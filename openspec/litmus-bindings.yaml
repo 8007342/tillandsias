@@ -639,7 +639,9 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:claims-fleet-visible
   - litmus:fragment-keys-are-read
+  - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
@@ -667,6 +669,7 @@ specs:
   - litmus:delegate-outcome-disposition-not-silent-shape
   - litmus:append-event-rejects-unknown-flags-shape
   - litmus:version-bump-isolation-shape
+  - litmus:plan-only-lane-structural
   coverage_ratio: 100
   last_verified: '2026-08-03'
 - spec_id: meta-orchestration

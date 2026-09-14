@@ -271,7 +271,28 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
     # Order 313: NO error swallowing in this chain — the volume-ownership
     # EACCES (root-owned models bind-mount vs uid-1000 container) hid for
     # weeks behind 2>/dev/null while the failure was blamed on the proxy.
-    mkdir -p "$OLLAMA_BINDIR" || echo "[inference] WARN: cannot create $OLLAMA_BINDIR (volume ownership? see order 313)" >&2
+    # ORDER 1183-j9dk: FATAL HERE, not four lines downstream. This was
+    # `|| echo WARN ... >&2` and then fell through — directly under a comment
+    # saying "NO error swallowing in this chain". The run did still die, but as
+    # `tar: ...: Cannot open: No such file or directory`, which names a missing
+    # directory rather than the reason it is missing, and is preceded by
+    # "will retry next launch (non-fatal)" describing a retry that can never
+    # succeed because the cause is a permission structure, not a transient.
+    #
+    # Measured on macOS (tlatoanis-macbook-air, 2026-09-14): the models mount is
+    # a virtiofs share that reaches the guest root-owned, and the container runs
+    # as uid 1000. Note this is NOT repairable by mode alone — the share refuses
+    # this uid at 0777 — so the diagnosis prints the uid AND the mount's owner
+    # instead of advising a chmod that does nothing.
+    if ! mkdir -p "$OLLAMA_BINDIR"; then
+        echo "[inference] FATAL: cannot create $OLLAMA_BINDIR" >&2
+        echo "[inference]   container uid=$(id -u) gid=$(id -g)" >&2
+        echo "[inference]   mount: $(ls -ldn "$OLLAMA_MODELS" 2>&1 || true)" >&2
+        echo "[inference]   the models mount must be writable by that uid." >&2
+        echo "[inference]   Linux: podman volume ownership (order 313)." >&2
+        echo "[inference]   macOS: virtiofs share ownership (order 1183-j9dk)." >&2
+        exit 1
+    fi
     OLLAMA_ARCH=""
     case "$(uname -m)" in
         x86_64 | amd64) OLLAMA_ARCH="amd64" ;;

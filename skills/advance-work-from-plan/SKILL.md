@@ -294,6 +294,21 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     -   **Clippy / idiomatic-podman hardening**.
     -   **Version-aware release ordering** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `version_aware_release_planning`). Releases are sequential numbered bundles (v0.3 → v0.4 → …), stability-gated not time-gated; "release X" is the CalVer Minor. Every open packet should carry `desired_release: vX.Y` (its ship-bucket, distinct from the milestone `release_target`). After the milestone preference, prefer packets targeting the **ACTIVE release** (`v0.5`; see `plan/loop_status.md`) over later-release ones — concentrate effort on shipping the current bundle. Cross-platform deps are gated by release order (dependent's `desired_release` >= its upstream's). A packet that must slip to a later release: file a `progress` note proposing the slip; the coordinator ratifies. Unmarked open packets default to the active release.
     -   **Filing a new packet? Mint its order, never pick one**: run `tillandsias-plan next-order` (→ `581-k3f9`). Computing "the next free order" from the ledger reads a snapshot that is stale the moment another host commits, so concurrent filers collide deterministically — twice on 2026-07-31, with six collisions still at HEAD. The minted token is PERMANENT: never renumber it, because order tokens leak into code comments, `@trace order:` headers, and commit messages, and a pushed commit message cannot be corrected. A prefix shared by two packets is normal, not a defect. Cite `packet_id` in anything durable. Canonical: `methodology/distributed-work.yaml` → `order_id_allocation`.
+
+        **READ THE `filed since` LINE next-order PRINTS ON STDERR BEFORE YOU
+        WRITE THE FRAGMENT (1163-3krg).** Minting is already a read of the
+        current fold — the next prefix is one above the highest order present —
+        so the tool has necessarily observed every row filed since you last
+        looked, and it now says so instead of handing the answer back as a bare
+        number. MEASURED 2026-09-13: lenovinha filed and claimed 1158-y3ad at
+        15:49Z, the coordinator filed 1160-nvzs — the same defect — at 16:05Z,
+        and next-order minted 1160 BECAUSE 1158 and 1159 were in that fold. The
+        tool that filed the duplicate had already read the answer. stdout is
+        unchanged (`order: $(tillandsias-plan next-order)` still composes); the
+        report is on stderr, and `--since <order>` sets the baseline explicitly
+        when the default — the highest order THIS WORKSTATION filed — is not
+        what you mean. A duplicate is filed by not looking, not by choosing the
+        wrong number.
     -   **In-forge self-service** (canonical: `methodology/distributed-work.yaml` → `in_forge_agent_self_service`): if you are running INSIDE the forge and hit a missing tool/capability/fix, unblock your FUTURE launches by filing in the SHARED CHECKOUT (the forge is rebuilt from sources each launch): a capability/tool proposal → `plan/forge-improvements/proposals/<date>-<slug>.md`; a forge bug → a `plan/issues/` packet `capability_tags: [forge, …]` `owner_host: linux|any`. If the packet is `forge`-tagged/`any` and fits the forge budget, just do it. Always shaped + verifiable + pushed (a finding that dies with the container is lost).
     -   **A LARGE packet is ELIGIBLE — size is not a skip reason** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `large_packet_is_eligible_work`). Do NOT scan a queue of big packets, judge them all "too large", and reach for an old, small, near-obsolete task instead — that inverts the queue's value order and churns work that later specs will supersede. Rank by VALUE and RELEVANCE, never by smallness: a large, fresh, release-targeted packet OUTRANKS a small, stale one. When you claim a packet you cannot finish this cycle, end in ONE of three valid outcomes, each a complete successful cycle: **(a) partial slice** — smallest vertical slice under a verifiable constraint + a `progress` event with `partial_artifact_refs` and an updated `next_action`; **(b) split** — decompose into smaller `ready` child packets at ownership/dependency/evidence boundaries (`split_into`), the shaping commit IS the cycle's output (this generalizes the forge-only order-264 split rule to every host); **(c) audit-dispose** — if it is stale/superseded, retire it (obsolete/tombstone) per the freshness class. A near-obsolete-looking packet is a signal to AUDIT it, not to implement it as busywork.
 4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
@@ -314,12 +329,27 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     git add plan/index.d/
     git commit -m "claim(<packet-id>): <host>"   # the fragment and NOTHING else
     git push origin <active-branch>
+    # ON A PLATFORM BRANCH (osx-next, windows-next) THIS IS NOT YET A CLAIM —
+    # nobody on trunk can see it until the relay. Push the fragment to trunk
+    # too (1153-j2nm); no build stamp is needed, the plan-only lane takes it:
+    scripts/push-plan-fragments-to-trunk.sh        # -> ok:fragments-on-trunk:<sha>:<n>
     ```
+
+    `push-plan-fragments-to-trunk.sh` builds one commit parented on
+    `origin/linux-next` carrying only the NEW fragment files (temporary index
+    and plumbing — your worktree, index and branch are untouched) and pushes
+    it to `refs/heads/linux-next` through this checkout's own pre-push hook.
+    Your platform branch keeps its copy; the relay merges the identical file
+    clean. `refused:fragments-to-trunk:trunk-fold:…` means a fragment names a
+    packet trunk has never seen (you filed it on this branch): run it without
+    arguments so the filing rides along. The control, from any trunk checkout:
+    `tillandsias-plan next <role> | grep -c <packet-id>` → 0.
 
     **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
     HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
     branch. It reaches a trunk host only when the coordinator relays that branch
-    into `linux-next`. Measured on tlatoanis-macbook-air 2026-09-05:
+    into `linux-next` — unless it was pushed to trunk with the helper above,
+    which is why that line is not optional. Measured on tlatoanis-macbook-air 2026-09-05:
 
     | | |
     |---|---|
@@ -852,17 +882,24 @@ status `ready`. The packet closes only when every agent named in
     plan-only lane. **This inverts the old step 2/step 4 order for the CODE
     commit only** — every other ledger write keeps the 3c ordering.
 
-    **Choose a `scripts/gate-steps.d/NNN-*.step` prefix AFTER the integrate,
-    never before.** The landing script fetches and integrates sibling hosts'
-    work as part of landing, so a slot that was free when you wrote the file
-    can be taken by the time the gate runs — the gate then refuses with `FAIL:
-    two .step files share a numeric prefix`, and a whole gate is spent learning
-    it. yoga picked 205 on 2026-09-12 against an incoming `205-1137-dzzu.step`
-    and paid a full `--check` for it. Recovery is cheap once the shape is
-    known: `git mv` to the next free slot, `--amend`, confirm with
-    `scripts/test-gate-step-append-no-conflict.sh`, re-land. Same class as the
-    SHA rule above — read the tree the operation LEAVES, not the one it
-    started from.
+    **A `scripts/gate-steps.d/NNN-*.step` prefix is ALLOCATED BY THE LAND
+    TOOL, not chosen by you (1162-qbrx).** Pick the slot you mean between its
+    neighbours and land with `scripts/land-on-platform-branch.sh`: after its
+    own integrate and before the gate it runs
+    `scripts/allocate-gate-step-prefix.sh --base origin/<branch> --commit`,
+    which moves a step THIS push adds — and only that — to the smallest free
+    integer below the next occupied prefix when the integrate brought in a
+    sibling's step with the same number, and commits the rename
+    (`gate-step-prefix: 280-<order>.step -> 281-<order>.step (280 taken by
+    …)`). The old advice, "choose the prefix after the integrate", cannot
+    close this race because the window is the gate itself: MEASURED
+    2026-09-13, lenovinha's 280 followed it exactly and still collided
+    against yoga's 900-z3kv landing mid-gate (215, 255 and 280 that night,
+    each a full re-gate; yoga's 205 the day before). Hand-rolled push? Run
+    the allocator yourself after your merge, before your gate. A
+    `refused:gate-step-prefix:no-gap` means every integer up to the next
+    occupied prefix is taken — renumber by hand so the step keeps its place.
+    Existing steps are never renumbered.
 
     ORDER 1024-c3h3. This step used to run before the landing, and the evidence
     refs were systematically wrong for every host that followed it: lenovinha

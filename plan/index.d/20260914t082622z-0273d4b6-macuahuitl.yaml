@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    event:
+      type: note
+      ts: "2026-09-14T08:26:22Z"
+      agent_id: linux-macuahuitl-fable-20260914t074010z
+      host: macuahuitl
+      summary: |
+        Hotfix on the consumer (macbookair, 2026-09-14): build.sh consumed this row's probe with a bare `_mem_out="$(…)"` under set -euo pipefail, so the probe's rc 3 (could-not-run, no /proc/meminfo) aborted every macOS gate before the case that was written to wave darwin past. Capture is now `_mem_rc=0; _mem_out="$(…)" || _mem_rc=$?`; scripts/test-gate-memory-floor-consumer.sh drives the block in a separate bash process (a captured subshell ignores errexit and cannot see this) — rc 3 proceeds with the warn, rc 0 proceeds, rc 1 stops, the pre-fix form dies on rc 3. Landed by the coordinator with the 07:39Z meta cycle.

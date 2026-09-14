@@ -1,0 +1,39 @@
+# @trace spec:methodology-accountability
+# @trace order:1152-y3bv
+#
+# Order 1152-y3bv: the plan-only push lane refused floor hosts for two
+# structural reasons — a non-plan path in the outgoing diff that was trunk's
+# own (already gated there) after the mandated merge, and a plan binary read
+# as stale by an mtime comparison against the whole Cargo.lock (esme: three
+# ~2m22s rebuilds in one cycle to push fragments). Now a non-plan path whose
+# blob equals origin/linux-next's does not count against the lane, and
+# staleness is judged against the validator surface (the sources that
+# implement validate-yaml, check --strict-fragments and the fragment checkers,
+# plus the crate's Cargo.toml and its direct dependencies' lock stanzas) with
+# the mtime check as the fallback only when no surface stamp exists.
+name: litmus:plan-only-lane-structural
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1152-y3bv in a scratch two-branch repo with a stub plan binary: a
+  trunk-identical non-plan path takes the lane (a differing one still forces
+  the full gate); a change outside the validator surface is not stale (a
+  change to a validator source is, and the remedy names the one-crate
+  rebuild); each arm's mutation control is built from content and cmp-proven.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-plan-only-lane-structural.sh
+  - workspace contains scripts/hooks/pre-push-local-gate.sh and scripts/check-plan-binary-current.sh
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-plan-only-lane-structural.sh && test -x scripts/test-plan-only-lane-structural.sh && echo 'ok: lane-structural-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: lane-structural-fixture-parses"
+
+  - step: "trunk-identical paths take the lane, differing ones do not; validator-surface staleness with its negative control; content-built mutants"
+    command: "bash scripts/test-plan-only-lane-structural.sh | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: plan-only-lane-structural"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    field: unscoreable
+    value: ''
+    ts: "2026-09-14T07:54:25Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    event:
+      type: note
+      ts: "2026-09-14T07:54:25Z"
+      host: yoga
+      summary: |-
+        discharged: the fixture is landed and bound. --replace is required here BY THIS VERY CHANGE — clearing a field drops every line it had, which is exactly what the guard now refuses to do silently

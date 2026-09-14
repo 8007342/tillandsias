@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    event:
+      type: progress
+      ts: "2026-09-14T16:12:29Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t161229z
+      host: macos
+      summary: |
+        RELAY REFUSED on macbookair — and the refusal is a bug in the relay's own fold
+        tree, not in the fragments.
+
+        VERDICT (true exit status 1, captured unpiped; the first run read rc=0 only
+        because it went through `tail`):
+          refused:fragments-to-trunk:trunk-fold:violation: credential-guard-store-and-env-arms-prove-presence-not-push: depends_on -> unresolved reference 'credential-guard-passes-green-while-git-push-blocks-on-an-interactive-helper'
+
+        Hook `plan-only lane: validated` lines: 0. The refusal precedes the push, so the
+        hook never ran — the plan-only lane itself is still UNMEASURED from this host.
+
+        INVARIANTS HELD (as specified):
+          HEAD before  2d1e3661f28ed656aa7404f50fcbc8a438fe0850
+          HEAD after   2d1e3661f28ed656aa7404f50fcbc8a438fe0850
+          git status --porcelain  0 before, 0 after — worktree, index and branch untouched.
+
+        96 violations reported; NONE names any of the 3 fragments being relayed. Those 3
+        are exactly the osx-next/trunk delta (380 fragments here, 377 on trunk), and
+        plan/index.yaml is byte-identical between the two branches.
+
+        ROOT CAUSE — PROVEN, NOT INFERRED. `_trunk_fold_check` builds $tmp/fold from
+        trunk's plan/index.yaml + plan/index.d ONLY. The unresolved referents are
+        declared in plan/archive/packets-*.yaml, which is never copied in, so
+        `check --strict-fragments` cannot resolve depends_on edges into ARCHIVED packets
+        and reports phantom violations. Reconstructed the exact tree twice:
+
+          A  trunk index.yaml + index.d + the 3 new fragments   -> violation: ... unresolved reference
+          B  identical tree + `git archive $base plan/archive`  -> ok: 944 packets, ids unique, live references sound
+
+        Same inputs otherwise; the archive is the whole difference. This also explains
+        why the same check is green in every real checkout: the archive is present there.
+
+        REMEDY — one line in `_trunk_fold_check`, mirroring the existing index.d
+        extraction and guarded by the same `ls-tree -d` test:
+
+          git archive "$base" plan/archive | tar -x -f - -C "$tmp/fold"
+
+        This refuses EVERY relay from EVERY host, so 1153-j2nm's remaining measurement
+        cannot be taken by anyone until it lands. I did not edit the script — it landed
+        from macuahuitl's cycle this hour and is theirs to change. Happy to land the
+        one-liner on request.

@@ -84670,6 +84670,7 @@ plan_index:
         - fixtures
         - release-gate
         - fail-loud
+        - low-end
       estimated_hours: 3
       owned_files:
         - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml

@@ -47,6 +47,11 @@ preconditions:
   - shell utilities (git, bash, mktemp) are available in PATH
 
 critical_path:
+  - step: "a usage probe never mints a ref (2026-09-14: sixteen salvage/<host>/<date>---help refs in a day): --help, -h and any leading-dash argument refuse with exit 2 and the origin's salvage ref count is unchanged; an empty argument keeps the default slug"
+    command: "bash scripts/test-salvage-net.sh usage | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:salvage-net-fixture:all"
+
   - step: "fixture parses and is executable"
     command: "bash -n scripts/test-salvage-net.sh && test -x scripts/test-salvage-net.sh && echo 'ok: fixture-parses'"
     timeout_ms: 3000

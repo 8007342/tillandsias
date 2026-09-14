@@ -1,0 +1,14 @@
+# Gate step 1162-qbrx — data, not code.
+#
+# Binds the fixture for land-time gate-step prefix allocation, right after
+# 060-1072-b7eq (whose arm 7 refuses a tree with a shared prefix — the
+# refusal this allocation exists to prevent). Hermetic: scratch repos only;
+# arm 9 EXECUTES the land tool's own block against a stub allocator, so the
+# binding between scripts/land-on-platform-branch.sh and
+# scripts/allocate-gate-step-prefix.sh is proved by what ran.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a gate-step prefix taken by the integrate is reallocated at land time, before the gate (1162-qbrx)"
+STEP_SCRIPT="scripts/test-gate-step-prefix-allocation.sh"
+STEP_ERROR="land-time gate-step prefix allocation regressed — two lands choosing one prefix would collide in the gate again (1162-qbrx)"
+STEP_OK="gate-step prefix allocation holds"

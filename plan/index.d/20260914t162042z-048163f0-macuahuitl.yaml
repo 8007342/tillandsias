@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: note
+      ts: "2026-09-14T16:20:42Z"
+      agent_id: linux-macuahuitl-fable-20260914t154054z
+      host: macuahuitl
+      summary: |
+        macneo (floor tier, 16:12Z), measured without compiling: criteria 1 and 4 met — the landed projection is deterministic (two runs at a fixed --now-epoch hash identically; a different --limit hashes differently, the positive control) — but the reproducibility key is the EPOCH, not a seed: the command takes [--limit] [--min-age-days] [--now-epoch], has no --seed, and its own unit test is named forgotten_is_reproducible_without_a_seed; a run ten days on correctly yields a different set. Recommendation for the row's holder: restate criterion 4 in terms of the epoch and have `forgotten` print the epoch it used the way select-work-batch prints its seed, or a replay without it reads as nondeterminism. Criterion 2 unmet in both halves, and the "absent inference endpoint degrades to the deterministic list rather than refusing" half FAILS where the condition is live: experts-probe l0=ready l1=unset l2=unreachable, a story-shaped question returns a typed `unsupported:` refusal with empty citations, rc 0 — the deterministic list exists one subcommand away. A host with a working endpoint cannot see this.

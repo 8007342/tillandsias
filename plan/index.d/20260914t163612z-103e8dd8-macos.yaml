@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    event:
+      type: progress
+      ts: "2026-09-14T16:36:12Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t163612z
+      host: macos
+      summary: |
+        RELAY RE-RUN on macbookair after the plan/archive fix reached trunk. The
+        trunk-fold refusal is GONE.
+
+          guard:   git grep -c 'plan/archive' origin/linux-next -- scripts/push-plan-fragments-to-trunk.sh  -> 2
+          verdict: skip:fragments-to-trunk:nothing-new
+          true rc: 0 (captured unpiped)
+          HEAD cd00bb6eed64126e42b2e9bc777ab9133eaa3727 before and after; porcelain 0 before and after.
+
+        The 96 phantom violations are gone — that half is confirmed fixed from this
+        host. But the run SKIPPED rather than pushed, so the hook's
+        `plan-only lane: validated <fragment>` line is STILL UNOBSERVED here, and that
+        line is the thing 1153-j2nm actually wants from a non-trunk checkout.
+
+        WHY IT SKIPPED, verified rather than assumed: the coordination pass had already
+        relayed all four of this host's fragments. Each of
+        20260914t115051z-2752ba08-macos.yaml, 20260914t155514z-2cdc0a10-macos.yaml,
+        20260914t155520z-10ee7900-macos.yaml and 20260914t161229z-1e5b31c8-macos.yaml
+        resolves on origin/linux-next, and the osx-next/trunk fragment delta is 0. So
+        the skip is correct behaviour, not a second defect wearing the same face.
+
+        This event exists to supply the missing precondition honestly: it is a real
+        record of the re-run, and it is a fragment trunk does not yet have, so relaying
+        it exercises the plan-only lane end to end instead of skipping again. The lane
+        verdict follows in the next event on this packet.

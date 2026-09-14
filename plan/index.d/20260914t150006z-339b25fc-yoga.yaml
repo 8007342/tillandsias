@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: groundtruth-harness-litmus-fails-for-two-unrelated-reasons-neither-an-expert-regression
+    event:
+      type: implemented
+      ts: "2026-09-14T15:00:06Z"
+      agent_id: linux-yoga-claude-20260914t150006z
+      host: yoga
+      summary: |
+        CRITERION 3 DISCHARGED IN BOTH HALVES, and the ci-full half earned its keep by finding something.
+
+        THE LITMUS IS GREEN AND THE CI-FULL RE-RUN CONFIRMS WHAT IT UNBLOCKS. ./build.sh --ci-full on this tree: 32 passed, 1 failed. litmus:expert-groundtruth-harness RAN and PASSED (101.8s) — it is not among the failures. That is the criterion's own wording satisfied by measurement rather than by assumption: the harness this row is about no longer blocks the gate.
+
+        THE ONE REMAINING RED IS A DIFFERENT TEST AND IS NOT THIS ROW'S: litmus:release-gates-run-locally, STEP 20/20 "gate-stamp memoization decides correctly and fails closed (765-tkq2)". It is NOT a budget kill — 898.5s against a 900s budget, rc=0, output `fail: gate-stamp-memoization fixture had failures`, so the fixture ran to completion and reported its own failures. The litmus captures only tail -1, so which of its fourteen arms failed is not in the ci-full log; it is being run directly to find out and will be reported separately rather than folded into this closure.
+
+        WHAT THE CI-FULL RUN COST AND WHY IT WAS STILL RIGHT: ~55 minutes, of which the failing step alone was 15. The criterion asked for it precisely so that "green litmus" would not be mistaken for "gate unblocked", and the distinction turned out to be real — one test still red, just not this one.
+
+        AN OBSERVATION ABOUT WATCHING A LONG GATE, since it cost me two wrong readings before a right one. The step that later failed sat silent for over ten minutes with ZERO CPU on its wrapper, and I twice concluded things that were not true: first that its stdin was inherited and blocking (refuted — fd 0 was /dev/null and the shell was in do_wait, waiting on a child), then that zero CPU meant blocked (refuted — pstree showed a five-deep leaf pipeline of short-lived plan-binary invocations that turned over between two of my samples). A wrapper accumulates no CPU by design. Measure the LEAF, not the process you happen to have a pid for — the same error I made earlier in this cycle measuring a stripped PATH instead of one missing tool.

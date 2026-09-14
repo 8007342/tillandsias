@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: progress
+      ts: "2026-09-14T08:12:46Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260914t081057z
+      host: macneo
+      summary: |
+        macneo: CRITERIA ASSESSED AGAINST LANDED WORK — two of four look satisfied, one is HALF DONE BY ME, one is untouched. Not closing; assessment is a static read and this packet exists because hosts inferred guest state from host-side artefacts.
+        FIRST, A CORRECTION I OWE THIS ROW. My first pass this cycle read only the first two exit_criteria and was about to record "both criteria appear met". set-field REFUSED the accompanying next_action rewrite because it would have dropped six lines of another host's prose — and those lines name CRITERION 3 and CRITERION 4 and a three-step plan I had not seen. The guard caught a materially wrong assessment, not a formatting slip. Recording that because the packet's own subject is inference standing in for measurement, and I nearly added an instance.
+        CRITERION 1 (identify the running guest's binary FROM THE GUEST) — MECHANISM NOW EXISTS AND DOES NOT RIDE THE DEAD WIRE. The provisioning script writes `guest_binary_sha256 $GUEST_BIN_SHA`, computed inside the guest, into provision.state; vz.rs surfaces it via PROVISION_STATE_SHARE_TAG, a host-visible share the host reads with a plain read_to_string. A share, not the control wire — which is the point, since order 272 masks every other surface and the wire is what is down.
+        CRITERION 3 (the host learns WHY from the host, and the channel that survives a dead wire is NAMED) — the same share is that channel, and it is named in the source rather than in prose only.
+        CRITERION 2 (named cause, with the measurement that distinguishes) — CAUSE IS NAMED, REMEDY IS HALF DELIVERED, AND THE MISSING HALF IS MINE. The cause is PSK/version-binding: the PSK was keyed to the HOST binary rather than the GUEST binary, so mismatched binaries derived different PSKs and NNpsk0 failed at the first message, presenting exactly as `noise: input error` (fix 2976154d8; effect recorded twice — 9f4e826bf keyed release tray reaches Ready, cee4100fa v56.9.12.2 Windows smoke passes through CI). That retires the version-skew hypothesis the packet flagged as unproven, in favour of its own second candidate. BUT step (a) of the standing next_action asks for a classification that REACHES the `secure control wire handshake failed` line. I landed the classifier in 04cb49cd1 — HandshakeFailure with classify(), variants PeerSentNoUsableFrame / CryptoDisagreement / LocalMisconfiguration — and it is referenced in EXACTLY ONE FILE, secure_stream.rs. Nothing in tillandsias-macos-tray consumes it: no HandshakeError, no HandshakeFailure, no downcast_ref anywhere in that crate (positive control: the symbol resolves, so the empty result is a real absence). So the poll site still prints undifferentiated text and the operator still cannot tell a listener question from a crypto disagreement. I delivered the half that compiles and not the half that answers the question.
+        CRITERION 4 (NEGATIVE CONTROL: a merely-slow guest is NOT reported as this defect) — UNTOUCHED. `activating` still has zero occurrences in diagnose.rs, exactly as the standing next_action recorded. Step (b) is unstarted.
+        WHAT THIS CHANGES FOR A CLAIMER: (a) is now a small wiring job rather than a design one — the classification exists and needs consuming at the tray's poll site, plus a fixture asserting a too-short frame and a wrong-PSK frame report DIFFERENTLY (today only CryptoDisagreement appears in the fixtures; PeerSentNoUsableFrame is mapped but not asserted). (b) is unchanged and platform-independent. The live-VM half of (c) is smaller than written, because criteria 1 and 3 now have a mechanism: it reduces to reading provision.state off the share on a host with a running guest and confirming guest_binary_sha256 is present, well-formed, and matches the staged sha256 — the staged-versus-running SKEW check the unscoreable block already names.

@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: implemented
+      ts: "2026-09-14T11:49:38Z"
+      agent_id: linux-yoga-claude-20260914t114938z
+      host: yoga
+      summary: |
+        PART 1 OF THE NEXT_ACTION: the cross-shape enumeration, with the predicate, the counts, and the reproductions. Part 2 is NOT mine and I say why below rather than leaving it implied.
+
+        METHOD, as the row demands: count before reading, REPRODUCE the red on a host lacking the property before editing, record scanned/hits/false-positives/fixed so the next reader can tell a floor from a total. Corpus: 287 scripts/test-*.sh and 421 openspec/litmus-tests/*.yaml.
+
+        (a) TIER — invokes select-work-batch.sh or reads TILLANDSIAS_HOST_TIER without pinning it.
+            scanned 708, candidates 13, not pinning 10, REAL 2, false positives 8, fixed 2.
+            The 4 shell candidates are all mentions in COMMENTS or in lists of script NAMES being scanned as data; measured rc identical under TILLANDSIAS_HOST_TIER=low-end, which is how I classified them rather than by reading intent. litmus-nix-capability-probe greps the file and never runs it.
+            THE TWO REAL ONES, reproduced before editing: with TILLANDSIAS_HOST_TIER=low-end the selector correctly answers `refused:no-tier-work:... the mandate forbids the general queue` (847-wgy4), and litmus-cycle-batch-triage-shape's grammar arm reads that refusal as a grammar failure, while litmus-selector-urgency-not-inert-shape's arms get zero frontier lines and report "urgency inert or missing ( vs )". Both score a correct refusal as red — 1109-t8kw's shape exactly, in two files nobody had listed.
+            FIXED by pinning TILLANDSIAS_HOST_TIER=general on the 25 executing `command:` lines (22 + 3), which is the house pattern the row cites from the selector fixture. Only lines containing `command:` were touched, because ~4 of the 26 mentions are prose and a blind substitution would have corrupted them. Verified in BOTH directions: the grammar arm now passes under low-end AND still passes on the default host.
+
+        (b) hostname -f / git var GIT_AUTHOR_IDENT reliance.
+            scanned 708, candidates 1, REAL 0. Reproduced with GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM isolated: identical rc. A nil result, recorded as one.
+
+        (c) scratch repos that `git init` without isolating the global config.
+            scanned 708, candidates 70, not setting an identity 10, REAL 0. Ran all ten with GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null: 10 scanned, 0 differ. 51c0ad583 had already swept this predicate and this confirms it as closed rather than assuming so.
+
+        (d) tools assumed present in tillandsias-build (`hostname` is absent there).
+            scanned 287 shell fixtures, candidates 14, REAL 1, false positives 13, fixed 1.
+            MY FIRST MEASUREMENT HERE WAS WRONG AND REPORTED 12 OF 14. I built a PATH containing only the tools I had thought to symlink, so the run lacked jq, cargo, podman, sha256sum and more — two fixtures even returned 127, which is the harness breaking, not the property. I attributed a world of missing things to one missing thing. Re-run shadowing ONLY `hostname` with a failing stub: 14 scanned, 1 differs.
+            THE ONE REAL HIT IS MINE, FROM THIS MORNING: scripts/test-claims-across-branches.sh arm 2b, which I added at 73e6b2902, computes the node name with `hostname -s`. Inside the builder that arm reds while the check under test is perfectly correct — 1109-t8kw's shape, committed by me on the same day I read the row. Fixed: the arm falls back to TILLANDSIAS_WORKSTATION, TILLANDSIAS_HOST_KIND and the platform constant (all of which _is_me accepts), and SKIPS BY NAME if none resolves. Verified 10/10 both with and without `hostname` on PATH.
+
+        TOTAL: four predicates, 708 files scanned, 95 candidates, 3 real, 92 false positives, 3 fixed.
+
+        PART 2 IS NOT MINE AND HERE IS THE MEASUREMENT: the closure artifact needs a host where the AT-RISK probe prints AT-RISK and the tier is low-end. Run verbatim on yoga, the probe prints SAFE, and TILLANDSIAS_HOST_TIER is unset here. So yoga does not qualify on either half; esmeraldinha and pirria do. Producing that evidence from this host would mean constructing a world I do not live in and calling it a host report — which is the failure this row is about. Left open, with the row's own next_action unchanged for whoever has the right host.
+
+        A NOTE ON MY OWN INSTRUMENTS, since two of the four scans needed correcting before they said anything: my first triage regex for (a) matched mentions and executions identically — a pattern that returns EVERYTHING discriminates no better than one that returns nothing — so I measured rc under a low-end tier instead of reading intent. And yq is absent on this host, so my first YAML validation printed INVALID for both edited files; the before-control showed it printed INVALID for the untouched originals too, which is what identified the instrument rather than the files. tillandsias-plan validate-yaml says ok for both.

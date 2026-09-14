@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: orchestrate-enclave-step-5-forge-launch-is-nested-inside-a-never-taken-status-check-conditional-and-unnesting-it-needs-a-fixture-first
+    field: verifiable_closure
+    value: 'scripts/test-orchestrate-enclave.sh: arm 1 the forge podman run is reached with TILLANDSIAS_STATUS_CHECK unset (pre-fix result: FAILS — 1/3 on the original script, the run absent from the stubbed podman''s call log); arm 2 the status-check probe still runs when the variable is set and the launch runs too; arm 3 a content-built mutant re-nesting the launch under the guard reds arm 1. Measured 3/3 on macuahuitl 2026-09-14 at e78f27275. The detector''s DEAD_VAR self-test arm covers the lexical shape; TILLANDSIAS_STATUS_CHECK is documented at its definition as an activation seam.'
+    ts: "2026-09-14T08:09:30Z"
+    host: macuahuitl
+
+events:
+  - packet_id: orchestrate-enclave-step-5-forge-launch-is-nested-inside-a-never-taken-status-check-conditional-and-unnesting-it-needs-a-fixture-first
+    event:
+      type: note
+      ts: "2026-09-14T08:09:30Z"
+      host: macuahuitl
+      summary: |-
+        moved out of the unscoreable block: the fixture exists and reds pre-fix

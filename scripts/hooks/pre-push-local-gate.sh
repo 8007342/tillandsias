@@ -327,6 +327,152 @@ _lane_scoped_diff() { # remote_sha local_sha -> "<status>\t<path>" lines
         | LC_ALL=C sort -u
 }
 
+# ── ORDER 1152-y3bv: THE VALIDATOR SURFACE, NOT THE WHOLE CRATE ─────────────
+#
+# 1129-4su6's staleness check (plan_binary_is_stale, scripts/plan-binary-probe.sh)
+# compares the resolved plan binary's mtime against the WHOLE
+# crates/tillandsias-plan tree AND Cargo.lock — the whole workspace lock file,
+# fifteen sibling crates' dependency bumps included. esme measured 2026-09-14:
+# ANY Cargo.lock change anywhere in the workspace re-arms it, three ~2m22s
+# `cargo build --release -p tillandsias-plan` rebuilds in one cycle on a floor
+# host, none of which touched a byte this lane's own validation reads.
+#
+# What this lane actually RUNS is validate-yaml, yaml-type and `check
+# --strict-fragments` (plus the fragment checkers they shell out to). Their
+# implementation is found LIVE, not hardcoded, so a future split of main.rs
+# keeps naming the right file(s):
+#   grep -ln 'validate-yaml\|strict-fragments\|declared-closures-check\|closure-evidence-check' crates/tillandsias-plan/src/*.rs
+# Today that returns exactly crates/tillandsias-plan/src/main.rs.
+# crates/tillandsias-plan/Cargo.toml is included beside it because a
+# dependency version bump can change parsing/validation behaviour without
+# moving a single .rs byte.
+#
+# CARGO.LOCK IS SCOPED, NOT INCLUDED WHOLE: only the [[package]] stanzas for
+# this crate's DIRECT dependencies (read from crates/tillandsias-plan/Cargo.toml
+# by a human on 2026-09-14, not derived at check time — deriving the name list
+# from Cargo.toml would itself be a parse this bash gate would have to trust).
+# Scoping the FULL transitive closure was considered and rejected as
+# intractable here: it needs Cargo.lock's own dependency graph, which is the
+# parser this lane does not have and the reason 1129-4su6 hashed the whole
+# file in the first place. If Cargo.toml's [dependencies] table ever grows a
+# new entry, this list goes stale in the SAFE direction (a dependency quietly
+# not watched, same as today's total absence of lock-scoping) — never the
+# unsafe one (an unrelated crate's bump cannot look like ours moved).
+#
+# WHY THIS IS A DUPLICATE, NOT A SHARED FUNCTION. 1152-y3bv's owned-files list
+# is this file, scripts/check-plan-binary-current.sh and this packet's
+# fixture — no shared library file is in scope, and plan-binary-probe.sh
+# belongs to a different packet's concurrent edit. So the same computation is
+# defined here (the READER, consulted at push time) and in
+# scripts/check-plan-binary-current.sh (the WRITER, which mints the stamp
+# once it has independently confirmed — via the OLD, broader mtime check —
+# that the binary is current). scripts/test-plan-only-lane-structural.sh pins
+# that the two copies agree on the same input, so a drift between them fails
+# loudly instead of silently mis-scoring one side.
+_validator_surface_files() {
+    grep -ln 'validate-yaml\|strict-fragments\|declared-closures-check\|closure-evidence-check' \
+        crates/tillandsias-plan/src/*.rs 2>/dev/null
+    if [[ -f crates/tillandsias-plan/Cargo.toml ]]; then
+        echo crates/tillandsias-plan/Cargo.toml
+    fi
+}
+
+# Direct-dependency stanzas of Cargo.lock, one crate's [[package]] block at a
+# time — never the whole file. See the header comment above for why the list
+# is a literal rather than derived.
+_validator_surface_lock_stanzas() {
+    [[ -f Cargo.lock ]] || return 0
+    local _dep
+    for _dep in serde serde_yaml serde_json tillandsias-podman mlua tokio chrono; do
+        awk -v want="$_dep" '
+            /^\[\[package\]\]/ {
+                if (keep) printf "%s", blk
+                blk = $0 "\n"; keep = 0
+                next
+            }
+            { blk = blk $0 "\n" }
+            $0 == "name = \"" want "\"" { keep = 1 }
+            END { if (keep) printf "%s", blk }
+        ' Cargo.lock 2>/dev/null
+    done
+}
+
+# sha256sum (coreutils) or shasum -a 256 (stock macOS) — same portable
+# dispatch as scripts/gate-stamp.sh:147-160, duplicated for the reason in the
+# header comment above rather than sourced.
+_validator_surface_hash() {
+    local -a _sha_cmd=() _files=()
+    local _f
+    if command -v sha256sum >/dev/null 2>&1; then
+        _sha_cmd=(sha256sum)
+    elif command -v shasum >/dev/null 2>&1; then
+        _sha_cmd=(shasum -a 256)
+    else
+        return 1
+    fi
+    while IFS= read -r _f; do
+        [[ -n "$_f" ]] && _files+=("$_f")
+    done < <(_validator_surface_files)
+    [[ ${#_files[@]} -gt 0 ]] || return 1
+    {
+        for _f in ${_files[@]+"${_files[@]}"}; do
+            printf '%s\n' "$_f"
+            cat "$_f" 2>/dev/null
+            printf '\000'
+        done
+        _validator_surface_lock_stanzas
+    } | "${_sha_cmd[@]}" 2>/dev/null | cut -d' ' -f1
+}
+
+_validator_surface_stamp_path() { # $1 = binary path -> stamp file beside it
+    printf '%s.validator-surface-sha256\n' "$1"
+}
+
+# 0 = fresh (recorded stamp matches current sources)
+# 1 = stale (recorded stamp differs — the validator's own sources moved)
+# 2 = unknown (no stamp minted yet, or the hash could not be computed here)
+_validator_surface_verdict() { # $1 = binary path
+    local _bin="$1" _stamp _cur _stored
+    _stamp="$(_validator_surface_stamp_path "$_bin")"
+    [[ -f "$_stamp" ]] || return 2
+    _cur="$(_validator_surface_hash)" || return 2
+    [[ -n "$_cur" ]] || return 2
+    _stored="$(cat "$_stamp" 2>/dev/null)"
+    [[ -n "$_stored" ]] || return 2
+    [[ "$_stored" == "$_cur" ]] && return 0
+    return 1
+}
+
+# Wraps the verdict above with the pre-1152-y3bv mtime fallback, in the SAME
+# boolean sense plan_binary_is_stale uses (0 = stale, so this composes as
+# `... && _lane_staleness_check "$plan_bin"; then` exactly where the old
+# predicate sat). Sets _LANE_STALE_VIA so the refusal can say which path
+# judged it, which is the whole point: a change elsewhere in the crate or
+# workspace lock must reach the mtime fallback only when no surface stamp
+# exists yet — never override an actual surface-hash verdict.
+_lane_staleness_check() { # $1 = binary path
+    local _bin="$1" _rc
+    _validator_surface_verdict "$_bin"; _rc=$?
+    case $_rc in
+        0)
+            _LANE_STALE_VIA="validator-surface hash — unchanged since this binary was built (1152-y3bv)"
+            return 1
+            ;;
+        1)
+            _LANE_STALE_VIA="validator-surface hash — validate-yaml/check --strict-fragments/the fragment checkers' own sources changed since this binary was built (1152-y3bv); a change elsewhere in the crate or in the workspace Cargo.lock would NOT have triggered this"
+            return 0
+            ;;
+        *)
+            if plan_binary_is_stale "$_bin"; then
+                _LANE_STALE_VIA="mtime fallback — no validator-surface stamp recorded for this binary yet; run scripts/check-plan-binary-current.sh (or the full gate) once to mint one, and an unrelated crate/lock change stops re-arming this check (1152-y3bv)"
+                return 0
+            fi
+            _LANE_STALE_VIA="mtime fallback (fresh) — no validator-surface stamp recorded for this binary yet (1152-y3bv)"
+            return 1
+            ;;
+    esac
+}
+
 attempt_plan_only_lane() {
     local -a files=() srcs=() bases=() issue_bases=()
     local att_seen=0
@@ -599,7 +745,35 @@ attempt_plan_only_lane() {
                     bases+=("")
                     ;;
                 *)
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/ (full gate required)" >&2
+                    # ORDER 1152-y3bv. A non-plan path is not automatically
+                    # this push's problem: the mandated pre-push merge of
+                    # origin/linux-next (methodology pull_merge_cadence) can
+                    # leave a non-plan path in the scoped outgoing diff whose
+                    # CONTENT is exactly what trunk already carries and gates.
+                    # Measured on macneo 2026-09-13: a one-line ledger claim
+                    # push was refused here purely because such a path showed
+                    # up in the diff, with nothing in it for this host to
+                    # vouch for that trunk had not already vouched for.
+                    #
+                    # So: a non-plan path whose PUSHED BLOB is byte-identical
+                    # to origin/linux-next's blob for that same path is
+                    # trunk's content, already gated there, and is DROPPED
+                    # from this push's obligations rather than refused. A
+                    # path that DIFFERS from trunk — including one that does
+                    # not exist on trunk at all — still refuses exactly as
+                    # before; this narrows what counts against the lane, and
+                    # never widens what the lane will accept once counted.
+                    _1152_trunk_blob=""
+                    _1152_trunk_blob="$(git rev-parse --verify --quiet "refs/remotes/origin/linux-next:${path}" 2>/dev/null)" || true
+                    if [[ -n "$_1152_trunk_blob" ]]; then
+                        _1152_push_blob=""
+                        _1152_push_blob="$(git rev-parse --verify --quiet "${local_sha}:${path}" 2>/dev/null)" || true
+                        if [[ -n "$_1152_push_blob" && "$_1152_trunk_blob" == "$_1152_push_blob" ]]; then
+                            echo "plan-only lane: '$path' differs from nothing — byte-identical to origin/linux-next, already gated there; dropped from this push's obligations (1152-y3bv)" >&2
+                            continue
+                        fi
+                    fi
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
                     return 1
                     ;;
             esac
@@ -730,7 +904,15 @@ attempt_plan_only_lane() {
     # resolving somewhere other than where the operator thinks is exactly how
     # the .exe stayed stale forever in plan-binary-probe.sh's own comments.
     # Refuse and name.
-    if [[ $needs_yaml -eq 1 && $have_plan -eq 1 ]] && plan_binary_is_stale "$plan_bin"; then
+    #
+    # ORDER 1152-y3bv NARROWS THE QUESTION ABOVE, and _lane_staleness_check
+    # (defined beside _validator_surface_* above) is where that narrowing
+    # lives: it tries the validator-surface stamp first and falls back to
+    # this exact plan_binary_is_stale predicate ONLY when no stamp has been
+    # minted for this binary yet — so a host that has never run
+    # scripts/check-plan-binary-current.sh sees no change here at all, and
+    # one that has stops re-arming on an unrelated crate or Cargo.lock change.
+    if [[ $needs_yaml -eq 1 && $have_plan -eq 1 ]] && _lane_staleness_check "$plan_bin"; then
         local _newer _fresher _ctd
         # ONE newer file, the newest — not a list. At 06:00 the unaffordable
         # thing is a question whose answer needs another tool, and a list is a
@@ -786,6 +968,7 @@ attempt_plan_only_lane() {
         done
         echo "plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)" >&2
         echo "  resolved: $plan_bin" >&2
+        echo "  via:      ${_LANE_STALE_VIA:-mtime}" >&2
         [[ -n "$_newer" ]] && echo "  newer:    $_newer" >&2
         echo "  This lane validates the bytes you are pushing with the resolved binary, so a" >&2
         echo "  stale one can accept a fragment shape the current rules refuse (1129-4su6)." >&2
@@ -804,10 +987,16 @@ attempt_plan_only_lane() {
                 echo "  quiet this message." >&2
             fi
         elif [[ -f scripts/with-wsl2-builder.sh ]] && grep -qi microsoft /proc/version 2>/dev/null; then
-            echo "  REMEDY: bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan" >&2
+            echo "  REMEDY: bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh" >&2
         else
-            echo "  REMEDY: cargo build --release -p tillandsias-plan" >&2
+            echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh" >&2
         fi
+        # ORDER 1152-y3bv: the second command above is not decoration. It
+        # rebuilds the ONE crate this lane needs and, being mtime-fresh right
+        # after that build, re-mints the validator-surface stamp in the same
+        # breath — so the NEXT plan-only push on this host does not pay a
+        # cargo build for a change that never touched validate-yaml,
+        # check --strict-fragments or the fragment checkers.
         return 1
     fi
 

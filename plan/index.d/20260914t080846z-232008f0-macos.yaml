@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: next_action
+    value: '(a) IS BLOCKED ON 1183-j9dk, not merely undone: on macOS the inference container cannot write the model-cache virtiofs share (presented root-owned 0755, container runs uid 1000), so its ollama self-install FATALs on every launch from a clean cache and the model half CANNOT be populated through the product''s path. Fix 1183-j9dk first, then take (a). THE IMAGES HALF IS ALREADY MEASURED (macbookair 2026-09-14, released v56.9.13.1, guest --init rc=0): images 6.1 G in /var/lib/containers, rootfs 782M -> 4.4G, models 0 — with the full inventory on the evidence event (forge 3.04 GB, forge-base 3.03 GB, chromium-framework 1.79 GB, chromium-core 991 MB, git 576 MB, vault 488 MB, inference 445 MB, plus the small ones). AND NOTE THE LIFECYCLE SPLIT: --init populates IMAGES ONLY; models arrive at first inference run. A split measured straight after --init reads 100/0 and must not be reported as the steady-state ratio. When 1183-j9dk is fixed, the remaining work is one command: run the engine with the product''s mount, pull a tier model (qwen2.5:0.5b), then --exec-guest du -sh on both paths. DO NOT substitute a synthetic file for the model half — a ballast proves survival and says nothing about a ratio. (b) REMAINS DECIDED: clean room stays clean, and the operator has since added TILLANDSIAS_RESET_KEEP_MODELS (1181-bkem), an opt-in per-run flag now honoured by uninstall.sh, e2e-step2-macos.sh and both smoke skills — so the knob exists and default semantics are unchanged.'
+    ts: "2026-09-14T08:08:46Z"
+    host: macos
+
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: note
+      ts: "2026-09-14T08:08:46Z"
+      host: macos
+      summary: |-
+        (a) blocked on 1183-j9dk; images half measured; the keep-models knob shipped as 1181-bkem so the earlier 'if they want it' line is stale
