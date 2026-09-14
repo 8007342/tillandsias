@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    event:
+      type: progress
+      ts: "2026-09-14T12:14:53Z"
+      agent_id: linux-macuahuitl-fable-20260914t114033z
+      host: macuahuitl
+      summary: |
+        Implemented on linux (macuahuitl, meta cycle 2026-09-14T11:09Z). Built: scripts/push-plan-fragments-to-trunk.sh — one trunk-parented commit carrying only NEW plan/index.d/*.yaml and plan/loop_status.d/*.md (committed here, staged, or untracked; absent on trunk), through a temporary GIT_INDEX_FILE and plumbing, pushed to refs/heads/linux-next through the pusher's own pre-push hook, which takes the plan-only lane with no build stamp; before pushing, trunk's fold plus the fragments must pass `check --strict-fragments` and every terminal event must fold to a terminal status on trunk (status-loss). scripts/test-claims-fleet-visible.sh (25/25 here, the REAL hook installed as .git/hooks/pre-push with its four lane checkers copied in) and litmus:claims-fleet-visible under methodology-accountability; methodology plan_write_discipline (MAY for fragments, MUST for claims); advance-work §3 and the coordinate skill name the helper and its control.
+        Adversarial review (one opus agent, medium) before landing found and this cycle fixed: (1) BLOCKER — git hands pre-push the remote's CURRENT tip, so a trunk that moved after the helper's fetch is refused by the hook ("remote base not present locally") and no "[rejected]" line is ever printed; a wording regex made the retry dead code on any checkout with the hook installed — now the race is detected by state (refetch, compare the tip) and a fixture arm constructs it with a stale fetch mirror; (2) a completion EVENT pushed without its status fragment landed green and left trunk offering a closed row as ready — the 1127-apa8 shape reproduced through the new tool — now refused as status-loss with an arm; (3) staged-but-uncommitted fragments were invisible to the default selection (1101-b5rc's third source); (4) a stray .DS_Store or nested path blocked every claim — default candidates that cannot ride are now skipped with a note, explicit ones refused; (5) loop-status fragments were unvalidated before the push — now pre-screened with the lane's grammar; (6) `tar -x` without `-f -`; (7) the packet's own negative control (the platform branch carrying ungated code is still refused by its own gate) had no arm — now arm 9.
+        On owned_files: scripts/hooks/pre-push-local-gate.sh needed NO change — the lane already accepts a fragments-only commit parented on trunk from any checkout; a reader looking for a hook diff will not find one. Left: the platform-regime measurement on macbookair or yolanda (next_action); macbookair was asked in this cycle to run it for their 1183-j9dk claim.

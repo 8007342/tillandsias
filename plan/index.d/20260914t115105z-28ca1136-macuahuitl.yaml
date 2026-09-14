@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    field: next_action
+    value: 'What is LEFT (2026-09-14, macuahuitl): the platform-regime half of criterion 2 only. On macbookair (osx-next) or yolanda (windows-next), once origin/linux-next carries scripts/push-plan-fragments-to-trunk.sh: merge origin/linux-next into the platform branch as usual, make the next claim with set-field, commit it on the platform branch, run `scripts/push-plan-fragments-to-trunk.sh`, and paste into a progress event on this row (a) its verdict line `ok:fragments-on-trunk:<sha>:<n>`, (b) the hook''s `plan-only lane: validated <fragment>` line, (c) `git status --porcelain | wc -l` and `git rev-parse HEAD` before and after (must be equal), and (d) from any trunk checkout `tillandsias-plan next <role> | grep -c <order>` reading 0 before the coordinator''s next relay. A refused verdict is a finding, not a retry: paste the refusal and the hook''s reason. Then set this row completed. Everything else — the helper, its 17-arm fixture with the real hook, the litmus, methodology plan_write_discipline, the advance-work and coordinate skill text — landed on linux-next in this cycle.'
+    ts: "2026-09-14T11:51:05Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    event:
+      type: note
+      ts: "2026-09-14T11:51:05Z"
+      host: macuahuitl
+      summary: |-
+        implemented on linux; the platform measurement is what remains
