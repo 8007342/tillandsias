@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-step-numeric-prefix-is-read-then-written-so-two-hosts-landing-in-one-window-collide
+    event:
+      type: note
+      ts: "2026-09-14T19:48:41Z"
+      agent_id: linux-macuahuitl-fable-20260914t194050z
+      host: macuahuitl
+      summary: |
+        Obsoleted by 1162-qbrx (landed 32d831a52, completed 2026-09-14). This row asked for a `tillandsias-plan next-step-prefix` that mints a collision-free gate-step prefix at authoring time, and its own open next_action was to decide whether an ordered key CAN be minted collision-free locally. The answer, measured on 2026-09-13 (lenovinha's 215, 255 and 280 against yoga's 900-z3kv landing mid-gate, the 280 case choosing its prefix after the integrate), is no: the window is the gate itself, so no authoring-time or mint-time choice closes the race. 1162-qbrx moves the choice into the only window that cannot race — scripts/land-on-platform-branch.sh runs scripts/allocate-gate-step-prefix.sh after its integrate and before the gate, renaming a step THIS push adds to a free slot between its prefix and the next occupied one, and commits the rename; two lands choosing one prefix both land (fixture 20/20, gate step 065-1162-qbrx, litmus:gate-step-prefix-allocation). Mapping: this row's deliverable (a mint) → superseded by allocation at land time; its concern (two hosts landing in one window collide) → closed by that allocation. Verified by one sonnet reader and the coordinator; `grep -n next-step-prefix crates/tillandsias-plan/src/main.rs` is empty and stays so on purpose.

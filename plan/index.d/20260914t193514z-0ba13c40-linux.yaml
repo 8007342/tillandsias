@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-read-only-assertion-blames-the-selector-for-any-worktree-change-in-its-window-and-the-gate-runs-a-known-leaker
+    field: status
+    value: completed
+    ts: "2026-09-14T19:35:14Z"
+    host: linux
+
+events:
+  - packet_id: the-read-only-assertion-blames-the-selector-for-any-worktree-change-in-its-window-and-the-gate-runs-a-known-leaker
+    event:
+      type: completed
+      ts: "2026-09-14T19:35:14Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 86ac0e26d + scripts/run-litmus-test.sh ci-release --phase pre-build -- litmus:cycle-batch-triage-shape 26/26, step 23 green
