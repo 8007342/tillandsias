@@ -339,8 +339,25 @@ compute() {
         # all still hash; a change to any of them re-gates. Negative control:
         # scripts/test-gate-stamp.sh cases 6-7. Skipping here cannot desync the
         # exec-bit lockstep below: the pointer catches up on the next path.
+        #
+        # ORDER 1142-85zx adds plan/issues/*.md, and the arithmetic is the same
+        # one 930-i6x4 wrote down. Classifying twelve consecutive commits on
+        # origin/linux-next (lenovinha, 2026-09-12/13): seven memo-safe, five
+        # forcing a full gate — and FOUR of those five were plan-only, all four
+        # touching one coordinator drill record under plan/issues/. A code land
+        # exhausted all four of its attempts against that traffic. Nothing in a
+        # drill record changes what ./build.sh --check proved about a tree of
+        # Rust.
+        #
+        # TOP LEVEL ONLY, deliberately. `plan/issues/*.md` does not match
+        # plan/issues/research/*.md or any other subdirectory, and
+        # gate_stamp_plan_digest's find is -maxdepth 1 for the same reason: the
+        # two must cover EXACTLY the same set, or a path falls out of one
+        # without entering the other. A file in a subdirectory keeps forcing a
+        # full gate, which is the conservative side of that line.
         case "$path" in
             plan/index.d/*.yaml|plan/loop_status.d/*.md|plan/mo-full-attestations.d/*.md) continue ;;
+            plan/issues/*.md) case "${path#plan/issues/}" in */*) : ;; *) continue ;; esac ;;
         esac
         absolute="$REPO_ROOT/$path"
         if [[ -L "$absolute" ]]; then
@@ -518,6 +535,13 @@ gate_stamp_plan_digest() {
         LC_ALL=C find "$REPO_ROOT/plan/index.d" -maxdepth 1 -type f -name '*.yaml' -print0 2>/dev/null
         LC_ALL=C find "$REPO_ROOT/plan/loop_status.d" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null
         LC_ALL=C find "$REPO_ROOT/plan/mo-full-attestations.d" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null
+        # 1142-85zx. PAIRED WITH the skip in `compute`, never alone: excluding a
+        # path from one digest without adding it to the other makes the change
+        # invisible to BOTH, returns a full ok:gate-fresh, and silently stops the
+        # issue guard from ever running — the exact hole 1127-waxf was filed to
+        # close, re-opened one directory over. -maxdepth 1 matches the skip's
+        # top-level-only glob exactly.
+        LC_ALL=C find "$REPO_ROOT/plan/issues" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null
     } | LC_ALL=C sort -z \
       | xargs -0 -r "${GATE_STAMP_SHA256[@]}" 2>/dev/null \
       | LC_ALL=C sed "s|$REPO_ROOT/||" \
