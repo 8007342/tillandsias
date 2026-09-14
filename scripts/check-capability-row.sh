@@ -305,6 +305,18 @@ newest_row_ts() {
         }' 2>/dev/null | sort | tail -1
 }
 
+# The `kind:` this host's live row reports (linux, windows, macos).
+#
+# Order 1159-g96c. Used for ONE bit only: whether the locus this run derived was
+# DECLARED or FELL THROUGH. See the branch below for why that distinction is the
+# whole packet.
+row_kind() {
+    printf '%s\n' "$1" | awk -v h="host:$2\t" '
+        index($0, h) == 1 {
+            for (i = 1; i <= NF; i++) if ($i ~ /^kind:/) { sub(/^kind:/, "", $i); print $i; exit }
+        }' 2>/dev/null
+}
+
 # Set difference A \ B over `+`-joined sets, printed in the same shape.
 set_minus() {
     _sm_a="$1"; _sm_b="$2"
@@ -412,8 +424,46 @@ check() {
     own_present="$(printf '%s\n' "$matrix" | grep -c "^host:$host	locus:$locus	" 2>/dev/null)"
     case "$own_present" in
         '' | 0)
-            echo "due:no-capability-row:$host"
-            return 1
+            # ORDER 1159-g96c. THE HOST HAS ROWS, JUST NOT AT THIS LOCUS — and
+            # whether that means "publish one" or "you are running somewhere
+            # that does not publish" depends on HOW THE LOCUS WAS DERIVED.
+            #
+            # host-capability-probe.sh:142-149 decides locus three ways, and
+            # only two of them are ASSERTIONS:
+            #
+            #   TILLANDSIAS_HOST_KIND=forge  -> in-guest       DECLARED
+            #   probe reports kind windows   -> windows-host   DECLARED
+            #   anything else                -> bare-metal     FALLBACK
+            #
+            # A DECLARED locus is a real place that should publish. That is
+            # 850-bif2's whole purpose: the forge had never once been asked to
+            # publish a row, and telling it `due:` here is how it learns to.
+            # Suppressing this branch for a forge would regress that exactly.
+            #
+            # A FALLBACK locus is the else-arm answering because nothing else
+            # did. On esmeraldinha 2026-09-13, run from inside the builder
+            # distro, it answered `bare-metal` for a host whose committed rows
+            # are in-guest and windows-host — and the `due:` it produced would
+            # have been remedied by publishing a THIRD row describing the
+            # distro's hardware under a locus that is not a machine anyone
+            # routes to. Obeying the guard would have made the matrix worse
+            # (1128-4ffr's shape, and 889-ewvt's: a false row routes
+            # confidently and wrongly).
+            #
+            # So: fallback locus + rows at OTHER loci = report, never prompt.
+            # This is the one place the guard reads a bit of the probe's rule
+            # rather than the probe's answer, and it is deliberate — it asks
+            # "was this derived or asserted", which the fold does not record.
+            # It does NOT re-derive the locus (704-zcgi); row_locus still reads
+            # that off the live fold, as 1130-8zxn requires.
+            _lk="$(row_kind "$live" "$host")"
+            if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || [ "$_lk" = "windows" ]; then
+                echo "due:no-capability-row:$host"
+                return 1
+            fi
+            echo "check-capability-row: this run derived locus '$locus' by fallback, and $host publishes at other loci — publishing from here would mint a new locus for a machine that is not one. Nothing is asked of this context (1159-g96c)" >&2
+            echo "unavailable:locus-not-published"
+            return 2
             ;;
     esac
 
@@ -578,8 +628,22 @@ fixture() {
     # because that is the order the fold emits and the order is the bug.
     _row() { # <host> <locus> <ts> <triples...>
         _rw_h="$1"; _rw_l="$2"; _rw_t="$3"; shift 3
-        printf 'host:%s\tlocus:%s\tkind:linux\tid_source:node-name\tderived_tier:cpu\tts:%s\twriter:windows\tfrom:x\n' \
-            "$_rw_h" "$_rw_l" "$_rw_t"
+        # KIND TRACKS LOCUS, because on real hardware it cannot do otherwise:
+        # a windows-host row is published by a probe reporting kind windows,
+        # an in-guest row by one reporting linux (esmeraldinha and yolanda both
+        # carry exactly that pairing). This helper used to hardcode kind:linux
+        # for EVERY locus, which made `locus:windows-host kind:linux` — a
+        # combination no probe can emit. 1159-g96c reads kind to tell a
+        # DECLARED locus from a FALLBACK one, so the impossible pairing turned
+        # a correct arm red. The data maker was describing a fleet that does
+        # not exist; fixing the maker is the fix (1158-y3ad's lesson, one
+        # directory over).
+        case "$_rw_l" in
+            windows-host) _rw_k=windows ;;
+            *)            _rw_k=linux ;;
+        esac
+        printf 'host:%s\tlocus:%s\tkind:%s\tid_source:node-name\tderived_tier:cpu\tts:%s\twriter:windows\tfrom:x\n' \
+            "$_rw_h" "$_rw_l" "$_rw_k" "$_rw_t"
         if [ "$#" -eq 0 ]; then
             printf '  schedulable: none\n'
         else
@@ -794,8 +858,55 @@ fixture() {
             echo "ok: a-reachable-remedy-is-not-announced-as-unreachable" ;;
     esac
 
+    # ── ARMS 23-25: ORDER 1159-g96c, DECLARED LOCUS vs FALLBACK LOCUS ───────
+    #
+    # The probe decides locus three ways and only two are ASSERTIONS:
+    # TILLANDSIAS_HOST_KIND=forge -> in-guest, kind windows -> windows-host,
+    # ELSE -> bare-metal. The third is the else-arm answering because nothing
+    # else did, and it is the only one that can be wrong about where it is.
+
+    # 23. THE DEFECT, esme's shape. Committed rows at in-guest and
+    #     windows-host; this run derived bare-metal by FALLBACK. Pre-fix it
+    #     answered `due:`, whose remedy would publish a THIRD row describing
+    #     the builder distro's hardware under a locus that is not a machine
+    #     anyone routes to — the matrix made worse by obeying the guard.
+    _mk_hdr "$_fx_live"
+    _row fixturehost bare-metal "$_fresh_ts" cpu/container/ollama >>"$_fx_live"
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest     "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_fresh_ts" >>"$_fx_committed"
+    _expect "a-fallback-locus-on-a-host-that-publishes-elsewhere-asks-for-nothing" \
+        "unavailable:locus-not-published" 2 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
+    # 24. NEGATIVE CONTROL, AND THE LOAD-BEARING ONE. A forge DECLARES its
+    #     locus, so it is a real place that should publish, and telling it
+    #     `due:` here is the entire point of 850-bif2 — the forge had never
+    #     once been asked to publish a row. Suppressing this would regress that
+    #     exactly, and a fix that only looked at "is there a row at my locus"
+    #     would do precisely that.
+    _mk_hdr "$_fx_live"
+    _row fixturehost in-guest "$_fresh_ts" cpu/container/ollama >>"$_fx_live"
+    _mk_hdr "$_fx_committed"
+    _row fixturehost bare-metal "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _expect "a-forge-declaring-in-guest-is-still-asked-to-publish" \
+        "due:no-capability-row:fixturehost" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live" TILLANDSIAS_HOST_KIND=forge
+
+    # 25. NEGATIVE CONTROL: a windows-kind probe also DECLARES windows-host, so
+    #     a Windows host that has not yet published its native side is still
+    #     asked to. `_row` sets kind from locus, because on real hardware it
+    #     cannot do otherwise — this arm is the reason that matters.
+    _mk_hdr "$_fx_live"
+    _row fixturehost windows-host "$_fresh_ts" cpu/container/ollama >>"$_fx_live"
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _expect "a-windows-kind-probe-declaring-windows-host-is-still-asked-to-publish" \
+        "due:no-capability-row:fixturehost" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
     rm -rf "$_fx_dir"
-    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:22"
+    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:25"
     return "$_fx_fail"
 }
 

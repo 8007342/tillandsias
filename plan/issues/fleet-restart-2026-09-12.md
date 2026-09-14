@@ -3905,3 +3905,166 @@ stories.
   purposes even when it holds no lock; one per checkout. The cut's red is
   diagnosed and fixed (1175-wuwr, the wrapper's competing-gate capture under
   set -e); the land, attestation and re-gate follow.
+- **The cut's red, closed as a family (lenovinha) and owned (yoga).** Three
+  members in one night, one shape — A NON-ZERO EXIT LOST OR ACTED ON
+  INVISIBLY — and one remedy, `rc=0; out="$(…)" || rc=$?`: 1141-vf9w
+  (`printf | grep -q` under pipefail reports failure on a successful match),
+  1155-jurn (`$?` does not survive `wsl.exe -- bash -lc`), 1175-wuwr
+  (`out="$(detector)"` under `set -euo pipefail` kills the wrapper silently
+  between toolbox init and dispatch — the detector was WORKING PERFECTLY;
+  its correctness is what killed the wrapper). yoga, who wrote both the
+  block and its fixture: the fixture drove the extracted block under an
+  explicit `set +e`, twice, so it asserted about a shell nobody ships and
+  could not have seen the death no matter how many arms it grew — "the
+  assertion gets reviewed and the scaffolding that builds its premise does
+  not". lenovinha's rule for the instrument that found it: AN INSTRUMENT
+  WHOSE MOST LIKELY OUTPUT IS A NEGATIVE HAS TO BE HARDENED BEFORE THE
+  NEGATIVE IS TRUSTED — the empty env diff was load-bearing, and it was only
+  trustworthy because the dump had been made collision-proof first; two runs
+  on one filename would have diffed a run against itself and drawn the same
+  conclusion from nothing. Third instance of the shape the same evening: the
+  two-sweep /tmp collision producing a false determinism red. Rule kept:
+  one sweep per checkout, beside the one-gate lock. Meta cycle 23:41Z landed
+  62b3ae68b, attested 7a089997d; the re-gate runs on it.
+- **yoga refined the consumer fixture (81610b9b5, held for the back-merge
+  note): errexit does not single out code 1.** A bare `_cg_out="$(detector)"`
+  exits the wrapper on EVERY nonzero status, so codes 2 (caller contract), 3
+  (could-not-run) and an unrecognised code died at the same line, and their
+  arms still drove the block under `set +e`. Three more strict arms through
+  drive_strict; measured 14/14 post-fix, 9/14 on the pre-fix capture form
+  with the three new arms red beside the two landed ones — and every lax arm
+  green in BOTH, which is the finding: the lax arms cannot see this and never
+  could. The strict arms defend the `|| _cg_rc=$?` FORM; without them a later
+  edit could restore the bare assignment and leave 1 and 0 green while 2, 3
+  and 9 die silently, worse than before the fix because the fixture would look
+  like it was watching. The lax drive and arm loop stay on `set +e` on
+  purpose (they assert which case arm fires, observable only if the shell
+  survives to reach it), now BOUNDED by the strict arms rather than an
+  unexamined convenience. lenovinha's qualifier on the instrument rule: harden
+  when the negative ELIMINATES a hypothesis (someone stops searching on it),
+  not when it merely fails to confirm.
+- **yolanda reported a freeze breach that was not one, and found a real gap
+  doing it.** They pushed 1171-ccf2's code to windows-next at 23:37Z inside
+  the cut window and held everything after; the freeze holds code lands on
+  LINUX-NEXT only (the branch the release gate verifies), platform-branch
+  pushes move nothing the gate reads, and their relay is the coordinator's,
+  held until the back-merge — so nothing to revert and the cut base is
+  untouched. Told them so; the standing wording of the freeze in the memory
+  and the skill must say "linux-next", and tonight's messages did. The gap
+  they named stands regardless and they file it: a freeze is a rule with no
+  mechanism — the pre-push hook checks the trunk merge and the gate stamp and
+  never whether a freeze is live, and on a 41-minute gate the window between
+  "I checked" and "it pushed" is long enough for a freeze to begin inside it.
+  Shape requested: a live freeze marker on origin the hook consults for CODE
+  pushes to the frozen branch, plan-only exempt, set and cleared by the cut
+  runbook at the gate start and the back-merge push. Order numbers 1174-u5wp
+  and 1174-6r4k are distinct by design (the suffix exists because the number
+  is a per-fold sequence and hosts mint on different branches). 1171-ccf2 is
+  implemented at 740e93552; esme's measurement on a published release is
+  what is left.
+- **macneo (:40 cycle, attested f06c03708): the plan/issues differential,
+  measured as the A/B the packet 1142-85zx implied but nobody had run.** Same
+  floor-tier Mac, adjacent ledger-only cycles, one variable: a plan/issues
+  note in the diff forces the full `./build.sh --check` (~1000 s regime);
+  without it the plan-only lane accepted in 16 s wall clock and carried TEN
+  fragments (yoga's loop_status and attestations among them). THE
+  INTERACTION, theirs to name and mine to own: the per-host drill convention
+  (one plan/issues file per host, adopted to stop concurrent appends
+  corrupting one file) MULTIPLIES this defect — every host now writes a
+  plan/issues note on its cadence, so the forcing rate scales with fleet
+  size; macneo paid a full gate on each of its last two cycles for
+  markdown-only diffs and became a producer of the starvation it reports by
+  following the fix. Also measured: a push rejected as behind (origin moved
+  inside the cycle) cost seconds to retry BECAUSE the diff was plan-only;
+  under the packet's failure mode the same race costs a full gate per
+  attempt — starvation is duration MULTIPLIED BY retries, and only the
+  retries explain refused:land:attempts-exhausted. Released back to ready
+  rather than implemented: widening gate-stamp's skip list is a trunk-gate
+  owner's change and needs the memo verdict (ok:gate-fresh-except-plan) plus
+  the arm asserting the issue-citation guard still runs on an issues-only
+  diff (881-29me), which macneo tripped for real this week. Positive control
+  on the absence: the three plan globs ARE in gate-stamp.sh's skip case and
+  plan/issues is not. Routed: macuahuitl takes 1142-85zx in its next meta
+  cycle after the cut, sized against N writers. Keychain: five prompt-free
+  gates since the operator's restart.
+- **v56.9.13.1 CUT (2026-09-14, on the operator's instruction).** PR #115
+  merged at 5399da211 after the re-gate on 7a089997d (rc 0, 1522 s, 358/358
+  pre-build litmus, 33/33 checks; the first gate on 0c53aa4ae was red on
+  1175-wuwr); bump PR #116; tag v56.9.13.1 at main 6b8342f3f; back-merge
+  pushed on linux-next at f51aa955e with the README row (twelve v0.4 rows
+  distilled into one span, ten rows now), the work-queue line and
+  1175-wuwr's closure; release run 34794577946 dispatched. Cut base predates
+  yolanda's 1171-ccf2 windows-next code and macbookair's sed -i slice; both
+  relay next pass. All-clear sent to yoga, lenovinha, yolanda, macbookair.
+- **lenovinha: 1159-g96c blocked on a HOST RESOURCE CEILING, relayed rather
+  than retried.** Two land attempts SIGKILLed by the system for low memory
+  in the same phase (clippy strict + listen-vsock on tillandsias-headless),
+  tree intact both times; the 1047-h88p cap already resolves to the floor
+  (13 GB < 16 → CARGO_BUILD_JOBS=1) and one rustc still exceeds a 13.8 GB
+  host beside a desktop session and an agent. Marginal, not absolute: five
+  packets landed through the same gate on the same host tonight; the
+  back-merge moved the line, not the host. Decision: push work/1159-g96c,
+  the coordinator relays it in the next pass's single land with the platform
+  relays. Row to file (theirs): the ceiling is a step function with no rung
+  below one job, and a gate killed for memory leaves an empty log
+  indistinguishable from a hang — a named pre-gate memory floor and a
+  post-mortem OOM read (refused:gate:oom-killed) are the ask.
+- **lenovinha: the work/ relay push is refused too (stamp required), and the
+  answer is the lane that already exists.** `git push origin
+  HEAD:refs/heads/work/1159-g96c` → "plan-only lane: not applicable — new on
+  the remote; full gate required" then "the tree changed since ./build.sh
+  --check last passed (12 paths)" — the twelve paths being the back-merge
+  they were told to take. Filed 1176-fn2p (the gate cannot report its own
+  OOM; 1047-h88p's ceiling is a cliff with no rung below one job) and
+  1177-k4jq (the relay cannot rescue a host that cannot gate, because the
+  work/ ref demands the stamp; the ask is a hand-off of an UNGATED tree
+  marked as such, negative controls: platform branches and main unchanged,
+  the coordinator still gates before trunk). Coordinator's answer: the
+  ungated hand-off lane exists — since 1146-8j7i the salvage net handles a
+  clean tree with an unpushed commit (ok:salvaged-commits:<ref>:<sha>) and
+  pushes the commit object with authorship intact to a salvage ref the hook
+  accepts; 1159-g96c relays from it, gated here, next pass; the work/ lane is
+  the GATED hand-off by design, so 1177-k4jq may reduce to naming the choice
+  in the refusal text plus docs. Fourth member of tonight's family, in
+  lenovinha's own command: `git push … | tail -3 && echo pushed` reported a
+  failed push as pushed (the `&&` saw tail's status) forty minutes after they
+  wrote about the family; the real refusal was a stale plan binary
+  (1129-4su6), fixed by rebuilding one crate.
+- **lenovinha salvaged 1159-g96c through the existing lane:**
+  `ok:salvaged-commits:refs/heads/salvage/lenovinha/20260914-1159-g96c:477e5ed77`,
+  confirmed on origin (the `-commits` verdict, not `-local`: the copy survives
+  a re-clone; 4e38b5a29 reachable, authorship and message intact). Relay onto
+  linux-next in the next pass; ledger line then; deletion one pass after the
+  marker. 1177-k4jq corrected on the row (c5f41fd3d) and REDUCED: work/ is
+  the gated hand-off by design and salvage/ the ungated one, so the defect
+  is that the refusal never names the choice — refusal text plus docs,
+  negative controls unchanged. The actionable half, in their words: A TOOL
+  WHOSE NAME DESCRIBES ITS ORIGINAL CASE WILL NOT BE FOUND BY SOMEONE IN ITS
+  EXTENDED CASE — salvage-dirty-worktree.sh reads as a dirty-tree tool and
+  1146-8j7i's clean-tree extension was invisible at the moment it was
+  needed; lands in the skills batch beside the salvage rule. The evening in
+  one line, theirs: fluency in a failure mode is not protection from it — the
+  status-lost family caught yolanda, esme, macuahuitl and lenovinha in turn.
+- **yoga landed 1150-q462's strict-regime arms at 7c8f203e6 (attempt 2: attempt
+  1 gated green and lost the push race to the back-merge and the release
+  traffic; the tool re-fetched, re-merged and re-gated on its own; merged, not
+  rebased, as the unpushed set carried a merge).** The row's event now says,
+  in yoga's words, that the causal chain for the cut's red ran their fixture →
+  their block → the release gate, and the fixture is the link that should have
+  caught it.
+- **Coordination pass 02:05Z (pass 15; the 01:41Z cron delivered behind the
+  release watch).** Freeze over: three relays in one land — osx-next +12
+  (macbookair's 1135-z8gn sed -i slice with the mutation-arm fix, claim
+  released, macneo's attestation), windows-next +6 (yolanda's 1171-ccf2 at
+  740e93552, the held merge, the 1174-u5wp filing), and lenovinha's salvage
+  ref 477e5ed77 carrying 4e38b5a29 (1159-g96c, authorship intact) — merged
+  --no-ff, zero unmerged paths each. Salvage ledger line filed for the ref
+  (ok:salvage-sweep:refs=6:new=1:filed=1; ok:salvage-refs-ledger:7); it is
+  deleted no sooner than the pass after this marker lands. Trunk had moved
+  +10 since the back-merge (yoga's 1150-q462 strict arms at 7c8f203e6 and
+  ledger traffic). Stale rows `ok:stale-ready-rows:90/513`, none handed.
+  Audit rows=23 stems=23. Hand-offs: none — 1142-85zx is macuahuitl's next
+  meta cycle (macneo's A/B on the row), the floor's smoke is running on esme
+  (v56.9.13.1, Windows row, requested with the tag). Release run 34794577946:
+  Linux and Windows jobs green, macOS tray job still running at 02:11Z; the
+  three-set asset assertion waits on it.

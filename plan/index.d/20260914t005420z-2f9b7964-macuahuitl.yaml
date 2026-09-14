@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-tillandsias-builder-exits-silently-at-the-competing-gate-capture-under-set-e-whenever-a-gate-is-running-so-the-toolbox-property-fixture-reds-inside-ci-full-only
+    event:
+      type: progress
+      ts: "2026-09-14T00:54:20Z"
+      agent_id: linux-macuahuitl-fable-20260913t234100z
+      host: macuahuitl
+      summary: |
+        1175-wuwr completed: release-tier closure met — litmus:ensure-toolbox-include-shape step 5 [OK] inside ./build.sh --ci-full on 7a089997d (00:18Z–00:43Z, rc 0, 358/358 pre-build litmus, 33/33 checks), where it was red in two runs on 2026-09-13 (16:11Z and 22:27Z). Before/after in the failing regime: local-ci.sh --phase pre-build in the container, pre-fix wrapper P1/P2 red with the diagnostic showing the toolbox created and initialised and no dispatch; same invocation with the fix, step 5 green. Consumer fixture 11/11 post-fix, 9/11 on the pre-fix capture form; yoga's refinement (three more strict arms for codes 2/3/9, 14/14 vs 9/14) held for the post-cut land. The cut proceeded on this closure.

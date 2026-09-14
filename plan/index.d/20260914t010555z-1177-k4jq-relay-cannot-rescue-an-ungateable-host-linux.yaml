@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on lenovinha 2026-09-14. The relay protocol exists for hosts that
+# cannot gate, and its own entry step requires a gate.
+packets:
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    order: 1177-k4jq
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [tooling, coordination, gate, multi-host]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the guard: no fixture exercises a work/ ref push from a stampless host today. Future scripts/test-work-ref-accepts-ungated-tree.sh; the claimer writes it in the same commit and moves this text into verifiable_closure (1136-n8sh) — a host whose gate cannot complete can still push a `work/<order>` ref for the coordinator to relay: the pre-push hook admits a work/ ref carrying an UNGATED tree, refusing it for trunk as today, and the ref is marked so the relay gates it on arrival rather than trusting it (pre-fix result: FAILS — measured lenovinha 2026-09-14, `git push origin HEAD:refs/heads/work/1159-g96c` refused with 'the tree changed since ./build.sh --check last passed', on a host whose gate had just been SIGKILLed twice for memory); NEGATIVE CONTROL 1: a push to linux-next, osx-next, windows-next or main still requires the stamp exactly as today — the admission is for work/ refs only and must not become a general bypass; NEGATIVE CONTROL 2: a relayed work/ ref is GATED BY THE COORDINATOR before it reaches trunk, so nothing ungated ever lands; the exemption moves where the gate runs, never whether it runs."
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - methodology/multi-host-development.yaml
+    title: |
+      The relay protocol exists so a host that cannot gate can hand work to the coordinator, but pushing the `work/<order>` ref that starts the handoff itself requires a valid gate stamp — so the escape hatch is unreachable from exactly the state it was built for.
+    context: |
+      MEASURED ON LENOVINHA 2026-09-14, immediately after two land attempts
+      were SIGKILLed for memory in the same gate phase (sibling row). The
+      coordinator directed a relay. The handoff push was refused:
+
+        git push origin HEAD:refs/heads/work/1159-g96c
+          plan-only lane: not applicable — refs/heads/work/1159-g96c is new on
+          the remote; no base to diff against (full gate required)
+          pre-push refused: the tree changed since ./build.sh --check last
+          passed
+          CHANGED SINCE THE GATE RAN (12 paths): Cargo.lock, VERSION, build.sh,
+          crates/tillandsias-headless/..., README.md, ...
+
+      The 12 paths are the release back-merge the coordinator had just told this
+      host to take. So the sequence is: take the back-merge as instructed, gate
+      it, be killed for memory, be told to relay, and find the relay closed
+      because the tree changed — by the merge that was instructed.
+
+      THE SHAPE. A gate stamp is a promise about a tree. Requiring one to push a
+      `work/` ref treats that ref as if it were landing, and it is not: a work/
+      ref moves nothing on trunk, and the coordinator GATES IT ON ARRIVAL before
+      relaying. The stamp is being demanded twice for one landing, at a point
+      where the host demonstrably cannot produce it.
+
+      WHY `--no-verify` IS NOT THE ANSWER, stated because the refusal itself
+      offers it: the skill's own rule is never to use it, and it is right —
+      it would push an ungated tree with nothing marking it ungated, which is
+      the failure the stamp exists to prevent. The fix is not to bypass the
+      check but to make the work/ lane express what it actually is: a HANDOFF OF
+      AN UNGATED TREE to a host that will gate it.
+
+      NOT A THEORETICAL GAP. Two hosts in this fleet gate slowly or marginally
+      enough to need the relay, and it is the floor-tier and memory-constrained
+      hosts — the ones most likely to be unable to gate — that the protocol was
+      written for. An escape hatch reachable only from the states that do not
+      need it is not an escape hatch.
+
+      NOT IN SCOPE: the memory ceiling and the silent OOM (sibling row), and
+      whether the coordinator should relay at all (it works, once the ref
+      exists).
+    exit_criteria:
+      - 'a host with no valid gate stamp can push refs/heads/work/<order> and the ref is marked ungated (pre-fix result: FAILS — refused, measured with the verbatim output above)'
+      - 'a push to any platform branch or main still requires the stamp exactly as today'
+      - 'NEGATIVE CONTROL: the coordinator gates a relayed work/ ref before it reaches trunk — the exemption moves WHERE the gate runs, never WHETHER it runs'
+      - 'NEGATIVE CONTROL: --no-verify remains unnecessary and unused on this path; the fixture asserts the sanctioned push succeeds without it'
+    events:
+      - type: filed
+        ts: "2026-09-14T01:05:55Z"
+        agent_id: "linux-lenovinha-opus5-20260914t010555z"
+        host: lenovinha
+        summary: |
+          Found while obeying a coordinator-directed relay after a memory kill.
+          The instructed back-merge is what invalidated the stamp the handoff
+          required.
