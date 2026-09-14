@@ -56,6 +56,83 @@ else
     bad "an unheld packet must pass" "rc=$rc out=[$out]"
 fi
 
+# 2b. ORDER 1104-w9np — THE READER'S OWN CLAIM, REFLECTED BACK.
+#     MEASURED on lenovinha 2026-09-06: their own in_progress claim, merged into
+#     osx-next and windows-next by routine integration, was reported as "a
+#     sibling branch holds this packet — it is NOT yours to implement", and
+#     1071-adhj sat in_progress for a day with every criterion met. The advice is
+#     wrong in the most expensive direction: it tells a host to keep its hands
+#     off its own finished work, and the tool is authoritative on exactly that
+#     question. RED ON PRE-FIX CODE, which reports claimed-elsewhere here.
+mkstub "$W/mine" in_progress
+_node="$(hostname -s 2>/dev/null || echo unknown-host)"
+out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
+        TILLANDSIAS_XBRANCH_CLAIM_HOST="$_node" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^own-claim-reflected:SOME-PKT:'; then
+    ok "a claim held only under THIS host's label is reported as the reader's own, exit 0"
+else
+    bad "the reader's own reflected claim must not be reported as a sibling's" "rc=$rc out=[$out]"
+fi
+
+# 2c. NEGATIVE CONTROL for 2b, and it is the load-bearing one: a claim under
+#     ANOTHER host's label must still refuse. If 2b passed because the check now
+#     calls everything "mine", this arm catches it — and that failure direction
+#     is the one 814-iyu7 measures in duplicated hours.
+out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
+        TILLANDSIAS_XBRANCH_CLAIM_HOST="some-other-host" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^claimed-elsewhere:SOME-PKT:'; then
+    ok "NC: a claim under another host's label still refuses, exit 1"
+else
+    bad "another host's claim must still refuse" "rc=$rc out=[$out]"
+fi
+
+# 2d. NEGATIVE CONTROL: an UNATTRIBUTABLE claim refuses too. An empty or
+#     unreadable host is not evidence that the claim is yours, and the only safe
+#     direction for an ambiguous answer is the existing verdict.
+out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
+        TILLANDSIAS_XBRANCH_CLAIM_HOST=" " bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ]; then
+    ok "NC: an unattributable claim refuses rather than being assumed the reader's"
+else
+    bad "an unattributable claim must refuse" "rc=$rc out=[$out]"
+fi
+
+# 2e. THE PARSER ITSELF, against a planted fragment — so the seam above cannot
+#     be the only thing covered. Reads the status entry with the greatest ts.
+_frag="$W/tree/plan/index.d"; mkdir -p "$_frag"
+cat > "$_frag/a.yaml" <<'FRAG'
+status:
+  - packet_id: some-packet-name
+    field: status
+    value: in_progress
+    ts: "2026-01-01T00:00:00Z"
+    host: older-host
+FRAG
+cat > "$_frag/b.yaml" <<'FRAG'
+status:
+  - packet_id: some-packet-name
+    field: status
+    value: in_progress
+    ts: "2026-06-01T00:00:00Z"
+    host: newer-host
+FRAG
+#     EXTRACTED BY MARKERS, not sourced: the check is a script with a usage
+#     path, so `. "$CHECK"` runs it with no arguments and exits before defining
+#     anything — the first version of this arm did exactly that and reported
+#     "the parser did not read the winning entry's host" about a function that
+#     had never been defined. Extraction fails by name if the markers move.
+sed -n '/^_claim_host_on_branch() {/,/^}$/p' "$CHECK" > "$W/parser.sh"
+if [ ! -s "$W/parser.sh" ]; then
+    bad "could not extract _claim_host_on_branch — the markers moved and this arm asserts nothing"
+    _parsed=""
+else
+    _parsed="$( . "$W/parser.sh"; _claim_host_on_branch "$W/tree" some-packet-name 2>/dev/null )" || true
+fi
+case "$_parsed" in
+    *newer-host*) ok "the attribution parser takes the status entry with the greatest ts" ;;
+    *) bad "the parser did not read the winning entry's host" "got [$_parsed]" ;;
+esac
+
 # 3. THE FALSE NEGATIVE THAT MATTERS. No plan binary means the folds cannot be
 #    read at all. That MUST block: reporting ok would say "nobody holds it"
 #    on the strength of having been unable to look. This is 1024-c3h3's shape,

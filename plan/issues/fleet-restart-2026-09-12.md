@@ -4541,3 +4541,53 @@ stories.
   the cache can never populate on macOS; images half measured at 6.1 G) and
   thirteen others from the fleet's hosts, filed by the sweep from ls-remote;
   read which are rescues and which are done next pass before any deletion.
+- **yoga: 1104-w9np completed at 73e6b2902 (closed 7995741e4, attested
+  8ba2042f9), fixture 10/10, bound in build.sh.** The cross-branch claim
+  check told lenovinha to keep their hands off their own finished work
+  (1071-adhj stranded in_progress for a day with every criterion met because
+  their claim came back at them from osx-next and windows-next after routine
+  integration); the new verdict is an OK, not a refusal with nicer words:
+  own-claim-reflected:<packet>:<branch>, exit 0, the work is the reader's to
+  resume or release. SAFETY PROPERTY, since this weakens a refusal:
+  ambiguity fails toward the OLD verdict — an empty, unreadable or
+  unrecognised host is NOT "mine" and still refuses (treating a sibling's
+  claim as your own is 814-iyu7); that arm passes on the pre-fix code too,
+  correctly, a control for the fix rather than the defect. 1012-hu7d handled
+  with it: a claim written with --host yoga and a later fragment written
+  without (the platform bucket) are one host wearing two labels, so _is_me
+  accepts the node name, TILLANDSIAS_WORKSTATION, TILLANDSIAS_HOST_KIND and
+  the platform constant. The parser arm reports that it ASSERTED NOTHING
+  rather than passing — which caught their own fixture bug (its first
+  version sourced the check, hit the usage path, and reported a parser
+  failure about a function never defined). Negative result stated: no other
+  cross-branch verdict under scripts/ can reflect a claim back. yoga is
+  self-draining on their cron; no hand-off needed.
+- **Coordination pass 10:11Z (pass 21): a SALVAGE REF FLOOD from `--help`.**
+  The sweep had filed fourteen new ledger lines last pass, read blind from
+  ls-remote; read this pass with the four-branch ancestry check: sixteen refs
+  named salvage/<host>/20260914---help[-HHMMSS] — nine under toolbx (yoga's
+  toolbox hostname, 1012-hu7d's two-labels shape one more time) pointing at
+  yoga's LANDED commits, seven under yoga at 04:55:26–04:55:49Z pointing at
+  commits on NO branch, one from macbookair. Mechanism: scripts/salvage-dirty-
+  worktree.sh has no usage guard, so `--help` is taken as the slug and, since
+  the 1146-8j7i clean-tree extension, a clean HEAD is pushed under it — every
+  probe of the script for usage mints a ref, and the ledger check then
+  demands each be marked before deletion. Fixed forward this pass (a
+  coordination-side guard): an empty, -h, --help or any leading-dash
+  argument prints usage and exits 2 pushing nothing, a slug is
+  [A-Za-z0-9._-]+ not starting with a dash, with a fixture arm; the integrated
+  `---help` lines marked deleted this pass, refs deleted next pass; the seven
+  un-integrated ones held until yoga says what they are. The ledger's 22
+  lines were honest about the refs and silent about their meaning — a
+  sweep that files from ls-remote records existence, not rescue; the
+  ancestry read is the other half and it happens at the pass after.
+  Guard landed in this pass's land: `--help`, `-h` and any leading-dash
+  argument refuse with exit 2 pushing nothing; a slug is [A-Za-z0-9._-]+;
+  fixture scenario `usage` plus a litmus step; live probe on macuahuitl:
+  refused:salvage:usage, origin's ref count unchanged at 23. Fourteen of
+  twenty-six ledger lines are marked deleted (the integrated `---help` refs
+  and macbookair's relayed rescue); the un-integrated seven wait for yoga.
+  Relay this pass: osx-next +2 (macneo's attestation). Stale rows
+  `ok:stale-ready-rows:89/503`, none handed. Audit rows=23 stems=23. Trunk
+  since the cycle: yoga's 1104-w9np. Hand-offs: none — every capable host is
+  on its cron; the floor has nothing floor-shaped.
