@@ -4068,3 +4068,101 @@ stories.
   (v56.9.13.1, Windows row, requested with the tag). Release run 34794577946:
   Linux and Windows jobs green, macOS tray job still running at 02:11Z; the
   three-set asset assertion waits on it.
+- **v56.9.13.1 PUBLISHED.** Release run 34794577946 completed success on all
+  three jobs (Linux musl at ~01:1xZ, Windows tray ~01:5xZ, macOS tray
+  ~02:1xZ; ~75 min end to end, the macOS job the long pole). Asset assertion
+  by name, all three sets present: tillandsias-linux-x86_64 + SHA256SUMS,
+  tillandsias-tray-56.9.13.1-windows-x64.zip + tillandsias-tray.exe +
+  SHA256SUMS-windows, tillandsias-tray-56.9.13.1-macos-arm64.tar.gz +
+  Tillandsias.dmg + SHA256SUMS-macos; 32 assets; MSIX absent (unsigned,
+  withheld by design). Prerelease (daily channel). Linux smoke artifact:
+  https://github.com/8007342/tillandsias/releases/download/v56.9.13.1/tillandsias-linux-x86_64
+  The cut ran ~3h40m from the operator's word (22:26Z) to publish (02:1xZ):
+  25 min first gate (red), ~1h diagnosis, 3 min land, 25 min re-gate, ~10
+  min bump check, ~10 min back-merge check, ~75 min workflow. The
+  skills-audit proposal "assert all three sets, do not display" was applied
+  by hand here and lands in the release skill with the batch.
+- **Land 22: ok:land:1dd840e4d:attempt-1** — the three post-cut relays
+  (osx-next, windows-next, lenovinha's salvage ref with 4e38b5a29) gated on
+  Linux for the first time and green; osx-next and windows-next contained in
+  trunk, 4e38b5a29 contained; lenovinha closes 1159-g96c on it. The relay
+  list for the next pass is empty.
+- **esme: v56.9.13.1 Windows smoke PASS (report 04ae40da2, host-qualified).**
+  install exit 0, sha256 ok, tray 56.9.13.1 (6b8342f3f) exact; reset:
+  terminate 0, unregister 0, credentials cold, tillandsias-vm-uuid preserved,
+  tillandsias-build Running (--terminate used, not wsl --shutdown, to keep
+  it); provision cold 99 s, warm 17 s; wire reachable, wire_version 3, phase
+  Ready; diagnose exit 2 (the guest idled between calls). Sections 0–3
+  covered, 3b and 4–4c NOT RUN. Blast radius held; unpushed work bundled
+  outside the checkout before the reset. The three briefed expectations
+  confirmed (stale:capability-row-expired is the fix; due:no-capability-row
+  from the builder distro is 1159-g96c; 1171-ccf2's absent headless exe is
+  expected in this cut). DIVERGENCE, recorded not filed: the documented
+  post-provision idle-shutdown says a distro restart restores the wire with
+  no intervention; here seven polls over four minutes stayed 10060 with the
+  guest Running and both units active, and only a warm --provision-once
+  restored it. RUNBOOK FINDING (to file, windows): PowerShell 5.1 +
+  ErrorActionPreference=Stop + `*>&1` turns any native stderr line into a
+  terminating ErrorRecord — the tray's benign "Failed to set locale" aborted
+  --provision-once MID-PROVISION and the half-provisioned guest still
+  satisfied the destruction-marker assertion (a naive re-run reads fresh
+  while resumed); remedy Start-Process -Wait -PassThru with redirected
+  streams; and $LASTEXITCODE came back EMPTY for a native call in that
+  harness, so a canary (cmd /c exit 7 must report 7) precedes every
+  assertion. NEAR-MISS: a stale checkout read "NO LEDGER ROW for
+  v56.9.13.1" — order 380 would have filed the release as undescribed; the
+  merge produced the row. HELD: 1155-jurn's canary push, because esme's gate
+  came back red at 53 min on capabilities-envelope-names-its-source 1/6
+  inside the gate, 6/6 standalone on the same tree — the arm name requested.
+- **Fifteenth regime axis (esme, measured): WHICH ARTIFACT.** The envelope
+  suite (yoga's, bound by the coordinator as a post-build litmus tonight)
+  resolves `BIN="${TILLANDSIAS_BIN:-$ROOT/target/debug/tillandsias}"`, a
+  hardcoded in-tree path; on every Windows host with-wsl2-builder re-execs
+  with CARGO_TARGET_DIR redirected, so esme's `./build.sh --check` compiled
+  the headless crate into /root/.cache/tillandsias-wsl2-target (17:08) and
+  the fixture graded the 09:02 in-tree binary, which predates the
+  implementation (16:55): five of six arms red with accel_source='' (the
+  field ABSENT, not wrong); standalone 6/6 later because the in-tree binary
+  had since been rebuilt. The fixture is hermetic on the cache
+  (XDG_CACHE_HOME=$TMP) — only the binary could differ. Same family as
+  1154-6big and the resolve_target_binary reorder: a consumer resolving an
+  artifact from a path the build did not write. Row to file (esme, linux
+  pickup): route the suite and every sibling that hardcodes target/debug
+  (executed paths, not mentions) through resolve_target_binary honouring
+  CARGO_TARGET_DIR; closure arm plants a stale in-tree and a current
+  redirected binary. Green on Linux twice tonight because the target dir is
+  not redirected there. esme's 1155-jurn push stays held until a gate proves
+  green — correct.
+- **esme filed both (3f45bd299): 1178-eg49** (Windows runbook: PowerShell
+  5.1 NativeCommandError aborts provisioning on a benign stderr line; the
+  half-provisioned guest STILL satisfies the destruction-marker assertion
+  because a partial provision writes a vhdx that postdates the marker, so a
+  re-run reads fresh while resumed; remedy Start-Process -Wait -PassThru with
+  redirected streams plus the exit-code canary, both exercised on the host;
+  section 0 anticipates the empty-status class for bash and not PowerShell)
+  **and 1179-yshc** (fixture, linux): ONE violator, not a class — nine
+  fixtures mention target/debug, exactly one executes a hardcoded path (the
+  envelope suite); 721-nyev already settled the convention and a sibling's
+  own comment records its first version being refused for the same thing.
+  Deliverable: resolve through resolve_target_binary, TILLANDSIAS_BIN
+  override kept, the DEFAULT was wrong. Regime on the row. CORRECTION from
+  esme to a figure they gave earlier: the plan-only lane's stale-binary
+  refusal is re-armed by ANY Cargo.lock change in the workspace, not only
+  plan-crate edits — three release rebuilds (~2m22s each) in one cycle to
+  push ledger fragments; the guard is right (1129-4su6), the frequency is the
+  defect; goes on 1152-y3bv as a note. Routed: 1179-yshc → macuahuitl's next
+  meta cycle with 1142-85zx.
+- **macbookair reports a STANDING consent from the operator for destructive
+  work on macbookair** ("yes, and treat it as standing": the destructive
+  macOS smoke and 804-deux part 2's VM rebuild, now and on future cycles;
+  their framing: "we embrace destructive resets, our platform is idempotent
+  and ephemeral by design"). Recorded as macbookair's report of the
+  operator's words, scoped to that host. Routing change: 804-deux part 2
+  (end-to-end cache survival across a VM rebuild, the p1 declined every cycle
+  on the consent rule) is claimable unattended on macbookair from their next
+  cycle; the macOS smoke runs when a release publishes, findings as packets,
+  report host-qualified. macbookair is running the v56.9.13.1 macOS smoke
+  now — the first real test of their clamp-ca-material fix in a shipped
+  artifact (the script was wholly inert on macOS before it: `stat -c` is
+  GNU-only); the sed -i slice is NOT in this release and they will say so
+  against any fixture-portability finding.

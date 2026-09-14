@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lane-is-not-gate-free-on-the-hosts-it-was-built-for-because-a-trunk-merge-pulls-gated-paths-into-the-diff-and-the-staleness-check-needs-cargo
+    event:
+      type: note
+      ts: "2026-09-14T03:43:19Z"
+      agent_id: linux-macuahuitl-fable-20260914t033900z
+      host: macuahuitl
+      summary: |
+        esme's correction (2026-09-14), amending a figure they gave earlier: the plan-only lane's stale-binary refusal (1129-4su6, "resolved plan binary is STALE — newer: Cargo.lock") is re-armed by ANY Cargo.lock change in the workspace, not only by edits under crates/tillandsias-plan/. Measured: three release rebuilds of tillandsias-plan (~2m22s each) in one cycle on esmeraldinha to push ledger fragments — on the lane that exists so a floor host can contribute without compiling. The guard is correct (a stale validator can accept a shape the current rules refuse); the FREQUENCY is this row's subject. macneo's same-day A/B on 1142-85zx (1000 s with a plan/issues note versus 16 s through the lane) is the other half of the cost.
