@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: enclave-network-internal-enforcement-and-guard-discovery
+    event:
+      type: progress
+      ts: "2026-09-14T23:48:50Z"
+      agent_id: linux-yoga-claude-20260914t234849z
+      host: linux
+      summary: |-
+        BOTH EXIT CRITERIA MET, and one defect found in the fix that the row did not name.
+
+        CRITERION 1 — every enclave create site passes --internal. scripts/run-forge-project.sh and scripts/diagnose-proxy.sh now carry the flag, with a comment at each site naming the consequence that makes this p1 rather than p2: orchestrate-enclave.sh REFUSES to reuse a network whose .Internal is false and cannot repair one (creation is skipped for an existing network), so a single run of either script on a clean host left the real stack unable to start until an operator removed the network by hand. The two sites create the SAME network by the SAME name as the launcher that has passed the flag since 972-a8vh.
+
+        CRITERION 2 — the guard discovers create sites repo-wide. The hardcoded three-file list is gone; scripts/check-enclave-network-internal.sh now sweeps tracked *.sh and *.rs (731 and 235 files on this tree, against a list of three) and the shell arm is invocation-scoped: continuations are folded with awk, comment lines are dropped before matching, and the flag must appear on the same logical line as the create verb.
+
+        THE DEFECT IN MY OWN FIX, found by running it rather than by reading it. The first repo-wide draft kept the old Rust test — a file containing the literal "network" and not "--internal" is an offender — and accused four tillandsias-logging files whose only sin is the word "network" in a log field. The matcher never changed; only its radius did. A test that is safe against a hand-picked list of three podman files is false the moment it is pointed at a tree. The discriminator now is the PAIR of quoted argument literals "network" and "create", which an arg-builder spells as separate vector elements and prose that says "network created" spells as neither.
+
+        TWO LIMITS DECLARED RATHER THAN HIDDEN, both carried in the verdict itself as ok:enclave-network-internal:source[sh=N,rs=M,rust=file-scoped,declined=docs]:
+          - The Rust arm is still FILE-scoped. A Rust file with one compliant and one non-compliant create call reads as clean, because the flag is a vector element assembled far from the verb and grep cannot see that structure. Closing it needs the arg-builders tested, not grepped.
+          - Documentation is declined. cheatsheets/ and docs/ carry non-compliant `podman network create` EXAMPLES; gating on prose makes a doc edit fail a build. The declined scope prints so the absence of a cheatsheet from the offender list reads as a boundary chosen, not a cheatsheet that passed.
+
+        EVIDENCE.
+          - Negative control, the whole point of the row: with the two launchers restored to their pre-fix state, the OLD guard printed ok:enclave-network-internal:source rc=0 — green beside exactly the defect it exists to catch — while the new guard printed drift:launcher-omits-internal:scripts/diagnose-proxy.sh,scripts/run-forge-project.sh rc=1. Same tree, same command, opposite verdicts.
+          - scripts/test-enclave-network-internal-discovery.sh, new, hermetic, 10/10. Every case builds a throwaway git repo under mktemp -d; nothing touches the real checkout, nothing calls podman, no absolute timestamp appears in it. Six of the ten cases assert the guard stays SILENT — a commented-out bad example, the verb as a data string in a for-loop, an unrelated network, a log field named network, a folded multi-line compliant create — because a sweep fails by accusing where a list failed by missing, and a guard that only ever proves it can say drift is half tested.
+          - MUTATION TESTED, four mutations, each landing on exactly its own case and no other: dropping the comment filter reddens case 4; dropping the enclave scoping reddens case 6; reverting the Rust arm to "network"-only reddens case 8; dropping the empty-sweep refusal reddens case 9 (both its arms). Each mutation was proven to have APPLIED before its result was read — the first attempt at three of them silently failed to match and the fixture printed a green 10/10, which is the trap this project keeps rediscovering.
+          - An empty sweep now REFUSES (unavailable:source-discovery-empty-sh-N-rs-M, exit 2) instead of reporting ok, because a lister that returns nothing is indistinguishable from a tree with nothing wrong.
+
+        FILED, NOT FIXED: 1193-e6kv. spec:enclave-network requires the proxy to be the one dual-homed member via ENCLAVE_EGRESS_NETS, and the shell launchers never mention the egress network at all — the string does not appear in any of the three. So on the shell path the chokepoint sits on an internal network with no route out. That is untouched by this row's fix in either direction, and rolling a topology change into a p1 security fix would have made the security fix unreviewable.

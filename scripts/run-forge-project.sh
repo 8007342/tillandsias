@@ -113,9 +113,21 @@ if [[ "$RECREATE" -eq 1 ]]; then
     "$PODMAN_CTL" container rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
 fi
 
+# @trace spec:enclave-network, order:1118-zvai, order:972-a8vh
+# --internal is the isolation. Without it podman attaches a gateway to the
+# bridge and every member gets NAT egress, so the proxy stops being the only
+# way out. This is the SAME network orchestrate-enclave.sh creates, by the same
+# name, and that launcher has passed the flag since 972-a8vh — so whichever
+# launcher ran FIRST on a host decided whether the enclave was an enclave.
+#
+# The consequence is worse than a weaker run, and that is why this is p1:
+# orchestrate-enclave.sh REFUSES to reuse a network whose .Internal is false,
+# and it cannot repair one, because creation is skipped for a network that
+# already exists. So a single run of this script on a clean host left the real
+# stack unable to start until someone removed the network by hand.
 if ! "$PODMAN_CTL" network exists "$ENCLAVE_NET" >/dev/null 2>&1; then
-    echo "[run-forge-project] Creating enclave network: $ENCLAVE_NET"
-    "$PODMAN_CTL" network create --driver bridge --subnet "$ENCLAVE_SUBNET" "$ENCLAVE_NET" >/dev/null
+    echo "[run-forge-project] Creating enclave network: $ENCLAVE_NET (internal)"
+    "$PODMAN_CTL" network create --driver bridge --internal --subnet "$ENCLAVE_SUBNET" "$ENCLAVE_NET" >/dev/null
 fi
 
 mkdir -p "$CERTS_DIR"

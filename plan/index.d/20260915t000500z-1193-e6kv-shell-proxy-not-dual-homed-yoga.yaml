@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by yoga while closing 1118-zvai. Filed rather than fixed: it is a
+# different defect from the one that row scopes, and quietly widening a p1
+# security fix into a topology change is how a reviewable change stops being
+# reviewable.
+packets:
+  - packet_id: the-shell-launchers-never-create-or-attach-the-egress-network-so-the-proxy-the-one-member-the-spec-requires-to-be-dual-homed-sits-on-an-internal-network-with-no-way-out
+    order: 1193-e6kv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: stable-milestone-v1
+    capability_tags: [podman, network, security, guard]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a shell topology that matches the spec's dual-homing requirement, and a guard that proves the proxy can reach out. Future litmus arm; the claimer writes it in the same commit and moves this text into verifiable_closure: after scripts/orchestrate-enclave.sh brings the stack up, the proxy container is attached to BOTH networks and a fetch through it succeeds, while a non-proxy member on the same enclave network still fails to egress; NEGATIVE CONTROL: with the proxy attached only to the enclave network the same fetch fails, so the arm is measuring attachment and not the host's connectivity."
+    owned_files:
+      - scripts/orchestrate-enclave.sh
+      - scripts/diagnose-proxy.sh
+    title: |
+      spec:enclave-network requires the proxy to be the one dual-homed member (ENCLAVE_EGRESS_NETS = tillandsias-enclave,tillandsias-egress), and the shell launchers never mention the egress network at all — they create only the internal network and attach the proxy to it alone, so on the shell path the chokepoint has no route out.
+    context: |
+      FOUND 2026-09-14 on yoga while closing 1118-zvai, by reading what
+      --internal actually does to the proxy rather than only to the members
+      it isolates.
+
+      spec:enclave-network, under *Container attachment to enclave network*:
+      "The system MUST attach every Tillandsias-managed container to the
+      tillandsias-enclave network. Only the proxy MUST additionally be
+      attached to the egress network for external access", and it names
+      main.rs fn build_proxy_run_args as "the only dual-homed member
+      (ENCLAVE_EGRESS_NETS)". The Rust side carries both constants —
+      EGRESS_NET and ENCLAVE_EGRESS_NETS in tillandsias-headless/src/main.rs,
+      Service::EgressNetwork in container_deps.rs, and the dual-homing note on
+      container_profile.rs.
+
+      The shell side has NEITHER. `grep -n 'tillandsias-egress\|EGRESS'` over
+      orchestrate-enclave.sh, diagnose-proxy.sh and run-forge-project.sh
+      returns nothing: the string does not appear. orchestrate-enclave.sh
+      creates the internal network and starts the proxy with a single
+      `--network "$ENCLAVE_NET"`. An internal network has no gateway, so on
+      that path the proxy — the only thing that is supposed to be able to
+      reach the internet — cannot.
+
+      WHY THIS WAS NOT FIXED IN 1118-zvai. That row's scope is "pass
+      --internal at every create site, and make the guard discover sites
+      repo-wide". Its fix makes run-forge-project.sh and diagnose-proxy.sh
+      agree with orchestrate-enclave.sh, which has created the network
+      --internal since 972-a8vh — so it does not change the proxy's homing by
+      one bit, and this defect is exactly as old and exactly as severe after
+      that fix as before it. Rolling a topology change into a security fix
+      would also have made the security fix unreviewable.
+
+      WHAT IS NOT YET KNOWN, and should be measured before any code moves:
+      whether the shell stack is REACHED in a mode where the proxy must
+      egress, or whether it is only ever used for offline diagnostics on a
+      host whose Rust launcher already built the networks. 972-a8vh recorded
+      the shell path as "reached only in some launch modes". If the answer is
+      the second, the fix may be a refusal with a named reason rather than a
+      second network — but the current silence is wrong either way, because
+      an operator running the shell launcher gets a proxy that looks healthy
+      on :3128 and cannot fetch.
+    next_action: |
+      Measure first: bring the stack up with scripts/orchestrate-enclave.sh on
+      a host with no pre-existing networks, then from inside the proxy
+      container check for a default route and try one outbound fetch. Report
+      the measurement on this row BEFORE changing any topology. Then either
+      create and attach tillandsias-egress on the shell path to match
+      build_proxy_run_args, or make the launcher refuse with a reason naming
+      this row. Do not add the second network to diagnose-proxy.sh on the
+      strength of the spec alone — that script's proxy may be intentionally
+      offline, and the spec describes the managed stack.
