@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yolanda at macuahuitl's direction (2026-09-14), from a live near-miss
+# on this host during the v56.9.13.1 cut. The shape below is macuahuitl's ruling;
+# the measurement and the window are mine.
+packets:
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    order: 1176-9vqn
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    capability_tags: [release, cut, pre-push, hook, coordination, fleet]
+    estimated_hours: 4
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a fixture arm that does not exist yet. Future evidence line in scripts/test-pre-push-honours-a-live-freeze.sh: `ok:pre-push-refuses-code-under-a-live-freeze` rc 0, with a planted freeze marker naming the frozen branch, asserting the refusal NAMES the marker and the branch (pre-fix result: FAILS — the hook has no freeze concept at all; measured yolanda 2026-09-13, a code push to a platform branch completed at 23:37:18Z while the v56.9.13.1 freeze was live and in the pusher's own tree, and every hook check passed: ok:no-stale-base-revert, ok:main-branch-affordance, ok:linux-next-merged). NEGATIVE CONTROLS, both required: a PLAN-ONLY push under the same live marker is ADMITTED (the freeze is not a work stoppage and the plan lane is how coordination keeps moving during a cut), and a code push to a branch the marker does NOT name is ADMITTED."
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      A release freeze is announced in ledger prose and enforced by nothing: scripts/hooks/pre-push-local-gate.sh checks that linux-next is merged and that the gate stamp matches the tree, and has no concept of a live freeze, so it will push code to a frozen branch with every check green. A 41-minute gate makes the window between "I checked" and "it pushed" wide enough for a freeze to begin inside it. Put a live freeze marker on origin and have the hook consult it for CODE pushes to the frozen branch only, plan-only exempt.
+    context: |
+      MEASURED on yolanda during the v56.9.13.1 cut. I merged origin/linux-next
+      at 22:28Z; that merge carried a claim event reading "coordinator cleared
+      the claim through the plan-only lane during the v56.9.13.1 freeze, code
+      held until the all-clear". The land tool then ran its gate for 2476 s and
+      pushed at 23:37:18Z. Every pre-push check passed, because none of them is
+      about a freeze.
+
+      THE PUSH ITSELF TURNED OUT TO BE FINE and that is the point, not a
+      mitigation: macuahuitl's freeze holds code lands on LINUX-NEXT, the branch
+      the release gate verifies, and a windows-next push moves nothing that gate
+      reads. So the hazard is not that I broke the cut. It is that NOTHING IN THE
+      SYSTEM KNEW EITHER WAY — not the hook, not the tool, not me. The same
+      sequence aimed at linux-next would have pushed code into the frozen branch
+      with every check green, and the only thing standing between those two
+      outcomes was which branch I happened to be on.
+
+      THE WINDOW IS THE MECHANISM, and it is why a discipline rule cannot cover
+      this. On this host `./build.sh --check` takes 41 minutes. A freeze declared
+      at any point inside that window is invisible to a land that checked before
+      it started, and the land pushes on completion without re-asking. The floor
+      hosts are slower still. So "check before you push" is not a rule anyone can
+      actually follow here; the check has to happen at the push.
+
+      SHAPE (macuahuitl's ruling): a live freeze marker on origin — a ref, or a
+      small file under plan/ — that the hook consults for CODE pushes to the
+      branch the marker NAMES. Plan-only pushes are exempt, deliberately: the
+      plan lane is how coordination keeps moving during a cut, and every host
+      used it under this freeze. The cut runbook sets the marker at gate start
+      and clears it at the back-merge push, so the marker's lifetime is the
+      freeze's lifetime and nobody has to remember to clear it.
+
+      WHY A MARKER ON ORIGIN RATHER THAN A LOCAL FILE: a local file is only as
+      fresh as the last fetch, which reintroduces the same window one layer down.
+      The hook is already talking to origin at push time.
+
+      RELATED, and the reason this row is not the same as 1174-u5wp: that row
+      makes a long gate cheaper to repeat. This one makes a long gate safe to
+      finish. Fixing either does not fix the other.
+
+      NOT VERIFIED: whether a marker-aware hook can be made to fail CLOSED on a
+      fetch failure without making every offline push impossible. That trade is
+      real and I have not thought it through; whoever takes this should decide it
+      explicitly rather than inherit it from an implementation.
+    exit_criteria:
+      - 'a CODE push to the branch a live freeze marker names is REFUSED by the pre-push hook, and the refusal names the marker and the branch (pre-fix result: FAILS — the hook has no freeze concept)'
+      - 'NEGATIVE CONTROL: a PLAN-ONLY push under the same live marker is ADMITTED'
+      - 'NEGATIVE CONTROL: a code push to a branch the marker does not name is ADMITTED'
+      - 'the cut runbook sets the marker at gate start and clears it at the back-merge push, so the marker''s lifetime is the freeze''s lifetime'
+    events:
+      - type: filed
+        ts: "2026-09-14T00:30:00Z"
+        agent_id: "windows-yolanda-claude-20260913t082232z"
+        host: yolanda
+        summary: |
+          Filed by yolanda from a live near-miss during the v56.9.13.1 cut, at
+          macuahuitl's direction and to their shape. macuahuitl ruled the push
+          itself was not a breach (the freeze holds linux-next, not the platform
+          branches); the row is about the absent mechanism, not the push.
