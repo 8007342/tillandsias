@@ -1,0 +1,51 @@
+# @trace spec:methodology-accountability
+# @trace order:1153-j2nm
+#
+# Order 1153-j2nm: a claim or closure written on osx-next or windows-next
+# reached plan_next on other hosts only when the coordinator relayed the
+# branch (19 min to 2h02m, 1034-whsp), so two hosts could work one row —
+# 1127-apa8 was closed on osx-next at ~08:40Z and again from scratch on
+# linux-next at ~09:50Z on 2026-09-13. Now scripts/push-plan-fragments-to-trunk.sh
+# pushes a platform host's NEW fragments to origin/linux-next at claim time as
+# one trunk-parented commit built with plumbing (worktree, index and branch
+# untouched), through the plan-only lane (no build stamp), after checking
+# trunk's fold with the new fragments so an event on a packet trunk has never
+# seen is refused rather than landed.
+name: litmus:claims-fleet-visible
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1153-j2nm in a scratch bare-remote + osx-next working copy with the
+  REAL pre-push hook installed: the claim fragment reaches origin/linux-next
+  as one commit parented on the old tip with the fragment as its whole diff,
+  the ungated platform code is not carried, the hook takes the plan-only lane
+  with no stamp, local state is byte-identical before and after, a trunk
+  reader's fold shows in_progress, and the later relay merges clean; negative
+  controls for scope, trunk-fold (with a content-built mutant proving the
+  check bites), status-loss (a completion event without its status fragment),
+  the platform branch's own gate still refusing the ungated code, nothing-new,
+  immutability, dry-run, a staged-but-uncommitted fragment, loop-status
+  grammar, a trunk that moves between fetch and push (the hook refuses, the
+  refetch sees the move, the rebuilt commit lands), and usage.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-claims-fleet-visible.sh
+  - workspace contains scripts/push-plan-fragments-to-trunk.sh and scripts/hooks/pre-push-local-gate.sh
+
+critical_path:
+  - step: "the helper and the fixture parse and carry their exec bits"
+    command: "bash -n scripts/push-plan-fragments-to-trunk.sh && bash -n scripts/test-claims-fleet-visible.sh && test -x scripts/push-plan-fragments-to-trunk.sh && test -x scripts/test-claims-fleet-visible.sh && echo 'ok: claims-fleet-visible-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: claims-fleet-visible-parses"
+
+  - step: "a platform-branch claim reaches trunk through the lane with no stamp, nothing else moves, the relay merges clean; scope, trunk-fold (mutant-proven), nothing-new, immutability, dry-run and usage controls"
+    command: "bash scripts/test-claims-fleet-visible.sh | tail -1"
+    timeout_ms: 180000
+    expected_behavior: "PASS: claims-fleet-visible"
+
+  - step: "the helper refuses a flag it does not take and pushes nothing (the salvage --help lesson of 2026-09-14, applied before this tool minted anything)"
+    command: "bash scripts/push-plan-fragments-to-trunk.sh --bogus 2>/dev/null | tail -1"
+    timeout_ms: 10000
+    expected_behavior: "refused:fragments-to-trunk:usage:--bogus"

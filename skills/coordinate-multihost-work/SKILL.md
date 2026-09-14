@@ -73,6 +73,15 @@ the remedy is mechanical rather than attentional: **run the cross-branch check o
 every candidate before routing it, and never report a packet as unclaimed on the
 strength of a trunk read.**
 
+Since 1153-j2nm the gap has a second, shorter remedy on the CLAIMANT's side:
+`scripts/push-plan-fragments-to-trunk.sh` pushes a platform host's new
+fragments to `origin/linux-next` at claim time through the plan-only lane
+(no stamp; the worktree and branch are untouched; the relay merges the
+identical file clean). Tell a platform host that claims by message to run
+it, and when the cross-branch check reports `claimed-elsewhere:<order>:<branch>`,
+relay the fragment or ask the host to push it — the check remains the
+coordinator's control, because a host can still claim without the helper.
+
 ## Active Coordination & Mediation Audit
 
 In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:

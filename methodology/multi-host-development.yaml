@@ -768,12 +768,28 @@ multi_host_development:
       plan fragments in `plan/index.d/` and loop_status fragments in `plan/loop_status.d/`)
       directly to their active platform branch. The Linux coordinator merges sibling-branch
       work into `linux-next` during the coordination pass.
+      NEW fragments — claims, progress, closures, filings — MAY additionally be
+      pushed to `origin/linux-next` from ANY checkout, and a CLAIM MUST be
+      (order 1153-j2nm): `scripts/push-plan-fragments-to-trunk.sh` builds one
+      trunk-parented commit carrying only the new fragment files (temporary
+      index and plumbing; the worktree, index and branch are untouched) and
+      pushes it through the plan-only lane, so no build stamp is needed. Code
+      and everything else stays on the platform branch; the relay merges the
+      identical fragment clean.
     rationale: >
       Append-only fragments (`plan/index.d/`, `plan/loop_status.d/`) eliminate
       merge conflicts on ledger state across hosts. Sibling branches stay focused
       and committable on their active platform branch without branch context switching.
+      A claim exists to separate hosts, and a claim on a platform branch
+      separates nobody until the relay: MEASURED 2026-09-13, 1127-apa8 was
+      closed on osx-next at ~08:40Z and closed again from scratch on linux-next
+      at ~09:50Z because the first closure and its claim were invisible to
+      plan_next there; the relay gap runs 19 minutes to 2h02m (1034-whsp).
+      Pushing the fragment to trunk at claim time closes that gap for the cost
+      of one plan-only push.
     procedure:
       - "git fetch origin && git checkout <active-branch> && git pull --ff-only"
+      - "Claim by `tillandsias-plan set-field <order> status in_progress …`, commit the fragment on the platform branch, then `scripts/push-plan-fragments-to-trunk.sh` (verdict `ok:fragments-on-trunk:<sha>:<n>`); the control is `tillandsias-plan next <role> | grep -c <order>` reading 0 on a trunk checkout. A `refused:fragments-to-trunk:trunk-fold:` verdict means the fragment names a packet trunk has not seen — push the filing fragment with it (the default selection does)."
       - "Append plan edits as fragments in `plan/index.d/` (via `tillandsias-plan append-event` or new fragment files) and status edits via `tillandsias-plan loop-status-append`."
       - "git add ONLY the intended files (never `git add -A` from a dirty tree)."
       - "git commit with `chore(plan): <subject>` or `docs(plan): <subject>`."

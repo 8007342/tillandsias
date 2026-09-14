@@ -329,12 +329,27 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     git add plan/index.d/
     git commit -m "claim(<packet-id>): <host>"   # the fragment and NOTHING else
     git push origin <active-branch>
+    # ON A PLATFORM BRANCH (osx-next, windows-next) THIS IS NOT YET A CLAIM —
+    # nobody on trunk can see it until the relay. Push the fragment to trunk
+    # too (1153-j2nm); no build stamp is needed, the plan-only lane takes it:
+    scripts/push-plan-fragments-to-trunk.sh        # -> ok:fragments-on-trunk:<sha>:<n>
     ```
+
+    `push-plan-fragments-to-trunk.sh` builds one commit parented on
+    `origin/linux-next` carrying only the NEW fragment files (temporary index
+    and plumbing — your worktree, index and branch are untouched) and pushes
+    it to `refs/heads/linux-next` through this checkout's own pre-push hook.
+    Your platform branch keeps its copy; the relay merges the identical file
+    clean. `refused:fragments-to-trunk:trunk-fold:…` means a fragment names a
+    packet trunk has never seen (you filed it on this branch): run it without
+    arguments so the filing rides along. The control, from any trunk checkout:
+    `tillandsias-plan next <role> | grep -c <packet-id>` → 0.
 
     **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
     HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
     branch. It reaches a trunk host only when the coordinator relays that branch
-    into `linux-next`. Measured on tlatoanis-macbook-air 2026-09-05:
+    into `linux-next` — unless it was pushed to trunk with the helper above,
+    which is why that line is not optional. Measured on tlatoanis-macbook-air 2026-09-05:
 
     | | |
     |---|---|

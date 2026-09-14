@@ -639,6 +639,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:claims-fleet-visible
   - litmus:fragment-keys-are-read
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
