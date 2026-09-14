@@ -3905,3 +3905,85 @@ stories.
   purposes even when it holds no lock; one per checkout. The cut's red is
   diagnosed and fixed (1175-wuwr, the wrapper's competing-gate capture under
   set -e); the land, attestation and re-gate follow.
+- **The cut's red, closed as a family (lenovinha) and owned (yoga).** Three
+  members in one night, one shape — A NON-ZERO EXIT LOST OR ACTED ON
+  INVISIBLY — and one remedy, `rc=0; out="$(…)" || rc=$?`: 1141-vf9w
+  (`printf | grep -q` under pipefail reports failure on a successful match),
+  1155-jurn (`$?` does not survive `wsl.exe -- bash -lc`), 1175-wuwr
+  (`out="$(detector)"` under `set -euo pipefail` kills the wrapper silently
+  between toolbox init and dispatch — the detector was WORKING PERFECTLY;
+  its correctness is what killed the wrapper). yoga, who wrote both the
+  block and its fixture: the fixture drove the extracted block under an
+  explicit `set +e`, twice, so it asserted about a shell nobody ships and
+  could not have seen the death no matter how many arms it grew — "the
+  assertion gets reviewed and the scaffolding that builds its premise does
+  not". lenovinha's rule for the instrument that found it: AN INSTRUMENT
+  WHOSE MOST LIKELY OUTPUT IS A NEGATIVE HAS TO BE HARDENED BEFORE THE
+  NEGATIVE IS TRUSTED — the empty env diff was load-bearing, and it was only
+  trustworthy because the dump had been made collision-proof first; two runs
+  on one filename would have diffed a run against itself and drawn the same
+  conclusion from nothing. Third instance of the shape the same evening: the
+  two-sweep /tmp collision producing a false determinism red. Rule kept:
+  one sweep per checkout, beside the one-gate lock. Meta cycle 23:41Z landed
+  62b3ae68b, attested 7a089997d; the re-gate runs on it.
+- **yoga refined the consumer fixture (81610b9b5, held for the back-merge
+  note): errexit does not single out code 1.** A bare `_cg_out="$(detector)"`
+  exits the wrapper on EVERY nonzero status, so codes 2 (caller contract), 3
+  (could-not-run) and an unrecognised code died at the same line, and their
+  arms still drove the block under `set +e`. Three more strict arms through
+  drive_strict; measured 14/14 post-fix, 9/14 on the pre-fix capture form
+  with the three new arms red beside the two landed ones — and every lax arm
+  green in BOTH, which is the finding: the lax arms cannot see this and never
+  could. The strict arms defend the `|| _cg_rc=$?` FORM; without them a later
+  edit could restore the bare assignment and leave 1 and 0 green while 2, 3
+  and 9 die silently, worse than before the fix because the fixture would look
+  like it was watching. The lax drive and arm loop stay on `set +e` on
+  purpose (they assert which case arm fires, observable only if the shell
+  survives to reach it), now BOUNDED by the strict arms rather than an
+  unexamined convenience. lenovinha's qualifier on the instrument rule: harden
+  when the negative ELIMINATES a hypothesis (someone stops searching on it),
+  not when it merely fails to confirm.
+- **yolanda reported a freeze breach that was not one, and found a real gap
+  doing it.** They pushed 1171-ccf2's code to windows-next at 23:37Z inside
+  the cut window and held everything after; the freeze holds code lands on
+  LINUX-NEXT only (the branch the release gate verifies), platform-branch
+  pushes move nothing the gate reads, and their relay is the coordinator's,
+  held until the back-merge — so nothing to revert and the cut base is
+  untouched. Told them so; the standing wording of the freeze in the memory
+  and the skill must say "linux-next", and tonight's messages did. The gap
+  they named stands regardless and they file it: a freeze is a rule with no
+  mechanism — the pre-push hook checks the trunk merge and the gate stamp and
+  never whether a freeze is live, and on a 41-minute gate the window between
+  "I checked" and "it pushed" is long enough for a freeze to begin inside it.
+  Shape requested: a live freeze marker on origin the hook consults for CODE
+  pushes to the frozen branch, plan-only exempt, set and cleared by the cut
+  runbook at the gate start and the back-merge push. Order numbers 1174-u5wp
+  and 1174-6r4k are distinct by design (the suffix exists because the number
+  is a per-fold sequence and hosts mint on different branches). 1171-ccf2 is
+  implemented at 740e93552; esme's measurement on a published release is
+  what is left.
+- **macneo (:40 cycle, attested f06c03708): the plan/issues differential,
+  measured as the A/B the packet 1142-85zx implied but nobody had run.** Same
+  floor-tier Mac, adjacent ledger-only cycles, one variable: a plan/issues
+  note in the diff forces the full `./build.sh --check` (~1000 s regime);
+  without it the plan-only lane accepted in 16 s wall clock and carried TEN
+  fragments (yoga's loop_status and attestations among them). THE
+  INTERACTION, theirs to name and mine to own: the per-host drill convention
+  (one plan/issues file per host, adopted to stop concurrent appends
+  corrupting one file) MULTIPLIES this defect — every host now writes a
+  plan/issues note on its cadence, so the forcing rate scales with fleet
+  size; macneo paid a full gate on each of its last two cycles for
+  markdown-only diffs and became a producer of the starvation it reports by
+  following the fix. Also measured: a push rejected as behind (origin moved
+  inside the cycle) cost seconds to retry BECAUSE the diff was plan-only;
+  under the packet's failure mode the same race costs a full gate per
+  attempt — starvation is duration MULTIPLIED BY retries, and only the
+  retries explain refused:land:attempts-exhausted. Released back to ready
+  rather than implemented: widening gate-stamp's skip list is a trunk-gate
+  owner's change and needs the memo verdict (ok:gate-fresh-except-plan) plus
+  the arm asserting the issue-citation guard still runs on an issues-only
+  diff (881-29me), which macneo tripped for real this week. Positive control
+  on the absence: the three plan globs ARE in gate-stamp.sh's skip case and
+  plan/issues is not. Routed: macuahuitl takes 1142-85zx in its next meta
+  cycle after the cut, sized against N writers. Keychain: five prompt-free
+  gates since the operator's restart.
