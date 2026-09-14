@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    event:
+      type: implemented
+      ts: "2026-09-14T04:35:23Z"
+      agent_id: linux-yoga-claude-20260914t043523z
+      host: yoga
+      summary: |
+        BOTH HALVES IMPLEMENTED, and the division of labour between them is the design rather than a detail.
+
+        THE FLOOR CATCHES THE START STATE; THE POST-MORTEM CATCHES THE RUN STATE. lenovinha's two kills were the SECOND kind — the host had enough memory to begin and ran out inside clippy — so a floor alone would not have caught them and it is stated here rather than implied. What the floor buys is the other case: a host that cannot start at all stops in seconds with a named refusal instead of dying in minutes with nothing to show.
+
+        THE FLOOR IS A LEGIBILITY DEVICE, NOT A CAPACITY PREDICTOR. The row rules capacity out of scope in its own words ("Neither needs to make the build fit; both need the failure to be LEGIBLE"), and the first negative control is that the floor must not become a second cliff. Default 1 GiB MemAvailable, measured against yoga — 14.8 GiB MemTotal, 11-12 GiB available at rest, and a host that completes this gate routinely. An arm asserts the shipped default stays at or under a quarter of a completing host's headroom, so the control is a property rather than a literal and a later "tightening" reds it.
+
+        MemAvailable, NOT MemTotal, and the row's own measurement is why: lenovinha's total was constant across five successful lands and two kills on the same day. What moved was what was free. MemTotal cannot distinguish those.
+
+        THE POST-MORTEM ASKS THE KERNEL, and it asks in three states. SIGKILL leaves no exit path, so the victim writes nothing; the kernel does record the kill and nothing read it back. 0 ok:no-oom-record, 1 refused:gate:oom-killed, 3 could-not-run — because "no OOM record" and "could not look" are opposite facts and a host whose journal this user cannot read would otherwise report a confident not-OOM for every kill.
+
+        THE POSITIVE CONTROL IS LOad-BEARING. `journalctl -k -g <pattern>` prints "No entries" and exits 0 BOTH when the window is quiet and when the user cannot read the kernel journal at all — identical output for opposite facts. So the probe first asks whether ANY kernel line is readable and degrades to could-not-run when none is. MEASURED on yoga, unprivileged: journalctl -k returns lines while `dmesg` answers "Operation not permitted", which is why the journal is the source and dmesg is not.
+
+        WIRED IN TWO PLACES, for two different deaths. build.sh's _run consults the record whenever a child exits >= 128 — that is the recoverable case, where the kernel picks the largest RSS (rustc) and the script survives to report. The land driver consults it when the gate produced NO failing line at all, which is lenovinha's case: the log ends mid-line and the existing message already said "the gate may have died rather than refused" — now it asks instead of leaving the reader with the ambiguity.
+
+        NEGATIVE CONTROL 2 IS ENFORCED TWICE, by construction and by position. A clippy error exits 101 and never reaches _run's branch; the land driver consults only on the no-failing-line path; and inside the probe a --victim narrows the record so an unrelated OOM elsewhere on the host cannot be read as this gate's. An arm asserts the driver's consult sits below the `else`, by LINE ORDER.
+
+        FIXTURE 12/12, hermetic, regime stated in its header. Mutation-tested four ways, each with the diff printed and proven non-empty first: raising the default floor to 8 GiB reds the second-cliff arm; removing the victim narrowing reds NC2 by name; moving the floor check after the first compile reds the ordering arm; and disabling the driver's no-match branch reds arm 9 as "asserted nothing" rather than passing.
+
+        A FIXTURE BUG CAUGHT BY ITS OWN MUTATION, worth recording: arm 9's first version ranged from the sentence "no violation/refusal line matched" to the next `fi`, and my change MOVED that sentence into a case arm below the consult — so the range began after the thing it was looking for and reported the wiring missing. A matcher anchored on text the change itself moves is measuring its own edit. It now asserts by line order.
+
+        NOT DONE, and deliberately: nothing here adds a rung below one job. 1047-h88p's ceiling is untouched, the row rules that out of scope, and a cap cannot express "do not attempt this phase at all" — which is what the floor now says instead.

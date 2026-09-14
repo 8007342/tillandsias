@@ -161,7 +161,9 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # a later `git clean` removes.
     _gate_log="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-land-gate-attempt-${attempt}.log"
     echo "land: attempt $attempt — gate (./build.sh --check, log: $_gate_log)"
-    if ! ./build.sh --check > "$_gate_log" 2>&1; then
+    _gate_rc=0
+    ./build.sh --check > "$_gate_log" 2>&1 || _gate_rc=$?
+    if [ "$_gate_rc" -ne 0 ]; then
         # The FIRST failing step, not the last line: build.sh prints its verdict
         # after the failure, so a tail shows the summary and not the cause. The
         # error line is what the reader needs and it is what a re-run would have
@@ -229,7 +231,27 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "  first failing line: $_first_fail" >&2
             [ -n "$_fallback_note" ] && echo "$_fallback_note" >&2
         else
-            echo "  (no violation/refusal line matched; read the log — the gate may have died rather than refused)" >&2
+            # ORDER 1176-fn2p — "DIED" AND "REFUSED" ARE DIFFERENT FACTS, so ask
+            # the kernel rather than leaving the reader with the ambiguity this
+            # very sentence names. Measured on lenovinha 2026-09-14: two land
+            # attempts SIGKILLed in clippy, the gate log ending mid-line with no
+            # verdict, and nothing anywhere saying why. A hang and an OOM need
+            # opposite responses (wait longer versus stop and hand off).
+            #
+            # ONLY REACHED WHEN NO FAILING LINE MATCHED, so a gate that refused
+            # for an ordinary reason never consults this at all — the verdict
+            # cannot launder a real failure, which is 1176-fn2p's second
+            # negative control, enforced by POSITION here and by the kernel
+            # record itself inside the probe.
+            _oom_out="$(bash "$ROOT/scripts/check-oom-postmortem.sh" --since -60min 2>&1)"; _oom_rc=$?
+            case "$_oom_rc" in
+                1) echo "refused:land:gate-oom-killed — the gate produced no verdict (exit $_gate_rc) and the kernel records an OOM kill (1176-fn2p)" >&2
+                   printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2
+                   echo "  This host did not fail the gate; it could not run it. Free memory or hand the work off — re-running will cost another attempt for the same reason." >&2 ;;
+                0) echo "  (no violation/refusal line matched, and the kernel records NO OOM kill: the gate died for some other reason — read the log)" >&2 ;;
+                *) echo "  (no violation/refusal line matched; the OOM record could not be read, so died-versus-refused is UNDETERMINED here, not cleared)" >&2
+                   printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2 ;;
+            esac
         fi
         echo "  Do NOT re-run ./build.sh --check to diagnose this: it is a DIFFERENT" >&2
         echo "  invocation against a tree this script's integrate step may have moved," >&2

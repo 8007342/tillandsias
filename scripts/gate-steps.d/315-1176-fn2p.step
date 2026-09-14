@@ -1,0 +1,24 @@
+# Gate step 1176-fn2p — data, not code.
+#
+# Binds the fixture for the memory floor and the OOM post-mortem. Hermetic: both
+# probes are driven through their seams (--meminfo-from, --journal-from) and the
+# wiring arms read build.sh and land-on-platform-branch.sh as TEXT. An OOM
+# cannot be provoked on demand and the host that had one is not this one, so
+# stubs are the only honest construction for the positive case.
+#
+# TWO ARMS ARE THE PACKET'S OWN NEGATIVE CONTROLS and they are the reason this
+# is bound rather than run once: a host ABOVE the floor must see no new refusal
+# (the floor must not become a second cliff), and an OOM naming a different
+# victim must NOT be reported as this gate's kill (the verdict must not launder
+# an ordinary failure). Both are the failure modes a later "tightening" would
+# introduce, and neither is visible without an arm.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a gate too short of memory refuses by name, and a SIGKILLed gate says so (1176-fn2p)"
+STEP_SCRIPT="scripts/test-gate-memory-refusal.sh"
+STEP_ERROR="the memory floor or the OOM post-mortem regressed (1176-fn2p) — a gate killed for memory may again stop with an empty log indistinguishable from a hang, the floor may have become a second cliff refusing hosts that would have finished, or an unrelated OOM may now launder an ordinary gate failure; see the verdict line above"
+STEP_OK="gate memory floor and OOM post-mortem check passed"
+# Exit 3 means a probe is missing — nothing was examined, and the fixture says so
+# by name rather than passing. Exit 1 remains a real regression.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="one of the two probes is absent, so neither half could be exercised"
