@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-smoke-runbooks-windows-block-aborts-provisioning-on-a-benign-stderr-line-and-leaves-a-half-provisioned-guest-that-still-passes-the-freshness-assertion
+    order: 1178-eg49
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, testing, release, fail-loud, false-negative]
+    estimated_hours: 2
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a RUNBOOK
+      BLOCK, and nothing in the tree executes that block outside a live
+      destructive smoke — so any litmus named now resolves to nothing and
+      885-92iu refuses the row. Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-smoke-windows-block-survives-native-stderr.sh — drive the
+      block's invocation form against a stub that writes one benign line to
+      stderr and exits 0, and assert the step does NOT abort. A second arm
+      asserts the exit-code canary refuses when the channel cannot carry a
+      status. Both arms are msys-only and must SKIP loudly elsewhere, since
+      NativeCommandError is a Windows PowerShell behaviour.
+    title: |
+      the smoke runbook's §3 Windows block sets ErrorActionPreference=Stop and pipes the tray through `*>&1`, so PowerShell 5.1 turns any native stderr line into a terminating error — the tray's benign locale warning aborted --provision-once mid-provision and left a half-provisioned guest that still satisfies the destruction-marker assertion
+    context: |
+      MEASURED on esmeraldinha during the v56.9.13.1 Windows smoke, under an
+      operator-approved destructive run. Not a release defect: the release
+      passed. This is a defect in the runbook that grades it.
+
+      §3's Windows block opens with `$ErrorActionPreference = 'Stop'` and runs
+      the tray as `& $tray --provision-once *>&1 | Tee-Object <log>`. Under
+      Windows PowerShell 5.1 a native command's stderr is wrapped in an
+      ErrorRecord (NativeCommandError), so ANY stderr line becomes a
+      TERMINATING error regardless of the process's exit code.
+
+      The tray writes one benign line on this host:
+
+        tillandsias-tray.exe : Failed to set locale, defaulting to "C.UTF-8"
+
+      That aborted `--provision-once` MID-PROVISION. The provision log stopped
+      at "Installing systemd + podman in Fedora base...", the child process was
+      gone, and the distro was left registered but half-built.
+
+      WHY THAT IS WORSE THAN A FAILED STEP, and why it earns a row rather than
+      a note: the half-provisioned guest STILL SATISFIES THE DESTRUCTION-MARKER
+      ASSERTION. That assertion compares the rootfs `ext4.vhdx` mtime against a
+      marker file written before provisioning, and a partial provision writes a
+      new vhdx — so it postdates the marker. A re-run therefore reads as "a
+      fresh provision" while actually being a RESUMED one, and the runbook's
+      own guard against grading a survivor cannot tell the difference. The
+      operator recovered by unregistering the partial guest and provisioning
+      again from pristine, but only because the abort was noticed; nothing in
+      the block reports it.
+
+      A SECOND DEFECT IN THE SAME BLOCK, found while recovering from the first:
+      `$LASTEXITCODE` came back EMPTY for a native call in this harness — the
+      version string printed AFTER the line that read the variable. §0's own
+      preamble anticipates exactly this class for bash ("every assertion on a
+      captured status also checks the capture is NON-EMPTY") but the PowerShell
+      half only says it "asserts `$LASTEXITCODE` and `$?` instead", with no
+      equivalent non-empty check. An empty capture compared with `-ne 0` is
+      FALSE, so a failed step reads as a pass — the walk-past-a-failed-install
+      shape 727-kmks wrote the bash assertions to kill, reintroduced on the
+      PowerShell side.
+    deliverable: |
+      The Windows block survives a benign stderr line, and cannot grade a step
+      whose status it did not actually read.
+
+        * skills/smoke-curl-install-and-test-e2e/SKILL.md §3 Windows — replace
+          `& $tray ... *>&1 | Tee-Object` with
+          `Start-Process -Wait -PassThru -NoNewWindow -RedirectStandardOutput
+          <out> -RedirectStandardError <err>`, and read `.ExitCode` from the
+          returned process object. That reports a real exit code, keeps stderr
+          as stderr, and does not conflate a warning with a failure. This is
+          what the v56.9.13.1 run used after the abort, and it completed the
+          cold provision in 99 s and a warm one in 17 s.
+        * ADD AN EXIT-CODE CANARY to the block, before any assertion:
+          `Start-Process cmd.exe -ArgumentList '/c','exit 7' -Wait -PassThru`
+          must report `ExitCode` 7. Until that passes, every exit-code
+          assertion in the block is decoration — the same argument 1155-jurn
+          makes for the wsl.exe transport, on a different channel. The
+          v56.9.13.1 run ran this canary and it is why the provision's exit 0
+          is trustworthy.
+        * DECIDE AND RECORD whether the destruction-marker assertion can be
+          strengthened to distinguish a COMPLETE provision from a partial one.
+          An mtime comparison cannot: a partial provision writes a new vhdx
+          too. A completion marker written by the provisioner itself would, but
+          that is a product change rather than a runbook one, and the trade
+          should be stated rather than assumed.
+
+      SCOPE NOTE: do NOT fix this by setting `$ErrorActionPreference =
+      'Continue'` for the whole block. That would also swallow the errors the
+      block legitimately needs to stop on; the problem is conflating a native
+      command's stderr with failure, not the preference itself.
+    next_action: >
+      Swap the invocation to Start-Process -Wait -PassThru with redirected
+      streams and add the exit-code canary ahead of the first assertion — both
+      are mechanical and were exercised on esmeraldinha during the v56.9.13.1
+      run. Then decide the destruction-marker question separately.
+    provenance: |
+      Found by esme-windows on esmeraldinha during the v56.9.13.1 Windows smoke
+      (channel daily), run under the operator's standing approval for
+      macuahuitl-requested destructive tests. Filed at macuahuitl's direction.
+      The run's full report, including the recovery and both timings, is
+      plan/issues/smoke-e2e-findings-v56.9.13.1-2026-09-13-windows.md.
+
+      The block itself was added 2026-09-04 under 1004-fue3 precisely because
+      every prior Windows run had improvised and no two were comparable — so
+      this is a defect in the fix for non-comparability, found the second time
+      the block was executed.
