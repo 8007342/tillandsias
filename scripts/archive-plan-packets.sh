@@ -151,6 +151,12 @@ _ruby_usable() {
 # reach this; it guards the ruby-dependent paths.
 _require_ruby() {
     _ruby_usable && return 0
+    # THE TOKEN GOES ON STDOUT, beside the prose on stderr, because this exit is
+    # reachable from callers that never pass the tokenised --check early exit
+    # (order 1132-r4mt). Line-for-line the same cause as that one, so the same
+    # token: build.sh's forge skip keys on it, and a second spelling would make
+    # the skip depend on WHICH path reached the same condition.
+    echo "could-not-run:no-usable-ruby (965-sxec)"
     echo "Check FAILED: no usable ruby in this locus, so the archiver's ready-set" >&2
     echo "  and orphan-event invariants CANNOT BE EVALUATED. This says NOTHING" >&2
     echo "  about the ledger — the instrument is missing, not the data (923-ws3r)." >&2
@@ -332,12 +338,21 @@ if [ "$1" == "--check" ]; then
     # about to consume the answer; the fresh case costs a no-op cargo build.
     PLAN_BIN="$(ensure_fresh_plan_binary)" && _fresh_rc=0 || _fresh_rc=$?
     if [ "$_fresh_rc" -eq 2 ]; then
+        # ORDER 1132-r4mt. A STABLE TOKEN, for the same reason the no-usable-ruby
+        # exit has carried one since 965-sxec: this script has FOUR exit-3 sites
+        # and only one of them said which it was, so a caller reading rc=3 had to
+        # parse prose to tell "the ledger instrument is stale" from "ruby cannot
+        # run here" — two conditions repaired in different places. Measured on
+        # yoga 2026-09-12: an in-gate rc=3 whose reason string was NOT
+        # no-usable-ruby, and a whole cycle went into asking WHICH it had been.
+        echo "could-not-run:archiver:stale-plan-binary (1132-r4mt)"
         echo "Check FAILED: the resolved tillandsias-plan is STALE for this tree and"
         echo "  could not be rebuilt in this locus (851-cduu). A stale instrument does"
         echo "  not fail; it answers wrong — refusing to evaluate the ready-set"
         echo "  invariant with a binary built for another checkout."
         exit 3
     elif [ "$_fresh_rc" -ne 0 ]; then
+        echo "could-not-run:archiver:no-plan-binary (1132-r4mt)"
         echo "Check FAILED: no runnable tillandsias-plan, so the ready-set invariant"
         echo "  cannot be evaluated. Refusing to fall back to the idempotency-only"
         echo "  check — that is precisely the false green this assertion replaces."
@@ -371,6 +386,7 @@ if [ "$1" == "--check" ]; then
     for _frag in "$SCRATCH"/plan_tmp/index.d/*.yaml; do
         [ -e "$_frag" ] || continue
         if ! "$PLAN_BIN" fragment-event-packets "$_frag" >> "$SCRATCH"/plan_tmp_addressed_raw.txt 2>/dev/null; then
+            echo "could-not-run:archiver:unreadable-fragment (1132-r4mt)"
             echo "Check FAILED: cannot read fragment $_frag, so the orphan invariant"
             echo "  cannot be evaluated. Refusing."
             _archiver_cleanup
@@ -382,6 +398,11 @@ if [ "$1" == "--check" ]; then
     _ap_phase orphans-before
 
     if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+        # DISTINCT FROM no-usable-ruby, and the distinction is the point: that
+        # one means the lane has no runnable interpreter and is forge-skippable;
+        # this one means a ruby WAS runnable and the worker still failed, which
+        # is never skippable.
+        echo "could-not-run:archiver:ruby-worker-failed (1132-r4mt)"
         echo "Check COULD NOT RUN: the archiver's ruby worker failed to execute"
         echo "  (965-sxec). The ready set was never re-derived, so nothing here is"
         echo "  a statement about it."
@@ -413,6 +434,7 @@ if [ "$1" == "--check" ]; then
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
     if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+        echo "could-not-run:archiver:ruby-worker-failed-idempotency-pass (1132-r4mt)"
         echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
         echo "  pass (965-sxec), so idempotency was never evaluated."
         exit 3
@@ -449,6 +471,7 @@ if [ "$1" == "--check" ]; then
         # regression, so relay the distinction instead of flattening it.
         case "$_answerability" in
             *:no-runnable-plan-binary*|*:cannot-create-workdir*|*:sweep-failed*|*:ready-listing-failed*|*:unknown-argument*)
+                echo "could-not-run:archiver:answerability-harness-failed (1132-r4mt)"
                 echo "Check COULD NOT RUN: the answerability harness failed before it could"
                 echo "  judge the sweep, so this says NOTHING about the ledger — read its log."
                 echo "  $_answerability"

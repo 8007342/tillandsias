@@ -84,6 +84,15 @@ run_probe() {
     ( cd "$TMP" && PATH="$TMP/shadow:$PATH" TILLANDSIAS_HEADLESS_BIN="$1" bash "$PROBE" --fragment 2>&1 >/dev/null )
 }
 
+# ORDER 1171-ccf2. The install-dir arm needs the OPPOSITE of run_probe: no
+# TILLANDSIAS_HEADLESS_BIN at all, because that override pre-empts every later
+# candidate and would prove nothing about whether the install path is consulted.
+# LOCALAPPDATA is fixture-supplied, which is also the regime guard under test --
+# the candidate must appear when it is set and vanish when it is not.
+run_probe_install_dir() {
+    ( cd "$TMP" && PATH="$TMP/shadow:$PATH" LOCALAPPDATA="$1"         env -u TILLANDSIAS_HEADLESS_BIN bash "$PROBE" --fragment 2>&1 >/dev/null )
+}
+
 # ── 1. THE DEFECT: a stale candidate must NOT be admitted. ───────────────────
 out="$(run_probe "$TMP/stale")"
 rc=$?
@@ -147,6 +156,54 @@ case "$out3" in
         bad "a NON-RUNNING candidate was reported as stale; it is absent, not out of date" ;;
     *)  ok "a non-running candidate is not misreported as stale" ;;
 esac
+
+# ── 5. ORDER 1171-ccf2: the resolver consults the WINDOWS INSTALL DIR.
+#
+# install-windows.ps1 extracts into $LOCALAPPDATA\Programs\Tillandsias, which is
+# NOT on PATH — so before this order a Windows host with a tray installed had no
+# candidate at all and host-capability-probe.sh exited 2 at the very locus whose
+# expired-row verdict told it to publish. The installer is deliberately not made
+# to edit the user's PATH; the resolver looks where the install puts things.
+#
+# REGIME for these arms: LOCALAPPDATA is fixture-supplied and the host's own
+# value never reaches them, so they read the same on a Linux host (where the
+# variable is normally unset) as on Windows.
+inst="$TMP/fakelocal/Programs/Tillandsias"
+mkdir -p "$inst"
+cp "$TMP/current" "$inst/tillandsias.exe"
+
+out5="$(run_probe_install_dir "$TMP/fakelocal")"
+rc5=$?
+if [ "$rc5" -ne 2 ]; then
+    ok "a current binary in the install dir is CONSULTED (rc=$rc5, not the resolver's 2)"
+else
+    bad "the install dir was not consulted; a Windows install still has no candidate: $out5"
+fi
+
+# THE VOCABULARY PROBE STILL APPLIES THERE. Living in the install directory is
+# not a currency claim: a stale installed tillandsias.exe must be refused BY
+# NAME like any other candidate, or this order would re-open 1172-dyvd through
+# a new door.
+cp "$TMP/stale" "$inst/tillandsias.exe"
+out6="$(run_probe_install_dir "$TMP/fakelocal")"
+case "$out6" in
+    *refused:probe:stale-candidate:*tillandsias.exe*)
+        ok "a STALE binary in the install dir is refused by name, not admitted for its location" ;;
+    *)
+        bad "a stale installed binary was not refused by name: $out6" ;;
+esac
+
+# THE REGIME GUARD: with LOCALAPPDATA unset the candidate must not exist at all,
+# so the in-guest Linux locus never consults a Windows path nor reports a
+# Windows binary as its own.
+cp "$TMP/current" "$inst/tillandsias.exe"
+out7="$( cd "$TMP" && PATH="$TMP/shadow:$PATH"     env -u TILLANDSIAS_HEADLESS_BIN -u LOCALAPPDATA bash "$PROBE" --fragment 2>&1 >/dev/null )"
+rc7=$?
+if [ "$rc7" -eq 1 ] || [ "$rc7" -eq 2 ]; then
+    ok "with LOCALAPPDATA unset the install candidate does not exist (rc=$rc7)"
+else
+    bad "an unset LOCALAPPDATA still reached a Windows install path (rc=$rc7): $out7"
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "ok:probe-stale-candidate-fixture:all"
