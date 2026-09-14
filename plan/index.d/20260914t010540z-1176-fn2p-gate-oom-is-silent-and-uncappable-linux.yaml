@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on lenovinha 2026-09-14 after two land attempts were SIGKILLed for
+# memory in the same gate phase, with the job cap already at its floor.
+packets:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    order: 1176-fn2p
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [tooling, build, gate, observability]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the guard: build.sh has no memory-floor refusal and no OOM post-mortem today, so there is no litmus to pin. Future scripts/test-gate-memory-refusal.sh; the claimer writes it in the same commit and moves this text into verifiable_closure (1136-n8sh) — build.sh refuses BY NAME before the expensive phases on a host below a declared free-memory floor (refused:gate:insufficient-memory naming the floor and the reading), and a gate whose child was OOM-killed reports refused:gate:oom-killed by reading the kernel's OOM record rather than stopping silently (pre-fix result: FAILS — measured lenovinha 2026-09-14, two land attempts SIGKILLed in clippy strict+listen-vsock, gate log ends mid-line with no verdict and LAND_EXIT never set); NEGATIVE CONTROL 1: a host ABOVE the floor is unaffected and no new refusal appears — the floor must not become a second cliff that refuses hosts which would have completed; NEGATIVE CONTROL 2: a gate that fails for an ORDINARY reason (a real clippy error) still reports that reason and never refused:gate:oom-killed, so the new verdict cannot launder a genuine failure."
+    owned_files:
+      - build.sh
+      - scripts/land-on-platform-branch.sh
+    title: |
+      A gate SIGKILLed for memory stops with an empty log that is indistinguishable from a hang, and the 1047-h88p job ceiling is a step function whose lowest rung is one job — so a host that is still short at one job gets no cap, no warning, and no verdict.
+    context: |
+      MEASURED ON LENOVINHA 2026-09-14, twice, same phase:
+
+        land attempt 1  killed by the system, low memory
+        land attempt 2  killed by the system, low memory
+        both died in    clippy (strict + listen-vsock), checking
+                        tillandsias-headless
+        gate log ends   mid-line, no verdict, no LAND_EXIT
+
+      Tree intact after both: no merge or rebase in progress, worktree clean,
+      nothing partially pushed. The land script's sequencing is why an abrupt
+      kill left nothing to unpick, and that part worked.
+
+      THE CAP WAS ALREADY AT ITS FLOOR, measured not assumed:
+
+        MemTotal   14142800 kB
+        mem_gb     13  (integer div by 1048576)
+        13 < 16 -> CARGO_BUILD_JOBS=1
+        CARGO_BUILD_JOBS in the environment: UNSET, so the cap is what ran
+
+      So this is not parallelism. It is one rustc on tillandsias-headless under
+      the listen-vsock feature, beside a desktop session and an agent process,
+      on a 13.8 GB host.
+
+      TWO DEFECTS, AND THE SECOND IS THE EXPENSIVE ONE.
+
+      (1) THE CEILING IS A CLIFF WITH NO RUNG BELOW ONE. 1047-h88p reads
+      `if mem_gb < 16 then 1`. A host at 13 GB gets the same cap as a host at
+      2 GB, and a host still short at one job has nowhere left to go. The cap
+      cannot express "this host should not attempt this phase at all", which is
+      the true state here.
+
+      (2) THE GATE CANNOT REPORT ITS OWN RESOURCE EXHAUSTION. SIGKILL leaves no
+      exit path, so the log simply stops. A reader cannot tell an OOM from a
+      hang, and those need opposite responses — wait longer versus stop and
+      hand off. The kernel records the kill; nothing reads it back.
+
+      MARGINAL, NOT ABSOLUTE, and this is why it is a p2 rather than a blocker:
+      five packets landed through this same gate on this same host within the
+      preceding hours. v56.9.13's tree moved the line, not the host. A cliff at
+      16 GB has nothing to say about a host that crosses a threshold mid-day.
+
+      WHAT TO BUILD. A declared free-memory floor checked BEFORE the expensive
+      phases, refusing by name with the floor and the reading, so the host stops
+      in seconds instead of dying in minutes with nothing to show. Plus a
+      post-mortem read of the kernel's OOM record when a child dies on a signal,
+      so the driver emits refused:gate:oom-killed rather than stopping. Neither
+      needs to make the build fit; both need the failure to be LEGIBLE.
+
+      NOT IN SCOPE: making the gate smaller, tuning codegen-units, or lowering
+      the cap below one job (there is no such thing). Those are answers to "why
+      is the build big", and this packet is about "why did the gate say nothing".
+
+      A SECOND FINDING THAT FOLLOWS FROM THE FIRST AND IS FILED SEPARATELY:
+      the relay protocol cannot rescue a host that cannot gate, because pushing
+      a `work/` ref requires a valid gate stamp too. See the sibling row.
+    exit_criteria:
+      - 'a host below the declared free-memory floor refuses by name before clippy, naming the floor and the reading (pre-fix result: FAILS — the gate proceeds and is SIGKILLed with an empty log)'
+      - 'a gate whose child died on SIGKILL reports refused:gate:oom-killed by reading the kernel OOM record (pre-fix result: FAILS — the log stops mid-line and no verdict is emitted)'
+      - 'NEGATIVE CONTROL: a host above the floor sees no new refusal — the floor must not become a second cliff'
+      - 'NEGATIVE CONTROL: an ordinary clippy failure still reports its own reason and never refused:gate:oom-killed, so the verdict cannot launder a real failure'
+    events:
+      - type: filed
+        ts: "2026-09-14T01:05:40Z"
+        agent_id: "linux-lenovinha-opus5-20260914t010540z"
+        host: lenovinha
+        summary: |
+          Filed from two SIGKILLed land attempts with the job cap already at
+          its floor. The tree survived both; what did not survive was any
+          account of why the gate stopped.
