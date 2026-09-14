@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha from 1185-9qx6's side observation: nothing on the installed
+# Linux launcher answers "is this binary the tree's".
+packets:
+  - packet_id: the-installed-linux-launcher-carries-no-build-provenance-so-a-version-mismatch-cannot-be-told-from-a-stale-label-and-the-only-label-it-has-is-a-compile-time-bake-of-the-version-file
+    order: 1188-mm9y
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [tooling, instrument, release-tier, diagnostics]
+    parent_order: 1185-9qx6
+    estimated_hours: 2
+    unscoreable: "unpinnable-until-the-surface-exists: the deliverable is the provenance surface. Future litmus scripts/test-launcher-reports-its-provenance.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: the installed launcher reports the commit it was built from and whether that tree was dirty, and a fixture proves a binary built from a known SHA reports that SHA (pre-fix result: FAILS — no such surface exists on the Linux launcher today, measured on lenovinha 2026-09-14); NEGATIVE CONTROL: the reported SHA must come from the build, not be read from the checkout at runtime — a binary carried to a host with a different HEAD must still report its own build SHA."
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - build.sh
+    title: |
+      The installed Linux launcher carries no build provenance: `tillandsias --version` prints `include_str!("../../../VERSION")`, a compile-time bake, so a label that disagrees with the tree's VERSION cannot be told from a binary that IS the tree's, and there is no SHA to fall back on.
+    context: |
+      ANSWERING 1185-9qx6's side observation, which asked whether the installed
+      binary is the tree's after a green ci-full installed the launcher on
+      macuahuitl: `tillandsias --version` reported v56.9.12.2 against a VERSION
+      of 56.9.13.1.
+      THE ANSWER IS THAT THE QUESTION CANNOT BE ANSWERED, and that is the
+      defect. crates/tillandsias-headless/src/main.rs:121 is
+      `pub(crate) const VERSION: &str = include_str!("../../../VERSION");` and
+      main.rs:275 prints it, so the label is the VERSION FILE AS IT WAS WHEN THE
+      BINARY WAS COMPILED. A mismatch is therefore consistent with two states
+      needing opposite responses — the install copied a stale artifact, or the
+      binary is current and VERSION was bumped after it was built — and the
+      label cannot distinguish them. Nothing else on the launcher helps:
+      grepping the headless crate for a build-time commit fingerprint finds
+      NOTHING. The 765-evbt fingerprint machinery
+      (TILLANDSIAS_GIT_SHA_OVERRIDE / BUILD_COMMIT_SHA_OVERRIDE) is consumed by
+      crates/tillandsias-macos-tray/build.rs and guarded against in build.sh's
+      --install and --release blocks; the Linux launcher has no build.rs reading
+      it. So the macOS tray can say what it was built from and the launcher the
+      fleet actually installs cannot.
+      This is 881-29me's shape: cite what survives the operation. A version
+      label bakes at compile time and survives nothing; the commit does.
+      WHAT TO BUILD: a build.rs (or an existing-build-script hook) on
+      tillandsias-headless that bakes the commit SHA and a dirty flag, surfaced
+      by --version and by --diagnose, so `is this the tree's binary` is a
+      one-command answer on every host. NOT IN SCOPE: changing the VERSION
+      scheme or the bump rule.
+      MEASURED on lenovinha 2026-09-14T18:57Z, a second host, same shape:
+      VERSION 56.9.13.1, ~/.local/bin/tillandsias reports v56.9.12.1, and no
+      surface on that binary names the commit it came from.
+    exit_criteria:
+      - 'the installed launcher reports the commit SHA it was built from and whether that tree was dirty (pre-fix result: FAILS — no such surface; `tillandsias --version` prints only the compile-time VERSION bake)'
+      - 'a fixture builds from a known SHA and asserts the binary reports it'
+      - 'NEGATIVE CONTROL: the SHA is baked at build time, not read from the checkout at runtime — a binary run against a different HEAD still reports its own build SHA'
+    events:
+      - type: filed
+        ts: "2026-09-14T18:57:10Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed from 1185-9qx6's side observation. The question "is the
+          installed binary the tree's" has no answer on the Linux launcher:
+          its only label is a compile-time include_str! of VERSION, and the
+          crate bakes no commit SHA.
