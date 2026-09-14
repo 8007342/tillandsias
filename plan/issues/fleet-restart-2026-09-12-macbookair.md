@@ -340,3 +340,22 @@ looked"* will eventually be read as the former.
   wrong calls came from explaining a result instead of first reproducing it
   faithfully. A reproduce command in a packet is not evidence that it reproduces
   the defect — it is a claim, and it needs falsifying like any other.
+
+- 2026-09-14 (cycle, 830-xsk2): settled the in-guest hop's open device question
+  by measurement rather than assumption, as the prior claimant asked. Four arms:
+  the container profile alone refuses AF_VSOCK socket creation (EPERM); adding
+  --device /dev/vsock does NOT help (still EPERM); relaxing seccomp WITHOUT the
+  device works. So seccomp is the sole blocker and the device is irrelevant —
+  neither of the two routes the packet framed. The container route costs one
+  narrow seccomp allowance on a dedicated forwarder container, leaving every
+  other consumer on the default filter, which removes the "touches every
+  consumer" objection that made --add-host look comparable.
+- 2026-09-14: recorded explicitly that seccomp=unconfined is the ISOLATION
+  instrument and not the fix. A blunt flag that makes the symptom go away is the
+  easiest thing to ship and the hardest to walk back once a consumer depends on
+  it.
+- 2026-09-14: ETIMEDOUT from the forwarder under --exec-guest is EXPECTED, per
+  this packet's own 2026-08-29 constraint (VZ retains guest connects until the
+  host pumps CFRunLoop). Noted on next_action so the next claimant does not read
+  the correct result as a broken forwarder — the failure mode that constraint
+  was written down to prevent.
