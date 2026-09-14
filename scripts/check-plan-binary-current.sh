@@ -65,6 +65,103 @@ case "$_prc:$_probe" in
         exit 0 ;;
 esac
 
+# ── ORDER 1152-y3bv: MINT THE PLAN-ONLY LANE'S VALIDATOR-SURFACE STAMP ──────
+#
+# The pre-push plan-only lane used to judge staleness by comparing the
+# resolved binary's mtime against the WHOLE crates/tillandsias-plan tree plus
+# the WHOLE workspace Cargo.lock (plan_binary_is_stale,
+# scripts/plan-binary-probe.sh). esme measured 2026-09-14 that ANY Cargo.lock
+# change anywhere in the workspace re-arms it — three ~2m22s
+# `cargo build --release -p tillandsias-plan` rebuilds in one cycle on a
+# floor host, none of which touched a byte the lane's own validation reads.
+#
+# THE FIX NARROWS staleness to the VALIDATOR SURFACE — the sources that
+# implement validate-yaml, check --strict-fragments and the fragment
+# checkers — but narrowing needs a build-time RECORD to compare against, and
+# "the binary records nothing today": neither scripts/cycle-preflight.sh nor
+# scripts/plan-binary-probe.sh writes one; both only rebuild or resolve.
+#
+# THIS STEP IS WHERE THAT RECORD GETS MINTED. It already runs after any build
+# this host has done, as part of `./build.sh --check` (gate step
+# 095-1079-qb8k), and it has already resolved and executed $BIN above (the
+# executability probe).
+#
+# GATED ON THE OLD, BROADER mtime CHECK — DELIBERATELY. This step cannot
+# prove $BIN was JUST compiled; all it can prove is "nothing under
+# crates/tillandsias-plan or Cargo.lock is newer than $BIN", which is
+# plan_binary_is_stale's own question. When that says fresh, the NARROWER
+# validator-surface subset is certainly also current — a subset of a
+# not-newer set cannot itself be newer — so it is safe to record its hash as
+# the build-time baseline. When the old check says stale, this step changes
+# nothing: the last confirmed-fresh stamp (if any) is left standing rather
+# than being overwritten on an assumption.
+#
+# DUPLICATED FROM scripts/hooks/pre-push-local-gate.sh, not shared: 1152-y3bv's
+# owned-files list has no library file in scope for one copy, and
+# plan-binary-probe.sh belongs to a different packet's concurrent edit. Keep
+# the two hash computations in lockstep — scripts/test-plan-only-lane-structural.sh
+# pins that they agree on the same input.
+if ! command -v plan_binary_is_stale >/dev/null 2>&1; then
+    . scripts/plan-binary-probe.sh 2>/dev/null || true
+fi
+_vs_surface_files() {
+    grep -ln 'validate-yaml\|strict-fragments\|declared-closures-check\|closure-evidence-check' \
+        crates/tillandsias-plan/src/*.rs 2>/dev/null
+    [ -f crates/tillandsias-plan/Cargo.toml ] && echo crates/tillandsias-plan/Cargo.toml
+    return 0
+}
+_vs_surface_lock_stanzas() {
+    [ -f Cargo.lock ] || return 0
+    local _dep
+    for _dep in serde serde_yaml serde_json tillandsias-podman mlua tokio chrono; do
+        awk -v want="$_dep" '
+            /^\[\[package\]\]/ {
+                if (keep) printf "%s", blk
+                blk = $0 "\n"; keep = 0
+                next
+            }
+            { blk = blk $0 "\n" }
+            $0 == "name = \"" want "\"" { keep = 1 }
+            END { if (keep) printf "%s", blk }
+        ' Cargo.lock 2>/dev/null
+    done
+}
+_vs_surface_hash() {
+    local _sha1 _sha2 _f _list
+    if command -v sha256sum >/dev/null 2>&1; then
+        _sha1=sha256sum; _sha2=""
+    elif command -v shasum >/dev/null 2>&1; then
+        _sha1=shasum; _sha2="-a 256"
+    else
+        return 1
+    fi
+    _list="$(_vs_surface_files)"
+    [ -n "$_list" ] || return 1
+    {
+        printf '%s\n' "$_list" | while IFS= read -r _f; do
+            [ -n "$_f" ] || continue
+            printf '%s\n' "$_f"
+            cat "$_f" 2>/dev/null
+            printf '\000'
+        done
+        _vs_surface_lock_stanzas
+    } | $_sha1 $_sha2 2>/dev/null | cut -d' ' -f1
+}
+if command -v plan_binary_is_stale >/dev/null 2>&1 && ! plan_binary_is_stale "$BIN"; then
+    _vs_new="$(_vs_surface_hash)"
+    if [ -n "$_vs_new" ]; then
+        _vs_stamp="${BIN}.validator-surface-sha256"
+        _vs_tmp="$(mktemp "${_vs_stamp}.XXXXXX" 2>/dev/null || true)"
+        if [ -n "$_vs_tmp" ]; then
+            if printf '%s\n' "$_vs_new" > "$_vs_tmp" 2>/dev/null && mv -f "$_vs_tmp" "$_vs_stamp" 2>/dev/null; then
+                echo "stamped:plan-binary-validator-surface:$_vs_stamp" >&2
+            else
+                rm -f "$_vs_tmp" 2>/dev/null || true
+            fi
+        fi
+    fi
+fi
+
 # The real ledger must be untouched whatever happens. The fixture seeds its own
 # tree, but assert it rather than trusting the comment.
 _repo_before="$(ls plan/index.d 2>/dev/null | wc -l | tr -d ' ')"
