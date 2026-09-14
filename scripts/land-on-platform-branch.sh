@@ -161,9 +161,71 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # a later `git clean` removes.
     _gate_log="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-land-gate-attempt-${attempt}.log"
     echo "land: attempt $attempt — gate (./build.sh --check, log: $_gate_log)"
+    # ── ORDER 1174-u5wp — ADOPT A STAMP THIS TREE ALREADY EARNED ───────────
+    #
+    # MEASURED on yolanda 2026-09-13: the harness killed the land for low
+    # memory, `./build.sh --check` survived inside the WSL distro as an ORPHAN,
+    # ran 2476 s to completion, exited 0 and recorded a stamp for the tree --
+    # and the only process that would have read that exit code and pushed was
+    # already dead. Attempt 2, on a tree that had not moved and for which a
+    # valid stamp existed, started the same 41-minute gate from the top.
+    #
+    # THE REGIME IS THE MEMORY, which is why it compounds rather than merely
+    # wastes: vmmemWSL held 6.5 GB while the orphan ran, WSL does not return
+    # memory to Windows on its own, and the host was at 542 MB free of 15.9 GB
+    # when the kill fired. The orphan is what keeps the host in the state that
+    # caused the kill. On the four-core floor host that is a loop, not an
+    # incident.
+    #
+    # ADOPTION, NOT "DIE WITH THE PARENT" (macuahuitl's ruling): killing the
+    # orphan throws away a gate that finished GREEN. Adoption turns it into a
+    # free landing on the very next attempt.
+    #
+    # THIS IS NOT A PUSH-SAFETY HOLE, and the three conditions are why. The
+    # stamp is already exactly what the pre-push hook trusts, and it BINDS TO A
+    # TREE DIGEST -- so adopting it grants precisely the authority the hook
+    # would grant seconds later. A stamp older than the tree fails `verify`
+    # with stale:tree-changed-since-gate, which is the load-bearing negative
+    # control.
+    #
+    # AFTER THE INTEGRATE, NEVER BEFORE IT, and the row's "on entry" is the one
+    # thing corrected here: the fetch-and-merge above CHANGES THE TREE, so a
+    # stamp checked before it describes a tree this tool is about to replace.
+    # Checked here, the integrate has already happened and a no-op integrate --
+    # yolanda's case exactly -- leaves the stamp valid.
+    #
+    # THE UNION DEBT VETOES ADOPTION, and this file predicted this change: the
+    # comment above says the gate is MANDATORY whenever the marker exists,
+    # "because the whole point of writing the debt down is that a future 'skip
+    # the gate when nothing changed' shortcut must not silently inherit it"
+    # (1056-5344). This is that shortcut. It does not inherit it.
+    #
+    # SCOPE MUST BE `full`, because the hook enforces scope separately
+    # (enforce_stamp_scope) and a narrower stamp could satisfy the hook for a
+    # narrow push while saying nothing about the gate this tool owes.
+    _adopted=""
+    if [ ! -s "$_um" ]; then
+        _sv="$(bash scripts/gate-stamp.sh verify 2>/dev/null)"
+        if [ "$_sv" = "ok:gate-fresh" ]; then
+            _ss="$(bash scripts/gate-stamp.sh scope 2>/dev/null)"
+            if [ "$_ss" = "full" ]; then
+                # NAME THE STAMP, or a reader cannot tell a SKIPPED gate from a
+                # gate that never ran -- the row's third criterion. gate-stamp.sh
+                # exposes no field reader, so the `stamped` line is read from the
+                # file it owns; an unreadable one degrades to a named token
+                # rather than to silence.
+                _adopted="$(sed -n 's/^stamped[[:space:]]\{1,\}//p' "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp" 2>/dev/null | head -1)"
+                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green full-scope gate stamp; skipping the gate and going straight to the push (1174-u5wp)"
+                echo "land: attempt $attempt — gate ADOPTED, not run. A gate that finished green is worth adopting; the pre-push hook re-verifies this same stamp against this same tree."
+            fi
+        fi
+    fi
+
     _gate_rc=0
+    if [ -z "$_adopted" ]; then
     ./build.sh --check > "$_gate_log" 2>&1 || _gate_rc=$?
-    if [ "$_gate_rc" -ne 0 ]; then
+    fi
+    if [ -z "$_adopted" ] && [ "$_gate_rc" -ne 0 ]; then
         # The FIRST failing step, not the last line: build.sh prints its verdict
         # after the failure, so a tail shows the summary and not the cause. The
         # error line is what the reader needs and it is what a re-run would have
