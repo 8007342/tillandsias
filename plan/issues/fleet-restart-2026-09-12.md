@@ -4781,3 +4781,168 @@ block on its own land: no collision). 1109-t8kw tagged `low-end` in the
 base. The helper's archive fix lands with this pass. Stale rows 89/500,
 none handed. Audit rows=23 stems=23. Hosts silent this window (esme,
 yolanda since 12:20Z, lenovinha, pirria): not directed.
+
+**Pass 25 hold — esme, 17:12Z: 1155-jurn closed on both Windows hosts.**
+Merged by yolanda at e6f675d18; canary 7/7 on both hosts with arm 7 firing
+live on each — the wsl.exe transport drops exit status on yolanda too, so
+the defect is the platform's, not one host's. Daily macos-tray probe green
+(cargo rc=0, 70s cold target); findings in
+plan/issues/probe-macos-tray-on-windows-findings-2026-09-14.md. Two
+decisions taken by the coordinator on esme's evidence: (1) NO cycle-preflight
+advisory for the dropped status — preflight never crosses the hop (`grep
+wsl.exe scripts/cycle-preflight.sh` is empty), the condition is permanent,
+and a true line firing forever with no action attached trains hosts to skip
+the block; the convention lives here instead: A WINDOWS HOST LEARNS THAT ITS
+CHANNEL LIES ONLY BY RUNNING THE CANARY — run it before trusting any
+wsl.exe exit status, and measure in script files whose stdout tokens
+survive the hop. (2) 1155-jurn's caller routing: REFUSE stands (yolanda's
+implementation and argument) — a wrapper that reconstructs a status the
+transport dropped hides the platform's lie behind a number that looks
+measured; refusing puts the choice at the point of use. Esme asked to run
+the git-identity probe for 1109-t8kw part 2 (report the verdict word; the
+flip is the hand-off).
+Esme (17:30Z) on 1109-t8kw part 2: verdict word AT-RISK at the Windows/Git
+Bash locus (`git commit --allow-empty` rc=128, "unable to auto-detect email
+address (got 'bullo@Esmeraldinha.(none)')" — no global identity; this repo
+works only through its REPO-LOCAL identity, which a scratch checkout does
+not inherit, the packet's own predicate); SAFE inside the tillandsias-build
+distro (autodetect works there). TILLANDSIAS_HOST_TIER unset. The verdict is
+LOCUS-DEPENDENT and the row did not say which locus it meant; esme checked
+the consequence: scripts/run-litmus-test.sh does not re-exec through
+with-wsl2-builder (its only MINGW reference is platform naming), so
+invoking it from Git Bash keeps the AT-RISK locus and the measurement is
+real; ./build.sh would not. Coordinator's reading: AT-RISK-in-fact on a
+low-end host is the property; the env var is the selector's routing, not
+the precondition; row flipped to esmeraldinha at the Git Bash locus. Esme's
+near-miss, 1155-jurn's shape on a different substitution: the first distro
+probe ran `$(mktemp -d)` INSIDE the `wsl.exe -d … -- bash -lc '…'` argument
+string; the substitution came back EMPTY in transit, `git init` ran in the
+home directory instead of a fresh one, the commit succeeded there, and the
+probe printed DISTRO_SAFE about a world it never built — this packet's own
+subject reproduced while measuring it. The re-run pipes the script on
+stdin, prints its tmpdir, and refuses with PROBE_INVALID when mktemp returns
+empty. A value written in the argument string is not the value the far side
+sees.
+Esme (17:45Z), the hazard's nastier generalisation, FLEET-RELEVANT: the
+same first probe did more than misreport. With `$(mktemp -d)` mangled to
+empty inside the wsl.exe argument string, `cd` failed ("null directory")
+NON-FATALLY and the shell stayed in its inherited cwd — which, for a wsl.exe
+call from the harness, IS the live checkout under /mnt/c — so `git init -q`
+re-inited the live repo and `git commit --allow-empty` landed an empty
+commit ON WINDOWS-NEXT (26ed73ba9, tree-identical to d7db273f3, unpushed,
+removed once the litmus run stopped reading the tree). A FAILED cd IS NEVER
+NOWHERE: the fallback location is wherever you already were. Any fleet
+probe of the form `cd "$(mktemp -d)"; <mutating command>` sent through a
+wsl.exe argument string has this shape, and on a host whose branch pushes
+automatically it would not have stayed local. Load-bearing guard, in this
+order: print the tmpdir, refuse (PROBE_INVALID) when it is empty, and make
+the cd FATAL (`cd "$d" || exit`) — the PROBE_INVALID check alone is the
+half that only prevents the false verdict. Esme's corrected runner does all
+three; the first did none. Part 2 of 1109-t8kw is running at the Git Bash
+locus with the AT-RISK probe embedded in the same log as the verdicts
+(PROBE_COMMIT_RC=128, TIER unset), never through build.sh. Reading the flip
+correctly took esme three tries and the reason generalises: `git show
+origin/linux-next:plan/index.yaml | grep` reads the folded BASE, which
+fragments override; grepping fragments for the ORDER finds nothing because
+set-field addresses the packet by its long packet_id; `tillandsias-plan
+status` in a detached worktree at origin/linux-next is the computed answer
+(in_progress; `next any` 0). Computed, not grepped.
+Esme (17:58Z): 1109-t8kw part 2 MEASURED at the Git Bash locus, closure NOT
+met — meta-orchestration 20/3/1 (510s), forge-environment-discoverability
+15/9/1 (1163s), both rc=1; the AT-RISK probe re-executed inside the same
+script as the runs (PROBE_COMMIT_RC=128, TIER unset). THE SPLIT IS THE
+FINDING: (A) six are the row's own class — credential-channel-check-shape
+8/10 pins `env PATH=/usr/bin:/bin` and MINGW keeps git only at /mingw64/bin
+(proven single-variable: that PATH → missing:no-credential-channel; with
+/mingw64/bin → ok:forge-git-mirror); four die on `jq … /proc/self/fd/0`,
+absent on MSYS (counted on the shared error text, NOT individually
+reproduced — flagged as such); two grade git's CRLF warning as the
+verdict, salvage-net-roundtrip step 9 at rc=0. (B) TWO are floor-tier
+BUDGET, not assertion failures: capability-manifest-guard (rewritten
+af7529a26 under 1114-p2ht) TIMED OUT at a 300s single-step budget (300.6s,
+killed and censored) — "red again" would have been true as a verdict and
+false as a claim; build-cache-sweep-trigger the same at 30s. (C) THREE
+unclassified on purpose: empty `output=` cannot separate an assertion
+failure from an absent MCP server from a swallowed error — re-run with each
+arm's output captured to a FILE. Coordinator's judgements: part 1's
+grep-shaped predicate (git-init-without-identity) undercounts — the sweep
+gains a run-based half (exactly esme's method); the six fixes go to a child
+row for yolanda by mechanism, group B to its own tier-budget row, group C
+back to esme with file capture; 1109-t8kw returns to ready with
+next_action naming the children. A worktree C:/wt-cl on branch claim-1109
+at f93650214 on esme's host was reported as "not mine" and, ten minutes
+later, corrected by esme themselves: `git log -1 claim-1109` names
+esmeraldinha, 2026-09-06, their own abandoned claim worktree — "I did not
+create it" was not recognising their own work from eight days ago, stated
+to the fleet as a fact about the world rather than a gap in knowledge.
+Integrated four for four with a positive control; removed on the
+coordinator's say-so. The question to yolanda was retracted.
+Yolanda (18:10Z): C:/wt-cl was never theirs (no claim-1109 branch, local or
+tracking; f93650214 is in their object store as any fetched commit is —
+"presence proves nothing either way", said so nobody reads it as evidence
+later). The check turned up a stray worktree of THEIR OWN, unknown to them:
+C:/Users/…/Temp/tw, detached at b8ac355fb (release 56.8.31.3, 2026-08-31),
+survived two weeks and several dozen cycles unnoticed; verified BEFORE
+removal (zero untracked, zero modified, tip contained in windows-next,
+linux-next and main), 4.5M reclaimed, `git worktree list` now one entry,
+main tree clean through it with a land mid-gate. Standing check worth
+running per host: `git worktree list` — the whole sweep. Yolanda's
+correction of their own earlier claim: "wiring the 1155-jurn fixture into
+build.sh makes it inert on the hosts it is about" was true of THEIR
+implementation (skipped wholesale off MSYS, so inside the gate's WSL
+re-exec it would skip on every host always), not of esme's, which skips
+only the live arm while arms 1–6 run in-gate; they generalised from their
+own defect; esme's is the one that landed, theirs discarded. Yolanda's
+landing in flight: esme's work/1155-jurn merged at e6f675d18 with the
+second-host confirmation, 1183-2s7a, 1184-jqqg, the note pinning
+1171-ccf2's closure to the NEXT cut, and a record of why two hosts built
+1155-jurn. They will take the six-fixture child row from plan_next windows
+after the relay; their read of the CRLF-at-rc=0 mechanism: the one most
+likely load-bearing elsewhere, since rc=0 is invisible to every caller that
+reads only status.
+Esme (18:20Z), group C classified with file capture (windows-next 0fbc3ba95;
+report plan/issues/litmus-1109-t8kw-group-c-classified-2026-09-14.md): none
+of the three was silent by accident — one ends its failing branch in a bare
+`exit 1` inside a loop, one has a single silent exit path beside a counting
+one, one chains `grep && jq -e && echo` so any broken link yields nothing;
+"empty output" was a property of the FIXTURES, never evidence about the
+system under test, which is why they cost a second pass. (1) plan-answer-
+envelope-citability 6/21 → group A: `jq` emits CRLF on MSYS and `\r` is not
+in the default IFS, so word-splitting leaves it on every field but the last
+(item 1 len=68 ending `\r`, the same id assigned directly len=67 matches;
+the last citation is clean, which is why exactly one of two failed) — the
+third CRLF instance, ONE mechanism: on this locus text through a pipe
+carries `\r`, and any fixture that word-splits or string-compares it asserts
+a property of the host. (2) project-answer-synthesis-refusal-typed 3/10 →
+group A: the envelope says inference_reason=endpoint-timeout where the arm
+pins endpoint-unreachable; lib-inference-state.sh maps curl 6/7→unreachable,
+28→timeout at --max-time 1, and the connect attempt takes ~2s on the Windows
+stack against ~0s in the distro — the deadline, not the exit code (esme's
+first hypothesis, "curl's dead-port exit differs by platform", was FALSE:
+plain curl exits 7 on both; the plain-curl control run before writing it
+down is the only reason the plausible version did not ship). (3) citation-
+frame-and-caller-relation 8/8 → NOT classified but narrowed: its only silent
+exit is `grep -q FAILED && exit 1`, so the empty output DOES establish that
+`cargo test -p tillandsias-plan` printed FAILED — real failing tests, not a
+build break; which tests, and whether for a Windows reason, needs the cargo
+run (314s, the slowest arm in its spec — on a floor host a re-run could
+time out and wear group A's colour as a group B red). Net: group A 6→8 with
+four mechanisms (PATH pin without /mingw64/bin; /proc/self/fd/0 on MSYS;
+CRLF through pipes ×3; a curl exit vocabulary pinned to one locus), one arm
+open for a capable Windows host. C:/wt-cl removed; the branch ref
+claim-1109 kept (ancestor of all four; a ref costs nothing and is not
+deleted on a tidying impulse).
+Pass 25 (2026-09-14T18:11Z) state: windows-next +10 and osx-next +4
+relayed (esme's part-2 and group-C measurements and reports, the
+macos-tray probe findings, macbookair's 1153-j2nm measurement). Filed:
+1186-w3ph (windows — the eight MINGW fixture reds by four mechanisms plus
+the open cargo arm, for yolanda) and 1187-iij8 (litmus budgets by tier —
+the floor measures, a capable host lands). 1109-t8kw back to ready with
+part 1's method changed (a run-based half). 1155-jurn: REFUSE recorded as
+the coordinator's decision; no preflight advisory. Trunk since pass 24:
+1162-qbrx completed, 1153-j2nm completed on macbookair's measurement,
+1185-9qx6 filed (the release-tier freshness guard is blind to ci-full —
+the index has only ever held pre-build phases), the two release-tier
+litmus reds fixed forward, yoga's claim of 1110-c4nf. Stale rows 89/499,
+none handed. Audit rows=23 stems=23. Hosts silent this window (lenovinha,
+pirria): not directed.

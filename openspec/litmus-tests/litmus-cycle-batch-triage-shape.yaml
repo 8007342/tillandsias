@@ -64,7 +64,12 @@ critical_path:
     # a single-epic frontier cannot demonstrate variation and a red light
     # there would be reporting the ledger, not the code.
     command: "out=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null); nf=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$nf\" -lt 2 ]; then echo 'ok: seed-override n/a (single-epic frontier)'; exit 0; fi; seen=''; for s in aaa zzz 12345 yoga-x pirria-q7 abc123 qqq seed-8 seed-9; do e=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --seed \"$s\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); case \" $seen \" in *\" $e \"*) ;; *) seen=\"$seen $e\" ;; esac; done; n=$(printf '%s' \"$seen\" | wc -w); if [ \"$n\" -lt 2 ]; then echo \"FAIL: nine explicit seeds all chose one epic ($seen) — --seed is inert, the documented override is unreachable (949-uv5k)\"; exit 1; fi; echo \"ok: explicit seed reaches $n distinct epics\""
-    timeout_ms: 120000
+    # 1110-c4nf: measured on yoga 2026-09-14 at 2m24s wall for this arm alone,
+    # uncontended (the runner's own cpu.pressure note said "NOT contended at
+    # kill time"). Ten selector invocations at ~14s each cannot fit 120s, so
+    # this arm timed out and ABORTED the test before step 23 — the arm this
+    # packet is about — ever ran. The budget was the defect, not the arm.
+    timeout_ms: 300000
     expected_behavior: "ok: explicit seed reaches"
 
   - step: "NEGATIVE CONTROL: the DEFAULT still routes by rank, unseeded (949-uv5k)"
@@ -278,8 +283,42 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: budget intact with override"
 
+  # ORDER 1110-c4nf — NAME THE WRITER, DO NOT GUESS IT.
+  #
+  # This arm compared two opaque porcelain strings and printed "FAIL: selector
+  # mutated the worktree" for ANY difference. The gate HAS another writer in that
+  # window: build.sh runs scripts/archive-plan-packets.sh --check, a KNOWN leaker
+  # (yolanda, 2026-08-23) that leaves plan_tmp/, plan_tmp_*.txt and
+  # scripts/archive-plan-packets-check.rb behind. So a true "something wrote"
+  # signal arrived wearing a false attribution, and acting on it would have
+  # changed a selector that three measurements say writes only under TMPDIR.
+  #
+  # THE RED IS NOT SILENCED. The arm now diffs the two listings, NAMES every path
+  # that appeared, and only then attributes: paths belonging to the known
+  # concurrent leaker are reported BY NAME and do not convict the selector;
+  # anything else still fails. A fix that merely made this pass would convert a
+  # true signal into a vacuous green, which the row forbids in as many words.
+  #
+  # A wrong attribution is worse than a missing one — the same reason a trace
+  # migrated to the wrong function is worse than one that is absent.
+  # ORDER 1110-c4nf — NAME THE WRITER, DO NOT GUESS IT.
+  #
+  # This arm used to compare two opaque porcelain strings and print
+  # "FAIL: selector mutated the worktree" for ANY difference. The gate HAS a
+  # second writer in that window: build.sh runs archive-plan-packets.sh --check,
+  # a known leaker that leaves plan_tmp* and
+  # scripts/archive-plan-packets-check.rb behind. So a TRUE "something wrote"
+  # signal arrived wearing a FALSE attribution, and acting on it would have sent
+  # someone into select-work-batch.sh looking for a write that is not there.
+  #
+  # The red is NOT silenced. The arm diffs the two listings and NAMES every path
+  # that appeared; only then does it attribute. Paths of the known concurrent
+  # leaker are printed by name and do not convict the selector. ANY other path
+  # still fails, and now fails while naming itself. A fix that merely made this
+  # pass would turn a true signal into a vacuous green, which the packet forbids
+  # in as many words.
   - step: "selection writes nothing to the worktree"
-    command: "before=\"$(git status --porcelain)\"; TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
+    command: "before=\"$(mktemp)\"; after=\"$(mktemp)\"; git status --porcelain | sort > \"$before\"; TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux >/dev/null 2>&1; git status --porcelain | sort > \"$after\"; appeared=\"$(comm -13 \"$before\" \"$after\" | sed -e 's/^...//' -e 's/^\\\"//' -e 's/\\\"$//')\"; rm -f \"$before\" \"$after\"; if [ -n \"$appeared\" ]; then echo 'paths that appeared during the selector window:'; printf '  %s\\n' $appeared; unattributed=\"$(printf '%s\\n' $appeared | /usr/bin/grep -v -e '^plan_tmp' -e '^scripts/archive-plan-packets-check.rb' || true)\"; if [ -n \"$unattributed\" ]; then echo 'FAIL: paths appeared that are NOT the known archiver leak (1110-c4nf) — a writer is unaccounted for:'; printf '  %s\\n' $unattributed; exit 1; fi; echo 'note: every appeared path belongs to archive-plan-packets.sh --check, a known concurrent leaker; the selector is not implicated'; fi; echo 'ok: read-only'"
     timeout_ms: 30000
     expected_behavior: "ok: read-only"
 

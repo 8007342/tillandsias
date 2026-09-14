@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: note
+      ts: "2026-09-14T18:12:49Z"
+      agent_id: linux-macuahuitl-fable-20260914t181249z
+      host: macuahuitl
+      summary: |
+        Coordinator's decision on the open caller-routing question (2026-09-14, on esme's and yolanda's evidence): REFUSE stands, as yolanda built and argued it. A wrapper that reconstructs a status the wsl.exe transport dropped hides the platform's lie behind a number that looks measured; refusing puts the choice at the point of use, where the caller can see it. Also decided: no cycle-preflight advisory for the dropped status — preflight never crosses the hop, the condition is permanent, and a true line firing forever with no action attached trains hosts to skip the block; the convention lives in the fleet drill: a Windows host learns that its channel lies only by running the canary.
