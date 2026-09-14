@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: story-shaped-eager-work-packets
+    field: next_action
+    value: 'macneo 2026-09-14, measured on the live ledger, no build. CRITERION 1 IS MET AND CRITERION 4 IS MET-WITH-A-CAVEAT WORTH RESTATING: the landed projection (0a8815181) is deterministic — two runs at a fixed --now-epoch hash identically, with a positive control (limit 5 hashes differently) proving the comparison can detect change. But it takes NO --seed; its own test is forgotten_is_reproducible_without_a_seed, and the reproducibility parameter is --now-epoch. A run ten days on yields a DIFFERENT set, correctly, because the projection is age-ranked. Criterion 4 speaks of a seed; for this component the auditable key is the EPOCH, and `forgotten` does not print it the way select-work-batch prints its seed. RECOMMEND: restate criterion 4 in terms of the epoch and have the command emit the epoch it used, otherwise a replay without it reads as nondeterminism rather than a missing parameter. CRITERION 2 IS UNMET IN BOTH HALVES. Nothing routes story-shaped questions through the projection (no expert/answer/story path in the plan binary references `forgotten`). And the degradation requirement — an absent inference endpoint must DEGRADE TO THE DETERMINISTIC LIST rather than refuse — currently fails on a host where the condition is live rather than simulated: macneo has l0=ready, l1=unset, l2=unreachable, and a story-shaped question returns a typed `unsupported:` refusal with empty citations, rc 0. Honest, but not the required behaviour; the list exists and is one subcommand away. CRITERION 3 (yields real packets, closing event quotes three genuinely un-surfaced by minimax) UNTOUCHED and needs criterion 2 first. NOT CLAIMABLE BY A CARGO-CHECK-ONLY LANE beyond this: wiring the route and the fallback is Rust, and criterion 3 wants an inference endpoint this host does not have (L1/L2).'
+    ts: "2026-09-14T16:11:42Z"
+    host: macneo
+
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: note
+      ts: "2026-09-14T16:11:42Z"
+      host: macneo
+      summary: |-
+        criteria 1/4 measured and met with an epoch caveat; criterion 2 unmet in both halves
