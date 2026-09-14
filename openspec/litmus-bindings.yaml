@@ -8,6 +8,7 @@ specs:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
   - litmus:capabilities-envelope-names-its-source
+  - litmus:envelope-suite-resolves-the-redirected-artifact
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
