@@ -103,11 +103,28 @@ _run_guard() {
     return $_rc
 }
 
+SKIPPED_BEHAVIOURAL=0
 if [ "$(id -u)" = "0" ]; then
-    # 0555 is writable by root, so the precondition cannot be created. Refuse
-    # rather than pass: a skip that renders as a pass is the whole family of
-    # bug this fixture belongs to.
-    bad "cannot run the behavioural arms as uid 0 — 0555 does not exclude root, so the unwritable precondition is unconstructible"
+    # 0555 does not exclude root, so the unwritable precondition is
+    # UNCONSTRUCTIBLE here — the arms cannot be run, which is not the same as
+    # their subject being broken.
+    #
+    # This used to call bad(). That was wrong in exactly the way 1141-vf9w was
+    # wrong on darwin: a fixture saying "I could not look" collapsed into the
+    # step's content verdict, so a gate running as root would refuse every land
+    # with "the mkdir fail-loud guard regressed" about a guard it never
+    # exercised. Exit 2 is the honest channel; the binding .step declares
+    # STEP_SKIP_EXIT=2 and names what did run. The STATIC arms above are
+    # unaffected and still assert on every host.
+    #
+    # A SKIP IS NOT COVERAGE: as root this fixture pins the shipped text, not
+    # the behaviour.
+    # Worded on what is KNOWN at this point: the static arms ran, and their
+    # verdicts are in the summary line below. Do not claim they passed here —
+    # measured 2026-09-14, this line printed "RAN and passed" above a summary
+    # reading "0 passed, 4 failed".
+    echo "skip: the 4 static arms RAN (verdicts in the summary below); the behavioural arms cannot run as uid 0 (0555 does not exclude root)"
+    SKIPPED_BEHAVIOURAL=1
 elif [ -z "$_guard" ]; then
     bad "could not extract the mkdir guard from $EP — the behavioural arms did not run"
 else
@@ -141,4 +158,8 @@ else
 fi
 
 echo "inference-mkdir-fatal-1183-j9dk: $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+# A real failure outranks a skip: a regression found by the static arms must
+# still refuse, even on a host that could not run the behavioural ones.
+[ "$fail" -eq 0 ] || exit 1
+[ "$SKIPPED_BEHAVIOURAL" -eq 0 ] || exit 2
+exit 0

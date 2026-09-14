@@ -1,0 +1,38 @@
+# Gate step 1183-j9dk — data, not code.
+#
+# Binds the fail-loud fixture for the inference container's models mkdir. The
+# fixture was landed with 7 arms and a mutation control and then referenced by
+# NOTHING — no .step, no litmus, no skill — so no gate ran it and it could not
+# block the regression it was written for (found by macuahuitl reconciling
+# 1063-nraf, 2026-09-14). A guard that cannot fire is not a guard; that is the
+# same family as the silently-emptied pin this tree has been burned by before.
+#
+# HERMETIC. Four STATIC arms read the shipped images/inference/entrypoint.sh;
+# the behavioural arms build their own unwritable directory under mktemp and
+# run the guard text extracted from that file. No podman, no VM, no network, no
+# toolchain — honest on every host, and it costs the inner loop milliseconds.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf) — which is precisely the convention
+# that let the reconciliation find this fixture unbound by grep.
+STEP_DESC="Checking the inference models mkdir fails loud where it happens, naming ownership (1183-j9dk)"
+STEP_SCRIPT="scripts/test-inference-mkdir-fatal-1183-j9dk.sh"
+STEP_ERROR="the inference entrypoint's models-mkdir guard regressed (1183-j9dk) — a container that cannot create \${OLLAMA_MODELS}.tools may again warn and fall through to a fatal tar four lines later, naming a missing directory instead of the ownership that caused it; see the verdict line above"
+STEP_OK="Inference models-mkdir fail-loud check passed"
+
+# ORDER 1183-j9dk. Exit 2 means THIS HOST COULD NOT CONSTRUCT THE PRECONDITION,
+# not that the guard regressed. The behavioural arms need a directory the test
+# user cannot write, and mode 0555 does not exclude root — so under a gate
+# running as uid 0 the arms are unrunnable. Without this field that honest "I
+# could not look" would collapse into STEP_ERROR above and refuse every land on
+# a root gate with a content verdict about a guard it never exercised, which is
+# exactly what 1141-vf9w did to macOS before its skip channel landed.
+#
+# A real failure still outranks the skip: the fixture exits 1 whenever any arm
+# fails, including as root, so a regression caught by the STATIC arms refuses
+# normally. Verified on macbookair 2026-09-14 across all four regimes —
+# non-root+fixed 0, root+fixed 2, root+unfixed 1, non-root+unfixed 1.
+#
+# A SKIP IS NOT COVERAGE. As root this step pins the shipped TEXT of the guard,
+# not its behaviour.
+STEP_SKIP_EXIT=2
+STEP_SKIP_DESC="the 4 static arms RAN and pinned the shipped guard text; the behavioural arms could not run — mode 0555 does not exclude uid 0 on this host (1183-j9dk)"
