@@ -60,6 +60,18 @@ particular machine's state. The distinction was missed once because this
 section read as though every host running it were a smoke host; most of the
 fleet's Windows and macOS hosts are workstations.
 
+**`TILLANDSIAS_RESET_KEEP_MODELS=1`** lets this destruction spare the model
+cache (`cache_root()/models`) on the operator's word — opt-in, per run, never
+the default: the clean room stays clean unless this run asked otherwise (the
+2026-09-13 reset ruling; operator, 2026-09-14: "let's add the keep models
+flag to our resets"). Per platform: **Linux** — the podman reset and the
+credential clearer never touch `~/.cache/tillandsias/models`, so the flag is
+a documented no-op and the models survive regardless. **macOS** — honoured by
+`scripts/e2e-step2-macos.sh` below, which names the spared directory in its
+residue line. **Windows** — a no-op until 1182-2vaz moves the weights out of
+the distro (they live at `/root/.cache/tillandsias/models` inside the vhdx
+that `wsl --unregister` deletes) (operator ruling 2026-09-14; 1181-bkem).
+
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
 of what this smoke exercises — if init bricks, that is a finding, not a failure
@@ -81,16 +93,31 @@ silently carried this gap.
 
 Run `scripts/probe-credential-cold-state.sh --format=md` and paste its block
 into the findings file, the way the Windows leg records its hashes. It reports
-`credential-cold` or `credential-warm` from keychain **metadata only** — never
+`credential-cold` or `credential-warm` from **metadata only** — never
 `secret-tool search --all`, which prints the secret inline and put live tokens
 into two transcripts on 2026-08-25 — and reports `could-not-run` when the
 question cannot be asked, which must never be read as cold.
 
-Whether the reset should CLEAR that share (the Linux analogue of 804-ckst, whose
-`scripts/clear-vault-host-credentials.ps1` exists for Windows only) or whether
-preservation is correct and this document should simply say so, is an OPEN
-DECISION on 900-z3kv. Until it is made, do not write either claim as settled —
-report the measured state and move on.
+**Since 1149-vgn2 it checks the host keychain AND
+`~/.cache/tillandsias/fallback_*`, and a cold verdict names everything it
+checked.** It read the keychain alone until then, so pirria — no keychain
+item, a `fallback_vault-shamir-share-v1` untouched since 2026-09-01 keeping
+every reset warm — was certified cold, and the verdict's own text claimed the
+resync path was exercised. If the checkout running this skill predates
+1149-vgn2, its cold verdict is keychain-only: do not trust it (drill: plan/issues/fleet-restart-2026-09-12.md, 1149-vgn2 fixed: the cold probe now checks the fallback share).
+
+**DECIDED (900-z3kv, operator ruling 2026-09-13): the reset clears the
+host-held credentials.** Not open — the platform prefers idempotency to
+legacy support, and `podman system reset --force` is the baseline.
+`scripts/clear-vault-host-credentials.sh` clears THREE locations: the
+keychain items `vault-shamir-share-v1` and `vault-root-token-v1`, the
+`~/.cache/tillandsias/fallback_*` copies of both, and
+`~/.cache/tillandsias/vault-data`. `installation-uuid-v1` is deliberately
+PRESERVED — it anchors the INSTALLATION, and clearing it makes the next vault
+underivable rather than re-initialized. **Read the clearer's own last line,
+not the reset's exit code:** a partial clear prints
+`warn:clear-vault-credentials:partial` and still exits 0, which is precisely
+the state that looks cold and is not (drill: plan/issues/fleet-restart-2026-09-12.md, 900-z3kv COMPLETED).
 
 ---
 
@@ -253,6 +280,15 @@ download cache.
 Install the published artifact the canonical way an operator would — do NOT use a
 locally built `target/` binary; the whole point is to test the *download*.
 
+**`install.sh` is not a download test — it runs the full init (1133-kktm).**
+Measured on v56.9.12.2: 131 lines of podman/vault output, a Vault bootstrap
+provisioning twelve policies and AppRole roles, and a `tillandsias-vault`
+container left running on 8201. Reversible, not inert, and not what
+"curl-install and assert the tag" describes above. The §1/§2 consent line
+still holds (§2 destroys, §1 provisions), but on an operator's workstation say
+what §1 actually does before running it; consent to a download check is not
+consent to a Vault bootstrap (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
+
 Linux:
 
 The installer honors `TILLANDSIAS_RELEASE_BASE` so the smoke pins the exact
@@ -275,7 +311,10 @@ hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
 _rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
 # The comment used to say "must equal $SMOKE_TAG". Now it is checked.
-grep -qF "${SMOKE_TAG#v}" target/smoke-e2e/01-version.txt
+# BOUNDED (amendment to 1133-kktm): the version scheme is a monotonic
+# counter, so an unbounded substring test would accept 56.9.12.20 as a match
+# for 56.9.12.2. (drill: plan/issues/fleet-restart-2026-09-12.md, The promotion proven on the default Windows path)
+grep -qE "(^|[^0-9.])${SMOKE_TAG#v}([^0-9.]|\$)" target/smoke-e2e/01-version.txt
 ```
 
 > Three assertions replacing a pipe and a comment (order 727-kmks). The
@@ -369,7 +408,10 @@ if (-not (Test-Path $tray)) { throw "tray not found on PATH or at $tray after a 
 & $tray --version 2>&1 | Tee-Object target\smoke-e2e\01-version.txt | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "tray --version failed (exit $LASTEXITCODE)" }
 $installedVersion = (Get-Content target\smoke-e2e\01-version.txt -Raw).Trim()
-if ($installedVersion -notmatch [regex]::Escape($SmokeTag.TrimStart('v'))) {
+# BOUNDED (amendment to 1133-kktm): an unbounded substring match would accept
+# 56.9.12.20 as a match for 56.9.12.2 — the version scheme is a monotonic
+# counter, so the collision is reachable, not hypothetical.
+if ($installedVersion -notmatch ('(?<![0-9.])' + [regex]::Escape($SmokeTag.TrimStart('v')) + '(?![0-9.])')) {
   throw "installed tray version '$installedVersion' does not carry release $SmokeTag"
 }
 ```
@@ -403,6 +445,14 @@ TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
+  # 900-z3kv (operator ruling 2026-09-13, landed by yoga): the reset is the baseline, and
+  # an empty podman store is not a cold room — clear the host-held Vault credentials
+  # (keychain items, ~/.cache/tillandsias/fallback_*, the vault-data dir) in the SAME
+  # step, or the next --init resyncs the old share and the clean room is not one
+  # (drill: plan/issues/fleet-restart-2026-09-12.md, 900-z3kv COMPLETED).
+  scripts/clear-vault-host-credentials.sh 2>&1 | tee -a target/smoke-e2e/02-reset.log
+  CLEAR_RC=${PIPESTATUS[0]}; printf 'clear_exit=%s\n' "$CLEAR_RC" | tee target/smoke-e2e/02-clear-exit.txt
+  test -n "$CLEAR_RC" && test "$CLEAR_RC" -eq 0
 timing_emit smoke-destructive-reset smoke "$_T0" "${RESET_RC:-1}" || true
 test -n "$RESET_RC" && test "$RESET_RC" -eq 0
 ```
@@ -414,6 +464,25 @@ printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES
   | tee target/smoke-e2e/02-empty-store.txt
 test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
 ```
+
+**`0 volumes` is not `Vault's data is gone`, and the gap ran for ~2.5
+months.** Every Linux pass asserted an empty podman store while `--init`
+logged `preserving existing data volume` — both true, about different
+things: `vault_data_volume_exists()` tests `init_cache_dir()/vault-data`, a
+HOST DIRECTORY, not a podman volume. Assert that directory is absent too, in
+the same block as the three `test -z` lines above:
+
+```bash
+VAULT_DATA_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/vault-data"
+{ echo "[vault-data-dir]"; ls -la "$VAULT_DATA_DIR" 2>&1; } | tee target/smoke-e2e/02-vault-data-dir.txt
+test ! -e "$VAULT_DATA_DIR"
+```
+
+`scripts/clear-vault-host-credentials.sh` removes it but only best-effort —
+it is written from inside a container under a subuid, so a rootless `rm -rf`
+can be refused and the script still exits 0 with a `warn:` line. A
+`0-volumes` PASS beside a surviving `vault-data/` is a clean-room claim the
+run cannot support (drill: plan/issues/fleet-restart-2026-09-12.md, 900-z3kv criterion 1 DECIDED: (a)).
 
 If the reset errors or leaves residue → file a finding (capability: `podman`,
 `runtime`).
@@ -438,17 +507,10 @@ multi-GiB VM image while reporting a clean-room result. A false PASS on the
 destruction precondition is worse than a red run, because it gates promotion.
 
 ```bash
-pkill -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-rm -rf "$HOME/Library/Application Support/tillandsias" \
-       "$HOME/Library/Caches/tillandsias"
-# ASSERT, do not assume — the point of this block.
-MACOS_RESIDUE=""
-for d in "$HOME/Library/Application Support/tillandsias" \
-         "$HOME/Library/Caches/tillandsias"; do
-    [ -e "$d" ] && MACOS_RESIDUE="${MACOS_RESIDUE}${d}"$'\n'
-done
-printf '[macos-residue]\n%s' "$MACOS_RESIDUE" | tee target/smoke-e2e/02-macos-residue.txt
-test -z "$MACOS_RESIDUE"
+scripts/e2e-step2-macos.sh target/smoke-e2e
+test ! -e "$HOME/Library/Application Support/tillandsias"
+MACOS_RESIDUE="$(cat target/smoke-e2e/02-macos-residue.txt)"
+test -z "$(printf '%s' "$MACOS_RESIDUE" | tail -n +2)"
 ```
 
 If residue survives → file a finding (capability: `macos`, `runtime`) and do NOT

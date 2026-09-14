@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    field: status
+    value: in_progress
+    ts: "2026-09-14T07:47:34Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    event:
+      type: progress
+      ts: "2026-09-14T07:47:34Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: linux-next@5643619a9
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    event:
+      type: note
+      ts: "2026-09-14T07:47:34Z"
+      host: yoga
+      summary: |-
+        handed by the coordinator: yoga idle after 1174-u5wp; set-field on a long-form field replaces it wholesale and drops other hosts' warnings — the ledger CLI's LWW semantics, Rust in crates/tillandsias-plan; fallback 1163-3krg

@@ -9,6 +9,12 @@ set -euo pipefail
 # OUTSIDE $HOME (/usr/local/bin) and branches on uname, so a test that could not
 # redirect those two things would have to either skip the macOS arm or delete a
 # real installed binary to run.
+#
+# 1181-bkem: TILLANDSIAS_RESET_KEEP_MODELS=1 is an opt-in, per-run environment
+# flag. With --wipe, it spares $CACHE_DIR/models (the downloaded model cache)
+# instead of deleting it with the rest of the cache; unset, --wipe is unchanged
+# from before this flag existed. It never widens what --wipe alone would not
+# already remove, and it is a documented no-op without --wipe.
 _uname_s="${TILLANDSIAS_UNINSTALL_FAKE_UNAME:-$(uname -s)}"
 
 IS_MACOS=false
@@ -42,6 +48,10 @@ fi
 
 WIPE=false
 [[ "${1:-}" == "--wipe" ]] && WIPE=true
+
+# 1181-bkem: opt-in, per-run, never the default. See the seams comment above.
+KEEP_MODELS=false
+[[ "${TILLANDSIAS_RESET_KEEP_MODELS:-}" == "1" ]] && KEEP_MODELS=true
 
 echo ""
 echo "  Tillandsias Uninstaller"
@@ -267,6 +277,7 @@ done
 rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 
 SERVICE_HOME_REMOVED=false
+SERVICE_MODELS_NOT_SPARED=false
 if [[ "$IS_ROOT" == true ]]; then
     rm -f "/usr/local/bin/tillandsias" "/usr/local/bin/tillandsias-uninstall"
     # 804-wfcu. `userdel -r` removes the account's HOME, and `rm -rf` finishes
@@ -275,14 +286,33 @@ if [[ "$IS_ROOT" == true ]]; then
     # an uninstall; claiming afterwards that the cache was preserved is not.
     # Record what happened so the closing message can tell the truth.
     [ -d "$SERVICE_HOME" ] && SERVICE_HOME_REMOVED=true
+    # 1181-bkem: this script never moves or chowns files out of a root-owned
+    # service home on the invoking user's word, so under the flag we do not
+    # try to spare this copy — we only say, truthfully, that it is not spared.
+    if [[ "$KEEP_MODELS" == true && -d "$SERVICE_HOME/.cache/tillandsias/models" ]]; then
+        SERVICE_MODELS_NOT_SPARED=true
+    fi
     userdel -r "$SERVICE_USER" 2>/dev/null || true
     groupdel "$SERVICE_GROUP" 2>/dev/null || true
     rm -rf "$SERVICE_HOME"
+    if [[ "$SERVICE_MODELS_NOT_SPARED" == true ]]; then
+        echo "keep-models: $SERVICE_HOME/.cache/tillandsias/models is NOT spared by this script (service account home; not touched with reduced privilege)"
+    fi
 fi
 
 if [[ "$WIPE" == true ]]; then
-    # Remove cache (container images, opencode, openspec, secrets)
-    rm -rf "$CACHE_DIR"
+    # Remove cache (container images, opencode, openspec, secrets). 1181-bkem:
+    # under the flag, spare $CACHE_DIR/models and remove everything else
+    # directly under $CACHE_DIR instead of the whole tree, and say so — a run
+    # that kept models must not be able to read back as a clean room by
+    # accident.
+    if [[ "$KEEP_MODELS" == true && -d "$CACHE_DIR/models" ]]; then
+        _models_size="$(du -sh "$CACHE_DIR/models" 2>/dev/null | cut -f1)"
+        find "$CACHE_DIR" -mindepth 1 -maxdepth 1 ! -name models -exec rm -rf {} +
+        echo "keep-models: spared $CACHE_DIR/models (${_models_size:-unknown})"
+    else
+        rm -rf "$CACHE_DIR"
+    fi
 
     # Remove all versioned forge and web images. The GNU-only no-run-if-empty
     # xargs flag is gone (851-28b5): the empty case is genuinely reachable

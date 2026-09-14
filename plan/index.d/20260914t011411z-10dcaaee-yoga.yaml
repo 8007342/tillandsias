@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-reads-the-competing-gate-exit-codes-so-the-four-code-grammar-binds-no-one
+    event:
+      type: implemented
+      ts: "2026-09-14T01:14:11Z"
+      agent_id: linux-yoga-claude-20260914t011410z
+      host: yoga
+      summary: |
+        Strict-regime arms extended from code 1 to EVERY nonzero detector code, landed at 7c8f203e6 on linux-next.
+
+        THE GAP THE FIRST FIX LEFT. 62b3ae68b added two strict arms, for codes 1 and 0. errexit does not single out 1: a bare `_cg_out="$(detector)"` exits the wrapper on every nonzero status, so 2 (caller contract), 3 (could-not-run) and an unrecognised code died at the same line — and their arms still drove the block under `set +e`, so they still asserted about a shell the wrapper does not use. The original defect, one code narrower.
+
+        MEASURED through the TILLANDSIAS_CONSUMER_WRAPPER_UNDER_TEST seam against the pre-fix capture form, with the diff printed and proven non-empty before the result was believed: 14/14 post-fix, 9/14 pre-fix with the three new arms red beside the two existing ones. EVERY LAX ARM STAYED GREEN IN BOTH REGIMES, and that is the finding rather than a detail — the lax arms could not see this and never could.
+
+        WHAT THE ARMS DEFEND is the `|| _cg_rc=$?` FORM, which is uniform across codes. Without them a later edit could restore the bare assignment and leave 1 and 0 green while 2, 3 and 9 die silently — strictly worse than the state before the fix, because the fixture would then look like it was watching.
+
+        THE LAX DRIVE STAYS, deliberately. The original drive and the arm loop assert which case arm fires and what it says, which is observable only if the shell survives long enough to reach it. The shape left behind is a bounded relaxation: lax arms for what they can observe, strict arms bounding the regime, and the relaxation named in a comment instead of being an unexamined convenience.
+
+        PROVENANCE. The set +e was mine, in a fixture I wrote for a block I wrote, and macuahuitl found it as the cause of a red v56.9.13.1 release gate (1175-wuwr): under set -euo pipefail a host-side dispatch reaching the detector died after the toolbox init and before the command, which reads as "refuses inside the gate, passes standalone". This is the class where the assertion gets reviewed and the scaffolding that builds its premise does not.

@@ -59,12 +59,33 @@ These wipes are acceptable on Tillandsias smoke hosts. For a non-smoke host,
 set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` before invoking this skill; the skill
 must then file a blocker instead of resetting the substrate.
 
+**`TILLANDSIAS_RESET_KEEP_MODELS=1`** lets this destruction spare the model
+cache (`cache_root()/models`) on the operator's word — opt-in, per run, never
+the default: the clean room stays clean unless this run asked otherwise (the
+2026-09-13 reset ruling; operator, 2026-09-14: "let's add the keep models
+flag to our resets"). Per platform: **Linux** — the podman reset and the
+credential clearer never touch `~/.cache/tillandsias/models`, so the flag is
+a documented no-op and the models survive regardless. **macOS** — honoured by
+`scripts/e2e-step2-macos.sh` below, which names the spared directory in its
+residue line. **Windows** — a no-op until 1182-2vaz moves the weights out of
+the distro (they live at `/root/.cache/tillandsias/models` inside the vhdx
+that `wsl --unregister` deletes) (operator ruling 2026-09-14; 1181-bkem).
+
 ## 0. Preflight
 
 Run from the Tillandsias repository root. **Detect the OS first**, then enforce
 only that OS's guards.
 
+**Every gate in this skill hangs off `${PIPESTATUS[0]}`.** On cachyos under
+fish, `${PIPESTATUS[0]}` expanded to nothing and `install_exit` went blank —
+a silent false pass, caught only because the operator noticed the empty
+value (pirria, v56.9.12.2). Put the guard at the TOP OF EACH bash block, not
+only here: a §0-only guard is the half a relayed recipe drops — the same
+night, a block quoted into a chat message arrived without it and the reader
+was told to add what the runbook already had (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
+
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_DIR="target/build-install-smoke-e2e/$RUN_ID"
 mkdir -p "$LOG_DIR"
@@ -102,6 +123,7 @@ Per-OS build-script guard:
 ### 1·Linux
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   ./build.sh --ci-full --install 2>&1 | tee "$LOG_DIR/01-build-install.log"
@@ -125,6 +147,7 @@ test "${PIPESTATUS[0]}" -eq 0
 ### 1·macOS
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 scripts/build-macos-tray.sh 2>&1 | tee "$LOG_DIR/01-build-macos.log"
 BUILD_RC=${PIPESTATUS[0]}
 printf 'build_exit=%s\n' "$BUILD_RC" | tee "$LOG_DIR/01-build-exit.txt"
@@ -228,18 +251,36 @@ push it. Otherwise continue; on Linux the Podman reset is mandatory.
 
 ### 2·Linux — Podman reset
 
+**Prefer `scripts/e2e-step2-linux.sh "$LOG_DIR"`**, which sequences reset →
+capture → empty-store assert → clearer → cold-state probe → straggler probe
+correctly. The inline block below had the 727-kmks defect one section after
+naming it: `scripts/clear-vault-host-credentials.sh` used to run between the
+reset pipeline and `RESET_RC=${PIPESTATUS[0]}`, so `RESET_RC` read the
+CLEARER's exit status and a failed `podman system reset --force` read
+`reset_exit=0` — fixed below by snapshotting the array as the VERY NEXT
+command after the pipeline. If you run this by hand, keep that ordering
+(`ps=("${PIPESTATUS[@]}")` immediately after the pipe, then index it) and run
+the clearer only after `test "${ps[0]}" -eq 0`; any intervening command,
+`a=$?` included, resets `PIPESTATUS` silently (drill: plan/issues/fleet-restart-2026-09-12.md, What the pipe-verdict fixture found — extends the coordinator's rule entry below, which named this fixture as its follow-up).
+
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   podman system reset --force 2>&1 | tee "$LOG_DIR/02-reset.log"
+RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
+test "$RESET_RC" -eq 0
   # ORDER 900-z3kv: the store is not the whole room. The reset reaches neither
   # the keychain items, the fallback_* files, nor the host vault-data directory,
   # so without this the next --init RECOVERS a months-old share instead of
   # re-initialising. scripts/e2e-step2-linux.sh calls the clearer for you; if you
   # run the reset by hand, run the clearer too or the room is not clean.
   scripts/clear-vault-host-credentials.sh
-RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
-test "$RESET_RC" -eq 0
+  # An empty Podman store is not a clean room (1149-vgn2): pirria's smoke
+  # asserted 0 containers / 0 volumes / 0 images and reported cold while a
+  # fallback_vault-shamir-share-v1 had survived every reset since 2026-09-01 —
+  # the resync path was never exercised. Metadata only — never the secret.
+  scripts/probe-credential-cold-state.sh 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
 CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podman images -q)"
 printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES" "$IMAGES" \
   | tee "$LOG_DIR/02-empty-store.txt"
@@ -280,6 +321,7 @@ order 222). When `TILLANDSIAS_SMOKE_RESET_MODE=selective` is set, use
 `localhost/tillandsias-*` image but preserves the allowlisted upstream bases:
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   scripts/selective-tillandsias-reset.sh 2>&1 | tee "$LOG_DIR/02-reset.log"
@@ -294,17 +336,8 @@ behavior (no env var set) is unchanged: the full destructive reset above.
 ### 2·macOS — destroy the Virtualization.framework VM
 
 ```bash
-# Stop any running tray that holds the VM handle first.
-pkill -TERM -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-sleep 2
-pkill -KILL -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-
-VM_DIR="$HOME/Library/Application Support/tillandsias"
-CACHE_DIR="$HOME/Library/Caches/tillandsias"
-{ echo "[before]"; du -sh "$VM_DIR" "$CACHE_DIR" 2>/dev/null; } | tee "$LOG_DIR/02-destroy-before.txt"
-rm -rf "$VM_DIR" "$CACHE_DIR"
-{ echo "[after]"; ls -la "$VM_DIR" 2>&1; ls -la "$CACHE_DIR" 2>&1; } | tee "$LOG_DIR/02-destroy-after.txt"
-test ! -e "$VM_DIR"   # the whole VM state dir (rootfs.img lives at its top level) must be gone
+scripts/e2e-step2-macos.sh "$LOG_DIR"
+test ! -e "$HOME/Library/Application Support/tillandsias"   # the whole VM state dir (rootfs.img lives at its top level) must be gone
 ```
 
 > The macOS substrate is a single VFR-hosted VM, not a container store. There
@@ -355,6 +388,7 @@ gate**.
 ### 3·Linux
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   tillandsias --init --debug 2>&1 | tee "$LOG_DIR/03-init.log"
@@ -386,6 +420,7 @@ errors, unexpected registry pulls, and enclave-health failures.
 > reading it now costs one command.
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 # Cold provision: re-downloads the Fedora cloud rootfs and re-materializes the
 # ext4 VM disk from nothing (this is the highest-signal step — it exercises the
 # whole materialize → boot → vsock-handshake cold path). Streams JSON phases.
@@ -440,6 +475,7 @@ findings.
 ### 4·Linux
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode \
@@ -495,6 +531,16 @@ smoke run; record which one you used in the findings.
 Report the commit tested, installed version, evidence directory (`$LOG_DIR`),
 host kind, and the result of every reached gate. On failure, include the
 failing command, exit code, and the smallest useful log excerpt.
+
+**Report the §2 credential-cold-state probe verdict beside the empty-store
+result.** An empty Podman store is not a clean room: pirria's smoke asserted
+0 containers / 0 volumes / 0 images and reported cold while a
+`fallback_vault-shamir-share-v1` had survived every reset since 2026-09-01 —
+the resync path was never exercised, and that run was a leg under the
+v56.9.12.2 stable promotion. The reset reaches neither the keychain item, the
+fallback_* share, nor the host vault-data directory, and none of that is
+visible to the empty-store assertion. State the verdict — cold/warm and WHICH
+location produced it — from `$LOG_DIR/02-credential-state.txt` (drill: plan/issues/fleet-restart-2026-09-12.md, pirria's stable smoke of v56.9.12.2: PASS §0-§5).
 
 For each distinct product issue, **de-duplicate** against `plan/issues/` and
 file a ready work packet using the repository's smoke-report conventions:

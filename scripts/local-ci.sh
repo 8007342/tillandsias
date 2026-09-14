@@ -290,7 +290,16 @@ EVIDENCE_BUNDLE="$SIGNATURE_DIR/evidence-bundle.json"
 DELTA_JSON="$SIGNATURE_DIR/centicolon-delta.json"
 RUNTIME_STATUS_FILE="$SIGNATURE_DIR/runtime-phase.status"
 CHECK_LOG_DIR="$SIGNATURE_DIR/check-logs"
-CHECK_LOG_INDEX="$SIGNATURE_DIR/check-logs.jsonl"
+# ORDER 1174-6r4k — THE WRITER HONOURS THE SAME OVERRIDE THE READER DOES.
+# check-release-tier-freshness.sh has always read
+# ${TILLANDSIAS_CHECK_LOG_INDEX:-target/convergence/check-logs.jsonl}, but this
+# path was fixed — so a diagnostic run could not be pointed away from the record
+# the daily exercise reads, and every `--phase pre-build` reproduction polluted
+# it. Now a run that is NOT meant to be the host's release-tier answer can say
+# so: TILLANDSIAS_CHECK_LOG_INDEX=/tmp/scratch.jsonl scripts/local-ci.sh --phase
+# pre-build. The reader's tier discriminator makes that unnecessary for
+# correctness; this makes it possible to keep the record clean as well.
+CHECK_LOG_INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-$SIGNATURE_DIR/check-logs.jsonl}"
 VERSION_VALUE="$(cat VERSION 2>/dev/null || echo "0.0.0.0")"
 SOURCE_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")"
 CI_RUN_ID="local-ci-$(date -u +%Y%m%dT%H%M%SZ)"

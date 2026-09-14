@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-release-tier-freshness-reads-the-last-run-in-the-index-whatever-its-phase-so-a-green-phase-only-local-ci-run-skips-the-next-daily-release-tier-exercise
+    event:
+      type: implemented
+      ts: "2026-09-14T05:36:32Z"
+      agent_id: linux-yoga-claude-20260914t053631z
+      host: yoga
+      summary: |
+        IMPLEMENTED: the freshness reader picks the newest FULL-TIER run, names what it ignored, and the writer can be pointed away from the record.
+
+        THE DEFECT. The reader took `tail -1` and used whatever run wrote last. A diagnostic `scripts/local-ci.sh --phase pre-build` — the cheapest way to reproduce a gate-only red, which is what it was used for during the v56.9.13.1 cut — appends a PARTIAL run to the same index. Green, it reads fresh:release-tier and the 09:09 daily exercise (890-27mv) skips the real tier on the strength of a run that never touched post-build or runtime. Red, it reports a red the tier never produced.
+
+        WHAT COUNTS AS FULL TIER, taken from the writer's own vocabulary rather than invented: local-ci.sh sets CI_PHASE="all" for a whole run and to the phase name for --phase <p>. So a run is full-tier if its records say `all`, OR if between them they cover pre-build AND post-build AND runtime — three deliberate phase runs under one id HAVE exercised the tier, and an arm pins that, because keying on the literal word `all` would report a covered run as no answer at all.
+
+        THE dispatch=ci-full MARKER THE ROW NAMES DOES NOT EXIST IN THIS INDEX, and I recorded that instead of assuming it. build.sh's _stamp_dispatch writes `dispatch` into the GATE STAMP; local-ci.sh's check-log record carries ci_run_id, ci_phase, check_id, status, source_log, archived_log, sha256 and duration_ms — no dispatch field reaches this file. Phase coverage is the discriminator actually available. Adding a marker to the writer is a separate change and was not smuggled in.
+
+        "NO FULL RUN ANYWHERE" IS never, NOT fresh. An index holding only phase-only runs means this host has no release-tier answer — the same fact the no-index branch reports, reached another way. Reporting it green is the defect in its purest form, and it has its own arm.
+
+        THE IGNORED RUNS ARE NAMED: skip:phase-only-run:<id> with the phases it covers. Silence would look identical to "there was nothing newer", and the whole point is that something newer was deliberately not used.
+
+        THE WRITER now honours TILLANDSIAS_CHECK_LOG_INDEX, the same override the reader has always read. The tier discriminator makes that unnecessary for CORRECTNESS; it makes it possible to keep the record clean as well.
+
+        THE EXISTING FIXTURE'S OWN HELPER WAS PART OF THE SUBJECT. rec() hardcoded ci_phase:"pre-build" while every arm meant "a run" — so once the guard could tell a full tier from a phase-only one, every pre-existing arm was writing a partial run and the guard correctly refused to call any of them a release-tier answer. They are `all` now, and the phase-only case has its own helper because it is a distinct subject rather than the default. That is 5 of the 14 arms rewritten for a reason that only became visible after the discriminator existed.
+
+        AND ONE ARM I WROTE WRONG, caught by the fixture: I expected `stale:` for the covered-separately case using a date-stamped run id, which was both the wrong verdict (0d old is fresh) and an absolute date that would rot into staleness on its own. It uses the harness's now-derived RUN_ID and asserts fresh. The ordered arms above it are ordered relative to EACH OTHER and their verdicts (red, never) do not depend on age at all.
+
+        14/14. MUTATION-TESTED THREE WAYS, each diff printed and proven non-empty first: reverting the selection to the newest run of any kind reproduces the defect exactly (a green phase-only run reads fresh, rc 0) and reds three arms; dropping the coverage half reds the covered-separately arm; removing the writer's override reds the writer arm by name. Bound already at scripts/gate-steps.d/215-890-27mv.step.

@@ -1,0 +1,22 @@
+# Gate step 1173-a5ng — data, not code.
+#
+# Binds the fixture for the salvage-ledger trunk fallback. Hermetic: every arm
+# builds a throwaway git repo with its own EMPTY-but-reachable origin and a local
+# branch standing in for trunk, so nothing touches this checkout's ledger,
+# contacts the real origin, or deletes a ref.
+#
+# THE ARM THAT MATTERS IS THE NEGATIVE CONTROL: a line absent from origin and
+# unmarked in BOTH copies must still refuse. The fallback asks whether TRUNK
+# carries the MARKER, not whether trunk carries the line — widen that by one
+# word and every outstanding rescue is forgiven silently, which is the opposite
+# of what this ledger exists for.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the salvage ledger consults trunk before calling a deleted ref an outstanding rescue (1173-a5ng)"
+STEP_SCRIPT="scripts/test-salvage-refs-ledger.sh"
+STEP_ERROR="the salvage-ledger trunk fallback regressed (1173-a5ng) — either a behind tree is again refused for a line trunk already marked (which refuses every in-flight gate in the fleet the moment a ref is deleted), or the fallback has widened and a genuinely outstanding rescue is being forgiven; see the verdict line above"
+STEP_OK="salvage-refs ledger trunk fallback check passed"
+# Exit 3 means the checker is absent — nothing was examined, and the fixture
+# says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/check-salvage-refs-ledger.sh is absent, so the fallback could not be exercised"

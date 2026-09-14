@@ -550,6 +550,26 @@ cargo test -p <crate-you-touched>      # targeted, fast
 ```
 
 Hard rules:
+- **Detach any gate longer than a couple of minutes from the harness, and
+  never launch one by hand inside a WSL distro.** The harness reaps its own
+  `run_in_background` waiters under memory pressure: on macuahuitl two
+  polling loops were killed mid-`./build.sh --check` with "the system is
+  running low on memory" while `free` showed 53 GiB — the `setsid nohup` job
+  survived both, a Monitor task on the same log survived. Launch `setsid
+  nohup <cmd> >log 2>&1 & disown` and watch the log with Monitor, never a
+  background shell. On Windows invoke from Git Bash so `with-wsl2-builder.sh`
+  re-execs and exports its ext4 `CARGO_TARGET_DIR`; esme launched inside the
+  distro to dodge the reaper, compiled against `./target` on drvfs for
+  4050 s, and published a false ERROR and a tier ratio that were both the
+  bypass (drill: plan/issues/fleet-restart-2026-09-12.md, The agent harness kills its own background waiters under memory pressure during a gate).
+- **Poll the detached gate log's mtime, not only for a verdict token.**
+  macbookair reported a dead land as "slow" twice before adopting this: a
+  hung gate never prints `ok:` or `refused:`, so "still gating" and "dead"
+  are indistinguishable to a watcher that greps only for those. Watch the log
+  under Monitor and report STALL when it goes five minutes without
+  advancing. Before relaunching, look for a surviving process — killing the
+  host-side wrapper reaps only the wrapper, and the container-side
+  `build.sh` outlives it (drill: plan/issues/fleet-restart-2026-09-12.md, Watch a gate for a stall, not only for a verdict).
 - **Never bypass the idiomatic-podman layer.** The test `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` enforces routing through `PodmanClient` — no direct `Command::new("podman")` in production launch paths.
 - **Develop THROUGH the idiomatic layers — no ssh/root/side channels into the guest.** The control wire / `--diagnose` / ExecOneShot / PTY-attach (+`TILLANDSIAS_PTY_DEBUG` tee) surfaces are the ONLY sanctioned guest access, for forensics and debugging exactly as for runtime. A task the layer cannot do is a product gap: file a packet extending the layer instead of side-stepping. Root exec anywhere in guest/forge is a finding, not a tool. Canonical: `methodology/multi-host-development.yaml` `idiomatic_layers_for_agents` (The Tlatoāni, 2026-07-10, order 271).
 - **Container security flags are non-negotiable**: `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`.
@@ -566,6 +586,13 @@ Hard rules:
   635. A count whose denominator depends on flags nobody states is not
   falsifiable; "635 passed under tray,listen-vsock" is. Use the gate's set, and
   write the set next to the number in every claim.
+
+- **`cargo test -p <crate> <filter>` takes a substring, not a regex.** `"a|b"`
+  matches neither `a` nor `b`: a falsification pass on macbookair (2026-09-12)
+  selected ZERO tests with a regex-shaped filter and still printed `test
+  result: ok`. Quote the selection beside every targeted-test claim — read the
+  `N passed; M filtered out` line, or list the tests first — so a zero cannot
+  hide behind a green (drill: plan/issues/fleet-restart-2026-09-12.md, First autonomous-drain stories).
 
 - **`./build.sh --check` runs no litmus (748-tkjx); run the bound spec before
   landing on any surface a litmus covers.** On 2026-09-04 lenovinha ran the
@@ -798,12 +825,28 @@ status `ready`. The packet closes only when every agent named in
     REWRITES your commit, so a SHA captured before it is the pre-rebase local
     one and never exists upstream. `ok:land:<sha>` is the only SHA that exists.
 
+    **Never read a land or gate verdict through a pipe.** The shape above —
+    `landed="$(scripts/land-on-platform-branch.sh | sed -n '…')"` — reports
+    `sed`'s exit status, not the land script's. Three false claims in one
+    hour on two Windows hosts came from exactly this shape (2026-09-12):
+    yolanda read `land-on-platform-branch.sh | tail -25` as exit 0 and told
+    two parties the land tool reports success over a refused gate. It had
+    exited 3 and named its gate log, and esme was about to file a row
+    against the tool for the bug its own header exists to prevent. Capture
+    first, then parse:
+
     ```bash
-    landed="$(scripts/land-on-platform-branch.sh | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
+    land_out="$(scripts/land-on-platform-branch.sh 2>&1)"; land_rc=$?
+    landed="$(printf '%s\n' "$land_out" | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
+    [ "$land_rc" -eq 0 ] && [ -n "$landed" ] || { echo "land refused (rc=$land_rc): $land_out"; exit 1; }
     tillandsias-plan set-field <packet-id> status completed \
       --evidence "$landed" \
       --reason "<what shipped, validation log paths>"
     ```
+
+    `${PIPESTATUS[0]}` is not wrong, it is fragile: any intervening command
+    resets the array, and `a=$?` is the command everyone writes beside it.
+    Pinned by `litmus:land-verdict-through-a-pipe` (drill: plan/issues/fleet-restart-2026-09-12.md, What the pipe-verdict fixture found — extends the coordinator's rule entry below, which named this fixture as its follow-up).
 
     Then commit and push the ledger fragment (step 3), which takes the
     plan-only lane. **This inverts the old step 2/step 4 order for the CODE
@@ -922,11 +965,17 @@ A successful invocation MUST NOT exit with local-only work:
   |---|---|
   | `ok:salvaged:<ref>:<sha>` | the copy is on origin; it survives a re-clone |
   | `ok:salvaged-local:<ref>:<sha>` | the copy is in THIS repo only — the push failed. It survives a re-clone **only if someone pushes that ref**. Say so in your report and push it when the credential works: `git push origin <ref>` |
-  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one |
+  | `ok:salvage-not-needed` | **the dangerous one.** The script protects a DIRTY worktree, not an unpushed COMMIT: a clean tree with a finished unpushed commit and a red gate returns this, rc 0, with NOTHING preserved — exactly the state the salvage rationale above was written for. A first push of a `work/<order>` ref needs the full gate; `pre-push-local-gate.sh` instead exempts a push in which EVERY ref is `refs/heads/salvage/*`, so `git push origin HEAD:refs/heads/salvage/<host>/<yyyymmdd>-<order>` lands the commit ungated. Verify by `git merge-base --is-ancestor <sha> <remote-ref>` and by content on the remote, never by the push's exit code |
+  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one. A dangling symlink in the tree produces this rather than a skip |
 
   The middle row exists because the salvage used to push the commit straight
   to origin and create no local ref, so a failed push left nothing at all — on
   exactly the hosts most likely to strand work, the ones that cannot push.
+
+  yolanda measured the fourth row on 2026-09-12: clean tree, finished
+  unpushed commit, red gate — `ok:salvage-not-needed`, rc 0, nothing
+  preserved, which is exactly the state this rationale was written for
+  (drill: plan/issues/fleet-restart-2026-09-12.md, The salvage script covers the dirty tree, not the unpushed commit).
 
   **It cannot touch the worktree.** The script works through a temporary index
   and git plumbing only, so it is safe to run on dirt you have just been

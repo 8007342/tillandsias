@@ -3905,3 +3905,505 @@ stories.
   purposes even when it holds no lock; one per checkout. The cut's red is
   diagnosed and fixed (1175-wuwr, the wrapper's competing-gate capture under
   set -e); the land, attestation and re-gate follow.
+- **The cut's red, closed as a family (lenovinha) and owned (yoga).** Three
+  members in one night, one shape — A NON-ZERO EXIT LOST OR ACTED ON
+  INVISIBLY — and one remedy, `rc=0; out="$(…)" || rc=$?`: 1141-vf9w
+  (`printf | grep -q` under pipefail reports failure on a successful match),
+  1155-jurn (`$?` does not survive `wsl.exe -- bash -lc`), 1175-wuwr
+  (`out="$(detector)"` under `set -euo pipefail` kills the wrapper silently
+  between toolbox init and dispatch — the detector was WORKING PERFECTLY;
+  its correctness is what killed the wrapper). yoga, who wrote both the
+  block and its fixture: the fixture drove the extracted block under an
+  explicit `set +e`, twice, so it asserted about a shell nobody ships and
+  could not have seen the death no matter how many arms it grew — "the
+  assertion gets reviewed and the scaffolding that builds its premise does
+  not". lenovinha's rule for the instrument that found it: AN INSTRUMENT
+  WHOSE MOST LIKELY OUTPUT IS A NEGATIVE HAS TO BE HARDENED BEFORE THE
+  NEGATIVE IS TRUSTED — the empty env diff was load-bearing, and it was only
+  trustworthy because the dump had been made collision-proof first; two runs
+  on one filename would have diffed a run against itself and drawn the same
+  conclusion from nothing. Third instance of the shape the same evening: the
+  two-sweep /tmp collision producing a false determinism red. Rule kept:
+  one sweep per checkout, beside the one-gate lock. Meta cycle 23:41Z landed
+  62b3ae68b, attested 7a089997d; the re-gate runs on it.
+- **yoga refined the consumer fixture (81610b9b5, held for the back-merge
+  note): errexit does not single out code 1.** A bare `_cg_out="$(detector)"`
+  exits the wrapper on EVERY nonzero status, so codes 2 (caller contract), 3
+  (could-not-run) and an unrecognised code died at the same line, and their
+  arms still drove the block under `set +e`. Three more strict arms through
+  drive_strict; measured 14/14 post-fix, 9/14 on the pre-fix capture form
+  with the three new arms red beside the two landed ones — and every lax arm
+  green in BOTH, which is the finding: the lax arms cannot see this and never
+  could. The strict arms defend the `|| _cg_rc=$?` FORM; without them a later
+  edit could restore the bare assignment and leave 1 and 0 green while 2, 3
+  and 9 die silently, worse than before the fix because the fixture would look
+  like it was watching. The lax drive and arm loop stay on `set +e` on
+  purpose (they assert which case arm fires, observable only if the shell
+  survives to reach it), now BOUNDED by the strict arms rather than an
+  unexamined convenience. lenovinha's qualifier on the instrument rule: harden
+  when the negative ELIMINATES a hypothesis (someone stops searching on it),
+  not when it merely fails to confirm.
+- **yolanda reported a freeze breach that was not one, and found a real gap
+  doing it.** They pushed 1171-ccf2's code to windows-next at 23:37Z inside
+  the cut window and held everything after; the freeze holds code lands on
+  LINUX-NEXT only (the branch the release gate verifies), platform-branch
+  pushes move nothing the gate reads, and their relay is the coordinator's,
+  held until the back-merge — so nothing to revert and the cut base is
+  untouched. Told them so; the standing wording of the freeze in the memory
+  and the skill must say "linux-next", and tonight's messages did. The gap
+  they named stands regardless and they file it: a freeze is a rule with no
+  mechanism — the pre-push hook checks the trunk merge and the gate stamp and
+  never whether a freeze is live, and on a 41-minute gate the window between
+  "I checked" and "it pushed" is long enough for a freeze to begin inside it.
+  Shape requested: a live freeze marker on origin the hook consults for CODE
+  pushes to the frozen branch, plan-only exempt, set and cleared by the cut
+  runbook at the gate start and the back-merge push. Order numbers 1174-u5wp
+  and 1174-6r4k are distinct by design (the suffix exists because the number
+  is a per-fold sequence and hosts mint on different branches). 1171-ccf2 is
+  implemented at 740e93552; esme's measurement on a published release is
+  what is left.
+- **macneo (:40 cycle, attested f06c03708): the plan/issues differential,
+  measured as the A/B the packet 1142-85zx implied but nobody had run.** Same
+  floor-tier Mac, adjacent ledger-only cycles, one variable: a plan/issues
+  note in the diff forces the full `./build.sh --check` (~1000 s regime);
+  without it the plan-only lane accepted in 16 s wall clock and carried TEN
+  fragments (yoga's loop_status and attestations among them). THE
+  INTERACTION, theirs to name and mine to own: the per-host drill convention
+  (one plan/issues file per host, adopted to stop concurrent appends
+  corrupting one file) MULTIPLIES this defect — every host now writes a
+  plan/issues note on its cadence, so the forcing rate scales with fleet
+  size; macneo paid a full gate on each of its last two cycles for
+  markdown-only diffs and became a producer of the starvation it reports by
+  following the fix. Also measured: a push rejected as behind (origin moved
+  inside the cycle) cost seconds to retry BECAUSE the diff was plan-only;
+  under the packet's failure mode the same race costs a full gate per
+  attempt — starvation is duration MULTIPLIED BY retries, and only the
+  retries explain refused:land:attempts-exhausted. Released back to ready
+  rather than implemented: widening gate-stamp's skip list is a trunk-gate
+  owner's change and needs the memo verdict (ok:gate-fresh-except-plan) plus
+  the arm asserting the issue-citation guard still runs on an issues-only
+  diff (881-29me), which macneo tripped for real this week. Positive control
+  on the absence: the three plan globs ARE in gate-stamp.sh's skip case and
+  plan/issues is not. Routed: macuahuitl takes 1142-85zx in its next meta
+  cycle after the cut, sized against N writers. Keychain: five prompt-free
+  gates since the operator's restart.
+- **v56.9.13.1 CUT (2026-09-14, on the operator's instruction).** PR #115
+  merged at 5399da211 after the re-gate on 7a089997d (rc 0, 1522 s, 358/358
+  pre-build litmus, 33/33 checks; the first gate on 0c53aa4ae was red on
+  1175-wuwr); bump PR #116; tag v56.9.13.1 at main 6b8342f3f; back-merge
+  pushed on linux-next at f51aa955e with the README row (twelve v0.4 rows
+  distilled into one span, ten rows now), the work-queue line and
+  1175-wuwr's closure; release run 34794577946 dispatched. Cut base predates
+  yolanda's 1171-ccf2 windows-next code and macbookair's sed -i slice; both
+  relay next pass. All-clear sent to yoga, lenovinha, yolanda, macbookair.
+- **lenovinha: 1159-g96c blocked on a HOST RESOURCE CEILING, relayed rather
+  than retried.** Two land attempts SIGKILLed by the system for low memory
+  in the same phase (clippy strict + listen-vsock on tillandsias-headless),
+  tree intact both times; the 1047-h88p cap already resolves to the floor
+  (13 GB < 16 → CARGO_BUILD_JOBS=1) and one rustc still exceeds a 13.8 GB
+  host beside a desktop session and an agent. Marginal, not absolute: five
+  packets landed through the same gate on the same host tonight; the
+  back-merge moved the line, not the host. Decision: push work/1159-g96c,
+  the coordinator relays it in the next pass's single land with the platform
+  relays. Row to file (theirs): the ceiling is a step function with no rung
+  below one job, and a gate killed for memory leaves an empty log
+  indistinguishable from a hang — a named pre-gate memory floor and a
+  post-mortem OOM read (refused:gate:oom-killed) are the ask.
+- **lenovinha: the work/ relay push is refused too (stamp required), and the
+  answer is the lane that already exists.** `git push origin
+  HEAD:refs/heads/work/1159-g96c` → "plan-only lane: not applicable — new on
+  the remote; full gate required" then "the tree changed since ./build.sh
+  --check last passed (12 paths)" — the twelve paths being the back-merge
+  they were told to take. Filed 1176-fn2p (the gate cannot report its own
+  OOM; 1047-h88p's ceiling is a cliff with no rung below one job) and
+  1177-k4jq (the relay cannot rescue a host that cannot gate, because the
+  work/ ref demands the stamp; the ask is a hand-off of an UNGATED tree
+  marked as such, negative controls: platform branches and main unchanged,
+  the coordinator still gates before trunk). Coordinator's answer: the
+  ungated hand-off lane exists — since 1146-8j7i the salvage net handles a
+  clean tree with an unpushed commit (ok:salvaged-commits:<ref>:<sha>) and
+  pushes the commit object with authorship intact to a salvage ref the hook
+  accepts; 1159-g96c relays from it, gated here, next pass; the work/ lane is
+  the GATED hand-off by design, so 1177-k4jq may reduce to naming the choice
+  in the refusal text plus docs. Fourth member of tonight's family, in
+  lenovinha's own command: `git push … | tail -3 && echo pushed` reported a
+  failed push as pushed (the `&&` saw tail's status) forty minutes after they
+  wrote about the family; the real refusal was a stale plan binary
+  (1129-4su6), fixed by rebuilding one crate.
+- **lenovinha salvaged 1159-g96c through the existing lane:**
+  `ok:salvaged-commits:refs/heads/salvage/lenovinha/20260914-1159-g96c:477e5ed77`,
+  confirmed on origin (the `-commits` verdict, not `-local`: the copy survives
+  a re-clone; 4e38b5a29 reachable, authorship and message intact). Relay onto
+  linux-next in the next pass; ledger line then; deletion one pass after the
+  marker. 1177-k4jq corrected on the row (c5f41fd3d) and REDUCED: work/ is
+  the gated hand-off by design and salvage/ the ungated one, so the defect
+  is that the refusal never names the choice — refusal text plus docs,
+  negative controls unchanged. The actionable half, in their words: A TOOL
+  WHOSE NAME DESCRIBES ITS ORIGINAL CASE WILL NOT BE FOUND BY SOMEONE IN ITS
+  EXTENDED CASE — salvage-dirty-worktree.sh reads as a dirty-tree tool and
+  1146-8j7i's clean-tree extension was invisible at the moment it was
+  needed; lands in the skills batch beside the salvage rule. The evening in
+  one line, theirs: fluency in a failure mode is not protection from it — the
+  status-lost family caught yolanda, esme, macuahuitl and lenovinha in turn.
+- **yoga landed 1150-q462's strict-regime arms at 7c8f203e6 (attempt 2: attempt
+  1 gated green and lost the push race to the back-merge and the release
+  traffic; the tool re-fetched, re-merged and re-gated on its own; merged, not
+  rebased, as the unpushed set carried a merge).** The row's event now says,
+  in yoga's words, that the causal chain for the cut's red ran their fixture →
+  their block → the release gate, and the fixture is the link that should have
+  caught it.
+- **Coordination pass 02:05Z (pass 15; the 01:41Z cron delivered behind the
+  release watch).** Freeze over: three relays in one land — osx-next +12
+  (macbookair's 1135-z8gn sed -i slice with the mutation-arm fix, claim
+  released, macneo's attestation), windows-next +6 (yolanda's 1171-ccf2 at
+  740e93552, the held merge, the 1174-u5wp filing), and lenovinha's salvage
+  ref 477e5ed77 carrying 4e38b5a29 (1159-g96c, authorship intact) — merged
+  --no-ff, zero unmerged paths each. Salvage ledger line filed for the ref
+  (ok:salvage-sweep:refs=6:new=1:filed=1; ok:salvage-refs-ledger:7); it is
+  deleted no sooner than the pass after this marker lands. Trunk had moved
+  +10 since the back-merge (yoga's 1150-q462 strict arms at 7c8f203e6 and
+  ledger traffic). Stale rows `ok:stale-ready-rows:90/513`, none handed.
+  Audit rows=23 stems=23. Hand-offs: none — 1142-85zx is macuahuitl's next
+  meta cycle (macneo's A/B on the row), the floor's smoke is running on esme
+  (v56.9.13.1, Windows row, requested with the tag). Release run 34794577946:
+  Linux and Windows jobs green, macOS tray job still running at 02:11Z; the
+  three-set asset assertion waits on it.
+- **v56.9.13.1 PUBLISHED.** Release run 34794577946 completed success on all
+  three jobs (Linux musl at ~01:1xZ, Windows tray ~01:5xZ, macOS tray
+  ~02:1xZ; ~75 min end to end, the macOS job the long pole). Asset assertion
+  by name, all three sets present: tillandsias-linux-x86_64 + SHA256SUMS,
+  tillandsias-tray-56.9.13.1-windows-x64.zip + tillandsias-tray.exe +
+  SHA256SUMS-windows, tillandsias-tray-56.9.13.1-macos-arm64.tar.gz +
+  Tillandsias.dmg + SHA256SUMS-macos; 32 assets; MSIX absent (unsigned,
+  withheld by design). Prerelease (daily channel). Linux smoke artifact:
+  https://github.com/8007342/tillandsias/releases/download/v56.9.13.1/tillandsias-linux-x86_64
+  The cut ran ~3h40m from the operator's word (22:26Z) to publish (02:1xZ):
+  25 min first gate (red), ~1h diagnosis, 3 min land, 25 min re-gate, ~10
+  min bump check, ~10 min back-merge check, ~75 min workflow. The
+  skills-audit proposal "assert all three sets, do not display" was applied
+  by hand here and lands in the release skill with the batch.
+- **Land 22: ok:land:1dd840e4d:attempt-1** — the three post-cut relays
+  (osx-next, windows-next, lenovinha's salvage ref with 4e38b5a29) gated on
+  Linux for the first time and green; osx-next and windows-next contained in
+  trunk, 4e38b5a29 contained; lenovinha closes 1159-g96c on it. The relay
+  list for the next pass is empty.
+- **esme: v56.9.13.1 Windows smoke PASS (report 04ae40da2, host-qualified).**
+  install exit 0, sha256 ok, tray 56.9.13.1 (6b8342f3f) exact; reset:
+  terminate 0, unregister 0, credentials cold, tillandsias-vm-uuid preserved,
+  tillandsias-build Running (--terminate used, not wsl --shutdown, to keep
+  it); provision cold 99 s, warm 17 s; wire reachable, wire_version 3, phase
+  Ready; diagnose exit 2 (the guest idled between calls). Sections 0–3
+  covered, 3b and 4–4c NOT RUN. Blast radius held; unpushed work bundled
+  outside the checkout before the reset. The three briefed expectations
+  confirmed (stale:capability-row-expired is the fix; due:no-capability-row
+  from the builder distro is 1159-g96c; 1171-ccf2's absent headless exe is
+  expected in this cut). DIVERGENCE, recorded not filed: the documented
+  post-provision idle-shutdown says a distro restart restores the wire with
+  no intervention; here seven polls over four minutes stayed 10060 with the
+  guest Running and both units active, and only a warm --provision-once
+  restored it. RUNBOOK FINDING (to file, windows): PowerShell 5.1 +
+  ErrorActionPreference=Stop + `*>&1` turns any native stderr line into a
+  terminating ErrorRecord — the tray's benign "Failed to set locale" aborted
+  --provision-once MID-PROVISION and the half-provisioned guest still
+  satisfied the destruction-marker assertion (a naive re-run reads fresh
+  while resumed); remedy Start-Process -Wait -PassThru with redirected
+  streams; and $LASTEXITCODE came back EMPTY for a native call in that
+  harness, so a canary (cmd /c exit 7 must report 7) precedes every
+  assertion. NEAR-MISS: a stale checkout read "NO LEDGER ROW for
+  v56.9.13.1" — order 380 would have filed the release as undescribed; the
+  merge produced the row. HELD: 1155-jurn's canary push, because esme's gate
+  came back red at 53 min on capabilities-envelope-names-its-source 1/6
+  inside the gate, 6/6 standalone on the same tree — the arm name requested.
+- **Fifteenth regime axis (esme, measured): WHICH ARTIFACT.** The envelope
+  suite (yoga's, bound by the coordinator as a post-build litmus tonight)
+  resolves `BIN="${TILLANDSIAS_BIN:-$ROOT/target/debug/tillandsias}"`, a
+  hardcoded in-tree path; on every Windows host with-wsl2-builder re-execs
+  with CARGO_TARGET_DIR redirected, so esme's `./build.sh --check` compiled
+  the headless crate into /root/.cache/tillandsias-wsl2-target (17:08) and
+  the fixture graded the 09:02 in-tree binary, which predates the
+  implementation (16:55): five of six arms red with accel_source='' (the
+  field ABSENT, not wrong); standalone 6/6 later because the in-tree binary
+  had since been rebuilt. The fixture is hermetic on the cache
+  (XDG_CACHE_HOME=$TMP) — only the binary could differ. Same family as
+  1154-6big and the resolve_target_binary reorder: a consumer resolving an
+  artifact from a path the build did not write. Row to file (esme, linux
+  pickup): route the suite and every sibling that hardcodes target/debug
+  (executed paths, not mentions) through resolve_target_binary honouring
+  CARGO_TARGET_DIR; closure arm plants a stale in-tree and a current
+  redirected binary. Green on Linux twice tonight because the target dir is
+  not redirected there. esme's 1155-jurn push stays held until a gate proves
+  green — correct.
+- **esme filed both (3f45bd299): 1178-eg49** (Windows runbook: PowerShell
+  5.1 NativeCommandError aborts provisioning on a benign stderr line; the
+  half-provisioned guest STILL satisfies the destruction-marker assertion
+  because a partial provision writes a vhdx that postdates the marker, so a
+  re-run reads fresh while resumed; remedy Start-Process -Wait -PassThru with
+  redirected streams plus the exit-code canary, both exercised on the host;
+  section 0 anticipates the empty-status class for bash and not PowerShell)
+  **and 1179-yshc** (fixture, linux): ONE violator, not a class — nine
+  fixtures mention target/debug, exactly one executes a hardcoded path (the
+  envelope suite); 721-nyev already settled the convention and a sibling's
+  own comment records its first version being refused for the same thing.
+  Deliverable: resolve through resolve_target_binary, TILLANDSIAS_BIN
+  override kept, the DEFAULT was wrong. Regime on the row. CORRECTION from
+  esme to a figure they gave earlier: the plan-only lane's stale-binary
+  refusal is re-armed by ANY Cargo.lock change in the workspace, not only
+  plan-crate edits — three release rebuilds (~2m22s each) in one cycle to
+  push ledger fragments; the guard is right (1129-4su6), the frequency is the
+  defect; goes on 1152-y3bv as a note. Routed: 1179-yshc → macuahuitl's next
+  meta cycle with 1142-85zx.
+- **macbookair reports a STANDING consent from the operator for destructive
+  work on macbookair** ("yes, and treat it as standing": the destructive
+  macOS smoke and 804-deux part 2's VM rebuild, now and on future cycles;
+  their framing: "we embrace destructive resets, our platform is idempotent
+  and ephemeral by design"). Recorded as macbookair's report of the
+  operator's words, scoped to that host. Routing change: 804-deux part 2
+  (end-to-end cache survival across a VM rebuild, the p1 declined every cycle
+  on the consent rule) is claimable unattended on macbookair from their next
+  cycle; the macOS smoke runs when a release publishes, findings as packets,
+  report host-qualified. macbookair is running the v56.9.13.1 macOS smoke
+  now — the first real test of their clamp-ca-material fix in a shipped
+  artifact (the script was wholly inert on macOS before it: `stat -c` is
+  GNU-only); the sed -i slice is NOT in this release and they will say so
+  against any fixture-portability finding.
+- **DUPLICATE FIX ON 1142-85zx, mine, by the rule I wrote.** I claimed the
+  row at 03:41Z with a set-field in this checkout and launched a sub-agent
+  without pushing the claim; yoga's plan_next still offered it, they claimed
+  on trunk (226d19f06), fixed (236329190) and closed (2c6d108f6) while my
+  agent worked; my land refused on the merge conflict. "A hand-off is a claim
+  flip ON TRUNK" — a claim that stays local is not a claim, and the positive
+  control (plan_next no longer lists it) was never run against origin. Cost:
+  one sonnet sub-agent (139,330 tokens, 10 min) and one refused land; the
+  winner is yoga's (it also fixed the fast-refusals counter that would have
+  refused mine), mine dropped by rebase before landing, per
+  on-a-duplicate-fix-hold-never-drop — the loser holds, the winner is on
+  origin. Rule for the next cycle: push claims through the plan-only lane
+  BEFORE spawning the agent, and run the control against origin's fold.
+- **The second reading of 1142-85zx (yoga's ask, answered from the salvaged
+  ref).** Two hosts, same constraint, same two decisions arrived at
+  separately: top-level only (maxdepth 1) and the citation guard wired into
+  the memoised-plan arm. Mine lacked the 1087-h2z9 counter excision only
+  because my agent never ran test-gate-fast-refusals.sh. What mine had that
+  yoga's did not: arm 6c, a mutation control IN THE ARM (their falsification
+  was five hand-run mutations, "the control in the author's memory"). And
+  what yoga measured that my review missed: arm 6c builds its mutant by
+  PROVENANCE (`git show HEAD:` cmp'd against the worktree), which differs
+  only while the fix is uncommitted — on every host that has merged the fix
+  it reds permanently, accusing the checkout of an uncommitted change; a
+  fixture that asserts its own change has not landed. I verified "pre-fix
+  red" and never asked what the arm would print a day later. Resolution:
+  yoga rebuilds the mutant BY CONTENT (strip the two constructs, cmp proves
+  the strip applied and names itself on a no-op strip, require the
+  issues-only change not to reach the memo verdict), lands it under my name
+  citing arm 6c and refs/heads/salvage/macuahuitl/20260914-1142-85zx
+  (59009673e); the ref stays until the arm is on trunk. Rule kept: a
+  mutation control must construct its mutant from content, never from where
+  HEAD happens to be.
+- **macbookair: v56.9.13.1 macOS smoke PASS (a09ff4884), and the clamp fix
+  verified in a published artifact.** Clean room under the standing consent:
+  install exit 0 into /Applications (no ~/Applications fallback), tray
+  56.9.13.1 (6b8342f3f) exact; reset removed 2.3 GB of state plus the sparse
+  rootfs.img with residue asserted empty and sizes measured BEFORE removal so
+  a no-op destruction could not pass as a clean room; provision exit 0 with
+  the full 528 MB Fedora image re-downloaded, rootfs postdating the
+  destruction marker; diagnose exit 0. No product findings. The lane's ledger
+  claim (1135-z8gn's clamp-ca-material fix) verified by executing the shipped
+  source.
+- **macbookair: 804-deux part 2 VERIFIED end to end (111de1387)** — the row
+  had carried "UNVERIFIED: needs a re-provision, not authorised" since
+  2026-08-19; the standing consent made it available. Seeded so survival is
+  provable byte-wise (a 61 B marker plus 2 MiB of /dev/urandom ballast,
+  incompressible), rm -rf $VM_DIR only with the cache untouched, then
+  --provision: both files sha256-identical across the rebuild, rootfs.img
+  nine seconds old at the check (a genuinely new VM), and the ballast
+  present in the NEW guest via --exec-guest rc 0. The consent rule held the
+  p1 for 26 days; the operator's word closed it in one cycle.
+- **Coordination pass 04:05Z (pass 17; the 03:41Z cron delivered behind the
+  meta cycle's land).** Relays: osx-next +5 (the two above plus attestations)
+  in this pass's land after the meta cycle's; windows-next +3 (esme's rows
+  and smoke PASS) already merged in that cycle's land. Salvage refs on
+  origin: lenovinha's 1159-g96c (line marked deleted in the cycle's commit;
+  the ref is deleted the pass AFTER that marker lands, i.e. next pass) and
+  the new macuahuitl/20260914-1142-85zx (yoga's second reading; line filed
+  by this pass's sweep; kept until the content-built arm 6c is on trunk);
+  five older pirria/unknown refs unchanged. Stale rows
+  `ok:stale-ready-rows:89/513`, none handed. Audit rows=23 stems=23.
+  Hand-offs: none — macbookair self-drained 804-deux under the standing
+  consent, yoga takes the arm-6c rebuild, lenovinha closes 1159-g96c, esme
+  re-gates 1155-jurn after 1179-yshc lands.
+- **Arm 3d on trunk at 7a6b3ecef (yoga, co-authored to macuahuitl):** arm
+  6c's idea with the construction changed — the mutant stripped from a copy
+  of the SHIPPED stamp (the skip-glob case arm and the plan_digest find), cmp
+  proving the strip applied and naming a no-op strip, the issues-only change
+  required NOT to reach ok:gate-fresh-except-plan (verdict
+  stale:tree-changed-since-gate); 11/11, mutation-tested 9/11 with the
+  no-match patterns red by name. yoga's own words on the cmp check: they had
+  produced that exact false pass twice in this row's work and still drafted
+  the strip without asking what it would do if it matched nothing — the
+  control is in the arm now. The row's event carries both hosts' halves.
+  The salvage ref macuahuitl/20260914-1142-85zx has done its job: line filed
+  and marked deleted this pass, ref deleted next pass. yoga idle, lock free,
+  level with origin — 1176-fn2p is the hand-off (a 14 GB Silverblue host
+  under the same 16 GB cliff lenovinha measured; the OOM-signal row is
+  measurable there), claim flipped on trunk after the in-flight land pushes.
+- **macbookair: 804-deux story complete (attested 437988c82, claim released).**
+  Both halves deliberately: the host half alone proves only that rm -rf
+  missed a directory; the guest half proves the freshly provisioned VM
+  re-attaches the virtiofs share and sees the surviving bytes; the ballast is
+  /dev/urandom so "survived" cannot be misread as "recreated". Two items
+  remain, neither consent-shaped: (a) the populated-cache models-versus-images
+  split needs a forge run pulling a real engine and model — macbookair did
+  NOT substitute the 2 MiB ballast for that figure ("a synthetic number
+  standing where a measured one belongs is the thing this fleet keeps getting
+  bitten by"); --exec-guest works on this path (rc 0, waits for Ready), so
+  the probe exists; 830-xsk2's CFRunLoop timeout is a different path.
+  (b) SCOPE, decided by the coordinator under the operator's reset ruling and
+  surfaced as decided: model_cache_dir() sits under $CACHE_DIR, so the smoke
+  and uninstall destroyers wipe the models dir (~2.47 GB re-downloaded per
+  smoke; the dir was ABSENT when 804-deux started because the same host's
+  smoke had wiped it hours earlier). The clean room stays clean: 804-deux's
+  deliverable was survival across a VM REBUILD, a different lifecycle from
+  the smoke's destruction; the cost is a measurement on the row. A
+  keep-models knob for smoke runs is one line and the operator's word.
+- **OPERATOR DECISION (2026-09-14): "let's add the keep models flag to our
+  resets."** Filed and claimed 1181-bkem on trunk BEFORE any agent started
+  (control 0), with 1182-2vaz beside it. Shape decided from where the
+  models live (cache_root()/models): Linux keeps them already (the podman
+  reset and the credential clearer never touch ~/.cache/tillandsias/models —
+  the flag is a documented no-op there and the Linux step-2 script now says
+  so in one line); macOS wiped them because both smoke runbooks rm -rf the
+  whole cache dir inline — the destroy moves into scripts/e2e-step2-macos.sh,
+  one source for both runbooks (803-49re), honouring
+  TILLANDSIAS_RESET_KEEP_MODELS=1 with the spared dir NAMED in the residue
+  line so a kept-models run cannot read as a clean room by accident;
+  uninstall.sh --wipe honours it on both; Windows cannot spare weights that
+  live inside the distro's vhdx (806-a4tu) — 1182-2vaz moves them to a
+  host-side mount first, the macOS virtiofs share's shape. Default unchanged:
+  the clean room stays clean (the 2026-09-13 reset ruling); the flag is
+  opt-in per run. Implemented by a three-agent workflow (two sonnet
+  implementers on disjoint files, one opus verifier re-deriving the mutation
+  controls and grepping the flag's reach).
+- **yoga: 1176-fn2p completed at be9f54100 (closed 13aacb6c8, attested
+  3850ece4b), fixture 12/12, both negative controls armed.** Stated on the
+  row so it is not misread as a fix for lenovinha's two kills: THE FLOOR
+  WOULD NOT HAVE CAUGHT THEM — the floor catches the START state and their
+  host had enough memory to begin; it ran out inside clippy, the RUN state,
+  which the OOM post-mortem covers. Floor default 1 GiB MemAvailable (not
+  MemTotal — lenovinha's total was constant across five successful lands and
+  two kills the same day), with an arm asserting the shipped default stays at
+  or under a quarter of a completing host's headroom, so a later tightening
+  reds it. INSTRUMENT LESSON for any host reading a kernel log:
+  `journalctl -k -g <pattern>` prints "No entries" and exits 0 BOTH when the
+  window is quiet and when the user cannot read the kernel journal —
+  identical output for opposite facts; the probe asks whether ANY kernel line
+  is readable before concluding, and degrades to could-not-run otherwise;
+  a post-mortem built on dmesg would silently answer not-OOM on every
+  Silverblue host (dmesg: "Operation not permitted" unprivileged). Three
+  land attempts, all gate-green, two lost to the push race; the floor ran
+  live each time (ok:gate-memory:11654MB available, floor 1024MB). Out of
+  scope by the row: no rung below one job (1047-h88p untouched); the relay
+  lane's stamp requirement (1177-k4jq) still open — handed to yoga by claim
+  flip on trunk after this.
+- **yoga: 1177-k4jq completed at 5f4b122e2 (closed 30a1b81b4, attested
+  46000d4b9), fixture 8/8, both negative controls armed, the gate itself
+  unchanged — only the signpost moved.** Verified before building: the
+  hook's section 0 exempts refs/heads/salvage/* by design (872-c9nd) and
+  salvage-dirty-worktree.sh covers the clean-but-stranded commit since
+  1146-8j7i, so the ungated hand-off was reachable from lenovinha's state and
+  what was missing was one sentence in the refusal a stuck host actually
+  reads. Deviation corrected on the row: the fixture is
+  scripts/test-refusal-names-the-ungated-lane.sh, not the reserved
+  test-work-ref-accepts-ungated-tree.sh — a filename promising the design the
+  reduction replaced would be a false claim sitting in the tree. An arm the
+  row did not ask for: the NAMED remedy covers the state that reaches the
+  refusal (a refusal naming a command that cannot help is worse than one
+  naming nothing). DRILL LESSON, the same one twice in two cycles, in yoga's
+  words: the fixture's first version extracted the whole refuse() body and
+  two mutations that DELETED the echoes still passed 8/8 — the comment block
+  above them names the same command, so the matcher matched the prose ABOUT
+  the fix; it now scans only the echo lines, which is what a user reads.
+  Scan declarations, not substrings — and run the mutation even when the
+  arm looks obviously right.
+- **yoga: 1173-a5ng completed at be5a3275e (closed 75d3ed5d1, attested
+  09e4523db), fixture 7/7 at the filename the row named; live check
+  ok:salvage-refs-ledger:8.** The checker consults trunk's copy before
+  calling a deleted ref an outstanding rescue (a behind tree gets
+  ok:…:marker-on-trunk:<ref> and a MERGE TRUNK line); sweep-salvage-refs.sh's
+  header carries the one-pass-after-the-marker rule, stated as a REDUCTION,
+  not a guarantee (a floor host's gate runs an hour) — both mechanisms, not
+  either. Two things to carry: the fallback keys on the MARKER, not on the
+  line naming the ref (matching the ref alone would forgive every
+  outstanding rescue silently; an arm reds on exactly that mutation); and
+  `git show <ref>:<path>` on a missing ref exits non-zero writing ZERO
+  BYTES, indistinguishable from "read it, found no marker" when the rc is
+  discarded — the helper returns a distinct code and the caller REFUSES,
+  saying the behind-tree case could not be ruled out (yoga had reported a
+  fabricated hazard from that exact mistake before). Three fixture bugs the
+  fixture caught, recorded rather than re-run quietly: the ledger line
+  written from memory had the wrong field order; the first version created
+  NO remote and assumed that made the ref absent — it made ls-remote FAIL,
+  so the checker took its origin-unreachable skip and the reachability half
+  never ran (an unreachable remote and an empty one are different facts,
+  this packet's own distinction one layer down); a fourth mutation failed to
+  apply through a quoting error and printed 7/7 from an unmutated file.
+  Both of tonight's salvage refs are safe to delete next pass. yoga idle
+  again → 1174-6r4k handed by claim flip on trunk.
+- **yoga: 1174-6r4k completed at bff49e06c (closed f844f4e1f, attested
+  f2276d74e), 14/14 in the existing scripts/test-release-tier-freshness.sh.**
+  The daily exercise can no longer be skipped by a diagnostic run.
+  CORRECTION to the row as I filed it: no dispatch=ci-full marker exists in
+  the check-log index (_stamp_dispatch writes `dispatch` into the GATE STAMP;
+  a check-log record carries ci_run_id, ci_phase, check_id, status,
+  source_log, archived_log, sha256, duration_ms) — the discriminator is phase
+  coverage alone, from the writer's own vocabulary: CI_PHASE "all" for a
+  whole run, or records covering pre-build AND post-build AND runtime. Two
+  design points: an index holding ONLY phase-only runs reports never, not
+  fresh (the same fact as no index; reporting it green would be the defect in
+  its purest form), and ignored runs are named with their coverage, because
+  silence would read as "nothing newer". The writer honours
+  TILLANDSIAS_CHECK_LOG_INDEX now. DRILL LESSON, yoga's: the FIXTURE'S OWN
+  HELPER was part of the subject — rec() hardcoded ci_phase "pre-build" while
+  every arm meant "a run", so once the guard could tell a full tier from a
+  phase-only one, every pre-existing arm was writing a partial run and the
+  guard correctly refused to call any of them a tier answer; five of fourteen
+  arms rewritten. A fixture written before a distinction exists encodes the
+  absence of that distinction, silently. yoga idle again → 1174-u5wp handed.
+- **yoga: 1084-nzqc completed at 59225de1d (closed 62fdc9c91, attested
+  23b249bcd)** — both SIGPIPE-guard escapes closed (an absolute-path producer;
+  a pipeline split across `\` continuations), the 1069-c9w6 fingerprint
+  flagged, the pre-fix guard measured green on the same tree; fixture 8/8,
+  five of eight arms negative controls. **1174-u5wp RELEASED back to ready at
+  86765770a, not started, by design:** it arrived mid-cycle while 1084-nzqc
+  was in flight and the cycle was already attested; it changes the tool every
+  host lands with, so it gets a fresh cycle with its own boundary; yoga takes
+  it at their next cron unless reassigned. Design note from them: adopting
+  an existing valid stamp cannot weaken anything, because the pre-push hook
+  re-verifies the stamp against the tree at push time. DRILL, both theirs:
+  (1) the fix refused its own land, correctly — four REFUSED lines, every one
+  heredoc test data in the fixture; a fixture for a class guard must CONTAIN
+  the patterns it flags and the guard scans the diff; the project's answer,
+  assemble the needle at runtime (980-ja2m), not `# sigpipe-ok:` (that would
+  have silenced the refusal and lied, and one arm exists precisely to test
+  that the marker still exempts a folded line). (2) Four fixture defects,
+  every one a green arm asserting nothing: the rc died in a subshell
+  (`_rc=$?` inside a function the caller ran as `$(…)`) so all four negative
+  controls passed trivially; one negative control could not reach the check
+  it appeared to guard (its file was not in the diff) — only the mutation
+  found it; BS='\\' wrote TWO backslashes, an escaped backslash rather than
+  a continuation, so the continuation arms exercised shell that does not
+  continue — caught by cat -A on the generated file, not by the 8/8.
+- **Coordination pass 06:11Z (pass 19; the 05:41Z cron delivered behind the
+  keep-models land).** Relays: none (both platform branches contained).
+  Trunk in the last 90 minutes is yoga's: 1173-a5ng, 1174-6r4k, 1084-nzqc
+  closed; 1174-u5wp claimed by hand-off and released back to ready, not
+  started, by design (a land-tool change gets a fresh cycle). Both salvage
+  refs deleted this pass under the hook's named override, one pass after
+  their markers landed and with yoga's trunk fallback (1173-a5ng) now
+  protecting any behind tree: lenovinha/20260914-1159-g96c and
+  macuahuitl/20260914-1142-85zx. Stale rows `ok:stale-ready-rows:89/509`,
+  none handed. Audit rows=23 stems=23. Hand-offs: none — yoga takes
+  1174-u5wp at their cron; the floor has nothing floor-shaped; macbookair's
+  next is the 804-deux split measurement; esme re-gates 1155-jurn. This
+  pass's records ride the plan fast lane for the first time: 1142-85zx put
+  plan/issues on it, so the drill fold no longer forces a full gate on every
+  other host.

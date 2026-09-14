@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    event:
+      type: implemented
+      ts: "2026-09-14T04:56:11Z"
+      agent_id: linux-yoga-claude-20260914t045611z
+      host: yoga
+      summary: |
+        IMPLEMENTED UNDER LENOVINHA'S REDUCTION, and I verified the reduction before building on it rather than taking it on report.
+
+        THE REDUCTION SAYS the work/ lane is the GATED hand-off by design and salvage/ is the ungated one, so the deliverable is the refusal TEXT naming that choice — not admitting an ungated tree onto a work/ ref, which is what the row was filed with. CHECKED, both halves:
+          * scripts/hooks/pre-push-local-gate.sh section 0 exempts refs/heads/salvage/* from the gate BY DESIGN (872-c9nd), scoped so a salvage cannot ride along with other refs.
+          * scripts/salvage-dirty-worktree.sh covers the CLEAN-but-stranded commit since 1146-8j7i — `git status` empty, HEAD unreachable from any origin ref — which is exactly lenovinha's state: gated green, staled by an instructed back-merge, then unable to re-gate. It pushes HEAD to the salvage ref and answers ok:salvaged-commits.
+        So the ungated hand-off already existed and was reachable from the state in question. What was missing was a sentence: the refusal a stuck host actually reads offered ONE escape, `git push --no-verify`, which the skill forbids.
+
+        WHAT SHIPPED: refuse() now names scripts/salvage-dirty-worktree.sh as the ungated hand-off, says the relaying host gates it there, and says the work/<order> lane is the GATED one that demands the stamp — ABOVE the --no-verify line, which stays because the hook's own header records that a bypassable hook is deliberate. A pointer, not a bypass: the refusal gained a sentence and no exit path, and the salvage exemption is untouched.
+
+        THE FILENAME DEVIATES AND IT IS FLAGGED RATHER THAN HIDDEN. The row reserved scripts/test-work-ref-accepts-ungated-tree.sh. That name describes the design the reduction REPLACED — nothing here makes a work/ ref accept an ungated tree, and a fixture promising that in its filename would be a false claim sitting in the tree. It is scripts/test-refusal-names-the-ungated-lane.sh, and the reason is written in its header.
+
+        FIXTURE 8/8, source-text regime stated: no arm pushes anything or creates a remote ref, because a fixture that pushed to prove a push works would be doing the thing it tests against the fleet's trunk. Both of the row's negative controls are arms, plus one the row did not ask for — that the NAMED REMEDY actually covers the state that reaches this refusal, since a refusal naming a command that cannot help is worse than one naming nothing: it costs a cycle to discover.
+
+        MUTATION-TESTED THREE WAYS, each diff printed and proven non-empty first: deleting the salvage echoes reds three arms, hoisting --no-verify above them reds NC2 by name, and widening the exemption from refs/heads/salvage/* to refs/heads/* reds the scoping arm.
+
+        AND THE FIXTURE WAS WRONG FIRST, in this row's own class. Its initial version extracted the WHOLE refuse() body and two mutations that DELETED the echoes still passed 8/8 — because the comment block above them explains the remedy and names the same command. A file that documents itself contains every string it emits, so a matcher over the body was matching the prose ABOUT the fix rather than the fix. It now scans only the `echo` lines, which is what a user reads. Same lesson as the archiver tokens one cycle ago: scan declarations, not substrings — and I hit it again anyway, which is why the mutation step is not optional.
+
+        NOT DONE, deliberately: the pre-push hook still demands the stamp for work/ refs, platform branches and main, exactly as before. The exemption moves WHERE the gate runs, never WHETHER — and under this reduction it does not move at all; only the signpost does.

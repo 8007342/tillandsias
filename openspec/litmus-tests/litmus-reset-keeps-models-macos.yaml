@@ -1,0 +1,32 @@
+# @trace spec:cache-recovery-mechanism
+# @trace order:1181-bkem
+#
+# Order 1181-bkem, the operator's 2026-09-14 decision: "let's add the keep
+# models flag to our resets." The clean room stays clean by default (the
+# 2026-09-13 reset ruling); TILLANDSIAS_RESET_KEEP_MODELS=1 is opt-in, per
+# run, and honoured only by the reset and uninstall paths. macbookair
+# measured the cost it removes: ~2.47 GB of weights re-downloaded per macOS
+# smoke, the models dir absent at 804-deux's start because the same host's
+# smoke had wiped it hours earlier. Hermetic: a scratch HOME, seeded files,
+# stubs on a PATH-prefixed dir; no real tray, no podman, no host cache.
+name: litmus:reset-keeps-models-macos
+spec: cache-recovery-mechanism
+phase: pre-build
+description: >
+  With TILLANDSIAS_RESET_KEEP_MODELS=1 the macOS destroy path (scripts/e2e-step2-macos.sh, the single source both smoke runbooks call) removes the VM state dir and everything under the cache dir except models/, which survives byte-identical and is NAMED in the residue line; without the flag everything goes; a copy with the sparing stripped (proven different by cmp) destroys the models under the flag, so the arm has teeth.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-e2e-step2-macos.sh
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-e2e-step2-macos.sh && test -x scripts/test-e2e-step2-macos.sh && echo 'ok: reset-keeps-models-macos-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: reset-keeps-models-macos-fixture-parses"
+
+  - step: "flag set spares models/ and names it; flag unset destroys everything; the stripped mutant destroys models under the flag"
+    command: "bash scripts/test-e2e-step2-macos.sh | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: test-e2e-step2-macos"

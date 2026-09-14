@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    event:
+      type: implemented
+      ts: "2026-09-14T04:06:22Z"
+      agent_id: linux-yoga-claude-20260914t040621z
+      host: yoga
+      summary: |
+        ARM 3d — THE MUTATION CONTROL NOW LIVES IN THE FIXTURE. macuahuitl's arm 6c, adapted; the idea and the reason are theirs and the adaptation is one construction detail.
+
+        WHOSE IS WHAT. macuahuitl implemented this row independently on 2026-09-14 while my claim held it — their claim never left their checkout, mine flipped status at 03:35:24Z and landed as 226d19f06 against theirs at 03:41Z, so both arbitration rules pointed the same way and they conceded. Their work is preserved at refs/heads/salvage/macuahuitl/20260914-1142-85zx (fix 98f9d593e, close 59009673e). Independently and separately, their version chose TOP-LEVEL-ONLY with -maxdepth 1 and wired the citation guard into the same ok:gate-fresh-except-plan arm — the same two decisions as mine, which is worth more than the collision cost.
+
+        WHAT THEIRS HAD THAT MINE DID NOT. Arms 3b and 3c assert what the FIXED stamp does. The only evidence they can tell fixed from broken was five mutations I ran by hand and wrote up in a commit message, and nobody re-runs a commit message. Arm 6c put the control IN the arm: rebuild the pre-fix stamp, prove by cmp that the reconstruction is real, and require it to fail the same case.
+
+        WHY THE CONSTRUCTION CHANGED, measured rather than argued. Arm 6c built the mutant as `git show HEAD:scripts/gate-stamp.sh`, which yields a mutant only while the fix is UNCOMMITTED — their own bad message says so, asking whether the change is uncommitted in this checkout. Measured on yoga once 236329190 was on trunk: rc 0, and cmp reports the HEAD copy BYTE-IDENTICAL to the worktree's, carrying six plan/issues references. So on every host that had merged the fix the arm would red permanently, accusing the checkout. A fixture that asserts its own change has not landed yet is one step from pinning the bug's symptom as a contract. macuahuitl reviewed for "does it red pre-fix" and did not ask what it would print a day later; that is recorded in their drill.
+
+        THE ADAPTATION: build the mutant by CONTENT. Strip the skip-glob case arm and the plan_digest find from a copy of the shipped stamp, cmp to prove the strip applied, then require a plan/issues-only change NOT to reach ok:gate-fresh-except-plan against it. Same guarantee, no dependence on where HEAD sits. Measured verdict from the reconstruction: stale:tree-changed-since-gate, which is what 3b would have reported before the fix.
+
+        THE cmp IS NOT A FORMALITY. A strip that matches nothing produces a copy of the fixed stamp and certifies everything — and BOTH of our fixtures produced exactly that false pass during this row's work, once each: my arm 3c passed for the wrong reason on a stamp an earlier arm had broken, and a hand mutation of mine that failed to apply printed 4 passed 0 failed from an unmutated tree. Mutation-tested: pointing the strip at patterns that match nothing reds arm 3d by that name, 9/11.
+
+        11/11 with the arm in place. The salvage ref stays until this is on trunk; macuahuitl asked to be told before filing its deletion.
