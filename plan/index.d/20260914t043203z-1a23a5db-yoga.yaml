@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    field: status
+    value: in_progress
+    ts: "2026-09-14T04:32:03Z"
+    host: yoga
+
+events:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    event:
+      type: progress
+      ts: "2026-09-14T04:32:03Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: linux-next@4538d6cf4
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    event:
+      type: note
+      ts: "2026-09-14T04:32:03Z"
+      host: yoga
+      summary: |-
+        handed by the coordinator (pass 04:05Z): yoga is idle and a 14 GB Silverblue host under the same 16 GB cliff lenovinha measured; the OOM-signal row (a named pre-gate memory floor and a post-mortem OOM read) is measurable there; fallback 1177-k4jq (the refusal text names the salvage lane)
