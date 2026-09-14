@@ -72,3 +72,18 @@ not as hygiene but because the wall-clock number it records is the only thing
 the entry carries, and a contended number is not a measurement. The 2026-09-13
 entry recorded the lock contention as an observation; a reader following the
 skill top-down has no way to learn it.
+
+**Instrument note, added after the push that carried this file**: the push
+log is not a progress indicator, and I read it as one. Both pushes of this
+entry produced a log of exactly three lines — `ok:no-stale-base-revert`,
+`ok:main-branch-affordance`, `ok:linux-next-merged:1` — and no verdict line.
+The first had genuinely not landed; the second HAD, `origin/windows-next`
+moving to the expected SHA with the file readable at that ref. So the missing
+verdict distinguishes nothing: the same three lines accompany a refusal and a
+success. The hook chain's later output does not reach the redirected file on
+this host, which makes "the log stopped early" a statement about the log.
+
+The only thing that settled it either time was reading the remote ref and then
+the file's content AT that ref. Recorded because the wrong inference is the
+cheap one — a short log looks like an interrupted run, and here it is the
+normal shape of a completed one.
