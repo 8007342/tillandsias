@@ -2502,10 +2502,16 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
         }
     }
 
-    // The LWW channel. `field:` is ANY field, not just status — the key is
-    // misnamed and plan/index.d/README.md says so.
-    if let Some(sts) = doc.get("status").and_then(Value::as_sequence) {
-        for s in sts {
+    // The LWW channel, read through the one function that knows how many
+    // spellings it has (1158-y3ad). `field:` is ANY field, not just status —
+    // the key is misnamed and plan/index.d/README.md says so, and the comment
+    // saying so used to sit directly above a read of the misnamed spelling
+    // alone. A `fields:`-spelled next_action write was then invisible here,
+    // which does NOT silence this pass — it makes it FIRE, because this scan
+    // looks for the ABSENCE of a carry-forward. The advisory named a packet
+    // whose next_action had in fact been set. (yolanda, 2026-09-13.)
+    for s in tillandsias_plan::fragments::lww_entries(doc) {
+        {
             let Some(pid) = text(s, "packet_id") else {
                 continue;
             };
@@ -4522,6 +4528,41 @@ fn main() {
                     ),
                 }
             }
+            // ORDER 1123-k3mq — SAY WHAT WAS THROWN AWAY.
+            //
+            // 686-7qcm taught compaction the closure ladder, so a rung-lowering
+            // write no longer corrupts the base. But the losing write was then
+            // dropped AND ITS FRAGMENT DELETED, in silence: a coordinator
+            // releasing an expired claim got `ok:` from set-field, `ok:
+            // compacted N fragment(s)` from here, and a ledger still reading
+            // `completed`. Nothing in the chain said the release had not taken,
+            // which is how two maintainers read one ledger, disagree, and are
+            // both correct.
+            //
+            // THE RULE IS STATED HERE because this is where a reader meets it.
+            // `status` is a monotone join over the closure ladder and timestamps
+            // do NOT order it — the one place that surprise actually costs
+            // somebody something is the moment their write is refused.
+            for (pid, discarded, retained, host) in &c.discarded_status {
+                eprintln!(
+                    "warning: status write DISCARDED for {pid}: '{discarded}' (from {}) does not \
+                     apply over '{retained}' — `status` folds as a MONOTONE JOIN over the closure \
+                     ladder (implemented < completed < verified < done), not last-write-wins, so a \
+                     newer value that sits LOWER is refused and its timestamp is never consulted \
+                     (1123-k3mq).",
+                    if host.is_empty() {
+                        "unknown host"
+                    } else {
+                        host.as_str()
+                    }
+                );
+                eprintln!(
+                    "         The fragment carrying it has been consumed, so this warning is the \
+                     only remaining record. To move DOWN the ladder deliberately, re-run with \
+                     `set-field {pid} status {discarded} --reopen-evidence <falsifying observation>` \
+                     (650-dq6u)."
+                );
+            }
             println!(
                 "ok: compacted {} fragment(s) into {} ({} removed)",
                 c.consumed.len(),
@@ -5118,9 +5159,12 @@ fn main() {
             };
             let mut offenders: Vec<String> = Vec::new();
             let mut checked = 0u32;
-            // status: LWW closures
-            if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
-                for u in us {
+            // The LWW closures, both spellings (1158-y3ad). This scan builds
+            // an OFFENDERS list, so a write it cannot see is never an offender
+            // and the guard stays green — it fails OPEN, the opposite symptom
+            // from carry_forward_gaps above and the same defect.
+            {
+                for u in tillandsias_plan::fragments::lww_entries(&doc) {
                     let field = u
                         .get("field")
                         .and_then(serde_yaml::Value::as_str)
@@ -5316,9 +5360,10 @@ fn main() {
                         }
                     }
                 }
-                // A set-field fragment may reassign the closure text too.
-                if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
-                    for u in us {
+                // A set-field fragment may reassign the closure text too —
+                // under either spelling (1158-y3ad).
+                {
+                    for u in tillandsias_plan::fragments::lww_entries(&doc) {
                         if u.get("field").and_then(serde_yaml::Value::as_str)
                             == Some("verifiable_closure")
                         {
@@ -5351,8 +5396,18 @@ fn main() {
             }
 
             for (label, tok) in &missing {
+                // 1136-n8sh: name the way out and the counterpart guard. A
+                // packet whose DELIVERABLE IS THE TEST is refused from both
+                // sides — 977-448j for naming no litmus, this guard for naming
+                // one nothing defines yet — and neither message used to
+                // mention the other or the sanctioned exit. The attractive
+                // wrong turn after reading only this line is to delete the
+                // pin, which lands straight back in 977-448j; the second wrong
+                // turn is to leave the pin dangling, which is 1068-cxmf's
+                // standing defect. The bind is intended; the silence was not.
                 eprintln!(
-                    "declared-closure-unresolvable: {label} declares litmus:{tok} — no litmus test declares that name."
+                    "declared-closure-unresolvable: {label} declares litmus:{tok} — no litmus test declares that name. \
+If this test is THIS packet's deliverable, do not delete the pin (977-448j then refuses the row for carrying no obligation) and do not leave it dangling (1068-cxmf): declare `unscoreable: unpinnable-until-the-guard-exists` instead, name {tok} in it as the future litmus filename, and write that litmus in the same commit as the thing it tests."
                 );
             }
             for (label, tok) in &unbound {

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: note
+      ts: "2026-09-13T10:13:36Z"
+      agent_id: linux-macuahuitl-fable-20260913t101336z
+      host: macuahuitl
+      summary: |
+        Two more stale shapes for the evidence, and a cheaper first pass. (1)
+        lenovinha, 1127-apa8: the fixing commit NAMES the order in its subject
+        (e357f3f87 "fix(1125-wi4d, 1126-w8rq, 1127-apa8)") and the row was simply
+        never moved off ready; the query "a landed commit whose subject cites
+        <order> while <order> still folds ready" has no owned_files heuristic and
+        no false positives, and belongs as a FIRST pass ahead of the fuzzier one —
+        still a candidate list (the commit fixed three orders and might have
+        completed two), verification by execution stays mandatory. (2) lenovinha,
+        1123-k3mq: PARTLY stale — one criterion already met under another order,
+        another live and quieter than the original defect; surfacing must not
+        assume all-or-nothing. (3) The 1127-apa8 double closure across two branches
+        is NOT this class: the row genuinely was ready on each branch; that is the
+        cross-branch claim visibility packet, filed separately.

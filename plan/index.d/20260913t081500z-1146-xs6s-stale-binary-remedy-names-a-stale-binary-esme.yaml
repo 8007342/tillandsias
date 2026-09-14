@@ -1,0 +1,124 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-stale-plan-binary-refusal-prints-a-remedy-that-is-itself-stale-and-on-windows-unrunnable
+    order: 1146-xs6s
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, fail-loud, windows, false-negative]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a REMEDY
+      LINE that no fixture currently reads: nothing asserts that the binary the
+      refusal recommends is newer than the sources it will validate against, so
+      any litmus named now resolves to nothing and 885-92iu refuses the row.
+      Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-stale-plan-binary-remedy-is-actually-fresh.sh — construct a
+      resolved binary older than a candidate that is itself older than the
+      crate sources, and assert the refusal does NOT print that candidate as a
+      REMEDY. A second arm should assert the refusal does not recommend a
+      candidate that cannot execute on the host it is printed on.
+
+      WIRE IT IN THE SAME COMMIT THAT WRITES IT, by one of two routes and say
+      which: an `_run bash` line in build.sh, or BOTH an
+      openspec/litmus-tests/litmus-<name>.yaml definition AND an
+      openspec/litmus-bindings.yaml registry entry under the right spec_id.
+      Half of route 2 is 1068-cxmf's dangling pin, and scripts/test-*.sh is not
+      globbed by build.sh, so an unwired fixture is a file rather than a gate.
+    title: |
+      the plan-only lane's STALE-binary refusal recommends the freshest binary NEWER THAN THE RESOLVED ONE rather than newer than the sources, so on a shared Windows/WSL checkout it prints a remedy that is itself stale and cannot execute where the hook runs
+    context: |
+      MEASURED on esmeraldinha during a routine plan-only push, after a merge of
+      origin/linux-next brought newer plan-crate sources.
+
+      The refusal itself is correct and well-written. 1129-4su6 added it for a
+      real reason: the lane validates the bytes being pushed with the resolved
+      binary, so a stale one can accept a fragment shape the current rules
+      refuse. The verdict fired exactly when it should:
+
+        plan-only lane: REFUSED — the resolved plan binary is STALE
+          resolved: ./target/release/tillandsias-plan
+          newer:    crates/tillandsias-plan/src/main.rs
+
+      THE DEFECT IS THE NEXT THREE LINES, the remedy. By symbol, the candidate
+      loop that fills `_fresher` selects on `[[ "$_cand" -nt "$plan_bin" ]]` —
+      newer than THE RESOLVED BINARY, not newer than the sources that triggered
+      the refusal. So it can name, and here did name, a candidate that is newer
+      than the stale one and still older than the crate it validates against.
+
+      Observed mtimes on this host:
+
+        crates/tillandsias-plan/src/main.rs   2026-09-13 00:55  (the trigger)
+        target/release/tillandsias-plan       2026-09-12 16:56  (resolved, PE32+)
+        target/debug/tillandsias-plan         2026-09-12 18:08  (printed as REMEDY, ELF)
+
+      18:08 is newer than 16:56 and older than 00:55. Following the printed
+      remedy would have validated the push with a binary that is stale in
+      exactly the sense the refusal exists to prevent — the guard would report
+      success having been defeated by its own advice.
+
+      AND THE OVERRIDE CANNOT CATCH IT. TILLANDSIAS_PLAN_BIN is honoured on
+      EXISTENCE alone and never executed, deliberately, per 704-zcgi — so the
+      recommended path is subject to neither the freshness check nor a
+      runnability check. On a shared Windows/WSL checkout the second half bites
+      too: the recommended candidate here is an ELF, the hook runs from Git Bash
+      on the Windows side, and 1060-6fx7 already measured what a non-runnable
+      override produces — three arms reporting "validation FAILED —
+      tillandsias-plan check refused the folded ledger", i.e. the lane blaming
+      the DATA for a missing INSTRUMENT.
+
+      So on this platform the printed remedy has two failure modes and no
+      success mode: taken literally it either silently defeats the freshness
+      guard, or produces a false verdict about ledger corruption.
+
+      WHAT THE OPERATOR DID INSTEAD, and why it is the right shape: rebuilt the
+      resolved binary (`cargo build --release -p tillandsias-plan`, 1m38s at
+      CARGO_BUILD_JOBS=1) so the guard's premise became TRUE rather than
+      bypassed. The push then took the plan-only lane cleanly and validated
+      three fragments. A remedy that makes a guard's premise true is worth
+      printing; one that satisfies its comparison is not.
+    deliverable: |
+      The refusal recommends only a binary that would actually pass the check it
+      is a remedy for, or recommends a rebuild.
+
+        * scripts/hooks/pre-push-local-gate.sh — the `_fresher` candidate loop
+          must require the candidate to be newer than the NEWEST source that
+          triggered the refusal (the value already computed into `_newer`), not
+          merely newer than `$plan_bin`. A candidate failing that test is not a
+          remedy and must not be printed as one.
+        * DECIDE AND RECORD what to print when no candidate qualifies. The
+          honest answer is the rebuild command, which is what actually worked
+          here; silence would be worse than today, since the reader is left
+          with a refusal and no route.
+        * CONSIDER, and record the decision either way: whether to skip
+          candidates that cannot execute on the running host. 704-zcgi's
+          existence-only rule for the override is deliberate and should NOT be
+          changed — but printing an unrunnable path as advice is a different
+          act from honouring one a caller supplied, and 1060-6fx7 already
+          measured the cost of the resulting verdict.
+
+      SCOPE NOTE: do not "fix" this by removing the REMEDY line. The refusal is
+      one of the better diagnostics in the tree — it names the resolved binary,
+      the source that outdated it, and why it matters. The line is wrong, not
+      the instinct to print one.
+    next_action: >
+      Change the `_fresher` comparison to test against the triggering source
+      rather than against the resolved binary, and decide what to print when no
+      candidate qualifies — the rebuild command is the answer that worked on
+      the host that found this.
+    provenance: |
+      Found by esme-windows on esmeraldinha while pushing plan-only fragments
+      after a trunk merge. The refusal was diagnosed only after capturing the
+      push output to a FILE: two earlier attempts filtered it — once by
+      grepping a captured variable for fixed patterns, once by piping to
+      `tail -20` — and both discarded the verdict line, costing two extra
+      pushes to recover a diagnosis that was present in the first one.
+      Recorded because the same filtering habit is what makes a well-written
+      refusal unreadable.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-dead-env-branches-reads-pass-scans-the-detectors-own-comments-so-a-variable-it-quotes-can-never-be-cleared
+    event:
+      type: progress
+      ts: "2026-09-13T20:05:44Z"
+      agent_id: linux-macuahuitl-fable-20260913t194011z
+      host: macuahuitl
+      summary: |
+        1169-zw44 closed: the READS pass excludes the detector's own comment lines (shared self_name, by basename, the same exclusion the DOCUMENTED pass already applied by path), so a variable the file quotes as an example is invisible to the report rather than a permanent phantom read. Self-test arm: a same-basename scratch file quoting ${P}_SELFQUOTE_VAR in a comment must appear neither dead nor live; the revert test needed a same-basename copy because self_name derives from BASH_SOURCE. TILLANDSIAS_PROJECT_ENGINE and TILLANDSIAS_STATUS_CHECK remain dead today on their real gating reads elsewhere, which is the correct verdict; this row only makes them clearable.

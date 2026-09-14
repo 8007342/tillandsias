@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: decided
+      ts: "2026-09-13T11:37:24Z"
+      agent_id: linux-yoga-claude-20260913t113724z
+      host: yoga
+      summary: |
+        CRITERION 1 DECIDED: (a). And the row's premise needs widening — the reset
+        leaves TWO host-side artifacts, not one.
+
+        THE DECISION IS (a): the documented clean-room reset should clear the host-held
+        Shamir share, so `--init` genuinely re-initializes. NOT (b). Two agents have now
+        declined this decision (yoga 2026-08-26, claim expired; lenovinha 2026-09-13,
+        "deliberately NOT made here"), and a third deferral is the failure mode the
+        criterion was written against — it says DECIDE, and record which.
+
+        WHY (a) AND NOT (b), on evidence rather than preference:
+
+          1. AFTER A RESET THE SHARE PROTECTS NOTHING THE RUNBOOK MEANS TO KEEP. The
+             podman store is asserted empty — containers, volumes AND images, on three
+             hosts. Preserving a share whose purpose is to unseal a store that was just
+             destroyed is not conservatism; it is the reset silently not being one.
+
+          2. THE NEGATIVE CONTROL IS SATISFIED STRUCTURALLY, which is what makes (a)
+             safe. The criterion requires that clearing must not break the legitimate
+             warm-restart path, where a host reboots and Vault SHOULD recover. A reboot
+             does not run `podman system reset --force`. Clearing in the RESET path only
+             leaves restart-recovery untouched by construction, not by a flag.
+
+          3. (b) WOULD MAKE THE DOCUMENT HONEST AND THE GAP PERMANENT. The
+             keychain-volume resync path has never been exercised on Linux in ~2.5
+             months. (b) writes that down forever; (a) is the only branch that ever
+             exercises it.
+
+        THE SECOND ARTIFACT, measured here and not in the row. The row says the reset
+        "does not reach the host keychain". It also does not reach a host DIRECTORY:
+        `vault_data_volume_exists()` in vault_bootstrap.rs tests
+        `init_cache_dir()/vault-data` — a path on the host, NOT a podman volume.
+
+            /var/home/tlatoani/.cache/tillandsias/vault-data   dated 2026-07-16
+            yoga's keychain share                    modified  2026-07-16T17:18:02Z
+
+        A matched pair, same day, both surviving every reset since. This also explains
+        an apparent contradiction nobody had reconciled: the smoke asserts 0 VOLUMES and
+        `--init` then logs "preserving existing data volume". Both are true — they are
+        about different things, and the log's wording invites reading a host directory
+        as a podman volume. That is this row's own class one level down, and the same
+        shape as 894-scxy: a message naming a layer other than the one it observed.
+
+        CONSEQUENCE FOR IMPLEMENTING (a), and it makes the work smaller than it looks:
+        clearing the SHARE ALONE is self-completing. With the share gone,
+        `is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring()`
+        becomes true, the stale host vault-data directory is removed on the next
+        `--init`, and the run genuinely re-initializes. So (a) needs one clearing step
+        in the documented reset, not two — but a fixture must pin that the DIRECTORY
+        goes too, because if the partial-init branch ever changes, clearing the share
+        alone silently stops producing a cold room.
+
+        NOT IMPLEMENTED THIS CYCLE, and the row is released to ready rather than held.
+        Criterion 3 requires proving (a) in BOTH directions by fixture — after a reset
+        the keychain entry is absent, AND a wipe path that does not clear it is caught —
+        and a one-direction assertion is what produced this row. That is a slice of its
+        own and I would rather hand over a decision with its evidence than a half-built
+        clearing path at the end of a long session. next_action carries the shape.
+
+        NEVER MATERIALISED THE SECRET: the probe reads Created/Modified/Locked metadata
+        only, per criterion 4 and the 2026-08-25 incident. I ran lenovinha's
+        scripts/probe-credential-cold-state.sh, which reports
+        `credential-state:warm (share present, created=2026-06-15T20:11:35Z
+        modified=2026-07-16T17:18:02Z locked=false)` — a fourth host-confirmation of the
+        filing, obtained without reading the share.

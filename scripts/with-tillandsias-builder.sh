@@ -389,7 +389,163 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # kept in step by hand; sharing removes the possibility rather than detecting
 # the drift.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
+
+# ── ORDER 1141-vf9w: TERMINATION MUST CROSS THIS BOUNDARY TOO ──────────────
+#
+# This file used to `exec toolbox run ...`, which replaces the wrapper — so
+# there was no host-side process left to signal, and `toolbox run` is only a
+# thin client of `podman exec`. The container-side build.sh is parented by
+# CONMON, not by the client, so killing the host side reaps the client and
+# leaves the gate RUNNING in the same checkout.
+#
+# MEASURED ON YOGA 2026-09-13, a real gate mid-run:
+#     3171292 ppid 1200     toolbox run --container tillandsias-builder
+#     3171549 ppid 3171292  podman ... exec ...
+#     3171571 ppid 3171568  bash .../build.sh --check   <- conmon, NOT the client
+#     3185549 ppid 3171571  bash .../build.sh --check
+# SIGTERM to 3171290+3171292 reaped the host side; 3171571 stayed ALIVE with a
+# live child still writing a test transcript. SIGTERM to the STRAY did nothing
+# 8s later; SIGKILL to it and its child reaped it. pirria saw one still running
+# 12 minutes after its launcher was "stopped", with
+# test-archiver-ruby-could-not-run.sh as its live child, concurrent with a
+# second gate — which is how a gate refuses on this host and passes on the
+# relaunch with nothing changed (1132-r4mt arm 4's race). The same defect is
+# the env-forwarding lesson one axis over: that boundary did not carry FLAGS
+# inward, this one did not carry TERMINATION inward.
+#
+# A MARKER, NOT A PID WALK. The far side is reachable here only because a
+# toolbox shares the host PID namespace (verified on yoga: `ps` inside reports
+# pid 1 as the host's systemd). Even so, matching on a COMMAND LINE would kill
+# a legitimate concurrent gate, since a stray and a healthy gate run the same
+# argv. Every process of THIS dispatch carries a unique token in its
+# environment instead, forwarded by the TILLANDSIAS_ namespace above, so the
+# kill set is exactly this dispatch's tree and can never be another's.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-dispatch-reap.sh"
+TILLANDSIAS_WRAPPER_TOKEN="$(tillandsias_dispatch_token)"
+export TILLANDSIAS_WRAPPER_TOKEN
+
+# The reap itself lives in lib-dispatch-reap.sh, NOT here: scripts/
+# with-wsl2-builder.sh dispatches the same way and has the same defect, and
+# 891-5shq's fourth criterion is that a second boundary must not be able to
+# reimplement a fix this one already made.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-dispatch-reap.sh"
+
+# Run the dispatch as a CHILD and wait, so a signal has something to arrive at.
+# `wait` interrupted by a trap returns 128+signo, and this file runs under the
+# caller's `set -e`, so the wait is guarded with `|| rc=$?` — a bare one would
+# exit the shell the instant the trap fired, BEFORE the reap had run, which is
+# a wrapper that forwards correctly and still orphans the gate.
+# ACT ON THE REAPER'S VERDICT, do not merely call it.
+#
+# This trap used to be `tillandsias_reap_marked "$TOKEN"; exit 143`, which
+# DISCARDED the return value and exited 143 either way — so a reaper that
+# could not reap produced a wrapper reporting a clean cancellation over a
+# survivor still holding the checkout. Fixing the reaper to return an honest
+# verdict does nothing while its caller throws the verdict away; the silent
+# success simply moves up one layer, which is the same defect wearing the
+# caller's name.
+#
+# Caught on darwin, where /proc does not exist and the scan finds nothing: the
+# reaper answered "success, killed nothing". lib-dispatch-reap.sh's own header
+# had already stated the requirement — a no-op that SAYS SO, never a silent
+# success — and the code four lines on returned 0. Both halves are being
+# corrected; this is the caller half.
+#
+# The exit stays 143 because that is what a terminated wrapper IS. What changes
+# is that a failure to propagate is SAID, on stderr, naming the token so the
+# survivor can be found by hand.
+_tb_on_signal() {
+    local rc=0
+    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "[tillandsias-builder] refused:dispatch-reap-incomplete: could not confirm the container-side tree was reaped (rc=$rc)." >&2
+        echo "  A CANCELLED GATE MAY STILL BE RUNNING in this checkout, holding the same tree." >&2
+        echo "  Find it:  ps -eo pid,ppid,etime,cmd | grep 'build.sh --check'" >&2
+        echo "  Its processes carry TILLANDSIAS_WRAPPER_TOKEN=$TILLANDSIAS_WRAPPER_TOKEN" >&2
+        echo "  SIGTERM has been measured inert on a survivor; SIGKILL the pid and its children." >&2
+    fi
+    exit 143
+}
+
+_tb_dispatch() {
+    local rc=0
+    toolbox run --container "$TOOLBOX_NAME" bash -l -c "$1" &
+    _TB_CHILD=$!
+    trap '_tb_on_signal' TERM INT HUP
+    wait "$_TB_CHILD" || rc=$?
+    trap - TERM INT HUP
+    # An exit nobody asked for still propagates verbatim.
+    exit "$rc"
+}
+
 ENV_FORWARD="$(tillandsias_env_forward_prefix)"
+
+# ORDER 1141-vf9w — ASK ABOUT COMPETING GATES HERE, ON THE HOST, BEFORE THE
+# DISPATCH. This is the only place on a Silverblue host where the question can
+# be answered: build.sh re-execs into the toolbox before its own fast refusals,
+# and from inside, a host-side wrapper's environ is unreadable — `[ -r ]`
+# answers true and the read is denied. Run there, the detector saw no wrapper
+# for any token and reported every gate as a competing gate. Advisory that was
+# noise; refusing it would have made every Linux gate refuse itself.
+#
+# Best-effort by construction: this must never be the reason a build does not
+# start.
+_tb_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
+    # ASSERT HOST-SIDE AND HAND OVER OUR OWN PID. $$ here is the host-side shell
+    # that minted TILLANDSIAS_WRAPPER_TOKEN above and is about to dispatch, so
+    # it is exactly the process whose readability decides whether the check can
+    # see the class of process its verdict depends on. The check verifies our
+    # environ is readable AND carries that token; if it cannot read us it says
+    # `blind` rather than reporting a clean tree.
+    # READ THE VERDICT (1150-q462). Until now this was `|| true`: the four-code
+    # grammar 1141-vf9w built existed only in the fixture and in a printed line,
+    # and a CALLER-CONTRACT bug was indistinguishable from an unsupported
+    # substrate — two conditions wanting opposite responses.
+    #
+    # 2 and 3 are ENUMERATED SEPARATELY and there is NO default that proceeds.
+    # A `case` whose `*)` falls through to success is how "fix your call site"
+    # becomes "this host cannot answer" and gets written off, which is the
+    # collapse 1140-i6ct exists to prevent one check over.
+    #
+    # STILL BEST-EFFORT: none of these branches stops the build. The detector is
+    # advisory, and the promotion to refusing is a separate change with its own
+    # evidence (1141-vf9w) — the first reader of these codes must not also be the
+    # first thing that can stop a gate.
+    # set -e-SAFE CAPTURE (2026-09-13, found by the v56.9.13.1 cut). This file
+    # runs under `set -euo pipefail`, and `_cg_out="$(cmd)"` with cmd exiting
+    # non-zero EXITS THE SHELL at the assignment: the `_cg_rc=$?` that used to
+    # follow never ran, the four-code case below never printed, and every
+    # dispatch that reached this line while a gate was running in the checkout
+    # (the detector's rc 1) died silently with rc 1 — after the toolbox had
+    # been created and initialised, before the command was dispatched. The
+    # toolbox property fixture was red inside --ci-full for that reason and
+    # green everywhere a gate was not running; the consumer fixture drove this
+    # block under `set +e` and could not see it. `cmd || rc=$?` is the only
+    # capture that survives errexit.
+    _cg_rc=0
+    _cg_out="$(bash "$_tb_self_dir/check-no-competing-gate.sh" --host-side "$$" 2>&1)" || _cg_rc=$?
+    case "$_cg_rc" in
+        0)  [ -n "$_cg_out" ] && printf '%s\n' "$_cg_out" ;;
+        1)  printf '%s\n' "$_cg_out"
+            echo "[tillandsias-builder] a competing gate is holding this checkout; this run may be raced (1141-vf9w)" >&2
+            ;;
+        2)  # A CALL SITE BUG, not a substrate limit. Loud, and named as ours.
+            printf '%s\n' "$_cg_out" >&2
+            echo "[tillandsias-builder] refused:competing-gate:caller-contract — THIS wrapper called the detector wrongly (1150-q462)." >&2
+            echo "  Not a property of this host: the assertion or the token export at this call site is wrong." >&2
+            ;;
+        3)  # This host cannot answer. Say so once; do not read it as clean.
+            printf '%s\n' "$_cg_out" >&2
+            echo "[tillandsias-builder] the competing-gate question could not be asked here; this is NOT a clean-room verdict (965-sxec)" >&2
+            ;;
+        *)  # NO SILENT DEFAULT. An unrecognised code is a grammar change nobody
+            # taught this caller, and proceeding quietly is how the grammar rots.
+            printf '%s\n' "$_cg_out" >&2
+            echo "[tillandsias-builder] unrecognised competing-gate exit $_cg_rc — the detector's grammar changed and this caller was not updated (1150-q462)" >&2
+            ;;
+    esac
+fi
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
 
@@ -402,8 +558,7 @@ if [[ "$_TB_DIRECT" == 1 ]]; then
         echo "usage: $SELF <command> [args...]" >&2
         exit 2
     fi
-    exec toolbox run --container "$TOOLBOX_NAME" \
-        bash -l -c "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
+    _tb_dispatch "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
 fi
 
 # Sourced from a build script: when `source`d, $0 and $@ are the calling
@@ -412,5 +567,4 @@ SCRIPT="$0"
 if [[ "$SCRIPT" != /* ]]; then
     SCRIPT="$(pwd)/$SCRIPT"
 fi
-exec toolbox run --container "$TOOLBOX_NAME" \
-    bash -l -c "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"
+_tb_dispatch "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"

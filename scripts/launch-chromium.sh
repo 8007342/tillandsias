@@ -87,7 +87,15 @@ PODMAN_ARGS=(
     "--userns=keep-id"
     "--cap-drop=ALL"
     "--cap-add=SYS_CHROOT"
-    "--network=${TILLANDSIAS_BROWSER_NETWORK:-host}"
+    # ORDER 1118-dwgx. DEFAULT TO THE ENCLAVE, NOT THE HOST. `--network=host`
+    # gave Chromium direct host network access with no proxy filtering — every
+    # other flag in this array is a confinement (cap-drop=ALL, no-new-privileges,
+    # read-only, tmpfs everything) and the network line undid them by default.
+    # The fallback chain honours TILLANDSIAS_ENCLAVE_NET so this agrees with
+    # check-enclave-network-internal.sh rather than hardcoding a second spelling
+    # of the same network; an operator who has renamed the enclave renames it
+    # once. TILLANDSIAS_BROWSER_NETWORK still wins for a deliberate override.
+    "--network=${TILLANDSIAS_BROWSER_NETWORK:-${TILLANDSIAS_ENCLAVE_NET:-tillandsias-enclave}}"
     "--security-opt=no-new-privileges"
     "--security-opt=label=disable"
     "--tmpfs=/tmp:size=256m"

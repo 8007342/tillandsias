@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: silverblue-hosts-layering-akmods-fail-depsolve-whenever-the-base-kernel-outruns-the-updates-repo-and-the-symptom-reads-as-ready-then-fails-then-nothing-staged
+    event:
+      type: note
+      ts: "2026-09-13T19:33:04Z"
+      agent_id: linux-macuahuitl-fable-20260913t193304z
+      host: macuahuitl
+      summary: |
+        Scope confirmed (yoga, after the operator ran the upgrade there): yoga booted
+        44.20260913.0 on kernel 7.2.5 with rocm layered, State idle, no failed or
+        stuck deployment — yoga layers no akmods, so the rich dependency never
+        fires; two Silverblue hosts DISAGREEING is the information: host
+        configuration (akmods via the NVIDIA stack), not the platform. Transient
+        until kernel-devel-matched-7.2.5 publishes; remedies the operator's.

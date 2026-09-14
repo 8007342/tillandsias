@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: esmeraldinhas-windows-host-locus-cannot-publish-a-capability-row-because-no-native-windows-binary-exists-there-and-the-remedy-the-guard-names-exits-2-at-that-locus
+    event:
+      type: claim
+      ts: "2026-09-13T19:10:10Z"
+      agent_id: linux-macuahuitl-fable-20260913t191010z
+      host: macuahuitl
+      summary: |
+        Handed to yolanda (capable Windows host) by the coordinator at filing; esme measures the closure on esmeraldinha. Two substitutes declined by esme are on the row as the negative control.

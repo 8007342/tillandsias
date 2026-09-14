@@ -288,8 +288,22 @@ ensure_fresh_plan_binary() {
             # FILE; only the string differs. What must agree is the artefact,
             # which readlink -f settles; the string should stay the one every
             # other caller already sees.
-            if _pbp_r="$(resolve_plan_binary 2>/dev/null)" \
-               && [ "$(readlink -f "$_pbp_r" 2>/dev/null)" = "$(readlink -f "$_pbp_built" 2>/dev/null)" ]; then
+            # REFUSE ON AN EMPTY SIDE — this compare used to pass SILENTLY when
+            # both substitutions failed. `readlink -f` is GNU-only on older BSD,
+            # and where it is missing BOTH sides are "" and `[ "" = "" ]` is
+            # TRUE, so the check deciding whether the RESOLVED binary is the
+            # BUILT one answered "same artefact" having compared nothing.
+            # Measured 2026-09-12: A=[] B=[] compares equal. Dormant on today's
+            # fleet — Darwin 25.6.0 carries readlink -f, verified — but dormant
+            # is not safe: it is one older host away from a guard that always
+            # agrees. Silent-degrade by the 1130-i6xj split (order 1135-z8gn).
+            _pbp_c1=""; _pbp_c2=""
+            if _pbp_r="$(resolve_plan_binary 2>/dev/null)"; then
+                _pbp_c1="$(readlink -f "$_pbp_r" 2>/dev/null || true)"
+                _pbp_c2="$(readlink -f "$_pbp_built" 2>/dev/null || true)"
+            fi
+            if [ -n "$_pbp_r" ] && [ -n "$_pbp_c1" ] && [ -n "$_pbp_c2" ] \
+               && [ "$_pbp_c1" = "$_pbp_c2" ]; then
                 bin="$_pbp_r"
             else
                 bin="$_pbp_built"
@@ -342,8 +356,29 @@ resolve_target_binary() {
     if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
         ctd="$root/$ctd"
     fi
+    # ORDER 1142-wn2k (esme filed the same defect as 1140-d6ni) — LOCUS-NATIVE ARTEFACT FIRST, the same reorder 1030-i2p8 made
+    # for resolve_plan_binary fifty lines above. That comment predicted the
+    # masking would lift; this sibling never got the change, so it lifted here
+    # instead.
+    #
+    # These used to try `.exe` before the ELF. On a SHARED Windows/WSL checkout
+    # both artefacts sit in one target dir, and with WSL interop enabled the
+    # .exe RUNS inside the distro — so a stale .exe beside a fresh ELF is the
+    # one this probe returned. MEASURED by esme: a Sep-4 tillandsias-policy.exe
+    # was selected over the current ELF, the Windows binary joined `/mnt/c/...`
+    # with a backslash, and check-cheatsheet-tiers refused "cheatsheets/
+    # directory not found" against a tree where it plainly exists. Same tree,
+    # same args: .exe -> ERROR, ELF -> silent pass. 67.5 minutes to reach that
+    # false verdict, and every Windows gate was refused until the reorder
+    # landed.
+    #
+    # SAFE FOR THE SAME REASON AS 1030-i2p8: this is a RUN-don't-stat probe, so
+    # a candidate is returned only when it actually executes. Inside a Linux
+    # locus the ELF runs and the .exe is skipped; on the Windows side the ELF
+    # cannot execute and is skipped, leaving the .exe. Each locus gets its
+    # native artefact with no caller passing a flag to say which it is in.
     for dir in ${ctd:+"$ctd/$profile"} "$root/target/$profile"; do
-        for candidate in "$dir/$name.exe" "$dir/$name"; do
+        for candidate in "$dir/$name" "$dir/$name.exe"; do
             if target_binary_runs "$candidate"; then
                 printf '%s\n' "$candidate"
                 return 0

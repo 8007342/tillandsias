@@ -1,0 +1,51 @@
+# @trace spec:accel-capability-probe
+# @trace order:1139-xe5m
+#
+# Order 1139-xe5m: `--capabilities` served a cached envelope indistinguishably
+# from a measurement, so a folded matrix row could not say whether its
+# hardware verdict was measured on the host or replayed from a cache file.
+# yoga's fix (224e29a52) appends `envelope_source=` / `accel_source=` with
+# the vocabulary measured|served|unknown, LAST on the one line the forge
+# receives. The row was filed `unscoreable: unpinnable-until-the-guard-exists`
+# because the field did not exist; this binding is the guard, and the row's
+# closure text moved into verifiable_closure in the same landing.
+#
+# THE CLOSURE THIS PINS, stated in the row before the field existed so it
+# could not be weakened later: the cached arm must be distinguishable from
+# the measured arm by reading the ENVELOPE ALONE — no filesystem access, no
+# comparison against a second run, no knowledge of the producing host. The
+# suite reads the key off the line; it never asks whether the cache file
+# exists (a fixture that did would pass while leaving every folded row as
+# ambiguous as before).
+#
+# REGIME: post-build, because the suite runs target/debug/tillandsias
+# (TILLANDSIAS_BIN overrides). Without a binary the suite exits 3 with
+# `could-not-run:capabilities-envelope-source:no-binary:<path>` — a named
+# refusal, never a green.
+name: litmus:capabilities-envelope-names-its-source
+spec: accel-capability-probe
+phase: post-build
+description: >
+  Pin 1139-xe5m: a cold `--capabilities` run reports accel_source=measured, a
+  second run against the same cache reports accel_source=served, the two
+  envelopes are otherwise identical, and the source key is the LAST field on
+  the line so an older consumer that splits on the first N fields is
+  unaffected. Hermetic under XDG_CACHE_HOME in a temp dir; touches no host
+  cache.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-capabilities-envelope-names-its-source.sh
+  - target/debug/tillandsias is built (or TILLANDSIAS_BIN names a current binary)
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-capabilities-envelope-names-its-source.sh && test -x scripts/test-capabilities-envelope-names-its-source.sh && echo 'ok: envelope-source-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: envelope-source-suite-parses"
+
+  - step: "cold run measured, warm run served, envelopes otherwise identical, source key last on the line"
+    command: "bash scripts/test-capabilities-envelope-names-its-source.sh | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: capabilities-envelope-names-its-source"

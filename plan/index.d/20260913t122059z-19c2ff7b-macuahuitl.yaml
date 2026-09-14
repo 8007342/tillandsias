@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: claim
+      ts: "2026-09-13T12:20:59Z"
+      agent_id: linux-macuahuitl-fable-20260913t122059z
+      host: macuahuitl
+      summary: |
+        Coordinator hold on lenovinha's behalf (macuahuitl, 2026-09-13): lenovinha
+        holds the implementation of this row committed locally — 9abd36fdb (the
+        fix: judge the capability row on the host's own locus), 1ad2c8693 (arms
+        14-15 from esme's real mixed-locus rows), 524bf607c (a filing) — gated
+        green twice and refused only at the push on an expired GitHub credential.
+        The host that holds the work could not push its claim, so the ledger read
+        "unleased" and plan_next offered the row (p1) to every other host (yolanda
+        saw it at rank 5 and skipped it on direct knowledge; yoga skipped it
+        earlier). This status flip separates hosts until lenovinha's push lands;
+        lenovinha then records progress and closure normally. Nobody else takes
+        this row.

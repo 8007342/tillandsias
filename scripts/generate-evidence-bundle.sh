@@ -186,8 +186,14 @@ EOF
     TEST_DURATION=$(grep "finished in" "$BUNDLE_STAGING/cargo-test-raw.log" | tail -1 || echo "unknown")
 
     TIMESTAMP_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    sed -i "s|TIMESTAMP_PLACEHOLDER|$TIMESTAMP_ISO|g" "$TEST_RESULTS_FILE"
-    sed -i "s|WORKSPACE_PLACEHOLDER|$PROJECT_ROOT|g" "$TEST_RESULTS_FILE"
+    # TEMP FILE, NOT `sed -i` (1135-z8gn): GNU-only; on BSD the edit silently
+    # does nothing and succeeds, so the bundle would ship with its
+    # PLACEHOLDER tokens intact and no error anywhere. Both substitutions in
+    # one pass — two `-i` calls were two chances to half-apply.
+    sed -e "s|TIMESTAMP_PLACEHOLDER|$TIMESTAMP_ISO|g" \
+        -e "s|WORKSPACE_PLACEHOLDER|$PROJECT_ROOT|g" \
+        "$TEST_RESULTS_FILE" > "$TEST_RESULTS_FILE.tmp" \
+        && mv "$TEST_RESULTS_FILE.tmp" "$TEST_RESULTS_FILE"
 
     _info "Tests completed: $TESTS_PASSED suites passed"
 else

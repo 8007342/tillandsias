@@ -31,7 +31,12 @@ grep -q "warning: dispatch arm 'query' is not listed in capabilities.txt" "$WORK
 grep -q 'order 583-dv9n' "$WORK/drifted.err" || { echo "FAIL: drift warning lacks order"; exit 1; }
 ! grep -q '^query$' "$WORK/drifted.out" || { echo "FAIL: drifted stdout still lists query"; exit 1; }
 ! grep -qvE '^[a-z][a-z0-9-]*$' "$WORK/drifted.out" || { echo "FAIL: drifted stdout is not a token stream"; exit 1; }
-[ "$(wc -l < "$WORK/drifted.out")" = "$want" ] || { echo "FAIL: drifted token count differs"; exit 1; }
+# -eq, NOT = : BSD wc PADS its count ("       2", not "2") in every form —
+# pipe, redirect and filename alike — so a string comparison is false on every
+# macOS host while the code under test is fine. This fixture read
+# "FAIL: drifted token count differs" on macOS for exactly that reason
+# (found 2026-09-12 by scripts/check-portability-idioms.sh, order 1130-i6xj).
+[ "$(wc -l < "$WORK/drifted.out")" -eq "$want" ] || { echo "FAIL: drifted token count differs"; exit 1; }
 echo "ok: drift-warns-on-stderr-no-gate"
 
 mkdir -p "$WORK/checkout/crates/tillandsias-plan"
@@ -50,7 +55,7 @@ CLEAN="$WORK/target/release/tillandsias-plan"
 "$CLEAN" capabilities >"$WORK/clean.out" 2>"$WORK/clean.err"
 [ ! -s "$WORK/clean.err" ] || { echo "FAIL: clean artifact wrote stderr: $(head -c 160 "$WORK/clean.err")"; exit 1; }
 want="$(grep -cE '^[a-z][a-z0-9-]*$' "$ROOT/crates/tillandsias-plan/capabilities.txt")"
-[ "$(wc -l < "$WORK/clean.out")" = "$want" ] || { echo "FAIL: clean token count differs"; exit 1; }
+[ "$(wc -l < "$WORK/clean.out")" -eq "$want" ] || { echo "FAIL: clean token count differs"; exit 1; }
 grep -q '^query$' "$WORK/clean.out" || { echo "FAIL: clean artifact lacks query"; exit 1; }
 echo "ok: clean-tree-silent"
 echo "PASS: capability manifest guard (4/4)"

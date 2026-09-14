@@ -126,13 +126,31 @@ low-end hosts made the CPU bottlenecks visible. Until the counter in
   Prefer one agent with a schema over N parallel ones when the items are cheap.
 - **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
   `methodology_ask` and the project-info tools cost nothing next to an agent.
-- **Report it.** Until `scripts/cycle-metrics.sh --emit-tokens` exists, the
-  handoff carries a hand-attested `tokens:` line from what the harness reports:
-  main-context tokens spent, sub-agent tokens, agent count by model. A cycle
-  that spawned nothing writes `subagent_tokens=0 agents=0`. Only the agent can
-  observe these numbers, so this is an attestation (the `check-mcp-surface.sh`
-  shape), and an unmeasured spend is the order-531 shape one level up: it
-  reads as free and is not.
+- **Report it, and LOG it.** `scripts/cycle-metrics.sh --emit-tokens` now
+  exists (1119-6wn6), so the attestation is recorded rather than only typed:
+
+  ```
+  scripts/cycle-metrics.sh --emit-tokens host=<h> cycle=<id> \
+      main_ctx=<n> subagent_tokens=<n> agents=<n> \
+      by_model=<opus:3,haiku:39> label=<what the delegation was for>
+  ```
+
+  The handoff still carries the `tokens:` line — `scripts/cycle-metrics.sh`
+  renders it, with a rolling per-cycle average, and `source=absent` until a
+  record exists. A cycle that spawned nothing writes `subagent_tokens=0
+  agents=0` and is correctly absent from `token_recur:`.
+
+  **`label` is the field that earns the log its keep.** It names the WORK, not
+  the cycle, so the same expensive delegation recurring across days ranks as one
+  entry in `token_recur:` instead of scattering into unrelated rows. Only labels
+  seen MORE THAN ONCE are ranked: a one-off 4.5M sweep is a cost, not a
+  recurrence, and letting it top the list would bury the cheap thing paid fifty
+  times — which is the one the operator asked to find and simplify.
+
+  Only the agent can observe these numbers, so this stays an attestation (the
+  `check-mcp-surface.sh` shape); what changed is that it is now structured and
+  comparable across cycles. An unmeasured spend is the order-531 shape one level
+  up: it reads as free and is not.
 
 ## Full-Mode Terminal Attestation (order 614-2gqx)
 
@@ -276,6 +294,15 @@ and plumbing (`write-tree` / `commit-tree`), never a stash, an add against the
 real index, or a checkout. Verified: worktree status and `.git/index` are
 byte-identical afterwards, and `git show <sha>:<path>` returns an untracked
 file's full content.
+
+THE SAME SCRIPT ALSO COVERS A CLEAN TREE THAT IS NOT A SAFE ONE (order
+1146-8j7i): if `git status` is empty but HEAD itself is not reachable from any
+origin ref — a finished, gate-passing commit stranded when a later trunk merge
+reds the gate and every push is then refused — it pushes HEAD to the same
+salvage ref and answers `ok:salvaged-commits:<ref>:<sha>` instead of
+`ok:salvage-not-needed`. A host whose gate just went red on an otherwise-clean
+tree should run this script, not open a fresh `work/<order>` ref that the same
+red gate will refuse for the same reason the commit is stranded.
 
 WHY THIS RULE EXISTS, and it is the most expensive lesson in this file. On
 2026-08-23 a host wedged with 16 modified paths and one untracked litmus file
@@ -543,6 +570,24 @@ growing faster than it drains. One host currently measures well inside the
 bound, but that reading says nothing about what a second host does to it —
 which is precisely why hosts rejoin one at a time and the number is re-measured
 after each.
+
+**On immutable Linux, run the update-skew probe at cycle start and carry its
+verdict into the handoff** (order 1165-g6wx):
+
+```bash
+scripts/probe-silverblue-update-skew.sh   # -> skew: | ok:no-skew | could-not-run:
+```
+
+Read-only: it runs no `rpm-ostree` command that can mutate a deployment, and it
+exists so a cycle SAYS "skew" instead of a host guessing. A `skew:` verdict means
+this host cannot apply the offered update at all — `akmods` is layered, the base
+kernel has outrun the repo's `kernel-devel-matched`, depsolve fails and nothing
+stages, while `--check` and GNOME Software keep reporting "ready, requires
+restart". **Do not treat it as a cycle failure and do not act on it**: the three
+remedies all change what is installed on someone's workstation and are the
+operator's decision. Report the verdict and carry on. `could-not-run:` is not a
+clean verdict either — it means the question could not be asked.
+See `cheatsheets/runtime/silverblue-updates.md`.
 
 **If you are on immutable Linux (Silverblue/Kinoite), two things differ.**
 First, `./build.sh` transparently re-execs inside the `tillandsias-builder`

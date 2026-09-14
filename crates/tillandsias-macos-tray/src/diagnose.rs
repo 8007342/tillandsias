@@ -62,10 +62,56 @@ use crate::guest_binary::stage_embedded_guest_binary;
 /// the headless `--provision` mode consume it.
 const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
 
+/// TEST-ONLY redirection of [`image_root`]. Order 1127-xm3m: a unit test
+/// feeding a synthetic `VmPhase::Ready` reached `det.save(&crashloop_state_path())`
+/// and overwrote the DEVELOPER'S OWN `~/Library/Application Support/tillandsias/
+/// crashloop.state` — with `ever_ready 1 / last_phase ready`, the content that
+/// says "this guest booted fine". `./build.sh --check` runs this suite, so
+/// every push from a Mac destroyed the live guest evidence a macOS packet
+/// measures, and `--diagnose` then READ the test's fiction back as its
+/// crash-loop verdict.
+///
+/// Thread-local rather than an env var: `cargo test` runs tests in parallel
+/// threads in one process, and a process-wide `set_var` would race. The
+/// crash-loop save happens inline on the calling thread, so a thread-local
+/// override reaches it and reaches nothing else.
+#[cfg(test)]
+thread_local! {
+    static IMAGE_ROOT_OVERRIDE: std::cell::RefCell<Option<PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Point [`image_root`] at `root` for THIS THREAD until the returned guard
+/// drops. Any test that can reach a write under `image_root()` must hold one.
+#[cfg(test)]
+pub(crate) struct ImageRootGuard;
+
+#[cfg(test)]
+impl ImageRootGuard {
+    pub(crate) fn set(root: PathBuf) -> Self {
+        IMAGE_ROOT_OVERRIDE.with(|o| *o.borrow_mut() = Some(root));
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for ImageRootGuard {
+    fn drop(&mut self) {
+        IMAGE_ROOT_OVERRIDE.with(|o| *o.borrow_mut() = None);
+    }
+}
+
 /// Where the .app installer materializes VM artifacts on a macOS host.
 /// Mirrors `status_item::default_image_root` so `--diagnose` reads the
 /// same paths the live tray writes/reads.
 fn image_root() -> PathBuf {
+    // The override exists ONLY under `cfg(test)`; a release build has exactly
+    // the HOME-derived path it always had (order 1127-xm3m's negative
+    // control: the real tray must keep writing the real file).
+    #[cfg(test)]
+    if let Some(root) = IMAGE_ROOT_OVERRIDE.with(|o| o.borrow().clone()) {
+        return root;
+    }
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -770,6 +816,23 @@ async fn open_control_wire_stream(
                     tillandsias_control_wire::WIRE_VERSION,
                     HopId::HostGuest,
                 ),
+                // DEBUG ONLY, AND ENFORCED AS SUCH. On a release macOS tray
+                // this arm is unreachable by construction — build.rs refuses
+                // to produce one unless both digests are present AND 64 hex
+                // chars, which is exactly what bundled_guest_digest() needs to
+                // return Some. The refusal below is defence in depth: if that
+                // invariant is ever weakened, this path must FAIL LOUDLY
+                // rather than quietly derive from the host's own binary hash,
+                // because a silent fall-back here reinstates 1084-x8ya with no
+                // error anywhere — the guest simply never becomes reachable.
+                #[cfg(not(debug_assertions))]
+                None => {
+                    return Err("no embedded guest digest in a release tray: refusing the \
+                         unkeyed self-hash derivation (1084-x8ya) — rebuild through \
+                         scripts/build-macos-tray.sh"
+                        .to_string());
+                }
+                #[cfg(debug_assertions)]
                 None => channel_psk(
                     tillandsias_secure_channel::workspace_version(),
                     tillandsias_control_wire::WIRE_VERSION,
@@ -3736,6 +3799,47 @@ mod tests {
             p.ends_with("Library/Application Support/tillandsias/crashloop.state"),
             "{}",
             p.display()
+        );
+    }
+
+    /// Order 1127-xm3m, NEGATIVE CONTROL — the one that must not regress.
+    /// With no guard held, `image_root()` is the REAL HOME-derived path, so a
+    /// live tray keeps writing the live file. A "fix" that simply severed the
+    /// write would make the suite pass and leave `--diagnose` reading a file
+    /// nobody maintains.
+    #[test]
+    fn production_image_root_is_unchanged_without_a_guard() {
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap();
+        assert_eq!(
+            super::image_root(),
+            home.join("Library/Application Support/tillandsias"),
+            "the production path must be exactly what it always was"
+        );
+    }
+
+    /// Order 1127-xm3m — the guard actually redirects, and releases on drop.
+    /// Without this, `production_image_root_is_unchanged_without_a_guard`
+    /// could pass simply because the override never works at all.
+    #[test]
+    fn image_root_guard_redirects_and_releases() {
+        let real = super::image_root();
+        let tmp = tempfile::tempdir().expect("temp image root");
+        {
+            let _g = super::ImageRootGuard::set(tmp.path().to_path_buf());
+            assert_eq!(super::image_root(), tmp.path());
+            assert_eq!(
+                super::crashloop_state_path(),
+                tmp.path().join("crashloop.state"),
+                "the crash-loop write must follow the override — this is the \
+                 path the offending test now writes instead of the user's"
+            );
+        }
+        assert_eq!(
+            super::image_root(),
+            real,
+            "the override MUST release on drop, or one test would redirect the rest"
         );
     }
 

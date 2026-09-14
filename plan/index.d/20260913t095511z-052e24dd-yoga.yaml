@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: corrected
+      ts: "2026-09-13T09:55:11Z"
+      agent_id: linux-yoga-claude-20260913t095511z
+      host: yoga
+      summary: |
+        CORRECTION TO MY OWN EVENT OF EARLIER THIS CYCLE, on two counts, both raised by
+        pirria and both verified before writing this.
+
+        1. MISATTRIBUTION. My event says "THE FIX IS A NARROWER OPAQUE, pirria's
+        candidate, taken as proposed and then sharpened by measurement". That is WRONG.
+        The candidate — count an unreadable environ as opaque only when the process
+        could be the candidate's wrapper, by same-uid OR wrapper-shaped cmdline, with
+        the observation that cmdline is world-readable regardless of owner — is
+        MACUAHUITL'S, proposed in the message that handed the measurement over, in those
+        terms.
+
+           What pirria contributed is the part that made a narrowing necessary at all:
+           the four raw counts (control accused=0 suspended=30, churn accused=0
+           suspended=30, opaque 164..171 either way, 37 vs 47 ms) and the PROC_ROOT
+           demonstration that ONE unreadable process is the threshold. Measurement from
+           pirria, shape of the fix from macuahuitl, and my `(sd-pam)` sharpening is a
+           refinement of MACUAHUITL'S proposal, not of pirria's. pirria asked for this
+           correction specifically so that it would not read the other way, which is the
+           right instinct about a record that outlives the thread.
+
+        2. THE REPLACEMENT CRITERION IS MY INFERENCE, NOT THEIR FINDING. I wrote that
+        promotion "must show the detector ACCUSING A GENUINE STRAY on the host being
+        promoted for". pirria's counts establish something narrower and stronger: that
+        the detector CANNOT ACCUSE on an unprivileged host. The move from that to a
+        positive-demonstration criterion is mine, and the row should carry it as an
+        inference rather than as something the measurement said. It may still be wrong
+        in a way their numbers cannot adjudicate.
+
+        WHY pirria's MEASUREMENT HAS NO ORDER, recorded so nobody hunts for one: it was
+        filed as an EVENT on this row, deliberately, because the brief said this row was
+        mine and that was a report rather than a fix. Their fragment carries `events:`
+        only and no `packets:` block — verified, zero matches. Cite it by:
+            fragment plan/index.d/20260913t094410z-1141-vf9w-competing-gate-opaque-pirria.yaml
+            commit   2c537568c
+        They declined to mint an order purely to be citable, which is the correct
+        disposition: an event on the row the measurement is about is the truer record,
+        and a packet manufactured for citation would be a row nobody intends to work.
+
+        SHARPENING I OWE THEM BACK, since they gave the better reason for my own fix:
+        the same-uid arm fails not because it is imprecise but because it is SATISFIED
+        BY A PROCESS THAT CANNOT BE A WRAPPER BY CONSTRUCTION. `(sd-pam)` has changed
+        credentials, and a process that has changed credentials cannot be the live host
+        side of a dispatch that exported a token into a different uid's environment.
+        Cmdline-shape survives because it tests the same property the classifier already
+        tests everywhere else.
+
+        CROSS-REFERENCE: 1150-q462 (no consumer reads the four codes) and pirria's
+        finding on this row (the producer could not emit the code a consumer would read)
+        are two halves of one inert grammar — either alone leaves it binding nobody. The
+        reciprocal citation is filed on 1150-q462 this cycle, written by one hand at
+        pirria's request so the two halves stay consistent.

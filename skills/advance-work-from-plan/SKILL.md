@@ -491,6 +491,27 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     would have nothing to find; the 3-of-5 stranded rate measured on 2026-08-30
     is a symptom of hosts not releasing, not of a reaper that fails to run.
 
+### 3.1 — The positive control on the claim (2026-09-13)
+
+A claim is a PUSHED status flip. Nothing else separates hosts: not the claim
+event, not a message to the coordinator, not a division of work agreed with a
+peer. lenovinha's 1130-8zxn sat `ready` on every other host's plan_next for
+hours while the fix was finished on lenovinha, because the claim was an
+`append-event` (943-unii) and then an unpushed flip — "the cycle felt claimed"
+while the one mechanical signal a selector reads was absent. yoga and yolanda
+skipped it on direct knowledge, which does not scale.
+
+After the flip is PUSHED, run the control:
+
+```bash
+tillandsias-plan next <your-role> --limit 8 | grep -c '<order>'   # must print 0
+```
+
+If it prints 1 the claim did not take (unpushed, wrong field, refused by the
+ladder) and the row is still being offered to the fleet; fix that before
+starting the work. A host whose push is blocked reports the blocker with the
+committed SHA and the coordinator pushes the flip on its behalf.
+
 ## 4 — Host Write Scope & Unblock-with-NOOP
 
 Each host has a primary write scope. You can READ everything; you should normally only WRITE within your scope:
@@ -787,6 +808,18 @@ status `ready`. The packet closes only when every agent named in
     Then commit and push the ledger fragment (step 3), which takes the
     plan-only lane. **This inverts the old step 2/step 4 order for the CODE
     commit only** — every other ledger write keeps the 3c ordering.
+
+    **Choose a `scripts/gate-steps.d/NNN-*.step` prefix AFTER the integrate,
+    never before.** The landing script fetches and integrates sibling hosts'
+    work as part of landing, so a slot that was free when you wrote the file
+    can be taken by the time the gate runs — the gate then refuses with `FAIL:
+    two .step files share a numeric prefix`, and a whole gate is spent learning
+    it. yoga picked 205 on 2026-09-12 against an incoming `205-1137-dzzu.step`
+    and paid a full `--check` for it. Recovery is cheap once the shape is
+    known: `git mv` to the next free slot, `--amend`, confirm with
+    `scripts/test-gate-step-append-no-conflict.sh`, re-land. Same class as the
+    SHA rule above — read the tree the operation LEAVES, not the one it
+    started from.
 
     ORDER 1024-c3h3. This step used to run before the landing, and the evidence
     refs were systematically wrong for every host that followed it: lenovinha

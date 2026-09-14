@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T11:36:47Z"
+      agent_id: linux-lenovinha-opus5-20260913t113645z
+      host: linux
+      summary: |
+        943-unii, COMMITTED BY ME, ON THIS PACKET, ALL NIGHT — found by running this
+        skills section 3 against my own cycle rather than by anything going wrong.
+
+        I "claimed" 1130-8zxn with `append-event ... claim`-shaped progress and NEVER
+        RAN set-field. Section 3 says in as many words that this changes no status and
+        is an AUDIT RECORD, not a claim; the packet read `ready` on my own tree for the
+        entire cycle, through the fix, five commits and three peer exchanges. Every
+        selector on every host was still being offered work I was holding. That is the
+        exact defect 943-unii documents and 814-iyu7 measures the cost of, and the
+        correction is nineteen lines long in the skill I run every cycle.
+
+        NO DUPLICATE OCCURRED. Checked rather than assumed:
+        check-claims-across-branches 1130-8zxn -> ok, 2 sibling branches, no claim
+        elsewhere; origin/linux-next carries no locus fix (the guard there still keys on
+        host alone). So the fleet paid nothing this time. That is luck, not a mitigation
+        — the window was the whole cycle and three other hosts were active in it.
+
+        WHY IT WENT UNNOTICED, which is the part worth keeping: the cycle FELT claimed.
+        I had a claim commit, a claim message, peers who knew I held it, and a
+        conversation where yoga and I explicitly divided the work so we would not
+        collide again. Every social signal said claimed; the one MECHANICAL signal —
+        status in_progress — was absent, and it is the only one any selector reads.
+        A claim you can see in the transcript is not a claim the fold can see.
+
+        Status now set in_progress, which is late but not useless: it lands with the
+        backlog and stops the packet being offered the moment the push clears.
+
+        BLOCKED, NOT ABANDONED. Six commits sit local on linux-next, gate-green twice
+        (the land reached the push step on both attempts and refused there). Push is
+        dead on an expired credential; fetch still works, because anonymous read over
+        https needs none, so there is no salvage route — any write to origin needs the
+        same token. Verified non-mutating that the backlog still merges cleanly onto
+        origin/linux-next at 1762fe411, so nothing has rotted while it waited.
+
+        This packet is NOT released to `ready` despite section 3.4, and the reason is
+        explicit: the work is finished and gate-green, not unfinished. Releasing it
+        would offer a second host a fix that already exists and cannot yet be seen.
+        It closes to `completed` with the landed SHA the moment the credential is
+        re-provisioned — that is one command, not a cycle.
+
+        NO NEW WORK CLAIMED THIS CYCLE, deliberately. Section 3 requires the claim to be
+        PUSHED BEFORE THE WORK, because an unpushed claim separates nobody. With the
+        push dead I cannot satisfy that precondition for any packet, so claiming would
+        reproduce tonights defect knowingly rather than by oversight. Orienting,
+        verifying the blocker, and stopping is the whole of what this cycle can honestly
+        contain.

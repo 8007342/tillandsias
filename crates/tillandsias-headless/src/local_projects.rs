@@ -1,23 +1,17 @@
 // @trace spec:host-shell-architecture
 // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-//! Shared filesystem scanner for `EnumerateLocalProjects` across both
-//! transports.
+//! Shared filesystem scanner backing local-project enumeration on the Linux
+//! native (unix-socket) transport.
 //!
-//! Per the convergence packet's Q4 answer ("unified context; the in-VM
-//! headless on Win/Mac sees the in-VM filesystem, the Linux native
-//! headless sees the host filesystem — both populate
-//! `EnumerateLocalProjects` correctly via their local scanner"), each
-//! transport resolves its OWN project root path:
+//! Order 997-e4v2 removed `EnumerateLocalProjects` from the vsock (in-VM)
+//! transport, so only one resolver remains live: `host_project_root` below,
+//! via `TILLANDSIAS_HOST_PROJECT_ROOT` env var (default `$HOME/src`). The
+//! in-VM counterpart this doc used to describe (`TILLANDSIAS_IN_VM_PROJECT_ROOT`,
+//! default `/home/forge/src`) had no caller left after that removal and was
+//! deleted as dead code rather than kept `#[allow(dead_code)]`.
 //!
-//!   * vsock (in-VM): `vsock_server::in_vm_project_root` →
-//!     `TILLANDSIAS_IN_VM_PROJECT_ROOT` env var (default
-//!     `/home/forge/src`).
-//!   * unix (Linux native host): `tray::host_project_root` →
-//!     `TILLANDSIAS_HOST_PROJECT_ROOT` env var (default `$HOME/src`).
-//!
-//! Both transports then call `scan_project_root` here — the scan logic
-//! (dirs only, no dot-files, sorted by label, mtime as
-//! `last_seen_unix`) is identical and lives in one place.
+//! `scan_project_root` here does the actual walk (dirs only, no dot-files,
+//! sorted by label, mtime as `last_seen_unix`).
 
 #[cfg(feature = "tray")]
 use std::env;

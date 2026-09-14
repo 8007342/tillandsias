@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    field: status
+    value: completed
+    ts: "2026-09-13T13:42:48Z"
+    host: yoga
+
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: completed
+      ts: "2026-09-13T13:42:48Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: c91650cec
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: note
+      ts: "2026-09-13T13:42:48Z"
+      host: yoga
+      summary: |-
+        reorder on trunk verified by content; guard case 6 of test-plan-binary-probe.sh passing and wired via route 1 at build.sh; confirmed in production by esme; route B retracted

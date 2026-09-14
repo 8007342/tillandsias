@@ -1,0 +1,13 @@
+# Gate step 1137-dzzu — data, not code (order 1072-b7eq).
+#
+# Pins the STEP_SKIP_EXIT contract: a step that COULD NOT RUN must not report
+# what the check would have FOUND. Filed after esmeraldinha's land refused with
+# "a cheatsheet reference does not resolve" on a host where rg was merely
+# absent and zero references had been examined.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled from
+# a variable is invisible to every name-based scan.
+STEP_DESC="Checking a could-not-run gate step skips instead of asserting a verdict (1137-dzzu)"
+STEP_SCRIPT="scripts/test-gate-step-skip-exit.sh"
+STEP_ERROR="the could-not-run/content-failure distinction has regressed: a tooling gap may now read as a content verdict, or a real failure as a skip (1137-dzzu) — see the verdict line above"
+STEP_OK="Gate-step skip-exit contract passed"

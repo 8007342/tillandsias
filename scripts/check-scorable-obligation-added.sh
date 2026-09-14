@@ -227,8 +227,37 @@ _BLOCK_AWK='
         /^[ \t]*unscoreable:[ \t]*[^ \t]/ { unscoreable = "yes"; inclosure = 0; next }
         # verifiable_closure, block-scalar or inline.
         /^[ \t]*verifiable_closure:[ \t]*[|>]/ { inclosure = 1; next }
+        # THE INLINE FORM IS UNQUOTED BEFORE IT IS MATCHED. The patterns in
+        # _scorable_p are ANCHORED to the first character (scripts/*.sh*,
+        # litmus:*, cargo test*), so a closure written as a double-quoted YAML
+        # scalar began with a quote character and matched nothing. A plainly
+        # scorable row was refused for its QUOTING, and the same words written
+        # as a block scalar passed. Measured on lenovinha while filing
+        # 1137-dzzu, whose closure names two scripts and was refused anyway.
+        #
+        # This is the 994-8r3w lesson in a third dialect: the verdict was
+        # correct about the letter and wrong about the intent, and the moves
+        # available to the filer were to learn an undocumented formatting rule
+        # or to write unscoreable: about a plainly scorable row. Both are worse
+        # records than the closure being filed.
+        #
+        # ONLY A MATCHED PAIR IS STRIPPED, and only from the ends. A closure
+        # that legitimately contains a quote keeps it, and a lone leading quote
+        # is left alone rather than guessed at. NOTE \047 is the single quote,
+        # which cannot appear literally inside this single-quoted awk program.
         /^[ \t]*verifiable_closure:[ \t]*[^ \t|>]/ {
-            if (first == "") { line = $0; sub(/^[ \t]*verifiable_closure:[ \t]*/, "", line); first = line }
+            if (first == "") {
+                line = $0; sub(/^[ \t]*verifiable_closure:[ \t]*/, "", line)
+                sub(/[ \t]+$/, "", line)
+                if (line ~ /^".*"$/ || line ~ /^\047.*\047$/) {
+                    line = substr(line, 2, length(line) - 2)
+                }
+                # An EMPTY closure stays empty and stays refused: a bare pair of
+                # quotes unquotes to nothing, which is silence, which is what
+                # this gate exists to refuse. Stripping must never turn an empty
+                # scalar into a pass.
+                if (line != "") first = line
+            }
             inclosure = 0; next
         }
         # Any other key at field depth ends the block scalar.
@@ -358,7 +387,17 @@ while IFS= read -r row; do
         cdetail="${cdetail}  ${f}: packet '${pid}' has no obligation in its own bytes; another fragment or the base index supplies one — accepted on the FOLDED packet (1071-adhj)"$'\n'
     else
         violations=$((violations + 1))
-        detail="${detail}  ${f}: packet '${pid}' carries no scorable obligation — add a verifiable_closure naming a litmus:<test>, or an explicit 'unscoreable: <reason>' (977-448j)"$'\n'
+        # NAME THE NEW-TEST CASE AND ITS EXIT. A packet whose DELIVERABLE IS
+        # THE TEST is refused from BOTH sides and neither message said so: this
+        # guard refuses it for naming no litmus, and if the filer then names the
+        # one the packet will write, check-declared-closures-added.sh refuses it
+        # for naming a test nothing defines (885-92iu) and build.sh exits 1. The
+        # attractive wrong turn is to declare the pin and let it dangle, which
+        # is 1068-cxmf's standing defect, already four instances deep. Measured
+        # 2026-09-12 filing 1130-i6xj: both refusals, in succession, same row.
+        # The bind is INTENDED; only the silence about the exit was not
+        # (1136-n8sh).
+        detail="${detail}  ${f}: packet '${pid}' carries no scorable obligation — add a verifiable_closure naming a litmus:<test>, or an explicit 'unscoreable: <reason>' (977-448j). IF THIS PACKET'S DELIVERABLE IS THE TEST ITSELF, pinning a name nothing defines yet will be refused by 885-92iu — use 'unscoreable: unpinnable-until-the-guard-exists', name the future litmus filename in it, and write that litmus in the same commit as the thing it tests (1136-n8sh)"$'\n'
     fi
 done < "$_PENDING"
 

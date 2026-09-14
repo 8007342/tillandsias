@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    field: status
+    value: completed
+    ts: "2026-09-13T08:11:37Z"
+    host: macos
+
+events:
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    event:
+      type: completed
+      ts: "2026-09-13T08:11:37Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: e357f3f87
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    event:
+      type: note
+      ts: "2026-09-13T08:11:37Z"
+      host: macos
+      summary: |-
+        verified landed: --include moved before the -- at check-proxy-permissive-port-routing.sh:59; guard returns ok:proxy-permissive-port:unrouted-and-documented rc 0 on macneo with a positive control on the 3129 literal

@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from esme's report: the
+# windows-host locus on esmeraldinha cannot publish a capability row because
+# no native Windows tillandsias binary exists there, and the floor host
+# cannot build one.
+packets:
+  - packet_id: esmeraldinhas-windows-host-locus-cannot-publish-a-capability-row-because-no-native-windows-binary-exists-there-and-the-remedy-the-guard-names-exits-2-at-that-locus
+    order: 1171-ccf2
+    status: in_progress
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: windows
+    capability_tags: [windows, capability-row, floor-tier, release, probe]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a measurement on esmeraldinha. Future evidence line in scripts/check-capability-row.sh's verdict on the Windows host locus: `ok:capability-row-current:esmeraldinha` rc 0 after `bash scripts/host-capability-probe.sh --fragment` succeeds from Git Bash with a native binary (pre-fix result: FAILS — rc 2 'no runnable tillandsias binary (build or install one)'; target/release/tillandsias.exe and target/debug/tillandsias.exe absent; the debug ELF exits 126 on Windows; the guard then reports stale:capability-row-expired:esmeraldinha:age=1866506s rc 1 and names a remedy that cannot run where the verdict fires; measured esme 2026-09-13); NEGATIVE CONTROL: publishing from the distro is refused as the wrong locus (it would mint the bare-metal third locus 1159-g96c is about), and `--locus windows-host` from inside the distro is refused as unsound (the probe measures the running machine; 889-ewvt: a false row routes confidently and wrongly)."
+    owned_files:
+      - scripts/host-capability-probe.sh
+      - scripts/check-capability-row.sh
+    title: |
+      esmeraldinha's windows-host locus has never had a native Windows tillandsias binary (the release installs only the tray; the checkout carries only an ELF that exits 126 there), so host-capability-probe.sh --fragment exits 2 from Git Bash and the locus cannot publish; after 1154-8ywc the guard correctly reports the row expired and names a remedy that cannot run where the verdict fires. Closing it needs either a Windows-native headless build produced by the capable Windows host and installed on esme, or the probe accepting the installed tray binary if it exposes the capability surface. yolanda decides which is cheaper.
+    context: |
+      MEASURED on esme 2026-09-13 (compile-free lane): the probe's rc 2, both
+      .exe paths absent, the ELF's 126, the guard's stale verdict with age
+      1866506 s, and the remedy's impossibility at that locus. lenovinha is
+      landing the honest minimum meanwhile (a stderr line naming the
+      constraint, stdout grammar untouched), which documents the gap rather
+      than closing it. Two substitutes declined by esme and recorded so
+      nobody tries them: publishing from the distro derives bare-metal and
+      mints a third locus; `--locus windows-host` from inside the distro
+      stamps the guest's hardware with the host's label, and the capability
+      matrix ROUTES on these rows. Declining the row is defensible; it leaves
+      that locus permanently unpublishable and its row permanently expired.
+
+      WHAT TO BUILD, yolanda's choice: (a) a Windows-native release build of
+      tillandsias-headless on yolanda, installed on esme at the path the
+      probe resolves (the debug ELF is 249 MB, so a release build), with the
+      installed-binary path added to the probe's resolver if it is not
+      target/; or (b) if the installed tray (tillandsias-tray.exe) exposes
+      the capability probe surface, the probe resolves it as a candidate on
+      Windows. Either way the closure is esme's own measured
+      `ok:capability-row-current:esmeraldinha`.
+    exit_criteria:
+      - 'host-capability-probe.sh --fragment succeeds from Git Bash on esmeraldinha and check-capability-row.sh reports ok:capability-row-current:esmeraldinha rc 0 (pre-fix result: FAILS — rc 2 then stale rc 1)'
+      - 'NEGATIVE CONTROL: the probe still refuses to publish the windows-host locus from inside the distro'
+      - 'the guard''s remedy text on Windows names a command that can run where the verdict fires'
+    events:
+      - type: filed
+        ts: "2026-09-13T19:10:09Z"
+        agent_id: "linux-macuahuitl-fable-20260913t191009z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from esme's measurement and handed to
+          yolanda (the capable Windows host) with the flip at filing; esme
+          measures the closure on its own hardware.

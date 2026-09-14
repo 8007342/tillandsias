@@ -73,9 +73,32 @@ use std::path::{Path, PathBuf};
 /// something does is the kind of quiet defect this ledger is built to refuse.
 /// Fold behaviour is otherwise unchanged: same key, same lattice, same order
 /// independence, so every fragment already on disk folds identically.
-fn lww_entries(doc: &Value) -> Vec<&Value> {
+/// The LWW channels a fragment may carry. `fields:` is the canonical
+/// spelling; `status:` is the alias `set-field` emits (642-fedr). This list
+/// is a named const rather than a literal in the loop below because the
+/// coverage assertion in `compaction_text_tests` reads it: a channel read
+/// through a loop variable never appears as a literal `.get("…")`, so a
+/// source-text scan alone cannot see it (1063-nraf; 1157-ghmi — the guard
+/// stayed green while compaction dropped fields:-spelled corrections).
+pub(crate) const LWW_CHANNELS: &[&str] = &["fields", "status"];
+
+/// PUBLIC BECAUSE IT IS THE ONLY SANCTIONED READER OF THIS CHANNEL (1158-y3ad).
+/// Three consumers in main.rs hardcoded `doc.get("status")` while this list has
+/// read two spellings all along, so a `fields:`-spelled write was invisible to
+/// all three — silently in the two scans that look for offenders, and LOUDLY in
+/// the one that looks for an omission, which reported a missing next_action on
+/// a packet whose next_action had been set. The canonical list existed and was
+/// not canonical, because nothing forced a consumer to use it.
+/// `scripts/test-lww-channel-consumers.sh` now refuses a fragment-channel read
+/// written anywhere but here, so a fourth consumer cannot reintroduce it.
+///
+/// The const above and this `pub` are two halves of one guarantee and arrived
+/// from two hosts in the same window: the const makes the channel set legible
+/// to a source-text scan that cannot see a loop variable; the `pub` makes it
+/// the only place a consumer may read from. Neither alone closes the class.
+pub fn lww_entries(doc: &Value) -> Vec<&Value> {
     let mut out: Vec<&Value> = Vec::new();
-    for channel in ["fields", "status"] {
+    for channel in LWW_CHANNELS {
         if let Some(seq) = doc.get(channel).and_then(Value::as_sequence) {
             out.extend(seq.iter());
         }
@@ -1114,6 +1137,22 @@ pub struct CompactionText {
     /// Fragments compaction REFUSED to consume, with the records of theirs that
     /// the rendered candidate does not carry (order 843-624y).
     pub refused: Vec<(PathBuf, Vec<String>)>,
+    /// ORDER 1123-k3mq. Status writes compaction CONSUMED THE FRAGMENT FOR but
+    /// did not apply, because they move DOWN the closure ladder without a
+    /// falsified event. `(packet_id, discarded_value, retained_value, host)`.
+    ///
+    /// WHY THIS HAS TO BE REPORTED. 686-7qcm taught compaction the ladder, which
+    /// stopped it writing a lowered rung into the base. But the losing write is
+    /// then dropped AND ITS FRAGMENT IS DELETED, so the author's intent leaves
+    /// no trace anywhere: a coordinator releasing an expired claim gets `ok:`
+    /// from set-field, `ok: compacted N fragment(s)` from compact, and a ledger
+    /// that still says `completed`. Measured on a scratch ledger at HEAD — base
+    /// `completed`, fragment `ready`, compact prints one ok: line and zero words
+    /// about the value it threw away.
+    ///
+    /// Keeping the rung is correct; keeping it SILENTLY is what makes two
+    /// maintainers disagree about the same ledger and both be reading it right.
+    pub discarded_status: Vec<(String, String, String, String)>,
 }
 /// Format-preserving, text-level compaction.
 ///
@@ -1144,6 +1183,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             candidate: raw,
             consumed: Vec::new(),
             refused: Vec::new(),
+            discarded_status: Vec::new(),
         });
     }
     let merged = fold(&base, &fragments);
@@ -1208,11 +1248,18 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     //    the base text (a win over the same value needs no edit).
     let mut lww: std::collections::BTreeMap<String, (String, String, Value)> =
         std::collections::BTreeMap::new();
+    // ORDER 1123-k3mq: status writes the ladder refuses, so the caller can say so.
+    let mut discarded_status: Vec<(String, String, String, String)> = Vec::new();
     for frag in &fragments {
-        let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) else {
-            continue;
-        };
-        for u in us {
+        // BOTH LWW channels, exactly as `lww_entries` folds them. This read
+        // used to be `doc.get("status")` alone, so a fragment written with the
+        // canonical `fields:` spelling folded for every reader and was
+        // INVISIBLE here: compaction rendered a base without the correction,
+        // then deleted the fragment that carried it. Isolated on yolanda
+        // 2026-09-13 by removing fragments one at a time — perfect correlation
+        // with the channel name — and caught by the real-ledger round-trip
+        // test, which is the whole reason that test exists.
+        for u in lww_entries(&frag.doc) {
             let (Some(pid), Some(field), Some(value)) = (
                 u.get("packet_id").and_then(Value::as_str),
                 u.get("field").and_then(Value::as_str),
@@ -1280,6 +1327,27 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             };
             if better {
                 lww.insert(key, (ts, host, value.clone()));
+            } else if field == "status" {
+                // The write LOST the ladder comparison. Record it with the value
+                // that beat it so the report can name both — "your `ready` did
+                // not take, `completed` stands" is actionable; "ok: compacted 1
+                // fragment" is not. Only a value that actually DIFFERS is worth
+                // reporting: re-asserting the rung a packet already holds is a
+                // no-op, not a discarded intention.
+                let retained = lww
+                    .get(&key)
+                    .map(|(_, _, v)| v.as_str().unwrap_or("").to_string())
+                    .or_else(|| {
+                        base_value(&base, pid, field)
+                            .as_ref()
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_default();
+                let incoming = value.as_str().unwrap_or("").to_string();
+                if !incoming.is_empty() && incoming != retained {
+                    discarded_status.push((pid.to_string(), incoming, retained, host.clone()));
+                }
             }
         }
     }
@@ -1525,6 +1593,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         candidate,
         consumed,
         refused,
+        discarded_status,
     })
 }
 
@@ -2977,6 +3046,150 @@ packets:
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// ORDER 1123-k3mq. Compaction and the runtime fold must apply the SAME
+    /// rule to `status`, and a write the ladder refuses must be REPORTED rather
+    /// than dropped in silence.
+    ///
+    /// The defect that produced this row: two hosts disagreed about one packet
+    /// and both were reading the ledger correctly. The base row said `ready`
+    /// (compaction, newer) and the fold answered `completed` (an older fragment
+    /// sitting higher on the ladder). 686-7qcm then taught compaction the
+    /// ladder, which fixed the corruption — and left the losing write being
+    /// dropped WITH ITS FRAGMENT DELETED, so a coordinator releasing a claim
+    /// got `ok:` twice and a ledger that had ignored them.
+    #[test]
+    fn compaction_refuses_a_rung_lowering_status_write_and_says_so() {
+        let dir = std::env::temp_dir().join(format!("tilland-k3mq-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        let base = "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: completed\n      title: t\n";
+        std::fs::write(&index, base).expect("write base");
+        // A coordinator releasing an expired claim: newer ts, LOWER rung, and no
+        // falsified event to authorise the descent.
+        std::fs::write(
+            d.join("index.d").join("20260911t195139z-cccc-coord.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: ready\n    ts: \"2026-09-11T19:51:39Z\"\n    host: coordinator\n",
+        )
+        .expect("write frag");
+
+        let c = compact_text(&index).expect("compaction runs");
+
+        // CRITERION 1: compaction applies the ladder, so the base keeps the rung
+        // and re-folding the result cannot revert it.
+        assert!(
+            !c.candidate.contains("status: ready"),
+            "compaction wrote a rung-lowering value into the base; the fold would revert it and the two rules have diverged again:\n{}",
+            c.candidate
+        );
+        assert!(
+            c.candidate.contains("status: completed"),
+            "the retained rung is missing from the compacted base:\n{}",
+            c.candidate
+        );
+
+        // CRITERION 2: the discarded write is RECORDED. Without this the
+        // fragment is deleted and the author's intent leaves no trace at all —
+        // which is strictly worse than the original corruption, because the
+        // corruption was at least visible in the base.
+        assert_eq!(
+            c.discarded_status.len(),
+            1,
+            "the refused status write was dropped silently; a coordinator cannot learn their release did not take"
+        );
+        let (pid, discarded, retained, host) = &c.discarded_status[0];
+        assert_eq!(pid, "subject");
+        assert_eq!(
+            discarded, "ready",
+            "the report must name the value that was refused"
+        );
+        assert_eq!(
+            retained, "completed",
+            "the report must name the value that beat it"
+        );
+        assert_eq!(host, "coordinator", "the report must name who wrote it");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ORDER 1123-k3mq, NEGATIVE CONTROL — and the row calls it load-bearing.
+    ///
+    /// The tempting fix is to make `status` last-write-wins, which would satisfy
+    /// the "both rules agree" criterion by DELETING the ladder: any returning
+    /// host with a stale high-water fragment could then silently reopen finished
+    /// work, and `--reopen-evidence` would stop being the only path down
+    /// (650-dq6u). So the ladder must keep its teeth in BOTH directions.
+    #[test]
+    fn compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins() {
+        let dir = std::env::temp_dir().join(format!("tilland-k3mq-neg-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: implemented\n      title: t\n",
+        )
+        .expect("write base");
+        // OLDER but HIGHER on the ladder.
+        std::fs::write(
+            d.join("index.d").join("20200101t000000z-aaaa-h1.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: verified\n    ts: \"2020-01-01T00:00:00Z\"\n    host: h1\n",
+        )
+        .expect("write frag a");
+        // NEWER but LOWER. Under last-write-wins this would take; under the
+        // ladder it must not.
+        std::fs::write(
+            d.join("index.d").join("20260101t000000z-bbbb-h2.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: completed\n    ts: \"2026-01-01T00:00:00Z\"\n    host: h2\n",
+        )
+        .expect("write frag b");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.candidate.contains("status: verified"),
+            "the older HIGHER rung lost to a newer lower one — status has become last-write-wins and 650-dq6u's ratchet is gone:\n{}",
+            c.candidate
+        );
+
+        // A legitimate ASCENT must still apply, or the fix has simply frozen the
+        // field: implemented -> verified is the win above, and it changed the
+        // base from its starting value.
+        assert!(
+            !c.candidate.contains("status: implemented"),
+            "a legitimate rung ASCENT was refused; compaction is now frozen rather than monotone"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ORDER 1123-k3mq. Re-asserting the rung a packet already holds is a no-op,
+    /// not a discarded intention — reporting it would train readers to ignore
+    /// the warning that matters.
+    #[test]
+    fn compaction_does_not_report_a_status_write_that_changes_nothing() {
+        let dir = std::env::temp_dir().join(format!("tilland-k3mq-noop-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: completed\n      title: t\n",
+        )
+        .expect("write base");
+        std::fs::write(
+            d.join("index.d").join("20260101t000000z-dddd-h1.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: completed\n    ts: \"2026-01-01T00:00:00Z\"\n    host: h1\n",
+        )
+        .expect("write frag");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.discarded_status.is_empty(),
+            "a same-value status write was reported as discarded; noise here teaches readers to skip the real warning: {:?}",
+            c.discarded_status
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn fragment_names_sort_chronologically_because_the_fold_depends_on_it() {
         let early = fragment_name("20260801T0100Z", "aaaa", "linux-mutable");
@@ -3783,6 +3996,69 @@ plan_index:
         }
     }
 
+    /// A correction written under the CANONICAL `fields:` channel folds for
+    /// every reader (lww_entries lists it first) and used to be invisible to
+    /// compaction, which read `status:` alone — the candidate rendered without
+    /// it, folded to a different state, and the fragment carrying the intent
+    /// was deleted. Isolated on yolanda 2026-09-13 by removing fragments one at
+    /// a time. Pre-fix result: FAILS at assert_fold_equivalent.
+    #[test]
+    fn a_fields_spelled_correction_survives_the_compaction_round_trip() {
+        let d = scratch("fields-channel");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260913t1245z-aaaa-h1.yaml"),
+            "fields:\n  - packet_id: alpha\n    field: next_action\n    value: the first two steps are done; nothing left is windows-lane\n    ts: \"2026-09-13T12:45:00Z\"\n    host: yolanda\n",
+        )
+        .expect("fields fragment");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.candidate.contains("nothing left is windows-lane"),
+            "the fields:-spelled correction must reach the rendered base; pre-fix it was silently dropped"
+        );
+        assert_fold_equivalent(&index, COMMITTED);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The two fixes meet rather than coexist (lenovinha, 1123-k3mq): a
+    /// rung-lowering status write spelled under `fields:` was invisible twice
+    /// over — neither compacted NOR reported as discarded, since the reporting
+    /// branch sat inside the same `status:`-only read. After the channel list
+    /// is shared it is refused AND reported, like its `status:`-spelled twin.
+    #[test]
+    fn a_fields_spelled_rung_lowering_write_is_refused_and_reported() {
+        let d = scratch("fields-rung");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9991-bbbb\n      status: completed\n      title: t\n",
+        )
+        .expect("write base");
+        std::fs::write(
+            d.join("plan/index.d/20260913t1246z-bbbb-h2.yaml"),
+            "fields:\n  - packet_id: subject\n    field: status\n    value: ready\n    ts: \"2026-09-13T12:46:00Z\"\n    host: coordinator\n",
+        )
+        .expect("fields fragment");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            !c.candidate.contains("status: ready"),
+            "a rung-lowering write must be refused whichever channel spelled it"
+        );
+        assert_eq!(
+            c.discarded_status.len(),
+            1,
+            "the refused fields:-spelled write must be REPORTED, not dropped in silence (the composition of 1123-k3mq with the channel fix)"
+        );
+        let (pid, discarded, retained, host) = &c.discarded_status[0];
+        assert_eq!(pid, "subject");
+        assert_eq!(discarded, "ready");
+        assert_eq!(retained, "completed");
+        assert_eq!(host, "coordinator");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     /// The rendered text must parse to EXACTLY the same packets (and per-packet
     /// events) as the Value-domain fold — the strongest possible guarantee that
     /// compaction did not change state while preserving format.
@@ -4094,15 +4370,35 @@ plan_index:
         }
     }
 
-    /// THE ASSERTION THAT GENERALISES. Read this file's own source, find every
-    /// top-level key the folder pulls out of a fragment, and require it to be
-    /// covered above. Adding a channel to the folder without adding a probe
-    /// fails here — which is the only mechanism that makes the next channel
-    /// safe rather than merely making this one safe.
+    /// THE ASSERTION THAT GENERALISES — from TWO inputs. (1) Read this file's
+    /// own source and find every literal `frag.doc.get("…")` / `d.doc.get("…")`
+    /// site. (2) Read `LWW_CHANNELS` directly. The union must be covered by
+    /// `CHANNEL_PROBES`. The literal scan alone was blind (1157-ghmi):
+    /// `lww_entries` reads its channels through a loop variable, so "fields"
+    /// and "status" never appeared as literals, "fields" had no probe, and
+    /// this assertion stayed green while compaction silently dropped
+    /// fields:-spelled corrections (1156-eif4) — a binding assembled from a
+    /// variable is invisible to every name-based scan (1063-nraf). Adding a
+    /// channel to either input without a probe fails here, which is the only
+    /// mechanism that makes the next channel safe rather than this one.
     #[test]
     fn the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads() {
-        let src = include_str!("fragments.rs");
+        // COMMENTS ARE STRIPPED BEFORE THE SCAN. The doc comment above quotes
+        // the literal shape it looks for, and the first run of this widened
+        // assertion matched its own prose and demanded a probe for "…" — the
+        // pin-reads-its-author's-comment shape (823-u5zf, 1118-dwgx). Code
+        // lines only; the mutation control that plants a literal site plants
+        // it in code.
+        let src_code: String = include_str!("fragments.rs")
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<&str>>()
+            .join("\n");
+        let src = src_code.as_str();
         let mut read: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for channel in LWW_CHANNELS {
+            read.insert((*channel).to_string());
+        }
         for (pat, _) in [("frag.doc.get(\"", 0), ("d.doc.get(\"", 0)] {
             let mut rest = src;
             while let Some(i) = rest.find(pat) {
@@ -4140,6 +4436,13 @@ plan_index:
         (
             "status",
             "status:\n  - packet_id: alpha\n    field: status\n    value: implemented\n    \
+             ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
+        ),
+        (
+            // The canonical LWW spelling, reachable only by hand-writing a
+            // fragment — the one that had no probe (1157-ghmi).
+            "fields",
+            "fields:\n  - packet_id: alpha\n    field: next_action\n    value: probed through the canonical channel\n    \
              ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
         ),
         (

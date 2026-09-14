@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: status
+    value: ready
+    ts: "2026-09-13T20:10:26Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T20:10:26Z"
+      host: macos
+      summary: |-
+        released at cycle end: clamp-ca-material.sh done (7 sites, script was inert on macOS); 20 reported / 17 remediable / floor 3; sed -i now the largest class at 9

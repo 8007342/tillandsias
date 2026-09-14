@@ -23,24 +23,69 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/check-plan-binary-probe-usage.sh"
+
+# PORTABLE MILLISECONDS. `date +%s%N` is a GNU-ism: BSD date SUCCEEDS with
+# garbage output rather than failing, so an exit-code guard cannot catch it
+# (761-g36m) — the same "a failure that reads as success" shape this fixture's
+# own subject is about. scripts/timing-log.sh already solves it: %3N with digit
+# validation, degrading to seconds*1000. Use the shared one rather than a fourth
+# private copy (704-zcgi).
+. "$ROOT/scripts/timing-log.sh" 2>/dev/null || true
+command -v timing_now_ms >/dev/null 2>&1 || timing_now_ms() { date +%s 2>/dev/null | awk '{printf "%d000", $1}' 2>/dev/null || echo 0; }
 RUNS="${TILLANDSIAS_DETERMINISM_RUNS:-20}"
 fail=0
 
-# ARM 1 — N consecutive runs on an UNCHANGED tree give exactly one verdict.
-# THIS IS THE DISCRIMINATING ARM, verified in both directions on the real tree:
-# against the pre-fix guard, 20 runs produced TWO distinct verdicts
-# (scripts=7/569 and scripts=8/569); against the fixed guard, ONE. It needs the
-# real corpus, because the race requires a file large enough that grep -q exits
-# while the upstream is still writing.
-verdicts="$(for _ in $(seq "$RUNS"); do bash "$GUARD" 2>/dev/null; done | sort -u)"
-count="$(printf '%s\n' "$verdicts" | grep -c .)"
-if [ "$count" = 1 ]; then
-    echo "ok: ${RUNS} runs agree ($(printf '%s' "$verdicts" | head -1))"
-else
-    echo "FAIL: ${RUNS} runs produced $count distinct verdicts:"
-    printf '%s\n' "$verdicts" | sed 's/^/    /'
+# ARM 1 — THE DETECTOR. N runs against a MINIMAL tree holding the REAL file
+# that flaked, and nothing else. It must give exactly one verdict.
+#
+# WHY A MINIMAL TREE AND NOT THE REAL CORPUS. The race is a property of the
+# FILE, not of the corpus: grep -q has to match while the writer is still
+# writing, which depends on that file's size and match position, not on how many
+# other files were walked. Measured on yoga 2026-09-12, copying
+# scripts/test-fragment-status-loss.sh verbatim into a two-file tree:
+#
+#     PRE-FIX  20 runs -> 13x scripts=0/2, 7x scripts=1/2   TWO verdicts
+#     POST-FIX 20 runs -> 20x scripts=1/2                   ONE verdict
+#     cost: 194 ms for 20 runs (7 ms/run)
+#
+# The full-corpus equivalent costs 132.6 s for 20 runs (pirria, cachyos, land
+# gate) — the single most expensive step in a 635 s gate, 21% of wall clock —
+# and gives a WEAKER pre-fix split (6/4 against 13/7). So the corpus bought wall
+# clock and no signal. 680x cheaper, better discrimination.
+#
+# THE STAND-IN, NOT THE TREE, WAS THE DIFFERENCE. An earlier attempt at this
+# used a SYNTHETIC file — a hardcoded path plus 400 padding lines, sized to
+# resemble the real one — and did not reproduce the flake at all, which nearly
+# established "the race needs the corpus" as fact and would have made the 132 s
+# step permanent. Use the real file. A failed reproduction is a result about the
+# SETUP until it is a result about the subject.
+_mk_minimal() {
+    _d="$(mktemp -d)"
+    mkdir -p "$_d/scripts" "$_d/openspec/litmus-tests"
+    printf 'resolve_plan_binary() { echo /bin/true; }\n' > "$_d/scripts/plan-binary-probe.sh"
+    cp "$ROOT/scripts/test-fragment-status-loss.sh" "$_d/scripts/" 2>/dev/null
+    printf '%s\n' "$_d"
+}
+md="$(_mk_minimal)"
+if [ ! -f "$md/scripts/test-fragment-status-loss.sh" ]; then
+    # The subject file is gone. Say so as its own state rather than passing: a
+    # detector that silently tests an empty tree is the defect this pins.
+    echo "FAIL: scripts/test-fragment-status-loss.sh is absent — this arm has no subject and cannot detect anything"
     fail=1
+else
+    _t0="$(timing_now_ms)"
+    verdicts="$(for _ in $(seq "$RUNS"); do PLAN_PROBE_ROOT="$md" bash "$GUARD" 2>/dev/null; done | sort -u)"
+    _ms=$(( $(timing_now_ms) - _t0 ))
+    count="$(printf '%s\n' "$verdicts" | grep -c .)"
+    if [ "$count" = 1 ]; then
+        echo "ok: ${RUNS} runs agree in ${_ms}ms ($(printf '%s' "$verdicts" | head -1))"
+    else
+        echo "FAIL: ${RUNS} runs produced $count distinct verdicts in ${_ms}ms:"
+        printf '%s\n' "$verdicts" | sed 's/^/    /'
+        fail=1
+    fi
 fi
+rm -rf "$md"
 
 # ARM 2 — a POSITIVE CONTROL, and it is NOT a pin for this defect. Say so
 # plainly: measured against the PRE-FIX guard on this scratch tree, the planted

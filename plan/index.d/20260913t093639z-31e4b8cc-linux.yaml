@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    field: status
+    value: completed
+    ts: "2026-09-13T09:36:39Z"
+    host: linux
+
+events:
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    event:
+      type: completed
+      ts: "2026-09-13T09:36:39Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: verified by execution at HEAD: --include precedes -- at line 59; staged guest binary -> ok:; real .rs naming 3129 -> violation:stale-unrouted-caveat (negative control intact); CONSUMER_ROOT still crates. Fixed by e357f3f87
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    event:
+      type: note
+      ts: "2026-09-13T09:36:39Z"
+      host: linux
+      summary: |-
+        already fixed by e357f3f87 which names this order in its subject; only the status was never moved

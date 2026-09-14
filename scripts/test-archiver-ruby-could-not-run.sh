@@ -72,6 +72,18 @@ elif [ "$rc2" -eq 3 ] && printf '%s' "$out2" | grep -q 'no usable ruby'; then
     pass=$((pass+1))
 else
     fail=$((fail+1)); echo "FAIL: positive control did not pass on a host with ruby (rc=$rc2)"
+    # PRINT WHAT IT SAID (order 1132-r4mt). $out2 is captured at the call above
+    # WITH 2>&1 and was then discarded -- every refusal of this arm printed the
+    # exit code and threw away the sentence naming its own cause. That happened
+    # on two hosts on 2026-09-12, twice each, in gates costing ~8 minutes apiece,
+    # and both times the run that would have explained it was already gone.
+    #
+    # It matters more here than usual because this arm SKIPS on a CONJUNCTION
+    # (rc2==3 AND the output says "no usable ruby"), so a bare rc=3 means the
+    # archiver refused for some OTHER reason and that reason is the whole
+    # question. yoga measured rc=0 standalone against rc=3 in situ, same tree.
+    echo "  what the archiver actually said (rc=$rc2):"
+    printf '%s\n' "$out2" | sed 's/^/    /'
 fi
 
 # 5. The worktree must be clean afterwards. The archiver copies plan/ and a

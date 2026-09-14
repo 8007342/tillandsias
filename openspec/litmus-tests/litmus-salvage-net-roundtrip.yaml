@@ -76,3 +76,13 @@ critical_path:
     command: "bash scripts/test-salvage-net.sh sweep | tail -1"
     timeout_ms: 30000
     expected_behavior: "ok:salvage-net-fixture:all"
+
+  - step: "unpushed (1146-8j7i): a clean tree whose HEAD is on no origin ref is salvaged as commits; a clean tree on origin stays not-needed"
+    command: "bash scripts/test-salvage-net.sh unpushed | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"
+
+  - step: "symlink (1146-8j7i): a path the substrate cannot stage is skipped by name and every other path still lands"
+    command: "bash scripts/test-salvage-net.sh symlink | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:salvage-net-fixture:all"

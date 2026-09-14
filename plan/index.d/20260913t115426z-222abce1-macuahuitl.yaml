@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-sweep-files-its-events-to-an-archived-packet-so-apply-mode-refuses-every-ref-and-rescued-work-stays-unseen
+    event:
+      type: progress
+      ts: "2026-09-13T11:54:26Z"
+      agent_id: linux-macuahuitl-fable-20260913t115426z
+      host: macuahuitl
+      summary: |
+        Landed at linux-next@46eebb80d (macuahuitl; one sonnet sub-agent implemented,
+        the coordinator verified by its own run and patched the checker). --apply
+        files to plan/salvage-refs.d/<host>.md with ancestry and file-count per
+        line; checker wired into --check with a named offline skip; fixture 37 ok.
+        Applied on the real repo: 5 refs filed, checker ok:5, second apply filed 0.
+        The six refs deleted by hand tonight predate the ledger and live in the
+        drill. Criterion 4's wiring is in build.sh beside the MO-FULL ledger check.

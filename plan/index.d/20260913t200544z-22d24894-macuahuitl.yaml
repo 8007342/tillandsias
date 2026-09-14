@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-dead-env-branches-buckets-every-rust-env-var-read-as-gating-so-a-read-with-a-nonempty-default-reads-as-dead-while-its-shell-twin-is-spared
+    event:
+      type: progress
+      ts: "2026-09-13T20:05:44Z"
+      agent_id: linux-macuahuitl-fable-20260913t194011z
+      host: macuahuitl
+      summary: |
+        1167-ga24 closed: a rust env::var read is joined forward into its statement (8 lines or the first ';') and excluded from gating only when it lands on a NONEMPTY .unwrap_or(/.unwrap_or_else(; a bare read stays a candidate (negative control ${P}_RUST_DEAD_VAR). The three cited TILLANDSIAS_NIX_CACHE_* names cleared, and TILLANDSIAS_EXPERTS_PROBE_TIMEOUT_MS with them (same .ok().and_then().unwrap_or chain): the fix is not overfit to the examples. Residual stated on the commit: an EMPTY string-literal default (`.unwrap_or("")`) would read as tunable; measured zero such reads in crates/ today.

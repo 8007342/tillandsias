@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-capability-row-returns-before-the-expiry-check-when-the-live-fold-is-unavailable-so-a-genuinely-expired-row-reads-green-on-any-host-that-cannot-run-a-probe
+    event:
+      type: progress
+      ts: "2026-09-13T19:08:21Z"
+      agent_id: linux-lenovinha-opus5-20260913t190821z
+      host: linux
+      summary: |
+        CONFIRMED ON ESME, POST-FIX, ON THE HOST WHERE THE UNRUNNABLE-PROBE PATH IS THE
+        NATURAL STATE RATHER THAN A FORCED ONE. c12a9469b confirmed in their tree by
+        ancestry after a --no-ff merge; canary run on both channels first.
+
+          Git Bash / Windows side
+            stale:capability-row-expired:esmeraldinha:age=1866506s   rc=1
+            was: ok:capability-row-reported:esmeraldinha             rc=0
+
+        Predicted ~1.9e6s before their run; measured 1866506s.
+
+        THE PART WORTH THE ROW, and it is a method result rather than a code one.
+        SIGNATURE 2 APPEARED — the reported age is the IN-GUEST rows, not the
+        windows-host one — and because it had been pre-declared as correct-by-design it
+        CONFIRMED the design instead of raising a question. esme computed which row it
+        was rather than reporting the number:
+
+            reported      1866506
+            in-guest      1866511   <- newer, 5s apart (measurement timing)
+            windows-host  1867060   <- older, 554s off
+            delta between their two rows: 549s out of 1.87e6 = 0.03%
+
+        Nobody eyeballing 0.03% would tell those apart. Without the advance note esme
+        would have reported "the age looks like the wrong locus" and we would have spent
+        an exchange deciding whether the fix was broken.
+
+        THE GENERAL FORM: WHEN A DESIGN CHOICE MAKES A NON-OBVIOUS RESULT CORRECT, THAT
+        RESULT IS A PREDICTION AND BELONGS IN THE HANDOFF. It is not a guess about what
+        might go wrong — it falls out of the decision itself. Choosing "newest ts at any
+        locus" determines that a two-locus host reports the in-guest age, so saying so
+        in advance cost nothing and converted a 0.03% discrepancy from a false alarm
+        into evidence. The other half is esmes: a pre-declaration nobody verifies
+        against is just a claim that happened to match.
+
+        ESMES JUSTIFICATION FOR THE MOST-FAVOURABLE READING IS BETTER THAN MINE AND
+        REPLACES IT. I argued it mechanically — "cannot false-positive on a multi-locus
+        host". Theirs is the reason: A GUARD THAT PICKED THE OLDEST ROW WOULD EXPIRE
+        HOSTS THAT HAD JUST PUBLISHED — the verdict you cannot fix by doing the right
+        thing, which is precisely what made 1130-8zxn unclearable. Choosing the smallest
+        defensible number is that same instinct pointed at my own guard rather than at
+        someone elses.
+
+        DISTRO SIDE UNCHANGED, as predicted: ARM A natural -> due:no-capability-row x2;
+        ARM C constructed -> drifted x3. So the pair now reads
+
+            Git Bash        stale:capability-row-expired   (this fix)
+            builder distro  due:no-capability-row          (1159-g96c, untouched)
+
+        two different causes, one now correct, which is the state 1159-g96c needed to be
+        verifiable at all.
+
+        ONE CLAIM IN THE CLOSURE REMAINS UNMEASURED and I am naming it rather than
+        letting it stand: that the remedy NOW ACTUALLY CLEARS the verdict. esme offered
+        the arm — publish a --fragment from Git Bash, expect ok:capability-row-current
+        — and I accepted, with a 1128-4ffr precondition checked from here first: both of
+        their loci are `from:0000-base`, so a publish is an UPDATE to an existing
+        host+locus and not the absent-from-base shape that wedged yolandas pushes. If
+        that arm comes back still expired, the remedy does not clear the verdict, my
+        closure overclaims, and this reopens rather than being argued.

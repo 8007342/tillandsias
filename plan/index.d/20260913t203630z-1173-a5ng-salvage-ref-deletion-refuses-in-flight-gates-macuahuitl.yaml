@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: deleting-a-salvage-ref-refuses-every-in-flight-gate-whose-trunk-snapshot-predates-the-deleted-marker-because-the-ledger-checker-reads-only-the-local-copy
+    order: 1173-a5ng
+    status: ready
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [salvage, ledger, gate, coordination, bash]
+    estimated_hours: 2
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the checker's trunk fallback and its fixture. Future litmus scripts/test-salvage-refs-ledger.sh (create it if absent); the claimer writes it in the same commit and moves this text into verifiable_closure: check-salvage-refs-ledger.sh, on a line naming a ref absent from origin and UNMARKED locally, reads origin/linux-next's copy of the same ledger file (a fetch is already in its reachability precondition) and, when that copy carries the trailing marker for the same ref, prints ok:salvage-refs-ledger:<n>:marker-on-trunk:<ref> and exits 0 with a stderr line saying merge trunk (pre-fix result: FAILS — yolanda 2026-09-13 ~20:35Z: violation:salvage-refs-ledger:1 refused the 1172-dyvd land on a windows-next tree whose trunk snapshot 812274ce7 predates 6857ce7f6, the commit that marked the line, while trunk already carried the marker); NEGATIVE CONTROL: a line absent from origin and unmarked in BOTH copies still refuses violation:salvage-refs-ledger:1 — the outstanding-rescue semantics do not move; PROTOCOL: sweep-salvage-refs.sh's header states the deletion rule — a salvage ref is deleted no sooner than the pass AFTER its marker landed on trunk, never within one gate-duration of it."
+    owned_files:
+      - scripts/check-salvage-refs-ledger.sh
+      - scripts/test-salvage-refs-ledger.sh
+      - scripts/sweep-salvage-refs.sh
+    title: |
+      The salvage-ref bookkeeping is mark, land, then delete, and that protects a gate that merges trunk AFTER the marker lands; it does nothing for a gate already running on an older snapshot. check-salvage-refs-ledger.sh compares the LOCAL ledger against origin's refs, so the moment the ref is gone every in-flight gate in the fleet whose tree predates the marker refuses with violation:salvage-refs-ledger:1, and the checker is wired into ./build.sh --check. Measured on yolanda 2026-09-13: the coordinator marked line 19 at 6857ce7f6 (20:29Z), deleted the ref at 20:31Z, and yolanda's 1172-dyvd land, gating a tree merged before 6857ce7f6, refused at ~20:35Z. The line was marked on trunk the whole time.
+    context: |
+      Attribution, in yolanda's words: the ref was theirs, the ledger line
+      was the coordinator's sweep, and the gap is between the sweep and its
+      own checker (both 1148-3439). The deletion itself was correct by the
+      four-branch ancestry check and used the hook's named override
+      TILLANDSIAS_SALVAGE_DELETE_OK=1 (874-w2gc), never --no-verify.
+
+      Two fixes, both needed. The mechanical one: the checker already pays a
+      network round trip (git ls-remote); reading trunk's copy of the ledger
+      file is one more `git show origin/linux-next:<path>` and turns a behind
+      tree's refusal into "merge trunk", which every landing path does anyway
+      (the land tool's fetch-and-integrate step; the plan-only lane's
+      trunk-contained condition). The protocol one: no timing rule fully
+      closes the race (a floor host's gate can run an hour), so the grace
+      period is a reduction, not a guarantee; state it where the delete is
+      performed. Do NOT weaken the negative arm: a vanished ref with no marker
+      anywhere is exactly the outstanding rescue the file exists to surface.
+    exit_criteria:
+      - 'a line absent from origin, unmarked locally, marked on trunk: ok:salvage-refs-ledger:<n>:marker-on-trunk:<ref>, exit 0 (pre-fix result: FAILS — violation:salvage-refs-ledger:1, yolanda 2026-09-13)'
+      - 'NEGATIVE CONTROL: absent from origin and unmarked in both copies still refuses violation:salvage-refs-ledger:1'
+      - 'sweep-salvage-refs.sh header carries the one-pass-after-the-marker deletion rule'
+    events:
+      - type: filed
+        ts: "2026-09-13T20:36:30Z"
+        agent_id: "linux-macuahuitl-fable-20260913t203630z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from yolanda's refusal report; the race is
+          the coordinator's (deleted within two minutes of the marker
+          landing). Unblock was a message: re-run the land, the marker is on
+          trunk. Grace rule adopted immediately for coordinator deletions.

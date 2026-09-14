@@ -7,6 +7,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:capabilities-envelope-names-its-source
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
@@ -146,10 +147,15 @@ specs:
   status: active
   litmus_tests:
   - litmus:tool-materialization
+  - litmus:gnuism-advisory-names-the-known-instances
   - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
+  # 1137-da83. scripts/test-*.sh is not globbed by build.sh, so a fixture runs
+  # only because a binding names it; without this line the land-verdict fixture
+  # would be a file rather than a gate.
+  - litmus:land-verdict-through-a-pipe
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape

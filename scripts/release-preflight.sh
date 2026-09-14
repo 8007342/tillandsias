@@ -132,11 +132,67 @@ if [[ -n "$_plan_bin" ]]; then
     # deliberate act rather than every sibling's build (699-dycj).
     out="$("$_plan_bin" check --strict-fragments 2>&1)" && rc=0 || rc=$?
     if [[ $rc -eq 3 ]]; then
-        fail "plan ledger is INCOMPLETE — the fold could not read part of the corpus:"
-        fail "$out"
-        fail "repair the fragment before cutting; a release records counts over the whole plan"
-        echo "blocked:plan-ledger-incomplete"
-        exit 1
+        # ORDER 1128-4ffr — A PENDING CAPABILITY ROW IS NOT AN UNREADABLE CORPUS.
+        #
+        # check-capability-row.sh tells a host whose row is absent or expired to
+        # publish one, and says in its own header that its verdicts "never block
+        # work". But the fold declines to CONSUME a `capabilities:` row whose
+        # host+locus the compacted base does not already carry — correctly, since
+        # consuming it there would lose it — and reports that as an entry it
+        # could not use. --strict-fragments then calls the corpus partial, this
+        # gate refuses, and the pre-push hook wedges EVERY push from that host:
+        # not the row, not unrelated packets, nothing. Obeying the guard is what
+        # breaks the host, and it catches exactly the joining or returning hosts
+        # 850-bif2 exists to onboard. Measured on yolanda 2026-09-12 and
+        # reproduced here.
+        #
+        # THE DISTINCTION IS IN THE VERDICT ITSELF, which is why this can be
+        # decided here rather than by teaching the fold a new merge rule (this
+        # order owns the shell, not the fold). Two different drops wear the same
+        # `dropped-entry:` prefix and they are not the same event:
+        #
+        #   "...carries no host.host_id, so nothing can be matched against the
+        #    base"            -> MALFORMED. The row is unusable by anyone. Refuse.
+        #   "...the compacted base carries no row for that host and locus, so
+        #    consuming this fragment would lose it"
+        #                     -> PENDING. Well-formed, self-resolving the moment
+        #                        the base gains a row for that host. Do not wedge.
+        #
+        # The fragment is NOT lost in the pending case — the fold declines it and
+        # leaves it in plan/index.d, which is why letting the push through is
+        # safe: the data is still there for the compaction that will absorb it.
+        #
+        # NARROW BY CONSTRUCTION, and it has to be: this is a release gate, and a
+        # release is fixed forward — a wrong count ships permanently. So the
+        # allowance requires EVERY dropped entry to be the pending kind AND zero
+        # malformed fragments. One unreadable fragment, or one drop of any other
+        # shape, and this refuses exactly as before.
+        _drop_total="$(printf '%s\n' "$out" | grep -c '^dropped-entry:' || true)"
+        _drop_pending="$(printf '%s\n' "$out" | grep -c 'the compacted base carries no row for that host and locus' || true)"
+        _malformed="$(printf '%s\n' "$out" | grep -c '^malformed:' || true)"
+        if [[ "${_drop_total:-0}" -gt 0 && "${_drop_total:-0}" -eq "${_drop_pending:-0}" \
+              && "${_malformed:-0}" -eq 0 ]]; then
+            note "plan ledger carries ${_drop_pending} PENDING capability row(s) — a host whose row the compacted base does not yet have:"
+            printf '%s\n' "$out" | grep '^dropped-entry:' | sed 's/^/    /' >&2
+            note "  These are well-formed and are NOT lost: the fold leaves them in plan/index.d"
+            note "  for the compaction that will absorb them. Publishing one is what"
+            note "  check-capability-row.sh asks a joining host to do, so it must not wedge"
+            note "  that host's pushes (1128-4ffr). Every other incompleteness still refuses."
+            # CLEAR THE CODE, or the next branch refuses what this one just
+            # allowed. `check --strict-fragments` exits 3 for the whole
+            # incomplete class, and the `-ne 0` test below turns any survivor
+            # into blocked:plan-ledger-invalid — which is how the first cut of
+            # this fix traded one refusal for a differently-labelled one, and a
+            # WORSE label: "invalid" says the ledger is broken, when what
+            # happened is a new host published a row.
+            rc=0
+        else
+            fail "plan ledger is INCOMPLETE — the fold could not read part of the corpus:"
+            fail "$out"
+            fail "repair the fragment before cutting; a release records counts over the whole plan"
+            echo "blocked:plan-ledger-incomplete"
+            exit 1
+        fi
     fi
     if [[ $rc -ne 0 ]]; then
         fail "plan ledger check FAILED:"
@@ -167,8 +223,28 @@ fi
 # kept firing for two days after the purge. litmus:github-actions-budget owns
 # the cross-branch check; this one owns "do not reintroduce it here".
 if [[ -d .github/workflows ]]; then
+    # ORDER 1135-z8gn (macbookair 2026-09-13). `-printf` IS GNU-ONLY AND THIS
+    # GUARD IS ON THE RELEASE PATH. BSD find rejects it, the error goes to
+    # /dev/null by the redirect below, the set comes back EMPTY, and the
+    # refusal below never fires — a workflow-inventory guard that inventoried
+    # nothing and passed. Silent-degrade, in release-preflight, on every stock
+    # macOS host.
+    #
+    # MEASURED on tlatoanis-macbook-air with a planted intruder file:
+    #   /usr/bin/find ... -printf '%f\n'          -> EMPTY, guard passes
+    #   /usr/bin/find ... -exec basename {} \;     -> catches the intruder
+    #
+    # AND THE FIRST MEASUREMENT OF THAT LIED, which is worth the comment: this
+    # host has `bfs` on PATH as `find`, a third implementation that DOES
+    # support -printf, so the unfixed line passed the test through bfs and
+    # failed it through /usr/bin/find on the same machine in the same minute.
+    # The advisory's own header calls a PATH-dependent tool identity a runtime
+    # fact it cannot see; this is that, inverting a result.
+    #
+    # `-exec basename {} \;` is POSIX and behaves the same on both. One process
+    # per file, and the set here is a handful of workflow files.
     unexpected="$(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
-        ! -name 'release.yml' -printf '%f\n' 2>/dev/null | sort)"
+        ! -name 'release.yml' -exec basename {} \; 2>/dev/null | sort)"
     if [[ -n "$unexpected" ]]; then
         fail "unsanctioned workflow(s) present — only release.yml may consume cloud minutes:"
         sed 's/^/    /' <<<"$unexpected" >&2

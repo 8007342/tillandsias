@@ -1747,6 +1747,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
+    # ORDER 1141-vf9w — is another gate already using this checkout?
+    #
+    # ADVISORY BY DEFAULT, and deliberately so. A cancelled gate could outlive
+    # its launcher and keep running against this tree (the wrapper now
+    # propagates termination, but a survivor from before that fix, from a kill
+    # -9, or from a host where propagation cannot run, still holds the
+    # checkout). Reporting it HERE is worth a lot -- it is the cheapest possible
+    # place to learn that the verdict you are about to spend six minutes on may
+    # be raced.
+    #
+    # It does not REFUSE yet because this discriminator has been wrong three
+    # times in two cycles and twice only a measurement caught it, and a wrong
+    # refusal on this line stops every Linux host rather than one. Promotion is
+    # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
+    # be flipped on fleet evidence rather than on confidence -- the same staging
+    # check-portability-idioms.sh argues for itself.
+    # DELIBERATELY UNFLAGGED. By the time this runs on a Silverblue or WSL host
+    # we are INSIDE the dispatch, where the host-side wrapper is unreadable (or,
+    # on WSL, has no /proc entry at all), so any verdict from here is a guess —
+    # and the guess it made was to accuse every gate of being its own
+    # competitor. Without --host-side the check now says so and stops. On a host
+    # that does NOT re-exec, this is the host side, and wiring the assertion
+    # here is the follow-up rather than a silent widening.
+    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
+
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
         exit 1
@@ -2104,6 +2129,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "checkout-lock attested-release fixture passed"
 
+    # ORDER 1137-da83. Belt for the litmus binding's braces, and deliberately
+    # the same wiring as the attested-release fixture above rather than a new
+    # pattern. A fixture reaches the gate by ONE of two routes — an explicit
+    # line here, or a litmus binding under openspec/litmus-bindings.yaml — and
+    # scripts/test-*.sh is NOT globbed, so a fixture with neither is a file
+    # rather than a gate. This one pins what a caller reads from a REFUSED
+    # land: three false claims in one hour came from reading that verdict
+    # through `| tail`, the worst of them accusing land-on-platform-branch.sh
+    # of the exact defect its header exists to prevent.
+    _step "Checking the land-verdict-through-a-pipe fixture (1137-da83)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-verdict-through-a-pipe.sh" 2>&1; then
+        _error "the land-verdict pipe fixture regressed — either the land tool stopped exiting 3 and naming a refused gate, or the trap it documents changed shape and the row's guidance is now wrong"
+        exit 1
+    fi
+    _info "land-verdict-through-a-pipe fixture passed"
+
     # The release runbook must not prescribe pushing the tag before the
     # back-merge (898-zhf3). That order is UNEXECUTABLE with the pre-push hook
     # installed — creating the tag locally is enough for the monotonicity guard
@@ -2156,6 +2197,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "release runbook tag-order fixture passed"
+
+    # ORDER 1140-i6ct. The HERMETIC half only. The live fixture
+    # (test-vault-shutdown-forwards-sigterm.sh) stops a real container and is
+    # deliberately NOT wired here — 1140-i6ct says in as many words that
+    # wiring it would red every host whose image is behind trunk. This drives
+    # its classifier with injected values, so it needs no podman and cannot
+    # red on a stale enclave. Its arm 3 is the one that matters: a vintage
+    # check that short-circuited the measurement would make the live fixture
+    # unable to fail at all.
+    _step "Checking the vault-shutdown classifier keeps all four outcomes reachable (1140-i6ct)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-vault-shutdown-fixture-classifier.sh" 2>&1; then
+        _error "the vault shutdown fixture can no longer tell a stale image from the 1134-u934 defect — or can no longer fail at all"
+        exit 1
+    fi
+    _info "vault-shutdown classifier fixture passed"
 
     _step "Checking the promote-stable evidence gate and dry-run..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
@@ -2232,6 +2288,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Capability-row host-resolution fixture passed"
+
+    # ORDER 1172-dyvd. The guard above proves the host can NAME itself; this one
+    # proves the probe will not SPEAK for it out of a stale binary.
+    # host-capability-probe.sh's resolver admitted any candidate whose
+    # `--inference-tier` exited 0, which proves a binary runs and nothing about
+    # whether it knows the vocabulary the ledger is written in — and that script
+    # writes the ledger. Measured on yolanda: an Aug-29 PE answered rc 0 and
+    # published a row saying the host had no GPU and no NPU; it has both, and
+    # the matrix routes on that row. Wired here rather than only as a litmus
+    # because scripts/test-*.sh is not globbed and a fixture reaching the gate
+    # by neither route is a file, not a gate.
+    _step "Checking the probe refuses a stale candidate (1172-dyvd)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-refuses-stale-candidate.sh" 2>&1; then
+        _error "host-capability-probe.sh would publish a capability row from a binary it cannot show is current — the matrix routes on that row"
+        exit 1
+    fi
+    _info "Probe stale-candidate refusal fixture passed"
 
     # Order 889-ewvt. The guard above proves the host can NAME itself. This one
     # proves the row it publishes is still TRUE: check-capability-row.sh printed
@@ -2874,7 +2947,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # inherited from a sibling only warns and can never red-gate this host.
     _step "Checking that fragments added by this change parse..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
-        _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host (plan/index.d/README.md)"
+        _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host; the offending file and reason are named on the check's own output above, and the fragment format is documented in plan/index.d/README.md"
         exit 1
     fi
     _info "Added-fragment parse check passed"
@@ -2972,6 +3045,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         esac
     fi
 
+    # ADVISORY, never a gate (1130-i6xj). Shell idioms that pass on the host
+    # that wrote them and fail somewhere else: SEVEN landed across three hosts
+    # on 2026-09-12, every one green on trunk before it bit, four of them
+    # freezing a platform apiece. A check able to freeze a platform in order to
+    # fix them would cost more than it saves, so this only COUNTS — and the
+    # count is split silent-degrade first, because a hook that quietly stops
+    # guarding is worse than a fixture that fails by name.
+    if [ -x scripts/check-portability-idioms.sh ] || [ -f scripts/check-portability-idioms.sh ]; then
+        _portability="$(bash scripts/check-portability-idioms.sh 2>/dev/null | head -1 || true)"
+        case "$_portability" in
+            portability-idioms:*silent-degrade=0*loud-fail=0) : ;;
+            portability-idioms:*) _warn "$_portability (see scripts/check-portability-idioms.sh; not a gate)" ;;
+        esac
+    fi
+
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise
     # the other arms. This builds the workspace for ONE non-host target on hosts
@@ -2999,6 +3087,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "MO-FULL attestation ledger check passed"
+
+    # Order 1148-3439. The salvage-refs ledger (plan/salvage-refs.d/) is the
+    # standing record the sweep files to now that its old target is archived;
+    # every line must parse and name a ref still on origin or marked deleted.
+    _step "Checking the salvage-refs ledger (1148-3439)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-salvage-refs-ledger.sh" 2>&1; then
+        _error "the salvage-refs ledger carries a malformed line or names a ref that is gone without a ' deleted' marker (plan/salvage-refs.d/)"
+        exit 1
+    fi
+    _info "salvage-refs ledger check passed"
 
     # Order 795-imz3. `if ! <pipeline>` verdicts invert under pipefail when the
     # consumer exits early (grep -q SIGPIPEs its producer), so the gate refuses
@@ -3434,6 +3532,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     for _step_file in "$SCRIPT_DIR"/scripts/gate-steps.d/*.step; do
         [ -e "$_step_file" ] || continue
         STEP_DESC=""; STEP_SCRIPT=""; STEP_ERROR=""; STEP_OK=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""
         # shellcheck disable=SC1090
         . "$_step_file"
         if [ -z "$STEP_DESC" ] || [ -z "$STEP_SCRIPT" ]; then
@@ -3445,7 +3544,29 @@ if [[ "$FLAG_CHECK" == true ]]; then
             exit 1
         fi
         _step "$STEP_DESC..."
-        if ! _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1; then
+        # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
+        # code that means "this check could not run here", as distinct from
+        # "this check ran and failed". Without it every non-zero exit printed
+        # STEP_ERROR, so a host merely lacking the tool was told a cheatsheet
+        # reference does not resolve — a content verdict about nothing that was
+        # examined, and it refused the land. The sibling tier check already had
+        # the right shape (it prints its own skip: line and exits 0); this
+        # gives the DATA-wired steps the same vocabulary.
+        #
+        # NEGATIVE CONTROL, load-bearing: the skip path is reached only on an
+        # EXACT match against the nominated code. Any other non-zero exit —
+        # notably exit 1, the genuine content failure — still takes the
+        # refusal branch below. A step that nominates nothing behaves exactly
+        # as it did before.
+        _step_rc=0
+        _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1 || _step_rc=$?
+        if [ "$_step_rc" -ne 0 ] \
+           && [ -n "$STEP_SKIP_EXIT" ] \
+           && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then
+            _info "skip:${STEP_SCRIPT##*/}:could-not-run (exit $_step_rc; ${STEP_SKIP_DESC:-the step nominated this code as could-not-run}; check not run — see the reason above)"
+            continue
+        fi
+        if [ "$_step_rc" -ne 0 ]; then
             _error "${STEP_ERROR:-$STEP_SCRIPT failed} — see the verdict line above"
             exit 1
         fi

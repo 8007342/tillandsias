@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-land-script-treats-auth-failed-as-terminal-so-a-transient-credential-blip-costs-a-whole-cycle-where-one-retry-after-a-pause-would-have-landed
+    field: status
+    value: in_progress
+    ts: "2026-09-13T19:40:14Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-land-script-treats-auth-failed-as-terminal-so-a-transient-credential-blip-costs-a-whole-cycle-where-one-retry-after-a-pause-would-have-landed
+    event:
+      type: progress
+      ts: "2026-09-13T19:40:14Z"
+      host: macuahuitl
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: linux-next@368d0b787
+  - packet_id: the-land-script-treats-auth-failed-as-terminal-so-a-transient-credential-blip-costs-a-whole-cycle-where-one-retry-after-a-pause-would-have-landed
+    event:
+      type: note
+      ts: "2026-09-13T19:40:14Z"
+      host: macuahuitl
+      summary: |-
+        claimed for cycle 2026-09-13T19:40:11Z by linux-macuahuitl-fable-20260913t194011z

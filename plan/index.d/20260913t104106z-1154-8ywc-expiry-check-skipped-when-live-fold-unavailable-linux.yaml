@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on lenovinha 2026-09-13 from a chain esme sent while trying to run a
+# test for 1130-8zxn. The defect is in check(), not in the probe resolver that
+# exposed it, and the two must not be fixed in the wrong order.
+packets:
+  - packet_id: check-capability-row-returns-before-the-expiry-check-when-the-live-fold-is-unavailable-so-a-genuinely-expired-row-reads-green-on-any-host-that-cannot-run-a-probe
+    order: 1154-8ywc
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [tooling, integrity, capability, guard]
+    estimated_hours: 2
+    verifiable_closure: "scripts/check-capability-row.sh fixture: with TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1 and a committed row older than TILLANDSIAS_CAPABILITY_ROW_MAX_AGE, the verdict names the staleness and its age rather than ok:capability-row-reported (pre-fix result: FAILS — measured on lenovinha 2026-09-13, a row dated 2020-01-01 answered ok:capability-row-reported rc=0 with an uncomputed age of 222163200s against a window of 604800s); NEGATIVE CONTROL: with the live fold unavailable and the row INSIDE the window the verdict stays ok:capability-row-reported, because that token means 'a row exists, unverified' and must not start claiming the row was compared."
+    owned_files:
+      - scripts/check-capability-row.sh
+    title: |
+      check-capability-row.sh returns at the live-fold short-circuit before the expiry check, so on any host where the live probe cannot run a genuinely expired capability row reads ok: with exit 0 — the guard fails open on age, in the one direction a guard must never fail.
+    context: |
+      MEASURED THREE WAYS, on three hosts, and the third is the one that makes
+      this a property of the code path rather than of hosts that happen to be
+      broken:
+
+        yolanda    probe runnable                 -> expiry executes ->
+                   stale:capability-row-expired:yolanda:age=791026s, caught
+        esme       probe unresolvable             -> short-circuit ->
+                   ok:capability-row-reported rc=0 over rows 21 DAYS old
+        lenovinha  probe runnable, short-circuit FORCED via the documented
+                   seam TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1 ->
+                   ok:capability-row-reported rc=0 over a row dated
+                   2020-01-01, age 222163200s never computed
+
+      lenovinha normally never short-circuits — proven by its live verdict
+      ok:capability-row-current, which is emitted only AFTER the live fold
+      succeeds. So the fail-open follows from the live fold being
+      unavailable, not from a host lacking a probe binary.
+
+      THE CONFLATION. The age check does not need the probe. A committed
+      row's ts is a fact about the LEDGER; whether a live probe can run is a
+      fact about the host's BUILD STATE. check() treats the second as
+      permission to skip the first. The short-circuit's own comment is
+      correct about what it means — "the probe could not run, so nothing here
+      knows whether the row is TRUTH" — and age is not truth, it is
+      provenance, and it was readable the whole time.
+
+      ORDERING IS LOAD-BEARING, AND IS THE REASON THIS IS ITS OWN ROW.
+      1154-6big (esme) fixes resolve_probe, which does not consider
+      ./target/debug/tillandsias and so cannot see a working probe on a
+      debug-built host. FIXING THAT FIRST WOULD HIDE THIS: with it fixed
+      esme's live fold starts working, the short-circuit stops firing,
+      esme's 21-day rows correctly expire, and this defect goes invisible
+      again on every host with a runnable binary — still there, still
+      fail-open, waiting for the next host that cannot build. This row lands
+      first or alongside 1154-6big; neither closes the class alone.
+
+      WHAT TO BUILD. Move the age check ahead of the live-fold short-circuit,
+      or run it on both paths. When the live fold is unavailable AND the row
+      is expired, the verdict must name the staleness (the remedy — publish —
+      is the same and does not need a probe). When the live fold is
+      unavailable and the row is fresh, ok:capability-row-reported stands
+      unchanged: it means "a row exists, unverified", and must not be widened
+      into a claim that a comparison happened.
+
+      NOT IN SCOPE: resolve_probe's candidate list (1154-6big), and the
+      locus-keying of the accessors (1130-8zxn, landed).
+
+      CREDIT: esme found it and sent the CHAIN rather than the verdict. The
+      verdict alone was a green and would have been read as one.
+    exit_criteria:
+      - 'live fold unavailable + committed row older than MAX_AGE -> the verdict names the staleness and its age (pre-fix result: FAILS — ok:capability-row-reported rc=0, age never computed)'
+      - 'live fold unavailable + row inside MAX_AGE -> still ok:capability-row-reported (NEGATIVE CONTROL: the unverified-reporting token must not start implying a comparison)'
+      - 'live fold available -> every existing verdict unchanged; the 15 existing fixture arms still pass'
+      - 'NEGATIVE CONTROL: an unrunnable probe still never manufactures a drift claim (arm 5 preserved) — this packet adds an AGE answer on that path, never a TRUTH one'
+    events:
+      - type: filed
+        ts: "2026-09-13T10:41:06Z"
+        agent_id: "linux-lenovinha-opus5-20260913t104106z"
+        host: lenovinha
+        summary: |
+          Found by esme while blocked on a 1130-8zxn re-run; reproduced on
+          lenovinha through the documented seam on a host that does not
+          exhibit it naturally, which is what makes it a code-path claim.
+          Ordering against 1154-6big recorded because the cheaper fix hides
+          this one.

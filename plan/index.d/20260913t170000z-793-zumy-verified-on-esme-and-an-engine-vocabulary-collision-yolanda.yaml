@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# EVENTS ONLY, deliberately: this records an observation and changes no field.
+# 1160-nvzs is open (three consumers hardcode the `status:` spelling of the LWW
+# channel), so a `fields:`-spelled write would be invisible to carry_forward_gaps
+# and to both closure-evidence scans. Writing no LWW entry at all sidesteps the
+# question rather than adding to the hazard.
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: verified
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-13T17:00:00Z"
+      evidence_refs:
+        - "esmeraldinha, tree e3cf301d3: unusable_reason = engine-unverified:vulkan-present-not-enumerated — the third arm, on the only host carrying a Vulkan loader AND an ICD set"
+        - "envelope: accel_reason=engine-unverified_vulkan-present-not-enumerated accel_gpu=present-unusable accel_class=cpu-only accel_proof=unknown render_nodes: [] engines: []"
+        - "esme's three guards green BEFORE the reading was believed: provenance (wsl2_vulkan_facts_at 7, wsl2_paravirtual_gpu_reason_from 6, engine-unverified 2 — the detection is in the tree that ran); binary mtime 09:02:29 NEWER than source 08:48:11 after a deliberate rebuild; cache envelope timestamp == wall clock, moved aside and restored"
+      summary: >
+        THE DETECTION REACHES THE ONE HOST THAT COULD FALSIFY IT. Pre-fix,
+        esmeraldinha reported engine-missing:no-vulkan-icd while carrying both a
+        loader and the stock mesa-vulkan-drivers ICD set — the constant was
+        wrong there and coincidentally right on every host nobody had checked.
+        It now reports the third arm, which is honest in both directions: the
+        false claim is gone, and `not-enumerated` says in the identifier what
+        the probe did not do.
+
+        THE GUARDS ARE WHY THIS IS EVIDENCE RATHER THAN A REPORT. esme's prior
+        binary predated the detection and would have returned the OLD reason
+        from code that no longer exists — correct token, live timestamp, cache
+        bypassed, wrong binary, which is the most convincing wrong answer
+        available on this packet. They rebuilt and proved the binary newer than
+        the source before reading the line.
+      note: >
+        A VOCABULARY COLLISION, FOUND BY esme AND NOT A DEFECT. The same
+        envelope line carries:
+
+          accel_reason=engine-unverified_vulkan-present-not-enumerated
+          accel_gpu_engine=engine-missing
+
+        which reads as a contradiction and is not. By symbol, `gpu_engine`
+        answers "engine-missing" when a GPU device record exists but nothing in
+        `doc.engines` advertises support for device_class "gpu" — and `engines`
+        is empty on that host. So `accel_gpu_engine` is about the INFERENCE
+        engine (the rocm/cuda/metal/ollama branch), while the reason's prefix is
+        about the VULKAN TRANSLATION layer. Both statements are true and they
+        are about different subjects.
+
+        THIS CHANGE MADE THE COLLISION LEGIBLE RATHER THAN INTRODUCING IT.
+        Before, the reason read `engine-missing:no-vulkan-icd` and the two
+        fields agreed in wording by accident, so nobody read them as
+        contradicting. The third arm disagrees in wording while agreeing in
+        fact, which is what surfaced it. esme checked the mechanism before
+        reporting it as a contradiction; I am recording it rather than renaming
+        anything, because criterion 2 requires `engine-missing` verbatim for the
+        missing arms and a rename would have to move one vocabulary or the
+        other, which is a decision for whoever takes the enumeration half.
+
+        WHAT REMAINS, unchanged by this verification: criterion 2's opening
+        clause ("Detection is by ENUMERATION, not file existence") and the
+        software-rasterizer criterion below it are the SAME half — something
+        must enumerate and reject PHYSICAL_DEVICE_TYPE_CPU /
+        DRIVER_ID_MESA_LLVMPIPE. A filesystem detection cannot, and says so.
+        Both arms are live on esmeraldinha: llvmpipe beside the real part in one
+        enumeration, and the sibling distro loader-absent. esme has flagged that
+        half as available and unblocked rather than claiming it — it needs a
+        Vulkan binding plus a fixture, beyond the compile-free lane.

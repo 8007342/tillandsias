@@ -254,7 +254,28 @@ esac
 # NEGATIVE CONTROL: binary NEWER than its sources -> not stale -> lane proceeds.
 # Without this, a fix that refused every push would pass the arm above and
 # destroy the lane, whose reason to exist is speed (930-i6x4).
-touch -t 202609120600 "$LW/wc/target/release/tillandsias-plan"
+# PLAIN `touch` — mtime = NOW — AND NEVER A LITERAL TIMESTAMP HERE.
+# A literal is a fixture with an EXPIRY DATE. This line read
+# `touch -t 202609120600` and meant "make the stub current": that stamp was
+# in the future when it was written on the morning of 2026-09-12 and in the
+# PAST by that afternoon, at which point the stub became OLDER than the
+# source files this fixture writes at RUN TIME (crates/tillandsias-plan/
+# src/main.rs, Cargo.lock). The lane then correctly called the stub stale and
+# the CONTROL arm below — "a CURRENT binary is not refused as stale" —
+# inverted, refusing every land on EVERY host with
+# `ensure_fresh_plan_binary broke its contract`.
+#
+# Note the shape, because no portability check would have caught it: this was
+# not a GNU/BSD divergence. The fixture creates its sources at run time on any
+# platform, so it failed everywhere at once, permanently, from a wall-clock
+# moment onward. And it failed by impersonating a REAL staleness refusal, so
+# the receiving host reads "someone pushed a stale binary" rather than "this
+# test expired". Measured 2026-09-12: 15 passed / 1 failed before, 16 passed /
+# 0 failed after.
+#
+# `touch` with no operand is newer than anything this fixture wrote moments
+# earlier, has no -t/-d GNU-vs-BSD divergence, and cannot expire.
+touch "$LW/wc/target/release/tillandsias-plan"
 _out2="$(_lane_push)"; _rc2=$?
 case "$_out2" in
     *"is STALE"*) ck "CONTROL: a CURRENT binary is not refused as stale" yes no ;;

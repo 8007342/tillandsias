@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-names-a-remedy-that-cannot-run-at-the-locus-where-the-verdict-fires-so-a-windows-host-is-told-to-publish-from-a-context-with-no-runnable-probe
+    event:
+      type: progress
+      ts: "2026-09-13T19:10:18Z"
+      agent_id: linux-lenovinha-opus5-20260913t191018z
+      host: linux
+      summary: |
+        IMPLEMENTED. The verdict is unchanged; the constraint is named beside it.
+
+        WHAT SHIPPED. On the one path where the guard knows BOTH that the row is expired
+        AND that its own live probe just failed, it writes ONE stderr line saying the
+        remedy needs a probe that runs at this locus. Stdout is byte-identical — the
+        token and exit code are the grammar consumers parse, and 1154-8ywc kept them
+        deliberately unchanged. The header exit-code paragraph, which promised the
+        publish unconditionally, now says WHERE THAT COMMAND CAN RUN and records why.
+
+        THE EVIDENCE IS DIRECT, NOT INFERRED, and that is what makes the line safe to
+        emit: live_matrix has ALREADY invoked host-capability-probe.sh — the exact
+        command the remedy names — and got nothing back. So the guard reports what
+        happened rather than guessing what would. It never claims a probe is impossible
+        here, only that this one did not run.
+
+        THREE ARMS, 22/22, and stdout and stderr are asserted SEPARATELY so a later
+        edit cannot satisfy one by breaking the other:
+
+          20  expired + no live fold -> the constraint is named on stderr
+          21  the same invocation -> stdout still exactly
+              stale:capability-row-expired:fixturehost:age=694800s rc=1
+          22  NEGATIVE CONTROL: a host WHOSE PROBE RUNS gets an expired verdict with NO
+              such line. Telling a host its remedy is unreachable when it is reachable
+              is the same false advisory pointed the other way — 1158-y3ad's
+              carry-forward arm is the precedent, and that one fired about a packet
+              that was fine.
+
+        TEETH, both directions:
+          remove the stderr line   -> arm 20 FAILS (got ''), 21 and 22 still pass
+          emit it unconditionally  -> arm 22 FAILS, naming the host that was wrongly
+                                      told its remedy was out of reach
+
+        Live on lenovinha, probe runnable: ok:capability-row-current, stderr EMPTY.
+        859-b2zc identity wrapper: 9 passed, 0 failed, unchanged.
+
+        A MISTAKE WORTH RECORDING because it is the third time this class has bitten me
+        tonight: arm 20 FAILED on its first run against a correct implementation. My
+        glob was `*1165-xkjh*"could not run at this locus"*` — the order token BEFORE
+        the phrase — while the message emits the phrase first. The fixture was wrong,
+        not the code, and I nearly read it as the fix not taking. A pattern that
+        encodes an ordering the message does not have is the same shape as asserting a
+        denominator whose flag you did not state: the assertion looked precise and was
+        precisely wrong.
+
+        WHAT THIS DOES NOT FIX, stated so the row is not over-read: esme still cannot
+        publish a windows-host row, because that host has NO tillandsias binary that
+        executes on the Windows side — not a findable one being missed (1154-6big) but
+        none to find. That is a fleet capability gap needing a scheduled Windows build,
+        and it belongs to the operator or the coordinator. This packet makes the guard
+        honest about the constraint; it does not remove it.

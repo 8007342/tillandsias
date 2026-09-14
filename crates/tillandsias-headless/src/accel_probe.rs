@@ -108,6 +108,50 @@ pub struct CapabilityDocument {
     /// pre-existing behaviour and no worse than it was.
     #[serde(default)]
     pub render_nodes: Vec<DrmRenderNode>,
+    /// Whether THIS envelope was measured now or served from the on-disk cache.
+    ///
+    /// ORDER 1139-xe5m. `--capabilities` served `~/.cache/tillandsias/capabilities.json`
+    /// whenever one existed, and nothing in the envelope said so: `timestamp`,
+    /// `probe_identity` and `hardware_fingerprint` all describe the PRODUCING
+    /// run, so a replay is byte-identical to the measurement it replays.
+    /// Measured on esmeraldinha 2026-09-13 — the cache present replayed
+    /// `2026-09-12T03:29:40.356539631+00:00` digit for digit across runs
+    /// (`chrono::Utc::now()` does not reproduce a nanosecond field), and moving
+    /// the cache aside yielded a timestamp agreeing with the wall clock.
+    ///
+    /// THE FIELD, NOT A STALENESS BOUND OR A BYPASS FLAG. All three were on the
+    /// row; only the field makes an ALREADY-COLLECTED envelope interpretable,
+    /// and the fleet capability matrix folds rows produced on other machines
+    /// hours earlier. A bound or a flag changes what FUTURE runs emit and leaves
+    /// every stored row exactly as ambiguous as it was. The other two remain
+    /// available and are not foreclosed by this.
+    ///
+    /// NEVER PERSISTED AS A VALUE — [`write_capability_cache`] clears it before
+    /// writing, so the on-disk document says `null` and a serve stamps `served`
+    /// onto the copy it returns. Persisting `measured` would replay the claim
+    /// along with the document, which is this defect exactly.
+    ///
+    /// `None` MEANS UNKNOWN AND IS NOT "measured": documents written before this
+    /// order carry no such field, and a reader must not promote their silence
+    /// into a measurement — that is the inference this order exists to stop.
+    #[serde(default)]
+    pub envelope_source: Option<EnvelopeSource>,
+}
+
+/// How a [`CapabilityDocument`] in hand came to be (order 1139-xe5m).
+///
+/// Readable from the envelope ALONE: no filesystem access, no second run, and
+/// no knowledge of the producing host — which is the closure the row states,
+/// because a matrix row arrives as bytes from a machine you cannot ask.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+// @trace order:1139-xe5m, spec:accel-capability-probe
+pub enum EnvelopeSource {
+    /// The probe ran and produced this document in this process.
+    Measured,
+    /// A cache entry was served unchanged; `timestamp` is the ORIGINAL
+    /// measurement's, not this run's.
+    Served,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -161,6 +205,42 @@ pub struct DeviceRecord {
     pub cpu_flags: Option<Vec<String>>,
     pub cpu_cores: Option<CpuCores>,
     pub system_ram_gb: Option<f64>,
+
+    /// Where `name` CAME FROM: `measured` | `placeholder` (order 1137-rgfm).
+    ///
+    /// THE DENY-LIST COULD NOT BE MADE CORRECT, which is why this is a field
+    /// and not another string comparison. `hardware_fingerprint` refused a
+    /// placeholder by listing the ones someone had already found —
+    /// `d.name != "Host CPU" && d.name != "unknown"` — a list written from the
+    /// WINDOWS defect (805-r98w). `Apple Silicon CPU` is a different
+    /// placeholder, so it passed a check whose entire purpose is to catch
+    /// placeholders. A deny-list of the ones you know inherits every one you
+    /// do not, and the next platform arm adds a third.
+    ///
+    /// The probe knows which it emitted; nothing downstream can recover it from
+    /// the string. So the probe says so. This is the same shape as
+    /// `memory_bandwidth_source` two fields up ("soc-table" | "measured" |
+    /// "unknown") and the same shape as `is_battery_present: Option<bool>`
+    /// (803-r8u4): make the absent case EXPRESSIBLE rather than inferring it
+    /// from a value that cannot carry it.
+    ///
+    /// WHY A PLACEHOLDER NAME IS NOT MERELY UNTIDY. `hardware_fingerprint`
+    /// hashes `cpu:{vendor}/{name}/{cores}` and `gpu:{vendor}/{name}`. On
+    /// Apple silicon those were byte-identical across the whole fleet, so the
+    /// fingerprint collapsed to core count plus RAM class and could not
+    /// separate an M1 from an M5. `capability-matrix --by-hardware` re-keys the
+    /// fleet on that fingerprint and reports control=yes|no per hardware GROUP,
+    /// so a measurement taken on one Mac would be read as covering another —
+    /// 808-43mw's "two WSL2 guests share one kernel_release" failure, on a
+    /// different field.
+    ///
+    /// `serde(default)` yields `None` for every document filed before this
+    /// existed, and `None` means "this probe did not say" — never "measured".
+    /// The fingerprint refuses on `None` only when the name ALSO looks like a
+    /// known placeholder, so old documents keep their current behaviour
+    /// instead of all becoming unidentifiable at once.
+    #[serde(default)]
+    pub name_source: Option<String>,
 
     /// Whether this device's memory is ITS OWN or the host's: `unified` |
     /// `discrete` | `None` (order 964-r98h).
@@ -279,7 +359,30 @@ pub struct MeasurementRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 // @trace spec:accel-capability-probe
 pub struct HostInfo {
-    pub is_battery_present: bool,
+    /// Does this host have a battery — `Some(true)`/`Some(false)` when something
+    /// LOOKED, `None` when nothing could (order 803-r8u4).
+    ///
+    /// THIS WAS A `bool`, AND A BARE `bool` HERE CANNOT BE HONEST. Only the
+    /// Linux `/sys/class/power_supply` scan ever wrote it; every other host
+    /// kept the `false` initializer and serialised it as a confident denial.
+    /// The absent probe and the real answer "no battery" were the same byte.
+    ///
+    /// MEASURED, and this is the field evidence the fleet already holds: the
+    /// first macOS capability row (macneo, relayed by macuahuitl onto 657-zm2n
+    /// 2026-09-04) reads `is_battery_present false` — from a MacBook, which has
+    /// a battery. Nothing on that host had looked. The row was not
+    /// under-annotated, it was WRONG, and no consumer could see it.
+    ///
+    /// This matters beyond tidiness because the inference policy router
+    /// suspends background work on battery (spec inference-policy-router,
+    /// ADAPT-2). A laptop that reports `false` because nobody probed it is a
+    /// laptop the router will never throttle.
+    ///
+    /// `serde(default)` so a document filed before this field was optional —
+    /// including the fixtures under `scripts/fixtures/hardware-fingerprint/` —
+    /// still deserialises.
+    #[serde(default)]
+    pub is_battery_present: Option<bool>,
     pub kernel_release: String,
 
     /// WHICH MACHINE this document describes (order 808-43mw).
@@ -440,23 +543,42 @@ pub fn load_or_probe_at(
     let identity = probe_identity();
     if freshness == Freshness::Cached
         && let Ok(content) = fs::read_to_string(cache_file)
-        && let Ok(doc) = serde_json::from_str::<CapabilityDocument>(&content)
+        && let Ok(mut doc) = serde_json::from_str::<CapabilityDocument>(&content)
         && doc.schema_version == SCHEMA_VERSION
         && doc.legacy_tier == effective_tier
         // The check 852-dk9z adds. Without it a rebuilt binary republishes its
         // predecessor's document as if it had probed.
         && doc.probe_identity.as_deref() == Some(identity.as_str())
     {
+        // THE STAMP GOES ON THE COPY BEING RETURNED, not on the cache. The
+        // document is otherwise returned verbatim, `timestamp` included, so
+        // this field is the only thing distinguishing it from the run that
+        // produced it (order 1139-xe5m).
+        doc.envelope_source = Some(EnvelopeSource::Served);
         return doc;
     }
     let doc = run_probe(effective_tier);
-    if let Some(parent) = cache_file.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&doc) {
-        let _ = fs::write(cache_file, json);
-    }
+    let _ = write_capability_cache(cache_file, &doc);
     doc
+}
+
+/// Persist a capability document, WITHOUT its [`CapabilityDocument::envelope_source`].
+///
+/// Order 1139-xe5m. Every write of the cache goes through here, and the reason
+/// is the whole point of the field: a document written with `measured` on it
+/// would be served back later still claiming it was measured, which reproduces
+/// the defect in a form that now looks authoritative. The stored document says
+/// `null` — unknown — and the serve path stamps `served` onto the copy it hands
+/// out.
+// @trace order:1139-xe5m, spec:accel-capability-probe
+pub fn write_capability_cache(cache_file: &Path, doc: &CapabilityDocument) -> Result<(), String> {
+    let mut stored = doc.clone();
+    stored.envelope_source = None;
+    if let Some(parent) = cache_file.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(&stored).map_err(|e| format!("serialize: {e}"))?;
+    fs::write(cache_file, json).map_err(|e| format!("write {}: {e}", cache_file.display()))
 }
 
 /// Merge one measurement into the persisted capability document (order 805-wgbb).
@@ -521,12 +643,11 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
         Some(slot) => *slot = m,
         None => doc.measurements.push(m),
     }
-    if let Some(parent) = cache_file.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
-    }
-    let json = serde_json::to_string_pretty(&doc).map_err(|e| format!("serialize: {e}"))?;
-    fs::write(&cache_file, json).map_err(|e| format!("write {}: {e}", cache_file.display()))?;
-    Ok(())
+    // Through the helper so the stored document never carries an
+    // `envelope_source` claim (order 1139-xe5m): this path loads a document that
+    // may have been stamped `served` on the way in, and writing that back would
+    // persist a lie about a document that is, after this merge, neither.
+    write_capability_cache(&cache_file, &doc)
 }
 
 // @trace spec:accel-capability-probe
@@ -572,6 +693,9 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         // contributes an empty vec rather than a fabricated row, and the
         // gap above says which of those it was.
         render_nodes: container_lane.nodes,
+        // Stamped here because this is the only place a document is MEASURED.
+        // Serving re-stamps its copy; writing clears it (order 1139-xe5m).
+        envelope_source: Some(EnvelopeSource::Measured),
     };
     // Computed from the devices just enumerated, so the document carries its own
     // hardware identity and no consumer has to re-derive it. `checked` rather
@@ -659,17 +783,90 @@ fn enumerate_npus_checked() -> Option<Vec<DeviceRecord>> {
     }
 }
 
+/// Physical RAM in GiB on macOS, or `None` when the query did not answer.
+///
+/// ORDER 803-r8u4 / 803-rbqf. `enumerate_cpu`'s macOS arm set cores, vendor and
+/// a CPU name and then left `ram_gb` at its `None` initializer, so every macOS
+/// capability document filed `system_ram_gb: null` — visible in the fleet's
+/// first macOS row (macneo, relayed onto 657-zm2n 2026-09-04). The Linux and
+/// Windows arms both answer this; only macOS did not.
+///
+/// It is a FUNCTION rather than an inline block because two records need the
+/// number. On Apple silicon the GPU has no memory of its own — `memory_model`
+/// is `unified` — so physical RAM IS the Metal device's memory budget, and the
+/// device record that omits it cannot be reasoned about by a consumer that
+/// declines to sum unified budgets.
+///
+/// MEASURED on tlatoanis-macbook-air (Apple M5) 2026-09-12:
+/// `sysctl -n hw.memsize` -> `17179869184` -> 16.00 GiB.
+///
+/// GiB, not GB, matching the Windows arm's divisor: both divide by 1024^3.
+/// The CPU's real part name on macOS, or `None` when the query did not answer
+/// (order 1137-rgfm).
+///
+/// `machdep.cpu.brand_string` answers `Apple M5` on this host. The arm used to
+/// hard-code the FAMILY string "Apple Silicon CPU", which is byte-identical on
+/// every Apple silicon Mac in the fleet — so `hardware_fingerprint`'s
+/// `cpu:{vendor}/{name}/{cores}` component carried no information and the
+/// fingerprint collapsed to core count plus RAM class.
+///
+/// A failed query returns `None` and the caller KEEPS the family literal: the
+/// old string is useless for identity but is not a lie about capability, and
+/// the absent case must stay distinguishable from a measured one. That is what
+/// `name_source` records.
+#[cfg(target_os = "macos")]
+fn macos_cpu_brand() -> Option<String> {
+    let out = Command::new("sysctl")
+        .args(["-n", "machdep.cpu.brand_string"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if name.is_empty() { None } else { Some(name) }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_system_ram_gb() -> Option<f64> {
+    let out = Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|b| *b > 0)
+        .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+}
+
 // @trace spec:accel-capability-probe
 fn enumerate_cpu() -> DeviceRecord {
     let mut flags = Vec::new();
     let physical_cores;
     let logical_cores;
-    // Only the Linux probe mutates these defaults incrementally; the macOS arm
-    // overwrites them wholesale, so off-Linux the initializers are never read.
-    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    // The Linux probe mutates these defaults incrementally; the macOS and
+    // Windows arms overwrite them wholesale, so off-Linux the initializers for
+    // name and vendor are never read.
+    // macOS and Windows overwrite this wholesale, matching `cpu_name`/`vendor`
+    // below; only the Linux arm reads the initializer.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut ram_gb = None;
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut cpu_name = "Host CPU".to_string();
+    // ORDER 1137-rgfm. `placeholder` until an arm MEASURES the name. Every arm
+    // that fails to read one leaves this alone, so the honest default is the
+    // pessimistic one and a new platform arm cannot acquire `measured` by
+    // forgetting to set it.
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "macos", target_os = "windows")),
+        allow(unused_mut, unused_assignments)
+    )]
+    let mut name_source = "placeholder".to_string();
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut vendor = "unknown".to_string();
 
@@ -682,6 +879,7 @@ fn enumerate_cpu() -> DeviceRecord {
                     && let Some((_, v)) = line.split_once(':')
                 {
                     cpu_name = v.trim().to_string();
+                    name_source = "measured".to_string(); // 1137-rgfm
                     if cpu_name.contains("Intel") {
                         vendor = "intel".to_string();
                     } else if cpu_name.contains("AMD") {
@@ -722,8 +920,21 @@ fn enumerate_cpu() -> DeviceRecord {
         logical_cores = num_cpus();
         physical_cores = logical_cores;
         vendor = "apple".to_string();
+        // ORDER 1137-rgfm. The family literal survives ONLY as the fallback for
+        // a query that did not answer; a measured part name replaces it and
+        // says so. Keeping the literal rather than inventing one preserves the
+        // distinction the whole field exists for.
         cpu_name = "Apple Silicon CPU".to_string();
+        if let Some(brand) = macos_cpu_brand() {
+            cpu_name = brand;
+            name_source = "measured".to_string();
+        }
         flags.push("neon".to_string());
+        // ORDER 803-r8u4: this arm used to stop above, leaving `system_ram_gb`
+        // null on every macOS row. A failed query leaves it null exactly as
+        // before, so the absent case is unchanged and only the measurable one
+        // moves.
+        ram_gb = macos_system_ram_gb();
     }
 
     // ORDER 805-r98w / NPU parity, 2026-09-02. Native Windows used to fall
@@ -756,6 +967,7 @@ fn enumerate_cpu() -> DeviceRecord {
                         (f[1].trim().parse::<u32>(), f[2].trim().parse::<u32>())
                     {
                         if !name.is_empty() && phys > 0 && log > 0 {
+                            name_source = "measured".to_string(); // 1137-rgfm
                             got = Some((
                                 name,
                                 phys,
@@ -828,6 +1040,7 @@ fn enumerate_cpu() -> DeviceRecord {
         }),
         system_ram_gb: ram_gb,
         memory_model: None,
+        name_source: Some(name_source),
     }
 }
 
@@ -875,8 +1088,116 @@ fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: boo
 /// build loses the production value. Order 935-6fzk found this from macOS,
 /// where the Linux-only caller vanishes and nothing else references it.
 #[cfg(any(target_os = "linux", test))]
-fn wsl2_paravirtual_gpu_reason() -> &'static str {
-    "engine-missing:no-vulkan-icd"
+/// ORDER 793-zumy. What actually stops the dxg device being reachable — the
+/// PURE half, unit-tested, in the shape `amd_gpu_disposition` already uses on
+/// this file's AMD arm.
+///
+/// THIS USED TO BE AN UNCONDITIONAL STRING LITERAL. `enumerate_gpus` assigned
+/// `engine-missing:no-vulkan-icd` to EVERY dxg device, and nothing read
+/// `icd.d`, `libvulkan`, or an enumeration result — so the probe stated a cause
+/// it had not looked for. On esmeraldinha that statement is simply false: that
+/// host carries a Vulkan loader and the stock Fedora mesa-vulkan-drivers ICD
+/// set, unprovisioned, and enumerates Microsoft Direct3D12 (Intel UHD) as an
+/// INTEGRATED_GPU via DRIVER_ID_MESA_DOZEN over /dev/dxg. A constant cannot be
+/// wrong on one host and right on another; it was wrong everywhere and
+/// coincidentally matched the hosts nobody had checked.
+///
+/// THE VERDICT IS STILL DELIBERATELY UNCHANGED — `usable` stays false and the
+/// class stays cpu-only. Deciding a dxg device is USABLE requires enumerating
+/// it and rejecting PHYSICAL_DEVICE_TYPE_CPU / DRIVER_ID_MESA_LLVMPIPE, which
+/// is criterion 2's other half and needs a host that can enumerate. This change
+/// stops the probe asserting a false CAUSE; it does not promote the device.
+///
+/// WHY THE THIRD ARM IS NOT `engine-missing`. Criterion 2 requires that word
+/// verbatim for the case it describes — hardware present, no runtime to reach
+/// it — and both missing arms keep it. When the loader AND an ICD are present
+/// the engine is NOT missing, and saying so would be the same false statement
+/// with a new spelling. `engine-unverified` says what is true: something is
+/// installed, nothing has enumerated it yet. The owning packet should object
+/// here if criterion 2 was meant to cover that case too.
+fn wsl2_paravirtual_gpu_reason_from(loader_present: bool, icd_count: usize) -> String {
+    match (loader_present, icd_count) {
+        (false, _) => "engine-missing:no-vulkan-loader".to_string(),
+        (true, 0) => "engine-missing:no-vulkan-icd".to_string(),
+        (true, _) => "engine-unverified:vulkan-present-not-enumerated".to_string(),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// The IO half: what is actually on disk. `root` is a parameter ONLY so tests
+/// can point it at a fixture tree — production passes "/" — which is the same
+/// seam `enumerate_render_nodes_at` uses and for the same reason: a test that
+/// read the real filesystem would assert whatever this machine happens to have,
+/// which is the vacuous-green shape this file has been bitten by before.
+///
+/// Both ICD directories are read because the loader reads both: the packaged
+/// set lives under /usr/share and local overrides under /etc. Counting `.json`
+/// entries rather than listing them keeps this a fact-gatherer — the decision
+/// belongs in the pure function above, not here.
+fn wsl2_vulkan_facts_at(root: &std::path::Path) -> (bool, usize) {
+    // The loader's SONAME, not the -dev symlink: `libvulkan.so` without the
+    // version suffix is shipped by the development package and can be present
+    // on a host that cannot actually load an ICD.
+    let loader_present = [
+        "usr/lib/x86_64-linux-gnu/libvulkan.so.1",
+        "usr/lib64/libvulkan.so.1",
+        "usr/lib/libvulkan.so.1",
+    ]
+    .iter()
+    .any(|rel| root.join(rel).exists());
+
+    let icd_count = ["usr/share/vulkan/icd.d", "etc/vulkan/icd.d"]
+        .iter()
+        .filter_map(|rel| std::fs::read_dir(root.join(rel)).ok())
+        .flatten()
+        .flatten()
+        .filter(|e| {
+            e.path()
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("json"))
+        })
+        .count();
+
+    (loader_present, icd_count)
+}
+
+// ORDER 1135-z8gn follow-up (macbookair 2026-09-13), authorised by the
+// coordinator; the substance belongs to 793-zumy.
+//
+// THIS WAS `#[cfg(any(target_os = "linux", test))]` AND THE `test` ARM IS NOW
+// A LIE. It existed so a test could reach this function without a Linux
+// target. 793-zumy then RETARGETED that test onto the `_from` seam below —
+// its own comment says so — which left the arm compiling a function that, off
+// Linux, nothing calls at all: the production caller is itself linux-gated.
+//
+// On Linux the function stays alive through that production caller, so the
+// gate there never saw it. On macOS under `cfg(test)` it is dead code, and
+// `-D dead-code` refused every macOS land until this line changed. The
+// compiler was right both times; the two hosts were simply being asked
+// different questions.
+//
+// THE PRODUCTION ENTRY POINT IS NOW UNCOVERED, AND THAT IS DELIBERATE HERE.
+// Confirmed by 793-zumy's author (yolanda, 2026-09-13): the wrapper WAS meant
+// to stay covered, and after this cfg drop nothing covers its two lines —
+// their tree shows one production call inside the linux-gated block, zero test
+// callers, and the only grep hit in the test region is a doc comment.
+//
+// The remedy is theirs and is a LATER SLICE under 793-zumy, not this change: a
+// `wsl2_paravirtual_gpu_reason_at(root)` seam with production passing "/",
+// matching what the neighbouring probes already do, so ONE fixture-rooted test
+// covers it on every host instead of a cfg arm that only pretends to. Kept
+// separate on purpose — two hosts reaching into one function is the collision
+// this fleet has now had twice.
+//
+// A cfg arm kept alive for a caller that no longer exists is not coverage; it
+// is the appearance of coverage, which is worse, because it is what stopped
+// anyone noticing the wrapper was untested.
+#[cfg(target_os = "linux")]
+/// Production entry point: gather the facts from the live filesystem, then
+/// decide. Kept as a thin seam so the decision stays testable without IO.
+fn wsl2_paravirtual_gpu_reason() -> String {
+    let (loader, icds) = wsl2_vulkan_facts_at(std::path::Path::new("/"));
+    wsl2_paravirtual_gpu_reason_from(loader, icds)
 }
 
 /// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
@@ -1376,6 +1697,32 @@ impl DrmRenderNode {
 ///
 /// Split out because it is the only fiddly part and the whole enumeration is
 /// worthless if it silently yields 0 for a value it could not read.
+/// Parse a sysfs PCI id (`0x1002`) into a `u16`.
+///
+/// PCI-ONLY, AND THE TYPE IS THE CONTRACT. A PCI vendor/device id is 16 bits by
+/// the PCI spec, and the only production caller reads sysfs
+/// (`/sys/class/drm/card<N>/device/{vendor,device}`), so `u16` is correct here
+/// and not merely convenient. Anything wider is not a PCI id.
+///
+/// DO NOT REUSE THIS FOR A VULKAN `vendorID`. That is a DIFFERENT NAMESPACE:
+/// `uint32_t`, Khronos-assigned, and deliberately outside the PCI range for
+/// vendors that have no PCI id — lavapipe/llvmpipe reports 0x10005, which is
+/// 65541 and does not fit. `u16::from_str_radix` returns None on it, the `?` at
+/// the call site drops the WHOLE node, and a dropped row is indistinguishable
+/// from a device that never enumerated. So the failure would not read as
+/// "software rasterizer rejected"; it would read as "no such device", silently,
+/// for exactly the rows 793-zumy criterion 2 exists to reject EXPLICITLY.
+/// Rejecting a rasterizer and losing it must never produce the same record.
+///
+/// A Vulkan id therefore needs its own field (`u32`) and its own parser. Today
+/// nothing captures one: the enumerator is sysfs-only and rejects
+/// lavapipe/llvmpipe STRUCTURALLY, because a userspace-only ICD creates no DRM
+/// render node to find. This comment exists so the next person to add Vulkan
+/// enumeration does not reach for the nearest parser that compiles.
+///
+/// Raised by esme, corrected against this code by yolanda, settled on yoga
+/// against the hwfp-v2 field set: that bump records vendor_id/device_id from
+/// THIS path — sysfs PCI — so it needs no change.
 pub fn parse_pci_id(body: &str) -> Option<u16> {
     let t = body.trim();
     let hex = t.strip_prefix("0x").unwrap_or(t);
@@ -1539,10 +1886,38 @@ pub fn hardware_fingerprint_checked(
     let mut missing: Vec<String> = Vec::new();
 
     // A CPU name the probe filled in with a placeholder identifies nothing.
-    // "Host CPU" is what the Windows path emits today; "unknown" vendor is the
-    // matching tell.
+    //
+    // ORDER 1137-rgfm — THIS ASKS THE PROBE, AND FALLS BACK TO THE DENY-LIST.
+    // It used to be the deny-list alone:
+    //     d.name != "Host CPU" && d.name != "unknown"
+    // written from the Windows defect (805-r98w), which is the only shape a
+    // deny-list can have — the placeholders someone already tripped over. It
+    // therefore passed `Apple Silicon CPU`, a placeholder emitted by a
+    // different arm, in a check whose entire purpose is to catch placeholders.
+    // Every new platform arm can add a third, and the guard cannot know.
+    //
+    // `name_source` moves the question to the only party that can answer it:
+    // the probe knows whether it MEASURED the name or filled one in, and
+    // nothing downstream can recover that from the string. `Some("measured")`
+    // is identifying; `Some("placeholder")` is refused no matter how specific
+    // the string looks.
+    //
+    // THE DENY-LIST STAYS FOR `None`, deliberately. A document filed before
+    // this field existed says nothing about provenance, and treating that
+    // silence as "placeholder" would make every stored document in the fleet
+    // unidentifiable the day this lands — a correctness change that reads as an
+    // outage. For those rows the old test is exactly as good as it ever was.
+    // The list is not extended with "Apple Silicon CPU": a macOS probe new
+    // enough to emit that string is new enough to set `name_source`, so adding
+    // it would only mask the field being unset.
     let cpu_named = doc.devices.iter().any(|d| {
-        d.device_class == "cpu" && !d.name.is_empty() && d.name != "Host CPU" && d.name != "unknown"
+        d.device_class == "cpu"
+            && !d.name.is_empty()
+            && match d.name_source.as_deref() {
+                Some("measured") => true,
+                Some(_) => false,
+                None => d.name != "Host CPU" && d.name != "unknown",
+            }
     });
     if !cpu_named {
         missing.push("cpu model name (probe emitted a placeholder)".to_string());
@@ -2424,15 +2799,52 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
             fw_version: None,
             driver: None,
             usable: true,
-            unusable_reason: None,
+            // ORDER 803-rbqf: A DEVICE EXCLUDED BY LANE MUST NAME THE
+            // OBSTRUCTION. This record dropped the `container` lane silently,
+            // so a consumer reading it saw a device that simply was not offered
+            // there and had no way to learn why. The AMD arm already set the
+            // precedent with `container-lane-unverified`: the field carries the
+            // reason for a LANE restriction, not only for `usable: false`.
+            //
+            // The obstruction here is structural rather than unverified, and
+            // that is worth stating in the string. The container on a macOS
+            // host runs inside the linux-aarch64 VZ guest, and Metal does not
+            // cross that boundary — there is no passthrough to enable and no
+            // launcher flag that would change the answer.
+            unusable_reason: Some("metal-not-reachable-from-linux-aarch64-guest".to_string()),
             policy_unscheduled: None,
             lanes: vec!["host-native".to_string()],
             memory_bandwidth_gbps: None,
             memory_bandwidth_source: "unknown".to_string(),
             cpu_flags: None,
             cpu_cores: None,
-            system_ram_gb: None,
-            memory_model: None,
+            // ORDER 803-r8u4 / 803-rbqf. Apple silicon has ONE memory budget.
+            // `memory_model: None` meant "the classifier could not decide", and
+            // a consumer must decline to sum on `None` exactly as on `unified` —
+            // so the routing behaviour happened to be right while the recorded
+            // fact was missing. 793-qr4t's unified-memory criterion is
+            // "demonstrable on Apple silicon and nowhere else", and it was not
+            // demonstrable here, because the one platform that can show it
+            // filed no evidence.
+            //
+            // This is the only arm in this function that may assert `unified`
+            // from the platform rather than from device evidence, and it is not
+            // the `cfg`-derived-capability mistake 1090-8nh4 removed: that arm
+            // claimed a RUNTIME accelerator tier from a COMPILE-TIME fact, and
+            // was compiled out in the guest where the answer mattered. This code
+            // only ever executes on a real macOS host, and "Apple silicon shares
+            // DRAM between CPU and GPU" is an architectural invariant of every
+            // machine that can run it, not a measurement standing in for one.
+            system_ram_gb: macos_system_ram_gb(),
+            memory_model: Some("unified".to_string()),
+            // ORDER 1137-rgfm. "Apple Metal GPU" is a FAMILY literal, identical
+            // on every Apple silicon Mac, so the fingerprint's
+            // `gpu:{vendor}/{name}` component discriminates nothing. Naming a
+            // real Metal device needs a framework call rather than a sysctl and
+            // is NOT done here; what is done is refusing to let the literal
+            // pass as measured. The honest label is the one the deny-list could
+            // never apply to a name nobody had seen before.
+            name_source: Some("placeholder".to_string()),
         });
     }
 
@@ -2478,6 +2890,9 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 device_class: "gpu".to_string(),
                 vendor: "nvidia".to_string(),
                 name: nvidia_model_name(first_line),
+                // Read from nvidia-smi's own line (1137-rgfm: the probe says
+                // whether it measured the name; the deny-list cannot).
+                name_source: Some("measured".to_string()),
                 device_node: Some("/dev/nvidia0".to_string()),
                 fw_version: None,
                 driver: None,
@@ -2525,11 +2940,23 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         this_mm.as_deref() == Some("unified"),
                         discrete_gpu_is_schedulable(&gpus),
                     );
+                    let lspci_name = pci_device_name_via_lspci(&pci_addr);
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: "amd".to_string(),
-                        name: pci_device_name_via_lspci(&pci_addr)
+                        name: lspci_name
+                            .clone()
                             .unwrap_or_else(|| "AMD GPU (amdgpu)".to_string()),
+                        // 1137-rgfm: lspci answered -> measured; the fallback
+                        // string is a placeholder and must say so.
+                        name_source: Some(
+                            (if lspci_name.is_some() {
+                                "measured"
+                            } else {
+                                "placeholder"
+                            })
+                            .to_string(),
+                        ),
                         device_node: render_node,
                         fw_version: None,
                         driver: Some("amdgpu".to_string()),
@@ -2550,11 +2977,23 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 ("0x8086", Some("i915")) | ("0x8086", Some("xe")) => {
                     let (usable, lanes, unusable_reason) =
                         intel_gpu_disposition(intel_rt, render_node.is_some());
+                    let lspci_name = pci_device_name_via_lspci(&pci_addr);
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: "intel".to_string(),
-                        name: pci_device_name_via_lspci(&pci_addr)
+                        name: lspci_name
+                            .clone()
                             .unwrap_or_else(|| "Intel GPU".to_string()),
+                        // 1137-rgfm: lspci answered -> measured; the fallback
+                        // string is a placeholder and must say so.
+                        name_source: Some(
+                            (if lspci_name.is_some() {
+                                "measured"
+                            } else {
+                                "placeholder"
+                            })
+                            .to_string(),
+                        ),
                         device_node: render_node,
                         fw_version: None,
                         driver,
@@ -2577,6 +3016,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // when nothing else was found, and with the REAL vendor
                 // instead of the old hardcoded "amd".
                 (vid, _) if gpus.is_empty() => {
+                    let lspci_name = pci_device_name_via_lspci(&pci_addr);
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: match vid {
@@ -2584,8 +3024,19 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                             "0x1002" => "amd".to_string(),
                             _ => "unknown".to_string(),
                         },
-                        name: pci_device_name_via_lspci(&pci_addr)
+                        name: lspci_name
+                            .clone()
                             .unwrap_or_else(|| "Vulkan GPU".to_string()),
+                        // 1137-rgfm: lspci answered -> measured; the fallback
+                        // string is a placeholder and must say so.
+                        name_source: Some(
+                            (if lspci_name.is_some() {
+                                "measured"
+                            } else {
+                                "placeholder"
+                            })
+                            .to_string(),
+                        ),
                         device_node: render_node
                             .or_else(|| Some(format!("/sys/bus/pci/devices/{pci_addr}"))),
                         fw_version: None,
@@ -2623,6 +3074,9 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // honest "unknown".
                 vendor: "unknown".to_string(),
                 name: "WSL2 paravirtual GPU (/dev/dxg)".to_string(),
+                // Every WSL2 host emits this same string: it identifies the
+                // substrate, not the card (1137-rgfm: declared placeholder).
+                name_source: Some("placeholder".to_string()),
                 device_node: Some("/dev/dxg".to_string()),
                 fw_version: None,
                 driver: None,
@@ -2653,7 +3107,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // the class stays cpu-only: nothing here makes the GPU reachable
                 // today, and inflating the class would place GPU work on a host
                 // that cannot run it — the opposite failure, and the worse one.
-                unusable_reason: Some(wsl2_paravirtual_gpu_reason().to_string()),
+                unusable_reason: Some(wsl2_paravirtual_gpu_reason()),
                 policy_unscheduled: None,
                 // No lane: unreachable from the container AND from host-native
                 // code in the guest, because no Vulkan ICD is installed to
@@ -2761,6 +3215,8 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
                         _ => "unknown".to_string(),
                     },
                     name,
+                    // Win32_VideoController's own Name (1137-rgfm: measured).
+                    name_source: Some("measured".to_string()),
                     device_node: pair,
                     fw_version: None,
                     driver: (!driver.is_empty()).then(|| driver.to_string()),
@@ -2825,6 +3281,16 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
                 Some(DeviceRecord {
                     device_class: "npu".to_string(),
                     vendor,
+                    // 1137-rgfm: the PnP name is measured; the empty-name
+                    // fallback is a placeholder and says so.
+                    name_source: Some(
+                        (if name.is_empty() {
+                            "placeholder"
+                        } else {
+                            "measured"
+                        })
+                        .to_string(),
+                    ),
                     name: if name.is_empty() {
                         "Unknown Compute Accelerator".to_string()
                     } else {
@@ -2913,6 +3379,9 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
                     device_class: "npu".to_string(),
                     vendor,
                     name: name_str,
+                    // Derived from the driver name ("Intel NPU"), not read from
+                    // the device: a placeholder by construction (1137-rgfm).
+                    name_source: Some("placeholder".to_string()),
                     device_node: Some(node_path),
                     fw_version,
                     driver: driver_name,
@@ -2936,23 +3405,61 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
 
 // @trace spec:accel-capability-probe
 fn enumerate_host() -> HostInfo {
-    // Only the Linux power-supply scan can flip this; other hosts keep false.
-    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
-    let mut battery = false;
+    // ORDER 803-r8u4. `None` IS THE STARTING POSITION, not `Some(false)`.
+    //
+    // A host with no arm below has not looked, and the only truthful thing it
+    // can say is that it does not know. The old initializer was `false`, which
+    // is a different claim — "this machine has no battery" — and every non-Linux
+    // host made it without evidence.
+    #[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(unused_mut))]
+    // The macOS arm answers in one expression rather than accumulating, so the
+    // `None` initializer it replaces is never read there.
+    #[cfg_attr(target_os = "macos", allow(unused_assignments))]
+    let mut battery: Option<bool> = None;
 
     #[cfg(target_os = "linux")]
     {
+        // A READABLE directory with no battery in it IS evidence of absence, so
+        // this arm distinguishes the two outcomes the old code could not: the
+        // scan that ran and found nothing answers `Some(false)`, while a
+        // directory that could not be read at all leaves `None`.
         if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
+            let mut found = false;
             for entry in entries.flatten() {
                 let type_path = entry.path().join("type");
                 if let Ok(t) = fs::read_to_string(type_path)
                     && t.trim().eq_ignore_ascii_case("battery")
                 {
-                    battery = true;
+                    found = true;
                     break;
                 }
             }
+            battery = Some(found);
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // `pmset -g batt` names an internal battery when one is present. MEASURED
+        // on tlatoanis-macbook-air (Apple M5) 2026-09-12:
+        //
+        //   Now drawing from 'AC Power'
+        //    -InternalBattery-0 (id=23068771)\t80%; AC attached; not charging
+        //
+        // A desktop Mac prints the header and no `-InternalBattery-` line, which
+        // is why the marker is the battery row rather than the exit status: the
+        // command succeeds on both, and only the row separates them. A pmset
+        // that fails to run leaves `None`, because then nothing looked.
+        //
+        // NOT KEYED ON "AC Power"/"Battery Power" — that is the CHARGING state,
+        // which changes when someone unplugs the machine. The question here is
+        // whether the hardware exists.
+        battery = Command::new("pmset")
+            .args(["-g", "batt"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("InternalBattery"));
     }
 
     let kernel = Command::new("uname")
@@ -3080,8 +3587,20 @@ fn normalize_node_name(raw: &str) -> Option<String> {
 /// unidentifiable host into one row — the exact collision this field exists to
 /// prevent, reintroduced through the error path.
 fn resolve_host_id() -> (String, String) {
-    if let Ok(v) = std::env::var(HOST_ID_ENV)
-        && let Some(id) = normalize_node_name(&v)
+    resolve_host_id_from(std::env::var(HOST_ID_ENV).ok().as_deref())
+}
+
+/// The resolver proper, with the input as a PARAMETER rather than a read of
+/// the process environment (1146-z8ux). Two tests used to exercise this by
+/// `set_var`/`remove_var` on `HOST_ID_ENV` from parallel threads of one test
+/// process; when one removed the variable inside the other's window the first
+/// resolved by node-name and the suite failed about one run in fifteen with
+/// nothing wrong in the tree. Taking the input here deletes the shared global
+/// from the tests instead of scheduling around it; production reads the
+/// environment exactly once, in `resolve_host_id`.
+fn resolve_host_id_from(input: Option<&str>) -> (String, String) {
+    if let Some(v) = input
+        && let Some(id) = normalize_node_name(v)
     {
         return (id, "input".to_string());
     }
@@ -3410,7 +3929,8 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
          accel_reason={} accel_cpu_cores={} accel_ram_gb={} accel_proof={} \
          accel_side={} accel_gpu_path={} accel_gpu_engine={} \
          accel_mem_model={} accel_mem_budget_gb={} \
-         accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={}",
+         accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={} \
+         accel_source={}",
         class,
         gpu_state,
         gpu.map(|d| slug(&d.name))
@@ -3438,6 +3958,24 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         routing.prefill,
         routing.decode,
         routing.crossover,
+        // ORDER 1139-xe5m, APPENDED LAST for the same reason `accel_proof` was:
+        // every key above keeps its name, position and meaning, and
+        // `litmus:accel-envelope-reaches-the-forge` reads what it read before.
+        //
+        // THE LINE NEEDS IT, NOT ONLY THE JSON. This one line is what a forge
+        // receives as TILLANDSIAS_ACCEL_ENVELOPE and what the capability matrix
+        // folds; an agent holding it cannot open the producing host's cache
+        // file, so a JSON-only field would leave exactly the reader this packet
+        // is about unable to tell a replay from a measurement.
+        //
+        // `unknown` for a document written before this order — NOT `measured`.
+        // Promoting silence to a measurement is the inference the order exists
+        // to stop, and it would make every legacy row read as fresh.
+        match doc.envelope_source {
+            Some(EnvelopeSource::Measured) => "measured",
+            Some(EnvelopeSource::Served) => "served",
+            None => "unknown",
+        },
     )
 }
 
@@ -4687,6 +5225,30 @@ mod tests {
         assert_eq!(super::parse_pci_id("not-a-number"), None);
     }
 
+    /// A VULKAN vendorID IS NOT A PCI ID, and this pins the consequence rather
+    /// than the intention. lavapipe/llvmpipe reports 0x10005 — Khronos-assigned,
+    /// uint32_t, deliberately outside the PCI range — and it does not fit a
+    /// u16, so this parser returns None and the `?` in the caller drops the
+    /// whole node. A dropped row and a device that never enumerated are the
+    /// same record, so reusing this parser for Vulkan would turn the EXPLICIT
+    /// software-rasterizer rejection 793-zumy criterion 2 asks for into a
+    /// silent disappearance.
+    ///
+    /// This test does not argue that; it makes the boundary executable, so a
+    /// future Vulkan field that reaches for the nearest parser that compiles
+    /// has to read this first. The fix when that day comes is a separate u32
+    /// field with its own parser, never a widening of this one.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_vulkan_vendor_id_does_not_fit_a_pci_id_and_must_not_be_parsed_as_one() {
+        // Not a PCI id: 0x10005 is 65541, one namespace over and 6 past u16::MAX.
+        assert_eq!(super::parse_pci_id("0x10005"), None);
+        assert_eq!(super::parse_pci_id("0x10000"), None);
+        // The last value that IS a PCI id, so the boundary is pinned on both
+        // sides and a widened type would red this pair, not just the one above.
+        assert_eq!(super::parse_pci_id("0xffff"), Some(0xffff));
+    }
+
     /// ORDER 935-jhh5. The old `cdi_ok = effective_tier == "gpu-cuda"` was
     /// CIRCULAR — the tier derives from the same `nvidia-smi` the caller already
     /// ran — so it could never report a missing spec on a host with a working
@@ -4788,11 +5350,12 @@ mod tests {
             enumeration_gaps: Vec::new(),
             hardware_fingerprint: None,
             render_nodes: Vec::new(),
+            envelope_source: Some(EnvelopeSource::Measured),
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
             host: HostInfo {
-                is_battery_present: false,
+                is_battery_present: Some(false),
                 kernel_release: "test".to_string(),
                 host_id: "test-host".to_string(),
                 host_id_source: "input".to_string(),
@@ -4821,6 +5384,9 @@ mod tests {
             cpu_cores: None,
             system_ram_gb: None,
             memory_model: None,
+            // 1137-rgfm: None = this fixture states no provenance, so the
+            // pre-field deny-list still judges it, exactly as before.
+            name_source: None,
         }
     }
 
@@ -5313,6 +5879,70 @@ mod tests {
         );
     }
 
+    // ORDER 1139-xe5m. THE CLOSURE THESE PIN, stated so it is not weakened
+    // later: a served envelope must be distinguishable from a measured one by
+    // reading THE ENVELOPE ALONE — no filesystem access, no second run, no
+    // knowledge of the producing host. A test that told them apart by checking
+    // whether a cache file exists would pass while leaving every folded matrix
+    // row exactly as ambiguous as it is today.
+
+    #[test]
+    // @trace order:1139-xe5m, spec:accel-capability-probe
+    fn a_served_document_says_served_and_keeps_the_original_timestamp() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+        let stored = doc_with(Vec::new());
+        write_capability_cache(&cache, &stored).expect("write cache");
+
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+
+        assert_eq!(
+            got.envelope_source,
+            Some(EnvelopeSource::Served),
+            "a cache hit must say so on the copy it returns"
+        );
+        // The defect, in one assertion: the timestamp is the PRODUCING run's
+        // and is served verbatim, so it can never be the discriminator.
+        assert_eq!(got.timestamp, stored.timestamp);
+        assert!(
+            accel_envelope(&got).contains("accel_source=served"),
+            "the one line a forge receives must carry it too"
+        );
+    }
+
+    #[test]
+    // @trace order:1139-xe5m, spec:accel-capability-probe
+    fn the_stored_document_claims_neither_measured_nor_served() {
+        // Persisting `measured` would replay the CLAIM along with the document
+        // on every later serve — the defect again, wearing an authoritative
+        // field. The stored form says `null`, and the serve path stamps.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+        let mut measured = doc_with(Vec::new());
+        measured.envelope_source = Some(EnvelopeSource::Measured);
+        write_capability_cache(&cache, &measured).expect("write cache");
+
+        let raw = std::fs::read_to_string(&cache).expect("read back");
+        let back: CapabilityDocument = serde_json::from_str(&raw).expect("parse");
+        assert_eq!(back.envelope_source, None, "raw: {raw}");
+    }
+
+    #[test]
+    // @trace order:1139-xe5m, spec:accel-capability-probe
+    fn a_document_written_before_this_order_reads_unknown_not_measured() {
+        // Promoting silence into a measurement is the inference this order
+        // exists to stop: every row the fleet has already folded is silent.
+        let mut legacy = serde_json::to_value(doc_with(Vec::new())).expect("to value");
+        legacy
+            .as_object_mut()
+            .expect("object")
+            .remove("envelope_source");
+        let doc: CapabilityDocument = serde_json::from_value(legacy).expect("parse legacy");
+
+        assert_eq!(doc.envelope_source, None);
+        assert!(accel_envelope(&doc).contains("accel_source=unknown"));
+    }
+
     #[test]
     // @trace spec:accel-capability-probe
     fn envelope_stays_one_parsable_line_even_with_hostile_device_names() {
@@ -5360,6 +5990,8 @@ mod tests {
                 "accel_prefill_dev",
                 "accel_decode_dev",
                 "accel_decode_crossover_b",
+                // Order 1139-xe5m, appended last.
+                "accel_source",
             ],
             "every field must survive a hostile name: {env}"
         );
@@ -5484,29 +6116,123 @@ mod tests {
     /// missing translation layer, which is provisioning, not silicon.
     ///
     /// Read the sibling test below before trusting either: it renders a
-    /// TEST-SUPPLIED reason and therefore cannot pin production at all. This one
-    /// asserts the shipped value, and was confirmed to go red against the old
-    /// literal before it went green.
+    /// TEST-SUPPLIED reason and therefore cannot pin production at all.
+    ///
+    /// RETARGETED 793-zumy: this asserted `wsl2_paravirtual_gpu_reason()`, which
+    /// was a constant and is now a DETECTION reading the live filesystem. Left
+    /// as it was, the test would pass on any host without a Vulkan loader —
+    /// including this one — and go RED on esmeraldinha, which carries a loader
+    /// and an ICD set and is the only host that can verify this packet at all.
+    /// A test that reds on the verification host and greens everywhere else is
+    /// worse than no test. It now drives the PURE half with supplied facts, so
+    /// its verdict is a property of the code rather than of whoever ran it.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
     #[test]
     fn the_wsl2_unusable_reason_names_the_missing_engine_not_the_missing_render_node() {
-        let reason = wsl2_paravirtual_gpu_reason();
+        // BOTH missing arms must carry criterion 2's verbatim word.
+        for (loader, icds, arm) in [(false, 0usize, "no loader"), (true, 0, "loader, no ICD")] {
+            let reason = wsl2_paravirtual_gpu_reason_from(loader, icds);
+            assert!(
+                reason.starts_with("engine-missing"),
+                "criterion 2 requires the verbatim word `engine-missing` for the {arm} arm; got {reason}"
+            );
+            // The red herring must not come back.
+            assert!(
+                !reason.contains("dri-render-node"),
+                "the reason blames a render node WSL2 never creates: {reason}"
+            );
+            // A provisioning statement should name its own remedy, like the
+            // sibling rocm-runtime-missing / intel-compute-runtime-missing do.
+            assert!(
+                reason.contains("vulkan"),
+                "the reason should name WHICH engine is missing: {reason}"
+            );
+        }
 
-        // Criterion 2 requires this word verbatim.
-        assert!(
-            reason.starts_with("engine-missing"),
-            "criterion 2 requires the verbatim word `engine-missing`; got {reason}"
+        // AND THE TWO MISSING ARMS MUST BE DISTINGUISHABLE. Before this packet
+        // every dxg device got `no-vulkan-icd` whether or not a loader existed,
+        // so the reason named a remedy that would not have helped a host with
+        // no loader at all.
+        assert_ne!(
+            wsl2_paravirtual_gpu_reason_from(false, 0),
+            wsl2_paravirtual_gpu_reason_from(true, 0),
+            "a missing loader and a missing ICD need different remedies and must not share a reason"
         );
-        // The red herring must not come back.
+    }
+
+    /// 793-zumy: the arm that makes this a detection rather than a constant.
+    /// esmeraldinha HAS a loader and an ICD set, so `engine-missing` is simply
+    /// false there — it was the shipped answer anyway, on every host.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn a_present_loader_and_icd_is_not_reported_as_a_missing_engine() {
+        let reason = wsl2_paravirtual_gpu_reason_from(true, 1);
         assert!(
-            !reason.contains("dri-render-node"),
-            "the reason blames a render node WSL2 never creates: {reason}"
+            !reason.starts_with("engine-missing"),
+            "with a loader and an ICD present the engine is not missing; got {reason}"
         );
-        // A provisioning statement should name its own remedy, like the sibling
-        // rocm-runtime-missing / intel-compute-runtime-missing values do.
         assert!(
-            reason.contains("vulkan"),
-            "the reason should name WHICH engine is missing: {reason}"
+            reason.contains("unverified"),
+            "the honest statement is that nothing has enumerated it yet; got {reason}"
         );
+    }
+
+    /// 793-zumy, the IO half against a FIXTURE TREE — never the real /usr,
+    /// which would assert whatever this machine happens to carry.
+    ///
+    /// REGIME: hermetic, tempdir-rooted, no host state, no wall-clock.
+    #[test]
+    fn wsl2_vulkan_facts_read_the_icd_directories_the_loader_reads() {
+        let root = std::env::temp_dir().join(format!(
+            "tillandsias-vulkan-facts-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let share = root.join("usr/share/vulkan/icd.d");
+        let etc = root.join("etc/vulkan/icd.d");
+        std::fs::create_dir_all(&share).unwrap();
+        std::fs::create_dir_all(&etc).unwrap();
+
+        // Empty directories are NOT an ICD set.
+        let (loader, icds) = wsl2_vulkan_facts_at(&root);
+        assert!(!loader, "fixture has no loader");
+        assert_eq!(icds, 0, "empty icd.d directories are not an ICD");
+
+        // A non-json file must not count — the loader reads manifests, and a
+        // README in that directory is not one.
+        std::fs::write(share.join("README"), b"not a manifest").unwrap();
+        assert_eq!(
+            wsl2_vulkan_facts_at(&root).1,
+            0,
+            "a non-json file in icd.d must not read as an ICD"
+        );
+
+        // BOTH directories count, because the loader reads both.
+        std::fs::write(share.join("dzn_icd.x86_64.json"), b"{}").unwrap();
+        std::fs::write(etc.join("local_override.json"), b"{}").unwrap();
+        assert_eq!(
+            wsl2_vulkan_facts_at(&root).1,
+            2,
+            "packaged and local ICD manifests must both be seen"
+        );
+
+        // The loader arm keys on the SONAME, not the -dev symlink.
+        std::fs::create_dir_all(root.join("usr/lib64")).unwrap();
+        std::fs::write(root.join("usr/lib64/libvulkan.so"), b"").unwrap();
+        assert!(
+            !wsl2_vulkan_facts_at(&root).0,
+            "libvulkan.so without the version suffix is the -dev symlink, not a loadable runtime"
+        );
+        std::fs::write(root.join("usr/lib64/libvulkan.so.1"), b"").unwrap();
+        assert!(
+            wsl2_vulkan_facts_at(&root).0,
+            "libvulkan.so.1 is the loader the ICD is dlopened by"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// NOTE: this test cannot pin the production reason — it supplies its own.
@@ -5608,32 +6334,221 @@ mod tests {
             cpu_cores: None,
             system_ram_gb: None,
             memory_model: None,
+            // 1137-rgfm: None = this fixture states no provenance, so the
+            // pre-field deny-list still judges it, exactly as before.
+            name_source: None,
         }
     }
 
+    /// ORDER 803-rbqf. WHAT THIS TEST USED TO BE, and why it proved nothing:
+    ///
+    ///     let metal_device = DeviceRecord { ... lanes: vec!["host-native"] ... };
+    ///     assert!(!metal_device.lanes.contains(&"container".to_string()));
+    ///
+    /// It built its own `DeviceRecord` literal and asserted on THAT. The
+    /// production arm in `enumerate_gpus` was never called, so the test was a
+    /// tautology over a value the test itself had just written: if the real
+    /// macOS arm started advertising `container` tomorrow, this test would stay
+    /// green, because the literal it inspects is not the code that ships.
+    ///
+    /// A guard assembled only from what its author already believed inherits
+    /// every omission in that belief. The fix is not a stronger assertion, it
+    /// is a different SUBJECT — the probe's output instead of the test's input.
+    ///
+    /// Split in two because the subject is only observable on one platform:
+    /// this arm runs the real probe where it exists, and
+    /// [`the_macos_arm_cannot_advertise_the_container_lane`] pins the same
+    /// clause by source everywhere else, so a Linux CI run still refuses the
+    /// regression.
     #[test]
-    // @trace spec:accel-capability-probe
+    #[cfg(target_os = "macos")]
+    // @trace order:803-rbqf, spec:accel-capability-probe
     fn test_macos_metal_lane_isolation() {
-        let metal_device = DeviceRecord {
-            device_class: "gpu".to_string(),
-            vendor: "apple".to_string(),
-            name: "Apple Metal GPU".to_string(),
-            device_node: None,
-            fw_version: None,
-            driver: None,
-            usable: true,
-            unusable_reason: None,
-            policy_unscheduled: None,
-            lanes: vec!["host-native".to_string()],
-            memory_bandwidth_gbps: None,
-            memory_bandwidth_source: "unknown".to_string(),
-            cpu_flags: None,
-            cpu_cores: None,
-            system_ram_gb: None,
-            memory_model: None,
-        };
-        assert!(!metal_device.lanes.contains(&"container".to_string()));
-        assert!(metal_device.lanes.contains(&"host-native".to_string()));
+        let gpus = enumerate_gpus();
+        let metal = gpus
+            .iter()
+            .find(|d| d.vendor == "apple")
+            .expect("the macOS arm must enumerate an Apple GPU on a macOS host");
+
+        // PROBE-7, asserted against what the probe actually emitted.
+        assert!(
+            !metal.lanes.contains(&"container".to_string()),
+            "PROBE-7: Metal must not be offered on the container lane: {:?}",
+            metal.lanes
+        );
+        assert!(
+            metal.lanes.contains(&"host-native".to_string()),
+            "Metal is reachable host-native: {:?}",
+            metal.lanes
+        );
+
+        // 803-rbqf: the lane exclusion must NAME its obstruction.
+        assert!(
+            metal.unusable_reason.is_some(),
+            "a device excluded by lane must say why it is excluded"
+        );
+
+        // 803-r8u4: unified memory, and a budget to go with it.
+        assert_eq!(
+            metal.memory_model.as_deref(),
+            Some("unified"),
+            "Apple silicon shares one memory budget"
+        );
+        assert!(
+            metal.system_ram_gb.unwrap_or(0.0) > 0.0,
+            "unified memory is only a budget if the budget is recorded"
+        );
+    }
+
+    /// ORDER 803-r8u4, the host-fact half. Runs the REAL `enumerate_host` and
+    /// `enumerate_cpu` on a macOS host and refuses the two nulls the fleet's
+    /// first macOS capability row filed (macneo, relayed onto 657-zm2n
+    /// 2026-09-04: `system_ram_gb null, is_battery_present false`).
+    ///
+    /// It asserts `is_some()` rather than `Some(true)` ON PURPOSE. A Mac mini
+    /// has no battery and must be free to answer `Some(false)`; what is being
+    /// refused is `None`, which now means "nothing looked" and was the true
+    /// state of every macOS host before this arm existed. Pinning `true` here
+    /// would pass on this laptop and red on a desktop Mac for being correct.
+    ///
+    /// MEASURED on tlatoanis-macbook-air (Apple M5) 2026-09-12:
+    /// `is_battery_present: true`, `system_ram_gb: 16.0`.
+    /// ORDER 1137-rgfm. The CPU name must be THIS Mac's part, not the family
+    /// literal every Apple silicon host shares.
+    ///
+    /// It asserts against `machdep.cpu.brand_string` read independently, rather
+    /// than against a hard-coded "Apple M5" — pinning the string would red on
+    /// every other Mac in the fleet for being a different correct machine, and
+    /// pinning `!= "Apple Silicon CPU"` would accept any OTHER placeholder,
+    /// which is the deny-list mistake this order exists to remove.
+    ///
+    /// MEASURED on tlatoanis-macbook-air 2026-09-13: brand_string `Apple M5`;
+    /// before this change the record read `Apple Silicon CPU`, identical on
+    /// every Apple silicon Mac, so the fingerprint's cpu component carried no
+    /// information at all.
+    #[test]
+    #[cfg(target_os = "macos")]
+    // @trace order:1137-rgfm, spec:accel-capability-probe
+    fn macos_cpu_name_is_the_real_part_not_a_family_placeholder() {
+        let brand =
+            macos_cpu_brand().expect("machdep.cpu.brand_string must answer on a macOS host");
+        let cpu = enumerate_cpu();
+
+        assert_eq!(
+            cpu.name, brand,
+            "the record must carry the measured part name, not a family literal"
+        );
+        assert_eq!(
+            cpu.name_source.as_deref(),
+            Some("measured"),
+            "a measured name must SAY it was measured; the deny-list could not \
+             tell a new placeholder from a real part (1137-rgfm)"
+        );
+
+        // The fingerprint must now accept this document. Before 1137-rgfm it
+        // accepted it too — for the wrong reason, because "Apple Silicon CPU"
+        // was simply not on the deny-list.
+        assert!(
+            !cpu.name.is_empty() && cpu.name != "Apple Silicon CPU",
+            "the family literal survives only as the unmeasured fallback"
+        );
+    }
+
+    /// ORDER 1137-rgfm, the half that does NOT need a macOS host: a device
+    /// declaring `placeholder` is refused however specific its name looks, and
+    /// a device declaring nothing falls back to the old deny-list so documents
+    /// filed before the field keep their behaviour.
+    #[test]
+    // @trace order:1137-rgfm, spec:accel-capability-probe
+    fn a_declared_placeholder_is_refused_however_plausible_the_name() {
+        let mut doc = schedulable_gpu_doc();
+
+        // A name no deny-list would ever carry, declared as a placeholder.
+        for d in doc.devices.iter_mut().filter(|d| d.device_class == "cpu") {
+            d.name = "Apple M5".to_string();
+            d.name_source = Some("placeholder".to_string());
+        }
+        assert!(
+            hardware_fingerprint_checked(&doc).is_err(),
+            "a declared placeholder must be refused even when the string looks \
+             like a real part — that is the whole point of asking the probe"
+        );
+
+        // The same document, measured, is identifying.
+        for d in doc.devices.iter_mut().filter(|d| d.device_class == "cpu") {
+            d.name_source = Some("measured".to_string());
+        }
+        assert!(
+            hardware_fingerprint_checked(&doc).is_ok(),
+            "a measured name must be accepted"
+        );
+
+        // Provenance absent: the pre-field deny-list still judges it.
+        for d in doc.devices.iter_mut().filter(|d| d.device_class == "cpu") {
+            d.name_source = None;
+            d.name = "Host CPU".to_string();
+        }
+        assert!(
+            hardware_fingerprint_checked(&doc).is_err(),
+            "an old document naming a known placeholder is refused as before"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    // @trace order:803-r8u4, spec:accel-capability-probe
+    fn macos_host_facts_are_measured_not_defaulted() {
+        assert!(
+            enumerate_host().is_battery_present.is_some(),
+            "macOS must LOOK for a battery; None means nothing did (803-r8u4)"
+        );
+        let cpu = enumerate_cpu();
+        assert!(
+            cpu.system_ram_gb.unwrap_or(0.0) > 0.0,
+            "macOS must report physical RAM; null was the pre-803-r8u4 answer"
+        );
+    }
+
+    /// The source-level half of [`test_macos_metal_lane_isolation`], so the
+    /// clause is guarded on hosts that cannot run the macOS arm (order
+    /// 803-rbqf). Same technique, and for the same reason, as 1090-8nh4's
+    /// source assertion on `detect_inference_tier`: the fleet lands through
+    /// Linux hosts, and a macOS-only test is no guard at all on the branch
+    /// where most commits arrive.
+    #[test]
+    // @trace order:803-rbqf, spec:accel-capability-probe
+    fn the_macos_arm_cannot_advertise_the_container_lane() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/accel_probe.rs"));
+
+        // ANCHOR FIRST. A scan that silently finds nothing is a guard that
+        // never fires, and it looks exactly like a guard that passes.
+        let marker = "PROBE-7: macOS Metal is host-native ONLY";
+        let start = source
+            .find(marker)
+            .expect("the macOS arm's PROBE-7 marker moved; re-anchor this guard");
+        let arm = &source[start..];
+        let end = arm
+            .find("});")
+            .expect("could not find the end of the macOS DeviceRecord literal");
+        let arm = &arm[..end];
+
+        assert!(
+            !arm.contains("\"container\""),
+            "the macOS GPU arm names the container lane; Metal does not cross \
+             the linux-aarch64 guest boundary (PROBE-7, 803-rbqf)"
+        );
+        assert!(
+            arm.contains("\"host-native\""),
+            "the macOS GPU arm must still offer the host-native lane"
+        );
+        assert!(
+            arm.contains("unusable_reason: Some("),
+            "a lane-excluded device must name its obstruction (803-rbqf)"
+        );
+        assert!(
+            arm.contains("memory_model: Some(\"unified\""),
+            "Apple silicon is unified memory (803-r8u4)"
+        );
     }
 
     // ---- order 808-43mw: host identity and measurement labelling ----
@@ -5710,7 +6625,7 @@ mod tests {
     fn kernel_release_does_not_distinguish_two_wsl2_hosts() {
         let shared = "6.18.33.2-microsoft-standard-WSL2".to_string();
         let a = HostInfo {
-            is_battery_present: false,
+            is_battery_present: Some(false),
             kernel_release: shared.clone(),
             host_id: "yolanda".to_string(),
             host_id_source: "node-name".to_string(),
@@ -5742,13 +6657,11 @@ mod tests {
     /// two keys for one machine, which is the defect this field exists to fix.
     #[test]
     fn the_input_overrides_the_derived_name_and_is_normalised() {
-        let prev = std::env::var_os(HOST_ID_ENV);
-        unsafe { std::env::set_var(HOST_ID_ENV, "Esmeraldinha.LOCAL") };
-        let (id, source) = resolve_host_id();
-        match prev {
-            Some(v) => unsafe { std::env::set_var(HOST_ID_ENV, v) },
-            None => unsafe { std::env::remove_var(HOST_ID_ENV) },
-        }
+        // The input is passed, not planted in the process environment: this
+        // test and `the_probe_always_yields_a_foldable_key` run as threads of
+        // one process, and mutating `HOST_ID_ENV` from both raced about one
+        // run in fifteen (1146-z8ux).
+        let (id, source) = resolve_host_id_from(Some("Esmeraldinha.LOCAL"));
         assert_eq!(id, "esmeraldinha");
         assert_eq!(source, "input");
     }
@@ -5758,12 +6671,9 @@ mod tests {
     /// obtained.
     #[test]
     fn the_probe_always_yields_a_foldable_key() {
-        let prev = std::env::var_os(HOST_ID_ENV);
-        unsafe { std::env::remove_var(HOST_ID_ENV) };
-        let (id, source) = resolve_host_id();
-        if let Some(v) = prev {
-            unsafe { std::env::set_var(HOST_ID_ENV, v) }
-        }
+        // No input: the derived chain (hostname -> uname -n -> /etc/hostname)
+        // must answer. Nothing in the environment is touched (1146-z8ux).
+        let (id, source) = resolve_host_id_from(None);
         assert!(
             !id.is_empty(),
             "an empty key would fold every unknown host into one row"
@@ -5799,7 +6709,7 @@ mod tests {
     #[test]
     fn a_wsl2_row_cannot_yet_say_its_machine_is_windows() {
         let guest_row = HostInfo {
-            is_battery_present: true,
+            is_battery_present: Some(true),
             kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
             host_id: "yolanda".to_string(),
             host_id_source: "node-name".to_string(),
@@ -5829,6 +6739,7 @@ mod tests {
             enumeration_gaps: Vec::new(),
             hardware_fingerprint: None,
             render_nodes: Vec::new(),
+            envelope_source: Some(EnvelopeSource::Measured),
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {
@@ -5845,7 +6756,7 @@ mod tests {
                 model_params_b: None,
             }],
             host: HostInfo {
-                is_battery_present: true,
+                is_battery_present: Some(true),
                 kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
                 host_id: host.to_string(),
                 host_id_source: "node-name".to_string(),
@@ -6020,6 +6931,9 @@ mod tests {
                 cpu_cores: None,
                 system_ram_gb: None,
                 memory_model: Some(mm.to_string()),
+                // 1137-rgfm: None = this fixture states no provenance, so the
+                // pre-field deny-list still judges it, exactly as before.
+                name_source: None,
             }
         }
 

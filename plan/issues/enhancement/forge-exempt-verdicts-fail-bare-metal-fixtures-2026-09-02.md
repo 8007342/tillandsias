@@ -96,3 +96,24 @@ Instances 1 and 2 were fixed in-cycle because they blocked the gate this forge
 needed to push at all. Instance 3 does not block `--check` (which runs no
 litmus) and is filed rather than fixed, so the pattern gets decided once rather
 than patched a fourth time.
+
+## Instance 5 (same class, re-observed 2026-09-13 on forge-tillandsias)
+
+`litmus:committable-branch-guard-shape` step 4 ("no git identity fails closed
+with `blocked:no-git-identity`") FAILED on this forge: the guard emitted
+`ok:branch-linux-next` instead. The step is hermetic about CONFIG
+(`GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null`) but this forge's
+container environment EXPORTS `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` (+ committer
+twins), and `git var GIT_AUTHOR_IDENT` derives the identity from the
+environment first, so the guard's no-identity branch never fires. Proof:
+nulling the `GIT_AUTHOR_*` vars alongside the config produces
+`Author identity unknown` — the exact refusal the step expects. This is the
+same generalisation as the pirria note above ("a fixture must pin every
+environment variable its subject branches on"), and the committable-branch
+guard is a new victim of it. Fix shape: the no-identity step should also
+`env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME
+-u GIT_COMMITTER_EMAIL` (or set them empty). Not fixed here — same "decided
+once" policy as instance 3.
+
+Co-observed the same run: `litmus:build-cache-sweep-trigger` failed on
+`skip:forge-exempt` (instance 3 above, still open) — unchanged since 2026-09-02.

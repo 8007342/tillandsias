@@ -232,6 +232,12 @@ push it. Otherwise continue; on Linux the Podman reset is mandatory.
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   podman system reset --force 2>&1 | tee "$LOG_DIR/02-reset.log"
+  # ORDER 900-z3kv: the store is not the whole room. The reset reaches neither
+  # the keychain items, the fallback_* files, nor the host vault-data directory,
+  # so without this the next --init RECOVERS a months-old share instead of
+  # re-initialising. scripts/e2e-step2-linux.sh calls the clearer for you; if you
+  # run the reset by hand, run the clearer too or the room is not clean.
+  scripts/clear-vault-host-credentials.sh
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
 test "$RESET_RC" -eq 0
 CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podman images -q)"
