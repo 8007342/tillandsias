@@ -80,8 +80,16 @@ entry produced a log of exactly three lines — `ok:no-stale-base-revert`,
 The first had genuinely not landed; the second HAD, `origin/windows-next`
 moving to the expected SHA with the file readable at that ref. So the missing
 verdict distinguishes nothing: the same three lines accompany a refusal and a
-success. The hook chain's later output does not reach the redirected file on
-this host, which makes "the log stopped early" a statement about the log.
+success. CORRECTION, made the same hour and before this had a chance to mislead
+anyone: I first wrote that the hook chain.s later output "does not reach the
+redirected file on this host". That is wrong, and the disproof was the very
+next push — a FOREGROUND push, also redirected to a file, logged the whole
+chain including the plan-only lane verdict and the ref update. Redirection is
+not the variable. The two truncated logs were both written by BACKGROUNDED
+tasks; the complete one was not. So the discriminator is the background task
+context, not the file. I do not know the mechanism and am not guessing at one
+here — what is measured is that a backgrounded push.s log loses everything
+after the third hook line.
 
 The only thing that settled it either time was reading the remote ref and then
 the file's content AT that ref. Recorded because the wrong inference is the
