@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    field: verifiable_closure
+    value: 'bash scripts/test-set-field-prose-guard.sh — a long-form write that drops old lines is refused rc 2 and PRINTS each dropped line, leaving no fragment; --append keeps every old line and adds the new text under a dated attribution line; --replace still replaces wholesale; NEGATIVE CONTROLS: status and priority writes are unaffected, and an ADDITIVE rewrite that keeps every old line verbatim needs no flag. The rule is line-exact, so editing a line in place counts as dropping it. Bound at scripts/gate-steps.d/340-1151-td46.step.'
+    ts: "2026-09-14T07:54:25Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    event:
+      type: note
+      ts: "2026-09-14T07:54:25Z"
+      host: yoga
+      summary: |-
+        guard exists; moving the text out of unscoreable per 1136-n8sh

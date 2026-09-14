@@ -1,0 +1,24 @@
+# Gate step 1151-td46 — data, not code.
+#
+# Binds the fixture for set-field's long-form prose guard. Hermetic against a
+# THROWAWAY ledger: every arm builds its own plan/ tree and points the binary at
+# it with --index. That is not politeness — a fixture for a guard about
+# clobbering shared prose must not clobber shared prose, and the first live
+# probe of this change wrote a real fragment onto a real row's next_action
+# before it was removed.
+#
+# THE NEGATIVE CONTROLS ARE WHY THIS IS BOUND: a guard that refused ordinary
+# status or priority writes would stop every host in the fleet, and one that
+# refused an ADDITIVE rewrite would make correcting a row impossible without a
+# flag. Both are arms. The rule is deliberately LINE-EXACT — editing someone
+# else's sentence in place counts as dropping it, which is the case the row
+# exists for.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking set-field refuses to silently drop lines from a shared long-form field (1151-td46)"
+STEP_SCRIPT="scripts/test-set-field-prose-guard.sh"
+STEP_ERROR="the set-field prose guard regressed (1151-td46) — a host correcting one sentence can again delete warnings other hosts wrote into the same field, or the guard has widened and now refuses ordinary short-field writes; see the verdict line above"
+STEP_OK="set-field prose guard check passed"
+# Exit 3 means no runnable tillandsias-plan resolved — nothing was examined.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no runnable tillandsias-plan resolved, so set-field could not be exercised"
