@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-14T19:28:23Z"
+      agent_id: linux-pirria-opus5-20260914t192603z
+      host: pirria
+      summary: |
+        FLOOR MEASUREMENT (pirria-cachyos, 2026-09-14). Both named arms PASS here, well inside budget — the floor tier is NOT one regime, and that is the finding.
+
+        LOCUS: pirria-cachyos, Linux/CachyOS kernel 7.2.4-3, bare host (no toolbox; with-tillandsias-builder is Silverblue-only and passes through). AT-RISK on the 1109-t8kw git-identity probe: mktemp -d, then git init -q, then git commit -q --allow-empty prints AT-RISK; tmpdir /tmp/tmp.0Agr7YjbrB; global user.name and user.email both unset (this checkout carries a repo-local identity). TILLANDSIAS_HOST_TIER is UNSET on this host.
+
+        THE TWO ARMS (run as their specs, not by test name — the runner refuses a bare test name and names the owning spec, which is how the right entry point was found):
+        - litmus:capability-manifest-guard — budget 300000ms (litmus-capability-manifest-guard.yaml:59). PASS, 182.6s, rc=0, NOT killed. 39% headroom.
+        - litmus:build-cache-sweep-trigger — budget 30000ms per step (16 steps). PASS, 1.7s total, rc=0, NOT killed. Three orders of magnitude of headroom.
+
+        SPEC-LEVEL: run-litmus-test.sh forge-environment-discoverability --phase pre-build rc=0, wall 871.4s, PASS 24 / FAIL 0 / SKIP 1. run-litmus-test.sh meta-orchestration --phase pre-build rc=0, wall 148.1s, PASS 23 / FAIL 0 / SKIP 1. Zero reds on either suite.
+
+        WHAT THIS DOES TO THE PROPOSED FIX. 1187-iij8 offers two arms: (a) tally BUDGET separately from FAIL, or (b) scale budgets by TILLANDSIAS_HOST_TIER. This measurement is evidence AGAINST (b) on its own and FOR (a). Two reasons, both measured rather than argued:
+
+        1. TIER DOES NOT PREDICT SPEED. pirria and esmeraldinha are both the floor by this row's own criterion — both print AT-RISK, both qualify as low-end in the 1109-t8kw part-2 text. esme's capability-manifest-guard was killed at 300s (300.6s); pirria's finished in 182.6s. Same tier, same arm, 1.6x apart and on opposite sides of the budget. A multiplier keyed on tier would slow the budget on a host that never needed it, and would still be guessing on the one that did. What differs between the two loci is Git Bash / MINGW process-spawn cost, not the tier.
+
+        2. THE KEY IS ABSENT ANYWAY. TILLANDSIAS_HOST_TIER is unset on this host, so a tier-keyed multiplier has nothing to read here and would silently fall through to the unscaled budget — precisely the host where a reader could not tell the fallback from a deliberate verdict.
+
+        So the timeout esme hit reads as a MINGW-ism, not a floor-ism. That is the separation this measurement was routed to get, and it points the runner change at the reportability arm: rc=124 already exists (litmus-runner-reports-rc); what is missing is the tally telling BUDGET from FAIL so a closure predicate can name it. NOT claiming the row — lenovinha lands the runner change; these are the floor numbers.
+
+        CAVEAT, recorded rather than hidden: the runner emitted warn:litmus-degraded-no-yq on every invocation — yq is not on PATH here and could not be provisioned (the toolbox route is Silverblue-only and passes through on CachyOS; a pacman install needs a sudo password this session does not hold). Checked before trusting the numbers: neither litmus-capability-manifest-guard.yaml nor litmus-build-cache-sweep-trigger.yaml contains a single yq reference (grep -c gave 0 and 0), so no step of either named arm runs a yq command, and the runner's own metadata reads went through the compiled tillandsias-plan reader rather than the grep fallback. The timings and the two PASS verdicts stand. A reader who wants the OTHER 45 arms in these two suites at full confidence should re-run them on a host with yq present.
