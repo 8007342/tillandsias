@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: evidence
+      ts: "2026-09-14T03:54:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t035150z
+      host: macos
+      summary: |
+        THE BLOCKING CRITERION IS VERIFIED END TO END. This row carried "UNVERIFIED: end-to-end cache survival needs a re-provision (destroys $VM_DIR + in-VM Vault) — not authorised, not done" since 2026-08-19. The operator granted STANDING consent for destructive work on this host on 2026-09-13, so the re-provision it needed is now authorised. Measured on tlatoanis-macbook-air (Apple M5, macOS 25.6.0), 2026-09-14, against the released v56.9.13.1 tray.
+
+        METHOD, and the cache was seeded so survival is provable BYTE-WISE rather than by mere presence:
+          seeded  ~/Library/Caches/tillandsias/models/SURVIVAL-MARKER.txt (61 B)
+                  ~/Library/Caches/tillandsias/models/ballast.bin (2 MiB of /dev/urandom — incompressible, so a re-created file cannot coincidentally match)
+          then    rm -rf "$HOME/Library/Application Support/tillandsias"   <- $VM_DIR ONLY, the cache deliberately untouched
+          then    tillandsias-tray --provision                              <- provision_exit=0, full rebuild
+
+        HOST SIDE — SURVIVED, byte-identical:
+          SURVIVAL-MARKER.txt  before 0985e94703acbcc236394415da23b80983c9bc973c909c769cf2d3e4b732d716
+                               after  0985e94703acbcc236394415da23b80983c9bc973c909c769cf2d3e4b732d716
+          ballast.bin          before fb9021935fe2a9b32142989d1bd826b3c1163a8d843c56bc2a669822da5599f0
+                               after  fb9021935fe2a9b32142989d1bd826b3c1163a8d843c56bc2a669822da5599f0
+          rootfs.img rebuilt at 2026-09-14T03:52:56Z, checked at 03:53:05Z — nine seconds old, so a genuinely new VM and not the old one surviving the rm.
+
+        GUEST SIDE — RE-MOUNTED AND POPULATED in the NEW guest. `--exec-guest` (rc=0, exit_code 0):
+          drwxr-xr-x 4 root root     128 Sep 14 03:52 .
+          -rw-r--r-- 1 root root 2097152 Sep 14 03:52 ballast.bin
+          -rw-r--r-- 1 root root      61 Sep 14 03:52 SURVIVAL-MARKER.txt
+          model-cache on /root/.cache/tillandsias/models type virtiofs (rw,relatime,seclabel)
+        Both halves matter: the host half alone would prove only that rm -rf missed a directory; the guest half proves the freshly provisioned VM re-attaches the share and sees the surviving bytes.
+
+        INCIDENTAL, worth recording because a sibling row doubts it: `--exec-guest` WORKED on this path, rc=0, starting the VM and waiting for Ready by itself. 830-xsk2 records a CFRunLoop defect where --exec-guest times out outside tray continuous-runloop mode; whatever that path is, it is not this one, and anyone planning guest-side work on macOS can use --exec-guest as the probe.
+
+        CLEANUP: both seeded files removed after the measurement, so they cannot pollute part (a)'s models-vs-images split later.
+
+        WHAT REMAINS, unchanged by this:
+          (a) MEASUREMENT of the guest-side models-vs-images split on a POPULATED cache — still needs a forge lane run that pulls an engine and a real model. My 2 MiB ballast proves survival, NOT the split; I did not want a synthetic figure standing where a real one belongs.
+          (b) THE SCOPE DECISION, which is not mine to take: model_cache_dir() is under $CACHE_DIR, so the smoke and uninstall destroyers still delete it. I confirmed that from the other side this cycle — the v56.9.13.1 smoke I ran hours earlier wiped ~/Library/Caches/tillandsias wholesale, which is exactly why the models dir was ABSENT when I started here and had to be seeded. The literal deliverable (survives rm -rf $VM_DIR) is now MET AND PROVEN; the ~2.47 GB re-download on every smoke run is a separate, deliberate question about clean-room semantics.
