@@ -2050,6 +2050,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "YAML reader available and its verdicts stay distinct"
 
+    _step "Checking the wsl.exe transport can carry an exit status (1155-jurn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-wsl-exec-channel-carries-exit-status.sh" 2>&1; then
+        _error "the exit-status canary is wrong: a check that probes the local shell cannot see a transport that drops the status written in the argument string"
+        exit 1
+    fi
+    _info "Exit-status canary sound"
+
 
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then

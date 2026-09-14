@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yolanda at macuahuitl's direction from a measured 33-minute window on
+# 2026-09-14. The window has since closed on its own; the lane has not changed.
+packets:
+  - packet_id: the-plan-only-push-lane-skips-every-plan-semantic-check-so-a-lane-push-can-land-ledger-content-that-the-full-gate-refuses-and-block-every-host-that-must-run-it
+    order: 1183-2s7a
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    capability_tags: [pre-push, plan-lane, gate, coordination, fleet]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a fixture arm that does not exist yet. Future evidence line in scripts/test-plan-lane-runs-plan-semantic-checks.sh: `ok:plan-lane-refuses-what-the-full-gate-refuses` rc 0, driving the lane over a fragment carrying a dangling closure pin and asserting the lane REFUSES it and names the same check the full gate would (pre-fix result: FAILS — the lane accepts it; measured 2026-09-14, esme's 1179-yshc fragment reached trunk through the lane at about 03:15Z carrying litmus:envelope-suite-resolves-the-redirected-artifact with no such litmus, and every full gate between then and 03:48Z refused at 885-92iu with violation:declared-closure-unresolvable:1). NEGATIVE CONTROL: a fragment that passes the plan-semantic checks is still ADMITTED by the lane without a build — the lane's whole value is that a ledger append does not cost 41 minutes, and a version of this that just falls back to the full gate has removed the lane rather than fixed it."
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      The plan-only push lane runs none of the plan-semantic checks, so a lane push can land ledger content the full gate refuses: check-declared-closures-added appears zero times in scripts/hooks/pre-push-local-gate.sh, and on 2026-09-14 a fragment carrying a dangling closure pin reached trunk through the lane and refused every full gate for 33 minutes.
+    context: |
+      MEASURED 2026-09-14. esmeraldinha's 1179-yshc fragment declared
+      `litmus:envelope-suite-resolves-the-redirected-artifact` before that litmus
+      existed. It reached trunk through the plan-only lane at about 03:15Z. The
+      litmus landed at 03:48Z (5eb6da739). In between, any host running
+      `./build.sh --check` refused at 885-92iu with
+      violation:declared-closure-unresolvable:1 — including a 41-minute gate on
+      yolanda, which is how the window was found.
+
+      THE WINDOW CLOSED ON ITS OWN and that is not a mitigation. It closed
+      because the author landed the litmus 33 minutes later, which is exactly
+      what the remedy text asks for ("write that litmus in the same commit as the
+      thing it tests"). Nothing in the system closed it, and nothing would have
+      noticed if the second half had taken a day.
+
+      THE MECHANISM, verified by grep rather than inferred:
+      `check-declared-closures-added` appears ZERO times in
+      scripts/hooks/pre-push-local-gate.sh. Neither do the other plan-semantic
+      checks. The lane validates fragment SHAPE with the resolved plan binary and
+      accepts; it never asks the questions that read what a fragment MEANS.
+
+      THE PREMISE THAT IS FALSE. The lane's reasoning — set out at length in its
+      own comments about --first-parent, --no-merges and the --no-ff bypass — is
+      that ledger appends are cheap and safe to accept without a build, and that
+      the danger is arbitrary CODE sneaking through a lane meant for appends.
+      That is the right worry and the lane guards it carefully. This is the
+      MIRROR case it does not cover: plan content that only the full gate
+      validates. "No compile needed" is true of the fragment and false of the
+      checks that judge it.
+
+      THE ASYMMETRY IS THE REASON THIS IS WORTH FIXING RATHER THAN REMEMBERING.
+      The lane push costs its author nothing and takes seconds. The refusal lands
+      on every OTHER host, after a full gate, which on the floor hosts is the
+      most expensive thing they do. The author cannot see the cost and the payer
+      cannot see the cause: my own first reading of it was "trunk is red
+      fleet-wide", filed against a tree that was simply older than the fix.
+
+      WHAT TO RUN IN THE LANE (macuahuitl's list): check-declared-closures-added
+      at minimum, plus check-scorable-obligation-added, check-fragment-status-loss,
+      check-long-running-view and the salvage-refs ledger check. All shell, no
+      compile — which is the lane's own stated criterion for what it can afford.
+
+      NOT VERIFIED: whether these five are the complete set of build.sh steps that
+      read fragments rather than compiling. I listed what was named and did not
+      audit build.sh for others; whoever takes this should, because a lane that
+      runs four of six plan-semantic checks will read as safe and will not be.
+    exit_criteria:
+      - 'a plan-only push carrying a fragment that the full gate would refuse is REFUSED by the lane, naming the same check (pre-fix result: FAILS — the lane accepts it)'
+      - 'NEGATIVE CONTROL: a clean fragment is still admitted by the lane without a build, so the lane keeps its reason to exist'
+      - 'the lane names which plan-semantic checks it ran, so a reader can tell a checked append from an unchecked one'
+    events:
+      - type: filed
+        ts: "2026-09-14T09:00:00Z"
+        agent_id: "windows-yolanda-claude-20260913t082232z"
+        host: yolanda
+        summary: |
+          Filed by yolanda at macuahuitl's direction, from a window measured on
+          this host. macuahuitl supplied the check list and corrected my initial
+          reading: trunk was not red when I reported it, only the tree my gate
+          had refused, which predated the litmus commit.
