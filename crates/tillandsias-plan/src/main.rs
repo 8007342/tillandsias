@@ -6676,7 +6676,14 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             };
             if positional.len() < 3 {
                 eprintln!(
-                    "usage: tillandsias-plan set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]"
+                    "usage: tillandsias-plan set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT] [--append|--replace]\n\
+                     \n\
+                     On a long-form field (next_action, context, notes, title, deliverable,\n\
+                     verifiable_closure, unscoreable, provenance, progress_summary) a value that\n\
+                     drops lines the old value carried is REFUSED (1151-td46), because those lines\n\
+                     may be another host's warning and the LWW channel replaces wholesale:\n\
+                       --append   keep every old line, add yours under a dated attribution line\n\
+                       --replace  drop them deliberately, having read what the refusal listed"
                 );
                 std::process::exit(2);
             }
@@ -6835,6 +6842,85 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
             let reason = flagged("--reason").unwrap_or_default();
+
+            // ORDER 1151-td46 — A LONG-FORM FIELD IS NOT A SCALAR, AND THE
+            // LWW CHANNEL TREATS IT AS ONE.
+            //
+            // MEASURED on esme 2026-09-13 while attaching evidence to 793-zumy:
+            // one set-field on next_action replaced it wholesale and dropped
+            // three load-bearing lines OTHER HOSTS had written — a verification
+            // debt note, "DO NOT MOVE legacy_tier WITHOUT TELLING YOGA" (a
+            // downstream `grep -m1` makes key ORDER load-bearing there), and the
+            // hwfp-v2 field list. They were restored only because the tool
+            // happened to echo the old value's tail. check-fragment-status-loss
+            // guards the STATUS channel; nothing in the gate chain reads prose.
+            //
+            // THE REFUSAL IS ABOUT DROPPED LINES, not about length. Rewriting a
+            // long field freely is fine as long as every old line survives
+            // somewhere in the new text — which is what a genuine edit of one
+            // sentence looks like, and what a wholesale replacement does not.
+            let long_form = matches!(
+                field.as_str(),
+                "next_action"
+                    | "context"
+                    | "notes"
+                    | "title"
+                    | "deliverable"
+                    | "verifiable_closure"
+                    | "unscoreable"
+                    | "provenance"
+                    | "progress_summary"
+            );
+            let want_replace = args.iter().any(|a| a == "--replace");
+            let want_append = args.iter().any(|a| a == "--append");
+            if want_replace && want_append {
+                eprintln!("error: --replace and --append are mutually exclusive (1151-td46)");
+                std::process::exit(2);
+            }
+            // --append is a MERGE, and it is the default way to add a
+            // correction: the old text survives verbatim, the new text follows
+            // under a dated attribution line so a later reader can tell who
+            // added which half. Computed before the drop check, because after
+            // the merge nothing is dropped and the check has nothing to say.
+            let value = if want_append && long_form && current != "<unset>" {
+                format!("{current}\n\n[{ts} {host}] {value}")
+            } else {
+                value
+            };
+            if long_form && !want_replace && current != "<unset>" {
+                let new_lines: Vec<&str> = value.lines().map(str::trim_end).collect();
+                let dropped: Vec<&str> = current
+                    .lines()
+                    .map(str::trim_end)
+                    .filter(|old| !old.trim().is_empty())
+                    .filter(|old| !new_lines.iter().any(|n| n == old))
+                    .collect();
+                if !dropped.is_empty() {
+                    eprintln!(
+                        "refused:set-field:would-drop-prose — {} line(s) of {pid}.{field} are not present in the new value (1151-td46):",
+                        dropped.len()
+                    );
+                    for d in dropped.iter().take(20) {
+                        eprintln!("  would drop: {d}");
+                    }
+                    if dropped.len() > 20 {
+                        eprintln!("  ... and {} more", dropped.len() - 20);
+                    }
+                    eprintln!();
+                    eprintln!(
+                        "  Those lines may be ANOTHER HOST'S warning: this field is shared and the"
+                    );
+                    eprintln!(
+                        "  LWW channel replaces it wholesale. Three were dropped this way on"
+                    );
+                    eprintln!("  2026-09-13 and caught only by luck.");
+                    eprintln!(
+                        "    --append   keep every old line and add yours under a dated heading"
+                    );
+                    eprintln!("    --replace  you have read the lines above and they should go");
+                    std::process::exit(2);
+                }
+            }
 
             let compact = loop_status::iso_to_compact(&ts);
             let suffix = format!(
