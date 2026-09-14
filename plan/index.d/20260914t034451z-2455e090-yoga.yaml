@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    field: verifiable_closure
+    value: bash scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh — arm 3b (a plan/issues-only change yields ok:gate-fresh-except-plan, and names the invisible-to-both-digests case if it goes wrong), arm 3c (a plan/issues SUBDIRECTORY still stales the stamp, so the skip glob and the digest's -maxdepth cover the same set), and arm 5b (build.sh's partial-memo arm runs check-issue-citation-convention.sh, whose subject joined the lane). Bound at scripts/gate-steps.d/200-1127-waxf.step.
+    ts: "2026-09-14T03:44:51Z"
+    host: yoga
+
+events:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    event:
+      type: note
+      ts: "2026-09-14T03:44:51Z"
+      host: yoga
+      summary: |-
+        the guard now exists; moving the text out of unscoreable per the row's own instruction

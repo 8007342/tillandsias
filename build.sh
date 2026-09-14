@@ -1676,6 +1676,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
                     exit 1
                 fi
                 _info "Plan ledger check passed"
+                # ORDER 1142-85zx. plan/issues/*.md joined the fast lane, so the
+                # guard whose SUBJECT is that directory has to run here for the
+                # same reason the two above do: the exclusion and the guard cover
+                # the same paths in opposite directions, and a lane that skips
+                # the guard is how a change reaches trunk unvalidated.
+                #
+                # Measured on yoga: 11ms. This arm exists to be cheap, and a
+                # guard that costs a hundredth of a second is not the thing that
+                # makes it expensive — the whole memoised-plan arm is seconds.
+                if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+                    _error "a plan/issues record does not cite its subject as the convention requires (1142-85zx) — see the verdict above"
+                    exit 1
+                fi
+                _info "Issue citation convention check passed"
                 trap - EXIT
                 timing_emit build-check-memoized-plan check "$_CHECK_T0" 0 || true
                 exit 0
