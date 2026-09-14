@@ -49,6 +49,13 @@ $ErrorActionPreference = 'Stop'
 $Repo       = '8007342/tillandsias'
 $AppName    = 'Tillandsias'
 $ExeName    = 'tillandsias-tray.exe'
+# ORDER 1171-ccf2. The headless probe binary ships beside the tray and installs
+# beside it. It is NOT added to PATH: that is a permanent change to state the
+# platform does not own, made on every install, and the capability probe reaches
+# it through the install directory instead (host-capability-probe.sh's
+# _windows_install_candidate). Best-effort on install -- a release that predates
+# 1171-ccf2 carries no such file and must still install its tray.
+$HeadlessName  = 'tillandsias.exe'
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\$AppName"
 $InstalledExe  = Join-Path $InstallDir $ExeName
 $StartMenuDir  = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
@@ -408,6 +415,19 @@ try {
     Expand-Archive -Path "$Tmp\$ZipName" -DestinationPath $InstallDir -Force
     if (-not (Test-Path $InstalledExe)) {
         Die "Extraction did not produce $InstalledExe -- zip may be corrupt."
+    }
+    # ORDER 1171-ccf2. Expand-Archive already places everything the zip carries,
+    # so the headless probe binary needs no copy step -- only a word about
+    # whether it arrived. Best-effort and NEVER fatal: a release cut before
+    # 1171-ccf2 carries no tillandsias.exe and must still install its tray.
+    # Said out loud because its ABSENCE is the condition that left a Windows
+    # host unable to publish a capability row at all, and silence is what made
+    # that hard to see.
+    $InstalledHeadless = Join-Path $InstallDir $HeadlessName
+    if (Test-Path $InstalledHeadless) {
+        Say "  capability probe binary: $InstalledHeadless"
+    } else {
+        Say "  note: this release carries no $HeadlessName; the capability probe will have no runnable binary at this locus (1171-ccf2)"
     }
 
     # -- Start Menu shortcut ---------------------------------------------------

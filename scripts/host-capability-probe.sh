@@ -106,9 +106,42 @@ command -v jq >/dev/null 2>&1 || { echo "error: jq is required" >&2; exit 2; }
 # A REFUSED CANDIDATE IS NAMED AND THE LOOP CONTINUES. Silence was the defect;
 # a stale candidate that loses to a current one later in the list should say so,
 # because the operator's next question is "why is it not using the one I built".
+# ORDER 1171-ccf2. WHERE A WINDOWS INSTALL ACTUALLY PUTS IT.
+#
+# install-windows.ps1 installs to `$env:LOCALAPPDATA\Programs\Tillandsias`, and
+# that directory is NOT on PATH — measured on yolanda, `command -v tillandsias`
+# finds nothing on a host with a tray installed. So the `tillandsias` candidate
+# below never fires on a Windows install, and esmeraldinha's windows-host locus
+# had no runnable probe at all: the guard told it to publish, and the remedy
+# exited 2 at the locus where the verdict fired.
+#
+# The installer is NOT made to edit the user's PATH to fix this. That is a
+# permanent change to state the platform does not own, on every install, for a
+# nicety this packet does not need. The resolver looks where the install puts
+# things instead.
+#
+# REGIME-GUARDED ON PURPOSE: only when LOCALAPPDATA is set, so the in-guest
+# (Linux) locus never consults a Windows path and never reports a Windows
+# binary as its own. `cygpath -u` with a passthrough fallback is the tree's
+# existing idiom for this conversion (scripts/with-wsl2-builder.sh does the
+# same for LOCALAPPDATA and SYSTEMROOT); there is no shared helper to reuse.
+#
+# THE VOCABULARY PROBE APPLIES TO IT EXACTLY AS TO EVERY OTHER CANDIDATE
+# (1172-dyvd). Living in the install directory is not a currency claim — a
+# stale installed tillandsias.exe is refused BY NAME like any other, which is
+# the whole point of the check being about what a binary ANSWERS rather than
+# where it sits.
+_windows_install_candidate() {
+    [ -n "${LOCALAPPDATA:-}" ] || return 0
+    local base
+    base="$(cygpath -u "$LOCALAPPDATA" 2>/dev/null || printf '%s' "$LOCALAPPDATA")"
+    [ -n "$base" ] || return 0
+    printf '%s/Programs/Tillandsias/tillandsias.exe\n' "$base"
+}
+
 resolve_probe() {
     local candidate
-    for candidate in "${TILLANDSIAS_HEADLESS_BIN:-}" ./target/release/tillandsias tillandsias; do
+    for candidate in "${TILLANDSIAS_HEADLESS_BIN:-}" ./target/release/tillandsias "$(_windows_install_candidate)" tillandsias; do
         [ -n "$candidate" ] || continue
         "$candidate" --inference-tier >/dev/null 2>&1 || continue
         if "$candidate" --capabilities 2>/dev/null | grep -q 'accel_side='; then
