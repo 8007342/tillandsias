@@ -1,0 +1,24 @@
+# Gate step 1132-r4mt — data, not code.
+#
+# Binds the fixture that keeps the archiver's could-not-run channel SELF-NAMING.
+# It is source-text only: nothing runs the archiver, touches the ledger, or needs
+# ruby, a plan binary or a toolbox, because the exit-3 sites are reachable only
+# under conditions no host can create on demand and the property under test is
+# what the script CAN emit. The behavioural half is already bound by
+# 965-sxec's two fixtures, which drive the one site a stub PATH reaches.
+#
+# THE ARM THAT MATTERS is the negative control: build.sh's forge skip must keep
+# keying ONLY on the ruby cause. A stale plan binary or an unreadable fragment
+# must still stop the gate, because those are repairable in the locus that hit
+# them; making them skippable would turn a naming fix into leniency, which is
+# the failure 965-sxec's channel exists to prevent.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking every archiver could-not-run exit names its own cause (1132-r4mt)"
+STEP_SCRIPT="scripts/test-archiver-could-not-run-is-self-naming.sh"
+STEP_ERROR="an archiver exit-3 site no longer names its cause, or a repairable instrument failure became forge-skippable (1132-r4mt) — a caller reading rc=3 is back to parsing prose to tell a stale ledger instrument from a locus with no ruby; see the verdict line above"
+STEP_OK="archiver could-not-run self-naming check passed"
+# Exit 3 means the archiver source is not present — nothing was examined, and the
+# fixture says so by name rather than passing. Exit 1 remains a real regression.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/archive-plan-packets.sh is absent, so no exit-3 site could be read"

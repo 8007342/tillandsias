@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: implemented
+      ts: "2026-09-14T01:38:41Z"
+      agent_id: linux-yoga-claude-20260914t013840z
+      host: yoga
+      summary: |
+        CRITERION 2 ATTACKED FROM THE OTHER SIDE: rather than catch the intermittent, make the next one name itself.
+
+        THE FINDING THAT REFRAMED IT. The row says yoga's in-gate refusal was "COULD-NOT-RUN WITH A DIFFERENT REASON STRING — not no usable ruby", and three cycles have now gone into asking WHICH of the others it was. Counted this cycle: scripts/archive-plan-packets.sh has EIGHT exit-3 sites and, until now, ONE of them printed a machine-readable token. So rc=3 was structurally unable to say which condition produced it, and every refusal on record — on both hosts, twice each — discarded that fact at the moment it was known. That is this row's own criterion 1 ("print $out2 so a refusal names its own cause") one layer in, and it is why C2 kept costing a gate per attempt.
+
+        WHAT SHIPPED. Six more tokens, in the house grammar the fleet already uses (could-not-run:<subject>:<cause>, as in check-no-competing-gate.sh and check-release-tier-freshness.sh): archiver:stale-plan-binary, archiver:no-plan-binary, archiver:unreadable-fragment, archiver:ruby-worker-failed, archiver:ruby-worker-failed-idempotency-pass, archiver:answerability-harness-failed. Additive only: the prose is untouched, and no existing consumer's string moved.
+
+        TWO DELIBERATE NON-CHANGES, both recorded rather than tidied.
+          * _require_ruby now emits THE SAME token as the --check early exit, not a new one. They are one condition reached two ways, and build.sh's forge skip keys on it — a second spelling would make the skip depend on which path arrived first, which is exactly the union defect the coordinator untangled on 2026-09-02.
+          * The eighth site keeps `refused:no-plan-binary`, a token spelled in the FLEET-WIDE refusal grammar that select-work-batch.sh, check-pickup-role-grammar.sh and plan-binary-probe.sh all emit. Respelling it here would break that grammar to tidy this file. The inconsistency is real — a `refused:` token on a could-not-run exit — and it is named as a declared exception IN the fixture rather than papered over, so it stays visible.
+
+        THE NEGATIVE CONTROL IS THE POINT. build.sh wages an exit 3 through ONLY in a forge and ONLY on the ruby token; a stale plan binary or an unreadable fragment must still stop the gate, because those are repairable in the locus that hit them (965-sxec). An arm asserts build.sh's skip does not match an archiver:* token, so this naming fix cannot drift into leniency.
+
+        FIXTURE: scripts/test-archiver-could-not-run-is-self-naming.sh, 5/5, source-text regime stated in its header, bound at scripts/gate-steps.d/310-1132-r4mt.step with STEP_SKIP_EXIT=3.
+
+        MUTATION-TESTED FIVE WAYS, each with the diff printed and proven non-empty first: deleting any one of three tokens reds it, pointing the forge skip at an archiver:* token reds it, and moving a token to stderr reds it.
+
+        AND THE FIXTURE ITSELF WAS WRONG TWICE BEFORE IT WAS RIGHT, both times looking exactly like a pass:
+          1. It matched `could-not-run:` ANYWHERE in the window, so a deleted token was still credited by the COMMENT that explains it. A self-documenting file is full of quoted history — scan declarations, not substrings.
+          2. It bounded each site's window at the PREVIOUS exit-3, which let one site borrow a token belonging to another site between them; deleting a real token STILL passed. Only a small window local to the block (12 lines; measured, every site emits 3 to 8 lines above its exit) actually bites.
+        Both were caught by mutation and neither by reading. A fixture that cannot fail is the failure mode this row is about, and it very nearly shipped inside the fix for it.
+
+        WHAT THIS DOES NOT DO. It does not name the mechanism (C2) and does not claim to: the next in-gate rc=3 will now SAY which of the eight it is, which is what turns one refusal into an answer instead of another cycle. C3 — catch one refusal with the print armed — is unchanged and remains the settling read.
