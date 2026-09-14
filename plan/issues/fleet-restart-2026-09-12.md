@@ -4658,3 +4658,17 @@ measured the way they did tonight. Yolanda's phrasing for the class: a
 produced the maximum side effect the script is capable of. Yolanda is
 unblocked by merging trunk (both fixes predate their snapshot); 1183-2s7a
 lands with their re-gate.
+
+**Pass 23 (2026-09-14T14:11Z) — the flood's refs are gone; nothing to
+relay.** Deleted from origin under TILLANDSIAS_SALVAGE_DELETE_OK=1, one push
+for the seventeen `---help` refs (toolbx 9, yoga 7, tlatoanis-macbook-air 1)
+and one for macbookair's 804deux rescue, whose tip's five files (macneo's
+fragments) diff empty against trunk; every deleted ref's ledger line had
+carried its ` deleted` mark for at least one full pass (the grace rule from
+yolanda's refused gate on 2026-09-13). Origin now holds five salvage refs,
+all older than the flood (pirria 3, unknown 2), lines unmarked, refs kept.
+Sweep filed nothing new; ledger check ok:26. Drift win=0 osx=0 main=0.
+Trunk since pass 22: yoga's claim of 865-r6dt. No messages since yolanda's
+12:20Z report; no host idle by report; hosts silent this window (esme,
+macneo, lenovinha, pirria) not directed. Stale rows 89/501, none handed.
+Audit rows=23 stems=23.
