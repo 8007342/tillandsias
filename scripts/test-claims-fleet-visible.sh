@@ -456,6 +456,41 @@ git remote set-url --delete --push origin "$W/bare.git" 2>/dev/null || git remot
 printf '#!/bin/sh\nexec bash scripts/hooks/pre-push-local-gate.sh "$@"\n' > .git/hooks/pre-push
 G add plan/index.d >/dev/null; G commit -q -m "record(2-bbbb): implemented" >/dev/null
 
+# ── ARM 11b: THE REAL LEDGER'S REGIME — the trunk fold this repository's ──
+#     helper would build must pass check. The scratch ledgers above have no
+#     plan/archive; the real one resolves live rows' depends_on edges INTO
+#     archived packets, and a fold built without the archive reported 96 of
+#     them unresolved and refused every relay from every host (macbookair,
+#     2026-09-14). This arm materialises trunk's fold the way the helper
+#     does, from origin/linux-next when the ref exists (else HEAD), and
+#     requires check to pass — so the regime the first fixture lacked is
+#     measured on every gate, not discovered by a host that happens to relay.
+cd "$ROOT" || exit 2
+_base_ref="$(git rev-parse --verify --quiet refs/remotes/origin/linux-next 2>/dev/null || git rev-parse HEAD)"
+rm -rf "$W/realfold"; mkdir -p "$W/realfold/plan"
+git show "$_base_ref:plan/index.yaml" > "$W/realfold/plan/index.yaml" 2>/dev/null
+for d in plan/index.d plan/archive; do
+    [ -n "$(git ls-tree -d "$_base_ref" "$d" 2>/dev/null)" ] && git archive "$_base_ref" "$d" | tar -x -f - -C "$W/realfold"
+done
+git cat-file -e "$_base_ref:plan/schema.yaml" 2>/dev/null && git show "$_base_ref:plan/schema.yaml" > "$W/realfold/plan/schema.yaml"
+chk="$("$PLAN" --index "$W/realfold/plan/index.yaml" check --strict-fragments 2>&1 | grep -v OpenSpec | tail -1)"
+case "$chk" in
+    ok:*) ok "ARM 11b (real ledger): the trunk fold the helper builds from $(git rev-parse --short "$_base_ref") — index.yaml + index.d + archive — passes check ('${chk%% *}…')" ;;
+    *)    bad "ARM 11b (real ledger): the trunk fold the helper builds fails check — every relay would be refused: $chk" ;;
+esac
+# Control: the same fold WITHOUT the archive must fail, or this arm proves
+# nothing about the archive being load-bearing. Skipped (named) when this
+# ledger has no archive or no edge into it.
+if [ -d "$W/realfold/plan/archive" ]; then
+    rm -rf "$W/realfold/plan/archive"
+    chk2="$("$PLAN" --index "$W/realfold/plan/index.yaml" check --strict-fragments 2>&1 | grep -v OpenSpec | tail -1)"
+    case "$chk2" in
+        ok:*) echo "note: ARM 11b control: this ledger has no live edge into its archive, so the archive is not load-bearing here (the arm above still holds)" ;;
+        *)    ok "ARM 11b control: the same fold without the archive fails check ('$(printf '%s' "$chk2" | cut -c1-60)…') — the archive is load-bearing and the helper must carry it" ;;
+    esac
+fi
+cd "$W/wc" || exit 2
+
 # ── ARM 12: usage ──────────────────────────────────────────────────────────
 tip12="$(remote_tip)"
 out="$(helper --bogus 2>/dev/null | tail -1)"; rc=$?

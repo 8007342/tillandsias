@@ -244,8 +244,21 @@ _trunk_fold_check() {
         echo "refused:fragments-to-trunk:trunk-fold:$REMOTE/$TRUNK has no plan/index.yaml"; exit 1
     fi
     git show "$base:plan/index.yaml" > "$tmp/fold/plan/index.yaml"
-    if [ -n "$(git ls-tree -d "$base" plan/index.d 2>/dev/null)" ]; then
-        git archive "$base" plan/index.d | tar -x -f - -C "$tmp/fold"
+    # The fold is index.yaml + index.d + the ARCHIVE + the schema: archived
+    # packets are what live rows' depends_on edges resolve to, and a fold
+    # without them reports every such edge unresolved. MEASURED by macbookair
+    # 2026-09-14 on the real ledger — 96 unresolved referents, none of them a
+    # fragment being relayed; the same tree with `git archive $base
+    # plan/archive` extracted: ok, 944 packets. The first fixture never had an
+    # archive, so the helper was green on one regime (the scratch) and refused
+    # every relay from every host on the other.
+    for d in plan/index.d plan/archive; do
+        if [ -n "$(git ls-tree -d "$base" "$d" 2>/dev/null)" ]; then
+            git archive "$base" "$d" | tar -x -f - -C "$tmp/fold"
+        fi
+    done
+    if git cat-file -e "$base:plan/schema.yaml" 2>/dev/null; then
+        git show "$base:plan/schema.yaml" > "$tmp/fold/plan/schema.yaml"
     fi
     while IFS= read -r p; do
         case "$p" in plan/index.d/*) cp -- "$p" "$tmp/fold/$p" ;; esac
