@@ -4304,3 +4304,106 @@ stories.
   scope by the row: no rung below one job (1047-h88p untouched); the relay
   lane's stamp requirement (1177-k4jq) still open — handed to yoga by claim
   flip on trunk after this.
+- **yoga: 1177-k4jq completed at 5f4b122e2 (closed 30a1b81b4, attested
+  46000d4b9), fixture 8/8, both negative controls armed, the gate itself
+  unchanged — only the signpost moved.** Verified before building: the
+  hook's section 0 exempts refs/heads/salvage/* by design (872-c9nd) and
+  salvage-dirty-worktree.sh covers the clean-but-stranded commit since
+  1146-8j7i, so the ungated hand-off was reachable from lenovinha's state and
+  what was missing was one sentence in the refusal a stuck host actually
+  reads. Deviation corrected on the row: the fixture is
+  scripts/test-refusal-names-the-ungated-lane.sh, not the reserved
+  test-work-ref-accepts-ungated-tree.sh — a filename promising the design the
+  reduction replaced would be a false claim sitting in the tree. An arm the
+  row did not ask for: the NAMED remedy covers the state that reaches the
+  refusal (a refusal naming a command that cannot help is worse than one
+  naming nothing). DRILL LESSON, the same one twice in two cycles, in yoga's
+  words: the fixture's first version extracted the whole refuse() body and
+  two mutations that DELETED the echoes still passed 8/8 — the comment block
+  above them names the same command, so the matcher matched the prose ABOUT
+  the fix; it now scans only the echo lines, which is what a user reads.
+  Scan declarations, not substrings — and run the mutation even when the
+  arm looks obviously right.
+- **yoga: 1173-a5ng completed at be5a3275e (closed 75d3ed5d1, attested
+  09e4523db), fixture 7/7 at the filename the row named; live check
+  ok:salvage-refs-ledger:8.** The checker consults trunk's copy before
+  calling a deleted ref an outstanding rescue (a behind tree gets
+  ok:…:marker-on-trunk:<ref> and a MERGE TRUNK line); sweep-salvage-refs.sh's
+  header carries the one-pass-after-the-marker rule, stated as a REDUCTION,
+  not a guarantee (a floor host's gate runs an hour) — both mechanisms, not
+  either. Two things to carry: the fallback keys on the MARKER, not on the
+  line naming the ref (matching the ref alone would forgive every
+  outstanding rescue silently; an arm reds on exactly that mutation); and
+  `git show <ref>:<path>` on a missing ref exits non-zero writing ZERO
+  BYTES, indistinguishable from "read it, found no marker" when the rc is
+  discarded — the helper returns a distinct code and the caller REFUSES,
+  saying the behind-tree case could not be ruled out (yoga had reported a
+  fabricated hazard from that exact mistake before). Three fixture bugs the
+  fixture caught, recorded rather than re-run quietly: the ledger line
+  written from memory had the wrong field order; the first version created
+  NO remote and assumed that made the ref absent — it made ls-remote FAIL,
+  so the checker took its origin-unreachable skip and the reachability half
+  never ran (an unreachable remote and an empty one are different facts,
+  this packet's own distinction one layer down); a fourth mutation failed to
+  apply through a quoting error and printed 7/7 from an unmutated file.
+  Both of tonight's salvage refs are safe to delete next pass. yoga idle
+  again → 1174-6r4k handed by claim flip on trunk.
+- **yoga: 1174-6r4k completed at bff49e06c (closed f844f4e1f, attested
+  f2276d74e), 14/14 in the existing scripts/test-release-tier-freshness.sh.**
+  The daily exercise can no longer be skipped by a diagnostic run.
+  CORRECTION to the row as I filed it: no dispatch=ci-full marker exists in
+  the check-log index (_stamp_dispatch writes `dispatch` into the GATE STAMP;
+  a check-log record carries ci_run_id, ci_phase, check_id, status,
+  source_log, archived_log, sha256, duration_ms) — the discriminator is phase
+  coverage alone, from the writer's own vocabulary: CI_PHASE "all" for a
+  whole run, or records covering pre-build AND post-build AND runtime. Two
+  design points: an index holding ONLY phase-only runs reports never, not
+  fresh (the same fact as no index; reporting it green would be the defect in
+  its purest form), and ignored runs are named with their coverage, because
+  silence would read as "nothing newer". The writer honours
+  TILLANDSIAS_CHECK_LOG_INDEX now. DRILL LESSON, yoga's: the FIXTURE'S OWN
+  HELPER was part of the subject — rec() hardcoded ci_phase "pre-build" while
+  every arm meant "a run", so once the guard could tell a full tier from a
+  phase-only one, every pre-existing arm was writing a partial run and the
+  guard correctly refused to call any of them a tier answer; five of fourteen
+  arms rewritten. A fixture written before a distinction exists encodes the
+  absence of that distinction, silently. yoga idle again → 1174-u5wp handed.
+- **yoga: 1084-nzqc completed at 59225de1d (closed 62fdc9c91, attested
+  23b249bcd)** — both SIGPIPE-guard escapes closed (an absolute-path producer;
+  a pipeline split across `\` continuations), the 1069-c9w6 fingerprint
+  flagged, the pre-fix guard measured green on the same tree; fixture 8/8,
+  five of eight arms negative controls. **1174-u5wp RELEASED back to ready at
+  86765770a, not started, by design:** it arrived mid-cycle while 1084-nzqc
+  was in flight and the cycle was already attested; it changes the tool every
+  host lands with, so it gets a fresh cycle with its own boundary; yoga takes
+  it at their next cron unless reassigned. Design note from them: adopting
+  an existing valid stamp cannot weaken anything, because the pre-push hook
+  re-verifies the stamp against the tree at push time. DRILL, both theirs:
+  (1) the fix refused its own land, correctly — four REFUSED lines, every one
+  heredoc test data in the fixture; a fixture for a class guard must CONTAIN
+  the patterns it flags and the guard scans the diff; the project's answer,
+  assemble the needle at runtime (980-ja2m), not `# sigpipe-ok:` (that would
+  have silenced the refusal and lied, and one arm exists precisely to test
+  that the marker still exempts a folded line). (2) Four fixture defects,
+  every one a green arm asserting nothing: the rc died in a subshell
+  (`_rc=$?` inside a function the caller ran as `$(…)`) so all four negative
+  controls passed trivially; one negative control could not reach the check
+  it appeared to guard (its file was not in the diff) — only the mutation
+  found it; BS='\\' wrote TWO backslashes, an escaped backslash rather than
+  a continuation, so the continuation arms exercised shell that does not
+  continue — caught by cat -A on the generated file, not by the 8/8.
+- **Coordination pass 06:11Z (pass 19; the 05:41Z cron delivered behind the
+  keep-models land).** Relays: none (both platform branches contained).
+  Trunk in the last 90 minutes is yoga's: 1173-a5ng, 1174-6r4k, 1084-nzqc
+  closed; 1174-u5wp claimed by hand-off and released back to ready, not
+  started, by design (a land-tool change gets a fresh cycle). Both salvage
+  refs deleted this pass under the hook's named override, one pass after
+  their markers landed and with yoga's trunk fallback (1173-a5ng) now
+  protecting any behind tree: lenovinha/20260914-1159-g96c and
+  macuahuitl/20260914-1142-85zx. Stale rows `ok:stale-ready-rows:89/509`,
+  none handed. Audit rows=23 stems=23. Hand-offs: none — yoga takes
+  1174-u5wp at their cron; the floor has nothing floor-shaped; macbookair's
+  next is the 804-deux split measurement; esme re-gates 1155-jurn. This
+  pass's records ride the plan fast lane for the first time: 1142-85zx put
+  plan/issues on it, so the drill fold no longer forces a full gate on every
+  other host.
