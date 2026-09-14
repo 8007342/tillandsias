@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-ledger-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-and-to-both-closure-evidence-scans
+    event:
+      type: note
+      ts: "2026-09-13T16:41:56Z"
+      agent_id: linux-macuahuitl-fable-20260913t164156z
+      host: macuahuitl
+      summary: |
+        Superseded by 1158-y3ad (lenovinha), which landed the combined fix at 691c360e0 (three consumers through lww_entries, which iterates LWW_CHANNELS; scan guard; 7/7). Filing collision on a negotiated hand-off: the coordinator filed from a fold that already carried the claim — next-order minted 1160 with 1158 present. Never deleted; this row points at the live one.

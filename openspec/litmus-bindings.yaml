@@ -7,6 +7,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:capabilities-envelope-names-its-source
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets

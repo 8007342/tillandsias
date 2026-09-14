@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on lenovinha 2026-09-13 from esme's post-fix measurement of 1154-8ywc.
+# The verdict is right; the remedy it names cannot run where it fires.
+packets:
+  - packet_id: the-capability-row-guard-names-a-remedy-that-cannot-run-at-the-locus-where-the-verdict-fires-so-a-windows-host-is-told-to-publish-from-a-context-with-no-runnable-probe
+    order: 1165-xkjh
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [tooling, capability, guard, integrity]
+    estimated_hours: 2
+    verifiable_closure: "scripts/check-capability-row.sh fixture: when the committed row is expired AND the live fold could not run, the guard emits a stderr line naming that the remedy needs a probe running at this locus and that none is available here, while STDOUT stays byte-identical to today's stale:capability-row-expired:<h>:age=<n>s (pre-fix result: FAILS — no such line; measured esmeraldinha 2026-09-13, verdict rc=1 while host-capability-probe.sh --fragment exits 2 on the same host and locus); NEGATIVE CONTROL 1: the verdict TOKEN and exit codes are unchanged on every path, so consumers parsing the grammar see no difference and the 19 existing arms still pass; NEGATIVE CONTROL 2: an expired row on a host WITH a runnable probe emits no such line, because there the remedy is available and saying otherwise would be the false advisory this packet exists to remove."
+    owned_files:
+      - scripts/check-capability-row.sh
+    title: |
+      The capability-row guard tells a host to publish a row with host-capability-probe.sh --fragment, but on the locus where the expired verdict fires that command can exit 2 — so a correct, actionable verdict names a remedy that is unavailable exactly where it is read.
+    context: |
+      MEASURED ON ESMERALDINHA, 2026-09-13, after 1154-8ywc landed and made the
+      Windows path report honestly for the first time:
+
+        Git Bash / windows-host locus
+          check-capability-row.sh check
+            -> stale:capability-row-expired:esmeraldinha:age=1866506s  rc=1
+          host-capability-probe.sh --fragment
+            -> rc=2, "no runnable tillandsias binary (build or install one)"
+
+        target/release/tillandsias.exe  absent
+        target/debug/tillandsias.exe    absent
+        target/debug/tillandsias        present, an ELF, exits 126 there
+
+      The script header documents rc=1 as "actionable (publish a row: absent,
+      drifted, or expired — all three are fixed by host-capability-probe.sh
+      --fragment)". On that host and locus the named command cannot run.
+      Verdict correct, exit code correct, remedy unreachable.
+
+      A GUARD THAT NAMES AN UNAVAILABLE REMEDY TRAINS ITS READER TO IGNORE THE
+      VERDICT. Same cost as the false carry-forward advisory in 1158-y3ad from
+      the other side: there the guard fired about a packet that was fine, here
+      it fires correctly and asks for something impossible. Both teach the
+      reader the same thing.
+
+      THIS IS NOT 1130-8zxn RETURNING — esme's distinction and it is the
+      load-bearing one. 1130-8zxn was a WRONG verdict that could not be cleared
+      by doing the right thing. This is a RIGHT verdict whose remedy is out of
+      reach. Same felt experience for the host, opposite causes; conflating them
+      would reopen a closed packet instead of filing this one.
+
+      NOR IS IT 1154-6big. Adding the debug path to resolve_probe's candidates
+      helps a Linux-native locus; on Windows that candidate is an ELF the probe
+      would correctly refuse by running it. THE WINDOWS LOCUS HAS NO BINARY TO
+      FIND, not a findable binary being missed.
+
+      WHAT TO BUILD, scope deliberately narrow. The verdict TOKEN does not
+      change: consumers parse that grammar and 1154-8ywc left it alone on
+      purpose. The guard already knows, on one path, BOTH that the row is
+      expired AND that the live fold could not run. When both hold it emits a
+      STDERR line naming the constraint, leaving stdout byte-identical. The
+      header exit-code paragraph is corrected to say the remedy is available
+      only where a probe can run. One diagnostic, no new state, no grammar
+      change.
+
+      REJECTED, WITH REASONS, so nobody re-proposes them:
+
+      (a) Publish the windows-host row FROM the in-guest side using the probe's
+          locus-assertion flag. The flag exists at line 64, and that is what
+          makes it dangerous. The probe measures THE RUNNING MACHINE — it wraps
+          the real capability probe around whatever hardware it executes on — so
+          this would stamp the DISTRO's hardware with the windows-host label.
+          889-ewvt in one line: a missing row routes nothing; a false row routes
+          confidently and wrongly, which is strictly worse. The matrix ROUTES on
+          that row. The flag is for a probe that IS at a locus and cannot derive
+          it, never for asserting a locus you are not at.
+      (b) Publish from the distro and watch the Git Bash verdict. That mints a
+          third locus for a node that already has two — 1159-g96c's problem —
+          and would make the fleet's data worse in order to measure a claim.
+
+      THE REAL FIX IS A FLEET CAPABILITY GAP, NOT THIS ROW: esme has no native
+      Windows tillandsias at all, so the windows-host locus cannot publish from
+      anywhere. That is a scheduled build for the operator or the coordinator to
+      place, and this packet is the honest minimum that should land regardless.
+
+      STILL UNMEASURED AND LABELLED AS SUCH: 1154-8ywc's closure claims the
+      remedy now clears the verdict. It is untestable from the locus where the
+      verdict fires, because the remedy cannot run there. Not disproved —
+      unmeasured, which is a different and more useful thing to record.
+
+      CREDIT: esme measured it, checked the 1128-4ffr precondition independently
+      before attempting a publish, declined both unsound workarounds unasked,
+      and drew the 1130-8zxn distinction that stopped this being filed as a
+      regression.
+    exit_criteria:
+      - 'expired row + live fold unavailable -> a stderr line names that the remedy needs a probe at this locus and none is available (pre-fix result: FAILS — no such line)'
+      - 'stdout is byte-identical on every path; the 19 existing fixture arms pass unchanged'
+      - 'NEGATIVE CONTROL: an expired row on a host WITH a runnable probe emits no such line — the remedy is available there and saying otherwise is the false advisory this packet removes'
+      - 'the header exit-code paragraph no longer claims the fragment publish fixes all three actionable verdicts unconditionally'
+    events:
+      - type: filed
+        ts: "2026-09-13T19:09:26Z"
+        agent_id: "linux-lenovinha-opus5-20260913t190926z"
+        host: lenovinha
+        summary: |
+          Filed from esme's post-fix run on 1154-8ywc. The fix made the Windows
+          path report honestly, and honesty exposed that the remedy it names
+          cannot run there.

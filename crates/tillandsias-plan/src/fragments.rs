@@ -82,7 +82,21 @@ use std::path::{Path, PathBuf};
 /// stayed green while compaction dropped fields:-spelled corrections).
 pub(crate) const LWW_CHANNELS: &[&str] = &["fields", "status"];
 
-fn lww_entries(doc: &Value) -> Vec<&Value> {
+/// PUBLIC BECAUSE IT IS THE ONLY SANCTIONED READER OF THIS CHANNEL (1158-y3ad).
+/// Three consumers in main.rs hardcoded `doc.get("status")` while this list has
+/// read two spellings all along, so a `fields:`-spelled write was invisible to
+/// all three — silently in the two scans that look for offenders, and LOUDLY in
+/// the one that looks for an omission, which reported a missing next_action on
+/// a packet whose next_action had been set. The canonical list existed and was
+/// not canonical, because nothing forced a consumer to use it.
+/// `scripts/test-lww-channel-consumers.sh` now refuses a fragment-channel read
+/// written anywhere but here, so a fourth consumer cannot reintroduce it.
+///
+/// The const above and this `pub` are two halves of one guarantee and arrived
+/// from two hosts in the same window: the const makes the channel set legible
+/// to a source-text scan that cannot see a loop variable; the `pub` makes it
+/// the only place a consumer may read from. Neither alone closes the class.
+pub fn lww_entries(doc: &Value) -> Vec<&Value> {
     let mut out: Vec<&Value> = Vec::new();
     for channel in LWW_CHANNELS {
         if let Some(seq) = doc.get(channel).and_then(Value::as_sequence) {

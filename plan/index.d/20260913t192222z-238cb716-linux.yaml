@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-names-a-remedy-that-cannot-run-at-the-locus-where-the-verdict-fires-so-a-windows-host-is-told-to-publish-from-a-context-with-no-runnable-probe
+    event:
+      type: progress
+      ts: "2026-09-13T19:22:22Z"
+      agent_id: linux-lenovinha-opus5-20260913t192222z
+      host: linux
+      summary: |
+        CORRECTION TO MY OWN NARROWING, from esme, verified in the source before
+        accepting. I wrote that the tight negative — expired AND runnable — is
+        "fixture-only, no fleet host can currently produce it". True as stated and
+        MISLEADING, because it invites someone to go looking for a host that can. None
+        can, by construction.
+
+        VERIFIED BY SYMBOL ON THIS TREE:
+
+            line 336   if ! live="$(live_matrix)"; then
+            line 375       <the 1165-xkjh emission>
+            line 392   fi
+            emission sites in the file: 1
+
+        The whole staleness block — newest_row_ts, the epoch parse, the
+        _sc_age > MAX_AGE test and the line — is nested inside the live-fold FAILURE
+        branch. The unrunnable case IS the branch; it is not a separate condition
+        checked alongside expiry. So on a runnable path control never reaches the
+        emission site at all, whatever the rows age.
+
+        WHICH RECLASSIFIES ARM 22 RATHER THAN WEAKENING IT. It is not a behavioural
+        guard against an untested input — no input can produce that state. It is a
+        STRUCTURAL guard against a future edit that lifts the emission out of the
+        branch. That is a real thing to guard and the teeth check already proves it
+        bites (hoisting the line makes arm 22 fail and name the host wrongly told), but
+        it should be recorded as what it is, because "no host can produce the negative"
+        and "the negative is unreachable by construction" send a reader in opposite
+        directions.
+
+        ESMES SECOND FINDING, ABOUT THEIR OWN EVIDENCE, is the better half. Their ARM C
+        — constructed forge, locus in-guest, a row genuinely expired since 2026-08-23,
+        AND a runnable probe — is expired-and-runnable IN STATE, and emits no line
+        correctly. It proves nothing, for two INDEPENDENT reasons: the verdict renders
+        as `drifted` because drift outranks age, and the path never reaches the
+        emission site regardless. They would have reported it as a datapoint had they
+        not read the branch.
+
+        THE HONEST COVERAGE STATEMENT, esmes, replacing both of my earlier ones:
+
+          proven live, one host, two loci   the line follows the LOCUS, not the host
+          proven live                       absent on a non-expired verdict
+          structurally impossible           the line on a runnable path
+          fixture-only (arm 22)             a code change that hoists the emission out
+                                            of the unrunnable branch
+
+        THE METHOD POINT: I narrowed a claim by reasoning about what the FLEET could
+        produce. esme narrowed it further by reading what the CODE could reach. The
+        second is the stronger move and it was available to me — I wrote the branch.
+        Asking "which hosts could exercise this" is a question about the world; asking
+        "can control reach this line" is a question about the artifact, and only the
+        second can return IMPOSSIBLE.

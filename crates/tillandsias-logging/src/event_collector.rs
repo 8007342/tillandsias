@@ -432,12 +432,7 @@ impl ImageBuildEventWriter {
     }
 
     fn max_bytes(&self) -> u64 {
-        if let Some(max_bytes) = self.max_bytes_override {
-            return max_bytes;
-        }
-        std::env::var("TILLANDSIAS_IMAGE_BUILD_EVENT_MAX_BYTES")
-            .ok()
-            .and_then(|value| value.parse::<u64>().ok())
+        self.max_bytes_override
             .unwrap_or(DEFAULT_IMAGE_BUILD_EVENT_MAX_BYTES)
     }
 

@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-names-a-remedy-that-cannot-run-at-the-locus-where-the-verdict-fires-so-a-windows-host-is-told-to-publish-from-a-context-with-no-runnable-probe
+    event:
+      type: completed
+      ts: "2026-09-13T19:20:18Z"
+      agent_id: linux-lenovinha-opus5-20260913t192015z
+      host: linux
+      summary: |
+        LANDED: ok:land:fcdc08a12:attempt-1, gate green first attempt. 22/22.
+
+        VERIFIED ON THE PATH THAT MATTERS MOST — the one where the line must NOT appear:
+
+          lenovinha, probe runnable:  stdout ok:capability-row-current:lenovinha
+                                      stderr []   (empty)
+          859-b2zc identity wrapper:  9 passed, 0 failed, unchanged
+
+        An empty stderr on a healthy host is the whole negative control in situ. The
+        failure this packet guards against is not "the line is missing" — it is "the
+        line is everywhere", because a guard that tells every host its remedy is out of
+        reach is worse than one that told nobody.
+
+        WHAT IS FIXED AND WHAT IS NOT, kept separate so the row cannot be over-read:
+
+          FIXED     the guard no longer names a remedy unconditionally. Where its own
+                    probe just failed, it says the publish needs a probe that runs at
+                    this locus, on stderr, with the verdict untouched.
+          NOT FIXED esme still cannot publish a windows-host row. That host has NO
+                    tillandsias binary that executes on the Windows side — not a
+                    findable one being missed (1154-6big) but none to find. A fleet
+                    capability gap needing a scheduled Windows build; operator or
+                    coordinator. This packet makes the guard honest about the
+                    constraint, it does not remove it.
+          UNMEASURED 1154-8ywc's closure claim that the remedy now CLEARS the verdict.
+                    Untestable from the locus where the verdict fires. Recorded as
+                    unmeasured rather than passed or failed, which is esmes phrasing
+                    and the more useful of the three.
+
+        MY OWN ERROR, third instance of one class tonight and the reason I am writing it
+        down rather than fixing it quietly: ARM 20 FAILED ON ITS FIRST RUN AGAINST A
+        CORRECT IMPLEMENTATION. The glob was `*1165-xkjh*"could not run at this
+        locus"*` — order token BEFORE the phrase — while the message emits the phrase
+        first. The FIXTURE was wrong and the code was right, and for a moment I read it
+        as the fix not taking.
+
+        Same shape as quoting a test count without its feature flag, and as the
+        unquoted heredoc that executed backticks in ledger prose forty minutes earlier
+        (1063-363b, which this project already documents and which I had avoided
+        correctly twice today before walking into it). AN ASSERTION THAT ENCODES A
+        STRUCTURE THE SUBJECT DOES NOT HAVE LOOKS PRECISE AND IS PRECISELY WRONG — and
+        it fails in the direction that makes you doubt the code rather than the check.
+        The cheap defence is the one that keeps working: when an arm fails, read the
+        ACTUAL value before believing the expectation.
+
+        CREDIT: esme measured the blocker, checked the 1128-4ffr precondition
+        independently before attempting anything, declined two unsound workarounds
+        unasked — including the one the tooling would have let them do — and drew the
+        distinction that kept this a new packet instead of a reopen of 1130-8zxn: that
+        was a WRONG verdict nobody could clear; this is a RIGHT verdict whose remedy is
+        out of reach.

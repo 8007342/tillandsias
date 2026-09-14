@@ -74,8 +74,19 @@
 #
 # Exit codes: 0 = row present and current; 1 = actionable (publish a row:
 # absent, drifted, or expired — all three are fixed by
-# `scripts/host-capability-probe.sh --fragment`); 2 = could not determine
-# (report, never guess — an unavailable matrix is not an absent row).
+# `scripts/host-capability-probe.sh --fragment` WHERE THAT COMMAND CAN RUN);
+# 2 = could not determine (report, never guess — an unavailable matrix is not
+# an absent row).
+#
+# ORDER 1165-xkjh — THE REMEDY IS NOT AVAILABLE AT EVERY LOCUS. That paragraph
+# used to promise the publish unconditionally. It is not true on a locus with no
+# executable tillandsias: measured on esmeraldinha's Windows side 2026-09-13,
+# where the expired verdict is correct and `--fragment` exits 2 because neither
+# a native binary nor a runnable one exists there (the Linux debug build is an
+# ELF and exits 126). When this guard emits an expired verdict on a path where
+# its own probe just failed, it says so on STDERR — the verdict itself is
+# unchanged, because a reader who is told to do the impossible learns to ignore
+# the next verdict too.
 #
 # Advisory to the gate, like the health probe: these verdicts ask the cycle to
 # publish and commit a row, they never block work.
@@ -263,6 +274,37 @@ row_locus() {
         }' 2>/dev/null
 }
 
+# The NEWEST `ts:` across every row this host holds, at any locus.
+#
+# Order 1154-8ywc. The age check below used to sit AFTER the live-fold
+# short-circuit, so on a host whose probe cannot run it never executed at all:
+# `check()` returned `ok:capability-row-reported` and a row of any age read
+# green. Measured three ways — esme, whose probe is unresolvable, answered ok:
+# over rows 21 days old; lenovinha, forcing the short-circuit on a host that
+# does not exhibit it naturally, answered ok: over a row dated 2020-01-01 whose
+# 222163200s age was never computed; yolanda, probe runnable, correctly caught
+# a stale row. A guard failing OPEN on age, in the one direction a guard must
+# never fail.
+#
+# WHY THIS READS EVERY LOCUS AND NOT THE HOST'S OWN. The own-locus keying from
+# 1130-8zxn depends on `row_locus "$live"` — and on this path there IS no live
+# fold, which is the whole premise. Rather than guess a locus (the 1130-8zxn
+# defect reintroduced as a fallback), take the MOST FAVOURABLE reading: the
+# newest row the host holds anywhere. If even that one is expired then every
+# row is expired, so whichever locus turns out to be this host's, the verdict
+# holds. It cannot false-positive on a multi-locus host, and the age it reports
+# is the smallest defensible number rather than the largest available one.
+#
+# AGE IS NOT TRUTH. The short-circuit's own comment is right that an unrunnable
+# probe knows nothing about whether the row is TRUE. A ts is not a truth claim;
+# it is provenance, it was readable the whole time, and the two were conflated.
+newest_row_ts() {
+    printf '%s\n' "$1" | awk -v h="host:$2\t" '
+        index($0, h) == 1 {
+            for (i = 1; i <= NF; i++) if ($i ~ /^ts:/) { sub(/^ts:/, "", $i); print $i }
+        }' 2>/dev/null | sort | tail -1
+}
+
 # Set difference A \ B over `+`-joined sets, printed in the same shape.
 set_minus() {
     _sm_a="$1"; _sm_b="$2"
@@ -292,10 +334,59 @@ check() {
 
     # A row EXISTS. That used to be the whole answer; it is now the premise.
     if ! live="$(live_matrix)"; then
-        # NEGATIVE CONTROL. The probe could not run, so nothing here knows
-        # whether the row is true. Say that, and say it as its own state — a
-        # drift claim invented from a probe that never ran would be exactly the
-        # defect this dimension exists to remove, pointed the other way.
+        # AGE FIRST (1154-8ywc). A committed row's ts is a fact about the
+        # LEDGER; whether a live probe can run is a fact about the host's BUILD
+        # STATE. This branch used to treat the second as permission to skip the
+        # first, and skipping it failed OPEN. The remedy for an expired row is
+        # a `--fragment` publish, which needs no probe to ask for.
+        _sc_ts="$(newest_row_ts "$matrix" "$host")"
+        if [ -n "$_sc_ts" ]; then
+            _sc_epoch="$(iso_to_epoch "$_sc_ts")"
+            case "$_sc_epoch" in
+                '' | *[!0-9]*) _sc_epoch="" ;;
+            esac
+            if [ -n "$_sc_epoch" ]; then
+                _sc_age=$(( $(now_epoch) - _sc_epoch ))
+                [ "$_sc_age" -lt 0 ] && _sc_age=0
+                if [ "$_sc_age" -gt "$MAX_AGE" ]; then
+                    # ORDER 1165-xkjh. THE REMEDY IS NAMED ONLY WHERE IT CAN
+                    # RUN. Reaching here means BOTH that the row is expired AND
+                    # that this guard's own live probe — which invokes exactly
+                    # the command the remedy names — just failed. So the
+                    # verdict is correct, actionable, and asks for something
+                    # that does not work at this locus.
+                    #
+                    # Measured on esmeraldinha 2026-09-13 after 1154-8ywc made
+                    # this path report honestly for the first time: the Windows
+                    # side answered stale:capability-row-expired rc=1 while
+                    # `host-capability-probe.sh --fragment` exited 2 on the same
+                    # host and locus, having no native binary to run at all.
+                    #
+                    # A GUARD THAT NAMES AN UNAVAILABLE REMEDY TRAINS ITS READER
+                    # TO IGNORE THE VERDICT. The evidence here is direct rather
+                    # than inferred: live_matrix already ran the probe and got
+                    # nothing back, so this is a report of what happened, not a
+                    # guess about what would.
+                    #
+                    # STDOUT IS UNTOUCHED. The token and exit code are the
+                    # grammar consumers parse (1154-8ywc kept them deliberately
+                    # unchanged), so the constraint goes to stderr beside the
+                    # verdict and never into it.
+                    echo "check-capability-row: the remedy for this verdict is a fresh probe publish, and this guard's own probe could not run at this locus — publishing here needs a tillandsias binary that executes in this context (1165-xkjh)" >&2
+                    echo "stale:capability-row-expired:$host:age=${_sc_age}s"
+                    return 1
+                fi
+            fi
+        fi
+
+        # NEGATIVE CONTROL, and 1154-8ywc does NOT widen it. The probe could
+        # not run, so nothing here knows whether the row is TRUE. Say that, and
+        # say it as its own state — a drift claim invented from a probe that
+        # never ran would be exactly the defect this dimension exists to
+        # remove, pointed the other way. This packet added an AGE answer on
+        # this path, never a TRUTH one: `ok:capability-row-reported` still
+        # means "a row exists, unverified" and must never start implying that a
+        # comparison happened.
         echo "ok:capability-row-reported:$host"
         return 0
     fi
@@ -601,8 +692,110 @@ fixture() {
         "stale:capability-row-expired:fixturehost:age=694800s" 1 \
         TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
 
+    # ── ARMS 16-19: ORDER 1154-8ywc, THE FAIL-OPEN ON AGE ───────────────────
+    #
+    # Arm 5 above already covers "an unrunnable probe never manufactures
+    # drift", and it passed throughout — with a FRESH row. Nobody had asked
+    # what that path does with a STALE one, and the answer was: nothing. The
+    # expiry check sat after the short-circuit and never executed, so a row of
+    # any age read green on any host whose probe cannot run.
+    #
+    # These four hold LIVE_UNRUNNABLE fixed and vary only the row's age, which
+    # is the one variable that used to make no difference at all.
+
+    # 16. THE DEFECT, PINNED. Live fold unavailable, committed row eight days
+    #     old against a seven-day window. Pre-fix: ok:capability-row-reported
+    #     rc=0, with the age never computed.
+    _mk "$_fx_committed" fixturehost "$_old_ts" cpu/container/ollama
+    _expect "an-expired-row-is-still-expired-when-the-probe-cannot-run" \
+        "stale:capability-row-expired:fixturehost:age=694800s" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
+
+    # 17. NEGATIVE CONTROL 1, the one that keeps this packet honest. Same
+    #     unrunnable path, row INSIDE the window: the verdict must stay
+    #     `ok:capability-row-reported`. That token means "a row exists,
+    #     unverified", and if this packet had widened it into a claim that a
+    #     comparison happened, 889-ewvt's defect would be back — an artifact
+    #     read as evidence of the check that would have produced it.
+    _mk "$_fx_committed" fixturehost "$_fresh_ts" cpu/container/ollama
+    _expect "a-fresh-row-with-no-probe-still-reports-rather-than-verifies" \
+        "ok:capability-row-reported:fixturehost" 0 \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
+
+    # 18. NEGATIVE CONTROL 2: no TRUTH claim was added to this path. The
+    #     committed row advertises an engine; the live fold cannot run, so
+    #     nothing can contradict it. The verdict must NOT be `drifted` — that
+    #     is arm 5's guarantee and it must survive an age answer being added
+    #     beside it. Kept as its own arm because the two live on one code path
+    #     now and a later edit could collapse them.
+    _mk "$_fx_committed" fixturehost "$_fresh_ts" gpu/container/ollama
+    _expect "an-age-answer-did-not-become-a-truth-answer" \
+        "ok:capability-row-reported:fixturehost" 0 \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
+
+    # 19. MULTI-LOCUS ON THE UNRUNNABLE PATH. There is no live fold here, so
+    #     there is no locus — the 1130-8zxn keying is unavailable by
+    #     construction. Rather than guess one, the check reads the NEWEST row
+    #     the host holds anywhere: if even that is expired, every row is, so
+    #     the verdict holds whichever locus turns out to be this host's. Here
+    #     the newest is FRESH and an older sibling exists, so it must NOT
+    #     expire — a naive "any row is old" test would fail this arm, and that
+    #     is exactly the false positive this shape avoids.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest     "$_old_ts"   cpu/container/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _expect "the-newest-row-decides-on-the-unrunnable-path-so-an-old-sibling-does-not-expire-a-live-host" \
+        "ok:capability-row-reported:fixturehost" 0 \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
+
+    # ── ARMS 20-22: ORDER 1165-xkjh, THE REMEDY MUST BE AVAILABLE ───────────
+    #
+    # 1154-8ywc made the unrunnable-probe path report an expired row honestly.
+    # Honesty exposed the next problem: on esme's Windows locus that verdict is
+    # correct and the remedy it names exits 2, because no tillandsias binary
+    # executes there at all. A host told to publish, from a context where
+    # publishing is impossible.
+    #
+    # These arms check STDERR while asserting stdout is unchanged, because the
+    # whole design constraint is that the grammar consumers parse must not move.
+
+    # 20. Expired row + no live fold: the constraint is named on stderr.
+    _mk "$_fx_committed" fixturehost "$_old_ts" cpu/container/ollama
+    _err_out="$(_run TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1 2>&1 >/dev/null)"
+    case "$_err_out" in
+        *"could not run at this locus"*1165-xkjh*)
+            echo "ok: an-unreachable-remedy-is-named-as-unreachable" ;;
+        *)
+            echo "FAIL: expected a stderr line naming the unavailable remedy, got '$_err_out'"
+            _fx_fail=1 ;;
+    esac
+
+    # 21. STDOUT IS BYTE-IDENTICAL. The verdict is the contract; the diagnostic
+    #     is beside it, never inside it. Asserted separately from arm 20 so a
+    #     later edit cannot satisfy one by breaking the other.
+    _expect "the-diagnostic-did-not-leak-into-the-verdict" \
+        "stale:capability-row-expired:fixturehost:age=694800s" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
+
+    # 22. NEGATIVE CONTROL, and it is the one that stops this becoming the
+    #     defect it fixes. On a host where the probe DOES run, an expired row
+    #     must NOT carry the line — the remedy is available there, and telling
+    #     a host its remedy is unreachable when it is reachable is the same
+    #     false advisory in the opposite direction (1158-y3ad's carry-forward
+    #     arm is the precedent).
+    _mk "$_fx_committed" fixturehost "$_old_ts" cpu/container/ollama
+    _mk "$_fx_live" fixturehost "$_fresh_ts" cpu/container/ollama
+    _err_ok="$(_run TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live" 2>&1 >/dev/null)"
+    case "$_err_ok" in
+        *1165-xkjh*)
+            echo "FAIL: a host with a runnable probe was told its remedy is unreachable: '$_err_ok'"
+            _fx_fail=1 ;;
+        *)
+            echo "ok: a-reachable-remedy-is-not-announced-as-unreachable" ;;
+    esac
+
     rm -rf "$_fx_dir"
-    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:15"
+    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:22"
     return "$_fx_fail"
 }
 

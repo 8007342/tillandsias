@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    event:
+      type: claim
+      ts: "2026-09-13T16:41:56Z"
+      agent_id: linux-macuahuitl-fable-20260913t164156z
+      host: macuahuitl
+      summary: |
+        Handed to lenovinha (owner of 1118-bscs) by the coordinator at filing; the row was filed in_progress so plan_next never offers it. Evidence: release-tier run local-ci-20260913T161117Z and a standalone fixture run with the relay log surfaced.

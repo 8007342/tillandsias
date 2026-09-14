@@ -498,7 +498,42 @@ if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
     # see the class of process its verdict depends on. The check verifies our
     # environ is readable AND carries that token; if it cannot read us it says
     # `blind` rather than reporting a clean tree.
-    bash "$_tb_self_dir/check-no-competing-gate.sh" --host-side "$$" || true
+    # READ THE VERDICT (1150-q462). Until now this was `|| true`: the four-code
+    # grammar 1141-vf9w built existed only in the fixture and in a printed line,
+    # and a CALLER-CONTRACT bug was indistinguishable from an unsupported
+    # substrate — two conditions wanting opposite responses.
+    #
+    # 2 and 3 are ENUMERATED SEPARATELY and there is NO default that proceeds.
+    # A `case` whose `*)` falls through to success is how "fix your call site"
+    # becomes "this host cannot answer" and gets written off, which is the
+    # collapse 1140-i6ct exists to prevent one check over.
+    #
+    # STILL BEST-EFFORT: none of these branches stops the build. The detector is
+    # advisory, and the promotion to refusing is a separate change with its own
+    # evidence (1141-vf9w) — the first reader of these codes must not also be the
+    # first thing that can stop a gate.
+    _cg_out="$(bash "$_tb_self_dir/check-no-competing-gate.sh" --host-side "$$" 2>&1)"
+    _cg_rc=$?
+    case "$_cg_rc" in
+        0)  [ -n "$_cg_out" ] && printf '%s\n' "$_cg_out" ;;
+        1)  printf '%s\n' "$_cg_out"
+            echo "[tillandsias-builder] a competing gate is holding this checkout; this run may be raced (1141-vf9w)" >&2
+            ;;
+        2)  # A CALL SITE BUG, not a substrate limit. Loud, and named as ours.
+            printf '%s\n' "$_cg_out" >&2
+            echo "[tillandsias-builder] refused:competing-gate:caller-contract — THIS wrapper called the detector wrongly (1150-q462)." >&2
+            echo "  Not a property of this host: the assertion or the token export at this call site is wrong." >&2
+            ;;
+        3)  # This host cannot answer. Say so once; do not read it as clean.
+            printf '%s\n' "$_cg_out" >&2
+            echo "[tillandsias-builder] the competing-gate question could not be asked here; this is NOT a clean-room verdict (965-sxec)" >&2
+            ;;
+        *)  # NO SILENT DEFAULT. An unrecognised code is a grammar change nobody
+            # taught this caller, and proceeding quietly is how the grammar rots.
+            printf '%s\n' "$_cg_out" >&2
+            echo "[tillandsias-builder] unrecognised competing-gate exit $_cg_rc — the detector's grammar changed and this caller was not updated (1150-q462)" >&2
+            ;;
+    esac
 fi
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."

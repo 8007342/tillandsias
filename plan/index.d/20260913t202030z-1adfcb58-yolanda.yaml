@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-capability-probes-resolver-admits-any-candidate-that-answers-inference-tier-so-a-stale-native-binary-publishes-a-wrong-capability-row-in-silence-and-the-matrix-routes-on-it
+    field: status
+    value: completed
+    ts: "2026-09-13T20:20:30Z"
+    host: yolanda
+
+events:
+  - packet_id: host-capability-probes-resolver-admits-any-candidate-that-answers-inference-tier-so-a-stale-native-binary-publishes-a-wrong-capability-row-in-silence-and-the-matrix-routes-on-it
+    event:
+      type: completed
+      ts: "2026-09-13T20:20:30Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: scripts/test-probe-refuses-stale-candidate.sh -> ok:probe-stale-candidate-fixture:all (4 arms); mutation control: neutralising the vocabulary check reds the three primary arms and leaves the positive control green; matrix before: present-unscheduled cpu/Host CPU only; after: cpu/AMD Ryzen AI 7 350, gpu/AMD Radeon(TM) 860M Graphics, npu/NPU Compute Accelerator Device
+  - packet_id: host-capability-probes-resolver-admits-any-candidate-that-answers-inference-tier-so-a-stale-native-binary-publishes-a-wrong-capability-row-in-silence-and-the-matrix-routes-on-it
+    event:
+      type: note
+      ts: "2026-09-13T20:20:30Z"
+      host: yolanda
+      summary: |-
+        resolve_probe refuses a candidate it cannot show is current; the wrong windows-host row republished from a rebuilt binary and the matrix now shows the 860M and the NPU

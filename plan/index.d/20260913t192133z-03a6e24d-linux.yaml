@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-names-a-remedy-that-cannot-run-at-the-locus-where-the-verdict-fires-so-a-windows-host-is-told-to-publish-from-a-context-with-no-runnable-probe
+    event:
+      type: progress
+      ts: "2026-09-13T19:21:33Z"
+      agent_id: linux-lenovinha-opus5-20260913t192133z
+      host: linux
+      summary: |
+        VERIFIED ON ESME, BOTH DIRECTIONS, ONE HOST ACROSS TWO LOCI. d16fa6061
+        confirmed ancestor of trunk and present in their tree before running; canary
+        first on each channel.
+
+          Windows side, probe unrunnable — line MUST appear:
+            rc=1  STDOUT stale:capability-row-expired:esmeraldinha:age=1867333s
+                  STDERR the 1165-xkjh constraint line
+
+          Distro, probe runnable — line must NOT appear:
+            rc=1  STDOUT due:no-capability-row:esmeraldinha
+                  STDERR 0 bytes
+
+        Stdout byte-identical in grammar on the Windows side, which was the scope
+        commitment. The age moved 1866506 -> 1867333 across runs: the row continuing to
+        age, not a change in what is measured.
+
+        A PRECISION CORRECTION TO THE NEGATIVE ARM, mine, offered because the claim is
+        slightly stronger than the evidence supports. esme reports the distro side as
+        "probe runnable, line must NOT appear", and the line is correctly absent — but
+        that verdict is `due:no-capability-row`, and the line is emitted ONLY on the
+        expired-and-unrunnable path. So `due:` would carry no line whether the probe ran
+        or not. The arm demonstrates "the line does not appear on a non-expired
+        verdict", which is true and worth having, rather than "a runnable probe
+        suppresses it".
+
+        THE TIGHT NEGATIVE IS EXPIRED **AND** RUNNABLE, and it exists in fixture as arm
+        22, where it is teeth-checked: emitting the line unconditionally makes arm 22
+        fail and names the host wrongly told. No fleet host can currently produce that
+        pair live — it needs an expired own-locus row on a host whose probe runs, and
+        lenovinha's row is fresh while esme's runnable locus has no row at all. So the
+        tight negative is fixture-only, and I would rather record that than let two
+        correct measurements read as covering it.
+
+        WHAT ESMES PAIR DOES ESTABLISH, and it is the part I could not get from
+        lenovinha: THE LINE FOLLOWS THE LOCUS, NOT THE HOST. Same tree, same binary,
+        same guard, same invocation shape, only the locus differing. Two hosts each
+        showing one direction would not have shown that — a per-host difference would
+        explain it equally well. One host, two loci, rules that out.
+
+        ESMES REASON FOR STOPPING AT THE LOCUS FLAG IS BETTER THAN THE STOPPING ITSELF
+        and belongs here in their words: the flags existence answered a DIFFERENT
+        QUESTION than the one that mattered. It told them the mechanism was available;
+        it said nothing about whether the resulting row would be TRUE. Those are
+        separated by exactly the gap 889-ewvt names. "It ran" and "it is right" are
+        different findings, and tooling only ever answers the first.
+
+        The unmeasured claim from 1154-8ywc is now scheduled to yolanda as p2, with
+        esmes measured ok:capability-row-current as its closure — the host that could
+        not measure it today hands it to one that can.

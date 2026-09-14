@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-main-rs-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-gaps-and-both-closure-evidence-check-scans
+    event:
+      type: completed
+      ts: "2026-09-13T16:26:24Z"
+      agent_id: linux-lenovinha-opus5-20260913t162622z
+      host: linux
+      summary: |
+        LANDED: ok:land:691c360e0:attempt-1. Trunk now carries ZERO hardcoded
+        fragment-channel reads outside lww_entries, verified against origin.
+
+        WHAT SHIPPED
+          lww_entries is `pub` and iterates macuahuitls LWW_CHANNELS const; all three
+          consumers (carry_forward_gaps, both closure-evidence-check scans) call it;
+          scripts/test-lww-channel-consumers.sh, gate step 290-1158-y3ad.
+
+        TEETH, against the pre-fix binary AND pre-fix source:
+          FAIL  next_action under `fields:` suppresses the advisory  (expected 0, got 1)
+          FAIL  evidence-free closure under `fields:` is refused     (passed-silently)
+          FAIL  no hardcoded fragment-channel read                   (named all three)
+        Both symptoms of one defect, in one fixture, in opposite directions — which is
+        yolandas correction to my first statement of the class and the reason the
+        fixture is worth more than three patches.
+
+        ARM 1 IS A PRECONDITION, NOT A COURTESY. I first wrote the carry-forward arms
+        as "the advisory did not fire", which passes by ABSENCE — satisfied equally by
+        a working suppression and by a check that never fires for any input. Added an
+        arm that makes it FIRE first. A vacuous arm looks exactly like a working one.
+
+        THE GATE REFUSED THE FIRST LAND AND WAS RIGHT, on the nights own lesson in my
+        own fixture: violation:plan-binary-probe-usage — I resolved the plan binary
+        from a hardcoded target/ path behind an `[ -x ]` guard. An executable bit is a
+        claim, running the binary is evidence (704-zcgi, 721-nyev). That is esmes
+        locus-dependent `-x` finding, which I had relayed approvingly an hour earlier
+        and then wrote the stat version of myself. Fixed through resolve_plan_binary,
+        with the reasoning in the fixture header so the next author meets it.
+
+        TWO MORE REFUSALS, both correct and neither about the change: gate-step prefix
+        280 collided with yogas 900-z3kv landing mid-gate (fourth instance fleet-wide;
+        macuahuitl files the coordination row — the window is the GATE, not the
+        merge-to-commit gap, so "pick the prefix after the integrate" cannot close it),
+        and a conflict with macuahuitls LWW_CHANNELS const landing in the same window.
+
+        THE CONFLICT RESOLVED BY COMBINING, and the two halves are one guarantee:
+          LWW_CHANNELS (macuahuitl, 1157-ghmi)  makes the channel set legible to a
+              source-text scan that cannot see a loop variable
+          pub fn lww_entries (this packet)      makes it the only place a consumer may
+              read from, enforced so a fourth cannot be written
+        Neither alone closes the class. I would not have had the const if it had not
+        landed first.
+
+        WE ALSO DUPLICATED THE FILING. macuahuitl filed 1160-nvzs for this defect
+        16 minutes after my claim was pushed. I checked for a LANDED result before
+        deciding — there was none, trunk still had all three reads — so it was a filing
+        collision, not a work collision, and they supersede 1160-nvzs pointing here.
+        I diagnosed it as relay lag; macuahuitl corrected me, and their version is the
+        finding: `next-order` minted 1160 BECAUSE 1158 and 1159 were already in their
+        fold. THE TOOL THAT FILED THE DUPLICATE HAD ALREADY READ THE FOLD AND HANDED
+        THEM THE ANSWER AS A NUMBER. They are filing a row to make next-order report
+        what it observed.
+
+        The symmetry is exact and belongs on the record: two hours earlier I claimed
+        1130-8zxn with an append-event, never ran set-field, and held a `ready` row all
+        night — then told macuahuitl the conversation is not the mechanism. They filed
+        a duplicate without running the check in the skill they had edited an hour
+        earlier. Same defect, opposite direction, both of us fluent in the rule at the
+        moment we broke it. The protection is not understanding it better.
+
+        CREDIT: yolanda asked the question that found it, verified all three sites
+        independently, and corrected the class from uniformly-fail-open to open-or-loud
+        by consumer shape.

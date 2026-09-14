@@ -1,0 +1,16 @@
+# Gate step 1158-y3ad — data, not code (order 1072-b7eq).
+#
+# lww_entries folds two channel spellings; three consumers in main.rs read one.
+# A `fields:`-spelled write was invisible to all three, and the two failure
+# symptoms are OPPOSITE: silent in the scans that look for offenders, LOUD (a
+# false advisory about a packet whose next_action WAS set) in the scan that
+# looks for an omission. Neither says `fields:`.
+#
+# The behavioural arms pin the three sites; the scan-side arm is what stops a
+# fourth consumer being written that hardcodes one spelling again.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every LWW-channel consumer reads both spellings (1158-y3ad)"
+STEP_SCRIPT="scripts/test-lww-channel-consumers.sh"
+STEP_ERROR="a consumer of the LWW channel reads only one spelling, so a fields:-spelled write is invisible to it (1158-y3ad) — see the verdict line above"
+STEP_OK="LWW-channel consumer check passed"

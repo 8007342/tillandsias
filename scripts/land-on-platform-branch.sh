@@ -317,6 +317,15 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             done
         done
     fi
+    # ORDER 1164-cftu: ONE retry on the auth signature, after a pause. Measured
+    # on lenovinha 2026-09-13: the credential went dead, alive, dead and alive
+    # within an hour with no operator action, and a land refused on a dead
+    # moment that cleared seconds later — a whole gated cycle for a blip. A
+    # real expiry fails twice and refuses exactly as before; the retry never
+    # runs a gh auth command (1025-a896). The delay is overridable so the
+    # fixture (scripts/test-land-auth-retry.sh) does not wait.
+    _auth_retried=0
+    while :; do
     if [ -n "$_bounder" ]; then
         "$_bounder" "$_push_timeout" git push origin "$BRANCH" > "$_plog" 2>&1
         rc=$?
@@ -334,6 +343,15 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         git push origin "$BRANCH" > "$_plog" 2>&1
         rc=$?
     fi
+    if [ "$rc" -ne 0 ] && [ "$_auth_retried" -eq 0 ] \
+        && grep -qiE "authentication failed|invalid username or token|could not read Username|Permission denied \(publickey\)" "$_plog"; then
+        _auth_retried=1
+        echo "land: auth-failed once, retrying after ${TILLANDSIAS_LAND_AUTH_RETRY_DELAY:-30}s (1164-cftu)"
+        sleep "${TILLANDSIAS_LAND_AUTH_RETRY_DELAY:-30}"
+        continue
+    fi
+    break
+    done
     _elapsed=$(( $(date +%s) - _t0 ))
 
     # THE HANG, NAMED. Distinguish it from a fast empty log: only a push that

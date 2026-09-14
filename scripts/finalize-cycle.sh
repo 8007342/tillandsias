@@ -193,16 +193,12 @@ _step "re-verify boundary at the head containing the record"
 scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
     echo "refused:finalize:boundary-verify-failed-post-record" >&2; exit 3; }
 
-# Best-effort context proxy, emitted where a cycle actually ends so the
-# measurement collects itself rather than depending on anyone remembering
-# (997-pdgf). BYTES, NOT TOKENS. Never fails the cycle it measures.
-{
-    _t="${TILLANDSIAS_TRANSCRIPT:-}"
-    [ -n "$_t" ] && scripts/cycle-metrics.sh --emit-context \
-        host="$(scripts/agent-identity.sh node-name 2>/dev/null || echo unknown)" \
-        cycle="$(date -u +%Y-%m-%dT%H:%MZ)" transcript="$_t"
-} >/dev/null 2>&1 || true
-
+# ORDER 829-dkuc: the context-proxy emit (997-pdgf) that used to sit here read
+# TILLANDSIAS_TRANSCRIPT, which nothing anywhere ever assigned or documented —
+# the "collects itself rather than depending on anyone remembering" intent was
+# never wired to a setter, so this block was a permanent no-op. Removed rather
+# than left as dead ceremony; scripts/cycle-metrics.sh --emit-context is still
+# available for a caller that has an actual transcript path to pass it.
 
 _step "derive the terminal marker"
 exec scripts/mo-full-attest.sh self
