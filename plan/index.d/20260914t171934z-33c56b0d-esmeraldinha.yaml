@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    field: status
+    value: in_progress
+    ts: "2026-09-14T17:19:34Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: progress
+      ts: "2026-09-14T17:19:34Z"
+      host: esmeraldinha
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: esme 2026-09-14T17:30Z: git-identity probe AT-RISK at the Windows/Git Bash locus (git commit --allow-empty rc=128, no global identity), SAFE inside the builder distro; run-litmus-test.sh does not re-exec through with-wsl2-builder
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-14T17:19:34Z"
+      host: esmeraldinha
+      summary: |-
+        handed by the coordinator: part 2 needs an AT-RISK low-end host; esmeraldinha qualifies at the Git Bash locus — run scripts/run-litmus-test.sh directly from Git Bash, never through ./build.sh; name the locus on every verdict line
