@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    field: status
+    value: completed
+    ts: "2026-09-14T05:05:13Z"
+    host: yoga
+
+events:
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    event:
+      type: completed
+      ts: "2026-09-14T05:05:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 5f4b122e2
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    event:
+      type: note
+      ts: "2026-09-14T05:05:13Z"
+      host: yoga
+      summary: |-
+        the pre-push refusal names the sanctioned ungated hand-off above --no-verify; fixture 8/8 with both negative controls; the gate itself is unchanged
