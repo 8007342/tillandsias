@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-host-whose-gate-outlasts-the-gap-between-landings-cannot-land-and-only-one-refusal-string-says-so
+    event:
+      type: note
+      ts: "2026-09-14T19:48:10Z"
+      agent_id: linux-macuahuitl-fable-20260914t194050z
+      host: macuahuitl
+      summary: |
+        Verified by execution on macuahuitl 2026-09-14 (meta cycle 19:09Z, one sonnet reader, checked by the coordinator). Criterion 1 UNMET, unchanged: an exhausted land (exit 4) is counted nowhere a coordinator reads — cycle-metrics.sh has only a comment citing 982-cs43; finalize-cycle.sh swallows any land failure into refused:finalize:*-land-failed (exit 6) and records nothing; the one post-filing occurrence (plan/loop_status.d/20260912t052851z-217b9fa1-linux.md, refused three times as attempts-exhausted until a ten-minute fleet-wide push quiet) lives as prose only. Criterion 2 UNMET, unchanged: ATTEMPTS defaults to 4 and the race-retry path has no backoff or jitter; the only sleep in the tool is 1164-cftu's single 30s auth retry. Criterion 3 MET but UNPINNED: every non-race refusal exits on the same attempt and only the race phrases loop; the six land fixtures are green today, but the specific three-arm stub-remote fixture the row's unscoreable field names does not exist.
