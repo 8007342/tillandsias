@@ -320,3 +320,23 @@ looked"* will eventually be read as the former.
   cannot resolve — 96 phantom violations. Proven by rebuilding the tree with
   and without the archive: violation vs "ok: 944 packets ... sound". Reported
   with a one-line remedy; not edited, the script is macuahuitl's.
+
+- 2026-09-14 (cycle, 1063-nraf): bound scripts/test-inference-mkdir-fatal-1183-j9dk.sh
+  to scripts/gate-steps.d/345-1183-j9dk.step. It had been landed with 7 arms and
+  a mutation control and referenced by NOTHING — green and meaningless. Landed
+  bddf183c1; the gate log shows the step executing. Binding also forced a fix:
+  its uid-0 path called bad(), so a root gate would have refused every land with
+  a content verdict about a guard it never ran (the 1141-vf9w shape). Now
+  STEP_SKIP_EXIT=2, verified across four regimes with an `id` shim.
+- 2026-09-14: 1183-j9dk corrected THREE TIMES IN ONE DAY, all mine — Unix
+  permissions, then SELinux, then "does not reproduce". The third was the worst:
+  I ran the packet's own reproduce command, got 4/4 success, and announced a
+  retraction that the orchestrator propagated. The command does a SINGLE-level
+  mkdir; the product does `mkdir -p ${OLLAMA_MODELS}.tools/ollama`, TWO levels,
+  and fails on the second. The probe and the product were never the same
+  operation.
+- 2026-09-14, the rule I keep relearning: RE-RUN THE BARE FAILURE IN THE FORM
+  THE PRODUCT PERFORMS IT before naming any mechanism. Every one of the three
+  wrong calls came from explaining a result instead of first reproducing it
+  faithfully. A reproduce command in a packet is not evidence that it reproduces
+  the defect — it is a claim, and it needs falsifying like any other.
