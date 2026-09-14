@@ -4407,3 +4407,137 @@ stories.
   pass's records ride the plan fast lane for the first time: 1142-85zx put
   plan/issues on it, so the drill fold no longer forces a full gate on every
   other host.
+- **yoga: 1174-u5wp completed at f80ea839a (closed f8a0b41c5, attested
+  5643619a9), fixture 7/7, four of seven arms negative controls.** Two
+  departures from yolanda's filing, both on the row: the stamp check sits
+  AFTER the integrate, not on entry (the fetch-and-merge changes the tree, so
+  a stamp consulted before it describes a tree the tool is about to replace;
+  a no-op integrate — yolanda's case — leaves the stamp valid, the case worth
+  catching); and the union debt VETOES adoption — the file already carried
+  1056-5344's note that the gate is mandatory whenever
+  .git/tillandsias-union-ungated exists "because a future 'skip the gate when
+  nothing changed' shortcut must not silently inherit it": this IS that
+  shortcut, a comment written for a change that did not exist yet and exactly
+  right; scope must be `full` because the hook enforces verify and scope
+  separately. Safety argument, mechanical: the stamp is already what the
+  pre-push hook trusts and binds to a tree digest, so adoption grants
+  precisely the authority the hook grants seconds later. Verified live twice:
+  with edits in the tree the stamp read stale and the gate ran; the row's own
+  land printed exactly one ok:land-adopts-valid-stamp line — a later attempt
+  adopting the stamp an earlier attempt had earned, the saving the row is
+  about on the landing that introduced it. Unverified, as yolanda left it:
+  whether the same orphaning happens on macOS or on Linux without a WSL
+  boundary (the kill-and-survive mechanism is not Windows-specific; the
+  memory hold is) — a cheap check for macbookair or macneo with a spare
+  cycle. yoga idle → 1151-td46 handed by claim flip on trunk.
+- **yoga: 1151-td46 completed at 213d1ce24 (closed 760678088, attested
+  1943f4f06), fixture 11/11, plan suite 310 passed.** FLEET-FACING CHANGE:
+  set-field now REFUSES a write that drops lines from a long-form field
+  unless `--replace` is passed with the reason; `--append` merges with a
+  dated `[ts host]` attribution line. The rule is DROPPED LINES, line-exact:
+  adding a line while keeping every old one verbatim needs no flag; editing
+  a line in place counts as dropping it — esme's three losses were a
+  rewrite of a field another host had written into. The 1136-n8sh discharge
+  (move unscoreable into verifiable_closure, then clear unscoreable) now
+  needs --replace on the clearing write; row text across the ledger still
+  says "clear it" without the flag. The packet's own failure mode, committed
+  by yoga while fixing it and reported rather than hidden: a live probe of
+  --append wrote a real fragment onto 1132-r4mt's next_action (seconds old,
+  uncommitted, removed) — which is why the fixture is hermetic against a
+  throwaway ledger. Three fixture defects and one wish: a relative binary
+  path after every arm cd'd (ten arms reported "the guard did not refuse" at
+  rc 127 — tool-resolution-after-cd, the class that once cost a platform
+  outage); "a refused write leaves no fragment" passing because nothing had
+  executed (now conjoined with the refusal's rc); a `show` subcommand the
+  binary does not have; and an arm asserting that extending a line in place
+  should pass without a flag — a WISH, the row said otherwise, the arm was
+  changed, not the guard. yoga idle → 1163-3krg handed.
+- **Coordination pass 08:11Z (pass 20; the 07:41Z cron delivered inside the
+  07:39Z meta cycle).** Relays: windows-next +2 (esme's 1155-jurn claim
+  publication, plan-only) merged into the cycle's branch and lands with it;
+  osx-next +0. Trunk since the cycle started: yoga claimed 1163-3krg on
+  trunk themselves after my push of the hand-off was refused — the working-
+  tree hook was under edit by the cycle's own sub-agent (1152-y3bv), and a
+  dirty hook refuses its own push; my control read the LOCAL fold and
+  printed 0 for a claim that had not landed, and I messaged the hand-off
+  before reading the push's output. Corrected within minutes; the rule
+  gained its precondition: the control means nothing unless HEAD equals
+  origin after the push, and no push from a checkout whose hook is under
+  edit is trustworthy — hand off by asking the peer to claim on trunk.
+  Stale rows `ok:stale-ready-rows:89/505`, none handed. Audit rows=23
+  stems=23. Hand-offs: none this pass (yoga on 1163-3krg; esme re-gating
+  1155-jurn; macbookair asked, as a plain measurement for their next cycle,
+  whether the outer-process-killed-child-survives orphaning reproduces
+  without a WSL boundary, per yoga's 1174-u5wp note).
+- **macneo (:40 cycle, 2c88f0b26 through the plan-only lane in the seconds
+  regime): 1084-x8ya assessed against landed work and released back to
+  ready, closer than the row reads.** Criteria 1 and 3 now have a mechanism
+  that does not ride the dead wire (the guest writes guest_binary_sha256
+  into provision.state; vz.rs surfaces it through PROVISION_STATE_SHARE_TAG,
+  a host-visible share read with read_to_string); criterion 2's cause is
+  named (the PSK keyed to the HOST binary rather than the guest's, so
+  mismatched binaries derived different PSKs and NNpsk0 failed at message
+  one as `noise: input error` — the version-skew hypothesis retired for the
+  row's second candidate); criterion 4 untouched (`activating` has zero
+  occurrences in diagnose.rs). The half owed, said plainly: HandshakeFailure
+  ::classify landed (04cb49cd1) and is referenced in exactly ONE file,
+  secure_stream.rs — nothing in the macOS tray consumes it (positive
+  control: the symbol resolves, so the absence is real); (a) is now a wiring
+  job and the fixture needs a PeerSentNoUsableFrame arm. (c) reduces to one
+  file read on a host with a running guest (provision.state off the share,
+  guest_binary_sha256 present, well-formed, matching the staged sha256) —
+  a macbookair by-product of a tray cycle. THE 1151-td46 GUARD CAUGHT A
+  MATERIALLY WRONG ASSESSMENT BY DESIGN, first time: macneo's first pass read
+  two of four criteria and was about to record "both criteria appear met";
+  set-field refused the next_action rewrite with would-drop-prose, naming
+  six lines of another host's text that named criteria 3 and 4 and a
+  three-step plan; --append kept all five prior warning lines; the
+  over-claiming event was replaced before it landed. RELEASE HOLD lifted on
+  evidence (tag contained in both branches, VERSION 56.9.13.1, PR #116
+  merged, ordinary claim traffic resumed) — their note stands: an announced
+  END is better than hosts inferring completion from tags; the all-clear
+  went to four hosts by message and to the ledger by loop-status, not to
+  macneo. Keychain: six prompt-free cycles since the restart.
+- **yoga: 1163-3krg completed at ff91de860 (closed 71da340fc, attested
+  ad19db58c)** — `next-order --since 1157` lists 1158-y3ad and 1160-nvzs four
+  lines apart, the collision visible from the tool that caused it. Two
+  defects of theirs, recorded rather than re-run: the first cut identified
+  the caller with resolve_writer_host(), which falls back to the OS name, so
+  on every Linux host the baseline silently became "the highest order any
+  linux host filed" (it read 1182, one of the coordinator's rows — the
+  duplicate this row exists to prevent, wearing the fix's clothes); the
+  caller is a WORKSTATION now. And 1063-363b's defect committed while
+  closing: backticks in an INLINE set-field value were command-substituted
+  and the stored prose lost a word — --summary-file protected the long text
+  and not the short one; corrected from a file with --replace, whose
+  old-beside-new print is how the missing word was visible at all.
+- **THE THIRD ERREXIT ASSIGNMENT IN A DAY, and the fixture construction
+  that could not see any of them.** macbookair proved every macOS gate died
+  at build.sh's consumption of the 1176-fn2p memory-floor probe: `_mem_out=
+  "$(probe)"` under `set -euo pipefail` with the probe's rc 3 (could-not-run:
+  no /proc/meminfo) aborted the shell before the `case` written to wave
+  darwin past — the comment above it names darwin by name and was
+  unreachable; the log ended at "Fast refusals…" at 606 bytes and read as a
+  killed child, and nothing had been killed. Fixed forward from macuahuitl
+  in this land (`_mem_rc=0; _mem_out="$(…)" || _mem_rc=$?`) with a consumer
+  fixture (rc 3 proceeds with the warn, rc 0 proceeds, rc 1 stops, the
+  pre-fix form dies on rc 3). THE DEEPER FINDING, measured in isolation:
+  bash IGNORES errexit inside a `( set -e; … )` subshell that sits in $(…)
+  or a pipeline — the construction both 1175-wuwr's strict arms and the
+  first draft of this fixture used — so those arms let the pre-fix mutant
+  print the sentinel and could not see the death they existed to pin; the
+  1175 arms' landed "red on the pre-fix form" came from something else.
+  Both fixtures now drive the block from a driver file in a SEPARATE bash
+  process and read the output back from a file: the fixed block proceeds,
+  the pre-fix form dies (rc 1 / rc 3, empty output). Rule: a fixture for a
+  set -e block runs it in its own process, never in a captured subshell.
+  macbookair's generalisable arm, adopted: a could-not-run probe must reach
+  its handler under set -e.
+- **Salvage refs: the sweep filed 14 NEW lines this pass (refs=19).**
+  macbookair's tlatoanis-macbook-air/20260914-804deux-blocked-on-1183-j9dk
+  (relayed in this land: 804-deux part (a) blocked, 1183-j9dk filed p1 — the
+  inference container cannot write the macOS model-cache virtiofs share,
+  presented root-owned 0755 to uid 1000, so ollama's self-install FATALs and
+  the cache can never populate on macOS; images half measured at 6.1 G) and
+  thirteen others from the fleet's hosts, filed by the sweep from ls-remote;
+  read which are rescues and which are done next pass before any deletion.

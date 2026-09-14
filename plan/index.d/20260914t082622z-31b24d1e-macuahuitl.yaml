@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lane-is-not-gate-free-on-the-hosts-it-was-built-for-because-a-trunk-merge-pulls-gated-paths-into-the-diff-and-the-staleness-check-needs-cargo
+    field: verifiable_closure
+    value: 'litmus:plan-only-lane-structural (spec methodology-accountability): scripts/test-plan-only-lane-structural.sh 14/14 — (1) an outgoing diff whose only non-plan paths are byte-identical to origin/linux-next''s takes the plan-only lane (pre-fix result: FAILS — refused to the full gate); (2) staleness is judged against the validator surface (the sources implementing validate-yaml, check --strict-fragments and the fragment checkers, the crate''s Cargo.toml, its direct dependencies'' lock stanzas), so a change elsewhere in the crate or the workspace lock does not stale the validator (pre-fix result: FAILS — the mtime check said stale), with the mtime check as the fallback only when no surface stamp exists and the verdict naming which path judged it; NEGATIVE CONTROLS: a non-plan path that differs from trunk still forces the full gate, a change to a validator source still refuses and the remedy names the one-crate rebuild; each arm''s mutant built from content, cmp-proven. The fourteen existing lane fixtures unchanged. Left, stated: live confirmation on a floor host (pirria/esme) that a plan-only push now needs no cargo — the stamp is minted the first time the old check reads fresh, so a floor host pays one more rebuild and then none.'
+    ts: "2026-09-14T08:26:22Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-plan-only-lane-is-not-gate-free-on-the-hosts-it-was-built-for-because-a-trunk-merge-pulls-gated-paths-into-the-diff-and-the-staleness-check-needs-cargo
+    event:
+      type: note
+      ts: "2026-09-14T08:26:22Z"
+      host: macuahuitl
+      summary: |-
+        moved out of the unscoreable block: the fixture and its litmus exist
