@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: progress
+      ts: "2026-09-14T16:11:36Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260914t161045z
+      host: macneo
+      summary: |
+        macneo: MEASURED THE TWO CRITERIA THIS HOST CAN SETTLE WITHOUT COMPILING, and one of them fails in a way the criterion's own wording hides. No code change; the remaining work is Rust and an inference endpoint, neither in this lane.
+        CRITERION 1 / CRITERION 4 — DETERMINISM CONFIRMED, BUT THE REPRODUCIBILITY KEY IS NOT A SEED. The landed projection (0a8815181) takes [--limit N] [--min-age-days N] [--now-epoch S] and has NO --seed; its own unit test is named forgotten_is_reproducible_without_a_seed. Measured on the live ledger: two runs at a fixed --now-epoch hash identically; a run at limit 5 hashes differently, which is the positive control proving the comparison can detect a change at all, so the equality means something. BUT a run ten days later on the clock yields a DIFFERENT set — the projection is age-ranked, so its reproducibility is conditional on pinning --now-epoch. Criterion 4 says "the same seed yields the same set"; for this component the reproducibility parameter is the EPOCH, and nothing currently requires anyone to record it. The selector prints its seed for exactly this reason (cycle_batch_triage); `forgotten` prints no epoch. An audit that replays a forgotten-derived selection without the epoch it was taken at cannot reproduce it, and would read that as nondeterminism rather than as a missing parameter. Recommend criterion 4 be restated in terms of the epoch, and the epoch printed in the output the way the seed is.
+        CRITERION 2 — UNMET IN BOTH HALVES, and this host is the natural place to have found the second. First half: nothing routes story-shaped questions through the projection; no expert/answer/story path references `forgotten` in the plan binary. Second half is the interesting one — the criterion requires that "an absent inference endpoint DEGRADES TO THE DETERMINISTIC LIST rather than refusing". macneo is an experts-degraded host, so the condition is live here rather than simulated: experts-probe reports l0=ready, l1=unset, l2=unreachable. Asking a story-shaped question ("which packets has triage forgotten?") returns a TYPED REFUSAL — `unsupported: no packet in the ledger matches any token ... and it is not a recognised ready/burndown query`, rc 0, empty citations. That is an honest refusal and it is NOT the required behaviour: the criterion asks for the deterministic list, and the list exists and is one subcommand away. So the degradation path is not merely unwired, it currently answers `unsupported` where the packet says it must answer with rows.
+        A CORRECTION I OWE MY OWN REPORTING. I have written "experts report source=absent on this host" in several loop-status entries, taking it from cycle-metrics' `experts: ... source=absent`. experts-probe disagrees: l0=ready, and L0 answered the query above. The accurate statement is that L1 is unset and L2 unreachable while L0 is ready — cycle-metrics' `source=absent` refers to its own artefact being absent, not to the expert layer being down. Repeating the metric's phrasing as a fact about the host was wrong, and it is the same shape as every other finding this week: a summary line read as a measurement.
