@@ -4179,3 +4179,89 @@ stories.
   on-a-duplicate-fix-hold-never-drop — the loser holds, the winner is on
   origin. Rule for the next cycle: push claims through the plan-only lane
   BEFORE spawning the agent, and run the control against origin's fold.
+- **The second reading of 1142-85zx (yoga's ask, answered from the salvaged
+  ref).** Two hosts, same constraint, same two decisions arrived at
+  separately: top-level only (maxdepth 1) and the citation guard wired into
+  the memoised-plan arm. Mine lacked the 1087-h2z9 counter excision only
+  because my agent never ran test-gate-fast-refusals.sh. What mine had that
+  yoga's did not: arm 6c, a mutation control IN THE ARM (their falsification
+  was five hand-run mutations, "the control in the author's memory"). And
+  what yoga measured that my review missed: arm 6c builds its mutant by
+  PROVENANCE (`git show HEAD:` cmp'd against the worktree), which differs
+  only while the fix is uncommitted — on every host that has merged the fix
+  it reds permanently, accusing the checkout of an uncommitted change; a
+  fixture that asserts its own change has not landed. I verified "pre-fix
+  red" and never asked what the arm would print a day later. Resolution:
+  yoga rebuilds the mutant BY CONTENT (strip the two constructs, cmp proves
+  the strip applied and names itself on a no-op strip, require the
+  issues-only change not to reach the memo verdict), lands it under my name
+  citing arm 6c and refs/heads/salvage/macuahuitl/20260914-1142-85zx
+  (59009673e); the ref stays until the arm is on trunk. Rule kept: a
+  mutation control must construct its mutant from content, never from where
+  HEAD happens to be.
+- **macbookair: v56.9.13.1 macOS smoke PASS (a09ff4884), and the clamp fix
+  verified in a published artifact.** Clean room under the standing consent:
+  install exit 0 into /Applications (no ~/Applications fallback), tray
+  56.9.13.1 (6b8342f3f) exact; reset removed 2.3 GB of state plus the sparse
+  rootfs.img with residue asserted empty and sizes measured BEFORE removal so
+  a no-op destruction could not pass as a clean room; provision exit 0 with
+  the full 528 MB Fedora image re-downloaded, rootfs postdating the
+  destruction marker; diagnose exit 0. No product findings. The lane's ledger
+  claim (1135-z8gn's clamp-ca-material fix) verified by executing the shipped
+  source.
+- **macbookair: 804-deux part 2 VERIFIED end to end (111de1387)** — the row
+  had carried "UNVERIFIED: needs a re-provision, not authorised" since
+  2026-08-19; the standing consent made it available. Seeded so survival is
+  provable byte-wise (a 61 B marker plus 2 MiB of /dev/urandom ballast,
+  incompressible), rm -rf $VM_DIR only with the cache untouched, then
+  --provision: both files sha256-identical across the rebuild, rootfs.img
+  nine seconds old at the check (a genuinely new VM), and the ballast
+  present in the NEW guest via --exec-guest rc 0. The consent rule held the
+  p1 for 26 days; the operator's word closed it in one cycle.
+- **Coordination pass 04:05Z (pass 17; the 03:41Z cron delivered behind the
+  meta cycle's land).** Relays: osx-next +5 (the two above plus attestations)
+  in this pass's land after the meta cycle's; windows-next +3 (esme's rows
+  and smoke PASS) already merged in that cycle's land. Salvage refs on
+  origin: lenovinha's 1159-g96c (line marked deleted in the cycle's commit;
+  the ref is deleted the pass AFTER that marker lands, i.e. next pass) and
+  the new macuahuitl/20260914-1142-85zx (yoga's second reading; line filed
+  by this pass's sweep; kept until the content-built arm 6c is on trunk);
+  five older pirria/unknown refs unchanged. Stale rows
+  `ok:stale-ready-rows:89/513`, none handed. Audit rows=23 stems=23.
+  Hand-offs: none — macbookair self-drained 804-deux under the standing
+  consent, yoga takes the arm-6c rebuild, lenovinha closes 1159-g96c, esme
+  re-gates 1155-jurn after 1179-yshc lands.
+- **Arm 3d on trunk at 7a6b3ecef (yoga, co-authored to macuahuitl):** arm
+  6c's idea with the construction changed — the mutant stripped from a copy
+  of the SHIPPED stamp (the skip-glob case arm and the plan_digest find), cmp
+  proving the strip applied and naming a no-op strip, the issues-only change
+  required NOT to reach ok:gate-fresh-except-plan (verdict
+  stale:tree-changed-since-gate); 11/11, mutation-tested 9/11 with the
+  no-match patterns red by name. yoga's own words on the cmp check: they had
+  produced that exact false pass twice in this row's work and still drafted
+  the strip without asking what it would do if it matched nothing — the
+  control is in the arm now. The row's event carries both hosts' halves.
+  The salvage ref macuahuitl/20260914-1142-85zx has done its job: line filed
+  and marked deleted this pass, ref deleted next pass. yoga idle, lock free,
+  level with origin — 1176-fn2p is the hand-off (a 14 GB Silverblue host
+  under the same 16 GB cliff lenovinha measured; the OOM-signal row is
+  measurable there), claim flipped on trunk after the in-flight land pushes.
+- **macbookair: 804-deux story complete (attested 437988c82, claim released).**
+  Both halves deliberately: the host half alone proves only that rm -rf
+  missed a directory; the guest half proves the freshly provisioned VM
+  re-attaches the virtiofs share and sees the surviving bytes; the ballast is
+  /dev/urandom so "survived" cannot be misread as "recreated". Two items
+  remain, neither consent-shaped: (a) the populated-cache models-versus-images
+  split needs a forge run pulling a real engine and model — macbookair did
+  NOT substitute the 2 MiB ballast for that figure ("a synthetic number
+  standing where a measured one belongs is the thing this fleet keeps getting
+  bitten by"); --exec-guest works on this path (rc 0, waits for Ready), so
+  the probe exists; 830-xsk2's CFRunLoop timeout is a different path.
+  (b) SCOPE, decided by the coordinator under the operator's reset ruling and
+  surfaced as decided: model_cache_dir() sits under $CACHE_DIR, so the smoke
+  and uninstall destroyers wipe the models dir (~2.47 GB re-downloaded per
+  smoke; the dir was ABSENT when 804-deux started because the same host's
+  smoke had wiped it hours earlier). The clean room stays clean: 804-deux's
+  deliverable was survival across a VM REBUILD, a different lifecycle from
+  the smoke's destruction; the cost is a measurement on the row. A
+  keep-models knob for smoke runs is one line and the operator's word.
