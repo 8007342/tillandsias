@@ -114,7 +114,10 @@ setup_repo
 issue_pass_token
 (cd "$TDIR/repo" && bash scripts/gate-stamp.sh write --scope full --dispatch check >/dev/null)
 stampfile="$TDIR/repo/.git/tillandsias-gate-stamp"
-sed -i 's/^toolchain .*/toolchain 0000000000000000000000000000000000000000000000000000000000000000/' "$stampfile"
+# 1135-z8gn: BSD sed -i takes the NEXT ARG as a backup suffix, so the GNU
+# form parses the FILE as the script ("invalid command code") and the rewrite
+# never happens. Temp-file form is identical on both dialects.
+sed 's/^toolchain .*/toolchain 0000000000000000000000000000000000000000000000000000000000000000/' "$stampfile" > "$stampfile.tmp" && mv "$stampfile.tmp" "$stampfile"
 v="$(memo check)"; rc=$?
 if [ "$rc" -ne 0 ] && [ "$v" = "stale:toolchain-changed" ]; then
     ok "a toolchain change refuses the memo on an unchanged tree"
