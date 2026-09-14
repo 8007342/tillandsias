@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: enclave-network-internal-enforcement-and-guard-discovery
+    event:
+      type: progress
+      ts: "2026-09-14T23:35:48Z"
+      agent_id: linux-yoga-claude-20260914t233547z
+      host: linux
+      summary: |-
+        CLAIM — yoga. VERIFIED LIVE BEFORE CLAIMING (the discipline lenovinha set on 1118-bscs, where two p1 rows that night turned out already-built). Both halves reproduce at HEAD.
+
+        HALF 1 — two launchers create the enclave network with NAT egress. In run-forge-project.sh the create call passes --driver bridge and --subnet "$ENCLAVE_SUBNET" and no --internal; diagnose-proxy.sh does the same with a literal 10.0.42.0/24. orchestrate-enclave.sh, the launcher the guard does check, passes the flag. So WHICH launcher first creates the network decides whether the enclave is an enclave, and the two that get it wrong are the ones nothing watches.
+
+        HALF 2 — the guard reads a hardcoded list of three files, and its own header says so. It checks scripts/orchestrate-enclave.sh plus two Rust files. Both offending launchers are outside that list, which is why a check that is GREEN on this tree sits beside two unisolated create calls. Its header even names tillandsias-headless/src/main.rs as a third Rust path that passes the flag, and the loop does not read that file either — the list and the prose already disagree.
+
+        A further defect in the same half, not in the row's text: the Rust arm tests the FILE, not the invocation — grep '"network"' and then grep '"--internal"' anywhere in the same file. A file with one compliant create and one non-compliant create reads as clean. Repo-wide discovery has to be invocation-scoped or it inherits that hole at a larger radius.
+
+        Open question this claim does NOT prejudge: whether --internal is correct for BOTH new sites or only one. diagnose-proxy.sh is a diagnostic that may need egress to be meaningful. I will read what each network is for before changing either, and if one of them legitimately needs egress the answer is an explicit, named exemption the guard knows about, not a silent omission.

@@ -132,6 +132,48 @@ for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-conve
 done
 chmod +x "$AB/wc/scripts"/*.sh "$AB/wc/scripts/hooks"/*.sh 2>/dev/null || true
 
+# ORDER 1109-t8kw, predicate (d) — A TOOL ASSUMED PRESENT.
+#
+# Arms A-D need the plan-only lane to be APPLICABLE, and the lane fails closed
+# unless it can validate fragments: pre-push-local-gate.sh:1003 requires `yq` on
+# PATH *or* a runnable target/release/tillandsias-plan. This scratch worktree is
+# built from scratch, so it has no target/release, and run_guard_ab deliberately
+# unsets TILLANDSIAS_PLAN_BIN to exercise the real discovery path. On a host with
+# yq that gap is invisible — yq satisfies the check and all four arms run. On a
+# host WITHOUT yq there is no validator at all, the lane correctly refuses with
+# "neither yq nor target/release/tillandsias-plan is available to validate
+# fragments (fail closed; full gate required)", and this fixture scored that
+# CORRECT REFUSAL as arm A failing. That is this packet's title exactly: a
+# fixture asserting a property of the environment it runs in, so a correct
+# refusal reads as a failure.
+#
+# MEASURED on pirria 2026-09-14 (Linux floor, no yq, unprovisionable here —
+# the toolbox route is Silverblue-only): 12/14 with arms A and B red, and
+# 14/14 from the same tree with one line seeding the binary below. The guard
+# was right both times; only the fixture's environment changed.
+#
+# So CONSTRUCT the property rather than inherit it. If this checkout has no
+# built binary either, SKIP BY NAME rather than scoring the guard wrong for an
+# environment the arm never claimed to need — the precedent is
+# test-claims-across-branches.sh's own 1109-t8kw skip.
+#
+# AND IT IS THE BINARY, NOT yq. `yq` satisfies the lane's FIRST validator gate
+# (pre-push-local-gate.sh:1003) and is NOT enough for these arms: arm A's push
+# adds a plan/index.d fragment, so the lane also runs the fold and status-loss
+# checks, and those refuse with "no runnable tillandsias-plan resolved" —
+# "yq validates one blob's shape; it cannot fold the ledger, which is what
+# these two checks read" (1124-7f3u, quoted from the guard's own remedy line).
+# A first version of this fix treated yq as sufficient and skipped the copy;
+# it passed on this yq-absent host and still failed under the litmus runner,
+# which is what surfaced the distinction. Construct the binary unconditionally.
+AB_VALIDATOR=1
+if [ -x "$ROOT/target/release/tillandsias-plan" ]; then
+    mkdir -p "$AB/wc/target/release"
+    cp "$ROOT/target/release/tillandsias-plan" "$AB/wc/target/release/tillandsias-plan"
+else
+    AB_VALIDATOR=0
+fi
+
 printf 'packets: []\n' > "$AB/wc/plan/index.yaml"
 printf 'trunk-version-old\n' > "$AB/wc/shared.txt"
 GA add -A >/dev/null; GA commit -q -m base
@@ -165,6 +207,9 @@ run_guard_ab_with() { # $1 = alternate hook script (absolute path)
 }
 reset_ab() { GA reset -q --hard origin/windows-next; git -C "$AB/wc" clean -qfd; mkdir -p "$AB/wc/plan/index.d"; }
 
+if [ "$AB_VALIDATOR" -eq 0 ]; then
+    echo "skip:arms-ab:no-plan-binary (1109-t8kw) — target/release/tillandsias-plan is not built in this checkout, so the lane's fold and status-loss precondition cannot be constructed (yq does not substitute, 1124-7f3u); NOT a verdict about the guard"
+else
 # ── ARM A: a non-plan path byte-identical to origin/linux-next is dropped ──
 printf 'packets: []\n' > "$AB/wc/plan/index.d/20260913t000000z-arm-a.yaml"
 printf 'trunk-version-new\n' > "$AB/wc/shared.txt"   # matches trunk's NEW content exactly
@@ -220,6 +265,7 @@ else
     bad "MUTATION B: arm B's scenario still refuses with the equality test weakened — arm B proves nothing"
 fi
 reset_ab
+fi   # AB_VALIDATOR (1109-t8kw skip-by-name)
 
 # ════════════════════════════════════════════════════════════════════════
 # ARMS C / D — STALENESS AGAINST THE VALIDATOR SURFACE (deliverable 2)

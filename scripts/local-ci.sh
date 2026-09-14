@@ -302,7 +302,23 @@ CHECK_LOG_DIR="$SIGNATURE_DIR/check-logs"
 CHECK_LOG_INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-$SIGNATURE_DIR/check-logs.jsonl}"
 VERSION_VALUE="$(cat VERSION 2>/dev/null || echo "0.0.0.0")"
 SOURCE_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")"
-CI_RUN_ID="local-ci-$(date -u +%Y%m%dT%H%M%SZ)"
+# ORDER 1185-9qx6 — THE RUN ID IS THE CORRELATION KEY, SO IT MUST BE SHAREABLE.
+# check-release-tier-freshness.sh groups check-log records by ci_run_id and
+# calls a run FULL-tier when its phases cover pre-build, post-build and runtime.
+# `./build.sh --ci-full` drives the pre-build phase through THIS script and the
+# other two itself, so those records can only join this run if the caller can
+# name it. TILLANDSIAS_CI_RUN_ID lets it; unset (every interactive and cron
+# invocation) the behaviour is exactly what it always was. A malformed value is
+# REFUSED rather than normalised: the reader parses the timestamp back out of
+# this string, and a run it cannot date reports could-not-run.
+CI_RUN_ID="${TILLANDSIAS_CI_RUN_ID:-local-ci-$(date -u +%Y%m%dT%H%M%SZ)}"
+case "$CI_RUN_ID" in
+    local-ci-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *)
+        echo "refused:local-ci:TILLANDSIAS_CI_RUN_ID='$CI_RUN_ID' is not local-ci-YYYYMMDDTHHMMSSZ" >&2
+        exit 2
+        ;;
+esac
 CI_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 CHECK_IDS=(

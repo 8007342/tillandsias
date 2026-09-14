@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga from the uncontended ci-release pre-build run taken while
+# closing 1110-c4nf; macuahuitl routed the finding back to the host holding
+# the measurement.
+packets:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    order: 1191-vrjf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [testing, release, fail-loud, docs]
+    estimated_hours: 2
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a renderer that formats numbers in a fixed numeric locale and a guard that proves it. Future litmus scripts/test-dashboard-numeric-locale.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: rendering a dashboard row under LC_NUMERIC=fr_FR.UTF-8 and under LC_ALL=C produces BYTE-IDENTICAL output, and neither run writes a decimal comma; NEGATIVE CONTROL: a row whose percentage is empty or non-numeric still renders the placeholder rather than aborting; pre-fix result: FAILS — the fr_FR run exits 1 at the pct_display assignment, measured on yoga 2026-09-14T21:47Z."
+    owned_files:
+      - scripts/update-convergence-dashboard.sh
+    title: |
+      update-convergence-dashboard.sh renders percentages with bash printf under the CALLER's LC_NUMERIC, so on a comma-decimal host the pct_display assignment refuses a dot-separated value outright and litmus:local-ci-self-clean-evidence step 4 fails rc=1 — and the values printf does accept come out with a decimal COMMA in a file other tools parse.
+    context: |
+      MEASURED on yoga (LANG=fr_FR.UTF-8, LC_NUMERIC=fr_FR.UTF-8)
+      2026-09-14T21:47Z, on an UNCONTENDED `scripts/run-litmus-test.sh
+      ci-release --phase pre-build`, and reproduced twice (once alongside a
+      second run, once alone), so this is not a contention artifact:
+
+        [STEP 4/5] render centicolon dashboards exactly as the CI gate does
+        ... [FAIL] rc=1
+        success_pattern=^ok:dashboard-target-routed$
+        output=[dashboard] rendering 1 signature records for Local Development
+        scripts/update-convergence-dashboard.sh: printf: 89.8989898989899:
+        nombre non valable
+
+      Reduced to the mechanism at the prompt on the same host:
+        printf '%.1f\n' 89.8989898989899          -> rc=1, "nombre non valable"
+        LC_ALL=C printf '%.1f\n' 89.8989898989899 -> rc=0, "89.9"
+        printf '%.1f\n' 89                        -> rc=0, "89,0"   <-- COMMA
+
+      So there are TWO defects behind one red, and the second is the quieter
+      one: the abort is loud, but a host whose percentages happen to parse
+      writes a decimal comma into a dashboard that is read as a data file.
+      The locus is the `pct_display` assignment in the row loop of
+      update-convergence-dashboard.sh; the `inverse` computation on the next
+      lines goes through awk, which parses under the same locale, so it wants
+      checking in the same pass rather than being assumed safe.
+
+      This is a HOST-DEPENDENT red: it is green on every C-locale host in the
+      fleet and cannot be reproduced by reading the script. Whoever takes it
+      should set the numeric locale explicitly at the renderer's boundary
+      (LC_ALL=C for the formatting, or a single formatting helper) rather
+      than asking callers to export anything — a fix that depends on the
+      caller's environment is the same class of defect in a new place.
+
+      WHAT TO BUILD: pin the numeric locale inside the renderer, then the
+      guard named in unscoreable, which must assert BYTE-IDENTICAL output
+      across the two locales rather than merely a zero exit — a run that
+      exits 0 while writing "89,0" is exactly the failure the exit code
+      misses.
+    next_action: |
+      Reproduce with LC_NUMERIC=fr_FR.UTF-8 on any host (no fr_FR host
+      required — the variable is enough), fix at the pct_display locus and
+      audit the awk neighbours, then write the two-locale byte-identity
+      guard. Do NOT fix by exporting a locale from the litmus step: that
+      makes the arm green and leaves the renderer wrong for its real callers.

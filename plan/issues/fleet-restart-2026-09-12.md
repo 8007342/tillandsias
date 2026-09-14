@@ -5142,3 +5142,61 @@ Note for the next lander on any host: lenovinha's unpushed 345-1185-9qx6.step
 now collides with 345-1183-j9dk on trunk — the first real run of 1162-qbrx's
 allocator will be their land, and its `gate-step-prefix: … -> …` line is the
 live confirmation that row still owes.
+
+**Pass 27 hold — yoga (20:30Z): 1110-c4nf complete** (86ac0e26d /
+d616a1d96 / MO-FULL 6cb07aeee): step 23 of litmus-cycle-batch-triage-shape
+now diffs the porcelain and NAMES the paths that appeared instead of
+comparing two opaque strings — archive-plan-packets.sh --check's known leak
+is attributed by name and no longer convicts the selector; falsified in the
+useful direction with a seeded concurrent writer. Step 5's budget raised
+120s→300s (2m24s uncontended; it had been aborting the test before step 23
+ran; 26/26 now). Two reds left open OUTSIDE that packet, both uncontended on
+today's linux-next, same class (the selector at ~14s per invocation against
+a 120s arm budget — 1187-iij8's class on a FAT host): litmus:capability-
+routing-shape step 1/5 TIMEOUT, and litmus:local-ci-self-clean-evidence step
+4/5 rc=1 (centicolon dashboard render). Flagged, not claimed; yoga asked to
+file them through the lane as rows with their measurement and take them if
+their next cycle has room (interchangeable Linux → yoga/lenovinha).
+Yoga (20:45Z): both reds filed and landed at 8f7c1573c — 1191-vrjf and
+1192-xv4n, ready. 1191-vrjf is NOT the centicolon renderer: it is a NUMERIC-
+LOCALE defect — update-convergence-dashboard.sh formats percentages with
+bash printf under the CALLER's LC_NUMERIC, and yoga runs fr_FR.UTF-8;
+reduced at the prompt: `printf '%.1f' 89.8989898989899` → rc=1 "nombre non
+valable", `LC_ALL=C` → 89.9, and the values printf does accept come out as
+"89,0" with a decimal comma into a file other tools parse — the abort is the
+loud half, the comma the quiet one; the row says exporting a locale from the
+litmus step is not an acceptable fix. 1192-xv4n cites 1187-iij8 with a fact
+that row lacked: a FAT host misses the budget by 14% (test-capability-
+routing.sh 2m17s uncontended, 8/8 standalone, against 120s), and a second
+point in the same suite (cycle-batch-triage-shape step 5, 120s against
+2m24s, fixed in passing at 86ac0e26d). The general shape: a budget miss does
+not fail one arm, it TRUNCATES the test and the arms after it report nothing
+while looking covered; the row asks for a guard on budget-vs-last-measured-
+cost rather than a blind sweep. A new regime axis for the standing list: the
+caller's LOCALE — a numeric format under LC_NUMERIC≠C is a different
+program.
+Lenovinha (20:55Z): the operator unlocked the keyring; the salvage ref was
+pushed FIRST and verified on origin by ancestry (ok:salvaged:…:5fa2e038f),
+then 1185-9qx6 integrated, re-gated green and landed on attempt 1 — evidence
+1e3e1e01e (the rebase rewrote the SHA; the earlier dc4721a09 is a ghost,
+1024-c3h3), land ok:land:5e92fda4d:attempt-1; record-ci-phase-result.sh,
+test-release-tier-freshness-reads-ci-full.sh and 355-1185-9qx6.step verified
+on origin by tree. THE ALLOCATOR'S FIRST LIVE COLLISION: a sibling took 345
+(macbookair's 1183-j9dk step) during the hour lenovinha's push was blocked,
+so the blocked window became exactly 1162-qbrx's race; the land tool moved
+345 → 355 (ok:gate-step-prefix:reallocated:1) and landed without a re-gate.
+Lenovinha's line for the drill: A PUSH-BLOCKED HOST IS A PREFIX-COLLISION
+GENERATOR. 1189-2ra5 is now a real claim on trunk (the flip pushed; the
+selector reads 0), worked next on the :51 cadence. Salvage ref
+refs/heads/salvage/lenovinha/20260914-1185-9qx6 stays on origin until the
+sweep files its line and marks it (22:11Z), deletion the pass after.
+Pass 27 (2026-09-14T22:11Z) state: osx-next +2 relayed (macbookair's
+attestation); windows-next 0. Trunk since pass 26: yoga's 1191-vrjf and
+1192-xv4n filed, lenovinha's 1185-9qx6 landed through the allocator's first
+live collision (345 → 355), 1189-2ra5 claimed by lenovinha, the 1162-qbrx
+live note. Salvage sweep filed one line (lenovinha's 1185-9qx6 ref, ancestry
+none because the land rebased it); all four of its commits are
+patch-equivalent on trunk (`git cherry` −), line marked deleted, ref goes at
+00:11Z. Stale rows 88/505, none handed. Audit rows=23 stems=23. Hosts
+silent this window (esme, macneo): not directed; every capable host is on
+its own claim.
