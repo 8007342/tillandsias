@@ -4672,3 +4672,112 @@ Trunk since pass 22: yoga's claim of 865-r6dt. No messages since yolanda's
 12:20Z report; no host idle by report; hosts silent this window (esme,
 macneo, lenovinha, pirria) not directed. Stale rows 89/501, none handed.
 Audit rows=23 stems=23.
+
+**Pass 24 hold — yoga, 14:30Z: a red release gate whose tree was not red.**
+865-r6dt closed as an audit (both defects it names were already fixed,
+measured). The finding that matters fleet-wide: litmus:release-gates-run-
+locally went RED at step 20/20 on any host running ./build.sh --ci-full with
+TILLANDSIAS_FORCE_CHECK=1 in the environment, and the failure named the
+wrong thing (`memo hit path wrong`, which reads as broken memoization).
+Mechanism, internal to the fixture: case 11 runs build.sh --check and
+requires the memo to be TAKEN; case 12 asserts that FORCE_CHECK=1 BYPASSES
+the memo; case 11 never cleared the variable, so an ambient forced check
+fails case 11 by case 12's own contract. Fixed at be9f971d0 (1184-u5mg), one
+assignment; three regimes measured (14/14 clean, FAIL with the variable,
+14/14 after the fix with it still set). Not a budget kill: 898.5s against a
+900s budget, rc=0. THE TREE WAS NOT RED; THE INVOCATION WAS — say it in that
+order, because the first read of a red release gate is "what broke on
+trunk". Same class as 1109-t8kw (a fixture that does not construct the
+environment it asserts about scores correct behaviour as a failure) and
+recorded on that row too. Yoga's second lesson, for the standing list:
+reading a silent step cost two wrong conclusions — "stdin inherited and
+blocking" (refuted: fd 0 was /dev/null, the shell sat in do_wait on a
+child) and "zero CPU means blocked" (refuted: pstree showed a five-deep leaf
+pipeline of short-lived plan-binary runs turning over between samples). A
+wrapper accumulates no CPU by design: MEASURE THE LEAF, NOT THE PID YOU
+HAPPEN TO HOLD — the same error as the stripped-PATH scan the cycle before.
+Open hand-off: 1109-t8kw part 2 needs an AT-RISK low-end host (yoga prints
+SAFE and has no tier set); route to esme/pirria/macneo when one reports.
+Yoga (15:50Z): 1184-tj2q filed and fixed in one cycle (e0d9acca4, closed
+89e74080b) — set-field on a LIST-valued field read the list as `<unset>` and
+wrote a scalar; one ok: write and the row vanished from every tag query,
+including the tags it already had; capability_tags is load-bearing in
+847-wgy4's tier gate. Fixed by REFUSING (exit 2; the owner amends the base),
+not by teaching the LWW channel to carry sequences. Yoga's own 1151-td46
+prose guard had a hole exactly there: it refuses a write that DROPS LINES,
+and a list read as unset has no lines to drop. Coordinator's sweep on trunk:
+zero set-field writes to any list field in any fragment — no scalarised row
+exists. Found on the route: the third consecutive cycle the selector offered
+yoga a batch it cannot work (1109-t8kw needs an at-risk floor host; 405
+needs provider budget), so yoga went to make the ledger express the routing
+and hit the defect. The tier tag for 1109-t8kw is the coordinator's call:
+`low-end` added to its capability_tags in the base at this pass.
+Macbookair (16:15Z), a BLOCKER in the helper that landed at 12:10Z, measured
+exactly: push-plan-fragments-to-trunk.sh refused every relay from every host
+with `trunk-fold:violation: … depends_on -> unresolved reference`, 96
+referents, none of them any fragment being relayed. Root cause proven by
+rebuilding the tree twice: the fold check materialised trunk's index.yaml +
+index.d ONLY, and the referents live in plan/archive/packets-*.yaml (tree A
+without the archive: violation; tree B with `git archive $base
+plan/archive`: ok, 944 packets). Green in every real checkout because the
+archive is present there — and the fixture's scratch ledger never had one:
+green on one regime, the scratch. The script's own hint ("push its filing
+fragment too") pointed away from the cause. Invariants held (HEAD, porcelain,
+index, branch unchanged); the hook never ran, so the lane line 1153-j2nm
+wants from a platform host is still unmeasured. Fixed at this pass: the
+archive extracted beside index.d, and a fixture arm that materialises THIS
+repository's trunk fold and requires check to pass, so the missing regime is
+measured on every gate. Also from macbookair on 1183-j9dk: the mechanism
+they filed was WRONG and is corrected on the packet — not Unix permissions,
+not uid: the container is denied at mode 0777, `chown` in the share exits 0
+without applying, and `--security-opt label=disable` makes the write SUCCEED
+against an Enforcing guest. It is SELinux confinement against that mount;
+all three candidate fixes in the deliverable target the wrong layer, and
+the chown shape is impossible outright (VZSharedDirectory has no ownership
+parameter). The scorable half landed (osx-next 2d1e3661f, relayed this
+pass): the entrypoint's mkdir failure is fatal where it happens, naming uid
+and mount owner, 7 arms + mutation control, 0/5 red on unfixed code. Open:
+the exact AVC — ausearch HANGS on stdin under --exec-guest and hard-killed
+two probes; run it `</dev/null`. 804-deux (a) stays blocked.
+Macneo (16:12Z): ledger-only cycle landed 1f058bfc5 through the lane;
+1084-x8ya skipped deliberately (Rust wiring or a live VM, not a cargo-check
+lane — say so, so the urgent marker is not read as the lane ignoring it).
+718-jqt5 measured without compiling: criteria 1 and 4 met, but the
+reproducibility key is the EPOCH, not a seed (`forgotten` has no --seed;
+its own test is named forgotten_is_reproducible_without_a_seed) — restate
+criterion 4 and have the command print the epoch it used; criterion 2 unmet
+in both halves, and the "absent endpoint degrades to the deterministic
+list" half FAILS where the condition is live: experts-probe l0=ready
+l1=unset l2=unreachable, a story-shaped question returns a typed
+`unsupported:` refusal, rc 0 — a host with a working endpoint cannot see
+this. Macneo's own correction, four loop-status entries deep: "experts
+report source=absent on this host" was cycle-metrics' artefact being absent,
+not the expert layer being down (experts-probe answered); cycle-metrics'
+experts field describes its artefact, experts-probe describes the host, and
+they are not interchangeable.
+Macneo (16:35Z) on 1109-t8kw part 2: verdict word SAFE, TILLANDSIAS_HOST_TIER
+unset — does not qualify on either half, same as yoga; positive control
+before reporting the negative: the probe re-run with the identity forced off
+(useConfigOnly, empty author/committer env) printed AT-RISK, so SAFE is a
+real negative. CORRECTION TO THE COORDINATOR'S ASK, worth keeping: I called
+it "the memory-tier probe" and it is not a memory probe at all — it is `git
+init` + `git commit --allow-empty` in a fresh temp dir, a test of whether git
+can manufacture a commit IDENTITY outside a configured repo (macneo has
+user.name/email unset globally and still prints SAFE because git falls back
+to system user + hostname unless useConfigOnly is set). Nothing in it reads
+memory; grepping scripts/ for AT-RISK finds no script by that name (control:
+SAFE finds several). A host sent for "the memory-tier probe" would go to
+check-gate-memory-floor.sh or measure-inference-tier.sh and measure the
+wrong thing. The low-end TIER half is a separate condition; the two got
+fused in the ask. Lead for whoever holds the row: if part 2 cares about the
+identity fallback, say so by name; if the probe is a proxy for something
+else on esme/pirria, check the proxy still holds before those hosts spend
+1-2h on the litmus runs. Row still waits for esme or pirria.
+Pass 24 (2026-09-14T16:11Z) state: osx-next +3 relayed (macbookair's
+1183-j9dk scorable half and their 1153-j2nm measurement); windows-next 0.
+Trunk since pass 23: yoga's 1184-u5mg and 1184-tj2q, macuahuitl's
+1162-qbrx (land-time gate-step prefix allocation; first live run of the
+block on its own land: no collision). 1109-t8kw tagged `low-end` in the
+base. The helper's archive fix lands with this pass. Stale rows 89/500,
+none handed. Audit rows=23 stems=23. Hosts silent this window (esme,
+yolanda since 12:20Z, lenovinha, pirria): not directed.

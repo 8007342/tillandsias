@@ -31,6 +31,8 @@
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
 #       3 gate failed | 4 attempts exhausted | 5 auth failed
 #       6 push failed for a reason retrying cannot fix
+#       8 gate-step prefix could not be allocated after the integrate (1162-qbrx:
+#         no free slot before the next occupied prefix — renumber by hand)
 #       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
 #         helper — the push hangs forever and the log stays zero-byte)
 set -uo pipefail
@@ -123,6 +125,36 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
                 echo "refused:land:trunk-merge-conflict — resolve origin/$TRUNK by hand" >&2
                 exit 2
             fi
+        fi
+    fi
+
+    # ORDER 1162-qbrx: ALLOCATE GATE-STEP PREFIXES HERE — after the integrate,
+    # before the gate — the only window that cannot race. A .step file's
+    # numeric prefix is chosen at authoring time; the integrate above can
+    # bring in another host's step with the same prefix, and the gate's own
+    # fixture (test-gate-step-append-no-conflict.sh, arm 7) then refuses the
+    # tree after the full gate has run. MEASURED 2026-09-13 (lenovinha): 215,
+    # 255 and 280 collided, the last one after following the "pick it after
+    # the integrate" advice exactly; each cost a full re-gate. The allocator
+    # renames only steps THIS push adds, to a free slot between its prefix
+    # and the next occupied one, and commits the rename so the gate sees the
+    # final tree. On a platform branch the trunk merge above brings in
+    # trunk's own steps, which read as "added" against origin/$BRANCH and
+    # are PUBLISHED — --exclude keeps them out of the added set.
+    if [ -f scripts/allocate-gate-step-prefix.sh ]; then
+        _alloc_rc=0
+        if [ "$BRANCH" != "$TRUNK" ]; then
+            _alloc_out="$(bash scripts/allocate-gate-step-prefix.sh --base "origin/$BRANCH" --exclude "origin/$TRUNK" --commit 2>&1)" || _alloc_rc=$?
+        else
+            _alloc_out="$(bash scripts/allocate-gate-step-prefix.sh --base "origin/$BRANCH" --commit 2>&1)" || _alloc_rc=$?
+        fi
+        case "$_alloc_out" in
+            ok:gate-step-prefix:no-collision) ;;
+            *) printf '%s\n' "$_alloc_out" | sed "s/^/land: attempt $attempt — /" ;;
+        esac
+        if [ "$_alloc_rc" -ne 0 ]; then
+            echo "refused:land:gate-step-prefix — $(printf '%s\n' "$_alloc_out" | grep -m1 '^refused:' || printf '%s\n' "$_alloc_out" | tail -1)" >&2
+            exit 8
         fi
     fi
 

@@ -641,6 +641,7 @@ specs:
   litmus_tests:
   - litmus:claims-fleet-visible
   - litmus:fragment-keys-are-read
+  - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
