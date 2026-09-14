@@ -882,17 +882,24 @@ status `ready`. The packet closes only when every agent named in
     plan-only lane. **This inverts the old step 2/step 4 order for the CODE
     commit only** — every other ledger write keeps the 3c ordering.
 
-    **Choose a `scripts/gate-steps.d/NNN-*.step` prefix AFTER the integrate,
-    never before.** The landing script fetches and integrates sibling hosts'
-    work as part of landing, so a slot that was free when you wrote the file
-    can be taken by the time the gate runs — the gate then refuses with `FAIL:
-    two .step files share a numeric prefix`, and a whole gate is spent learning
-    it. yoga picked 205 on 2026-09-12 against an incoming `205-1137-dzzu.step`
-    and paid a full `--check` for it. Recovery is cheap once the shape is
-    known: `git mv` to the next free slot, `--amend`, confirm with
-    `scripts/test-gate-step-append-no-conflict.sh`, re-land. Same class as the
-    SHA rule above — read the tree the operation LEAVES, not the one it
-    started from.
+    **A `scripts/gate-steps.d/NNN-*.step` prefix is ALLOCATED BY THE LAND
+    TOOL, not chosen by you (1162-qbrx).** Pick the slot you mean between its
+    neighbours and land with `scripts/land-on-platform-branch.sh`: after its
+    own integrate and before the gate it runs
+    `scripts/allocate-gate-step-prefix.sh --base origin/<branch> --commit`,
+    which moves a step THIS push adds — and only that — to the smallest free
+    integer below the next occupied prefix when the integrate brought in a
+    sibling's step with the same number, and commits the rename
+    (`gate-step-prefix: 280-<order>.step -> 281-<order>.step (280 taken by
+    …)`). The old advice, "choose the prefix after the integrate", cannot
+    close this race because the window is the gate itself: MEASURED
+    2026-09-13, lenovinha's 280 followed it exactly and still collided
+    against yoga's 900-z3kv landing mid-gate (215, 255 and 280 that night,
+    each a full re-gate; yoga's 205 the day before). Hand-rolled push? Run
+    the allocator yourself after your merge, before your gate. A
+    `refused:gate-step-prefix:no-gap` means every integer up to the next
+    occupied prefix is taken — renumber by hand so the step keeps its place.
+    Existing steps are never renumbered.
 
     ORDER 1024-c3h3. This step used to run before the landing, and the evidence
     refs were systematically wrong for every host that followed it: lenovinha

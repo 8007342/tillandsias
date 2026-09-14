@@ -1,0 +1,46 @@
+# @trace spec:methodology-accountability
+# @trace order:1162-qbrx
+#
+# Order 1162-qbrx: gate-step files are ordered by a scarce integer prefix
+# chosen at authoring time, and the gate's own fixture refuses a tree where
+# two share one; "pick it after the integrate" could not close the race
+# because the window is the gate itself (lenovinha's 215, 255 and 280 on
+# 2026-09-13, the last one following the advice exactly; each a full
+# re-gate). Now scripts/land-on-platform-branch.sh calls
+# scripts/allocate-gate-step-prefix.sh after its integrate and before the
+# gate: a step THIS push adds whose prefix the integrate has taken moves to
+# the smallest free integer below the next occupied prefix, committed, so the
+# gate sees the final tree and the step keeps the place its author chose.
+name: litmus:gate-step-prefix-allocation
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1162-qbrx hermetically: two sequential lands choosing 280 both land
+  (the second at 281) with the pre-fix control showing the shared prefix the
+  gate would have refused; an explicit ordering between neighbours is
+  preserved; no collision changes nothing; no gap refuses; two added files
+  sharing a prefix keep the first and move the second; dry-run moves nothing;
+  usage is refused; and the land tool calls the allocator between its
+  integrate and its gate (structural).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-gate-step-prefix-allocation.sh
+  - workspace contains scripts/allocate-gate-step-prefix.sh and scripts/land-on-platform-branch.sh
+
+critical_path:
+  - step: "the allocator and the fixture parse and carry their exec bits"
+    command: "bash -n scripts/allocate-gate-step-prefix.sh && bash -n scripts/test-gate-step-prefix-allocation.sh && test -x scripts/allocate-gate-step-prefix.sh && test -x scripts/test-gate-step-prefix-allocation.sh && echo 'ok: gate-step-prefix-allocation-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: gate-step-prefix-allocation-parses"
+
+  - step: "two lands choosing one prefix both land; ordering preserved; no-gap refused; the land tool calls the allocator in the window"
+    command: "bash scripts/test-gate-step-prefix-allocation.sh | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: gate-step-prefix-allocation"
+
+  - step: "smoke, not a cleanliness claim: with --base HEAD the added set is empty by construction, so this only proves the allocator runs to a verdict on this tree (it would have caught the pipefail kill a non-numeric .step file once caused)"
+    command: "bash scripts/allocate-gate-step-prefix.sh --base HEAD --dry-run 2>/dev/null | tail -1"
+    timeout_ms: 10000
+    expected_behavior: "ok:gate-step-prefix:no-collision"
