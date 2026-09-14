@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    field: next_action
+    value: |-
+      PART 1 IS DONE at d1a9516cc: four predicates, 708 files scanned, 95 candidates, 3 real, 92 false positives, 3 fixed — (a) tier 2 real (litmus-cycle-batch-triage-shape, litmus-selector-urgency-not-inert-shape, both pinned on executing command lines only), (b) 0 real, (c) 0 real which confirms 51c0ad583's sweep closed, (d) 1 real and it was mine (test-claims-across-branches arm 2b used hostname -s, absent in the builder). LEFT: PART 2 ONLY, the closure artifact, and it needs a host yoga is not — the AT-RISK probe prints SAFE here and TILLANDSIAS_HOST_TIER is unset, so esmeraldinha or pirria must run the two litmus specs and paste the counts plus the probe output.
+
+      [2026-09-14T18:12:56Z macuahuitl] Coordinator's change to part 1's method (2026-09-14, on esme's finding that the six group-A reds were found by RUNNING and none would be caught by the git-init-without-identity predicate): part 1's sweep gains a run-based half — run the suite on an AT-RISK host and classify by mechanism, which is exactly what part 2 did — and a grep-only 'N clean' is not to be trusted. The eight fixture reds are 1186-w3ph (windows); the two budget timeouts are 1187-iij8; group C's open arm (citation-frame, cargo test FAILED on Windows) is inside 1186-w3ph. What is left on THIS row: part 1 re-swept with the run-based half, then close.
+    ts: "2026-09-14T18:12:56Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-14T18:12:56Z"
+      host: macuahuitl
+      summary: |-
+        part 1 method changed; children filed

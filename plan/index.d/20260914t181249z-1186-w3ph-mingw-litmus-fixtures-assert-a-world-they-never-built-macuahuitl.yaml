@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator from esmeraldinha's 1109-t8kw part 2
+# measurement at the Windows/Git Bash locus (2026-09-14): the fixes belong to
+# a host that can gate on Windows, not to the measurement row.
+packets:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    order: 1186-w3ph
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, fixtures, testing, litmus, fail-loud]
+    estimated_hours: 6
+    parent_order: 1109-t8kw
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the eight fixtures fixed by mechanism. Future litmus scripts/test-mingw-fixtures-build-their-world.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: at the Git Bash locus (uname MINGW64_NT-*) each of the eight named arms passes, with the AT-RISK identity probe embedded in the same log; NEGATIVE CONTROL per mechanism — a PATH pin without /mingw64/bin still refuses, a /proc/self/fd/0 read still fails on MSYS, a CRLF'd token still mismatches when the strip is removed, and the curl vocabulary arm still reds when the locus mapping is removed; pre-fix result: FAILS — meta-orchestration 20/3/1 and forge-environment-discoverability 15/9/1 on esmeraldinha 2026-09-14T17:49Z."
+    owned_files:
+      - plan/issues/litmus-1109-t8kw-part2-esmeraldinha-2026-09-14.md
+      - plan/issues/litmus-1109-t8kw-group-c-classified-2026-09-14.md
+      - scripts/lib-inference-state.sh
+    title: |
+      Eight litmus fixtures are red at the Windows/Git Bash locus because they assert about a world they never built — four mechanisms (a PATH pin that omits /mingw64/bin where MINGW keeps git; jq reading /proc/self/fd/0, absent on MSYS; CRLF through pipes, three instances, one graded as the verdict at rc=0; a curl exit vocabulary pinned to one locus's deadline) — and one arm left open because it needs the cargo run.
+    context: |
+      MEASURED by esmeraldinha 2026-09-14 (1109-t8kw part 2, uname
+      MINGW64_NT-10.0-26200, scripts/run-litmus-test.sh direct, never
+      build.sh; the AT-RISK identity probe re-executed inside the same log:
+      PROBE_COMMIT_RC=128, TIER unset). By mechanism, from the two reports
+      in owned_files: (1) credential-channel-check-shape 8/10 pins
+      `env PATH=/usr/bin:/bin`; MINGW keeps git only at /mingw64/bin —
+      single-variable proof: that PATH → rc=1 missing:no-credential-channel,
+      with /mingw64/bin → rc=0 ok:forge-git-mirror; guard correct, fixture
+      never built its world. (2) four arms die on `jq … /proc/self/fd/0`,
+      absent on MSYS — counted on the shared error text, NOT individually
+      reproduced (esme flagged that; verify each before fixing). (3) CRLF:
+      salvage-net-roundtrip step 9 grades git's CRLF warning as the verdict
+      AT rc=0 (a command that succeeded, scored red because stderr was
+      compared against an ok: token); one more arm the same way; and
+      plan-answer-envelope-citability 6/21 — jq emits CRLF on MSYS and \r is
+      not in the default IFS, so word-splitting leaves it on every field but
+      the last (item 1 len=68 ending \r, the same id assigned directly len=67
+      matches). ONE mechanism: on this locus text through a pipe carries \r,
+      and any fixture that word-splits or string-compares it asserts a
+      property of the host. (4) project-answer-synthesis-refusal-typed 3/10
+      pins inference_reason=endpoint-unreachable where this host produces
+      endpoint-timeout: lib-inference-state.sh maps curl 6/7→unreachable,
+      28→timeout at --max-time 1, and the connect attempt takes ~2s on the
+      Windows stack against ~0s in the distro — the DEADLINE, not the exit
+      code (plain curl exits 7 on both; esme's first hypothesis was wrong
+      and their plain-curl control caught it). The product's refusal reason
+      is accurate for this host; the fixture pins one locus's vocabulary.
+      OPEN, not classified: citation-frame-and-caller-relation 8/8 — its
+      only silent exit is `grep -q FAILED && exit 1`, so the empty output
+      DOES establish that `cargo test -p tillandsias-plan` printed FAILED
+      on Windows (real failing tests, not a build break); which tests, and
+      whether for a Windows reason, needs the cargo run — 314s, the slowest
+      arm in its spec; on a floor host a re-run could time out and read as
+      this row's shape when it is the budget row's. Not this row: two
+      floor-tier BUDGET timeouts (their own row) and part 1's sweep method.
+      Fix by MECHANISM, one commit per mechanism, each with its negative
+      control; measure at the Git Bash locus, never through build.sh (it
+      re-execs into the SAFE builder).
+    exit_criteria:
+      - 'each of the eight named arms passes at the Git Bash locus with the identity probe embedded in the same log (pre-fix result: FAILS — 12 red across two specs on 2026-09-14, 8 of them this row)'
+      - 'NEGATIVE CONTROL per mechanism: with the fix removed the arm reds again for the recorded reason (PATH, /proc/self/fd/0, CRLF, curl vocabulary)'
+      - 'the open citation-frame arm is either fixed with its failing tests named, or moved to its own row with the cargo output attached — never left as an empty output'
+    events:
+      - type: filed
+        ts: "2026-09-14T18:12:49Z"
+        agent_id: "linux-macuahuitl-fable-20260914t181249z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from esmeraldinha's part 2 measurement
+          and group C classification; routed to the capable Windows host.

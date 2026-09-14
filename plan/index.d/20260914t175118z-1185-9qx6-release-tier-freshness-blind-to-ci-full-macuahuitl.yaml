@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator from the 2026-09-14 daily release-tier
+# exercise: a green ./build.sh --ci-full left the freshness guard reading never.
+packets:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    order: 1185-9qx6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [gate, ci, tooling, release-tier, instrument]
+    estimated_hours: 3
+    parent_order: 890-27mv
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the instrument. Future litmus scripts/test-release-tier-freshness-reads-ci-full.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: after a green ./build.sh --ci-full (or a recorded stand-in for its phases) check-release-tier-freshness.sh answers ok:release-tier:<age> naming that run, and a phase-only local-ci run still does not (1174-6r4k's guard kept); pre-fix result: never:release-tier after a green ci-full, measured twice on 2026-09-14."
+    owned_files:
+      - scripts/check-release-tier-freshness.sh
+      - scripts/local-ci.sh
+      - build.sh
+    title: |
+      check-release-tier-freshness.sh cannot read a green ./build.sh --ci-full as fresh: target/convergence/check-logs.jsonl records only pre-build phases (245 of 245 entries ever), so the guard's "FULL-tier run" can never exist from the run it guards, and the daily release-tier exercise's green is invisible to the instrument that exists to detect its absence.
+    context: |
+      MEASURED on macuahuitl 2026-09-14 (890-27mv criterion 1, cadence half b):
+      before the exercise the guard read never:release-tier (newest index run
+      local-ci-20260914T001822Z, pre-build only); ./build.sh --ci-full on
+      ed669a32e went red (rc=1 in 1840s, two litmus fixture constructs, fixed
+      forward) and the re-run on e6d73cc15 went GREEN (rc=0 in 1813s, litmus
+      364 PASS / 0 FAIL, launcher installed) — and the guard STILL read
+      never:release-tier, newest run local-ci-20260914T171946Z covering only
+      [ pre-build]. The index has never held any other phase: every one of
+      its 245 entries is ci_phase pre-build. So the 1174-6r4k fix (a
+      phase-only local-ci run must not satisfy the guard) is right and
+      complete, and the writer side never produces the record the reader
+      now requires: ci-full drives the pre-build litmus through local-ci
+      (indexed) and runs its build, test, post-build and install phases
+      outside the index. The v56.9.13.1 cut's ci-full of 2026-09-13 left no
+      FULL-tier record either, which is why the guard read never all day.
+      WHAT TO BUILD, for the claimer to weigh: (a) ci-full records a
+      full-tier run in the index when it completes green — one record per
+      phase it ran, or one closing record naming the phases — written by
+      build.sh at the end of --ci-full; or (b) the guard accepts a second
+      artefact ci-full already leaves (the gate stamp with its tier, or a
+      dedicated stamp under $GIT_DIR) as the full-tier answer. Either way the
+      negative control stands: a phase-only local-ci run must still read as
+      not a release-tier answer. NOT IN SCOPE: changing what ci-full runs.
+      Side observation for the same claimer, unscored here: after the green
+      ci-full installed the tree's launcher, `tillandsias --version` reports
+      v56.9.12.2 while VERSION is 56.9.13.1 — the ci-full-installs-the-
+      launcher shape of 2026-09-11 (a stale label baked at build time); say
+      whether the installed binary is the tree's.
+    exit_criteria:
+      - 'after a green ./build.sh --ci-full, scripts/check-release-tier-freshness.sh answers ok:release-tier:<age> naming that run (pre-fix result: FAILS — never:release-tier after the green run of 2026-09-14T17:49Z)'
+      - 'NEGATIVE CONTROL: a green phase-only scripts/local-ci.sh --phase pre-build run still answers never:/stale: (1174-6r4k kept)'
+      - 'the daily exercise (890-27mv) reports the guard verdict from the same host run, and it reads fresh within the 24h window'
+    events:
+      - type: filed
+        ts: "2026-09-14T17:51:18Z"
+        agent_id: "linux-macuahuitl-fable-20260914t175118z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from the daily release-tier exercise: a
+          green ci-full, and the guard still reads never — the writer never
+          produces what the reader requires.
