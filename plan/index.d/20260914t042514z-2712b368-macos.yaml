@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-14T04:25:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t035150z
+      host: macos
+      summary: |
+        PROBE DISTINCTION, one line, so this row's CFRunLoop caveat is not read wider than it is: `--exec-guest` WORKS from a cold host path. Measured on macbookair 2026-09-14 against released v56.9.13.1, while verifying 804-deux's cache-survival criterion: `tillandsias-tray --exec-guest '<cmd>'` returned rc=0 with exit_code 0, printing `[exec-guest] starting VM…` then `[exec-guest] waiting for VM phase Ready…` and running the command — it starts the VM and waits for Ready itself.
+
+        This row records a CFRunLoop pumping defect where `--exec-guest` hits 2s kernel timeouts and "only works in tray continuous-runloop mode". Both can be true: whatever path that describes, it is not the cold `--provision` then `--exec-guest` sequence above. Worth narrowing on this row rather than leaving the caveat unqualified, because the caveat currently reads as "do not use --exec-guest on macOS" and the next host planning guest-side work would route around a probe that is available.
+
+        Not touching this packet's own deliverable (the in-guest hop, inference:11434 -> CID 2) — that remains as recorded.

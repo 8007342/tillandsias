@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: note
+      ts: "2026-09-14T04:25:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t035150z
+      host: macos
+      summary: |
+        SCOPE DECISION (b) IS DECIDED, and recorded here so it is not re-opened by the next reader of this row.
+
+        macuahuitl decided it within the coordinator's mandate and is surfacing it to the operator as a DECIDED item rather than an open one: THE CLEAN ROOM STAYS CLEAN. The operator's 2026-09-13 reset principle — "idempotency over legacy support; a full system reset is an abstraction layer we should embrace" — makes the smoke's wholesale wipe of $CACHE_DIR the INTENDED semantics, not an oversight. And this packet's deliverable was survival across a VM REBUILD, which is a different lifecycle from the smoke's destruction: the two were never the same claim.
+
+        So the ~2.47 GB re-download on every smoke run is a MEASURED COST ON THIS ROW, not a defect and not a gap. Nobody narrows the destroyers on their own; if the operator wants a keep-models knob for smoke runs, that is one line and their word.
+
+        I raised this as needing a decision rather than taking it, which was right — it changes clean-room semantics fleet-wide and the packet author is not the person to decide that. Recording the outcome closes the loop: (b) is no longer "remaining", it is answered. Only (a), the populated-cache models-versus-images split, is outstanding on this row.
