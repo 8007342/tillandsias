@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: groundtruth-harness-litmus-fails-for-two-unrelated-reasons-neither-an-expert-regression
+    event:
+      type: investigated
+      ts: "2026-09-14T13:59:30Z"
+      agent_id: linux-yoga-claude-20260914t135929z
+      host: yoga
+      summary: |
+        AUDIT RATHER THAN IMPLEMENT: both named defects are already fixed in this tree, and all three exit criteria hold. Measured on yoga rather than inferred from the row's age.
+
+        THE ROW WAS FILED 2026-08-24 WITH BOTH DEFECTS OPEN. Filed deliberately rather than fixed, because (2) meant editing committed groundtruth cases "whose correct new form depends on what 394 was asserting, and the last four cycles have shown how easily a confident edit to this harness certifies the wrong thing". That caution is why it is worth auditing rather than re-implementing.
+
+        (1) THE FIXTURE NEVER SUPPLIED AN INDEX — NO LONGER TRUE. scripts/test-groundtruth-corpus-declaration.sh runs 9/9 here, and two of its arms are exactly this subject:
+              ok: this host HAS an index — spec.answer graded rather than skipped (sets=1 total=5 pass=5 fail=0 skipped=0)
+              ok: a STALE index is still a HARNESS ERROR (rc=2), never skipped
+            So the index is supplied where it exists and the absence is a NAMED SKIP rather than an empty verdict — the row's "a step whose verdict variable can be EMPTY must report that as an error" is satisfied by construction. The committed glob now grades sets=4 total=33 pass=33 fail=0 skipped=0, against the row's measured 31/33 with two distinct failures.
+            ATTRIBUTION, checked rather than guessed: fcfb909a2 "fix(888-miiy): a host capability gap is a loud recorded skip, never a silent green" (2026-08-25, the day after this row was filed) touches crates/tillandsias-plan/src/groundtruth.rs and adds 28 lines matching SPEC_INDEX/skip in this fixture. That is consistent with it being the fix; I did not bisect, so I put it no more strongly.
+
+        (2) THE THREE 394-KEYED CASES — NO LONGER FAILING, AND NO LONGER KEYED. Every remaining reference to 394 in openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml is a comment or an @trace header; there is no live status pin. The set grades sets=1 total=22 pass=22 fail=0.
+
+        (3) LITMUS GREEN, AND I RAN THE OWNING SPEC RATHER THAN THE TEST NAME. `run-litmus-test.sh expert-groundtruth-harness` refuses with a hint — it is a TEST name, not a spec — so the spec is forge-environment-discoverability. It ran litmus:expert-groundtruth-harness (102.2s, confirmed present in the log twice) and finished Status: PASS.
+
+        WHAT I DID NOT DO WITHOUT RUNNING IT: the criterion's second half asks for ./build.sh --ci-full "to confirm what it unblocks rather than assuming". That is running now, detached, and its verdict is recorded separately. Until it lands, the honest statement is that the litmus is green and the ci-full confirmation is outstanding — not that the row is fully discharged.
+
+        ALSO STILL OPEN AND NOT MINE TO CLOSE: the row records a third finding, FORGE_SPEC_INDEX_DIR leaking a WSL path from another host into macuahuitl's environment. It was measured NOT to be the cause and filed as a separate hazard. Nothing here touches it, and this closure does not absorb it.

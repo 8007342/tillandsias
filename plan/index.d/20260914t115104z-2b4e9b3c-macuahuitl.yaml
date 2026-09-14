@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    field: verifiable_closure
+    value: 'litmus:claims-fleet-visible (scripts/test-claims-fleet-visible.sh, pre-build, size instant): in a scratch bare remote with the REAL pre-push hook installed, a claim fragment written on an osx-next working copy that is ahead of trunk by an ungated code commit is pushed by scripts/push-plan-fragments-to-trunk.sh as ONE commit parented on origin/linux-next whose whole diff is the fragment; the code is not carried; the hook prints `plan-only lane: validated <fragment>` with no gate stamp present (verify: stale:never-run); HEAD, branch, index and worktree hash identical before and after; a trunk reader''s fold shows in_progress; relaying osx-next afterwards merges clean with one copy. Negative controls: a non-plan path -> refused:fragments-to-trunk:scope; a claim on a packet filed only on the platform branch -> refused:fragments-to-trunk:trunk-fold (and a content-built mutant with the check stripped lands it and trunk''s own `check --strict-fragments` refuses — the check has teeth); nothing new -> skip; a changed copy of a landed fragment -> refused:exists; --dry-run pushes nothing; an unknown flag -> exit 2. Trunk stays at its old tip on every refusal. The platform-regime half of criterion 2 (a real osx-next or windows-next checkout, that host''s own hook and binary) is a measurement on macbookair or yolanda: the helper''s verdict line and the hook''s lane line pasted into a progress event on this row.'
+    ts: "2026-09-14T11:51:04Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    event:
+      type: note
+      ts: "2026-09-14T11:51:04Z"
+      host: macuahuitl
+      summary: |-
+        discharged the unscoreable placeholder into the litmus that now exists (1136-n8sh shape)

@@ -924,6 +924,17 @@ fn rows_filed_since(packets: &[serde_yaml::Value], base: u64) -> Vec<(u64, Strin
     out
 }
 
+/// ORDER 1184-tj2q — is this packet field a SEQUENCE?
+///
+/// A free function rather than an inline expression so the refusal it gates can
+/// be tested: `cargo test -p tillandsias-plan set_field_refuses_a_list_valued_field`.
+fn field_is_list(packet: &serde_yaml::Value, field: &str) -> bool {
+    packet
+        .get(field)
+        .and_then(serde_yaml::Value::as_sequence)
+        .is_some()
+}
+
 fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
@@ -6869,6 +6880,52 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 eprintln!("error: resolved packet has no packet_id");
                 std::process::exit(1);
             };
+            // ORDER 1184-tj2q — A LIST IS NOT AN UNSET SCALAR, AND TREATING IT
+            // AS ONE MAKES THE ROW VANISH.
+            //
+            // str_field returns None for a SEQUENCE, so a list-valued field read
+            // as "<unset>" and the write replaced it with a scalar string. The
+            // damage is not cosmetic: capability_tags is load-bearing in the
+            // selector, where 847-wgy4's tier gate reserves `low-end` work for
+            // the floor hosts and subtracts it from everyone else's pool.
+            //
+            // MEASURED on a throwaway ledger 2026-09-14, control first:
+            //   before: select-rows --tag testing  -> the row
+            //   write:  set-field <row> capability_tags "testing, low-end"
+            //           -> ok: r.capability_tags <unset> -> testing, low-end
+            //   after:  select-rows --tag testing  -> nothing
+            //           select-rows --tag low-end  -> nothing
+            // One `ok:` write, and the row matches NO tag query at all —
+            // including the tags it already carried.
+            //
+            // 1151-td46's prose guard cannot catch this: it refuses a write that
+            // DROPS LINES, and here the old value reads as unset, so there are
+            // no lines to drop. A guard that protects prose cannot protect a
+            // list it cannot see.
+            //
+            // REFUSE RATHER THAN LEARN TO WRITE LISTS. Writing one correctly
+            // means rendering a sequence into the LWW channel and teaching every
+            // consumer to read it, which is a change to the channel's contract;
+            // scalarising silently is the failure, and stopping it is the fix
+            // this order owns. The refusal names the field and the paths that
+            // CAN edit a list, so the caller is redirected rather than merely
+            // blocked.
+            if field_is_list(packet, &field) {
+                eprintln!(
+                    "refused:set-field:list-valued-field — {pid}.{field} is a LIST, and set-field writes scalars only (1184-tj2q)."
+                );
+                eprintln!(
+                    "  Writing it here would read the existing list as <unset> and replace it with a string,"
+                );
+                eprintln!(
+                    "  after which the row matches NO tag query — including the entries it already has."
+                );
+                eprintln!(
+                    "  Edit a list in the packet's own declaration, or record the intent as an event and"
+                );
+                eprintln!("  ask the row's owner to amend it. Nothing was written.");
+                std::process::exit(2);
+            }
             let current = str_field(packet, &field).unwrap_or("<unset>").to_string();
             // 699-usxc, second half. A no-op on the FIELD must not silently
             // discard a note the caller explicitly asked to record.
@@ -9719,5 +9776,57 @@ mod next_order_filed_since_tests {
 "#,
         );
         assert!(!packet_filed_by(&ps[0], "yoga"));
+    }
+}
+
+#[cfg(test)]
+mod set_field_list_guard_tests {
+    //! ORDER 1184-tj2q. set-field writes scalars; a list read as `<unset>` and
+    //! replaced by a string makes the row match NO tag query, including the
+    //! entries it already carried.
+    use super::field_is_list;
+
+    fn packet() -> serde_yaml::Value {
+        serde_yaml::from_str(
+            r#"
+packet_id: r
+order: "9999-tag"
+status: ready
+priority: p2
+next_action: one line
+capability_tags:
+  - testing
+  - fixtures
+owned_files:
+  - scripts/a.sh
+"#,
+        )
+        .expect("fixture parses")
+    }
+
+    #[test]
+    fn set_field_refuses_a_list_valued_field() {
+        let p = packet();
+        assert!(field_is_list(&p, "capability_tags"));
+        assert!(field_is_list(&p, "owned_files"));
+    }
+
+    #[test]
+    fn scalar_fields_are_not_refused() {
+        // The negative control the row names: status, priority and long-form
+        // prose keep today's behaviour, including 1151-td46's drop guard. A
+        // guard that refused every field would stop the fleet.
+        let p = packet();
+        assert!(!field_is_list(&p, "status"));
+        assert!(!field_is_list(&p, "priority"));
+        assert!(!field_is_list(&p, "next_action"));
+    }
+
+    #[test]
+    fn an_absent_field_is_not_a_list() {
+        // An unset field must stay writable — refusing it would make set-field
+        // unable to ADD a scalar field that does not exist yet.
+        let p = packet();
+        assert!(!field_is_list(&p, "verifiable_closure"));
     }
 }

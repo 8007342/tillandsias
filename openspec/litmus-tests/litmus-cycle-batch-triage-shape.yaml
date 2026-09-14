@@ -27,25 +27,25 @@ critical_path:
     # broke the step, CORRECTLY: unlike the expression-pinned guards repaired
     # earlier this session, an output grammar is a genuine contract, so changing
     # the output without changing the contract is the defect, not the test.
-    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( route=(rank:[0-9]+/[0-9]+:width=[0-9]+|tier:low-end))?( urgent=[A-Za-z0-9._-]+)?( harness=[A-Za-z0-9._-]+)?$' && echo 'ok: batch grammar'"
+    command: "TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( route=(rank:[0-9]+/[0-9]+:width=[0-9]+|tier:low-end))?( urgent=[A-Za-z0-9._-]+)?( harness=[A-Za-z0-9._-]+)?$' && echo 'ok: batch grammar'"
     timeout_ms: 30000
     expected_behavior: "ok: batch grammar"
 
   - step: "the batch never exceeds its budget"
-    command: "for b in 1 2 5; do n=$(scripts/select-work-batch.sh linux --budget $b | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: budget $b returned $n packets\"; exit 1; fi; done; echo 'ok: budget respected'"
+    command: "for b in 1 2 5; do n=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --budget $b | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: budget $b returned $n packets\"; exit 1; fi; done; echo 'ok: budget respected'"
     timeout_ms: 60000
     expected_behavior: "ok: budget respected"
 
   - step: "COHESION: every packet in a batch belongs to the announced epic"
     # The whole point. A batch spanning epics is the scatter this replaces.
-    command: "out=$(scripts/select-work-batch.sh linux --budget 5); epic=$(printf '%s' \"$out\" | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); n=$(printf '%s' \"$out\" | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -lt 1 ]; then echo 'FAIL: empty batch'; exit 1; fi; echo \"ok: cohesive batch of $n from $epic\""
+    command: "out=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --budget 5); epic=$(printf '%s' \"$out\" | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); n=$(printf '%s' \"$out\" | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -lt 1 ]; then echo 'FAIL: empty batch'; exit 1; fi; echo \"ok: cohesive batch of $n from $epic\""
     timeout_ms: 30000
     expected_behavior: "ok: cohesive batch"
 
   - step: "REPRODUCIBLE: the same seed yields the same batch"
     # Without this, a cycle cannot be replayed or audited and the entropy is
     # indistinguishable from nondeterminism.
-    command: "a=$(scripts/select-work-batch.sh linux --seed fixed-seed-1); b=$(scripts/select-work-batch.sh linux --seed fixed-seed-1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: same seed produced different batches'; exit 1; fi; echo 'ok: reproducible'"
+    command: "a=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --seed fixed-seed-1); b=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --seed fixed-seed-1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: same seed produced different batches'; exit 1; fi; echo 'ok: reproducible'"
     timeout_ms: 60000
     expected_behavior: "ok: reproducible"
 
@@ -63,7 +63,7 @@ critical_path:
     # epics. Skipped, not failed, when the live frontier holds one epic —
     # a single-epic frontier cannot demonstrate variation and a red light
     # there would be reporting the ledger, not the code.
-    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); nf=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$nf\" -lt 2 ]; then echo 'ok: seed-override n/a (single-epic frontier)'; exit 0; fi; seen=''; for s in aaa zzz 12345 yoga-x pirria-q7 abc123 qqq seed-8 seed-9; do e=$(scripts/select-work-batch.sh linux --seed \"$s\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); case \" $seen \" in *\" $e \"*) ;; *) seen=\"$seen $e\" ;; esac; done; n=$(printf '%s' \"$seen\" | wc -w); if [ \"$n\" -lt 2 ]; then echo \"FAIL: nine explicit seeds all chose one epic ($seen) — --seed is inert, the documented override is unreachable (949-uv5k)\"; exit 1; fi; echo \"ok: explicit seed reaches $n distinct epics\""
+    command: "out=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null); nf=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$nf\" -lt 2 ]; then echo 'ok: seed-override n/a (single-epic frontier)'; exit 0; fi; seen=''; for s in aaa zzz 12345 yoga-x pirria-q7 abc123 qqq seed-8 seed-9; do e=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --seed \"$s\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); case \" $seen \" in *\" $e \"*) ;; *) seen=\"$seen $e\" ;; esac; done; n=$(printf '%s' \"$seen\" | wc -w); if [ \"$n\" -lt 2 ]; then echo \"FAIL: nine explicit seeds all chose one epic ($seen) — --seed is inert, the documented override is unreachable (949-uv5k)\"; exit 1; fi; echo \"ok: explicit seed reaches $n distinct epics\""
     timeout_ms: 120000
     expected_behavior: "ok: explicit seed reaches"
 
@@ -76,7 +76,7 @@ critical_path:
     #
     # A host with no capability row legitimately reports no route= field; that
     # is the seeded path by design, so it is a skip rather than a failure.
-    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null | head -1); if ! printf '%s' \"$out\" | grep -q ' route=rank:'; then echo 'ok: default-routing n/a (host is not ordinal-routed)'; exit 0; fi; a=$(scripts/select-work-batch.sh linux 2>/dev/null | head -1); b=$(scripts/select-work-batch.sh linux 2>/dev/null | head -1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: default pick is not stable'; exit 1; fi; printf '%s' \"$a\" | grep -q ' route=rank:' || { echo 'FAIL: default run lost its rank routing — the seed override leaked into the default path'; exit 1; }; echo 'ok: default still routes by rank'"
+    command: "out=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null | head -1); if ! printf '%s' \"$out\" | grep -q ' route=rank:'; then echo 'ok: default-routing n/a (host is not ordinal-routed)'; exit 0; fi; a=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null | head -1); b=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null | head -1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: default pick is not stable'; exit 1; fi; printf '%s' \"$a\" | grep -q ' route=rank:' || { echo 'FAIL: default run lost its rank routing — the seed override leaked into the default path'; exit 1; }; echo 'ok: default still routes by rank'"
     timeout_ms: 60000
     expected_behavior: "ok: default still routes by rank"
 
@@ -85,7 +85,7 @@ critical_path:
     # line would be a false provenance record — and the triage grammar above
     # admits only rank:/tier: tokens, so inventing a third would widen the
     # grammar to describe a lie.
-    command: "l=$(scripts/select-work-batch.sh linux --seed grammar-probe 2>/dev/null | head -1); printf '%s' \"$l\" | grep -q ' route=' && { echo 'FAIL: explicit-seed run still advertises a route'; exit 1; }; printf '%s' \"$l\" | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( urgent=[A-Za-z0-9._-]+)?( harness=[A-Za-z0-9._-]+)?$' || { echo 'FAIL: explicit-seed batch line left the pinned grammar'; exit 1; }; echo 'ok: explicit-seed line carries no route and holds the grammar'"
+    command: "l=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --seed grammar-probe 2>/dev/null | head -1); printf '%s' \"$l\" | grep -q ' route=' && { echo 'FAIL: explicit-seed run still advertises a route'; exit 1; }; printf '%s' \"$l\" | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( urgent=[A-Za-z0-9._-]+)?( harness=[A-Za-z0-9._-]+)?$' || { echo 'FAIL: explicit-seed batch line left the pinned grammar'; exit 1; }; echo 'ok: explicit-seed line carries no route and holds the grammar'"
     timeout_ms: 30000
     expected_behavior: "ok: explicit-seed line carries no route"
 
@@ -97,7 +97,7 @@ critical_path:
   # trains people to re-run it. The properties that matter — a floor exists, and
   # minimax still dominates — are exact, not statistical.
   - step: "ENTROPY FLOOR: no frontier epic is starved"
-    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); if printf '%s\\n' \"$out\" | head -1 | grep -q ' route=rank:'; then echo 'ok: entropy floor n/a (ordinal routing, 847-wgy4 — the ROTATION covers the frontier, asserted by litmus:capability-routing-shape case 3; the p column is informational on a routed host)'; exit 0; fi; n=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$n\" -lt 2 ]; then echo \"ok: entropy floor n/a (single-epic frontier)\"; exit 0; fi; min=$(printf '%s\\n' \"$out\" | grep \"^frontier$(printf '\\t')\" | sed 's/.*p=//' | sort -g | head -1); awk -v m=\"$min\" 'BEGIN { if (m+0 < 0.02) { print \"FAIL: frontier epic starved at p=\" m; exit 1 } print \"ok: entropy floor min_p=\" m }'"
+    command: "out=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null); if printf '%s\\n' \"$out\" | head -1 | grep -q ' route=rank:'; then echo 'ok: entropy floor n/a (ordinal routing, 847-wgy4 — the ROTATION covers the frontier, asserted by litmus:capability-routing-shape case 3; the p column is informational on a routed host)'; exit 0; fi; n=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$n\" -lt 2 ]; then echo \"ok: entropy floor n/a (single-epic frontier)\"; exit 0; fi; min=$(printf '%s\\n' \"$out\" | grep \"^frontier$(printf '\\t')\" | sed 's/.*p=//' | sort -g | head -1); awk -v m=\"$min\" 'BEGIN { if (m+0 < 0.02) { print \"FAIL: frontier epic starved at p=\" m; exit 1 } print \"ok: entropy floor min_p=\" m }'"
     timeout_ms: 60000
     expected_behavior: "ok: entropy floor"
 
@@ -122,7 +122,7 @@ critical_path:
     # the top holds 0.499 — dominant by 1.5x. This still fails if the floor ever
     # flattens the distribution or inverts the order, which is the regression the
     # step exists to catch, and it scales with frontier size instead of decaying.
-    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^frontier$(printf '\\t')\"); k=$(printf '%s\\n' \"$out\" | grep -c .); if [ \"$k\" -lt 2 ]; then echo 'ok: minimax dominant (single-epic frontier)'; exit 0; fi; top=$(printf '%s\\n' \"$out\" | head -1 | sed 's/.*p=//'); second=$(printf '%s\\n' \"$out\" | sed -n '2p' | sed 's/.*p=//'); awk -v t=\"$top\" -v s=\"$second\" -v k=\"$k\" 'BEGIN { u = 1.0/k; if (t+0 <= s+0) { print \"FAIL: top epic p=\" t \" does not beat the runner-up p=\" s \" — ordering inverted\"; exit 1 } if (t+0 <= u) { print \"FAIL: top epic p=\" t \" is no better than uniform \" u \" — entropy has flattened minimax\"; exit 1 } printf \"ok: minimax dominant p=%s vs uniform %.3f over k=%s\\n\", t, u, k }'"
+    command: "out=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null | grep \"^frontier$(printf '\\t')\"); k=$(printf '%s\\n' \"$out\" | grep -c .); if [ \"$k\" -lt 2 ]; then echo 'ok: minimax dominant (single-epic frontier)'; exit 0; fi; top=$(printf '%s\\n' \"$out\" | head -1 | sed 's/.*p=//'); second=$(printf '%s\\n' \"$out\" | sed -n '2p' | sed 's/.*p=//'); awk -v t=\"$top\" -v s=\"$second\" -v k=\"$k\" 'BEGIN { u = 1.0/k; if (t+0 <= s+0) { print \"FAIL: top epic p=\" t \" does not beat the runner-up p=\" s \" — ordering inverted\"; exit 1 } if (t+0 <= u) { print \"FAIL: top epic p=\" t \" is no better than uniform \" u \" — entropy has flattened minimax\"; exit 1 } printf \"ok: minimax dominant p=%s vs uniform %.3f over k=%s\\n\", t, u, k }'"
     timeout_ms: 60000
     expected_behavior: "ok: minimax dominant"
 
@@ -135,7 +135,7 @@ critical_path:
   # four fields, their names, their order, and their numeric shape are all still
   # required. The negative control below is what keeps the widening honest.
   - step: "reports epic coverage so the ungrouped gap cannot hide"
-    command: "mf_stage prod 0 OUT -- scripts/select-work-batch.sh linux && mf_holds_ere OUT '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=([0-9]+(\\([a-z0-9:,]+\\))?|[a-z][a-z0-9:,]*))*$' && echo 'ok: triage line'"
+    command: "mf_stage prod 0 OUT -- TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux && mf_holds_ere OUT '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=([0-9]+(\\([a-z0-9:,]+\\))?|[a-z][a-z0-9:,]*))*$' && echo 'ok: triage line'"
     timeout_ms: 30000
     expected_behavior: "ok: triage line"
 
@@ -161,12 +161,12 @@ critical_path:
     expected_behavior: "ok: pin discriminates"
 
   - step: "NEGATIVE CONTROL: an unknown role is refused, not silently defaulted"
-    command: "scripts/select-work-batch.sh nonsense >/dev/null 2>&1 && { echo 'FAIL: bad role accepted'; exit 1; }; scripts/select-work-batch.sh nonsense 2>&1 | grep -q '^refused:bad-role:' && echo 'ok: bad role refused'"
+    command: "TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh nonsense >/dev/null 2>&1 && { echo 'FAIL: bad role accepted'; exit 1; }; TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh nonsense 2>&1 | grep -q '^refused:bad-role:' && echo 'ok: bad role refused'"
     timeout_ms: 15000
     expected_behavior: "ok: bad role refused"
 
   - step: "NEGATIVE CONTROL: a zero/garbage budget is refused"
-    command: "scripts/select-work-batch.sh linux --budget 0 >/dev/null 2>&1 && { echo 'FAIL: budget 0 accepted'; exit 1; }; scripts/select-work-batch.sh linux --budget abc >/dev/null 2>&1 && { echo 'FAIL: garbage budget accepted'; exit 1; }; echo 'ok: bad budget refused'"
+    command: "TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --budget 0 >/dev/null 2>&1 && { echo 'FAIL: budget 0 accepted'; exit 1; }; TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --budget abc >/dev/null 2>&1 && { echo 'FAIL: garbage budget accepted'; exit 1; }; echo 'ok: bad budget refused'"
     timeout_ms: 15000
     expected_behavior: "ok: bad budget refused"
 
@@ -183,7 +183,7 @@ critical_path:
     # EMIT A BATCH. Keeping the old assertion would pin a refusal the script can
     # no longer produce, which is how a passing test starts describing a program
     # that no longer exists.
-    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:missing-tool' && { echo 'FAIL: the selector still depends on jq'; exit 1; }; printf '%s' \"$out\" | grep -q '^batch: ' && echo 'ok: batch emitted without jq'"
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:missing-tool' && { echo 'FAIL: the selector still depends on jq'; exit 1; }; printf '%s' \"$out\" | grep -q '^batch: ' && echo 'ok: batch emitted without jq'"
     timeout_ms: 15000
     expected_behavior: "ok: batch emitted without jq"
 
@@ -193,7 +193,7 @@ critical_path:
     # instance of that class is a plan binary too old to answer — which is not
     # hypothetical, since this very change added a subcommand every host's
     # binary predates until it rebuilds.
-    command: "out=$(TILLANDSIAS_PLAN_BIN=/bin/true scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: a stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:(stale-plan-binary|query-failed|no-plan-binary)' && echo 'ok: environment fault refused on its own token'"
+    command: "out=$(TILLANDSIAS_PLAN_BIN=/bin/true TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: a stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:(stale-plan-binary|query-failed|no-plan-binary)' && echo 'ok: environment fault refused on its own token'"
     timeout_ms: 15000
     expected_behavior: "ok: environment fault refused on its own token"
 
@@ -230,12 +230,12 @@ critical_path:
     # host whose binary predated it was told the plan was drained.
     # TILLANDSIAS_PLAN_BIN exists so this is testable on a host whose binary is
     # current — i.e. exactly the hosts CI runs on, where the hole was invisible.
-    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: unknown query constraint: --claimable-by\" >&2\\nexit 2\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:stale-plan-binary:' && echo 'ok: stale binary refused on its own token'"
+    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: unknown query constraint: --claimable-by\" >&2\\nexit 2\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:stale-plan-binary:' && echo 'ok: stale binary refused on its own token'"
     timeout_ms: 20000
     expected_behavior: "ok: stale binary refused on its own token"
 
   - step: "NEGATIVE CONTROL: any other query failure refuses as query-failed and quotes the reason"
-    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: ledger is unreadable\" >&2\\nexit 3\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: failed query reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:query-failed:.*exited 3: error: ledger is unreadable' && echo 'ok: query failure refused with its reason'"
+    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: ledger is unreadable\" >&2\\nexit 3\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: failed query reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:query-failed:.*exited 3: error: ledger is unreadable' && echo 'ok: query failure refused with its reason'"
     timeout_ms: 20000
     expected_behavior: "ok: query failure refused with its reason"
 
@@ -244,7 +244,7 @@ critical_path:
     # `missing-tool`. The same bad invocation then produced different diagnoses on
     # different hosts, and the bad-budget control above only really tested hosts
     # that happened to have jq.
-    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux --budget 0 2>&1); printf '%s' \"$out\" | grep -q '^refused:bad-role:budget' && echo 'ok: argument errors precede environment probes'"
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --budget 0 2>&1); printf '%s' \"$out\" | grep -q '^refused:bad-role:budget' && echo 'ok: argument errors precede environment probes'"
     timeout_ms: 15000
     expected_behavior: "ok: argument errors precede environment probes"
 
@@ -266,7 +266,7 @@ critical_path:
     # Asserts the OUTCOME, not the mechanism, so a different future fix satisfies
     # it too: whatever the selector does, it must not offer p3 work while a p0 is
     # claimable.
-    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); pk=\"$(mktemp)\"; \"$MFPLAN\" parked-blocks 2>/dev/null | cut -f1 | sort -u > \"$pk\"; best_ledger=$(\"$MFPLAN\" query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '.[]|[(.packet_id//\"-\"),((.priority//\"p3\")|sub(\"^p\";\"\"))]|@tsv' | grep -vFf \"$pk\" | cut -f2 | sort -n | head -1); rm -f \"$pk\"; if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; best_batch=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); pk=\"$(mktemp)\"; \"$MFPLAN\" parked-blocks 2>/dev/null | cut -f1 | sort -u > \"$pk\"; best_ledger=$(\"$MFPLAN\" query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '.[]|[(.packet_id//\"-\"),((.priority//\"p3\")|sub(\"^p\";\"\"))]|@tsv' | grep -vFf \"$pk\" | cut -f2 | sort -n | head -1); rm -f \"$pk\"; if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
     timeout_ms: 60000
     expected_behavior: "ok: urgency reachable"
 
@@ -274,12 +274,12 @@ critical_path:
     # The override must not become a licence to scatter. One urgent outsider plus
     # a cohesive remainder is workable; three unrelated p0s is the scatter this
     # selector exists to end.
-    command: "for b in 1 2 3; do n=$(scripts/select-work-batch.sh linux --budget $b 2>/dev/null | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: override broke budget $b ($n)\"; exit 1; fi; done; echo 'ok: budget intact with override'"
+    command: "for b in 1 2 3; do n=$(TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --budget $b 2>/dev/null | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: override broke budget $b ($n)\"; exit 1; fi; done; echo 'ok: budget intact with override'"
     timeout_ms: 60000
     expected_behavior: "ok: budget intact with override"
 
   - step: "selection writes nothing to the worktree"
-    command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
+    command: "before=\"$(git status --porcelain)\"; TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
     timeout_ms: 30000
     expected_behavior: "ok: read-only"
 
@@ -313,7 +313,7 @@ critical_path:
     # confess the drop in triage; the nix-declared side is the negative
     # control proving the filter discriminates on the declared set instead of
     # suppressing tagged work unconditionally.
-    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: nix-required-pkt\\n    order: 910-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: caps-epic\\n    capability_tags: [release, nix]\\n  - packet_id: plain-pkt\\n    order: 910-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: caps-epic\\n    capability_tags: [plan]\\n' > \"$d/ledger.yaml\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; absent=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo\" scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); present=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo nix\" scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); rm -rf \"$d\"; printf '%s' \"$absent\" | grep -q 'nix-required-pkt' && { echo 'FAIL: nix-required packet offered to a nix-less host'; exit 1; }; printf '%s' \"$absent\" | grep -q \"^packet$(printf '\\t')910-bbbb\" || { echo 'FAIL: nix-less host lost capability-clean work too'; exit 1; }; printf '%s' \"$absent\" | grep -qE '^triage: .* caps_filtered=1$' || { echo 'FAIL: capability drop not confessed in triage'; exit 1; }; printf '%s' \"$present\" | grep -q \"^packet$(printf '\\t')910-aaaa\" || { echo 'FAIL: declared nix did not restore nix-required work'; exit 1; }; echo 'ok: capability filter is two-sided'"
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: nix-required-pkt\\n    order: 910-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: caps-epic\\n    capability_tags: [release, nix]\\n  - packet_id: plain-pkt\\n    order: 910-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: caps-epic\\n    capability_tags: [plan]\\n' > \"$d/ledger.yaml\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; absent=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo\" TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); present=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo nix\" TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); rm -rf \"$d\"; printf '%s' \"$absent\" | grep -q 'nix-required-pkt' && { echo 'FAIL: nix-required packet offered to a nix-less host'; exit 1; }; printf '%s' \"$absent\" | grep -q \"^packet$(printf '\\t')910-bbbb\" || { echo 'FAIL: nix-less host lost capability-clean work too'; exit 1; }; printf '%s' \"$absent\" | grep -qE '^triage: .* caps_filtered=1$' || { echo 'FAIL: capability drop not confessed in triage'; exit 1; }; printf '%s' \"$present\" | grep -q \"^packet$(printf '\\t')910-aaaa\" || { echo 'FAIL: declared nix did not restore nix-required work'; exit 1; }; echo 'ok: capability filter is two-sided'"
     timeout_ms: 30000
     expected_behavior: "ok: capability filter is two-sided"
 
@@ -329,7 +329,7 @@ critical_path:
     # filter regresses they outrank everything and the step fails immediately.
     # Two-sided: an EXPIRED lease must NOT exclude (the reaper property), and
     # the blocked packet's own OPEN BLOCKER is claimable and must appear.
-    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: clean-pkt\\n    order: 920-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: pool-epic\\n  - packet_id: open-dep-pkt\\n    order: 920-dddd\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p1\\n    release_target: pool-epic\\n  - packet_id: dep-blocked-pkt\\n    order: 920-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n    depends_on: [920-dddd]\\n  - packet_id: ghost-dep-pkt\\n    order: 920-cccc\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n    depends_on: [999-zzzz]\\n  - packet_id: leased-pkt\\n    order: 920-eeee\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n  - packet_id: expired-lease-pkt\\n    order: 920-ffff\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p1\\n    release_target: pool-epic\\n' > \"$d/ledger.yaml\"; mkdir -p \"$d/leases/leased-pkt.lease\" \"$d/leases/expired-lease-pkt.lease\"; printf 'lease_id=other-cycle\\nhost=other-host\\nexpires_epoch=4102444800\\n' > \"$d/leases/leased-pkt.lease/holder\"; printf 'lease_id=dead-cycle\\nhost=other-host\\nexpires_epoch=1000000000\\n' > \"$d/leases/expired-lease-pkt.lease/holder\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_LEDGER_LEASE_ROOT=\"$d/leases\" scripts/select-work-batch.sh linux --release v0.5 --budget 6 --seed pool-fixture 2>&1); rm -rf \"$d\"; for bad in 920-bbbb 920-cccc 920-eeee; do printf '%s' \"$out\" | grep -q \"^packet$(printf '\\t')$bad\" && { echo \"FAIL: excluded packet $bad filled a batch slot\"; exit 1; }; done; for good in 920-aaaa 920-dddd 920-ffff; do printf '%s' \"$out\" | grep -q \"^packet$(printf '\\t')$good\" || { echo \"FAIL: claimable packet $good missing — the filter over-excludes\"; exit 1; }; done; echo 'ok: pool is deps-clear and unleased, two-sided'"
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: clean-pkt\\n    order: 920-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: pool-epic\\n  - packet_id: open-dep-pkt\\n    order: 920-dddd\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p1\\n    release_target: pool-epic\\n  - packet_id: dep-blocked-pkt\\n    order: 920-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n    depends_on: [920-dddd]\\n  - packet_id: ghost-dep-pkt\\n    order: 920-cccc\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n    depends_on: [999-zzzz]\\n  - packet_id: leased-pkt\\n    order: 920-eeee\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: pool-epic\\n  - packet_id: expired-lease-pkt\\n    order: 920-ffff\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p1\\n    release_target: pool-epic\\n' > \"$d/ledger.yaml\"; mkdir -p \"$d/leases/leased-pkt.lease\" \"$d/leases/expired-lease-pkt.lease\"; printf 'lease_id=other-cycle\\nhost=other-host\\nexpires_epoch=4102444800\\n' > \"$d/leases/leased-pkt.lease/holder\"; printf 'lease_id=dead-cycle\\nhost=other-host\\nexpires_epoch=1000000000\\n' > \"$d/leases/expired-lease-pkt.lease/holder\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_LEDGER_LEASE_ROOT=\"$d/leases\" TILLANDSIAS_HOST_TIER=general scripts/select-work-batch.sh linux --release v0.5 --budget 6 --seed pool-fixture 2>&1); rm -rf \"$d\"; for bad in 920-bbbb 920-cccc 920-eeee; do printf '%s' \"$out\" | grep -q \"^packet$(printf '\\t')$bad\" && { echo \"FAIL: excluded packet $bad filled a batch slot\"; exit 1; }; done; for good in 920-aaaa 920-dddd 920-ffff; do printf '%s' \"$out\" | grep -q \"^packet$(printf '\\t')$good\" || { echo \"FAIL: claimable packet $good missing — the filter over-excludes\"; exit 1; }; done; echo 'ok: pool is deps-clear and unleased, two-sided'"
     timeout_ms: 30000
     expected_behavior: "ok: pool is deps-clear and unleased, two-sided"
 
