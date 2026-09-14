@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: evidence
+      ts: "2026-09-13T23:41:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t233229z
+      host: macos
+      summary: |
+        sed -i SLICE: FIVE REAL SITES CONVERTED, and one of them was failing OPEN.
+
+        OF NINE REPORTED, ONLY FIVE ARE EXECUTED SHELL. One is the advisory's own fixture subject; three are mentions inside heredoc fixture data, a comment and a message string in scripts/test-litmus-mutation-arm-guard.sh. Established by EXECUTION — that fixture runs rc=0 with ZERO `sed:` errors on this BSD-userland host, which no genuine instance does. Filed as 1174-jd8n: the advisory counts mentions, not actions, and the file it over-reports most is the one whose whole subject is that distinction (901-jtvi, "a comment naming sed -i is not a caller").
+
+        THE FAIL-OPEN ONE, which is the important half of this slice. scripts/test-mode-only-regression-887-bz88.sh reconstructs a pre-fix guard into $PRE and mutates it, then asserts the reconstruction passes the incident tree and prints "arm 3 has teeth". On macOS the mutation NEVER APPLIED:
+
+            sed: 1: "/var/folders/lm/krdnbsm ...": invalid command code f
+            ok: MUTATION: the index-only guard passes the incident tree — arm 3 has teeth
+            ok:mode-only-regression-fixture:all        rc=0
+
+        BSD sed -i reads the NEXT ARGUMENT as a backup suffix, so the expression became the suffix and $PRE was parsed as the script. The arm then asserted against an UNMUTATED reconstruction, got the answer it wanted, and reported teeth it had never tested — in green, on every macOS run. The arm's own `bad` branch warns it "may pass for the wrong reason"; that is exactly what was happening.
+
+        TWO-PART FIX, because the temp-file form alone would leave the next non-portable edit failing open the same way (macuahuitl's correction, and it is right):
+          1. `sed EXPR in > tmp && mv tmp in` at all five sites — identical on both dialects.
+          2. THE MUTATION ARM NOW PROVES THE MUTANT DIFFERS before asserting anything:
+               cp "$PRE" "$PRE.premutation"
+               ... mutate ...
+               cmp -s "$PRE.premutation" "$PRE" && bad "mutation did not apply ..."
+             That is 829-dkuc's "prove the diff non-empty" rule, put in the ARM rather than in the author's memory.
+
+        FALSIFIED, both directions, unpiped:
+            mutation replaced with a no-op pattern -> rc=1, "FAIL: mutation did not apply — $PRE is byte-identical after the edit, so the arm below would pass for the wrong reason"
+            restored                               -> rc=0, "ok: MUTATION: ... arm 3 has teeth"
+
+        BEFORE / AFTER across all five fixtures on this host:
+            test-gate-stamp-memoization      rc=1, 1 sed err  ->  rc=1, 0 sed err, 12 ok-lines -> 13
+            test-hash-image-sources          rc=1, 1 sed err  ->  rc=0
+            test-mode-only-regression        rc=0, 1 sed err  ->  rc=0, 0 sed err, mutation now REAL
+            test-source-slice-bounds         rc=1, 2 sed err  ->  rc=0
+            test-litmus-mutation-arm-guard   rc=0, 0 sed err  ->  unchanged, untouched
+
+        A PRE-EXISTING FAILURE I DID NOT FIX AND AM NOT CLAIMING: test-gate-stamp-memoization still exits 1 on `FAIL: combined dispatch: memo_taken=no rc=2 (want 124=still working)`. That line is BYTE-IDENTICAL before and after my change — the sed fix let the fixture get one arm further (12 ok-lines to 13, the toolchain arm the sed -i had been breaking) and did not touch this. It wants 124, which is a timeout exit, so it is plausibly its own portability question on a host where `timeout` differs. Someone should take it; it is not part of this class and I did not want it folded into a sed -i commit.

@@ -98,7 +98,9 @@ tracked_file="$repo/images/default/Containerfile"
 [[ -f "$tracked_file" ]] || tracked_file="$(git -C "$repo" ls-files -- images/default | head -1)"
 [[ -n "$tracked_file" ]] && tracked_file="$repo/${tracked_file#"$repo/"}"
 if [[ -f "$tracked_file" ]]; then
-    sed -i 's/$/\r/' "$tracked_file"
+    # 1135-z8gn: temp-file form; BSD sed -i would read the expression as a
+# backup suffix and leave the file untouched.
+sed 's/$/\r/' "$tracked_file" > "$tracked_file.tmp" && mv "$tracked_file.tmp" "$tracked_file"
     crlf_after="$("$HASHER" forge "$repo/images/default" "$repo")"
     git -C "$repo" checkout -- "${tracked_file#"$repo/"}"
     [[ "$crlf_before" == "$crlf_after" ]] || {
