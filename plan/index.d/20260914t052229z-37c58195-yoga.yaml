@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: deleting-a-salvage-ref-refuses-every-in-flight-gate-whose-trunk-snapshot-predates-the-deleted-marker-because-the-ledger-checker-reads-only-the-local-copy
+    field: status
+    value: in_progress
+    ts: "2026-09-14T05:22:29Z"
+    host: yoga
+
+events:
+  - packet_id: deleting-a-salvage-ref-refuses-every-in-flight-gate-whose-trunk-snapshot-predates-the-deleted-marker-because-the-ledger-checker-reads-only-the-local-copy
+    event:
+      type: progress
+      ts: "2026-09-14T05:22:29Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: linux-next@2cc2c9412
+  - packet_id: deleting-a-salvage-ref-refuses-every-in-flight-gate-whose-trunk-snapshot-predates-the-deleted-marker-because-the-ledger-checker-reads-only-the-local-copy
+    event:
+      type: note
+      ts: "2026-09-14T05:22:29Z"
+      host: yoga
+      summary: |-
+        handed by the coordinator: yoga idle after 1177-k4jq and inside the salvage lane all night; the ledger checker's fallback to trunk's copy of the file (a behind tree reads 'merge trunk', not 'outstanding rescue'); fallback 1174-6r4k

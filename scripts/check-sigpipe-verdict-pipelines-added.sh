@@ -112,7 +112,16 @@ fi
 # a false positive on correct code. Live producer instances of rg: zero. When
 # one appears, add it with an anchor that distinguishes a command from an
 # argument.
-UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(cat|find|journalctl|coredumpctl|grep[[:space:]]+-[a-zA-Z]*[rR][a-zA-Z]*|git[[:space:]]+(log|diff|show|ls-files|ls-tree|grep)|cargo|podman[[:space:]]+(logs|events|ps|images)|docker[[:space:]]+(logs|ps|images))([[:space:]]|$)'
+# ORDER 1084-nzqc — ESCAPE 1: AN ABSOLUTE PATH IS STILL THE COMMAND.
+# The anchor used to be `(^|[;&|(]|[[:space:]])` alone, so in `/usr/bin/grep`
+# the character before `grep` is `/` and the producer did not match. That is not
+# a hypothetical spelling: scripts/validate-traces.sh calls `/usr/bin/grep`
+# EIGHT times, deliberately, so macOS gets BSD grep regardless of Homebrew, and
+# 35 occurrences across 9 files under scripts/ were invisible for the same
+# reason. `(/[^[:space:]|;&()]*)?` admits an optional path prefix -- /usr/bin/,
+# /bin/, or any absolute path -- while still requiring the delimiter before it,
+# so `foogrep` and `mygit` remain unmatched.
+UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(/[^[:space:]|;&()]*/)?(cat|find|journalctl|coredumpctl|grep[[:space:]]+-[a-zA-Z]*[rR][a-zA-Z]*|git[[:space:]]+(log|diff|show|ls-files|ls-tree|grep)|cargo|podman[[:space:]]+(logs|events|ps|images)|docker[[:space:]]+(logs|ps|images))([[:space:]]|$)'
 
 # Consumers that stop reading before EOF.
 EARLY_EXIT_CONSUMER_RE='\|[[:space:]]*(grep[[:space:]]+[^|]*-[a-zA-Z]*q|grep[[:space:]]+[^|]*-m[[:space:]]*1|head[[:space:]]|sed[[:space:]]+-n?[[:space:]]*.?[0-9]*q)'
@@ -136,7 +145,45 @@ while IFS= read -r f; do
     esac
     file_sets_pipefail "$f" || continue
 
-    while IFS= read -r added; do
+    # ORDER 1084-nzqc — ESCAPE 2: A PIPELINE SPLIT ACROSS `\` CONTINUATIONS.
+    #
+    # This loop read ONE ADDED LINE AT A TIME, and VERDICT_CONTEXT_RE anchors on
+    # a leading if/while/until/elif. A pipeline written across continuations puts
+    # the verdict context on the FIRST physical line and the early-exiting
+    # consumer on the LAST, so no single line carries both and the conjunction
+    # below could never be satisfied. A census found 155 verdict-context lines
+    # ending in a continuation under scripts/ -- an upper bound, but the order of
+    # the blind spot.
+    #
+    # FOLDED FROM THE FILE, NOT FROM THE DIFF, and that is the safe half. Joining
+    # the diff's added-line stream would splice lines that are not adjacent in
+    # the file whenever a hunk adds only part of a continuation, and fabricate a
+    # pipeline nobody wrote. Instead the FILE is folded into logical lines, and a
+    # logical line is in scope when ANY of its physical lines was added -- which
+    # is also the more faithful reading of "added in this change".
+    _added_f="$(mktemp "${TMPDIR:-/tmp}/sigpipe-added.XXXXXX")" || continue
+    git diff "$base_ref" -- "$f" 2>/dev/null | sed -n 's/^+//p' > "$_added_f"
+    # A diff of a deleted or renamed-away file adds nothing; skip without cost.
+    if [ ! -s "$_added_f" ]; then rm -f "$_added_f"; continue; fi
+
+    _logical=""      # the folded line being accumulated
+    _touched=0       # 1 when one of its physical lines was added
+    while IFS= read -r _phys || [ -n "$_phys" ]; do
+        if [ -n "$_logical" ]; then
+            # Continuations are joined with a single space: the regexes are
+            # whitespace-tolerant and this keeps `\` out of the matched text.
+            _logical="$_logical ${_phys#"${_phys%%[![:space:]]*}"}"
+        else
+            _logical="$_phys"
+        fi
+        if grep -Fxq -- "$_phys" "$_added_f" 2>/dev/null; then _touched=1; fi
+        case "$_logical" in
+            *'\') _logical="${_logical%\\}"; continue ;;
+        esac
+
+        added="$_logical"; _logical=""
+        _was_touched="$_touched"; _touched=0
+        [ "$_was_touched" -eq 1 ] || continue
         [ -n "$added" ] || continue
         case "$added" in
             *"sigpipe-ok:"*) continue ;;
@@ -154,9 +201,8 @@ while IFS= read -r f; do
         echo "         so a MATCH can surface as a failure. Capture first, or use a" >&2
         echo "         here-string: grep -q PATTERN <<<\"\$var\"" >&2
         echo "         Reviewed and genuinely bounded? append: # sigpipe-ok: <reason>" >&2
-    done <<EOF
-$(git diff "$base_ref" -- "$f" 2>/dev/null | sed -n 's/^+//p')
-EOF
+    done < "$f"
+    rm -f "$_added_f"
 done <<EOF
 $(git diff --name-only "$base_ref" 2>/dev/null)
 EOF

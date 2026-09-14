@@ -90,12 +90,33 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
     -   Document the spec gap or divergence via `tillandsias-plan loop-status-append` and the host's queue file.
     -   Force-assign a corrective "Spec Alignment & Litmus Verification" packet as the next primary task.
 
+**Establish blast radius before broadcasting a land-blocker.** Where a failure
+was found is not where it bites: a guard shipped in 68d404947 failed
+`test-cycle-flow-emit-idempotency.sh`, and the coordinator relayed a
+land-blocker reading to six hosts before checking that the fixture's only
+caller is a litmus test outside both `--check` and the land path — no host
+was actually blocked, and the alarm had to be un-told within the hour. Before
+declaring or relaying a blocker, name the gate that actually runs the failing
+step (the divergence file, or one grep for the caller) and state the radius
+(`--check`, land path, litmus/`--ci-full`) in the broadcast (drill: plan/issues/fleet-restart-2026-09-12.md, Refusing a caller that had not asked the question).
+
 ### 3. Thrashing (Undo-Loops / Write-Write Collisions)
 *   **Detection**: Sibling A and Sibling B are repeatedly overwriting each other's changes, reverting each other's plan notes, or fighting over shared files.
 *   **Mediation**:
     -   Freeze both active leases.
     -   Perform a git history analysis (`git log -p -n 5 <shared-file>`) to pinpoint the root conflict.
     -   Enforce the CRDT semantic-merge policy: plan updates are semantic upserts keyed by stable IDs. If code is thrashed, assign a single synchronous conflict-resolution wave to one host and keep the other host on a separate, independent fallback path.
+
+**Repeated `attempts-exhausted` refusals across hosts, with no content
+conflict, are trunk-churn thrashing — not stale claims.** A two-fix land from
+macuahuitl was refused three times against an ~8 min gate while origin moved
+every ~2.5 min; yoga lost two more attempts at ~4 min on the same trunk.
+Under a declared ten-minute fleet-wide quiet the same land passed on attempt
+1. Mediate churn as you would a real collision: declare the quiet, then
+assign a landing order per branch for its duration — one host at a time,
+each messaging its SHA to the next — instead of a free-for-all. The loser is
+not the slowest host; it is whoever pushes last against a moving base, and it
+pays a full gate for nothing (drill: plan/issues/fleet-restart-2026-09-12.md, A push quiet is an instrument, and one was enough).
 
 ### 4. Divergent Branch Paths (Branch Drift)
 *   **Detection**: Sibling branch (`windows-next` or `osx-next`) is accumulating independent commits that are not integrated into `linux-next`.
@@ -187,6 +208,16 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
 -   **No Idle Hosts**: Every active host MUST have at least one claimed or ready unblocked primary packet, plus one named independent fallback packet (e.g. in packaging, docs-distillation, or CI testing) so that a host never sits idle when its primary path is gated.
 -   A host waiting for remote integration MUST be assigned an independent
     fallback unless all eligible work is blocked.
+-   **Under a fast-moving trunk, assign floor-tier hosts by relay-ref, not
+    direct land.** esme merged trunk at 09:13, gated green for 39 minutes,
+    and was refused at 09:52 on containment: the stamp was valid, the merge
+    premise under it was not. A green gate on that tier is 21-25 minutes at
+    best, so against a trunk moving every few minutes the platform branch
+    lands only in the gaps. Shape the assignment as: push the gated tree to
+    `work/<order>` and name a specific fast host to merge it into the
+    platform branch on its next land — tens of minutes of exposure become a
+    seconds-long merge. Plan-only pushes are the exception; they stay on the
+    host's own push path (drill: plan/issues/fleet-restart-2026-09-12.md, The floor-tier treadmill, measured).
 -   **Assign Stable Work Items**: Each assignment must specify: `id`, `owner_host`, `status`, dependencies, owned files, next concrete action, expected evidence, and `agent_status_packet` expectations.
 -   **Cross-host recurrence audit** (order 1001-q3zf). The meta-orchestration
     handoff REQUIRES pasting the cycle-metrics output verbatim, which is how
@@ -285,6 +316,15 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
     A `blocked:*` verdict means STOP AND REPORT, not work-then-discover. The
     cost of skipping this is one host-cycle of finished work that cannot be
     landed, and the coordinator then has to relay it by hand.
+
+    **Any credential-helper probe the coordinator hands to a host MUST
+    redirect stdout.** On 2026-09-12 the coordinator's own probe line, handed
+    to macneo, had no redirect: on success it printed the operator's PAT into
+    the transcript and forced a rotation. The rc is the signal; stdout is the
+    secret. Any probe dispatched with the preflight is written `… get
+    >/dev/null; echo rc=$?`, and a probe line already sent without the
+    redirect is corrected in place and the leak reported to the operator
+    (drill: plan/issues/fleet-restart-2026-09-12.md, macneo can push again; the probe leaked the token).
 
 ---
 

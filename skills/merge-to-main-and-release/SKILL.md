@@ -175,6 +175,24 @@ Update the PR body with today's `${new_tag}` even if reusing — the human revie
 >
 > The verification did not disappear; it moved to this host. Run it here.
 
+**Announce a cut freeze before running the gate.** From the moment
+`./build.sh --ci-full` starts until the step-5 back-merge is pushed, any CODE
+landing on `linux-next` — the branch this gate verifies — moves the head past
+the commit this gate verified and forces a full re-gate. State the window
+(start time, expected end at the back-merge push) so other hosts hold code
+landings until it lifts (drill: plan/issues/fleet-restart-2026-09-12.md, Cut freeze versus gate freeze).
+
+- Platform-branch pushes (`osx-next`, `windows-next`) move nothing the gate
+  reads and are not frozen; `plan/`, `docs/` and `skills/` pushes through the
+  plan-only lane are exempt — but exempt means allowed, not free: a plan-only
+  closure push during a relay gate cost one host a re-integrate and a second
+  8-minute gate. The question before any push in the window is "is anyone
+  mid-gate", not "am I exempt" (drill: plan/issues/fleet-restart-2026-09-12.md, An exemption describes what is allowed, not what is free).
+- The freeze is enforced by nobody: the pre-push hook checks the trunk merge
+  and the gate stamp, never whether a freeze is live, so a push that starts
+  before the announced window and lands during it goes through clean
+  regardless (yolanda, 2026-09-14; drill: plan/issues/fleet-restart-2026-09-12.md, yolanda reported a freeze breach that was not one, and found a real gap doing it).
+
 **Before the gate, if this host rebaked its images today** (any `--init`
 after a version change, the post-restart checklist), warm podman's ID-mapped
 layer copy of the forge image once — `podman run --rm --userns=keep-id
@@ -434,8 +452,33 @@ gh run list --workflow=release.yml --branch="${new_tag}" --limit 1
 run_id="$(scripts/resolve-release-run.sh "${new_tag}")" || { echo "$run_id"; exit 1; }
 run_id="${run_id#ok:release-run:}"
 gh run watch "${run_id}"                     # blocks until green or red
-gh release view "${new_tag}" --json url,assets --jq '.url, .assets[].browserDownloadUrl'
+assets="$(gh release view "${new_tag}" --json assets --jq '.assets[].name')"
 ```
+
+**Assert, don't display.** v56.9.11.1 (2026-09-11) published Linux and macOS
+assets while the Windows tray job FAILED (1122-xi2f); `gh release view`
+printed a healthy-looking release and the gap was found a day later by a
+Windows host spending an assignment slot on it. A platform job can fail
+while the run still publishes the others' assets. So list the asset names
+and REQUIRE all three sets — failing this step loudly and naming the missing
+platform — rather than just printing whatever exists. The only sanctioned
+absence is the unsigned MSIX (see Hard guardrails), never a platform's
+primary asset (drill: plan/issues/fleet-restart-2026-09-12.md, v56.9.11.1 was cut 2026-09-11). Asset names measured on v56.9.13.1
+(drill: plan/issues/fleet-restart-2026-09-12.md, v56.9.13.1 PUBLISHED):
+
+```bash
+for a in tillandsias-linux-x86_64 SHA256SUMS \
+         "tillandsias-tray-${new_version}-windows-x64.zip" tillandsias-tray.exe SHA256SUMS-windows \
+         "tillandsias-tray-${new_version}-macos-arm64.tar.gz" Tillandsias.dmg SHA256SUMS-macos; do
+  printf '%s\n' "$assets" | grep -qxF "$a" || { echo "blocked:release-asset-missing:$a"; exit 1; }
+done
+echo "ok:release-assets:all-three-sets"
+gh release view "${new_tag}" --json url --jq '.url'
+```
+
+The MSIX is never asserted here — Step 7's asset check expects the HONEST
+WITHHOLD on unsigned builds (see Hard guardrails), not a flagged-missing
+platform asset.
 
 > The trap this replaces, and it is the same family as the `gh pr checks
 > --watch` note in step 5. The step used to be a bare command substitution:

@@ -93,11 +93,90 @@ if [ ! -s "$INDEX" ]; then
     exit 1
 fi
 
-LAST_RECORD="$(tail -1 "$INDEX")"
-LAST_RUN="$(field_of "$LAST_RECORD" ci_run_id)" || {
-    echo "could-not-run:release-tier:the last record in $INDEX carries no ci_run_id"
-    exit 3
+# ── ORDER 1174-6r4k — PICK THE NEWEST FULL-TIER RUN, NOT THE NEWEST RUN ────
+#
+# This used to read `tail -1` and take whatever run wrote last. A diagnostic
+# `scripts/local-ci.sh --phase pre-build` — the cheapest way to reproduce a
+# gate-only red, and what it was used for during the v56.9.13.1 cut — appends a
+# PARTIAL run to the same index. Green, it would read fresh:release-tier and the
+# 09:09 daily exercise (890-27mv) would skip the real tier on the strength of a
+# run that never touched post-build or runtime. Red, it would report a red the
+# tier never produced. Measured on macuahuitl 2026-09-13 23:39Z:
+# local-ci-20260913T233926Z, a pre-build-only run, became the newest record.
+#
+# WHAT COUNTS AS FULL TIER, from the writer's own vocabulary: local-ci.sh sets
+# CI_PHASE="all" for a whole run and to the phase name for `--phase <p>`. So a
+# run is full-tier if its records say `all`, or if between them they cover
+# pre-build AND post-build AND runtime — a run that did every phase separately
+# has exercised the tier even though no single record says so.
+#
+# THE dispatch=ci-full MARKER THE ROW MENTIONS DOES NOT EXIST IN THIS INDEX, and
+# it is recorded here rather than assumed: build.sh's _stamp_dispatch writes
+# `dispatch` into the GATE STAMP, and local-ci.sh's check-log record carries
+# ci_run_id, ci_phase, check_id, status, source_log, archived_log, sha256 and
+# duration_ms — no dispatch field reaches this file. Phase coverage is the
+# discriminator that is actually available; adding a marker to the writer is a
+# separate change and is not smuggled in here.
+_run_ids=""          # every run id, in order of first appearance
+_full_runs=""        # those whose phase set covers the tier
+_phases_for() {      # _phases_for <run-id> -> space-separated phase set
+    local _id="$1" _p _seen=""
+    while IFS= read -r _r; do
+        case "$_r" in *"\"ci_run_id\":\"$_id\""*) ;; *) continue ;; esac
+        _p="$(field_of "$_r" ci_phase)" || _p=""
+        [ -n "$_p" ] || continue
+        case " $_seen " in *" $_p "*) ;; *) _seen="$_seen $_p" ;; esac
+    done < "$INDEX"
+    printf '%s' "$_seen"
 }
+while IFS= read -r _rec; do
+    [ -n "$_rec" ] || continue
+    _id="$(field_of "$_rec" ci_run_id)" || continue
+    case " $_run_ids " in *" $_id "*) continue ;; esac
+    _run_ids="$_run_ids $_id"
+done < "$INDEX"
+for _id in $_run_ids; do
+    _set="$(_phases_for "$_id")"
+    case " $_set " in
+        *" all "*) _full_runs="$_full_runs $_id"; continue ;;
+    esac
+    case " $_set " in
+        *" pre-build "*)
+            case " $_set " in *" post-build "*)
+                case " $_set " in *" runtime "*) _full_runs="$_full_runs $_id" ;; esac ;;
+            esac ;;
+    esac
+done
+
+LAST_RUN=""
+for _id in $_full_runs; do LAST_RUN="$_id"; done
+if [ -z "$LAST_RUN" ]; then
+    # NOT "fresh". Every run on record is partial, so this host has no
+    # release-tier answer at all — the same fact the no-index branch reports,
+    # reached a different way, and reporting it as green would be the defect
+    # this order exists to remove.
+    _newest=""; for _id in $_run_ids; do _newest="$_id"; done
+    echo "never:release-tier:no FULL-tier run in $INDEX — the newest run $_newest covers only [$(_phases_for "$_newest")]"
+    echo "  A phase-only run is not a release-tier answer (1174-6r4k). Run"
+    echo "  scripts/local-ci.sh (all phases) or ./build.sh --ci-full to produce one."
+    exit 1
+fi
+
+# NAME THE RUNS BEING IGNORED. Silence here would look identical to "there was
+# nothing newer", and the whole point is that something newer was deliberately
+# not used.
+_skipped=""
+_after=0
+for _id in $_run_ids; do
+    [ "$_after" -eq 1 ] && case " $_full_runs " in
+        *" $_id "*) ;;
+        *) _skipped="${_skipped:+$_skipped }$_id" ;;
+    esac
+    [ "$_id" = "$LAST_RUN" ] && _after=1
+done
+for _id in $_skipped; do
+    echo "skip:phase-only-run:$_id (newer than $LAST_RUN, covers only [$(_phases_for "$_id")] — not a release-tier answer)"
+done
 
 # ── Verdict over the WHOLE last run, not just its last line ────────────────
 # A tail -1 verdict would report the status of one check and call it the run's.

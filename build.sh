@@ -1118,6 +1118,28 @@ _run() {
     local _run_t0 _run_rc=0 _run_dt
     _run_t0="$(_now_ms)"
     (cd "$SCRIPT_DIR" && "$@") || _run_rc=$?
+    # ORDER 1176-fn2p — A CHILD THAT DIED ON A SIGNAL IS ASKED ABOUT, ONCE.
+    #
+    # 128+N is a signal death, and 137 (SIGKILL) is what the OOM killer leaves.
+    # The victim writes nothing, so without this the phase simply stops and the
+    # reader is left with a truncated log. Consulting the kernel here costs
+    # nothing on the normal path: this branch is unreachable unless a child has
+    # already died on a signal.
+    #
+    # IT CANNOT LAUNDER AN ORDINARY FAILURE (1176-fn2p's second negative
+    # control): a clippy error exits 101 and never reaches this branch, and even
+    # here the verdict comes from the kernel's own record, not from the rc.
+    if [ "$_run_rc" -ge 128 ]; then
+        local _oom_out _oom_rc
+        _oom_out="$(bash "$SCRIPT_DIR/scripts/check-oom-postmortem.sh" --since -30min 2>&1)"; _oom_rc=$?
+        case "$_oom_rc" in
+            1) _error "refused:gate:oom-killed — a child died on signal $(( _run_rc - 128 )) and the kernel records an OOM kill (1176-fn2p)"
+               printf '%s\n' "$_oom_out" >&2 ;;
+            0) _warn "a child died on signal $(( _run_rc - 128 )) and the kernel records NO OOM kill — this is not a memory kill (1176-fn2p)" ;;
+            *) _warn "a child died on signal $(( _run_rc - 128 )); the OOM record could not be read, so the cause is UNDETERMINED, not cleared (1176-fn2p)"
+               printf '%s\n' "$_oom_out" >&2 ;;
+        esac
+    fi
     _run_dt=$(( $(_now_ms) - _run_t0 ))
     [[ "$_run_dt" -ge 0 ]] || _run_dt=0
     _PHASE_WORK_MS=$(( _PHASE_WORK_MS + _run_dt ))
@@ -1760,6 +1782,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
+
+    # ORDER 1176-fn2p — CAN THIS HOST START THE EXPENSIVE PHASES AT ALL?
+    #
+    # A gate SIGKILLed for memory writes nothing: the log ends mid-line and a
+    # reader cannot tell an OOM from a hang, which need opposite responses (wait
+    # longer versus stop and hand off). Measured on lenovinha 2026-09-14: two
+    # land attempts killed in clippy strict+listen-vsock, no verdict, LAND_EXIT
+    # never set, and the 1047-h88p job cap ALREADY at its floor of one job --
+    # there is no rung below one, so the cap had nothing left to say.
+    #
+    # THIS IS A LEGIBILITY FLOOR, NOT A CAPACITY PREDICTOR, and the distinction
+    # is what keeps it from becoming a second cliff (1176-fn2p's first negative
+    # control). The default is 1 GiB available against yoga's measured 11-12 GiB
+    # at rest on a host that completes this gate routinely, so no host that
+    # would have finished is refused here. It catches the START state; the OOM
+    # post-mortem in _run catches the RUN state, which is the kind lenovinha hit.
+    #
+    # NOT A REFUSAL ON could-not-run. A host with no readable MemAvailable
+    # (darwin, a stripped container) gets exit 3 and is waved past with a note:
+    # refusing a gate because a probe could not read a file would be a capacity
+    # claim from an instrument that never looked (965-sxec).
+    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" 2>&1)"
+    case "$?" in
+        0) _info "${_mem_out%%$'\n'*}" ;;
+        1) _error "${_mem_out%%$'\n'*}"
+           printf '%s\n' "$_mem_out" >&2
+           exit 1 ;;
+        *) _warn "${_mem_out%%$'\n'*} — the memory floor could not be evaluated here; the gate proceeds unguarded by it (1176-fn2p)" ;;
+    esac
 
     # ORDER 1141-vf9w — is another gate already using this checkout?
     #

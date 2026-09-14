@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-envelope-suite-hardcodes-target-debug-so-on-a-re-execing-host-it-grades-artifact-history-instead-of-the-tree-under-gate
+    order: 1179-yshc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [gate, testing, fail-loud, false-negative, portability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-capabilities-envelope-names-its-source.sh
+    verifiable_closure: |
+      litmus:envelope-suite-resolves-the-redirected-artifact — an arm plants a
+      STALE binary at ./target/debug/tillandsias and a CURRENT one under a
+      redirected CARGO_TARGET_DIR, runs the envelope suite, and asserts it
+      exercised the REDIRECTED one. Pre-fix result: FAILS. The pre-fix
+      demonstration already exists and is cited below — five of six arms red
+      under a gate whose redirected build was correct and unused.
+    title: |
+      test-capabilities-envelope-names-its-source.sh resolves `$ROOT/target/debug/tillandsias` directly, so on every host where the builder re-execs with CARGO_TARGET_DIR redirected it grades whatever artifact happens to sit in-tree rather than the tree under gate
+    context: |
+      MEASURED on esmeraldinha, 2026-09-13, during a `./build.sh --check` run
+      launched from Git Bash so `with-wsl2-builder` re-execed (verified:
+      `grep -c 'Re-execing inside'` = 1).
+
+      THE SUITE FAILED 1/6 UNDER THE GATE AND PASSES 6/6 STANDALONE ON THE SAME
+      TREE. The failing arms, verbatim — note the one that passed is the only
+      arm that does not read the new field:
+
+        FAIL: a cold run reported accel_source='', want measured
+        FAIL: a second run reported accel_source='', want served
+        ok:   the served document replays the producing run's timestamp verbatim
+        FAIL: the stored cache document has no envelope_source key at all
+        FAIL: the measured and served envelopes are byte-identical — nothing discriminates
+        FAIL: --fresh reported accel_source='', want measured
+
+      Every failure is the field ABSENT rather than wrong, which is a binary
+      without the feature and not an environment difference.
+
+      THE CAUSE IS THE RESOLUTION LINE, not the envelope and not the suite's
+      logic. `BIN="${TILLANDSIAS_BIN:-$ROOT/target/debug/tillandsias}"` reads
+      the IN-TREE path and never consults CARGO_TARGET_DIR, and `build.sh` does
+      not export TILLANDSIAS_BIN (grep count 0). Under the sanctioned Windows
+      gate, `with-wsl2-builder` redirects CARGO_TARGET_DIR, so:
+
+        gate compiled the headless crate          4 `Compiling tillandsias-headless` lines
+        into /root/.cache/tillandsias-wsl2-target/tillandsias/debug/tillandsias   built 17:08, DURING the gate
+        the suite ran ./target/debug/tillandsias                                  09:02, predating the feature
+        crates/tillandsias-headless/src/accel_probe.rs                            16:55
+
+      So the gate built a correct binary, left it unused, and graded one from
+      eight hours earlier. The in-tree artifact has since been rebuilt (17:54,
+      strings count 2 for `envelope_source`), which is why the same suite now
+      passes 6/6 standalone — two runs of one fixture against two different
+      binaries.
+
+      THE CACHE IS NOT THE VARIABLE, which rules out the obvious rival reading:
+      the suite sets `XDG_CACHE_HOME="$TMP"` on every invocation and reads
+      `$TMP/tillandsias/capabilities.json`; its own header says "hermetic in
+      the cache, LIVE on the host". Neither is it a uid difference — both the
+      gate and the standalone run execute as root in that distro.
+
+      THE CONVENTION ALREADY EXISTS AND THIS IS ITS ONE VIOLATOR. Order
+      721-nyev settled it, and a sibling fixture states it in its own comment:
+      "RESOLVE THROUGH THE SHARED PROBE (721-nyev), never a hardcoded target/
+      path… an executable BIT is a claim; RUNNING the binary is evidence."
+      scripts/test-ledger-write-reaches-its-reader.sh records that its FIRST
+      version hardcoded `./target/debug/tillandsias-plan`, that the gate
+      refused it, and that the refusal was correct.
+
+      SWEEP, executed paths rather than mentions (the 1130-i6xj distinction):
+      nine fixtures under scripts/test-*.sh mention `target/debug/`; exactly
+      ONE executes a hardcoded one, and it is this file. The other eight are
+      comments, negative controls, or already route through the probe. So the
+      blast radius is one fixture breaking an established rule, not a class
+      needing a new convention.
+
+      REGIME, and it is why this survived: GREEN on Linux, where
+      CARGO_TARGET_DIR is not redirected and the in-tree path IS the build
+      output. The coordinator's gate passed this suite twice on 2026-09-13. It
+      can only fail where the builder re-execs — every Windows host — so the
+      host that can see it is not the host that binds it.
+    deliverable: |
+      The suite runs the artifact the gate built, on every locus.
+
+        * scripts/test-capabilities-envelope-names-its-source.sh — resolve the
+          binary through the shared probe rather than a hardcoded path,
+          honouring CARGO_TARGET_DIR when set and falling back to
+          ./target/debug. 1154-6big's `resolve_target_binary` already exists
+          for exactly this and is the one place the fleet agreed to put "which
+          artifact"; teaching build.sh to export TILLANDSIAS_BIN would put that
+          knowledge in a second place.
+        * KEEP the TILLANDSIAS_BIN override. It is the documented way a caller
+          names a binary deliberately, and this row is about the DEFAULT being
+          wrong, not the override.
+        * The litmus in verifiable_closure must plant BOTH artifacts — a stale
+          in-tree one and a current redirected one — because an arm that only
+          checks "a binary was found" passes today.
+
+      SCOPE NOTE: do NOT fix this by having the suite rebuild the binary. The
+      gate already built it; a second build would hide the resolution defect
+      behind a redundant compile and make every host pay for it.
+    next_action: >
+      Route the suite's BIN through resolve_target_binary honouring
+      CARGO_TARGET_DIR, then write the two-artifact litmus — it must fail
+      against the current file, which the esmeraldinha gate transcript already
+      demonstrates.
+    provenance: |
+      Found by esme-windows on esmeraldinha while gating an unrelated change
+      (1155-jurn); the gate's red was not that change, whose own step passed.
+      Diagnosed to the resolution line rather than to the envelope, and filed
+      at macuahuitl's direction as its own row rather than against 1139-xe5m —
+      yoga's suite is correct about the envelope; the binding put it into a
+      gate whose Windows locus builds elsewhere.
+
+      Full gate transcript and the standalone comparison:
+      plan/issues/smoke-e2e-findings-v56.9.13.1-2026-09-13-windows.md records
+      the same run's other findings; the gate log itself is
+      .git/gate-1155.log on that host and is not committed.

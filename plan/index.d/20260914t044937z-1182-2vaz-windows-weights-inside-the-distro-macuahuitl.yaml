@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-windows-the-model-weights-live-inside-the-wsl-distro-so-wsl-unregister-cannot-spare-them-and-the-keep-models-flag-needs-a-host-side-models-mount
+    order: 1182-2vaz
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: windows
+    capability_tags: [reset, smoke, models, windows, wsl2]
+    estimated_hours: 4
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a host-side models location the distro mounts, and the Windows smoke row's reset honouring TILLANDSIAS_RESET_KEEP_MODELS=1 by leaving that location alone across wsl --unregister. Future litmus: an arm in the Windows smoke report asserting a seeded model file survives the unregister-and-provision cycle byte-identical when the flag is set (pre-fix result: FAILS — /root/.cache/tillandsias/models lives inside the distro's ext4.vhdx, 806-a4tu, and unregister deletes the vhdx). The claimer writes it in the same commit and moves this text into verifiable_closure."
+    owned_files:
+      - scripts/install-windows.ps1
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      The keep-models flag (see the sibling row filed the same minute) cannot spare weights on Windows: they live at /root/.cache/tillandsias/models INSIDE the tillandsias distro (806-a4tu), and the Windows reset is `wsl --unregister tillandsias`, which deletes the vhdx wholesale. Keeping models there means a host-side location (under %LOCALAPPDATA%\Tillandsias, mounted into the guest as the models dir, the shape the macOS lane already has with its virtiofs models share) that the reset leaves alone. Until then the flag is a documented no-op on Windows and the runbook says so.
+    context: |
+      Filed by the coordinator when the operator asked for the keep-models
+      flag on every reset (2026-09-14). Linux spares the models already;
+      macOS gets the flag in the sibling row; Windows needs the location
+      change first. esme measured the Windows smoke's blast radius on
+      2026-09-13 (the guest destroyed, tillandsias-build untouched) — the
+      models are on the destroyed side. Measurement and closure belong to a
+      Windows host; the design decision (where the host-side dir lives and
+      how the guest mounts it) should follow the macOS virtiofs share's
+      shape rather than invent a second one.
+    exit_criteria:
+      - 'a seeded model file survives unregister-and-provision byte-identical with the flag set (pre-fix result: FAILS)'
+      - 'without the flag the models are destroyed with the distro, as today'
+      - 'the runbook names the flag as a no-op until this lands, then as honoured'
+    events:
+      - type: filed
+        ts: "2026-09-14T04:49:37Z"
+        agent_id: "linux-macuahuitl-fable-20260914t044937z"
+        host: macuahuitl
+        summary: |
+          Filed beside the keep-models row: the platform where the flag cannot
+          be an rm-time decision.

@@ -41,3 +41,12 @@ test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
 # probe exits nonzero on any straggler and fails the lane loud.
 "$SCRIPT_DIR/container-teardown-straggler-probe.sh" 2>&1 | tee "$LOG_DIR/02-straggler-probe.log"
 test "${PIPESTATUS[0]}" -eq 0
+
+# 1181-bkem: the reset above never touches the model cache — say so
+# explicitly rather than by omission.
+MODELS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models"
+if [ -d "$MODELS_DIR" ]; then
+  printf 'models: %s kept (%s)\n' "$MODELS_DIR" "$(du -sh "$MODELS_DIR" 2>/dev/null | cut -f1)"
+else
+  printf 'models: %s absent\n' "$MODELS_DIR"
+fi

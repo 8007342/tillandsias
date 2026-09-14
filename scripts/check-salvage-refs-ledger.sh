@@ -65,18 +65,59 @@ cd "$ROOT" || { echo "violation:salvage-refs-ledger:no-root"; exit 1; }
 
 LEDGER_DIR="plan/salvage-refs.d"
 REMOTE=origin
+# ORDER 1173-a5ng. The branch whose copy of the ledger is consulted when the
+# LOCAL copy is behind. Named rather than hardcoded so the fixture can point it
+# at a throwaway ref, but defaulted to the trunk every host merges from.
+TRUNK_REF="${TILLANDSIAS_SALVAGE_TRUNK_REF:-origin/${TILLANDSIAS_TRUNK_BRANCH:-linux-next}}"
 
 TS_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 SHA_RE='^[0-9a-f]{40}$'
 
 violations=0
 lines=0
+marker_on_trunk=""
 
 refuse() { # refuse <file> <detail...>
     violations=$((violations + 1))
     echo "REFUSED: $1" >&2
     shift
     printf '   %s\n' "$@" >&2
+}
+
+# ORDER 1173-a5ng — IS THIS LINE ALREADY MARKED ON TRUNK?
+#
+# THE RACE, measured on yolanda 2026-09-13: the coordinator marked line 19 at
+# 6857ce7f6 (20:29Z) and deleted the ref at 20:31Z; yolanda's land, gating a tree
+# merged BEFORE that commit, refused at ~20:35Z with
+# violation:salvage-refs-ledger:1 — while trunk carried the marker the whole
+# time. Mark-then-land-then-delete protects a gate that merges trunk AFTER the
+# marker lands. It does nothing for a gate already running on an older snapshot,
+# and on a floor host a gate runs for an hour, so no timing rule closes this.
+#
+# THE FIX IS ONE READ THE CHECK ALREADY PAYS FOR. It makes a network round trip
+# for `git ls-remote` above; trunk's copy of the same ledger file is a local
+# `git show` against a ref that fetch already updated.
+#
+# THREE STATES, NOT TWO, and the third is the one that bites. `git show
+# <ref>:<path>` on a missing ref or a path absent there EXITS NON-ZERO AND WRITES
+# ZERO BYTES — indistinguishable from "read it, found no marker" if the rc is
+# discarded. This function returns 2 for "could not read trunk's copy" so the
+# caller refuses (the pre-existing behaviour) rather than silently forgiving.
+_marker_on_trunk() { # _marker_on_trunk <ledger-file> <ref> -> 0 marked | 1 not | 2 unreadable
+    local _f="$1" _ref="$2" _copy _rc
+    _copy="$(git show "$TRUNK_REF:$_f" 2>/dev/null)"; _rc=$?
+    [ "$_rc" -eq 0 ] || return 2
+    # A marked line names the ref AND ends with the trailing marker. Matching
+    # the ref alone would forgive an unmarked line on trunk, which is the very
+    # outstanding-rescue case the negative control keeps.
+    while IFS= read -r _l || [ -n "$_l" ]; do
+        case "$_l" in
+            *"$_ref"*' deleted') return 0 ;;
+        esac
+    done <<EOF
+$_copy
+EOF
+    return 1
 }
 
 if [ ! -d "$LEDGER_DIR" ]; then
@@ -184,7 +225,21 @@ for f in "$LEDGER_DIR"/*.md; do
         [ "$remote_heads" != "__ORIGIN_UNREACHABLE__" ] || continue
         case "$remote_heads" in
             *"$ref"*) ;;
-            *) refuse "$f" "line $ln names $ref, which no longer exists on $REMOTE and carries no trailing ' deleted' marker" ;;
+            *)
+                # 1173-a5ng: before refusing, ask TRUNK. A local copy that is
+                # merely behind is the commonest reason a line is unmarked here,
+                # and it is not an outstanding rescue.
+                _marker_on_trunk "$f" "$ref"
+                case "$?" in
+                    0)  marker_on_trunk="${marker_on_trunk:+$marker_on_trunk,}$ref"
+                        echo "   line $ln names $ref, absent from $REMOTE and unmarked in this checkout — but $TRUNK_REF's copy of $f already carries the marker." >&2
+                        echo "   MERGE TRUNK: this tree predates the commit that marked it. Nothing is outstanding." >&2
+                        ;;
+                    2)  refuse "$f" "line $ln names $ref, which no longer exists on $REMOTE and carries no trailing ' deleted' marker" \
+                               "(and $TRUNK_REF:$f could not be read, so the behind-tree case could NOT be ruled out — fetch, then re-run)" ;;
+                    *)  refuse "$f" "line $ln names $ref, which no longer exists on $REMOTE and carries no trailing ' deleted' marker" ;;
+                esac
+                ;;
         esac
     done <"$f"
 done
@@ -192,6 +247,12 @@ done
 if [ "$violations" -gt 0 ]; then
     echo "violation:salvage-refs-ledger:$violations"
     exit 1
+fi
+if [ -n "${marker_on_trunk:-}" ]; then
+    # The row's verdict shape. A reader greps the token; the stderr lines above
+    # say what to do about it.
+    echo "ok:salvage-refs-ledger:$lines:marker-on-trunk:$marker_on_trunk"
+    exit 0
 fi
 echo "ok:salvage-refs-ledger:$lines"
 exit 0

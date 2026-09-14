@@ -29,7 +29,29 @@ pass=0; fail=0
 ok()   { printf 'ok:   %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf 'FAIL: %s\n' "$1"; fail=$((fail+1)); }
 
-BIN="${TILLANDSIAS_BIN:-$ROOT/target/debug/tillandsias}"
+# Resolve through the SHARED PROBE (721-nyev), never a hardcoded target/
+# path. The old default here — `$ROOT/target/debug/tillandsias` unqualified —
+# never consulted CARGO_TARGET_DIR, so on every host where the builder
+# re-execs with it redirected (every Windows host, via with-wsl2-builder.sh)
+# this suite graded whatever stale artifact sat in-tree instead of the one
+# the gate just built (1179-yshc; measured by esme 2026-09-14: 5/6 arms red
+# with accel_source='' — the field ABSENT — while a current binary sat unused
+# in the redirected dir). TILLANDSIAS_BIN stays an explicit override: this
+# row is about the DEFAULT being wrong, not the override.
+if [ -n "${TILLANDSIAS_BIN:-}" ]; then
+    BIN="$TILLANDSIAS_BIN"
+else
+    PROBE="$ROOT/scripts/plan-binary-probe.sh"
+    if [ -r "$PROBE" ]; then
+        . "$PROBE"
+    else
+        # A missing reader must ANNOUNCE itself rather than surface as a
+        # silent fallback to the very default this row exists to retire.
+        resolve_target_binary() { return 1; }
+    fi
+    BIN="$(resolve_target_binary tillandsias debug "$ROOT" 2>/dev/null)"
+    [ -n "$BIN" ] || BIN="$ROOT/target/debug/tillandsias"
+fi
 if [ ! -x "$BIN" ]; then
     # Not a skip that asserts nothing: there is no product to ask, and saying so
     # by name is the only honest answer. `./build.sh --check` builds this binary,

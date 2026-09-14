@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-the-twenty-seven-verified-runbook-edits-from-the-2026-09-13-skills-audit-with-the-nights-three-corrections
+    order: 1180-at95
+    status: in_progress
+    kind: docs
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [skills, runbooks, coordination, docs]
+    estimated_hours: 3
+    verifiable_closure: |
+      scripts/check-skills-single-source.sh reports ok on the tree after the batch (every edited skill still linked from the five runtime skill dirs); every edit cites the drill entry (plan/issues/fleet-restart-2026-09-12.md) it derives from; the two release-skill steps the batch adds (announce the cut freeze on linux-next at gate start, assert all three artifact sets by name in step 7) were executed by hand in the v56.9.13.1 cut on 2026-09-14 and their measured lines are the citations; the meta-orchestration stray-protocol text names the host-side podman exec as the discriminator (yoga's correction), and the salvage paragraph's first line says "dirty tree OR unpushed commit" (lenovinha's 1177-k4jq reduction).
+    owned_files:
+      - skills/meta-orchestration/SKILL.md
+      - skills/coordinate-multihost-work/SKILL.md
+      - skills/advance-work-from-plan/SKILL.md
+      - skills/deslop-sweep/SKILL.md
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+      - skills/merge-to-main-and-release/SKILL.md
+      - skills/build-install-and-smoke-test-e2e/SKILL.md
+    title: |
+      The operator-approved skills audit of 2026-09-13 (workflow wf_67435872-4e4: seven sonnet readers, seven opus critics, 1,266,972 tokens) produced 38 proposals against the fleet-restart drill and kept 27 after refutation; only one line has landed (the de-slop skill's scratch-copy rule). The rest are runbook steps whose absence the drill already priced: verdicts read through pipes, the surviving gate, the unbounded push, the cut freeze and the three-set asset assertion, the smoke runbooks' cold-state and install-is-init claims, the de-slop first-run lessons, the salvage net's fourth verdict, the cargo substring filter, the quiet window under trunk churn, the stdout redirect on credential probes. Land them as one batch, one commit per skill, each edit citing its drill entry, plus the night's three corrections.
+    context: |
+      Audit output: the coordinator's session file (skills-audit-2026-09-13.md)
+      carries each kept proposal's revised text and the critic's reason;
+      the batch applies the revised text, not the reader's draft. Three
+      corrections from after the audit: yoga measured that conmon parentage is
+      how toolbox dispatch works, not how a stray looks (the discriminator is
+      the host-side podman exec); lenovinha found the salvage net's clean-tree
+      extension invisible under its name; yolanda reported a freeze breach
+      that was not one because the freeze covers linux-next only. Two of the
+      release-skill steps were executed by hand in the v56.9.13.1 cut.
+    exit_criteria:
+      - 'check-skills-single-source.sh ok after the batch; every edit cites its drill entry'
+      - 'the stray-protocol and salvage wording corrections present; the freeze names linux-next'
+      - 'one commit per skill'
+    events:
+      - type: filed
+        ts: "2026-09-14T03:41:14Z"
+        agent_id: "linux-macuahuitl-fable-20260914t034116z"
+        host: macuahuitl
+        summary: |
+          Filed and claimed in the 03:39Z meta cycle; a sonnet sub-agent applies
+          the batch, the coordinator reviews the diff per skill and commits.

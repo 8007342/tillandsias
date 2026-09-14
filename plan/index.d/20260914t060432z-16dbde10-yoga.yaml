@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: land-on-platform-branch-re-gates-a-tree-it-already-holds-a-valid-gate-stamp-for-so-a-gate-orphaned-by-an-outer-kill-is-41-minutes-spent-for-no-landing
+    field: status
+    value: ready
+    ts: "2026-09-14T06:04:32Z"
+    host: yoga
+
+events:
+  - packet_id: land-on-platform-branch-re-gates-a-tree-it-already-holds-a-valid-gate-stamp-for-so-a-gate-orphaned-by-an-outer-kill-is-41-minutes-spent-for-no-landing
+    event:
+      type: note
+      ts: "2026-09-14T06:04:32Z"
+      host: yoga
+      summary: |-
+        released on cycle exit, NOT started: assigned mid-cycle while 1084-nzqc was in flight, and this cycle is already attested (MO-FULL 23b249bcd). It touches the tool every host lands with, so it gets a fresh cycle with its own boundary rather than the tail of this one

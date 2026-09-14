@@ -287,10 +287,12 @@ FIRST — before the handoff, before the blocker, before anything else.**
 scripts/salvage-dirty-worktree.sh <slug>   # -> ok:salvaged:<ref>:<sha>
 ```
 
-It pushes a COPY of the dirty tree — tracked modifications, deletions and
-untracked files — to `salvage/<host>/<yyyymmdd>-<slug>` on origin, and it CANNOT
-touch the worktree: it builds the commit through a temporary `GIT_INDEX_FILE`
-and plumbing (`write-tree` / `commit-tree`), never a stash, an add against the
+The script handles a DIRTY tree OR a CLEAN tree whose HEAD is on no origin
+ref (order 1146-8j7i). For a dirty tree, it pushes a COPY — tracked
+modifications, deletions and untracked files — to
+`salvage/<host>/<yyyymmdd>-<slug>` on origin, and it CANNOT touch the
+worktree: it builds the commit through a temporary `GIT_INDEX_FILE` and
+plumbing (`write-tree` / `commit-tree`), never a stash, an add against the
 real index, or a checkout. Verified: worktree status and `.git/index` are
 byte-identical afterwards, and `git show <sha>:<path>` returns an untracked
 file's full content.
@@ -303,6 +305,17 @@ salvage ref and answers `ok:salvaged-commits:<ref>:<sha>` instead of
 `ok:salvage-not-needed`. A host whose gate just went red on an otherwise-clean
 tree should run this script, not open a fresh `work/<order>` ref that the same
 red gate will refuse for the same reason the commit is stranded.
+
+**A tool whose name describes its original case will not be found by someone
+in its extended case: `salvage-dirty-worktree.sh` is also the hand-off lane
+for a host that cannot gate (1177-k4jq); the `work/` lane is the GATED
+hand-off and demands the stamp.** A host whose own gate cannot complete —
+memory-ceilinged, credential-dead, or otherwise unable to produce a green —
+cannot use `work/<order>` at all: the relay-ref lane still requires the full
+gate on first push, which is exactly what such a host cannot supply. Salvage
+the finished commit to `salvage/<host>/<yyyymmdd>-<order>` instead and name it
+explicitly as an UNGATED hand-off in the report; the host or orchestrator that
+relays it gates it there, next pass (drill: the lenovinha entries of 2026-09-14).
 
 WHY THIS RULE EXISTS, and it is the most expensive lesson in this file. On
 2026-08-23 a host wedged with 16 modified paths and one untracked litmus file
@@ -500,6 +513,25 @@ TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check   #
   re-runs nothing, in 0.4s instead of 10s. That is correct for the inner loop
   and useless as evidence. A green you did not force proves only that the tree
   has not changed since some earlier green.
+
+**Killing the gate does not kill the gate (1132-r4mt).** `./build.sh --check`
+re-execs inside the `tillandsias-builder` toolbox via `podman exec`, so
+killing the host-side wrapper reaps only the wrapper: measured on pirria, the
+container-side `build.sh` kept running 12 minutes after it was "stopped",
+concurrently with the gate started after it — and two gates racing one
+checkout is the leading mechanism for the archiver-fixture flake that cost
+two full gates in a night (reproduced independently on yoga). SIGTERM to the
+wrapper is inert; only SIGKILL to the container-side pid and its child ends
+it. **The discriminator is NOT conmon parentage** — every container-side
+`build.sh` under toolbox dispatch has parent `conmon` while its launcher
+chain (`toolbox run` → `podman exec`) is alive, so that reading would record
+every healthy gate as a stray. A stray is a container-side pid whose
+HOST-SIDE `podman exec` no longer exists (measured by yoga on 2026-09-13 on a
+healthy running gate). Before relaunching any gate or land you stopped — or
+that a harness reaped — check for a survivor by that test, and force the
+relaunch: a stamped `ok:gate-fresh` no-op proves nothing about strays. Match
+`ps` output by NAME, never by field index — an index match once wrote an
+empty file and read as "no stray processes" (drill: plan/issues/fleet-restart-2026-09-12.md, yoga: 1132-r4mt advanced at 191d606db (MO-FULL 90dcbbe07), claim released, criteria 2 and 3 open).
 
 ## Where standing direction lives
 
@@ -1051,6 +1083,19 @@ the precise velocity-killer this guard prevents.
 
 Reads (`git fetch`/`git ls-remote`) succeeding is NOT evidence of a credential
 channel — public-repo reads are anonymous. Verify write capability explicitly.
+
+**Bound every `git push` with a timeout; an empty push log is a refusal, not
+slowness (macneo, two land stalls of 3000 s each).** `land: attempt 1 — push`
+was the last line written, the push log was ZERO bytes, and a stack sample
+showed `git-credential-osxkeychain` blocked in `CSSM_DecryptDataFinal` — an
+ACL confirmation dialog no non-GUI session can answer. The guard's
+`GIT_TERMINAL_PROMPT=0`/`GCM_INTERACTIVE=never` above close git's own
+prompts, not an OS helper below them; macbookair pushed six times on the same
+helper and repo from inside a GUI session, so the variable is the session,
+not the config. A genuine credential fault refuses WITH output; a keychain
+hang produces none. Wrap the push (`timeout <n> git push …`), `stat` the log
+twice before calling anything slow, and report
+`blocked:credential-helper-hung` with the probe (drill: plan/issues/fleet-restart-2026-09-12.md, A push with no timeout emits nothing).
 
 ## Committable Branch Guard
 
@@ -1892,6 +1937,16 @@ Rules:
 - If the plan records a latest tested release older than the current GitHub
   release, prioritize curl-install e2e.
 - File every finding as a plan packet; write a PASS report for clean runs.
+- **Host-qualify any report filename another host could produce the same
+  day (1004-fue3).** The smoke runbook once templated its report path from
+  release and UTC date with no host field; two platforms smoking one release
+  on one day collided add/add at land time, and the naive resolution — "take
+  one side" — silently deleted a platform's result. Name each report or
+  per-host finding with the host baked in (`<host_kind>-<host_id>`, or the
+  hostname), never a bare subject-and-date. The smoke template carries the
+  field now; a hand-written findings path (`…-findings-<DATE>.md`, the shape
+  named above for `/build-macos-tray`) still does not, so add it yourself
+  (drill: plan/issues/fleet-restart-2026-09-12.md, Two lanes, one report filename).
 
 ## Mutable Linux Coordinator Duties
 
@@ -2206,6 +2261,20 @@ Before exit:
    output is sufficient evidence, and both have reported LANDED for a refused
    push. It refuses non-retryable failures at once with their remedy (auth) and
    retries only a lost race.
+
+   **Never read a land or gate verdict through a pipe (1137-da83).** Three
+   false claims in one hour on two hosts: `scripts/land-on-platform-branch.sh
+   … | tail -25` read as exit 0 when the land had exited 3 and named its gate
+   log — the tool was nearly filed against for the defect its header exists
+   to prevent — and `tasklist … | head -2; echo rc=$?` reported `head`'s
+   status, published to a peer as a two-host difference that did not exist.
+   Capture the command's own status (`out="$(cmd 2>&1)"; rc=$?`) or `set -o
+   pipefail`. If you use PIPESTATUS, snapshot the array as the very next
+   command (`ps=("${PIPESTATUS[@]}")`); any intervening command resets it,
+   and the one everyone writes — `a=$?; b="${PIPESTATUS[0]}"` — yields 0 and
+   0. On Windows, `$?` through `wsl.exe -d <distro> -- bash -lc` from Git
+   Bash is always 0 (1155-jurn): canary `false; echo "$?"` before trusting
+   any status through it (drill: plan/issues/fleet-restart-2026-09-12.md, What the pipe-verdict fixture found — extends the coordinator's rule entry below, which named this fixture as its follow-up).
 
    WHY THIS IS NAMED HERE AND NOT LEFT TO BE DISCOVERED. Steps 4, 5 and 6 are
    three manual acts whose ORDER is the whole contract, and a host that

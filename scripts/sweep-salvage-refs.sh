@@ -37,6 +37,22 @@
 #      reports (report mode never writes anything).
 #      scripts/check-salvage-refs-ledger.sh is the gate that keeps this
 #      ledger's grammar and reachability honest.
+#
+#   DELETION RULE (order 1173-a5ng) — DELETE NO SOONER THAN THE PASS AFTER THE
+#   MARKER LANDED ON TRUNK, and never within one gate-duration of it.
+#
+#   Marking, landing, then deleting protects a gate that merges trunk AFTER the
+#   marker lands. It does nothing for a gate ALREADY RUNNING on an older
+#   snapshot: that tree's copy of this ledger has no marker, the ref is gone
+#   from origin, and the checker above refuses it. MEASURED on yolanda
+#   2026-09-13: line 19 marked at 6857ce7f6 (20:29Z), ref deleted at 20:31Z, and
+#   a land gating a tree merged before that commit refused at ~20:35Z while
+#   trunk carried the marker the whole time.
+#
+#   THIS RULE IS A REDUCTION, NOT A GUARANTEE, and saying so is the point: a
+#   floor-tier host's gate can run for an hour, so no waiting period closes the
+#   race. The checker's trunk fallback (1173-a5ng) is what actually resolves it;
+#   this rule shrinks the window the fallback has to cover. Both, not either.
 #   4. Reports the local overlap-refusals.jsonl (873-zcim exit criterion 3's
 #      durable record, which also had no consumer): total refusals, how many
 #      are new since the last consumed cursor, and the newest line. --apply
