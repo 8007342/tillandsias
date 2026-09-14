@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator from esmeraldinha's 1109-t8kw part 2
+# measurement: two reds that did not assert false — they timed out.
+packets:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    order: 1187-iij8
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, tooling, low-end, fail-loud, instrument]
+    estimated_hours: 3
+    parent_order: 1109-t8kw
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the instrument. Future litmus scripts/test-litmus-budget-by-tier.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: a step killed at its budget is reported by the runner as a BUDGET outcome distinct from FAIL in the spec tally (or the budget scales with the declared tier so the two named arms complete on the floor), and a genuine assertion failure still counts as FAIL (NEGATIVE CONTROL); pre-fix result: FAILS — capability-manifest-guard 300.6s killed at 300s and build-cache-sweep-trigger at 30s both tallied as FAIL on esmeraldinha 2026-09-14."
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/litmus-stdlib.sh
+      - plan/issues/litmus-1109-t8kw-part2-esmeraldinha-2026-09-14.md
+    title: |
+      A single-step litmus budget assumes a fast host: on the floor tier capability-manifest-guard (rewritten at af7529a26 under 1114-p2ht) timed out at its 300s budget (300.6s, killed and censored) and build-cache-sweep-trigger at 30s, and both were tallied as FAIL — a red that is true as a verdict and false as a claim, and would send a fixer to re-fix something that is not broken.
+    context: |
+      MEASURED by esmeraldinha 2026-09-14 at the Git Bash locus while
+      measuring 1109-t8kw part 2. Esme's own phrasing: writing "the
+      capability-manifest fixture is red again" would have been true as a
+      verdict and false as a claim. A fixture that assumes a fast host is
+      asserting a property of its environment — 1109-t8kw's class one level
+      up, in the RUNNER. The runner already reports rc=124 on a timeout
+      (litmus-runner-reports-rc); the tally does not distinguish it from an
+      assertion failure, and a closure row reads the count. WHAT TO BUILD,
+      for the claimer to weigh: (a) the tally reports BUDGET beside PASS/
+      FAIL/SKIP and a closure predicate can name it; and/or (b) budgets
+      scale with the declared tier (TILLANDSIAS_HOST_TIER low-end → a
+      multiplier), measured on the floor: esme has the AT-RISK, low-end
+      locus and can measure; a capable host lands the runner change.
+      NOT IN SCOPE: making the two named fixtures faster.
+    exit_criteria:
+      - 'a step killed at its budget is tallied as BUDGET, not FAIL, or completes on the floor under a tier-scaled budget (pre-fix result: FAILS — both arms tallied FAIL on esmeraldinha 2026-09-14)'
+      - 'NEGATIVE CONTROL: a genuine assertion failure still tallies FAIL'
+      - 'measured on a floor host at the AT-RISK locus, the two named arms no longer read as the shape of the sibling row (the eight fixture reds)'
+    events:
+      - type: filed
+        ts: "2026-09-14T18:12:49Z"
+        agent_id: "linux-macuahuitl-fable-20260914t181249z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from esmeraldinha's group B finding; the
+          floor measures, a capable host lands the runner change.
