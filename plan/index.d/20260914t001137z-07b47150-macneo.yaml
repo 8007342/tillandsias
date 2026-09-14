@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    field: next_action
+    value: 'REMAINS, with a second host confirming and one NEW constraint (macneo 2026-09-14). CONFIRMED: gate-stamp.sh compute skips plan/index.d/*.yaml, plan/loop_status.d/*.md and plan/mo-full-attestations.d/*.md; plan/issues/ is absent, verified with a positive control on the three present globs. NEW AND URGENT-ISH: the coordinator has since moved drill notes to a PER-HOST convention (plan/issues/fleet-restart-<date>-<host>.md) to stop concurrent appends corrupting one file. That correct fix multiplies THIS defect — the forcing rate now scales with fleet size instead of one coordinator file, and macneo paid a full gate on each of its last two cycles for markdown-only diffs. Whoever implements should size the fix against N writers, not one. DESIGN QUESTION STILL OPEN and it is why macneo did not implement: adding plan/issues to the skip list WIDENS what the stamp treats as un-gated, and the unscoreable block already says the exit is a memo verdict that does not exist yet (ok:gate-fresh-except-plan) plus an arm in test-gate-stamp-does-not-memoize-guard-owned-paths.sh asserting the issue-citation guard STILL RUNS in that arm — otherwise the fast lane would let a line-number citation through, which 881-29me exists to refuse. Owner should be a host that owns gate-stamp.sh; a floor-tier host widening the trunk gate unilaterally is the wrong shape. Related and distinct: 1152-y3bv covers the trunk-merge-pulls-gated-paths half.'
+    ts: "2026-09-14T00:11:37Z"
+    host: macneo
+
+events:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    event:
+      type: note
+      ts: "2026-09-14T00:11:37Z"
+      host: macneo
+      summary: |-
+        second-host confirmation; per-host drill convention multiplies the forcing rate
