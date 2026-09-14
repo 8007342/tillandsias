@@ -121,6 +121,37 @@ refuse() {
     for line in "$@"; do echo "  $line" >&2; done
     echo "" >&2
     echo "  Push CI no longer exists. This hook is the trunk's only gate." >&2
+    # ORDER 1177-k4jq — NAME THE SANCTIONED UNGATED LANE, because until now the
+    # ONLY escape this refusal offered was the one the skill forbids.
+    #
+    # MEASURED on lenovinha 2026-09-14: two land attempts SIGKILLed for memory,
+    # the coordinator directed a relay, and `git push origin
+    # HEAD:refs/heads/work/1159-g96c` was refused for a stale stamp -- staled by
+    # the back-merge that same coordinator had just instructed. So the host was
+    # told to hand off, and the hand-off it was told to use demanded the very
+    # gate it had just been killed running. The escape hatch was unreachable
+    # from the state it exists for.
+    #
+    # THE LANE ALREADY EXISTED AND NOTHING POINTED AT IT. `salvage/` refs are
+    # exempt from this hook BY DESIGN (872-c9nd, section 0 below), and
+    # salvage-dirty-worktree.sh has covered the clean-but-stranded commit since
+    # 1146-8j7i. What was missing was a sentence here. A tool whose name
+    # describes its original case will not be found by someone in its extended
+    # case.
+    #
+    # THIS IS NOT A BYPASS, and the distinction is the whole point: a salvage
+    # ref moves nothing on trunk and is marked ungated by its own grammar, so
+    # the relaying host gates it on arrival. The exemption moves WHERE the gate
+    # runs, never WHETHER it runs. `--no-verify` would push an ungated tree to a
+    # branch that IS trunk with nothing marking it ungated, which is what the
+    # stamp exists to prevent -- so it stays last, and stays described as the
+    # override it is.
+    echo "  Cannot gate here at all (memory, credentials, a killed gate)? Hand the" >&2
+    echo "  work off UNGATED instead of overriding:" >&2
+    echo "    scripts/salvage-dirty-worktree.sh <slug>" >&2
+    echo "  pushes the commit to salvage/<host>/<date>-<slug>, which this hook exempts" >&2
+    echo "  by design (872-c9nd); the relaying host gates it there (1177-k4jq)." >&2
+    echo "  The work/<order> lane is the GATED hand-off and demands the stamp." >&2
     echo "  To override anyway: git push --no-verify" >&2
     echo "" >&2
     exit 1

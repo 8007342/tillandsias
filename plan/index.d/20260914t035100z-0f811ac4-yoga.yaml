@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    event:
+      type: note
+      ts: "2026-09-14T03:51:00Z"
+      agent_id: linux-yoga-claude-20260914t035059z
+      host: yoga
+      summary: |
+        THE LAND REFUSED, CORRECTLY, AND THE REFUSAL WAS RIGHT ABOUT A RULE AND WRONG ABOUT THIS CASE — recorded because the fix touches a guard this row does not own.
+
+        scripts/test-gate-fast-refusals.sh (1087-h2z9) requires each hoisted guard to be invoked EXACTLY ONCE in build.sh, and my second call site made check-issue-citation-convention.sh count 2. The refusal stopped the land.
+
+        The rule's own stated reason is "a duplicate would run the check TWICE PER GATE, which is how a move that was really a copy hides". That premise does not hold here: build.sh's ok:gate-fresh-except-plan arm exits 0 before the hoisted phase is reached, so the memo-arm call runs INSTEAD of the hoisted one, never as well as it. Counting it as a duplicate refuses the exact wiring 1127-waxf requires — that the fast lane run the guards whose paths it admitted — so the rule as written forbids adding any guard to that lane at all. That is a real gap, not a nuisance: it would have bitten the next glob too.
+
+        FIXED BY EXCISION, NOT BY EXEMPTION. The counter now removes the memoised-plan arm from the text it counts, rather than allowing a second match anywhere. A genuine duplicate inside the hoisted phase is still caught — verified by mutation: a second check-litmus-pin-claims.sh call site in the hoisted phase reds it by name.
+
+        AND THE EXCISION HAS ITS OWN CONTROL, because an awk that matched nothing would leave the whole file in the variable and silently restore the old behaviour — a guard weakened into agreement with the thing it stopped refusing. An arm asserts the excised text is shorter than build.sh; mutating the awk to `cat build.sh` reds both that arm and the count.
+
+        A NOTE ON MY OWN METHOD, since it nearly cost a false result: the first attempt at the duplicate mutation did not apply (the substring I patched on did not exist), and the fixture printed 4 passed 0 failed. That is a pass from an unmutated tree, which proves nothing. The traceback was the only reason I did not read it as evidence. Print the diff and refuse an empty one — every time, including when the mutation looks trivial.

@@ -161,7 +161,71 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # a later `git clean` removes.
     _gate_log="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-land-gate-attempt-${attempt}.log"
     echo "land: attempt $attempt — gate (./build.sh --check, log: $_gate_log)"
-    if ! ./build.sh --check > "$_gate_log" 2>&1; then
+    # ── ORDER 1174-u5wp — ADOPT A STAMP THIS TREE ALREADY EARNED ───────────
+    #
+    # MEASURED on yolanda 2026-09-13: the harness killed the land for low
+    # memory, `./build.sh --check` survived inside the WSL distro as an ORPHAN,
+    # ran 2476 s to completion, exited 0 and recorded a stamp for the tree --
+    # and the only process that would have read that exit code and pushed was
+    # already dead. Attempt 2, on a tree that had not moved and for which a
+    # valid stamp existed, started the same 41-minute gate from the top.
+    #
+    # THE REGIME IS THE MEMORY, which is why it compounds rather than merely
+    # wastes: vmmemWSL held 6.5 GB while the orphan ran, WSL does not return
+    # memory to Windows on its own, and the host was at 542 MB free of 15.9 GB
+    # when the kill fired. The orphan is what keeps the host in the state that
+    # caused the kill. On the four-core floor host that is a loop, not an
+    # incident.
+    #
+    # ADOPTION, NOT "DIE WITH THE PARENT" (macuahuitl's ruling): killing the
+    # orphan throws away a gate that finished GREEN. Adoption turns it into a
+    # free landing on the very next attempt.
+    #
+    # THIS IS NOT A PUSH-SAFETY HOLE, and the three conditions are why. The
+    # stamp is already exactly what the pre-push hook trusts, and it BINDS TO A
+    # TREE DIGEST -- so adopting it grants precisely the authority the hook
+    # would grant seconds later. A stamp older than the tree fails `verify`
+    # with stale:tree-changed-since-gate, which is the load-bearing negative
+    # control.
+    #
+    # AFTER THE INTEGRATE, NEVER BEFORE IT, and the row's "on entry" is the one
+    # thing corrected here: the fetch-and-merge above CHANGES THE TREE, so a
+    # stamp checked before it describes a tree this tool is about to replace.
+    # Checked here, the integrate has already happened and a no-op integrate --
+    # yolanda's case exactly -- leaves the stamp valid.
+    #
+    # THE UNION DEBT VETOES ADOPTION, and this file predicted this change: the
+    # comment above says the gate is MANDATORY whenever the marker exists,
+    # "because the whole point of writing the debt down is that a future 'skip
+    # the gate when nothing changed' shortcut must not silently inherit it"
+    # (1056-5344). This is that shortcut. It does not inherit it.
+    #
+    # SCOPE MUST BE `full`, because the hook enforces scope separately
+    # (enforce_stamp_scope) and a narrower stamp could satisfy the hook for a
+    # narrow push while saying nothing about the gate this tool owes.
+    _adopted=""
+    if [ ! -s "$_um" ]; then
+        _sv="$(bash scripts/gate-stamp.sh verify 2>/dev/null)"
+        if [ "$_sv" = "ok:gate-fresh" ]; then
+            _ss="$(bash scripts/gate-stamp.sh scope 2>/dev/null)"
+            if [ "$_ss" = "full" ]; then
+                # NAME THE STAMP, or a reader cannot tell a SKIPPED gate from a
+                # gate that never ran -- the row's third criterion. gate-stamp.sh
+                # exposes no field reader, so the `stamped` line is read from the
+                # file it owns; an unreadable one degrades to a named token
+                # rather than to silence.
+                _adopted="$(sed -n 's/^stamped[[:space:]]\{1,\}//p' "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp" 2>/dev/null | head -1)"
+                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green full-scope gate stamp; skipping the gate and going straight to the push (1174-u5wp)"
+                echo "land: attempt $attempt — gate ADOPTED, not run. A gate that finished green is worth adopting; the pre-push hook re-verifies this same stamp against this same tree."
+            fi
+        fi
+    fi
+
+    _gate_rc=0
+    if [ -z "$_adopted" ]; then
+    ./build.sh --check > "$_gate_log" 2>&1 || _gate_rc=$?
+    fi
+    if [ -z "$_adopted" ] && [ "$_gate_rc" -ne 0 ]; then
         # The FIRST failing step, not the last line: build.sh prints its verdict
         # after the failure, so a tail shows the summary and not the cause. The
         # error line is what the reader needs and it is what a re-run would have
@@ -229,7 +293,27 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "  first failing line: $_first_fail" >&2
             [ -n "$_fallback_note" ] && echo "$_fallback_note" >&2
         else
-            echo "  (no violation/refusal line matched; read the log — the gate may have died rather than refused)" >&2
+            # ORDER 1176-fn2p — "DIED" AND "REFUSED" ARE DIFFERENT FACTS, so ask
+            # the kernel rather than leaving the reader with the ambiguity this
+            # very sentence names. Measured on lenovinha 2026-09-14: two land
+            # attempts SIGKILLed in clippy, the gate log ending mid-line with no
+            # verdict, and nothing anywhere saying why. A hang and an OOM need
+            # opposite responses (wait longer versus stop and hand off).
+            #
+            # ONLY REACHED WHEN NO FAILING LINE MATCHED, so a gate that refused
+            # for an ordinary reason never consults this at all — the verdict
+            # cannot launder a real failure, which is 1176-fn2p's second
+            # negative control, enforced by POSITION here and by the kernel
+            # record itself inside the probe.
+            _oom_out="$(bash "$ROOT/scripts/check-oom-postmortem.sh" --since -60min 2>&1)"; _oom_rc=$?
+            case "$_oom_rc" in
+                1) echo "refused:land:gate-oom-killed — the gate produced no verdict (exit $_gate_rc) and the kernel records an OOM kill (1176-fn2p)" >&2
+                   printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2
+                   echo "  This host did not fail the gate; it could not run it. Free memory or hand the work off — re-running will cost another attempt for the same reason." >&2 ;;
+                0) echo "  (no violation/refusal line matched, and the kernel records NO OOM kill: the gate died for some other reason — read the log)" >&2 ;;
+                *) echo "  (no violation/refusal line matched; the OOM record could not be read, so died-versus-refused is UNDETERMINED here, not cleared)" >&2
+                   printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2 ;;
+            esac
         fi
         echo "  Do NOT re-run ./build.sh --check to diagnose this: it is a DIFFERENT" >&2
         echo "  invocation against a tree this script's integrate step may have moved," >&2

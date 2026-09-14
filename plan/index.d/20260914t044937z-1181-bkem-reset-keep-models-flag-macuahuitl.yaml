@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-resets-gain-a-keep-models-flag-so-a-clean-room-can-spare-the-model-cache-on-the-operators-word-without-narrowing-the-clean-room-by-default
+    order: 1181-bkem
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [reset, smoke, uninstall, models, macos, linux, bash]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverables are two hermetic fixtures and their scripts. Future litmus names: litmus:reset-keeps-models-macos (scripts/test-e2e-step2-macos.sh) and litmus:uninstall-keeps-models (scripts/test-uninstall-keeps-models.sh); the claimer writes them in the same commit and moves this text into verifiable_closure: with TILLANDSIAS_RESET_KEEP_MODELS=1, scripts/e2e-step2-macos.sh (the single macOS destroy path both smoke runbooks call) removes the VM state dir and everything under the cache dir EXCEPT models/, which survives byte-identical, and the residue assertion passes with models/ listed as spared by name; without the flag everything goes and the residue assertion is unchanged; scripts/uninstall.sh --wipe under the flag spares $CACHE_DIR/models the same way (pre-fix result: FAILS — uninstall.sh's rm -rf $CACHE_DIR ignores the flag, and the macOS smoke blocks rm -rf the cache dir inline in two skills; measured by macbookair 2026-09-14: ~2.47 GB re-downloaded per smoke, the models dir absent at 804-deux's start because the same host's smoke had wiped it); NEGATIVE CONTROL: the flag is honoured ONLY by the reset and uninstall paths — grep for the variable outside scripts/e2e-step2-*.sh, scripts/uninstall.sh and the two smoke skills finds nothing; mutation control: a copy of each script with the sparing removed reds its arm, the mutant proven different by cmp."
+    owned_files:
+      - scripts/e2e-step2-macos.sh
+      - scripts/test-e2e-step2-macos.sh
+      - scripts/uninstall.sh
+      - scripts/test-uninstall-keeps-models.sh
+      - scripts/e2e-step2-linux.sh
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+      - skills/build-install-and-smoke-test-e2e/SKILL.md
+    title: |
+      The operator, 2026-09-14, on 804-deux's scope finding: "let's add the keep models flag to our resets." TILLANDSIAS_RESET_KEEP_MODELS=1 lets a clean-room reset and an uninstall --wipe spare the model cache (cache_root()/models) on the operator's word, with the default unchanged: the clean room stays clean (the 2026-09-13 reset ruling). Where models live decides the shape: Linux keeps them already (the podman reset and the credential clearer never touch ~/.cache/tillandsias/models, so the flag is a documented no-op there); macOS wipes them today because both smoke runbooks rm -rf the whole cache dir inline — that destroy moves into scripts/e2e-step2-macos.sh, one source for both runbooks (803-49re: a second copy is where the fix does not go), which honours the flag; uninstall.sh --wipe honours it on both. Windows is a separate row: the weights live INSIDE the distro (806-a4tu), so wsl --unregister cannot spare them until they move to a host-side mount.
+    context: |
+      Measured by macbookair (804-deux part 2, 2026-09-14): the v56.9.13.1 macOS
+      smoke wiped the models dir wholesale hours before the survival test, so
+      the dir was absent and had to be seeded; ~2.47 GB re-download per smoke
+      run. The coordinator decided the clean room stays clean by default and
+      surfaced a keep-models knob as one line and the operator's word; the
+      operator said yes. Semantics: opt-in, per run, env-driven so a smoke
+      runbook or an operator's uninstall can set it without a CLI change;
+      never the default; the residue assertion must still run and must NAME
+      the spared directory so a run that kept models cannot read as a clean
+      room by accident. The fixtures are hermetic (a fake HOME with a seeded
+      models/ and non-model files, no real tray, no podman: shadow podman with
+      a stub on PATH for uninstall.sh).
+    exit_criteria:
+      - 'e2e-step2-macos.sh: flag set → models/ byte-identical and named in the residue line, everything else gone; flag unset → everything gone (pre-fix result: FAILS — no script existed; the runbooks rm -rf inline)'
+      - 'uninstall.sh --wipe: flag set → $CACHE_DIR/models survives; flag unset → gone (pre-fix result: FAILS)'
+      - 'both smoke runbooks call the script on macOS; e2e-step2-linux.sh reports the models dir it spared; the DESTRUCTIVE sections document the flag and the operator ruling'
+      - 'NEGATIVE CONTROL: the variable appears in no other executed path'
+    events:
+      - type: filed
+        ts: "2026-09-14T04:49:37Z"
+        agent_id: "linux-macuahuitl-fable-20260914t044937z"
+        host: macuahuitl
+        summary: |
+          Filed and claimed on the operator's instruction ("let's add the keep
+          models flag to our resets"), pushed through the plan-only lane before
+          any agent started (the rule 1142-85zx taught tonight).

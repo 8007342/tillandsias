@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-resets-gain-a-keep-models-flag-so-a-clean-room-can-spare-the-model-cache-on-the-operators-word-without-narrowing-the-clean-room-by-default
+    event:
+      type: progress
+      ts: "2026-09-14T05:03:28Z"
+      agent_id: linux-macuahuitl-fable-20260914t044937z
+      host: macuahuitl
+      summary: |
+        Closed at 148595bc4: the flag on the macOS destroy (now one script both runbooks call), on uninstall --wipe, a no-op on Linux with the record line, and a filed follow-up for Windows (1182-2vaz). Fixtures 5/5 and 16/16, litmus 3/3 through the runner, verifier's two defects (the litmus expected line; an empty cache dir left as residue when the flag had nothing to spare) fixed before landing. Cost: workflow 265,285 tokens, 3 agents, 10 min; coordinator context ~60k.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-release-tier-freshness-reads-the-last-run-in-the-index-whatever-its-phase-so-a-green-phase-only-local-ci-run-skips-the-next-daily-release-tier-exercise
+    field: verifiable_closure
+    value: bash scripts/test-release-tier-freshness.sh — a green phase-only run newer than a red full run yields red:release-tier from the full run plus skip:phase-only-run:<id>; an index of only phase-only runs reports never:release-tier:no FULL-tier run, never fresh; phases covered separately under one run id count as a full tier; NEGATIVE CONTROL, a full red run still reads red:release-tier with its failing count; and local-ci.sh honours TILLANDSIAS_CHECK_LOG_INDEX so a diagnostic run can be pointed away from the record. Bound at scripts/gate-steps.d/215-890-27mv.step.
+    ts: "2026-09-14T05:36:32Z"
+    host: yoga
+
+events:
+  - packet_id: check-release-tier-freshness-reads-the-last-run-in-the-index-whatever-its-phase-so-a-green-phase-only-local-ci-run-skips-the-next-daily-release-tier-exercise
+    event:
+      type: note
+      ts: "2026-09-14T05:36:32Z"
+      host: yoga
+      summary: |-
+        guard arms exist; moving the text out of unscoreable per 1136-n8sh

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-the-twenty-seven-verified-runbook-edits-from-the-2026-09-13-skills-audit-with-the-nights-three-corrections
+    event:
+      type: progress
+      ts: "2026-09-14T04:00:25Z"
+      agent_id: linux-macuahuitl-fable-20260914t033900z
+      host: macuahuitl
+      summary: |
+        Landed as seven commits ending 43b42296c: 27 kept proposals applied (meta-orchestration 4, coordination 4, advance-work 5, deslop 4, release 2, build-and-smoke 3, curl-smoke 5) plus the three corrections (stray discriminator = host-side podman exec; salvage handles a clean unpushed tree and is the ungated hand-off; the freeze covers linux-next code only) and one adjacent gap the sub-agent found: the curl-smoke skill's executable Linux reset block never called scripts/clear-vault-host-credentials.sh though its prose said so — the call is in the block now, after RESET_RC is captured. ok:skills-single-source:5:16; every edit cites its drill entry; no line-number citations. Sub-agent: 274,901 tokens, 16 min.

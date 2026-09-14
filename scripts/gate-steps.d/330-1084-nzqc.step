@@ -1,0 +1,24 @@
+# Gate step 1084-nzqc — data, not code.
+#
+# Binds the fixture for the two escapes that made the SIGPIPE verdict guard
+# blind. Hermetic: each arm builds a throwaway git repo and drives the guard
+# through TILLANDSIAS_SIGPIPE_ROOT/TILLANDSIAS_SIGPIPE_BASE, so no arm reads
+# this checkout's diff — a diff-scoped guard let loose on the real working tree
+# would assert about whatever the author happened to be editing.
+#
+# FIVE OF THE EIGHT ARMS ARE NEGATIVE CONTROLS, and that ratio is the point: the
+# fix WIDENS a guard, so the risk is not that it keeps missing things but that
+# it starts refusing correct code. An EOF-reading consumer, a bounded producer,
+# a sigpipe-ok marker on a folded line, an unchanged file, and an untouched line
+# in a CHANGED file must all stay unflagged. The last two are separate subjects:
+# one pins file-level scoping, the other line-level, and a mutation proved a
+# single arm could not reach both.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the SIGPIPE verdict guard sees absolute paths and continued pipelines (1084-nzqc)"
+STEP_SCRIPT="scripts/test-sigpipe-guard-sees-paths-and-continuations.sh"
+STEP_ERROR="the SIGPIPE verdict guard regressed (1084-nzqc) — either an absolute-path producer or a pipeline split across line continuations is escaping it again (the 1069-c9w6 fingerprint), or the widened matcher has started refusing correct code; see the verdict line above"
+STEP_OK="SIGPIPE verdict guard path/continuation check passed"
+# Exit 3 means the guard itself is absent — nothing was examined.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/check-sigpipe-verdict-pipelines-added.sh is absent, so neither escape could be exercised"

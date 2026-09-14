@@ -1,0 +1,48 @@
+# @trace spec:accel-capability-probe
+# @trace order:1179-yshc
+#
+# Order 1179-yshc (esme, 2026-09-14): the envelope-source suite resolved its
+# binary at a hardcoded `$ROOT/target/debug/tillandsias`. On every Windows host
+# the builder re-execs with CARGO_TARGET_DIR redirected, so the gate compiled
+# the crate into the redirected dir while the fixture graded the stale
+# in-tree binary: five of six arms red with the new field ABSENT, 6/6
+# standalone once the in-tree binary was rebuilt. Green on Linux twice the
+# same night because nothing is redirected there — the fifteenth regime axis
+# of the fleet-restart drill: WHICH ARTIFACT. The convention already existed
+# (721-nyev: resolve through the shared probe, never a hardcoded target/
+# path); this was the one executed violator among nine mentions.
+#
+# THE CLOSURE THIS PINS: the suite's default resolution honours a redirected
+# CARGO_TARGET_DIR through resolve_target_binary (1154-6big), with the in-tree
+# path as the fallback and TILLANDSIAS_BIN as the explicit override. The
+# fixture plants a stale fake in a scratch checkout's target/debug and a
+# current fake under a scratch redirected target dir, runs the pre-fix line
+# (a byte-for-byte copy of the defect) and the post-fix resolution, and
+# asserts the pre-fix picks the stale one and the post-fix the redirected one.
+# Hermetic: no cargo, no real binary, no host state.
+name: litmus:envelope-suite-resolves-the-redirected-artifact
+spec: accel-capability-probe
+phase: pre-build
+description: >
+  Pin 1179-yshc: with a stale binary at ./target/debug and a current one
+  under a redirected CARGO_TARGET_DIR, the envelope suite's resolution picks
+  the redirected one (post-fix) where the hardcoded default picked the stale
+  one (pre-fix), so the suite grades the tree under gate rather than
+  artifact history on hosts whose builder re-execs.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-envelope-suite-resolves-the-gates-artifact.sh
+  - workspace contains scripts/plan-binary-probe.sh (resolve_target_binary)
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-envelope-suite-resolves-the-gates-artifact.sh && test -x scripts/test-envelope-suite-resolves-the-gates-artifact.sh && echo 'ok: redirected-artifact-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: redirected-artifact-fixture-parses"
+
+  - step: "pre-fix resolution picks the stale in-tree binary; post-fix resolution picks the redirected, current one"
+    command: "bash scripts/test-envelope-suite-resolves-the-gates-artifact.sh | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "PASS: envelope-suite-resolves-the-gates-artifact"

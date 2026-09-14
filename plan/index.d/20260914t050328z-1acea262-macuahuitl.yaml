@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-resets-gain-a-keep-models-flag-so-a-clean-room-can-spare-the-model-cache-on-the-operators-word-without-narrowing-the-clean-room-by-default
+    field: verifiable_closure
+    value: 'litmus:reset-keeps-models-macos and litmus:uninstall-keeps-models (spec cache-recovery-mechanism): with TILLANDSIAS_RESET_KEEP_MODELS=1, scripts/e2e-step2-macos.sh removes the VM state dir and everything under the cache dir except models/, which survives byte-identical and is named in the residue line; with no models dir it destroys everything and says nothing was spared; without the flag everything goes; scripts/uninstall.sh --wipe spares $CACHE_DIR/models the same way and without --wipe the flag changes nothing; a mutant with the sparing stripped from content (cmp-proven) destroys models under the flag. Pre-fix result FAILS: no macOS step-2 script existed and uninstall.sh ignored the flag. Negative control: the variable appears only in the two scripts, the Linux report line, the two fixtures, the two litmus specs and the two smoke runbooks.'
+    ts: "2026-09-14T05:03:28Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-resets-gain-a-keep-models-flag-so-a-clean-room-can-spare-the-model-cache-on-the-operators-word-without-narrowing-the-clean-room-by-default
+    event:
+      type: note
+      ts: "2026-09-14T05:03:28Z"
+      host: macuahuitl
+      summary: |-
+        moved out of the unscoreable block: both fixtures and their litmus bindings exist
