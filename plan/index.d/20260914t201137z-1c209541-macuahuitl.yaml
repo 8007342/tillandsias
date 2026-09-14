@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    event:
+      type: note
+      ts: "2026-09-14T20:11:37Z"
+      agent_id: linux-macuahuitl-fable-20260914t201136z
+      host: macuahuitl
+      summary: |
+        Live confirmation from pirria's v56.9.13.1 smoke (2026-09-14, the report at plan/issues/smoke-e2e-findings-v56.9.13.1-2026-09-14-linux-pirria.md): the vault container's process tree at §3b was still `1 bash / 10 vault / 11 tee` — the exact shape this packet describes — and it stopped in 1s with exit 0 against a 10s grace, where the pre-fix state burned the full 30s and exited 137; the §4b teardown line carried the keeping application-lifetime clause. The v56.9.13.1 README row does not claim this packet; this note is the release ledger taking the credit from a measurement rather than a changelog.

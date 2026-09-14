@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    field: next_action
+    value: 'What is LEFT (2026-09-14, macuahuitl): criteria 1 and 2 — build the fixture-orphan check as a sibling of scripts/audit-guard-activation.sh (same activation-surface list, same find -L / orphan mechanism) globbing scripts/test-*.sh, refusing any fixture referenced by no .step, script, litmus binding or skill unless named with its reason in a deletions-only ratchet list (the shape of openspec/litmus-tests/unbound-grandfathered.txt); wire it as its own .step with a LITERAL STEP_SCRIPT; seed the list by re-deriving the disposition against today''s HEAD (14 unreferenced now; the 2026-09-05 list is stale). Criteria 3 and 4 are met and must not be re-touched. Interchangeable Linux tooling: lenovinha or yoga by the operator''s routing, not macuahuitl.'
+    ts: "2026-09-14T19:49:45Z"
+    host: macuahuitl
+
+events:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    event:
+      type: note
+      ts: "2026-09-14T19:49:45Z"
+      host: macuahuitl
+      summary: |-
+        reconciliation: two criteria met, the scan itself is still missing

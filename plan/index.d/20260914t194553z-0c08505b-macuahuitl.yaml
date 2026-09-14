@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: coordinator-dispatch-has-no-credential-preflight
+    field: next_action
+    value: 'What is LEFT (2026-09-14, macuahuitl): (1) criterion 2 needs one live dispatch to a host whose upstream is actually blocked: at dispatch time, observed to stop before doing any work — measured, not narrated; the next host that reports a blocked: preflight IS that measurement, paste it here. (2) criterion 4: the caller count of one is not accepted as the end state. The mechanical caller belongs in scripts/land-on-platform-branch.sh immediately before its push — re-run check-credential-channel.sh and refuse with the guard''s own verdict and remedy (which, once 1189-2ra5 lands, says blocked:gh-keyring-locked → UNLOCK, not re-auth) instead of refused:land:auth-failed after a green gate; that closes the mid-cycle shape lenovinha hit today (preflight ok at 18:52Z, keyring locked by 19:37Z, 993s of gate spent before the refusal). Pair it with 1189-2ra5 on lenovinha, who has the locked host to measure on; a fat Linux host otherwise. Then set completed with the caller count (2) and the observed stop.'
+    ts: "2026-09-14T19:45:53Z"
+    host: macuahuitl
+
+events:
+  - packet_id: coordinator-dispatch-has-no-credential-preflight
+    event:
+      type: note
+      ts: "2026-09-14T19:45:53Z"
+      host: macuahuitl
+      summary: |-
+        reconciliation: two criteria met, two not; the mechanical caller named

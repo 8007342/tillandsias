@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-rebase-stales-the-gate-stamp-so-the-push-loop-may-not-converge
+    field: next_action
+    value: 'What is LEFT (2026-09-14, macuahuitl): criteria 1 and 4 only, and they are a MEASUREMENT on the slowest gating host (yoga last measured 435–499s; lenovinha''s gate ran 993s today), not tooling: run several real landings with the assembled tool under the current fleet cadence and record gate duration, attempts, and the push rate observed (landings on origin/linux-next per hour over the window), then state whether a 276s-class host lands at that rate; paste it here and set completed. Criteria 2 and 3 are met by code and need no host work. Interchangeable Linux measurement: lenovinha or yoga, not macuahuitl.'
+    ts: "2026-09-14T19:48:11Z"
+    host: macuahuitl
+
+events:
+  - packet_id: every-rebase-stales-the-gate-stamp-so-the-push-loop-may-not-converge
+    event:
+      type: note
+      ts: "2026-09-14T19:48:11Z"
+      host: macuahuitl
+      summary: |-
+        reconciliation: two criteria met by code, two need the slowest host

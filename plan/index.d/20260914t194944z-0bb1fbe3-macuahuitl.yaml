@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    event:
+      type: note
+      ts: "2026-09-14T19:49:44Z"
+      agent_id: linux-macuahuitl-fable-20260914t194050z
+      host: macuahuitl
+      summary: |
+        Verified by execution on macuahuitl 2026-09-14 (meta cycle 19:09Z, one sonnet reader, checked by the coordinator). Criterion 3 MET: build.sh runs scripts/test-cycle-preflight-cargo-resolution.sh inside the --check block on every land. Criterion 4 MET: scripts/check-litmus-bindings.sh still scans only openspec/litmus-tests (last touched 2026-09-02); ok:litmus-bindings:files=422 bound=406 today. Criteria 1 and 2 UNMET: no check enumerates scripts/test-*.sh for reachability — scripts/audit-guard-activation.sh (bound at 190-1087-h2z9) audits scripts/check-*.sh only (population=130 active=130 orphan=0, the wrong population for this row), and no manual/retired ratchet list exists. The gap is live: an ad hoc rescan today finds 14 test-*.sh referenced by no .step, script, litmus binding or skill — among them test-gate-memory-floor-consumer.sh (1176-fn2p, the coordinator's own, bound in this cycle) and test-inference-mkdir-fatal-1183-j9dk.sh (macbookair's, told). The gate-steps.d migration keeps STEP_SCRIPT literal FOR this row's future scan (build.sh cites 1063-nraf), which is a constraint that keeps the scan possible, not the scan. lenovinha's 2026-09-05 triage (9 live-host, 2 mark-manual, up to 11 fix-first) is nine days stale against today's tree and must be re-derived, not copied.

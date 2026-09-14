@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-credential-channel-reports-a-locked-but-present-keyring-as-missing-no-credential-channel-which-names-re-auth-the-remedy-that-evicts-every-other-host-instead-of-unlock
+    field: status
+    value: in_progress
+    ts: "2026-09-14T19:43:28Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-credential-channel-reports-a-locked-but-present-keyring-as-missing-no-credential-channel-which-names-re-auth-the-remedy-that-evicts-every-other-host-instead-of-unlock
+    event:
+      type: note
+      ts: "2026-09-14T19:43:28Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-14T20:0xZ by linux-lenovinha-claude-20260914t185710z, assigned by the macuahuitl coordinator; NOT YET A CLAIM ANYWHERE BUT THIS HOST — the flip is unpushed while the keyring is locked, so the fleet still sees it ready
