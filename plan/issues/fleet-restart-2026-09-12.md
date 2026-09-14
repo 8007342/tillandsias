@@ -4265,3 +4265,42 @@ stories.
   deliverable was survival across a VM REBUILD, a different lifecycle from
   the smoke's destruction; the cost is a measurement on the row. A
   keep-models knob for smoke runs is one line and the operator's word.
+- **OPERATOR DECISION (2026-09-14): "let's add the keep models flag to our
+  resets."** Filed and claimed 1181-bkem on trunk BEFORE any agent started
+  (control 0), with 1182-2vaz beside it. Shape decided from where the
+  models live (cache_root()/models): Linux keeps them already (the podman
+  reset and the credential clearer never touch ~/.cache/tillandsias/models —
+  the flag is a documented no-op there and the Linux step-2 script now says
+  so in one line); macOS wiped them because both smoke runbooks rm -rf the
+  whole cache dir inline — the destroy moves into scripts/e2e-step2-macos.sh,
+  one source for both runbooks (803-49re), honouring
+  TILLANDSIAS_RESET_KEEP_MODELS=1 with the spared dir NAMED in the residue
+  line so a kept-models run cannot read as a clean room by accident;
+  uninstall.sh --wipe honours it on both; Windows cannot spare weights that
+  live inside the distro's vhdx (806-a4tu) — 1182-2vaz moves them to a
+  host-side mount first, the macOS virtiofs share's shape. Default unchanged:
+  the clean room stays clean (the 2026-09-13 reset ruling); the flag is
+  opt-in per run. Implemented by a three-agent workflow (two sonnet
+  implementers on disjoint files, one opus verifier re-deriving the mutation
+  controls and grepping the flag's reach).
+- **yoga: 1176-fn2p completed at be9f54100 (closed 13aacb6c8, attested
+  3850ece4b), fixture 12/12, both negative controls armed.** Stated on the
+  row so it is not misread as a fix for lenovinha's two kills: THE FLOOR
+  WOULD NOT HAVE CAUGHT THEM — the floor catches the START state and their
+  host had enough memory to begin; it ran out inside clippy, the RUN state,
+  which the OOM post-mortem covers. Floor default 1 GiB MemAvailable (not
+  MemTotal — lenovinha's total was constant across five successful lands and
+  two kills the same day), with an arm asserting the shipped default stays at
+  or under a quarter of a completing host's headroom, so a later tightening
+  reds it. INSTRUMENT LESSON for any host reading a kernel log:
+  `journalctl -k -g <pattern>` prints "No entries" and exits 0 BOTH when the
+  window is quiet and when the user cannot read the kernel journal —
+  identical output for opposite facts; the probe asks whether ANY kernel line
+  is readable before concluding, and degrades to could-not-run otherwise;
+  a post-mortem built on dmesg would silently answer not-OOM on every
+  Silverblue host (dmesg: "Operation not permitted" unprivileged). Three
+  land attempts, all gate-green, two lost to the push race; the floor ran
+  live each time (ok:gate-memory:11654MB available, floor 1024MB). Out of
+  scope by the row: no rung below one job (1047-h88p untouched); the relay
+  lane's stamp requirement (1177-k4jq) still open — handed to yoga by claim
+  flip on trunk after this.
