@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: with-tillandsias-builder-exits-silently-at-the-competing-gate-capture-under-set-e-whenever-a-gate-is-running-so-the-toolbox-property-fixture-reds-inside-ci-full-only
+    order: 1175-wuwr
+    status: ready
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [toolbox, gate, set-e, litmus, release-tier, bash]
+    estimated_hours: 2
+    verifiable_closure: |
+      scripts/test-competing-gate-consumer.sh drives the wrapper's detector block under the wrapper's OWN regime (set -e) with a completion sentinel: with the detector stub exiting 1 the block completes and warns "may be raced"; with it exiting 0 the block completes. Pre-fix result: FAILS — against the shipped capture form (`_cg_out="$(detector)"` then `_cg_rc=$?`) the subshell exits at the assignment and neither the sentinel nor the warning appears (measured 9/11 with exactly the two strict arms red, via TILLANDSIAS_CONSUMER_WRAPPER_UNDER_TEST). Release-tier closure: litmus:ensure-toolbox-include-shape step 5 green inside ./build.sh --ci-full on this host, where it was red in two runs on 2026-09-13.
+    owned_files:
+      - scripts/with-tillandsias-builder.sh
+      - scripts/test-competing-gate-consumer.sh
+      - scripts/test-ensure-toolbox-properties.sh
+    title: |
+      with-tillandsias-builder.sh runs under `set -euo pipefail` and captured the competing-gate detector with a bare assignment, `_cg_out="$(…)"` then `_cg_rc=$?`: when the detector exits 1 — which it does whenever a gate is running in the checkout — the assignment exits the wrapper silently with rc 1, the `_cg_rc=$?` never runs, and the four-code case that 1150-q462 bound never prints. Every host-side dispatch that reached that line inside a running gate died after the toolbox was created and initialised and before the command was dispatched. The toolbox property fixture (777-amku, P1 and P2) was red in two release-tier runs for this and green in every regime without a live gate; the consumer fixture drove the block under `set +e` and could not see it.
+    context: |
+      Diagnosed in the v56.9.13.1 cut. What eliminated the alternatives, in
+      order: the fixture 10/10 standalone on the host and inside the builder
+      container; the full (364/364) and the quick-size (358/358) pre-build
+      litmus green inside the container; the red reproduced only through
+      scripts/local-ci.sh --phase pre-build inside the container; the
+      fixture's new inherited-environment dump diffed EMPTY between the bare
+      and the gated runs (lenovinha's precedent at build.sh:140-172 named the
+      class; yoga predicted "something other than environment"); two
+      fixtures concurrently green; then the raw diagnostic block — the fake
+      toolbox created, dnf/rustup/shims/marker all run, "Initialization
+      complete." printed, the include's ERROR line on stderr, and no
+      dispatch — pointed at the only code between the init and the dispatch,
+      the detector block. yoga's source reading of the include ("rc 1 with no
+      sentence and no call is evidence about the instrument") was right
+      about my first monitor filter, which had hidden the calls.log lines.
+      Fix: `_cg_rc=0; _cg_out="$(…)" || _cg_rc=$?`, the only capture that
+      survives errexit. Regime note for 1132-r4mt (yoga): a wrapper that
+      dies silently at this line whenever another gate is alive is a
+      candidate mechanism for "refuses inside the gate, passes standalone"
+      on any dispatch path that reaches the detector outside a container.
+    exit_criteria:
+      - 'consumer fixture strict arms green post-fix, red on the pre-fix capture form (pre-fix result: FAILS)'
+      - 'litmus:ensure-toolbox-include-shape step 5 green inside ./build.sh --ci-full on macuahuitl'
+      - 'the property fixture diagnoses a red (rc, stderr, calls.log, xtrace) and dumps its inherited env keys per run'
+    events:
+      - type: filed
+        ts: "2026-09-13T23:58:15Z"
+        agent_id: "linux-macuahuitl-fable-20260913t235815z"
+        host: macuahuitl
+        summary: |
+          Filed, claimed and fixed in the 23:41Z meta cycle on macuahuitl as
+          the cut's blocker; the release-tier closure is the re-gate that
+          follows this land.
