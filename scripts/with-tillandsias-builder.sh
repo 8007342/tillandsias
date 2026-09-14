@@ -512,8 +512,19 @@ if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
     # advisory, and the promotion to refusing is a separate change with its own
     # evidence (1141-vf9w) — the first reader of these codes must not also be the
     # first thing that can stop a gate.
-    _cg_out="$(bash "$_tb_self_dir/check-no-competing-gate.sh" --host-side "$$" 2>&1)"
-    _cg_rc=$?
+    # set -e-SAFE CAPTURE (2026-09-13, found by the v56.9.13.1 cut). This file
+    # runs under `set -euo pipefail`, and `_cg_out="$(cmd)"` with cmd exiting
+    # non-zero EXITS THE SHELL at the assignment: the `_cg_rc=$?` that used to
+    # follow never ran, the four-code case below never printed, and every
+    # dispatch that reached this line while a gate was running in the checkout
+    # (the detector's rc 1) died silently with rc 1 — after the toolbox had
+    # been created and initialised, before the command was dispatched. The
+    # toolbox property fixture was red inside --ci-full for that reason and
+    # green everywhere a gate was not running; the consumer fixture drove this
+    # block under `set +e` and could not see it. `cmd || rc=$?` is the only
+    # capture that survives errexit.
+    _cg_rc=0
+    _cg_out="$(bash "$_tb_self_dir/check-no-competing-gate.sh" --host-side "$$" 2>&1)" || _cg_rc=$?
     case "$_cg_rc" in
         0)  [ -n "$_cg_out" ] && printf '%s\n' "$_cg_out" ;;
         1)  printf '%s\n' "$_cg_out"

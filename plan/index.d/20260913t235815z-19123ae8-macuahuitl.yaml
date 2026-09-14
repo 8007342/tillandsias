@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: with-tillandsias-builder-exits-silently-at-the-competing-gate-capture-under-set-e-whenever-a-gate-is-running-so-the-toolbox-property-fixture-reds-inside-ci-full-only
+    event:
+      type: progress
+      ts: "2026-09-13T23:58:15Z"
+      agent_id: linux-macuahuitl-fable-20260913t234100z
+      host: macuahuitl
+      summary: |
+        Fixed at 47968400f: `_cg_rc=0; _cg_out="$(detector)" || _cg_rc=$?` in with-tillandsias-builder.sh; the consumer fixture gains two strict-mode arms (set -e with a completion sentinel) and the wrapper-under-test seam; measured 11/11 post-fix and 9/11 on the pre-fix capture form with exactly the strict arms red. The property fixture (777-amku) carries the diagnostic that found it: rc, the include's streams, the fake's call log, an xtrace re-run, and a keys-only inherited-environment dump per run. Release-tier closure pending the ci-full re-gate on this land.
