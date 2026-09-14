@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cross-branch-claim-check-reflects-a-hosts-own-claim-back-at-it-as-a-siblings
+    event:
+      type: implemented
+      ts: "2026-09-14T09:46:54Z"
+      agent_id: linux-yoga-claude-20260914t094653z
+      host: yoga
+      summary: |
+        IMPLEMENTED: the cross-branch check now subtracts the reader's own authorship, and says the work is theirs to resume.
+
+        THE DEFECT, in lenovinha's words and mine: their own in_progress claim, merged into osx-next and windows-next by routine integration, came back as "A sibling branch holds this packet in_progress ... It is NOT yours to implement." 1071-adhj then sat in_progress for a day — hidden from ready and from burndown — with all four criteria met and the work already relayed. The tool is authoritative on exactly that question, so the host repeated the verdict to the coordinator as fact. That is correct behaviour toward a tool that is confidently wrong.
+
+        THE NEW VERDICT IS AN OK, NOT A REFUSAL: when every branch holding the claim records THIS host as the claimant, it prints own-claim-reflected:<packet>:<branch> per branch, exits 0, and says plainly that the work is the reader's to resume or to release. A refusal with nicer words would have left the same day of stranded work.
+
+        AMBIGUITY FAILS TOWARD THE OLD VERDICT, and that is the safety property. An empty, unreadable or unrecognised host is NOT "mine": it falls to claimed-elsewhere, because treating a sibling's claim as your own is 814-iyu7 — the failure this whole file exists to prevent. An arm pins it.
+
+        BOTH VOCABULARIES COUNT AS ME, and 1012-hu7d is stacked on this row for exactly that reason: a claim written with --host yoga and a later fragment written without it (falling back to TILLANDSIAS_HOST_KIND, the platform bucket `linux`) are the same host wearing two labels, and no query keyed on one returns the other. _is_me accepts the node name, TILLANDSIAS_WORKSTATION, TILLANDSIAS_HOST_KIND and the platform constant. A reader that knew only one of its own names would still be told to leave its own work alone.
+
+        ATTRIBUTION IS A SEPARATE QUESTION FROM STATUS, and the file already says why the status one goes through the binary (635-i6vm: status is LWW and a later fragment can release a claim, so raw fragment presence is a different question). The status still goes through the fold; attribution takes the status entry with the greatest ts. Both are ts-LWW so they agree, and where they might not, the comparison falls to the old verdict.
+
+        FIXTURE 10/10, four new arms. The seam TILLANDSIAS_XBRANCH_CLAIM_HOST forces the attribution because the arms drive sibling folds through a STUB binary against the REAL origin refs — a fixture cannot plant a fragment on origin/osx-next, and one that tried would be testing git. THE SEAM IS NOT THE ONLY COVERAGE: a separate arm runs the parser itself against a planted fragment pair and asserts it takes the greater ts, so neither half rests on the other.
+
+        THE CLOSURE'S FALSIFICATION, run the way the row asks: with the PRE-FIX checker in place the new arm reds by name — "the reader's own reflected claim must not be reported as a sibling's" — and the parser arm reports that it could not extract the function and therefore ASSERTED NOTHING, rather than passing. Both negative controls pass on the pre-fix code too, which is right: they are controls for the fix, not for the defect.
+
+        A FIXTURE DEFECT CAUGHT ON THE WAY: the parser arm first did `. "$CHECK"`, which runs the script with no arguments, hits its usage path and exits before defining anything — so it reported "the parser did not read the winning entry's host" about a function that had never been defined. It extracts by markers now and fails by name when they move.
+
+        NOT DONE, and named because the row asks: the sweep for other cross-branch verdicts that enumerate branches without excluding self. This file's other enumerations (the batch loop and the existence scan) already skip $CURRENT and do not attribute, so neither can reflect a claim back. Nothing else in scripts/ folds sibling branches to attribute a claim.
