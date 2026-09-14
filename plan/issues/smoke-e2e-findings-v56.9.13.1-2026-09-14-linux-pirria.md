@@ -160,6 +160,8 @@ carries `warn:litmus-degraded-no-yq` and should say so.
 
 ### Work Packet: smoke-finding/clear-vault-credentials-cannot-remove-subuid-owned-vault-data
 
+**ROUTED — this finding is now order `1188-vixu` on trunk (filed by the macuahuitl coordinator at 49e6eab89; p1, linux, child of 900-z3kv). The row is authoritative; this section is the evidence it was filed from.**
+
 - id: `smoke-finding/clear-vault-credentials-cannot-remove-subuid-owned-vault-data`
 - owner_host: linux
 - capability_tags: [vault, podman, release, testing]
@@ -204,6 +206,8 @@ carries `warn:litmus-degraded-no-yq` and should say so.
 
 ### Work Packet: smoke-finding/smoke-evidence-dir-is-never-cleared-between-runs
 
+**ROUTED — this finding is now order `1189-7yvu` on trunk (49e6eab89; any host). The row is authoritative; this section is the evidence it was filed from.**
+
 - id: `smoke-finding/smoke-evidence-dir-is-never-cleared-between-runs`
 - owner_host: any
 - capability_tags: [testing, release, fail-loud]
@@ -237,6 +241,8 @@ carries `warn:litmus-degraded-no-yq` and should say so.
     host: linux
 
 ### Work Packet: smoke-finding/cold-room-smoke-lane-can-never-reach-committable-work
+
+**ROUTED — this finding is now order `1190-swen` on trunk (49e6eab89), and the coordinator has RULED on it: option (a). The guard-stop IS §4's expected outcome on a cold host — a cold Vault holds no GitHub token by design, so the lane's claim after a reset is "the forge comes up, the guard fires, nothing is claimed or committed, the tree stays pristine". No scoped token after §3: handing the lane a credential would test a different machine than the one the smoke exists to prove. The ruling is written into the row's title and context, and §4 of the runbook gets the sentence. The `next_action` below offered both options and is superseded on that point.**
 
 - id: `smoke-finding/cold-room-smoke-lane-can-never-reach-committable-work`
 - owner_host: linux
@@ -292,7 +298,8 @@ carries `warn:litmus-degraded-no-yq` and should say so.
 ## Green observations worth keeping
 
 - **1134-u934 is fixed in this release, and this lane can say so from a
-  measurement rather than from a changelog.** The vault container's process tree
+  measurement rather than from a changelog** — the measurement is now carried as
+  a note on that row (49e6eab89). The vault container's process tree
   at §3b was still `1 bash / 10 vault / 11 tee` — the exact shape the packet
   describes — and it stopped in **1s with exit 0** against a 10s grace. The packet's
   pre-fix state was a full 30s grace burned and `Exited (137)`. The row for
