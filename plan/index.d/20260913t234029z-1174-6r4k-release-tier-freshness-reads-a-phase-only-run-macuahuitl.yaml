@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-release-tier-freshness-reads-the-last-run-in-the-index-whatever-its-phase-so-a-green-phase-only-local-ci-run-skips-the-next-daily-release-tier-exercise
+    order: 1174-6r4k
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [release-tier, local-ci, freshness, bash]
+    estimated_hours: 1
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the tier discriminator in the freshness check and its fixture arm. Future litmus: an arm in scripts/test-release-tier-freshness.sh (exists; extend it); the claimer writes it in the same commit and moves this text into verifiable_closure: check-release-tier-freshness.sh selects the newest run in target/convergence/check-logs.jsonl whose records cover the FULL tier (pre-build AND post-build AND runtime phases, or a record carrying dispatch=ci-full), never a run whose only phase is one of them; a phase-only run newer than the last full run is reported as ignored by name (skip:phase-only-run:<ci_run_id>) and the verdict comes from the last full run (pre-fix result: FAILS — macuahuitl 2026-09-13 23:39Z: a diagnostic `scripts/local-ci.sh --phase pre-build` run wrote local-ci-20260913T233926Z as the newest run and the check reads only LAST_RUN's statuses and timestamp, so a green partial run would read fresh:release-tier and the 09:09 daily exercise (890-27mv) would skip the real tier); NEGATIVE CONTROL: a full run that is red still reads red:release-tier with its failing count."
+    owned_files:
+      - scripts/check-release-tier-freshness.sh
+      - scripts/test-release-tier-freshness.sh
+    title: |
+      check-release-tier-freshness.sh reads the LAST run in target/convergence/check-logs.jsonl, counts its pass/fail records and takes its timestamp from the ci_run_id, with no tier discriminator: a phase-only `scripts/local-ci.sh --phase pre-build` run (the cheapest way to reproduce a gate-only red, which is what it was used for tonight) becomes the release-tier answer. If it is green, the daily 890-27mv exercise reads fresh and skips the real ci-full; if it is red, it reports a red the tier did not produce. local-ci.sh writes the index at a fixed path (CHECK_LOG_INDEX="$SIGNATURE_DIR/check-logs.jsonl"), so the reader's TILLANDSIAS_CHECK_LOG_INDEX override cannot isolate a diagnostic run.
+    context: |
+      Found while diagnosing the v56.9.13.1 cut's red (litmus:ensure-toolbox-
+      include-shape step 5, red only inside --ci-full): the cheap reproduction
+      is the gate's own phase through local-ci.sh, and running it appends a
+      partial run to the index the freshness guard reads. Tonight the ci-full
+      re-gate that follows appends a newer full run, so the record heals
+      itself; the defect is that it had to. Two fixes, both wanted: the reader
+      selects by tier coverage (records exist for every phase of the tier, or
+      a dispatch=ci-full marker written by build.sh's _stamp_dispatch), and
+      the writer honours the same TILLANDSIAS_CHECK_LOG_INDEX override the
+      reader does, so a diagnostic run can be pointed away from the record.
+    exit_criteria:
+      - 'newest run is phase-only and green, last full run is red: verdict red:release-tier from the full run, plus skip:phase-only-run:<id> (pre-fix result: FAILS — reads fresh from the partial run)'
+      - 'NEGATIVE CONTROL: newest run is full and red: red:release-tier with its failing count, unchanged'
+      - 'local-ci.sh honours TILLANDSIAS_CHECK_LOG_INDEX for its writes'
+    events:
+      - type: filed
+        ts: "2026-09-13T23:40:29Z"
+        agent_id: "linux-macuahuitl-fable-20260913t234029z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator mid-cut, after a diagnostic phase-only run
+          became the newest record the daily exercise would read; the ci-full
+          re-gate that follows restores a full run on top, and this row is
+          why that should not have been necessary.

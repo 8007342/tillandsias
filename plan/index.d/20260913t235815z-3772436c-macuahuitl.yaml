@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: with-tillandsias-builder-exits-silently-at-the-competing-gate-capture-under-set-e-whenever-a-gate-is-running-so-the-toolbox-property-fixture-reds-inside-ci-full-only
+    field: status
+    value: implemented
+    ts: "2026-09-13T23:58:15Z"
+    host: macuahuitl
+
+events:
+  - packet_id: with-tillandsias-builder-exits-silently-at-the-competing-gate-capture-under-set-e-whenever-a-gate-is-running-so-the-toolbox-property-fixture-reds-inside-ci-full-only
+    event:
+      type: progress
+      ts: "2026-09-13T23:58:15Z"
+      host: macuahuitl
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: linux-next@47968400f
+  - packet_id: with-tillandsias-builder-exits-silently-at-the-competing-gate-capture-under-set-e-whenever-a-gate-is-running-so-the-toolbox-property-fixture-reds-inside-ci-full-only
+    event:
+      type: note
+      ts: "2026-09-13T23:58:15Z"
+      host: macuahuitl
+      summary: |-
+        implemented; completed when the re-gate shows litmus:ensure-toolbox-include-shape step 5 green inside --ci-full

@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: investigated
+      ts: "2026-09-13T23:50:43Z"
+      agent_id: linux-yoga-claude-20260913t235043z
+      host: yoga
+      summary: |
+        ARM 5 EXHIBITED, and it needs neither a gate nor a ruby. Plus a NEGATIVE SAMPLE with ps, and a correction to my own refinement 3 on this row.
+
+        1. ARM 5, DEMONSTRATED DIRECTLY (exit criterion 4, arm 5 half). I ran ./scripts/archive-plan-packets.sh --check on a clean tree and killed it mid-run (SIGKILL by pid, with an explicit exclusion of my own shell). The worktree afterwards carried plan_tmp/ (hundreds of files), plan_tmp_addressed.txt, plan_tmp_addressed_raw.txt, plan_tmp_live.txt, plan_tmp_orphans_before.txt, plan_tmp_ready_before.txt and scripts/archive-plan-packets-check.rb — exactly the paths arm 5 refuses on. The tree was verified clean immediately before, and I removed all seven afterwards.
+           So arm 5's trigger is "an archiver run was interrupted", full stop: no gate, no stray, no absent ruby. ARMS 4 AND 5 ARE INDEPENDENT SUBJECTS — one stray can produce both, but arm 5 does not need one, and nothing here shows either causes the other. That is criterion 4 answered for arm 5's side; arm 4's rc=3 mechanism (criterion 2) stays open.
+
+        2. A TRAP IN THE EVIDENCE ITSELF, recorded because I nearly misread it: plan_tmp's mtime is INHERITED FROM THE COPY SOURCE, so a directory created seconds ago stats as hours old (12:37 local on a tree it was created on at 16:50 local). Anyone dating an interruption from that mtime — including anyone reconstructing the 2026-09-12 night — will place it hours early.
+
+        3. NEGATIVE SAMPLE, the row's standing instruction, now satisfied for the first time. Full in-situ ./build.sh --check with TILLANDSIAS_FORCE_CHECK=1: GATE_RC=0, and the fixture green, "PASS: archiver could-not-run on absent ruby 5/5 (965-sxec)". ps taken AT the fixture step (not before it), by name rather than by an awk field index — my first two capture attempts matched nothing and printed an empty file, which is the constructed-pattern-returns-zero trap and looks exactly like "no processes".
+             1336238 ppid 1336237  bash build.sh --check                       host side
+             1337112 ppid 1336238  toolbox run --container tillandsias-builder
+             1337163 ppid 1337112  podman ... exec
+             1337185 ppid 1337182  bash .../build.sh --check                   container side, conmon-parented
+             1454571 ppid 1454570  bash ./scripts/archive-plan-packets.sh --check
+             1454868 ppid 1454571  /usr/bin/ruby-mri ... archive-plan-packets-check.rb
+           Exactly one container-side gate, its host-side launcher alive, no stray. Third consecutive clean in-situ pass on yoga, and the first with a ps beside it, so it is the first that can serve as a negative for the surviving-gate claim.
+
+        4. CORRECTION TO MY OWN REFINEMENT 3, which is on this row in my hand. I wrote "THE SIGNATURE IS ppid, NOT PRESENCE ... what distinguishes a stray is that its ppid is conmon rather than the podman exec that launched it". MEASURED ABOVE: a perfectly healthy running gate is conmon-parented TOO (1337185's parent is conmon 1337182, never the podman exec 1337163 that launched it). Conmon-parentage is how toolbox dispatch works, not how a stray looks, so it discriminates nothing on its own. THE DISCRIMINATOR IS WHETHER THE HOST-SIDE podman exec / toolbox run FOR THAT CONTAINER-SIDE PID STILL EXISTS. A protocol built on my sentence would have recorded every healthy gate as a stray.
+
+        5. THE LOCUS ASYMMETRY, now concrete rather than inferred. Invoked from the host shell the archiver RE-EXECS into the builder (toolbox run -> podman exec observed in the tree above the killed run); invoked in-gate, already inside, it does not. And /usr/bin/ruby-mri IS present in the container, so the in-gate locus does not lack ruby. The asymmetry is real and remains unexcluded for arm 4, but it is not an absent-tool story on this host.
+
+        6. AN OBSERVATION I CANNOT YET EXPLAIN, stated as one. Eight idle /bin/bash -l processes were parented by conmon in the builder container, cwd crates/tillandsias-headless, no children, etimes 2h02m to 4h30m. A clean dispatch does NOT leak one: with-tillandsias-builder.sh true measured 11 before, 11 after, 11 after three seconds. So their origin is not established and I am not naming a mechanism for them; recorded so the next cycle can count them rather than rediscover them.
