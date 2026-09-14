@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    field: next_action
+    value: 'PART 1 IS DONE at d1a9516cc: four predicates, 708 files scanned, 95 candidates, 3 real, 92 false positives, 3 fixed — (a) tier 2 real (litmus-cycle-batch-triage-shape, litmus-selector-urgency-not-inert-shape, both pinned on executing command lines only), (b) 0 real, (c) 0 real which confirms 51c0ad583''s sweep closed, (d) 1 real and it was mine (test-claims-across-branches arm 2b used hostname -s, absent in the builder). LEFT: PART 2 ONLY, the closure artifact, and it needs a host yoga is not — the AT-RISK probe prints SAFE here and TILLANDSIAS_HOST_TIER is unset, so esmeraldinha or pirria must run the two litmus specs and paste the counts plus the probe output.'
+    ts: "2026-09-14T11:59:51Z"
+    host: yoga
+
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-14T11:59:51Z"
+      host: yoga
+      summary: |-
+        part 1 landed; part 2 left with the host requirement measured rather than assumed
