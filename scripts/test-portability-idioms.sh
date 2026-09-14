@@ -122,11 +122,22 @@ printf '%s\n' "$OUT" | grep -qE 'bump-version\.sh:[0-9]+' \
     || ok "DIALECT BRANCH: an idiom inside an explicit GNU/BSD branch is not flagged"
 
 # AND THE CONTROL: the window is BOUNDED, so a file that branches for ONE
-# idiom does not get blanket immunity. test-source-slice-bounds.sh has bare
-# sed -i and no dialect probe near it; it MUST still be named.
-printf '%s\n' "$OUT" | grep -qE 'test-source-slice-bounds\.sh:[0-9]+' \
-    && ok "DIALECT BRANCH control: a bare idiom with no nearby probe IS still flagged" \
-    || bad "DIALECT BRANCH control: the window is swallowing unguarded code"
+# idiom does not get blanket immunity — a bare idiom with no dialect probe
+# near it MUST still be named. CONSTRUCTED, not pinned to a live file: this
+# control used to name test-source-slice-bounds.sh, and the daily release-tier
+# exercise of 2026-09-14 found it red because that file had been FIXED the
+# evening before (1135-z8gn) — the control required the tree to keep the
+# defect the guard exists to find. The idiom is assembled at runtime so this
+# file does not carry its subject as a literal (the same reason as _D below).
+_I=i
+_dw="$(mktemp -d "$ROOT/target/plan-scratch/portability-dialect.XXXXXX" 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/portability-dialect.XXXXXX")"
+mkdir -p "$_dw/scripts"
+printf '#!/usr/bin/env bash\nsed -%s "s/a/b/" "$1"\n' "$_I" > "$_dw/scripts/bare-idiom.sh"
+_dout="$(TILLANDSIAS_PORTABILITY_ROOT="$_dw" bash "$GUARD" 2>&1)"
+rm -rf "$_dw"
+printf '%s\n' "$_dout" | grep -qE 'bare-idiom\.sh:[0-9]+' \
+    && ok "DIALECT BRANCH control: a bare idiom with no nearby probe IS still flagged (constructed tree)" \
+    || bad "DIALECT BRANCH control: the window is swallowing unguarded code (constructed bare-idiom.sh not named)"
 
 _D=d   # split literal; see the note at the grep below
 # COUNTERPART COMPLETENESS: `date -j` / `-jf` is the BSD PARSE form and is what
