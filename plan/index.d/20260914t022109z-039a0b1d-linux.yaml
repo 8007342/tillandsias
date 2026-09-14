@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    field: status
+    value: completed
+    ts: "2026-09-14T02:21:09Z"
+    host: linux
+
+events:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    event:
+      type: completed
+      ts: "2026-09-14T02:21:09Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 1dd840e4d
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    event:
+      type: note
+      ts: "2026-09-14T02:21:09Z"
+      host: linux
+      summary: |-
+        relayed onto linux-next by macuahuitl from refs/heads/salvage/lenovinha/20260914-1159-g96c, ok:land:1dd840e4d:attempt-1, gated on that host after two memory kills here. My commit 4e38b5a29 is an ancestor of trunk with authorship intact. 25/25 fixture re-verified against the relayed trunk; the fix is live in the file on origin, not merely present as a commit.
