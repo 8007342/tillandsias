@@ -3777,3 +3777,131 @@ stories.
   report since; queue heads unchanged (776-jcf3, 804-deux, 793-zumy). Audit
   rows=23 stems=23, every host NOT-PASTING (standing). Salvage refs: nothing
   to delete; the one-pass grace rule applies to the next one.
+- **Correction to pass 13's label.** The entry and its loop-status heading say
+  22:41Z; the pass ran at 22:12Z (the fragment's file stamp, 221221z, and its
+  --ts are right). The :41 cron fired at 21:41Z and its prompt was delivered
+  when my previous turn ended, thirty minutes later — cron prompts queue behind
+  a long turn, so a pass's real time is the delivery time on the clock, never
+  the cron's minute. Label by the clock.
+- **esme reports a standing approval from the operator, in their words:
+  "destructive tests requested by Macuahuitl are approved by me."** Scope as
+  esme recorded it, not widened: destructive runs the coordinator requests on
+  esme; a peer's request or esme's own judgement still goes to the operator.
+  esme restated the blast radius to the operator BEFORE they confirmed, and
+  corrected their own first telling: the Windows row of the curl-install
+  smoke does not podman-reset, it runs `wsl --unregister tillandsias` —
+  DESTROYED: the enclave guest (Vault sealed store, mirrors, images), caches,
+  vault-shamir-share-v1 and vault-root-token-v1 in Credential Manager
+  (tillandsias-vm-uuid kept); SURVIVES: `tillandsias-build` (gate
+  environment, cargo cache, models, the ollama serve). The Vault credentials
+  are RE-PROVISIONED, not rebuilt. Coordinator's reading, stated to esme and
+  here for the operator to correct: for runs I request, the standing approval
+  is the per-run word given ahead of time, so 1004-vsh2's no-pause clause
+  applies at the reset step; the workstation courtesies stay (blast-radius
+  block first, salvage before reset, hard stop at anything reaching
+  tillandsias-build or leaving the row's Windows lane). No run requested yet:
+  the run is the Windows smoke of the NEXT daily release, serving 1171-ccf2's
+  install-half closure and the routine smoke in one destruction.
+- **Windows lane hazard (yolanda, measured): the land tool orphans its gate
+  inside WSL when the outer process is killed.** The harness killed the land
+  for low memory (542 MB free of 15.9 GB); `build.sh --check` kept running
+  inside the distro for 30 more minutes, exited 0 and wrote the gate stamp;
+  the land script that would have read the exit and pushed was dead. Cost:
+  2476 s of gate and ~6.5 GB of vmmemWSL held for no landing — and vmmemWSL
+  does not return memory on its own, so the orphan is what keeps the host in
+  the state that caused the kill; the floor host is likelier to hit it and
+  likelier to hit it again. Silent both ways: no landing, and a log that
+  reads as a gate that stopped mid-phase. Decision: ONE row, filed by
+  yolanda — the land tool ADOPTS an existing valid stamp for the same tree
+  digest instead of re-gating (line 134's own debt), turning the orphan into
+  a free landing on the next attempt; "die with the parent" would discard a
+  green gate either way. Three instrument failures in the same hour, same
+  class (a check that returns cleanly has not answered the question): `pgrep`
+  does not exist under Git Bash, so `until ! kill -0 $(pgrep -f …)` declared
+  the land finished on its FIRST pass (empty substitution, `kill -0 ""`
+  fails, `! fail` is true — fails OPEN); `ps -W` cannot see into the VM, so
+  a survivor check reported zero cargo processes while cargo ran (fails
+  OPEN); `pgrep -f "build.sh --check"` under `sh -c` matched its own wrapper
+  and reported still-running after the gate was gone (fails CLOSED). Rule
+  carried: `command -v` the instrument before any liveness loop; an absent
+  instrument and an absent process produce the same empty string.
+- **macbookair (1135-z8gn, the sed -i class): a mutation arm that PASSES on
+  macOS while its mutation silently never applies.** BSD `sed -i` reads the
+  next argument as a backup suffix, so `sed -i 's/X/Y/' "$PRE"` binds the
+  expression as the suffix and parses the file path as the script ("invalid
+  command code f" on the leading /var); scripts/test-mode-only-regression-
+  887-bz88.sh then asserts the reconstructed pre-fix guard passes the incident
+  tree, gets the answer it wanted, and prints "arm 3 has teeth" — rc 0, on
+  every macOS run. Its own `bad` branch anticipated "arm 3 may pass for the
+  wrong reason". The other four sed -i sites (test-gate-stamp-memoization,
+  test-hash-image-sources, test-source-slice-bounds ×2) fail LOUD (rc 1 with
+  the sed error visible); only the mode-only one fails open. Fix shape agreed:
+  write through a temp file (both dialects agree) AND every mutation arm
+  proves the mutant differs before asserting the verdict — the 829-dkuc rule
+  "prove the diff non-empty" placed in the arm, not the author's memory.
+  Second advisory finding for 1130-i6xj, confirmed by execution: check-
+  portability-idioms.sh counts MENTIONS, not actions — three flagged sites in
+  test-litmus-mutation-arm-guard.sh are heredoc fixture data or a `bad`
+  message string in a fixture whose whole subject (901-jtvi) is "a comment
+  naming sed -i is not a caller"; of 9 sed -i reported, 5 are real. Same shape
+  as 1169-zw44 (the dead-env detector reading its own comments as reads).
+- **macbookair: 1135-z8gn sed -i executed sites landed osx-next 5d93b196a
+  (claim released 0fbe26838, MO-FULL 8b541db09); 1174-jd8n filed** (the
+  portability advisory counts mentions, not actions; closure requires the
+  over-reported fixture to report zero AND the advisory's own fixture to keep
+  its deliberate subjects, so a file-name exemption cannot satisfy it). The
+  fail-open mutation arm is fixed both ways: temp-file form at all five
+  executed sites AND the arm proves the mutant differs (cp to $PRE.premutation,
+  cmp -s, bad() if identical) before asserting — falsified by a no-op mutation
+  (rc 1 "mutation did not apply") and restored (rc 0 with the teeth line
+  back). Baseline loud-fail 12 → 7. Left, not folded in: scripts/test-gate-
+  stamp-memoization.sh exits 1 on macOS on `combined dispatch: memo_taken=no
+  rc=2 (want 124=still working)`, byte-identical before and after their
+  change; wants a timeout exit code, so plausibly `timeout` differing on that
+  host. The count lesson, stated by the row that keeps teaching it: sed -i
+  went 9 reported → 5 real, the fourth consecutive downward revision after
+  someone READ what the pattern matched; a count converges by being read,
+  not by being re-run. Relay of osx-next waits for the cut's back-merge.
+- **yoga: 1132-r4mt advanced at 191d606db (MO-FULL 90dcbbe07), claim released,
+  criteria 2 and 3 open.** Arm 5 exhibited directly: killing
+  archive-plan-packets.sh --check mid-run on a clean tree leaves plan_tmp/,
+  five plan_tmp_*.txt and scripts/archive-plan-packets-check.rb with no gate,
+  no stray and no absent ruby involved; arms 4 and 5 are independent subjects.
+  CORRECTION TO THE FLEET'S STRAY PROTOCOL, yoga's own sentence retracted by
+  measurement: conmon parentage is how toolbox dispatch works, not how a stray
+  looks — a healthy running gate's container-side build.sh has parent conmon
+  while its launcher chain (toolbox run → podman exec) is alive. The
+  discriminator is whether the HOST-SIDE podman exec for that container-side
+  pid still exists. Anyone applying the earlier wording would have recorded
+  every healthy gate as a stray; the skills-audit proposal for
+  meta-orchestration carried that wording and is corrected before landing.
+  Two instrument notes: plan_tmp's mtime is inherited from the copy source
+  (it stats hours old the moment it is created, so dating an interruption
+  from it places it early), and two ps captures matched an awk field index
+  instead of a name, wrote an empty file, and read as "no stray processes".
+  Unexplained, flagged: eight idle conmon-parented `/bin/bash -l` in yoga's
+  builder container, cwd crates/tillandsias-headless, 2–4.5 h old, no
+  children; a clean dispatch leaks none.
+- **Coordination pass 00:12Z 2026-09-14 (pass 14; the :41 cron delivered
+  31 minutes late behind the cut's diagnosis).** Relays HELD under the cut
+  freeze, both carrying code: osx-next +5 (macbookair, 1135-z8gn's sed -i
+  slice with the mutation-arm fix, claim released, attested) and windows-next
+  +3 (yolanda, 1171-ccf2: the Windows release carries tillandsias.exe and the
+  install dir becomes a probe candidate). Both relay in one land after the
+  stage-2 back-merge, so the cut base stays the tree the release gate
+  verified plus the wrapper fix that unblocks it. Trunk moved +6 under the
+  freeze, all plan-only as agreed: yoga's 1132-r4mt claim, advance and
+  attestation, lenovinha's 1159-g96c claim. Stale rows
+  `ok:stale-ready-rows:89/509`, candidates unchanged, none handed. Audit
+  rows=23 stems=23. Hand-offs: none — every capable host is on its own cron
+  or holding a local commit for the all-clear; the floor has nothing
+  floor-shaped until the cut publishes (esme's smoke). NEW HAZARD, measured
+  while diagnosing the cut: two `scripts/local-ci.sh --phase pre-build` runs
+  in one checkout collide on SHARED /tmp paths — the probe-usage determinism
+  check tees /tmp/probe-usage-determinism-corpus.log from both, and reported
+  "more than one verdict over the full corpus" in both concurrent runs while
+  the lone release gate was green on it; the second run's pre-build litmus
+  also slowed the first by ~2×. A local-ci run is a gate for contention
+  purposes even when it holds no lock; one per checkout. The cut's red is
+  diagnosed and fixed (1175-wuwr, the wrapper's competing-gate capture under
+  set -e); the land, attestation and re-gate follow.
