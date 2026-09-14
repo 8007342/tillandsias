@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    event:
+      type: progress
+      ts: "2026-09-13T22:30:18Z"
+      agent_id: linux-lenovinha-opus5-20260913t223018z
+      host: linux
+      summary: |
+        IMPLEMENTED, HELD LOCAL during the v56.9.13.1 freeze. 25/25. Not pushed.
+
+        MY OWN EXIT CRITERION 1 WAS UNSAFE AS WRITTEN AND I AM AMENDING IT. I wrote
+        "a host with in-guest and windows-host rows, run from a bare-metal-deriving
+        context, does NOT answer due:no-capability-row" — full stop. Implementing that
+        literally would have REGRESSED 850-bif2. A forge derives in-guest and very often
+        has no in-guest row yet; `due:` is exactly how it learns to publish, and that
+        packet exists because the forge had never once been asked. A fix that only
+        asked "is there a row at my locus" would have silenced the one prompt the
+        capability matrix was built to produce.
+
+        THE DISCRIMINATOR IS HOW THE LOCUS WAS DERIVED, not whether a row exists at it.
+        host-capability-probe.sh:142-149 decides three ways and only two are ASSERTIONS:
+
+            TILLANDSIAS_HOST_KIND=forge  -> in-guest      DECLARED
+            probe reports kind windows   -> windows-host  DECLARED
+            anything else                -> bare-metal    FALLBACK
+
+        A declared locus is a real place that should publish. A fallback locus is the
+        else-arm answering because nothing else did, and it is the only one that can be
+        wrong about where it is. So: FALLBACK LOCUS + ROWS AT OTHER LOCI = report, never
+        prompt. New verdict `unavailable:locus-not-published`, rc 2, which fits the
+        existing `^unavailable:[a-z-]+$` grammar with no change; the locus and the
+        reason go to stderr.
+
+        THIS READS ONE BIT OF THE PROBE'S RULE AND I WANT THAT ON THE RECORD RATHER THAN
+        BURIED. It asks "was this derived or asserted", which the fold does not record
+        anywhere. It does NOT re-derive the locus — row_locus still reads that off the
+        live fold exactly as 1130-8zxn requires, and 704-zcgi's warning is about
+        re-implementing the derivation, not about consulting the same input. The proper
+        fix is for the probe to stamp provenance on the row it publishes
+        (locus_source: declared|fallback), which is a fragment-schema change touching
+        crates/ and is not this packet.
+
+        THREE ARMS, AND THE SECOND AND THIRD ARE WHY THE FIRST IS SAFE:
+          23  fallback bare-metal + rows at in-guest and windows-host -> unavailable,
+              rc 2. esmes shape. Pre-fix: due:, whose remedy mints a third row.
+          24  NEGATIVE CONTROL, load-bearing: a forge DECLARING in-guest, with only a
+              bare-metal row committed, is STILL asked to publish. 850-bif2 preserved.
+          25  NEGATIVE CONTROL: a windows-kind probe declaring windows-host is still
+              asked to publish.
+
+        TEETH, both directions:
+          restore the unconditional due:        -> arm 23 FAILS, 24 and 25 pass
+          suppress regardless of declaration    -> arms 12, 24 and 25 ALL FAIL
+
+        A FIXTURE DATA BUG MY CHANGE EXPOSED, and it is the evenings lesson one more
+        time. Arm 12 went red on first run. The cause was not my change: the `_row`
+        helper hardcoded `kind:linux` for EVERY locus, producing
+        `locus:windows-host kind:linux` — a pairing NO PROBE CAN EMIT. Both real
+        Windows hosts carry windows-host/kind:windows and in-guest/kind:linux; I checked
+        the fold rather than assuming. The maker was describing a fleet that does not
+        exist, and it went unnoticed because until now nothing read `kind`. Fixed at the
+        maker: kind tracks locus. A FIXTURE'S DATA MAKER CAN ENCODE NOT ONLY A MISSING
+        SHAPE BUT AN IMPOSSIBLE ONE, and the second only surfaces when some new code
+        finally reads the field it got wrong.
+
+        Live on lenovinha (single locus, own row present): ok:capability-row-current.
+        859-b2zc identity wrapper: 9 passed, 0 failed.
+
+        HELD: code and this event are committed locally and NOT pushed, per the
+        coordinators freeze on crates/ and scripts/ landings for v56.9.13.1. Landing on
+        the all-clear.
