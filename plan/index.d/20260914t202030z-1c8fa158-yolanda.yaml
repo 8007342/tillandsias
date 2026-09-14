@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    field: status
+    value: in_progress
+    ts: "2026-09-14T20:20:30Z"
+    host: yolanda
+
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-14T20:20:30Z"
+      host: yolanda
+      summary: |-
+        claimed by yolanda before the work; claim pushed to trunk as its own commit per the rule the 1155-jurn duplication produced
