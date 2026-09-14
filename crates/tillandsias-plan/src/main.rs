@@ -854,6 +854,76 @@ fn now_epoch() -> i64 {
 /// TILLANDSIAS_HOST_KIND is consulted first for compatibility — it answers a
 /// DIFFERENT question (forge-vs-host, not which machine wrote this), but when
 /// it is set to `forge` it is the more specific truth.
+/// ORDER 1163-3krg — the pure half of next-order's "filed since" report.
+///
+/// Free functions rather than closures inside the subcommand arm, because the
+/// row asks for `cargo test -p tillandsias-plan next_order_reports_rows_filed_since`
+/// and a closure buried in a match arm cannot be tested at all. The arm reads
+/// the ledger and prints; these decide.
+fn order_prefix_of_value(p: &serde_yaml::Value) -> Option<u64> {
+    let t = p.get("order")?.as_str()?;
+    let digits: String = t.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse::<u64>().ok()
+}
+
+/// Did `who` file this packet? Matched on the `filed` event's `host`, or on a
+/// SEGMENT of its agent_id (`<platform>-<workstation>-<backend>-<ts>`).
+///
+/// SEGMENT-EXACT, never substring: `me` is a workstation name and a substring
+/// match would make "yoga" match a host called "yogab", and — worse in the
+/// other direction — a platform word like "linux" match every linux host's
+/// rows. The caller passes a workstation for that reason.
+fn packet_filed_by(p: &serde_yaml::Value, who: &str) -> bool {
+    let Some(evs) = p.get("events").and_then(|e| e.as_sequence()) else {
+        return false;
+    };
+    evs.iter().any(|e| {
+        if e.get("type").and_then(|t| t.as_str()) != Some("filed") {
+            return false;
+        }
+        let host_matches = e.get("host").and_then(|h| h.as_str()) == Some(who);
+        let agent_matches = e
+            .get("agent_id")
+            .and_then(|a| a.as_str())
+            .map(|a| a.split('-').any(|seg| seg == who))
+            .unwrap_or(false);
+        host_matches || agent_matches
+    })
+}
+
+/// Every packet whose order prefix is strictly above `base`, oldest first, as
+/// (prefix, order token, first non-empty title line truncated for one screen).
+fn rows_filed_since(packets: &[serde_yaml::Value], base: u64) -> Vec<(u64, String, String)> {
+    let mut out: Vec<(u64, String, String)> = packets
+        .iter()
+        .filter_map(|p| {
+            let n = order_prefix_of_value(p)?;
+            if n <= base {
+                return None;
+            }
+            let token = p
+                .get("order")
+                .and_then(|o| o.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let title = p
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .trim()
+                .chars()
+                .take(100)
+                .collect::<String>();
+            Some((n, token, title))
+        })
+        .collect();
+    out.sort_by_key(|(n, _, _)| *n);
+    out
+}
+
 fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
@@ -4629,7 +4699,10 @@ fn main() {
                 let mut out = Vec::new();
                 let mut i = 1usize;
                 while i < args.len() {
-                    if args[i] == "--count" {
+                    // --since takes a value too (1163-3krg); reading it as the
+                    // positional prefix would mint under the caller's baseline
+                    // instead of the next free one.
+                    if args[i] == "--count" || args[i] == "--since" {
                         i += 2; // the flag and its value
                         continue;
                     }
@@ -4675,6 +4748,96 @@ fn main() {
                     }
                 },
             };
+            // ORDER 1163-3krg — REPORT WHAT THE MINT ALREADY READ.
+            //
+            // Minting is a read of the CURRENT FOLD: the next prefix is one
+            // above the highest order present, so by the time this subcommand
+            // answers, it has already observed every row other hosts filed
+            // since the caller last looked. It handed that back as a bare
+            // number, which nobody treats as a signal.
+            //
+            // MEASURED 2026-09-13: lenovinha filed and claimed 1158-y3ad at
+            // 15:49Z; the coordinator filed 1160-nvzs, the same defect, at
+            // 16:05Z. next-order minted 1160 BECAUSE 1158 and 1159 were in the
+            // coordinator's fold. The tool that filed the duplicate had already
+            // read the answer.
+            //
+            // STDOUT IS UNTOUCHED, and that is the constraint that shapes this:
+            // `order: $(tillandsias-plan next-order)` is the documented
+            // composition, so the report goes to STDERR and every existing
+            // caller is unchanged. It does not refuse, either — the row puts
+            // that out of scope, and a filer who has read the list may well be
+            // filing something genuinely different.
+            //
+            // THE BASELINE is --since <order> when given, else the highest
+            // order THIS HOST filed, read from each packet's `filed` event.
+            // When this host has filed nothing the fold remembers, there is no
+            // "since" to speak of and the report says exactly that rather than
+            // listing the whole ledger or silently choosing zero.
+            let since_flag = args
+                .iter()
+                .position(|a| a == "--since")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|v| {
+                    let digits: String = v.chars().take_while(char::is_ascii_digit).collect();
+                    digits.parse::<u64>().ok()
+                });
+            // THE CALLER IS A WORKSTATION, NOT A PLATFORM, and getting this
+            // wrong makes the report confidently too narrow. resolve_writer_host
+            // falls back to std::env::consts::OS, so on every Linux host it
+            // answers "linux" — and a segment match on "linux" then matches
+            // EVERY linux host's rows, making the baseline "the highest order
+            // any linux host filed". Measured while writing this: the default
+            // baseline came back 1182, a row macuahuitl filed, so yoga would
+            // never have been told about anything lenovinha filed after it. A
+            // baseline that silently includes other hosts' filings is the same
+            // shape as the duplicate this row exists to prevent. With the
+            // workstation it reads 1150, yoga's own last, and 37 rows to read.
+            let me = std::env::var("TILLANDSIAS_WORKSTATION")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .or_else(|| {
+                    std::process::Command::new("hostname")
+                        .arg("-s")
+                        .output()
+                        .ok()
+                        .filter(|o| o.status.success())
+                        .and_then(|o| String::from_utf8(o.stdout).ok())
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                })
+                .unwrap_or_else(resolve_writer_host);
+            let since = since_flag.or_else(|| {
+                ledger
+                    .packets
+                    .iter()
+                    .filter(|p| packet_filed_by(p, &me))
+                    .filter_map(order_prefix_of_value)
+                    .max()
+            });
+            match since {
+                None => eprintln!(
+                    "next-order: no row in the fold records {me} as its filer, so there is no \"since\" to report (1163-3krg). Pass --since <order> to get one."
+                ),
+                Some(base) => {
+                    let newer = rows_filed_since(&ledger.packets, base);
+                    if newer.is_empty() {
+                        eprintln!("next-order: nothing filed since {base} (1163-3krg)");
+                    } else {
+                        eprintln!(
+                            "next-order: {} row(s) filed since {base} — READ THESE BEFORE FILING (1163-3krg):",
+                            newer.len()
+                        );
+                        for (_, token, title) in &newer {
+                            eprintln!("  {token}  {title}");
+                        }
+                        eprintln!(
+                            "  A duplicate is filed by not looking, not by choosing the wrong number."
+                        );
+                    }
+                }
+            }
+
             match tillandsias_plan::allocate::mint_batch(&ledger, prefix, count) {
                 Ok(tokens) => {
                     for t in tokens {
@@ -9432,5 +9595,129 @@ mod tests {
         assert!(ts.ends_with('Z'));
         assert!(ts.contains('T'));
         assert_eq!(ts.len(), 20);
+    }
+}
+
+#[cfg(test)]
+mod next_order_filed_since_tests {
+    //! ORDER 1163-3krg. next-order already READS the fold to mint — these pin
+    //! that it also REPORTS what it read.
+    //!
+    //! MEASURED 2026-09-13: lenovinha filed and claimed 1158-y3ad at 15:49Z and
+    //! the coordinator filed 1160-nvzs, the same defect, at 16:05Z. next-order
+    //! minted 1160 BECAUSE 1158 and 1159 were in the coordinator's fold. The
+    //! tool that filed the duplicate had already read the answer.
+    use super::{order_prefix_of_value, packet_filed_by, rows_filed_since};
+
+    fn packets(yaml: &str) -> Vec<serde_yaml::Value> {
+        let v: serde_yaml::Value = serde_yaml::from_str(yaml).expect("fixture yaml parses");
+        v.as_sequence().expect("a sequence").clone()
+    }
+
+    const THREE: &str = r#"
+- order: "1157-aaaa"
+  title: the caller's own last row
+  events:
+    - type: filed
+      host: yoga
+      agent_id: linux-yoga-claude-20260913t000000z
+- order: "1158-y3ad"
+  title: |
+    Three consumers hardcode the status spelling of the LWW channel
+  events:
+    - type: filed
+      host: lenovinha
+      agent_id: linux-lenovinha-opus5-20260913t154900z
+- order: "1159-g96c"
+  title: The capability-row guard derives its own locus from the context
+  events:
+    - type: filed
+      host: lenovinha
+"#;
+
+    #[test]
+    fn next_order_reports_rows_filed_since() {
+        let ps = packets(THREE);
+        let newer = rows_filed_since(&ps, 1157);
+        assert_eq!(newer.len(), 2, "both rows filed after 1157 are reported");
+        assert_eq!(newer[0].1, "1158-y3ad", "oldest first");
+        assert_eq!(newer[1].1, "1159-g96c");
+        // The TITLE is what makes the line actionable: an order alone is the
+        // bare number this row exists to stop handing back.
+        assert!(
+            newer[0].2.contains("hardcode the status spelling"),
+            "the title's first non-empty line is carried: {:?}",
+            newer[0].2
+        );
+    }
+
+    #[test]
+    fn nothing_filed_since_reports_an_empty_list_not_the_whole_ledger() {
+        // The negative control the row names. A baseline at or above the
+        // highest order must yield NOTHING — a report that fell back to
+        // listing everything would be noise a filer learns to skip.
+        let ps = packets(THREE);
+        assert!(rows_filed_since(&ps, 1159).is_empty());
+        assert!(rows_filed_since(&ps, 9999).is_empty());
+    }
+
+    #[test]
+    fn the_baseline_is_the_callers_own_last_filing_not_any_hosts() {
+        // THE DEFECT FOUND WHILE WRITING THIS, and the reason the caller is
+        // identified by WORKSTATION: resolve_writer_host falls back to
+        // std::env::consts::OS, so "linux" would match every linux host's
+        // agent_id segment and the baseline would silently include other
+        // hosts' filings — narrowing the report to nothing worth reading.
+        let ps = packets(THREE);
+        let mine: Vec<u64> = ps
+            .iter()
+            .filter(|p| packet_filed_by(p, "yoga"))
+            .filter_map(order_prefix_of_value)
+            .collect();
+        assert_eq!(mine, vec![1157], "only the row yoga filed");
+
+        let as_platform: Vec<u64> = ps
+            .iter()
+            .filter(|p| packet_filed_by(p, "linux"))
+            .filter_map(order_prefix_of_value)
+            .collect();
+        assert!(
+            as_platform.len() > 1,
+            "a platform word matches several hosts' rows ({as_platform:?}) — which is why the caller is a workstation"
+        );
+    }
+
+    #[test]
+    fn the_filer_match_is_segment_exact() {
+        // Substring matching would make a workstation match its own prefix's
+        // neighbours; segment-exact is what keeps "yoga" off "yogabook".
+        let ps = packets(
+            r#"
+- order: "2000-zzzz"
+  title: a row filed by a differently named host
+  events:
+    - type: filed
+      agent_id: linux-yogabook-claude-20260913t000000z
+"#,
+        );
+        assert!(!packet_filed_by(&ps[0], "yoga"));
+        assert!(packet_filed_by(&ps[0], "yogabook"));
+    }
+
+    #[test]
+    fn a_row_with_no_filed_event_is_not_attributed() {
+        // Only a `filed` event attributes a row. A packet whose only events are
+        // claims or notes was filed by someone this fold cannot name, and
+        // guessing would move the baseline for the wrong host.
+        let ps = packets(
+            r#"
+- order: "2001-zzzz"
+  title: claimed but not filed here
+  events:
+    - type: claimed
+      host: yoga
+"#,
+        );
+        assert!(!packet_filed_by(&ps[0], "yoga"));
     }
 }
