@@ -3987,3 +3987,84 @@ stories.
   plan/issues is not. Routed: macuahuitl takes 1142-85zx in its next meta
   cycle after the cut, sized against N writers. Keychain: five prompt-free
   gates since the operator's restart.
+- **v56.9.13.1 CUT (2026-09-14, on the operator's instruction).** PR #115
+  merged at 5399da211 after the re-gate on 7a089997d (rc 0, 1522 s, 358/358
+  pre-build litmus, 33/33 checks; the first gate on 0c53aa4ae was red on
+  1175-wuwr); bump PR #116; tag v56.9.13.1 at main 6b8342f3f; back-merge
+  pushed on linux-next at f51aa955e with the README row (twelve v0.4 rows
+  distilled into one span, ten rows now), the work-queue line and
+  1175-wuwr's closure; release run 34794577946 dispatched. Cut base predates
+  yolanda's 1171-ccf2 windows-next code and macbookair's sed -i slice; both
+  relay next pass. All-clear sent to yoga, lenovinha, yolanda, macbookair.
+- **lenovinha: 1159-g96c blocked on a HOST RESOURCE CEILING, relayed rather
+  than retried.** Two land attempts SIGKILLed by the system for low memory
+  in the same phase (clippy strict + listen-vsock on tillandsias-headless),
+  tree intact both times; the 1047-h88p cap already resolves to the floor
+  (13 GB < 16 → CARGO_BUILD_JOBS=1) and one rustc still exceeds a 13.8 GB
+  host beside a desktop session and an agent. Marginal, not absolute: five
+  packets landed through the same gate on the same host tonight; the
+  back-merge moved the line, not the host. Decision: push work/1159-g96c,
+  the coordinator relays it in the next pass's single land with the platform
+  relays. Row to file (theirs): the ceiling is a step function with no rung
+  below one job, and a gate killed for memory leaves an empty log
+  indistinguishable from a hang — a named pre-gate memory floor and a
+  post-mortem OOM read (refused:gate:oom-killed) are the ask.
+- **lenovinha: the work/ relay push is refused too (stamp required), and the
+  answer is the lane that already exists.** `git push origin
+  HEAD:refs/heads/work/1159-g96c` → "plan-only lane: not applicable — new on
+  the remote; full gate required" then "the tree changed since ./build.sh
+  --check last passed (12 paths)" — the twelve paths being the back-merge
+  they were told to take. Filed 1176-fn2p (the gate cannot report its own
+  OOM; 1047-h88p's ceiling is a cliff with no rung below one job) and
+  1177-k4jq (the relay cannot rescue a host that cannot gate, because the
+  work/ ref demands the stamp; the ask is a hand-off of an UNGATED tree
+  marked as such, negative controls: platform branches and main unchanged,
+  the coordinator still gates before trunk). Coordinator's answer: the
+  ungated hand-off lane exists — since 1146-8j7i the salvage net handles a
+  clean tree with an unpushed commit (ok:salvaged-commits:<ref>:<sha>) and
+  pushes the commit object with authorship intact to a salvage ref the hook
+  accepts; 1159-g96c relays from it, gated here, next pass; the work/ lane is
+  the GATED hand-off by design, so 1177-k4jq may reduce to naming the choice
+  in the refusal text plus docs. Fourth member of tonight's family, in
+  lenovinha's own command: `git push … | tail -3 && echo pushed` reported a
+  failed push as pushed (the `&&` saw tail's status) forty minutes after they
+  wrote about the family; the real refusal was a stale plan binary
+  (1129-4su6), fixed by rebuilding one crate.
+- **lenovinha salvaged 1159-g96c through the existing lane:**
+  `ok:salvaged-commits:refs/heads/salvage/lenovinha/20260914-1159-g96c:477e5ed77`,
+  confirmed on origin (the `-commits` verdict, not `-local`: the copy survives
+  a re-clone; 4e38b5a29 reachable, authorship and message intact). Relay onto
+  linux-next in the next pass; ledger line then; deletion one pass after the
+  marker. 1177-k4jq corrected on the row (c5f41fd3d) and REDUCED: work/ is
+  the gated hand-off by design and salvage/ the ungated one, so the defect
+  is that the refusal never names the choice — refusal text plus docs,
+  negative controls unchanged. The actionable half, in their words: A TOOL
+  WHOSE NAME DESCRIBES ITS ORIGINAL CASE WILL NOT BE FOUND BY SOMEONE IN ITS
+  EXTENDED CASE — salvage-dirty-worktree.sh reads as a dirty-tree tool and
+  1146-8j7i's clean-tree extension was invisible at the moment it was
+  needed; lands in the skills batch beside the salvage rule. The evening in
+  one line, theirs: fluency in a failure mode is not protection from it — the
+  status-lost family caught yolanda, esme, macuahuitl and lenovinha in turn.
+- **yoga landed 1150-q462's strict-regime arms at 7c8f203e6 (attempt 2: attempt
+  1 gated green and lost the push race to the back-merge and the release
+  traffic; the tool re-fetched, re-merged and re-gated on its own; merged, not
+  rebased, as the unpushed set carried a merge).** The row's event now says,
+  in yoga's words, that the causal chain for the cut's red ran their fixture →
+  their block → the release gate, and the fixture is the link that should have
+  caught it.
+- **Coordination pass 02:05Z (pass 15; the 01:41Z cron delivered behind the
+  release watch).** Freeze over: three relays in one land — osx-next +12
+  (macbookair's 1135-z8gn sed -i slice with the mutation-arm fix, claim
+  released, macneo's attestation), windows-next +6 (yolanda's 1171-ccf2 at
+  740e93552, the held merge, the 1174-u5wp filing), and lenovinha's salvage
+  ref 477e5ed77 carrying 4e38b5a29 (1159-g96c, authorship intact) — merged
+  --no-ff, zero unmerged paths each. Salvage ledger line filed for the ref
+  (ok:salvage-sweep:refs=6:new=1:filed=1; ok:salvage-refs-ledger:7); it is
+  deleted no sooner than the pass after this marker lands. Trunk had moved
+  +10 since the back-merge (yoga's 1150-q462 strict arms at 7c8f203e6 and
+  ledger traffic). Stale rows `ok:stale-ready-rows:90/513`, none handed.
+  Audit rows=23 stems=23. Hand-offs: none — 1142-85zx is macuahuitl's next
+  meta cycle (macneo's A/B on the row), the floor's smoke is running on esme
+  (v56.9.13.1, Windows row, requested with the tag). Release run 34794577946:
+  Linux and Windows jobs green, macOS tray job still running at 02:11Z; the
+  three-set asset assertion waits on it.
