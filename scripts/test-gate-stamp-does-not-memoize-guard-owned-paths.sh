@@ -144,6 +144,48 @@ case "${out%% *}" in
 esac
 rm -rf "$W/wc/plan/issues/research"
 
+# ── ARM 3d: THE MUTATION CONTROL LIVES HERE, not in the author's memory ─────
+#
+# macuahuitl's arm 6c, adapted. Their construction and their reason, and the
+# reason is the better half: arms 3b and 3c assert what the FIXED stamp does,
+# and the only evidence they can distinguish fixed from broken was five
+# mutations run by hand and written up in a commit message. Nobody re-runs a
+# commit message. This arm rebuilds the pre-fix stamp and requires it to FAIL.
+#
+# BUILT BY CONTENT, NOT BY PROVENANCE, and that is the adaptation. Their version
+# read the mutant from `git show HEAD:scripts/gate-stamp.sh`, which yields a
+# mutant only while the fix is UNCOMMITTED — measured on yoga once 236329190 was
+# on trunk: rc 0 and byte-identical to the worktree copy, so the arm would red on
+# every host that had merged the fix, with a message accusing the checkout of
+# having the change uncommitted. A fixture that asserts its own change has not
+# landed yet is one step from pinning the bug's symptom as a contract.
+#
+# Stripping by content has the same failure mode as any mutation — matching
+# nothing and certifying everything — so the cmp below is not a formality. Both
+# of our fixtures produced exactly that false pass tonight, once each.
+_mutant="$W/prefix-gate-stamp.sh"
+sed -e '/plan\/issues\/\*\.md) case "\${path#plan\/issues\/}"/d' \
+    -e '/find "\$REPO_ROOT\/plan\/issues" -maxdepth 1/d' \
+    "$STAMPER" > "$_mutant"
+if cmp -s "$STAMPER" "$_mutant"; then
+    bad "arm3d: the pre-fix reconstruction stripped NOTHING — it is a copy of the fixed stamp, so anything it certifies is worthless (did the skip-glob or the plan_digest find get rewritten?)"
+else
+    ok "arm3d: the pre-fix reconstruction differs from the fixed stamp — the mutant is real"
+    cp "$_mutant" "$W/wc/scripts/gate-stamp.sh"
+    _stamp_now
+    printf 'a drill record\n' > "$W/wc/plan/issues/zzz-1142-85zx-mutant.md"
+    _mut_out="$(S memo-check check)"
+    case "${_mut_out%% *}" in
+        ok:gate-fresh-except-plan)
+            bad "arm3d: the PRE-FIX stamp also produced ok:gate-fresh-except-plan — arms 3b/3c cannot tell fixed from broken: $_mut_out" ;;
+        *)
+            ok "arm3d: the pre-fix stamp does NOT put a plan/issues change on the fast lane (got: ${_mut_out%% *}) — 3b reds without the fix" ;;
+    esac
+    rm -f "$W/wc/plan/issues/zzz-1142-85zx-mutant.md"
+    cp "$STAMPER" "$W/wc/scripts/gate-stamp.sh"
+    _stamp_now
+fi
+
 # ── ARM 4: a stamp with no plan_digest FAILS CLOSED ─────────────────────────
 _stamp_now
 # Strip the field to synthesise a stamp written before this order.
