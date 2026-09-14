@@ -1,0 +1,32 @@
+# @trace spec:cache-recovery-mechanism
+# @trace order:1181-bkem
+#
+# Order 1181-bkem, the operator's 2026-09-14 decision: "let's add the keep
+# models flag to our resets." The clean room stays clean by default (the
+# 2026-09-13 reset ruling); TILLANDSIAS_RESET_KEEP_MODELS=1 is opt-in, per
+# run, and honoured only by the reset and uninstall paths. macbookair
+# measured the cost it removes: ~2.47 GB of weights re-downloaded per macOS
+# smoke, the models dir absent at 804-deux's start because the same host's
+# smoke had wiped it hours earlier. Hermetic: a scratch HOME, seeded files,
+# stubs on a PATH-prefixed dir; no real tray, no podman, no host cache.
+name: litmus:uninstall-keeps-models
+spec: cache-recovery-mechanism
+phase: pre-build
+description: >
+  With TILLANDSIAS_RESET_KEEP_MODELS=1, scripts/uninstall.sh --wipe spares $CACHE_DIR/models (byte-identical) and removes everything else under the cache dir; without the flag the cache dir goes entirely; the flag never widens what is deleted (without --wipe the cache is untouched); a copy with the sparing stripped destroys the models under the flag.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-uninstall-keeps-models.sh
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-uninstall-keeps-models.sh && test -x scripts/test-uninstall-keeps-models.sh && echo 'ok: uninstall-keeps-models-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: uninstall-keeps-models-fixture-parses"
+
+  - step: "flag set spares models/ and names it; flag unset destroys everything; the stripped mutant destroys models under the flag"
+    command: "bash scripts/test-uninstall-keeps-models.sh | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: uninstall-keeps-models"

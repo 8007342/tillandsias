@@ -60,6 +60,18 @@ particular machine's state. The distinction was missed once because this
 section read as though every host running it were a smoke host; most of the
 fleet's Windows and macOS hosts are workstations.
 
+**`TILLANDSIAS_RESET_KEEP_MODELS=1`** lets this destruction spare the model
+cache (`cache_root()/models`) on the operator's word — opt-in, per run, never
+the default: the clean room stays clean unless this run asked otherwise (the
+2026-09-13 reset ruling; operator, 2026-09-14: "let's add the keep models
+flag to our resets"). Per platform: **Linux** — the podman reset and the
+credential clearer never touch `~/.cache/tillandsias/models`, so the flag is
+a documented no-op and the models survive regardless. **macOS** — honoured by
+`scripts/e2e-step2-macos.sh` below, which names the spared directory in its
+residue line. **Windows** — a no-op until 1182-2vaz moves the weights out of
+the distro (they live at `/root/.cache/tillandsias/models` inside the vhdx
+that `wsl --unregister` deletes) (operator ruling 2026-09-14; 1181-bkem).
+
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
 of what this smoke exercises — if init bricks, that is a finding, not a failure
@@ -495,17 +507,10 @@ multi-GiB VM image while reporting a clean-room result. A false PASS on the
 destruction precondition is worse than a red run, because it gates promotion.
 
 ```bash
-pkill -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-rm -rf "$HOME/Library/Application Support/tillandsias" \
-       "$HOME/Library/Caches/tillandsias"
-# ASSERT, do not assume — the point of this block.
-MACOS_RESIDUE=""
-for d in "$HOME/Library/Application Support/tillandsias" \
-         "$HOME/Library/Caches/tillandsias"; do
-    [ -e "$d" ] && MACOS_RESIDUE="${MACOS_RESIDUE}${d}"$'\n'
-done
-printf '[macos-residue]\n%s' "$MACOS_RESIDUE" | tee target/smoke-e2e/02-macos-residue.txt
-test -z "$MACOS_RESIDUE"
+scripts/e2e-step2-macos.sh target/smoke-e2e
+test ! -e "$HOME/Library/Application Support/tillandsias"
+MACOS_RESIDUE="$(cat target/smoke-e2e/02-macos-residue.txt)"
+test -z "$(printf '%s' "$MACOS_RESIDUE" | tail -n +2)"
 ```
 
 If residue survives → file a finding (capability: `macos`, `runtime`) and do NOT

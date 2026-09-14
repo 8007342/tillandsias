@@ -104,6 +104,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:cache-recovery-fresh-start
+  - litmus:reset-keeps-models-macos
+  - litmus:uninstall-keeps-models
   coverage_ratio: 100
   last_verified: '2026-05-16'
 - spec_id: certificate-authority

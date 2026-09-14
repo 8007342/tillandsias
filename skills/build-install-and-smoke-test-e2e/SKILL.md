@@ -59,6 +59,18 @@ These wipes are acceptable on Tillandsias smoke hosts. For a non-smoke host,
 set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` before invoking this skill; the skill
 must then file a blocker instead of resetting the substrate.
 
+**`TILLANDSIAS_RESET_KEEP_MODELS=1`** lets this destruction spare the model
+cache (`cache_root()/models`) on the operator's word — opt-in, per run, never
+the default: the clean room stays clean unless this run asked otherwise (the
+2026-09-13 reset ruling; operator, 2026-09-14: "let's add the keep models
+flag to our resets"). Per platform: **Linux** — the podman reset and the
+credential clearer never touch `~/.cache/tillandsias/models`, so the flag is
+a documented no-op and the models survive regardless. **macOS** — honoured by
+`scripts/e2e-step2-macos.sh` below, which names the spared directory in its
+residue line. **Windows** — a no-op until 1182-2vaz moves the weights out of
+the distro (they live at `/root/.cache/tillandsias/models` inside the vhdx
+that `wsl --unregister` deletes) (operator ruling 2026-09-14; 1181-bkem).
+
 ## 0. Preflight
 
 Run from the Tillandsias repository root. **Detect the OS first**, then enforce
@@ -324,17 +336,8 @@ behavior (no env var set) is unchanged: the full destructive reset above.
 ### 2·macOS — destroy the Virtualization.framework VM
 
 ```bash
-# Stop any running tray that holds the VM handle first.
-pkill -TERM -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-sleep 2
-pkill -KILL -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-
-VM_DIR="$HOME/Library/Application Support/tillandsias"
-CACHE_DIR="$HOME/Library/Caches/tillandsias"
-{ echo "[before]"; du -sh "$VM_DIR" "$CACHE_DIR" 2>/dev/null; } | tee "$LOG_DIR/02-destroy-before.txt"
-rm -rf "$VM_DIR" "$CACHE_DIR"
-{ echo "[after]"; ls -la "$VM_DIR" 2>&1; ls -la "$CACHE_DIR" 2>&1; } | tee "$LOG_DIR/02-destroy-after.txt"
-test ! -e "$VM_DIR"   # the whole VM state dir (rootfs.img lives at its top level) must be gone
+scripts/e2e-step2-macos.sh "$LOG_DIR"
+test ! -e "$HOME/Library/Application Support/tillandsias"   # the whole VM state dir (rootfs.img lives at its top level) must be gone
 ```
 
 > The macOS substrate is a single VFR-hosted VM, not a container store. There
