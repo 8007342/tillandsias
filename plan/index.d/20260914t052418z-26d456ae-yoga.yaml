@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: deleting-a-salvage-ref-refuses-every-in-flight-gate-whose-trunk-snapshot-predates-the-deleted-marker-because-the-ledger-checker-reads-only-the-local-copy
+    event:
+      type: implemented
+      ts: "2026-09-14T05:24:18Z"
+      agent_id: linux-yoga-claude-20260914t052418z
+      host: yoga
+      summary: |
+        IMPLEMENTED as filed: the checker asks TRUNK before calling a deleted ref an outstanding rescue, and the sweep states the deletion rule.
+
+        THE RACE. Mark, land, delete protects a gate that merges trunk AFTER the marker lands; it does nothing for a gate already running on an older snapshot. yolanda 2026-09-13: line marked at 6857ce7f6 (20:29Z), ref deleted at 20:31Z, and a land gating a tree merged before that commit refused at ~20:35Z while trunk carried the marker the whole time. The checker compared the LOCAL ledger against origin's refs, so every in-flight gate in the fleet refuses the moment a ref is deleted.
+
+        THE FIX IS ONE READ THE CHECK ALREADY PAYS FOR: it makes a network round trip for git ls-remote; trunk's copy of the same file is a local `git show` against a ref fetch has already updated. On a line whose ref is absent from origin and unmarked locally, it now consults $TRUNK_REF's copy and, if THAT carries the trailing marker for the same ref, prints ok:salvage-refs-ledger:<n>:marker-on-trunk:<ref> with stderr saying MERGE TRUNK.
+
+        THE MARKER, NOT THE LINE, and the distinction is the negative control. The fallback matches a trunk line that names the ref AND ends with ' deleted'. Matching the ref alone would forgive an unmarked line on trunk — every outstanding rescue, silently — and an arm reds on exactly that mutation.
+
+        THREE STATES FROM `git show`, and the third is the one that bites: `git show <ref>:<path>` on a missing ref or an absent path EXITS NON-ZERO AND WRITES ZERO BYTES, indistinguishable from "read it, found no marker" if the rc is discarded. I have made that exact mistake before on this repo and reported a fabricated hazard from it. The helper returns a distinct code for unreadable and the caller REFUSES, saying the behind-tree case could not be ruled out rather than asserting a rescue.
+
+        DELETION RULE stated in sweep-salvage-refs.sh's header, where the delete is performed, AND stated as what it is: a REDUCTION, not a guarantee. A floor host's gate can run an hour, so no waiting period closes the race; the rule shrinks the window the fallback covers. Both, not either.
+
+        FIXTURE scripts/test-salvage-refs-ledger.sh, created (it did not exist), 7/7, hermetic — a throwaway repo per case with its own empty-but-reachable origin and a local branch standing in for trunk.
+
+        TWO FIXTURE BUGS CAUGHT BY THE FIXTURE ITSELF, both of which would have made every arm meaningless:
+          1. My ledger line had the wrong FIELD ORDER — I wrote | ts | host | ref | ... from memory; the grammar is | utc | ref | sha | ancestry | files |. The checker said "malformed sha" about a field holding a ref. Read the grammar from the checker's header, never from memory of the column order.
+          2. The first version created NO remote at all and assumed that made the ref "absent". It made git ls-remote FAIL, so the checker took its origin-unreachable SKIP and the reachability half — the entire subject — never ran. An unreachable remote and an empty one are different facts, which is the same distinction this packet is about, one layer down.
+
+        MUTATION-TESTED THREE WAYS, each diff printed and proven non-empty first: removing the fallback reds the behind-tree arms (the pre-fix state), matching the ref instead of the marker reds the negative control by name, and treating an unreadable trunk copy as "no marker" reds the could-not-rule-out arm. A fourth attempt failed to apply through a quoting error and printed 7/7 from an UNMUTATED file — recorded because that is the false result this discipline exists to catch, and it appeared again in the same cycle that I wrote the rule down.
