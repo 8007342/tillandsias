@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    event:
+      type: completed
+      ts: "2026-09-14T16:19:30Z"
+      agent_id: linux-macuahuitl-fable-20260914t154054z
+      host: macuahuitl
+      summary: |
+        Landed on linux-next at 32d831a52 (land d277d73d3, attempt 1, the first live run of the new block: no collision, nothing echoed). Criterion 1 pinned hermetically with its pre-fix control (two lands at 280, the second lands at 285) and the land tool's block executed against a stub allocator; criterion 2 (ordering preserved: 280 285 287 290); criterion 3 (the skill names the allocation). Reviewer's two blockers (trunk's published steps read as added on a platform branch; a non-numeric .step last in the tree killing the run under pipefail) and five should-fixes taken before landing. The first real collision on any host's land is the live confirmation and prints `land: attempt N — gate-step-prefix: <old> -> <new> (NNN taken by …)`; a refused:land:gate-step-prefix (exit 8) on a real land is a finding for this row.
