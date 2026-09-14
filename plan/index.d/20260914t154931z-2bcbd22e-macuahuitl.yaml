@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    field: next_action
+    value: 'Nothing is left on this host: the allocator, its 12-arm fixture, the land-tool call, the litmus, scripts/gate-steps.d/README.md and the skill text land in the 15:09Z cycle; the row completes with the landed SHA. The first real collision on any host''s land is the live confirmation — it prints `land: attempt N — gate-step-prefix: <old> -> <new> (NNN taken by …)`; a refused:land:gate-step-prefix on a real land is a finding to paste on this row. Option (2) of the packet (after:/before: headers, topological ordering) was not taken: (1) removes the re-gate and leaves the integer scheme intact.'
+    ts: "2026-09-14T15:49:31Z"
+    host: macuahuitl
+
+events:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    event:
+      type: note
+      ts: "2026-09-14T15:49:31Z"
+      host: macuahuitl
+      summary: |-
+        implemented on linux; what is left is stated
