@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    event:
+      type: completed
+      ts: "2026-09-14T22:08:21Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Landed and closed after the operator unlocked the login keyring on lenovinha.
+
+        RECOVERY WENT AS PLANNED. check-credential-channel.sh answered ok:gh-keyring-push-verified-refstate-refused, the collection read Locked=false, the salvage ref pushed and was verified on origin by ancestry (ok:salvaged:refs/heads/salvage/lenovinha/20260914-1185-9qx6:5fa2e038f), and land-on-platform-branch.sh then integrated, re-gated green and pushed on attempt 1.
+
+        LANDED. The rebase rewrote the SHAs, so the pre-land dc4721a09 is a ghost and the code is 1e3e1e01e on origin/linux-next; the land verdict was ok:land:5e92fda4d:attempt-1, whose HEAD commit is the gate-step prefix reallocation. The allocator moved the bound step from 345 to 355 because a sibling took 345 during the blocked window, exactly the 1162-qbrx race, and committed the rename itself.
+
+        VERIFIED ON ORIGIN, not merely pushed: scripts/record-ci-phase-result.sh, scripts/test-release-tier-freshness-reads-ci-full.sh and scripts/gate-steps.d/355-1185-9qx6.step are all present in origin/linux-next's tree.
+
+        THE CREDENTIAL BLOCKER WAS NOT AN EVICTION AND NOT A SIBLING. The login keyring on this host locked between the 18:52Z check and the 19:37Z push; the token was intact inside it the whole time, gh auth status hung rather than failing, and ~/.config/gh/hosts.yml was unchanged since 2026-08-20. No gh auth login or refresh was run here (1025-a896). That is filed as 1189-2ra5 and claimed by this host: the guard has no arm for a locked-but-present keyring, so it answers missing:no-credential-channel, whose obvious remedy is the re-auth that would have evicted every other host.
