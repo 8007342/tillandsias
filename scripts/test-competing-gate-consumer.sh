@@ -98,6 +98,26 @@ case "$out" in
     *) bad "0 under set -e: the block did not complete: $out" ;;
 esac
 
+# THE OTHER NONZERO CODES, under the same regime (yoga, 2026-09-14). errexit does
+# not single out 1: a bare `_cg_out="$(detector)"` exits the wrapper on EVERY
+# nonzero status, so 2, 3 and an unrecognised code died there too. The arms for
+# them above run under `set +e` and therefore still assert about a shell the
+# wrapper does not use — the same gap as before, one code narrower, and the
+# reason this refines rather than repeats the two arms above.
+#
+# It is the `|| _cg_rc=$?` form that makes them all survive, and that form is
+# uniform across codes; these arms are what stops a later edit from restoring
+# the bare assignment and leaving 1 and 0 green while 2, 3 and 9 die silently.
+for _sc in 2 3 9; do
+    out="$(drive_strict "$_sc" 'stub output for the strict regime')"
+    case "$out" in
+        *"consumer-block-completed"*)
+            ok "$_sc under set -e: the block completes (errexit survives every nonzero code, not only 1)" ;;
+        *)
+            bad "$_sc under set -e: the wrapper EXITED at the capture — the case never ran: $out" ;;
+    esac
+done
+
 # 3. 2 — caller contract. Must name THIS CALL SITE as wrong, not the host.
 out="$(drive 2 'refused:competing-gate:caller-contract (...)')"
 case "$out" in
