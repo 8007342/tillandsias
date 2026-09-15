@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    order: 1195-m9vi
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, plan-lane, macos, fleet-blocker, fail-loud]
+    estimated_hours: 3
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is the escape hatch
+      plus its proof, so naming a litmus nothing defines yet would be refused
+      by 885-92iu. Name stated here instead:
+      scripts/test-plan-lane-has-an-escape-from-a-red-trunk.sh, written in the
+      same commit as the thing it guards (1136-n8sh).
+
+      WHAT IT MUST ASSERT, so it is not weakened into something that passes
+      vacuously: from a host whose tree cannot satisfy the build stamp, a
+      PLAN-ONLY fragment still reaches trunk — and a MUTATION ARM must show the
+      assertion reds when the escape is removed. Asserting merely that a push
+      succeeds on a healthy host proves nothing about the wedge.
+    title: |
+      merging trunk makes the stamp refuse and not merging it makes the platform-branch rule refuse, so a macOS host with a red trunk can be unable to land even a PLAN FRAGMENT — the only symptom is a host that quietly stops writing to the ledger
+    context: |
+      MEASURED BY macneo-macos 2026-09-15, filed by macbookair because macneo
+      CANNOT PUSH — which is the defect itself. Not my measurement; theirs.
+
+      FOUR SUCCESSIVE REFUSALS, each a different gate, no --no-verify anywhere:
+
+        1. relay from their tree      refused:fragments-to-trunk:push —
+                                      "the tree changed since ./build.sh --check last passed"
+                                      (they had merged trunk to pick up the 1193-yw6u row, putting
+                                      trunk's code in their diff; no macOS host can refresh that
+                                      stamp while trunk is red)
+        2. push to osx-next from a CLEAN worktree, fragment only
+                                      blocked:linux-next-not-merged:osx-next
+        3. relay from the clean worktree
+                                      refused:fragments-to-trunk:no-validator
+                                      (no built plan binary in a fresh worktree)
+        4. same, TILLANDSIAS_PLAN_BIN at their built binary
+                                      refused:fragments-to-trunk:push —
+                                      "release preflight says blocked:plan-ledger-incomplete"
+
+      THE CLOSED LOOP IS 1 AND 2 TOGETHER: merge trunk and the stamp refuses;
+      do not merge trunk and the platform-branch rule refuses. Neither gate is
+      wrong on its own and both are load-bearing — together they leave a macOS
+      host with a red trunk no legal path to write to the ledger at all.
+
+      Step 4 looks like 1128-4ffr's shape, whose title is that a partial corpus
+      makes release preflight refuse and "the pre-push hook wedges every push
+      from that host". Not chased further, deliberately: macneo stopped at four
+      refusals rather than hunting a variant that happened to work for reasons
+      they could not explain, which is the right call and is why the pattern
+      rather than a workaround is the finding.
+
+      WHY IT IS NOT 1193-yw6u. That row is titled "no macOS host can land CODE"
+      and will be closed when the credential guard is fixed and trunk goes
+      green. These two mechanisms are INDEPENDENT of the credential guard. If
+      1193-yw6u closes, this stays broken and nobody notices, because a wedged
+      host's only symptom is silence — it stops writing to the ledger, which
+      looks identical to a host with nothing to say.
+
+      NOT UNIVERSAL, WHICH IS ITSELF THE HAZARD: macbookair kept a working
+      relay throughout the same incident and macneo did not. Two macOS hosts,
+      same trunk, different outcomes — so "the relay works" was true where it
+      was measured and false one host over, and a fleet-wide claim made from
+      either host alone would have been wrong.
+    deliverable: |
+      A host whose tree cannot satisfy the build stamp still has a sanctioned
+      path to land a PLAN-ONLY fragment, or the refusal names that path
+      explicitly. Silence is not acceptable: a wedged host must be
+      distinguishable from an idle one.
+    next_action: >
+      Start from the closed loop, not from step 4: reproduce 1 and 2 on any
+      host by making the tree differ from the stamp, then attempting the
+      fragment push both with and without the trunk merge. Both refusals are
+      correct in isolation, so the fix is not to weaken either gate — it is to
+      give the plan-only lane a path that does not depend on a stamp the host
+      cannot refresh, or to make each refusal name the other so the operator
+      sees the loop rather than two unrelated verdicts. Check 1128-4ffr before
+      touching the step-4 refusal; it may already own that one.
+    provenance: |
+      Measured by macneo-macos 2026-09-15 across four attempts; filed by
+      macbookair-macos the same day because macneo could not land the filing —
+      filing would have been a ledger write it cannot push, the same trap one
+      level up. macneo's own copy is stranded at commit 5598e7b3f and local ref
+      salvage/macneo-20260915-1193-evidence on that host only.

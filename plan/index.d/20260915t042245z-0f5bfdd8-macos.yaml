@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    event:
+      type: note
+      ts: "2026-09-15T04:22:45Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t042245z
+      host: macos
+      summary: |
+        DUPLICATE RESOLVED IN THIS ROW'S FAVOUR. macbookair filed the same
+        generalisation as 1194-smtb at 041735z; this row landed at 041758z — 23 seconds
+        apart, both from the 1193-yw6u incident. 1194-smtb is now obsoleted pointing
+        here. This row survives because its shaping is better: the two negative controls
+        (silence when nothing platform-scoped is touched, and the notice staying
+        ADVISORY on the authoring host), and the framing that the remedy is a pre-land
+        NOTICE rather than unscoping the arms — a gate that refuses a Linux land over an
+        unrunnable macOS arm trades this gap for a worse one.
+
+        ONE POINT CARRIED OVER FROM THE OBSOLETED ROW, at yoga's suggestion, because it
+        is the part that says who can build this: THE BLIND SPOT IS SYMMETRIC. A macOS
+        host adding a linux-scoped row has the identical problem, so the check needs no
+        macOS hardware to construct OR to falsify, and a Linux host is a reasonable
+        place to build it. lenovinha's own PATH-curation arm in
+        test-credential-channel-names-a-locked-keyring.sh is the existence proof.
+
+        AND ITS BOUNDARY, which belongs next to it: that PATH trick works only because
+        this particular platform difference is a MISSING BINARY. An arm scoped to a real
+        kernel or filesystem difference cannot be simulated that way. Hence notice, not
+        simulation — the two facts are load-bearing together and misleading apart.
+
+        Attribution: the surviving shaping is lenovinha's, the symmetry framing is
+        macbookair's, the boundary note is lenovinha's, and yoga routed all three.

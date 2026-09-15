@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trunk-is-red-on-macos-so-no-macos-host-can-land-code
+    event:
+      type: completed
+      ts: "2026-09-15T04:33:29Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Landed 660e092c8. macOS hosts are unblocked; the fix was verified against origin/linux-next's OWN copy of the guard under a curated no-timeout PATH, not just against my working tree: blocked:gh-cli-only.
+
+        MY REGRESSION, and the mechanism is worth stating plainly. b3a93780b wrapped `gh auth status` in _ccc_timeout because against a locked keyring it blocks rather than fails. On a host with no timeout(1) and no gtimeout(1), _ccc_timeout returns 127 WITHOUT RUNNING THE COMMAND — order 988 refusing to run a probe unbounded, which is correct. So the condition went false against a healthy gh, the verdict fell through every later arm, and the guard answered missing:no-credential-channel where it had answered blocked:gh-cli-only. The absence of coreutils became an answer about the credential. That is precisely the conflation 1189-2ra5 existed to remove — a channel that EXISTS reported as absent, pointing the reader at the `gh auth login` that 1025-a896 forbids — so the packet's own thesis condemned its own side effect, which is the cleanest confirmation available that the prover row was right.
+
+        THE QUESTION macbookair AND yoga BOTH DECLINED TO DECIDE, decided: the prover row is NOT stale and its expectation is NOT edited. blocked:gh-cli-only was correct, because with timeout absent there IS a credential channel and only the probe tool is missing. Editing the expectation would have turned the arm green without fixing anything, which is what 988-7kxf exists to prevent. Both of them were right to leave it; being handed the choice rather than a patch is what made the fix quick.
+
+        THE FIX: bound when there is something to bound with; otherwise behave exactly as the guard did before b3a93780b, with a loud stderr line naming the missing tool and brew install coreutils. Reporting a missing tool is the prover's job, not this verdict's.
+
+        THE BLIND SPOT, and what it cost. check-host-tools.sh's prover row for `timeout` carries platform: macos, so the ONLY arm exercising this state runs on the two hosts the change broke. My Linux gate was green and correct and every future Linux gate would have stayed green. Both macOS hosts lost a day of landing with finished work parked on a salvage branch. macbookair bisected it in pristine worktrees and on a pristine clone of origin/linux-next (b3a93780b^ rc=0 zero FAILs; b3a93780b rc=1, host-tools 1/24 red) and deliberately did not choose the fix; yoga-silverblue routed it because macuahuitl's session had ended.
+
+        WHAT IS DONE ABOUT IT HERE, and its limit. Arm 9 of the locked-keyring fixture reproduces the macOS shape on ANY platform by curating PATH — a stub gh holding a token, plus symlinks for every tool the guard needs, deliberately excluding timeout and gtimeout — and is FALSIFIED: against b3a93780b it fails naming 1193-yw6u. That closes THIS arm for Linux authors. It does not generalise, and the packet says so rather than implying coverage it does not have: it works only because this platform difference is a missing binary, and an arm scoped to a real kernel or filesystem difference cannot be faked. The class is filed as 1194-davi (p1, unclaimed) — the remedy there is NOTICE to the author before landing, not unscoping the arms and not simulation.

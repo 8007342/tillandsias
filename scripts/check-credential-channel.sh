@@ -374,9 +374,45 @@ credential_channel_verdict() {
   # requires every probe here to be bounded and says why — an unbounded probe is
   # the 860-g798 incident. This one was simply missed, and GH_PROMPT_DISABLED=1
   # matches the `gh api user` arm below so gh fails fast instead of prompting.
+  #
+  # ORDER 1193-yw6u — AND THE BOUNDING MUST NOT ITSELF ANSWER THE QUESTION.
+  #
+  # The first version of this wrapped the call in _ccc_timeout unconditionally.
+  # On a host with NO timeout(1) AND no gtimeout(1) — every macOS host without
+  # GNU coreutils — _ccc_timeout deliberately returns 127 WITHOUT RUNNING THE
+  # COMMAND (order 988: it will not run a probe unbounded). So this condition
+  # went false on a host whose gh was perfectly healthy, the verdict fell through
+  # every later arm, and the guard answered missing:no-credential-channel where
+  # it used to answer blocked:gh-cli-only.
+  #
+  # THAT IS THE SAME CONFLATION THIS ORDER'S SIBLING (1189-2ra5) EXISTS TO
+  # REMOVE: a channel that EXISTS, reported as absent, pointing the reader at
+  # `gh auth login` — the re-auth 1025-a896 forbids. It cost both macOS hosts
+  # their ability to land for a day (1193-yw6u), and no Linux or Windows gate
+  # could see it, because check-host-tools.sh's prover row for `timeout` is
+  # scoped platform: macos.
+  #
+  # So: bound it WHEN THERE IS SOMETHING TO BOUND WITH, and otherwise behave
+  # exactly as this guard did before 1189-2ra5 — the missing tool is reported by
+  # the prover that exists for it (988-7kxf), and is not this arm's answer to
+  # give. "I could not bound the probe" is not "you have no credential".
+  _ccc_gh_auth_ok() {
+    if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+      GH_PROMPT_DISABLED=1 _ccc_timeout 15 gh auth status >/dev/null 2>&1
+      return $?
+    fi
+    # No bounding tool. Say so once, loudly, and fall back to the pre-1189-2ra5
+    # call rather than inventing a verdict from the absence of coreutils.
+    echo "[check-credential-channel] no timeout(1)/gtimeout(1): running 'gh auth status' UNBOUNDED." >&2
+    echo "  If this host's keyring is LOCKED this call can block (1189-2ra5). It is" >&2
+    echo "  still the pre-1189-2ra5 behaviour, and the missing tool is reported by" >&2
+    echo "  check-host-tools.sh's own prover (988-7kxf) — not by this verdict." >&2
+    echo "  REMEDY (macOS): brew install coreutils   # provides gtimeout(1)" >&2
+    GH_PROMPT_DISABLED=1 gh auth status >/dev/null 2>&1
+  }
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
      && command -v gh >/dev/null 2>&1 \
-     && GH_PROMPT_DISABLED=1 _ccc_timeout 15 gh auth status >/dev/null 2>&1; then
+     && _ccc_gh_auth_ok; then
     # ORDER 860-g798 — `gh auth status` PROVES THE WRONG THING. It proves the
     # gh CLI holds a token; it says nothing about whether GIT can use it. On a
     # fresh clone git's credential.helper resolves to the system default —
