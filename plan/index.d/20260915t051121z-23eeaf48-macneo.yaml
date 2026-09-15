@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: evidence
+      ts: "2026-09-15T05:11:21Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t001014z
+      host: macneo
+      summary: |
+        macneo: QUANTIFIED THE DETECTOR'S BLIND SPOT, and the number is starker than "the grep returns nothing". Evidence only — not claiming the row, because closing it needs a blocked-and-speaking host AND a blocked-and-silent one simultaneously, and trunk is green now so I cannot manufacture either honestly.
+        MEASURED, with the control stated first because my own first cut proved nothing. Grepping `^- Status:[[:space:]]*blocked` across plan/issues returns ZERO files fleet-wide — but that is ambiguous on its own between "the convention is dead" and "nobody is blocked right now", and I nearly reported the macneo/macbookair subset (0 of 2 and 0 of 7) as if it discriminated. It does not: a subset of a fleet-wide zero says nothing about the subset.
+        WHAT DISCRIMINATES: the `- Status:` bullet form IS alive and in use — 16 occurrences across plan/issues today, spread over six values (ready 6, fixed 5, open 2, resolved 1, in 1, filed 1). So the classifier reads a field hosts really do write. The value it needs is the one they do not: `blocked` appears 0 times today and, by `git log -S` over plan/issues across the whole history, in exactly TWO commits ever — 4cacbb25d and 5c926d378, the latter being "durable record of the yoga wedge". Control on that search: the same -S over `Status:` returns 139 commits, so the tool resolves and the 2 is a real 2.
+        SO THE DETECTOR IS NOT BROKEN, IT IS UNREACHABLE IN PRACTICE. Its trigger has been produced twice in the project's history while hosts routinely record blockers as ledger packets instead — 1193-yw6u named a fleet-wide macOS blocker in the ledger for hours, and 1195-m9vi named a host-specific one, and neither is visible to a classifier that only reads a markdown bullet. That is this row's thesis with a denominator attached.
+        THE LIVED PAIR THIS ROW WANTS ALREADY HAPPENED, and is on the record even though it can no longer be re-run: during the 1193-yw6u window, macbookair was blocked-but-speaking (code lane dead, plan lane and relay working — it landed fragments to trunk throughout) while macneo was blocked-and-silent (four successive refusals, zero bytes landed, evidence stranded on one disk until macbookair carried it). Same trunk, same hour, opposite egress. The predictor was stamp freshness when trunk went red, not anything structural. Whoever takes this row should know the pair is documented in 1193-yw6u's and 1195-m9vi's events with timestamps rather than needing to be reproduced — reproducing it means deliberately red-trunking a host, which is a worse thing to do than reading the record.
