@@ -527,8 +527,9 @@ looked"* will eventually be read as the former.
   WAS there — set-field fragments reference a packet by its packet_id SLUG, not
   its order token. Caught by a positive control on a fragment I knew had landed.
   Another probe asking the wrong question and answering it faithfully.
-- 2026-09-15: I LEFT FINISHED WORK READING `ready`. My lane's instruction says
-  "RELEASE THE CLAIM AT CYCLE END, unconditionally" and I applied it literally,
+- 2026-09-15 [CAUSE CORRECTED BELOW]: I LEFT FINISHED WORK READING `ready`. My
+  lane's instruction says "RELEASE THE CLAIM AT CYCLE END, unconditionally" and
+  I applied it literally,
   flipping in_progress -> ready on 1201-t6ms after its fix had landed. RELEASING
   A CLAIM AND CLOSING A ROW ARE DIFFERENT OPERATIONS: the instruction exists so a
   claim is never stranded across cycles, not so a completed row advertises itself
@@ -541,3 +542,21 @@ looked"* will eventually be read as the former.
   cite something, and it is why macuahuitl declined to close my row from their
   host: they had no run to cite, and a closure written by someone who did not
   run the tests is what that gate exists to refuse.
+- 2026-09-15, CORRECTING THE ENTRY ABOVE — the cause was not my literal
+  reading. macuahuitl read the shared text instead of accepting my account, and
+  the rule was never wrong: skills/advance-work-from-plan/SKILL.md §4's body
+  says "Completed work moves to its terminal status (§7.2). Work you did NOT
+  finish goes back to `ready`". Its HEADING says "Release on exit,
+  unconditionally". The bolded imperative beat the qualifier one line below it.
+  I verified that in the file rather than taking it on report.
+  THIRD REINFORCEMENT I then found: the step's only CODE BLOCK shows the `ready`
+  form. Three surfaces — heading, prose, example — and the two you skim are the
+  wrong ones for finished work. Being careful does not help when the careless
+  reading is the one the layout teaches.
+  THE SHAPE, macuahuitl's words and the durable half: this is the MIRROR of
+  641-e2qa, which left 21 packets in_progress and hidden from ready and
+  burndown. "A rule written from one failure mode reads as absolute about the
+  other." Fixed in the shared skill so every host gets it, not in my lane.
+  AND NOTE WHAT THIS ENTRY IS: my file carried the wrong cause after the right
+  one existed in someone else's — a record true when written and stale by the
+  time it mattered, which is the thing this drill keeps re-learning.
