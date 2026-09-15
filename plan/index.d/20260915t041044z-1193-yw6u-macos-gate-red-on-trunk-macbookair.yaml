@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: trunk-is-red-on-macos-so-no-macos-host-can-land-code
+    order: 1193-yw6u
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [macos, credentials, gate, host-tools, fleet-blocker]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-credential-channel.sh
+      - scripts/check-host-tools.sh
+    title: |
+      origin/linux-next is RED on macOS — b3a93780b (1189-2ra5) flipped the no-timeout credential verdict, so test-host-tools.sh fails and ./build.sh --check refuses EVERY macOS land while Linux and Windows see nothing
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-15, by bisect in pristine
+      worktrees rather than by reading the diff:
+
+        b3a93780b^  scripts/test-host-tools.sh -> rc=0, zero FAIL lines
+        b3a93780b   scripts/test-host-tools.sh -> rc=1
+                    FAIL without timeout, check-credential-channel.sh reports blocked:gh-cli-only
+                         got=[missing:no-credential-channel]
+                         with-tool=[ok:gh-keyring-push-verified-hook-refused]
+                    FAIL: host-tools 1/24 red (989-ykks)
+
+      Also reproduced on a pristine worktree of origin/linux-next itself
+      (rc=1), so this is trunk's current state and not local dirt: this host's
+      worktree and pristine trunk fail identically.
+
+      WHY NO LINUX HOST CAN SEE IT. The prover row is macOS-scoped —
+      check-host-tools.sh's row for `timeout` carries platform field `macos`.
+      So the arm runs only on macOS. b3a93780b landed through a Linux gate that
+      never executed it, and every Linux and Windows land since has been green
+      and correct. The macOS lane alone is stopped.
+
+      WHAT IT COSTS RIGHT NOW: no macOS host can land ANY code. The gate is
+      mandatory and --no-verify is forbidden, so completed, tested work sits
+      unlandable. 690-w94k item 1 (a measured 3.47M-iteration CPU spin in the
+      VZ boot path, fixed and guarded) is blocked behind this on macbookair,
+      and macneo will hit the same wall on its next code land.
+
+      WHAT THE ARM IS ACTUALLY SAYING. check-host-tools.sh's own row documents
+      the precondition (1004-x9ua): the prover reaches the timeout dependency
+      only AFTER the credential guard clears its token arm, so on a host with a
+      dead or absent token it answers missing:no-credential-channel either way
+      and proves nothing about coreutils — and test-host-tools.sh is supposed to
+      detect that by comparing with-tool and without-tool verdicts and SKIP,
+      named. It is not skipping here because the WITH-TOOL verdict is
+      `ok:gh-keyring-push-verified-hook-refused`, i.e. the token arm DID clear.
+      So the comparison concludes the prover is live and then finds
+      missing:no-credential-channel where it expects blocked:gh-cli-only.
+
+      WHICH SIDE IS WRONG IS NOT ESTABLISHED, and this packet deliberately does
+      not decide it. Two readings, and they need the author of 1189-2ra5:
+        (a) the GUARD regressed — with timeout absent there IS a credential
+            channel, only the tool to probe it is missing, so
+            missing:no-credential-channel is the wrong verdict and
+            blocked:gh-cli-only was right;
+        (b) the PROVER row is stale — 1189-2ra5 deliberately re-taxonomised
+            these verdicts and the row simply has not been updated.
+      Reading (a) is the author's stated intent applied one step further than
+      it was tested; reading (b) would mean editing the expectation, which is
+      the move that turns a red guard green without fixing anything. Do not
+      pick by convenience.
+    deliverable: |
+      ./build.sh --check passes on a macOS host at origin/linux-next, with the
+      verdict question settled deliberately rather than by editing whichever
+      side is cheaper to change.
+    next_action: >
+      Reproduce is two commands and needs no macOS-only hardware beyond being
+      ON a macOS host: `scripts/test-host-tools.sh` (expect rc=1) and the same
+      in a pristine `git worktree add --detach <dir> b3a93780b^` (expect rc=0).
+      Then decide (a) vs (b) in context above WITH the author of 1189-2ra5 —
+      the commit is `fix(1189-2ra5): name a locked keyring as locked, not as no
+      credential at all`, so the taxonomy change was intentional and the
+      question is only whether the no-timeout path was meant to move with it.
+      Whichever side changes, the other must keep a falsifying arm: the whole
+      point of this prover (988-7kxf) is that omitting timeout must be
+      DISTINGUISHABLE from having no credential at all.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-15 after a land refused with
+      refused:land:gate-failed. Cause established by bisect in pristine
+      worktrees at b3a93780b and its parent, and confirmed against a pristine
+      worktree of origin/linux-next. Cited by symbol and commit, not by line.
