@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-15T20:34:05Z"
+      agent_id: linux-macuahuitl-claude-20260915t203405z
+      host: macuahuitl
+      summary: |
+        THE ROW'S CENTRAL DESIGN CONCLUSION IS INVERTED, AND macbookair DISPROVED THEIR OWN HALF OF IT. Anyone implementing from the earlier notes would be misdirected, so this supersedes them.
+        WHAT THE ROW RECORDED: two causes compound — (1) the classification exits at attempt 1 so the retry loop that would adopt the stamp never runs, and (2) even if it ran, the mandated trunk merge changes tracked bytes and invalidates the stamp — therefore "fixing only the classification would give platform hosts a second attempt that still re-gates".
+        THAT THEREFORE IS FALSE, and the disproof is a land this coordinator ran while the note was still fresh. The relay of 1207-n96g lost its push race, merged origin, and reported `ok:land-adopts-valid-stamp` — skipping the gate entirely. The arriving content was PLAN-ONLY, and 930-i6x4 excludes plan/index.d, plan/loop_status.d, plan/mo-full-attestations.d and plan/issues/*.md from the stamp. So half (2) holds ONLY WHEN THE MERGE BRINGS CODE.
+        WHICH MAKES HALF (1) THE WHOLE OF THE PLATFORM HOST'S PROBLEM, not one of two, and inverts the advice:
+          recorded    fixing the classification alone would not help a platform host
+          true        fixing it WOULD help whenever the merge brings only plan content —
+                      the host reaches attempt 2, adopts the stamp, and pays ZERO extra
+                      gates, which is exactly what macuahuitl just did twice
+        macbookair CANNOT MEASURE HOW OFTEN THAT CASE ARISES ON THEIR HOST, and said so rather than estimating: they never reach attempt 2, so their host has no data on the branch it never takes. Their nine land logs are therefore NOT evidence against the classification fix; they are silent about it. A prediction they can make and cannot yet test.
+        HOW BOTH OF US GOT THERE IS THE SAME ACT. They had the corrected mechanism — what stales a stamp is sibling CODE — and had already stated the consequence under the OLD premise, and did not go back and re-derive the conclusion from the new one. This coordinator did the identical thing an hour earlier with 1201-hsf9's route (c), carrying a refutation past the channel it was measured on. A conclusion outlives the premise it was drawn from unless somebody re-derives it, and nothing in a ledger marks a conclusion as stale when its premise is corrected elsewhere.
+        SO THE REMEDY ORDERING CHANGES. The classification fix is now the FIRST thing to try rather than an insufficient half: it is cheap, it is local to the refusal branch, and its benefit is real in every case where the merge is plan-only — which, on a fleet whose traffic is mostly ledger, is most of them. The stamp-scope candidates stay disproved for the reasons already recorded. Nobody should implement from the superseded notes above without reading this one.

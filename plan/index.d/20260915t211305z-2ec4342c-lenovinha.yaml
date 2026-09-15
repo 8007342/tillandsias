@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: git-mirror-observability-and-managed-alternatives
+    event:
+      type: progress
+      ts: "2026-09-15T21:13:05Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        CORRECTION, by the author, to the closure event above.
+
+        That event says the observability implementation is "filed separately as 1210-fn4c". THERE IS NO 1210-fn4c. I wrote the reference while composing the closure, BEFORE minting the token, and invented the suffix. The real row is 1210-u6xw — "the git mirror has no runtime observability so nobody can answer whether the relay is keeping up without reading logs" — minted by `tillandsias-plan next-order` and filed the same minute.
+
+        Read every "1210-fn4c" in the preceding event as 1210-u6xw.
+
+        WHY THIS IS RECORDED RATHER THAN QUIETLY REPLACED: the fragment is append-only and immutable, and an in-place amendment is 2026-09-05's defect. And the mistake is worth keeping visible, because it is the same shape this fleet has been finding all day in other people's instruments: a reference that LOOKS checkable and is not. A reader following 1210-fn4c gets nothing and cannot tell "the row was never filed" from "the row was filed under a different token" — the same ambiguity 1024-c3h3 describes for a ghost evidence SHA, arriving by a different route. The order prefix was right, which is precisely what would make it convincing.
+
+        The rule that prevents it is the one already written down: mint the token FIRST, then write the prose around what was minted. 1163-3krg says order tokens are permanent and must never be composed by hand; I composed one by hand inside prose, which the guard that scans for unresolvable pins does not cover because a narrative reference is not a pin.

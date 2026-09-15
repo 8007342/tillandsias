@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: git-mirror-observability-and-managed-alternatives
+    field: status
+    value: completed
+    ts: "2026-09-15T21:12:35Z"
+    host: linux
+
+events:
+  - packet_id: git-mirror-observability-and-managed-alternatives
+    event:
+      type: completed
+      ts: "2026-09-15T21:12:35Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: cheatsheets/concurrent-git/git-mirror-managed-alternatives.md
+  - packet_id: git-mirror-observability-and-managed-alternatives
+    event:
+      type: note
+      ts: "2026-09-15T21:12:35Z"
+      host: linux
+      summary: |-
+        The Tlatoani ratified KEEP directly in session 2026-09-15 ('our git-mirror is a strong approach'), which is the operator-owned decision criterion 2 was waiting on since 2026-08-16. All three exit criteria met; observability is ENUMERATED as the criterion asks, and its IMPLEMENTATION is filed separately as 1210-fn4c so open work stays visible

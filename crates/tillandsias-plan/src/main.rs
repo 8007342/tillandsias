@@ -7217,6 +7217,84 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     );
                     std::process::exit(1);
                 }
+                // ORDER 1211-q9bm — REFUSE A TERMINAL FLIP THAT WOULD STRAND THE
+                // LONG-RUNNING VIEW, at the flip rather than at someone else's gate.
+                //
+                // plan/long-running.md is a filtered view of ACTIVE multi_cycle
+                // packets, so a terminal packet must leave it.
+                // check-long-running-view.sh enforces that correctly — but it runs
+                // inside the gate (build.sh), so the refusal fires for WHOEVER LANDS
+                // NEXT. Measured 2026-09-15: completing 330 left its row behind, and
+                // the fleet-wide land block was paid for by yoga, who had to prove
+                // the refusal was not theirs, find the owner, and decide whether
+                // editing another host's lane was acceptable. The author never saw it.
+                //
+                // The checker's own message already names the right moment — "remove
+                // each stale one, in the same commit as the change that moved it" —
+                // which is a COMPLETION-TIME instruction delivered at LAND TIME to a
+                // different person. Everything needed to say it earlier is here: the
+                // packet, the new status, multi_cycle, and the view's contents.
+                //
+                // NOT A REPLACEMENT FOR THE LAND-TIME CHECK. That stays: a flip made
+                // by anything that bypasses set-field would strand the view again,
+                // and this guard cannot see those. Same reasoning as 940-f77j — the
+                // early refusal is a courtesy to the author, the gate is the backstop.
+                //
+                // Same shape as the fragment-status-loss precedent recorded at
+                // evidence_event_shape() above, where a checker refused AFTER the
+                // write and AFTER a commit and cost this host two cycles in an hour.
+                if tillandsias_plan::is_terminal_status(&value)
+                    && packet
+                        .get("multi_cycle")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                {
+                    let view_path = std::env::var("TILLANDSIAS_LONG_RUNNING_VIEW")
+                        .unwrap_or_else(|_| "plan/long-running.md".to_string());
+                    if let Ok(view) = std::fs::read_to_string(&view_path) {
+                        // The view keys rows by ORDER, in the same `| <order> |`
+                        // shape the checker parses (its view_orders() sed).
+                        let order = packet
+                            .get("order")
+                            .map(|o| match o {
+                                serde_yaml::Value::Number(n) => n.to_string(),
+                                serde_yaml::Value::String(s) => s.clone(),
+                                _ => String::new(),
+                            })
+                            .unwrap_or_default();
+                        // Mirror the checker's parser rather than inventing a second
+                        // one: its view_orders() is
+                        //   sed -n 's/^| *\([0-9][0-9a-z-]*\) *|.*/\1/p'
+                        // i.e. a leading pipe, the order token as the FIRST CELL,
+                        // then a pipe. Comparing the trimmed first cell says exactly
+                        // that without a regex, and keeps the two in step — a looser
+                        // match here would refuse a row the gate does not see.
+                        let listed = !order.is_empty()
+                            && view.lines().any(|l| {
+                                let t = l.trim_start();
+                                t.starts_with('|')
+                                    && t[1..]
+                                        .split('|')
+                                        .next()
+                                        .is_some_and(|cell| cell.trim() == order)
+                            });
+                        if listed {
+                            eprintln!(
+                                "error: '{order}' is multi_cycle and still listed in {view_path}, which is a filtered view of ACTIVE multi_cycle packets."
+                            );
+                            eprintln!(
+                                "       Remove its row in the SAME COMMIT as this status change (the wording check-long-running-view.sh uses)."
+                            );
+                            eprintln!(
+                                "       Refused here rather than at land time, where the cost falls on whoever lands next rather than on you (1211-q9bm)."
+                            );
+                            eprintln!(
+                                "       The prose columns are editorial and cannot be generated, so the row is yours to delete — not this tool's."
+                            );
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 let cur_rank = tillandsias_plan::closure_rank(&current);
                 let new_rank = tillandsias_plan::closure_rank(&value);
                 let is_downgrade = match (cur_rank, new_rank) {

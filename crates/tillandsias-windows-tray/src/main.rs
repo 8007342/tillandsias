@@ -789,6 +789,69 @@ fn ",
             "the confirm path must map replies over the transitional state"
         );
     }
+
+    /// 1213-ysme: the guest-side login log's tee is asserted HERE, not in
+    /// `wsl_lifecycle`, because `mod wsl_lifecycle` is `cfg(target_os =
+    /// "windows")` and the stub compiles everywhere else. The sibling
+    /// assertion that used to live beside the wrapper therefore ran on
+    /// Windows alone; on every host the fleet actually gates on, a filter
+    /// naming it reported `0 passed; 18 filtered out` under a green `ok`,
+    /// which 913-27ex settled is not a pass.
+    ///
+    /// The doc comment beside the wrapper warns a future debugger NOT to
+    /// de-pipe it on a blank-terminal recurrence — piping is not the
+    /// mechanism, and dropping the tee only costs the log that makes the next
+    /// failure legible. That warning was prose on linux-next: the change it
+    /// forbids would have passed every gate available to whoever made it.
+    ///
+    /// REGIME: source-scan over `include_str!`, no host state, no wall-clock,
+    /// no Win32 — the same idiom the assertion already used, which is why
+    /// moving it costs nothing. It never needed the module; it reads the raw
+    /// literal out of the file as TEXT. Same reasoning as `tray_registry`
+    /// being deliberately un-gated so its criteria are exercised on every host
+    /// rather than only where a registry exists.
+    ///
+    /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    #[test]
+    fn github_login_wrapper_captures_full_output_on_every_host() {
+        let source = include_str!("wsl_lifecycle.rs");
+        const OPEN: &str = "let github_login_wrapper = r#\"";
+        let start = source
+            .find(OPEN)
+            .expect("the GitHub-Login wrapper must exist")
+            + OPEN.len();
+        // Bound the window on the literal's own terminator rather than a fixed
+        // byte count: a slice taken at `start + 900` panics on a char boundary
+        // or past EOF as soon as the script grows, which would read as a defect
+        // in the wrapper rather than in this scan. Search from AFTER the
+        // opening delimiter — the literal begins `r#"#!/usr/bin/env bash`, so
+        // a terminator search from `start` matches the OPENING `"#` three bytes
+        // in and yields an empty body that fails every assertion below for the
+        // wrong reason.
+        let end = source[start..]
+            .find("\"#;")
+            .map(|off| start + off)
+            .expect("the wrapper literal must be terminated");
+        let body = &source[start..end];
+        let launch = body
+            .lines()
+            .find(|l| l.contains("tillandsias-headless --github-login"))
+            .expect("the wrapper must launch tillandsias-headless --github-login");
+
+        assert!(
+            launch.contains("/usr/local/bin/tillandsias-headless"),
+            "the wrapper must invoke the guest binary by absolute path: {launch}"
+        );
+        assert!(
+            launch.contains("2>&1 | tee"),
+            "both streams must reach the guest-side log, or the next failure is \
+             undiagnosable again: {launch}"
+        );
+        assert!(
+            body.contains("rc=${PIPESTATUS[0]}"),
+            "the login's own exit code must survive the pipeline, not tee's"
+        );
+    }
 }
 
 #[cfg(target_os = "windows")]

@@ -3699,6 +3699,46 @@ pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResoluti
     }
 }
 
+/// ORDER 1211-34v6. The refusal an operator reads when the login cannot resolve
+/// a repository — lifted out of the call site so it can be pinned by a test.
+///
+/// It used to end "or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again". That
+/// advice is INERT for this path: the resolver above reads `git config` and
+/// .git-pointer files and never consults the environment, so an operator
+/// following it got the identical refusal and learned nothing. The variable is
+/// real — the cloud lanes read it — which is exactly what made the wrong advice
+/// plausible.
+///
+/// Replacing it with SILENCE would have been worse: a refusal with no way
+/// forward. So the text now carries the remedy that was measured to work (the
+/// CLI lane from inside a checkout) and says plainly that the tray lane cannot
+/// satisfy it, because the tray runs in the guest at /root with no checkout —
+/// which is 759-vceg's CWD dependency, filed separately by yolanda.
+fn github_login_no_upstream_refusal() -> String {
+    "no GitHub upstream is configured for this checkout, so push permission \
+                 cannot be verified against a repository.\n\
+                 \n\
+                 Nothing was written to Vault. Seeding on authentication alone is the \
+                 state order 759-vceg exists to prevent: the token looks accepted here \
+                 and fails at the first push, which is how a release looked healthy and \
+                 broke the operator forty minutes later (803-49re).\n\
+                 \n\
+                 Run this login from the CLI, with your shell in a checkout whose \
+                 `origin` points at the target repository. The repository is resolved \
+                 from this process's CWD by `git config --get remote.origin.url` with a \
+                 .git-pointer fallback, so the checkout must be where the command runs.\n\
+                 \n\
+                 THE TRAY'S LOGIN CANNOT SATISFY THIS: it runs inside the guest, whose \
+                 CWD is /root and which holds no checkout, so it reaches this refusal \
+                 every time regardless of your token (order 1211-34v6).\n\
+                 \n\
+                 Setting TILLANDSIAS_PROJECT_REMOTE_URL does NOT help here. That \
+                 variable is real and the cloud lanes read it, but the resolver this \
+                 check uses never consults the environment — earlier text advertised it \
+                 and sent operators in a circle (order 1211-34v6, order 759-vceg)."
+        .to_string()
+}
+
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
@@ -10183,20 +10223,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         // checkout with an upstream is a smaller ask than a second probe path
         // whose own failure modes nobody has measured.
         None => {
-            return Err(
-                "no GitHub upstream is configured for this checkout, so push permission \
-                 cannot be verified against a repository.\n\
-                 \n\
-                 Nothing was written to Vault. Seeding on authentication alone is the \
-                 state order 759-vceg exists to prevent: the token looks accepted here \
-                 and fails at the first push, which is how a release looked healthy and \
-                 broke the operator forty minutes later (803-49re).\n\
-                 \n\
-                 Run this login from a checkout whose `origin` points at the target \
-                 repository, or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again \
-                 (order 759-vceg)."
-                    .to_string(),
-            );
+            return Err(github_login_no_upstream_refusal());
         }
     }
 
@@ -24948,8 +24975,15 @@ esac
 
         // SCOPE CONTROL: this really is the no-upstream arm and not some other
         // `None =>` that drifted above it.
+        //
+        // ORDER 1211-34v6 moved the refusal TEXT out of this arm and into
+        // github_login_no_upstream_refusal() so it could be pinned by a unit
+        // test instead of a source scan. The anchor follows the thing that
+        // moved. It is exactly as specific as the string it replaces — that
+        // helper is called from this arm and nowhere else — so the control is
+        // not weakened, and a `None =>` drifting above this one still fails it.
         assert!(
-            arm.contains("no GitHub upstream is configured"),
+            arm.contains("github_login_no_upstream_refusal"),
             "the window is not the no-upstream arm; the assertion below would \
              prove nothing about it: {arm}"
         );
@@ -25557,6 +25591,42 @@ esac
     // the Command::new("git") path returns None and the wire lane lost its
     // push channel). The parser must read a plain clone's config without
     // shelling out.
+    /// ORDER 1211-34v6. The refusal must not advertise a remedy that does
+    /// nothing, and must not go silent either.
+    ///
+    /// The old text told a stuck operator to set TILLANDSIAS_PROJECT_REMOTE_URL.
+    /// The resolver this check uses reads `git config` and .git-pointer files
+    /// and never consults the environment, so that advice returned the operator
+    /// to the same refusal — measured on yolanda's Windows host 2026-09-15,
+    /// where every tray login reached this arm regardless of the token.
+    ///
+    /// This asserts three things, and the third is why the test exists: the
+    /// working remedy is NAMED, the tray's inability to satisfy it is STATED
+    /// (otherwise an operator retries the lane that cannot work), and the env
+    /// var is never offered as a fix. The var may still be MENTIONED — the text
+    /// explains why it does not help — so the assertion is about the advice,
+    /// not about the string's presence.
+    #[test]
+    fn github_login_refusal_names_a_remedy_that_works() {
+        let msg = github_login_no_upstream_refusal();
+        assert!(
+            msg.contains("from the CLI") && msg.contains("checkout"),
+            "the refusal must name the CLI-from-a-checkout lane: {msg}"
+        );
+        assert!(
+            msg.contains("TRAY'S LOGIN CANNOT SATISFY THIS"),
+            "the refusal must say the tray lane cannot satisfy it, or an operator retries it forever: {msg}"
+        );
+        assert!(
+            msg.contains("does NOT help"),
+            "if TILLANDSIAS_PROJECT_REMOTE_URL is mentioned it must be marked inert, never offered: {msg}"
+        );
+        assert!(
+            !msg.contains("or set TILLANDSIAS_PROJECT_REMOTE_URL"),
+            "the inert remedy must not return: {msg}"
+        );
+    }
+
     #[test]
     fn parse_gitdir_origin_url_reads_plain_clone_config() {
         let tmp = tempfile::tempdir().expect("temp dir");

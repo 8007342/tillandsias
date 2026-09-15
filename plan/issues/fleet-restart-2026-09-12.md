@@ -6418,3 +6418,129 @@ row claims it is unfinished — and it is pirria's evidence to cite, not this
 coordinator's to assume. lenovinha's own follow-up is the mirror of it: closing
 1204-3s2s they recorded that 1125-92xa's verification remains UNBOUND, which is
 1205-aipn's subject reported by its own discoverer against their own row.
+
+**Pass 36 addendum (2026-09-15T21:05Z) — yolanda returned, and the defect the
+operator hit is a correct guard whose input the tray lane cannot supply.**
+ROOT CAUSE, found by yolanda and VERIFIED HERE IN THE SOURCE rather than taken
+on report: `run_provider_login` runs the 759-vceg push-authorization probe
+between the login and the Vault write, and it resolves the target repository
+with `read_host_project_origin_url(Path::new("."))` — THE PROCESS'S CURRENT
+WORKING DIRECTORY. On None it returns a long, well-written refusal whose
+literal text includes "Nothing was written to Vault". Confirmed present.
+THE INPUT IS UNOBTAINABLE IN THAT LANE ON THIS HOST, measured by yolanda in the
+guest: `find / -maxdepth 6 -name .git -type d` returns NOTHING — not one git
+checkout anywhere in the VM — /home/forge/src exists and is EMPTY after the
+~/src removal, and a guest login shell's cwd is /root. So the None arm is
+guaranteed on every login attempt whatever token is pasted. THE GUARD IS
+CORRECT AND ITS PRECONDITION IS UNSATISFIABLE WHERE IT RUNS, which is a design
+gap rather than a bug in either half, and it bites Windows and macOS tray hosts
+first because their login always runs in the guest.
+THE OPERATOR'S ~/src INSTINCT WAS RIGHT BY A PATH NOBODY WAS LOOKING AT. Their
+hypothesis was that project listing still resolved through a checkout that no
+longer exists; yolanda and yoga both read the enumeration code and correctly
+withdrew it. It turned out the checkout dependency is upstream of enumeration
+entirely — in the LOGIN's authorization probe — so the symptom they reported
+(auth succeeds, projects never list) was produced by a checkout dependency, in
+a different function, two steps earlier.
+FOUR SELF-CORRECTIONS FROM ONE HOST IN ONE SESSION, each unprompted and each
+before it cost anyone else: the ~/src hypothesis withdrawn on yoga's reading;
+"the login script never writes to Vault" corrected after finding the separate
+write step; "run_podman_command_silent swallows stderr" corrected after this
+coordinator read the function (it returns stderr AS the error); and "exec #2
+was the Vault write" corrected to `gh auth status` once the timeline resolved —
+the Vault write NEVER RAN, which is why the secret is absent and why nothing in
+Vault was ever touched. They also proved the Vault path FUNCTIONAL by
+measurement rather than by reading, with operator authorisation, and cleaned up
+after: minted a real SecretID, wrote, read back, deleted, and verified
+`kv list secret/` identical to the pre-probe state.
+AND THEY NEARLY FILED A FALSE FINDING OFF A `| head`-TRUNCATED LIST — a missing
+AppRole that was below the cut — and flagged it rather than letting it travel.
+That is this fleet's own capped-enumeration rule, caught on their own work; the
+coordinator hit the same trap six hours earlier reading a refusal's "12 path(s)"
+as a complete set and needed three retractions to unwind it.
+CONSENT, RECORDED AS REPORTED AND NOT AS VERIFIED: yolanda states the operator
+confirmed destructive-teardown consent DIRECTLY to them, in session, for this
+host on 2026-09-15. This coordinator did not hear it from the operator and
+cannot verify a consent given to someone else, so it is recorded with its
+attribution and surfaced for the operator to confirm or correct. yolanda
+correctly refused to act on the coordinator's word earlier and has run NO
+destructive teardown — and on this diagnosis does not need one: nothing is
+corrupt, the flow is refusing correctly on a precondition the host cannot meet.
+
+**Operator rulings, 2026-09-15 evening — recorded here because a standing
+authorization that lives only in a transcript is not an authorization anyone
+can check later.**
+DESTRUCTIVE TESTS: the operator approved FLEET-WIDE destructive tests as
+needed, given directly to this coordinator in session. That supersedes the
+per-host consent bookkeeping this file has been carrying all day, in which
+esme, macbookair and pirria held standing consent and yolanda and macneo did
+not. yolanda's separately-obtained per-run consent for 2026-09-15, recorded
+earlier as REPORTED-not-verified, is now subsumed by the general approval and
+needs no further confirmation.
+WHAT DOES NOT CHANGE: 1004-vsh2's reasoning about WHY the consent matters. A
+workstation's guest holds work the operator has not finished with, and an
+orchestrator's or peer's instruction to run a destructive procedure is still
+not the operator's consent to destroy a particular machine's state. The
+approval removes the need to ASK; it does not make a destructive run the right
+move when a diagnosis does not call for one. yolanda's own judgement tonight is
+the model — they had the consent, and declined to use it because nothing was
+corrupt and wiping would only reproduce the same refusal on a colder machine.
+WEBSITE: the operator authorised updating tillandsias.org directly, and the
+work is deployed at 778a078 — the git-mirror decision explained across levels
+1-4 at increasing relevance, three new slides with a nested-boxes figure, and
+the install lines shortened to site-hosted static shims that resolve the
+release channel at run time. The shim design preserves the property the long
+GitHub URLs were protecting: the site redeploys on commit while the release
+channel moves on its own, so the shims never need rebuilding when the app
+releases.
+
+**Pass 37 (2026-09-15T22:11Z) — the expiry sweep cannot see work that is
+committed but unlanded, and a guard was cfg-gated off every host that gates.**
+Nothing to relay: windows-next and osx-next both 0 ahead. Six rows in_progress,
+TWO expiry candidates, and NEITHER should be swept.
+1186-w3ph READS STALE AND ITS HOST IS THE MOST ACTIVE ON THE FLEET. The sweep
+reports claimant:yolanda with no activity since 2026-09-14T22:00Z, which is
+over the TTL. yolanda has been working all evening — three rows filed, a root
+cause found, four self-corrections — and their 1186-w3ph commits DO exist: at
+eb83f855e, on refs/heads/salvage/yolanda-windows/20260915-1186-w3ph, verified
+NOT an ancestor of trunk. So the work is committed and unlanded, and the ledger
+cannot see it. THE SWEEP MEASURES LANDED ACTIVITY AND CALLS IT HOST ACTIVITY.
+A host that commits, salvages, and is blocked on a gate or a decision looks
+identical to a host that walked away. This is the third distinct way this
+instrument has misread a live claim today, after the channel defect (1198-7q95)
+and the platform-versus-workstation attribution (1201-hsf9), and it is the
+first that is not a defect in the sweep at all — the sweep is reading the only
+signal it has.
+1155-jurn is the other candidate, unchanged all day: esme offline, finished
+work, left untouched by design.
+A GUARD WAS CFG-GATED OFF EVERY HOST THE FLEET GATES ON (yoga, 1213-ysme,
+completed and verified on trunk). The assertion forbidding a de-pipe of the
+GitHub-login wrapper lived inside a cfg(target_os = "windows") module, so on
+linux-next the doc comment warning a future debugger was PROSE: the change it
+forbids would have passed every gate available to whoever made it. Two hosts,
+same crate and filter — yoga 0 passed / 18 filtered out, a green ok over zero
+executed which 913-27ex settles is not a pass; yolanda 1 passed / 123 filtered.
+The fix was free because the assertion reads the file as text and never needed
+the module.
+AND THE DETECTION METHOD IS yolanda's, AND IT IS THE REUSABLE HALF: 105 tests
+exist on one host and not the other, and NEITHER OUTPUT SAYS SO. Comparing PASS
+counts cannot detect it — 0 and 1 are both plausible — but comparing
+FILTERED-OUT counts can. That is the first cheap test the fleet has for "this
+gate is not running what you think it is", and it needs no new machinery. They
+scoped their row to one crate and two hosts, flagged the generalisation as
+inferred, and named the cfg-gated modules as where to look without claiming any
+currently hides a guard.
+THE COORDINATOR'S OWN INSTRUMENT ERROR, CAUGHT BY CHECKING RATHER THAN BY CARE.
+Reading yoga's "roughly 17 cfg-gated module declarations", this coordinator
+counted 4 and was about to report the discrepancy. The query required `cfg` and
+`mod` on the SAME LINE, and the attribute normally sits on the line BEFORE the
+declaration — so it was structurally incapable of finding the ordinary case.
+Counted correctly: 17 in the attribute-then-declaration form, 2 same-line, 238
+cfg(target_os) attributes overall as the control. yoga's number was right. That
+is the fourth time today a wrong query produced a confident, plausible number.
+THE WEBSITE NOW CARRIES THE PROJECT'S UNTRACKED DEBT, filed as 1213-rbt9. Across
+the five levels at their pinned release: 38 published shortcomings, and FOURTEEN
+whose PATH line is the site's own sentinel, "No path to green is recorded in the
+repo." Five of the fourteen are security items. Levels 3 and 4 now link the
+tracking entry, so an outside reader who wants to argue with one — or report it
+— has somewhere to attach it rather than rediscovering it independently.

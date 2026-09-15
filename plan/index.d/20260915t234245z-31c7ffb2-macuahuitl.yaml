@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    event:
+      type: note
+      ts: "2026-09-15T23:42:45Z"
+      agent_id: linux-macuahuitl-claude-20260915t234245z
+      host: macuahuitl
+      summary: |
+        CRITERION 2 PARTIALLY DISCHARGED: the five security items triaged against TRUNK, with what was and was not checked stated per item. The site describes the PINNED stable release and is correct about it; this note says which of its claims a reader would find already changed if they looked at trunk instead.
+        (1) THE PROXY'S PERMISSIVE SECOND PORT IS MATERIALLY NARROWED AT TRUNK, and the site is now MORE PESSIMISTIC THAN THE CODE. The published RED says Squid listens on that port "on every interface". images/proxy/squid.conf at trunk binds it to 127.0.0.1:3129, and the comment records the reasoning: `3129` appears in no consumer, nothing publishes it, no build passes it, so narrowing the bind broke no caller that exists today. The port still allows every destination, so "an allowlist bypass exists" survives; "reachable" does not, in the sense a reader would take. When level 4's pin moves this RED must be rewritten rather than carried.
+        AN OVER-PESSIMISTIC PUBLISHED CLAIM IS ALSO A DEFECT ON AN HONESTY SURFACE, and worth saying plainly because the site's whole value is that its REDs are believed. A page that overstates a fixed weakness spends the credibility that makes its unfixed ones credible, and an outside reader who checks this one and finds it narrowed has been given a reason to discount the other thirteen.
+        (2) RSA-2048 vs THE SPEC'S PER-LAUNCH EC P-256: APPEARS UNCHANGED. `rsa:2048` is still generated at crates/tillandsias-headless/src/main.rs (and in vault_bootstrap.rs and the macOS diagnose path); no prime256v1/secp256r1 generation was found. Not exhaustively verified — the site's fuller claim covers lifetime, storage location and reuse, and only the key type was checked here.
+        (5) THE PLAINTEXT SHARE FALLBACK APPEARS UNCHANGED: crates/tillandsias-headless/src/vault_bootstrap.rs still joins a `fallback_` share file onto the cache dir. The site's fuller claim — written unconditionally inside a guest, never deleted, and satisfying the keychain-present check — was NOT individually verified here.
+        (4) THE SIGNATURE CLAIM IS NARROWER THAN ITS SUMMARY READS AND NEEDS RE-READING, NOT RE-STATING. scripts/install.sh DOES fetch SHA256SUMS and verify a checksum. The site's actual claim is narrower and may still hold in full: that the manifest travels the same channel as the binary, that Linux continues without it, and that no install path verifies a cosign bundle. Whoever takes this row should read the RED before testing it — the summary invites a check that would pass while the claim stands.
+        (3) THE macOS SIGNING ALLOW-LIST WAS NOT CHECKED. No macOS host was consulted and no reading was done. It is untouched, not cleared.
+        SO: one of five is materially changed, two appear to stand, one needs its narrower claim tested rather than its summary, and one is untouched. Criterion 2 asks for the five to be triaged FIRST and their status stated; that is done to the depth a Linux read allows, and the remaining depth needs either a macOS host or a deliberate test rather than more reading.
