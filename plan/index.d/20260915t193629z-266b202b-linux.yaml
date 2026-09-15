@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    event:
+      type: progress
+      ts: "2026-09-15T19:36:29Z"
+      agent_id: linux-yoga-claude-20260915t193628z
+      host: linux
+      summary: |-
+        CLAIM — yoga, for EXIT CRITERION 2 ONLY. The row names three surfaces and I am taking one; the other two are named below as not-taken rather than left ambiguous.
+
+        VERIFIED LIVE BEFORE CLAIMING, all three:
+          (1) images/git/Containerfile HEALTHCHECK is still port-only — its own header says "validates daemon readiness via port 9418".
+          (2) probe-upstream-auth.sh reaches "mirror has no local heads to probe with (still seeding?); cannot determine authorization" and then calls finish error with NO reason.
+          (3) the launcher seeded-gate is referenced from lib-common but the function itself is elsewhere; I have not traced it.
+
+        WHY CRITERION 2 AND WHY IT IS SMALL: the criterion offers two ways to satisfy it — probe anyway via a synthetic ref or ls-remote, OR carry the no-heads reason in the published namespace. The second is already a designed mechanism and is not being used here. publish() takes an optional reason and emits refs/tillandsias/upstream-auth/<state>/<reason>/<epoch>; order 809-w2xy built it to be backward compatible by construction, because the consumer parses state as the prefix and epoch as the suffix, so a middle segment is invisible to a reader that does not want it — and that was verified against git ls-remote in 2026-08-29 rather than assumed. finish denied already passes a reason. Four finish error call sites pass none, including both no-heads paths.
+
+        So the honest verdict the criterion asks for is one the mirror can already express and simply does not. That is a better fix than inventing a synthetic-ref probe, because it changes what is SAID rather than what is DONE — no new network behaviour on a mirror that is already in trouble.
+
+        WHAT I WILL NOT DO: change the state itself from error to something friendlier. "Cannot determine authorization" is TRUE — the probe genuinely cannot answer without a ref — and 778-hb3x's complaint is that the verdict conflates that with a transport failure, not that it should claim success. Making an honest error into a cheerful verdict would be the fail-open trade this project keeps refusing.
+
+        NOT TAKEN, and I am naming them so nobody reads this closure as covering them:
+          - the HEALTHCHECK surface (criterion 1) — it is a Containerfile change whose verification wants a live mirror container in the seeding-failed state, which I cannot construct here without disturbing a running stack.
+          - the launcher seeded-gate surfacing the last seed-failure line (criterion 3) — untraced by me, and it is the criterion that explicitly demands a litmus pin, so it deserves its own claim rather than a corner of this one.
