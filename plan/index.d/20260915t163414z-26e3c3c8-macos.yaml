@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    field: status
+    value: ready
+    ts: "2026-09-15T16:34:14Z"
+    host: macos
+
+events:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    event:
+      type: note
+      ts: "2026-09-15T16:34:14Z"
+      host: macos
+      summary: |-
+        cycle end: criterion 4 handed to work/690-w94k (5b249f35f) awaiting a trunk merge; criteria 2 and 3 genuinely unfinished, so ready is correct here rather than completed
