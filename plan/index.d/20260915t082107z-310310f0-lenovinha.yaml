@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    field: status
+    value: in_progress
+    ts: "2026-09-15T08:21:07Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    event:
+      type: note
+      ts: "2026-09-15T08:21:07Z"
+      host: lenovinha
+      summary: |-
+        claimed by its filer: the selector re-offered 1132-r4mt to this host on the very next cycle, which is the loop this row describes — it is now costing this host a pick every two hours
