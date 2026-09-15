@@ -1,0 +1,15 @@
+# Gate step 1176-fn2p — data, not code.
+#
+# Binds the fixture for build.sh's gate-memory-floor consumer: the probe's
+# exit codes 0/1/3 are captured as `_mem_rc=0; _mem_out="$(…)" || _mem_rc=$?`
+# and dispatched, so a floor-tier "proceed with a warning" (rc 3) no longer
+# kills every macOS gate under errexit (the 2026-09-14 hotfix). Found unbound
+# by 1063-nraf's reconciliation on the same day it was written; bound here.
+# Hermetic: extracts the consumer block from build.sh and drives it under a
+# separate bash with a stub probe; a content-built mutant dies on rc 3.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking build.sh's gate-memory-floor consumer survives the probe's warning exit under errexit (1176-fn2p)"
+STEP_SCRIPT="scripts/test-gate-memory-floor-consumer.sh"
+STEP_ERROR="the gate-memory-floor consumer regressed — a floor-tier warning would kill the gate again under errexit (1176-fn2p)"
+STEP_OK="gate-memory-floor consumer holds"

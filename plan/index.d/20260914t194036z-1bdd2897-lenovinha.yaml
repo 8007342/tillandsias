@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    event:
+      type: progress
+      ts: "2026-09-14T19:40:36Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Implementation COMPLETE and gated, BLOCKED ON THE CREDENTIAL, not on the work.
+
+        The fix is on the writer, as the row's option (a): scripts/record-ci-phase-result.sh (new) appends one record in local-ci.sh's exact field shape and refuses a run id the guard cannot date; scripts/local-ci.sh honours TILLANDSIAS_CI_RUN_ID so build.sh can name the run its phases belong to, refusing a malformed value at rc=2; build.sh exports a run id at the top of the ci-full dispatch and records post-build and runtime with their real status, including the red before it exits and the skip when the podman probe is unhealthy.
+
+        1174-6r4k's negative control is preserved by construction: nothing in the recorder can record a phase that did not run, so a phase-only pre-build diagnostic still reads never:release-tier.
+
+        SCOPE NOTE for criterion 1 and for the 890-27mv daily exercise: ./build.sh --ci-full ALONE exits after the pre-build gate and never runs post-build or runtime, so it still reads never, correctly. The tier is exercised by --ci-full --install. Criterion 1 is met for that dispatch; it cannot be met for the bare --ci-full without changing what ci-full runs, which the row puts out of scope.
+
+        FIXTURE scripts/test-release-tier-freshness-reads-ci-full.sh, 8/8, hermetic (each arm points the guard at a throwaway index via TILLANDSIAS_CHECK_LOG_INDEX, so the verdict never depends on whether this host has run the tier). Arm 2 is the negative control and reproduces the pre-fix never:release-tier exactly. Bound at scripts/gate-steps.d/345-1185-9qx6.step.
+
+        GATE: ./build.sh --check green on this tree, 993s, no violations, gate-stamp.sh verify reads ok:gate-fresh. The bound step reported "release-tier freshness writer/reader contract check passed". The land tool re-gated after its integrate and that gate also passed.
+
+        BLOCKER, and it is a fleet-level one. scripts/check-credential-channel.sh answered ok:gh-keyring-push-verified at 2026-09-14T18:52Z, at the start of this cycle. scripts/land-on-platform-branch.sh then integrated and gated cleanly and was REFUSED AT THE PUSH: refused:land:auth-failed, "fatal: could not read Username for 'https://github.com': No such device or address", after its own 1164-cftu retry. Re-running the credential check at 19:47Z now answers missing:no-credential-channel. So the channel was evicted DURING the cycle, between a verified check and a push roughly an hour later. Per 1025-a896 no gh auth login or gh auth refresh was run from this host; a re-auth here would evict the other hosts' token.
+
+        COMMIT dc4721a09642940b32aaab2c638ecb66dd6083a9, local only, on linux-next ahead 1. The salvage script's own path could not preserve it (a clean tree with a finished unpushed commit is its ok:salvage-not-needed case, the fourth row) and the ungated salvage-ref push hangs on the same absent credential, so the ref was made LOCALLY: ok:salvaged-local:refs/heads/salvage/lenovinha/20260914-1185-9qx6:dc4721a09. IT SURVIVES A RE-CLONE ONLY IF SOMEONE PUSHES IT. When the credential is re-provisioned: git push origin refs/heads/salvage/lenovinha/20260914-1185-9qx6, then scripts/land-on-platform-branch.sh linux-next.
+
+        NEXT ACTION: operator re-provisions the gh credential on lenovinha; then push the salvage ref and re-run the land. The packet stays in_progress and claimed by this host until then, because the work is done and only the push is missing.
+
+        ALSO FILED this cycle: 1188-mm9y, answering this row's side observation. The question "is the installed binary the tree's" has no answer on the Linux launcher: crates/tillandsias-headless/src/main.rs:121 is include_str!("../../../VERSION") and main.rs:275 prints it, so the label is the VERSION file as of COMPILE time, and a mismatch cannot be told from a current binary bumped after its build. The headless crate bakes no commit SHA; the 765-evbt fingerprint machinery is consumed only by crates/tillandsias-macos-tray/build.rs. Reproduced on lenovinha: VERSION 56.9.13.1, installed launcher reports v56.9.12.1. That fragment is also unpushed.

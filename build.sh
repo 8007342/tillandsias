@@ -1173,6 +1173,29 @@ _run_litmus_phase() {
         "$@" 2>&1 | tee "$log_file"
 }
 
+# ORDER 1185-9qx6. Record a phase THIS script ran into the check-log index, as
+# part of the run id exported at the top of the ci-full dispatch, so
+# check-release-tier-freshness.sh can see a full tier was exercised.
+#
+# BEST-EFFORT BY CONSTRUCTION: a missing jq or an unwritable target/ costs a
+# record and never the gate that earned it. The inverse — failing a green
+# ci-full because its bookkeeping failed — would make the guard's own fix a
+# reason to bypass the tier, which is the shape 758-jw6v warns about.
+_record_ci_phase() {
+    local phase="$1" check_id="$2" status="$3" log="${4:-}"
+    [[ -n "${TILLANDSIAS_CI_RUN_ID:-}" ]] || return 0
+    [[ -x "$SCRIPT_DIR/scripts/record-ci-phase-result.sh" ]] || return 0
+    local out
+    if out="$("$SCRIPT_DIR/scripts/record-ci-phase-result.sh" \
+        "$TILLANDSIAS_CI_RUN_ID" "$phase" "$check_id" "$status" "$log" 2>&1)"; then
+        _info "$out"
+    else
+        _warn "Could not record the $phase phase in the check-log index: $out"
+        _warn "  The phase's own result above stands; only the release-tier freshness record is missing."
+    fi
+    return 0
+}
+
 # Record that a gate passed against THIS tree, for the pre-push hook to verify.
 # Called from EVERY passing gate. It was originally only in the --check path,
 # which meant `--ci-full` — the STRONGER gate, and the one the release skill
@@ -1365,6 +1388,19 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
         CI_ARG_LIST+=(--strict-all)
     fi
     if [[ "$FLAG_CI_FULL" == true ]]; then
+        # ORDER 1185-9qx6 — NAME THIS RUN, so the phases that run OUTSIDE
+        # local-ci.sh can be recorded as part of it. The pre-build gate below is
+        # the only phase local-ci.sh (the sole writer of
+        # target/convergence/check-logs.jsonl) sees; the post-build status smoke
+        # and the runtime residual litmus run from this script through
+        # run-litmus-test.sh and wrote no record at all. That is why
+        # check-release-tier-freshness.sh read `never:release-tier` after a GREEN
+        # ci-full on macuahuitl 2026-09-14 — every one of the index's 245 entries
+        # was ci_phase pre-build, so the FULL-tier run its 1174-6r4k rule requires
+        # could never come from the run it guards. Each phase records its own real
+        # status below; nothing here claims a phase that did not run.
+        TILLANDSIAS_CI_RUN_ID="${TILLANDSIAS_CI_RUN_ID:-local-ci-$(date -u +%Y%m%dT%H%M%SZ)}"
+        export TILLANDSIAS_CI_RUN_ID
         _step "Running full CI/CD validation (pre-build gate)..."
         _prepare_ci_full_install_inputs
         CI_ARGS=(--phase pre-build)
@@ -1466,7 +1502,13 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         if TILLANDSIAS_STATUS_CHECK_BIN="$INSTALL_BIN" \
             _run_litmus_phase post-build e2e /tmp/litmus-post-build.log; then
             _info "Post-build status smoke passed"
+            _record_ci_phase post-build post-build-status-smoke pass /tmp/litmus-post-build.log
         else
+            # RECORD THE RED BEFORE EXITING. The guard has a red channel
+            # (`red:release-tier:`) and it can only ever fire if a failing phase
+            # leaves a record; exiting silently would make every non-green tier
+            # run indistinguishable from one that never happened.
+            _record_ci_phase post-build post-build-status-smoke fail /tmp/litmus-post-build.log
             _error "Post-build status smoke failed"
             exit 1
         fi
@@ -1479,13 +1521,21 @@ if [[ "$FLAG_INSTALL" == true ]]; then
             if _run_litmus_phase runtime e2e /tmp/litmus-runtime.log; then
                 printf 'PASS\n' >"$RUNTIME_STATUS_FILE"
                 _info "Runtime residual litmus passed"
+                _record_ci_phase runtime runtime-residual-litmus pass /tmp/litmus-runtime.log
             else
                 printf 'FAIL\n' >"$RUNTIME_STATUS_FILE"
+                _record_ci_phase runtime runtime-residual-litmus fail /tmp/litmus-runtime.log
                 _error "Runtime residual litmus failed"
                 exit 1
             fi
         else
             printf 'SKIP\n' >"$RUNTIME_STATUS_FILE"
+            # A skipped runtime phase is recorded as skipped, not omitted. The
+            # run still covered the tier's shape (the reader's coverage rule
+            # counts the phase), and the verdict line it prints says `skip`, so a
+            # reader can tell "runtime was not exercised on this host" from
+            # "runtime passed" — which dropping the record would hide.
+            _record_ci_phase runtime runtime-residual-litmus skipped /tmp/litmus-runtime.log
             if [[ -f "$RUNTIME_STATUS_FILE" ]] && grep -q '^SKIP$' "$RUNTIME_STATUS_FILE"; then
                 _warn "Runtime residual litmus skipped (host Podman runtime unhealthy)"
             fi
@@ -2049,6 +2099,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "YAML reader available and its verdicts stay distinct"
+
+    _step "Checking the wsl.exe transport can carry an exit status (1155-jurn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-wsl-exec-channel-carries-exit-status.sh" 2>&1; then
+        _error "the exit-status canary is wrong: a check that probes the local shell cannot see a transport that drops the status written in the argument string"
+        exit 1
+    fi
+    _info "Exit-status canary sound"
 
 
     _step "Checking set-field emits valid YAML for every value shape..."

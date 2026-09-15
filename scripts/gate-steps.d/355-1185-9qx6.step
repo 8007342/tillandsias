@@ -1,0 +1,22 @@
+# Gate step 1185-9qx6 — data, not code.
+#
+# Binds the fixture for the release-tier writer/reader contract. Hermetic: every
+# arm points the guard at a throwaway index via TILLANDSIAS_CHECK_LOG_INDEX, so
+# the verdict never depends on whether THIS host has run the tier.
+#
+# THE ARM THAT MATTERS IS THE NEGATIVE CONTROL (arm 2): a phase-only pre-build
+# run must still read never:release-tier. 1174-6r4k narrowed the reader to
+# FULL-tier runs and was right; 1185-9qx6 fixed the WRITER so that narrowing
+# never has to be widened. If arm 2 goes green, the guard has been loosened back
+# into accepting a pre-build gate as a release-tier answer, and the daily
+# exercise will skip the real tier on the strength of it.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a green ci-full leaves a full-tier record the freshness guard can read (1185-9qx6)"
+STEP_SCRIPT="scripts/test-release-tier-freshness-reads-ci-full.sh"
+STEP_ERROR="the release-tier freshness contract regressed (1185-9qx6) — either ci-full has stopped recording the phases it runs outside local-ci.sh (so a green release-tier run reads as never:release-tier, the pre-fix defect measured on macuahuitl 2026-09-14), or the guard has widened and a phase-only pre-build run now reads as a release-tier answer (1174-6r4k); see the failing arm above"
+STEP_OK="release-tier freshness writer/reader contract check passed"
+# Exit 3 means the guard, the recorder or jq is absent — nothing was examined,
+# and the fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/check-release-tier-freshness.sh, scripts/record-ci-phase-result.sh or jq is absent, so the contract could not be exercised"

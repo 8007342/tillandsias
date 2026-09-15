@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    field: status
+    value: completed
+    ts: "2026-09-14T22:08:15Z"
+    host: linux
+
+events:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    event:
+      type: completed
+      ts: "2026-09-14T22:08:15Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 1e3e1e01e
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    event:
+      type: note
+      ts: "2026-09-14T22:08:15Z"
+      host: linux
+      summary: |-
+        ci-full now records the phases it runs outside local-ci (post-build, runtime) under an exported TILLANDSIAS_CI_RUN_ID, so a green release tier is readable by check-release-tier-freshness.sh; fixture scripts/test-release-tier-freshness-reads-ci-full.sh 8/8 hermetic, arm 2 the negative control reproducing the pre-fix never:release-tier, bound at scripts/gate-steps.d/355-1185-9qx6.step (prefix reallocated from 345 by the land tool, 1162-qbrx); landed 1e3e1e01e, land verdict ok:land:5e92fda4d:attempt-1, gate log .git/tillandsias-land-gate-attempt-1.log. SCOPE: criterion 1 is met for the --ci-full --install dispatch; bare --ci-full exits after the pre-build gate and still reads never, correctly

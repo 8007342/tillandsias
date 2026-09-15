@@ -51,7 +51,14 @@
 # Exit: ALWAYS 0. This is an advisory.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# TILLANDSIAS_PORTABILITY_ROOT scopes the scan to another tree. It exists for
+# the fixture's CONSTRUCTED controls: every control used to pin a live file
+# in this repository ("test-source-slice-bounds.sh has bare sed -i and MUST be
+# named"), and on 2026-09-14 the daily release-tier exercise found that
+# control red — the instance had been fixed the evening before (1135-z8gn),
+# so the fixture was asserting the tree still carried the defect it exists
+# to find. A control that needs the tree to stay broken is not a control.
+ROOT="${TILLANDSIAS_PORTABILITY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" || exit 0
 
 # COMMENTS ARE NOT CODE, and skipping them is not cosmetic. Every one of these

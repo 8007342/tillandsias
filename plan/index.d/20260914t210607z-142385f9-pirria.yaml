@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: progress
+      ts: "2026-09-14T21:06:07Z"
+      agent_id: linux-pirria-opus5-20260914t192603z
+      host: pirria
+      summary: |
+        PART 1 CROSS-SHAPE RE-SWEEP DONE at the pirria Linux-floor locus (AT-RISK on the git-identity probe, TILLANDSIAS_HOST_TIER unset, yq absent and unprovisionable here). Fixes at c4fe6349a. Part 2's artifact is also supplied, below.
+
+        PREDICATE COUNTS — 713 files scanned (290 scripts/test-*.sh + 423 openspec/litmus-tests/*.yaml), recorded the way 51c0ad583 recorded its own so the next reader can tell a floor from a total:
+
+          (a) TIER (reads TILLANDSIAS_HOST_TIER or invokes select-work-batch.sh without pinning)
+              13 candidates -> 0 real hits, 13 false positives. Eight are prose comments or greps OVER the selector's source rather than runs of it; two pin the tier through a single wrapper and say why (test-harness-affinity-selection.sh's run_selector: "a 4-core CI host must not trip the low-end gate"); test-selector-drops-cross-branch-claims.sh pins it and names the pin as its own second live-state dependency.
+
+          (b) hostname domain-qualification / hostname -f / git var GIT_AUTHOR_IDENT
+              22 candidates -> 0 real hits. Zero uses of `hostname -f` anywhere in either corpus. The single `git var GIT_AUTHOR_IDENT` is a comment. This class was already closed by 890-t9pu and 51c0ad583, and several of the 22 are fixtures that deliberately SIMULATE hostname absence with a failing stub — the right shape, counted here so the number is not mistaken for exposure.
+
+          (c) git identity inherited from global config
+              67 candidates -> 0 real hits (52 scripts/test-*.sh + 15 litmus yaml that both `git init` AND commit). Every one constructs an identity, most via a per-call `git -c user.email=... -c user.name=...` wrapper. This is the predicate 51c0ad583 scanned; it is still clean, now measured across both corpora rather than one.
+
+          (d) tools assumed present in the environment
+              2 REAL HITS, BOTH FOUND BY RUNNING RATHER THAN BY GREPPING, 1 fixed-and-verified each.
+
+        THE METHODOLOGICAL POINT, which is the part worth keeping. Predicates (a)-(c) are grep-shaped and found nothing. Both real hits came from EXECUTION: the 52 identity-sensitive fixtures run at this locus (51 PASS, 1 FAIL) and then the spec suite. A grep cannot see a precondition that the HOST happens to satisfy — the fixture's text is silent about it precisely because it never had to say it. That is why this half of part 1 was specified as run-based, and it is the half that paid.
+
+        HIT 1 — scripts/test-plan-only-lane-structural.sh, arms A and B. The scratch worktree is built from nothing, so it has no target/release/tillandsias-plan, and run_guard_ab deliberately unsets TILLANDSIAS_PLAN_BIN to exercise the real discovery path. The plan-only lane therefore fails closed, and the fixture scored that CORRECT REFUSAL as arm A failing. This row's title, exactly: a fixture asserting a property of the environment it runs in, so a correct refusal reads as a failure.
+          REPRODUCED BEFORE EDITING, per this row's 10:22Z converse rule: 12/14 at this locus with arms A and B red; 14/14 from the same tree, same commit, with one line seeding the binary. The guard was right both times — only the fixture's environment changed. Fixed by CONSTRUCTING the property, with a skip-by-name (`skip:arms-ab:no-plan-binary`) when the checkout has no build at all, following test-claims-across-branches.sh's own 1109-t8kw skip precedent. Both paths verified: 14/14 with a binary, 10/10 and a named skip without one.
+
+          AND IT IS THE BINARY, NOT yq — a correction worth recording because it is the kind of thing that would have shipped as a silent half-fix. The first version of this fix treated yq as satisfying the precondition. It passed on this yq-absent host (the elif copied the binary) and STILL failed under the litmus runner, because arm A's push adds a plan/index.d fragment, so the lane also runs the fold and status-loss checks, and those refuse with "no runnable tillandsias-plan resolved" — the guard's own remedy line says "yq validates one blob's shape; it cannot fold the ledger, which is what these two checks read" (1124-7f3u). yq clears the FIRST validator gate and not the second. The distinction only surfaced because the spec was re-run after the fix rather than trusted from the standalone pass.
+
+        HIT 2 — openspec/litmus-tests/litmus-plan-only-push-lane-shape.yaml, steps 10 and 11. Same mechanism: the step builds a scratch repo, copies the guard into it, and never gives it a binary, so `[FAIL] rc=1 ... no runnable tillandsias-plan resolved`.
+          Step 11 is step 10's MUTATION CONTROL and it was PASSING FOR THE WRONG REASON. It expects a refusal, and a host with no resolvable binary hands it one for free — so on this locus the control could not have caught the bug it exists to catch, and said nothing about that. It also did not resolve a binary of its own, so the first patch there copied an empty $PB and the step still "passed"; it now resolves one first. Both steps construct the binary; step 11 still refuses, now for the right reason.
+
+          Spec-level at this locus: methodology-accountability 26 PASS / 3 FAIL -> 28 PASS / 1 FAIL.
+
+        REMAINING RED, NAMED AND DELIBERATELY NOT CLAIMED INTO THIS CLASS: litmus:release-gates-run-locally step 20 (gate-stamp memoization, 765-tkq2). It passes STANDALONE at this locus — 14/14, `ok:gate-stamp-memoization-fixture:14` — and fails only inside the spec run. The mechanism therefore looks like git-dir-local gate-stamp state shared across steps 13-20 of that same spec, not a host-inherited precondition, and it resembles this row's class only in its symptom. Per this row's own rule that symptom match is not membership, it is NOT filed here on the resemblance. Diagnosing it properly needs a ./build.sh --check, which this host should not spend; left for lenovinha or yoga with the mechanism named.
+
+        PART 2's OWED ARTIFACT, supplied here since this locus is the one the row asks for (AT-RISK and low-end). Both spec suites run at this locus, pasted rather than self-reported from a commit body:
+          bash scripts/run-litmus-test.sh meta-orchestration --phase pre-build              -> rc=0, 148.1s, PASS 23 / FAIL 0 / SKIP 1
+          bash scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build -> rc=0, 871.4s, PASS 24 / FAIL 0 / SKIP 1
+          AT-RISK probe output, guarded as the coordinator specified (tmpdir printed, emptiness refused, cd fatal):
+            tmpdir=/tmp/tmp.0Agr7YjbrB
+            AT-RISK
+            TILLANDSIAS_HOST_TIER=<unset>
+            git user.name=<unset>  user.email=<unset>
+          The probe's failure text names the mechanism: `fatal: unable to auto-detect email address (got 'lapto@pirria.(none)')` — the node name has no domain, so git refuses to synthesise an identity. This checkout commits only because it carries a repo-local one.
+
+        CAVEAT ON THE COUNTS, carried per the coordinator's instruction. Every litmus count on this host was taken under `warn:litmus-degraded-no-yq`: yq is not on PATH here and cannot be provisioned (with-tillandsias-builder is Silverblue-only and passes through on CachyOS; a package install needs a sudo password this session does not hold). The two named 1187-iij8 arms are exempt — neither yaml contains a yq reference (grep -c gave 0 and 0). The spec-level tallies above (24/0/1, 23/0/1, 28/1) are NOT exempt and are owed a re-run on a host with yq before anyone leans on them. Note the irony recorded rather than hidden: yq's absence is itself what exposed both hits, since a yq-present host clears the first validator gate and never reaches the second.
+
+        ONE MORE, ABOUT THE SWEEP TOOLING ITSELF, because it is this row's class one level up. The first pass of predicate (c) reported 52 of 52 candidates as real hits. That was false: the loop ran under zsh, which does not word-split an unquoted scalar the way bash does, so it iterated ONCE over the whole filename string and the `! grep` test was true for that one non-existent path. Re-run under bash it returns 0. A scan asserting a property of the shell it runs in is the same defect this row is about, and the runbook already carries its own instance of it (order 1004-fue3, measured on this host: PIPESTATUS expands empty under zsh and every exit assertion silently passes). Recorded so the number in this event is trusted for the right reason.

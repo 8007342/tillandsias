@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-host-whose-gate-outlasts-the-gap-between-landings-cannot-land-and-only-one-refusal-string-says-so
+    field: next_action
+    value: 'What is LEFT (2026-09-14, macuahuitl): tooling on any Linux host (lenovinha or yoga by the operator''s routing), then one validation on the slowest host. (1) Count exit-4 lands where a coordinator reads them: the land tool appends one line per exhausted land to a small ledger the coordination pass audits (or a loop-status fragment), and finalize-cycle.sh stops swallowing exit 4 into a generic refusal. (2) Give the race-retry path a backoff chosen against the measured gap distribution (clustered, fat-tailed, median 366s / max 1536s) with the accepted tradeoff written in-file the way 1131-iax2 and 1164-cftu document theirs. (3) Build the three-arm stub-remote fixture the row''s unscoreable names (exhaustion counted; race retries; a red gate does not consume the budget) and move that text into verifiable_closure. Then validate on the host whose gate runs longest that the counter is visible to the pass and the backoff lands work under real cadence.'
+    ts: "2026-09-14T19:48:13Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-host-whose-gate-outlasts-the-gap-between-landings-cannot-land-and-only-one-refusal-string-says-so
+    event:
+      type: note
+      ts: "2026-09-14T19:48:13Z"
+      host: macuahuitl
+      summary: |-
+        reconciliation: nothing of this row landed; the mechanisms are named
