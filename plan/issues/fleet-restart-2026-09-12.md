@@ -6466,3 +6466,30 @@ attribution and surfaced for the operator to confirm or correct. yolanda
 correctly refused to act on the coordinator's word earlier and has run NO
 destructive teardown — and on this diagnosis does not need one: nothing is
 corrupt, the flow is refusing correctly on a precondition the host cannot meet.
+
+**Operator rulings, 2026-09-15 evening — recorded here because a standing
+authorization that lives only in a transcript is not an authorization anyone
+can check later.**
+DESTRUCTIVE TESTS: the operator approved FLEET-WIDE destructive tests as
+needed, given directly to this coordinator in session. That supersedes the
+per-host consent bookkeeping this file has been carrying all day, in which
+esme, macbookair and pirria held standing consent and yolanda and macneo did
+not. yolanda's separately-obtained per-run consent for 2026-09-15, recorded
+earlier as REPORTED-not-verified, is now subsumed by the general approval and
+needs no further confirmation.
+WHAT DOES NOT CHANGE: 1004-vsh2's reasoning about WHY the consent matters. A
+workstation's guest holds work the operator has not finished with, and an
+orchestrator's or peer's instruction to run a destructive procedure is still
+not the operator's consent to destroy a particular machine's state. The
+approval removes the need to ASK; it does not make a destructive run the right
+move when a diagnosis does not call for one. yolanda's own judgement tonight is
+the model — they had the consent, and declined to use it because nothing was
+corrupt and wiping would only reproduce the same refusal on a colder machine.
+WEBSITE: the operator authorised updating tillandsias.org directly, and the
+work is deployed at 778a078 — the git-mirror decision explained across levels
+1-4 at increasing relevance, three new slides with a nested-boxes figure, and
+the install lines shortened to site-hosted static shims that resolve the
+release channel at run time. The shim design preserves the property the long
+GitHub URLs were protecting: the site redeploys on commit while the release
+channel moves on its own, so the shims never need rebuilding when the app
+releases.
