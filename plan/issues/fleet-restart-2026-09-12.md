@@ -6061,3 +6061,49 @@ it, so the name is assembled at runtime, the same remedy 1118-zvai used when a
 repo-wide sweep refused its own fixture's test data. 913-27ex caught two of the
 four; 721-77yu caught the fourth. Each guard was written by someone bitten the
 same way, which is the whole argument for writing them down.
+
+**Pass 33 (2026-09-15T14:11Z) — nothing to relay, and the third near-miss of
+the day dissolved by enumerating instead of concluding.** windows-next 0 ahead,
+osx-next 0 ahead, main unchanged; no host has filed a report in the thirteen
+minutes since pass 32 closed, which is what a fleet mid-slice looks like. Six
+rows in_progress, one expiry candidate (1155-jurn, esme's, untouched by
+design), audit rows=23 stems=23, stale-ready 88/507.
+I ALMOST FILED A DEFECT AGAINST THE LEDGER AND AGAINST A HOST THAT HAD DONE
+EVERYTHING RIGHT. macbookair pushed a status flip for 920-pxg6 to in_progress
+at 12:33:14Z — alone and first, exactly the discipline this coordinator asked
+them for an hour earlier — and the fold still reads `ready` with plan_next
+OFFERING the row. Read two ways, that is "the claim did not take", which would
+have been a serious instrument finding: the discipline produced no protection.
+The enumeration says otherwise. Every status write on that packet_id, in order:
+in_progress 09-13T11:51:14Z, ready 09-13T11:55:23Z, in_progress
+09-15T12:33:14Z, ready 09-15T12:37:28Z — all host=macos. They claimed it, did
+the darwin half, and RELEASED IT BACK four minutes later because only their
+half was done. The fold is correct, the flip took, and the row is claimable
+because there is claimable work in it.
+THAT IS THREE TODAY, AND THEY ARE ONE SHAPE. The 1201 order number shared with
+macbookair, which fifteen prior duplicates showed to be the ledger's normal
+state; this; and pass 29's pirria hazard, which their shell history dissolved.
+Each time the wrong answer was AVAILABLE FROM THE SAME DATA and each time it
+accused someone. The discriminator is never care — it is enumerating the
+outcomes before comparing, because a two-way read of a three-way world returns
+a specific falsehood rather than a shrug, and the specific falsehood is what
+gets sent to the host. One `grep` over the status channel cost less than the
+message I would have had to retract, as it did the other two times.
+STALE-READY, SURFACED NOT CLOSED: 1201-t6ms reads `ready` and a landed commit
+cites it (cfa791d41, on trunk via this pass's predecessor). macbookair wrote
+that `ready` DELIBERATELY — "release 1201-t6ms as landed" — so the claim was
+released correctly and the terminal status was not set, which leaves finished,
+landed work sitting in the ledger as unfinished. That is 1155-jurn's shape
+mirrored: one is finished work reading in_progress, this is finished work
+reading ready. Surfaced to its owner with the evidence, never closed from here;
+the row's own verification is theirs to run. 1183-j9dk is the other candidate,
+four citing commits, and it is a live blocker under 804-deux rather than an
+abandoned row — also surfaced, not judged.
+NOTHING ASSIGNABLE TO THE ONE IDLE HOST, AND THAT IS THE HONEST ANSWER. macneo
+is free, answered this coordinator's measurement ask within the hour, and is
+blocked on provisioning that only the operator can authorise. The floor-tier
+work that remains for it is a curl-install smoke, which on macOS is
+DESTRUCTIVE of that workstation's app state and VM directories, and macneo
+holds NO standing consent (1004-vsh2). So the queue for that host is empty
+until the operator answers, and inventing a slice to avoid saying so would be
+worse than the idleness.
