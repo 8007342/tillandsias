@@ -5775,3 +5775,50 @@ next connect. NOT expired and NOT closed from here — closing on a message
 rather than evidence in hand is how unfinished work gets marked done, and the
 expiry sweep that would otherwise have swept it is itself under repair
 (1198-7q95), so acting on its list right now would compound two faults.
+
+**Pass 32 (2026-09-15T12:11Z) — nothing to relay, and the sharpest hazard of
+the pass is that the gate caught a rule its author already holds.** All three
+siblings level: windows-next 0 ahead, osx-next 0 ahead, main 0 ahead. Every
+host's landed work is on trunk, so there is no relay this pass and no land of
+somebody else's commits — the first pass since the restart where the
+coordinator's single-point-of-failure role had nothing queued behind it.
+ARM 4 OF MY OWN 1198-7q95 FIXTURE WAS WRITTEN AS `if ! <pipeline> && [ … ]`
+AND THE LAND REFUSED IT, rc 3, 795-imz3. The refusal is correct and the shape
+is 1076-kft9: under pipefail a SIGPIPE from `grep -q` can invert the guard, so
+the arm could have passed for the wrong reason — in a fixture whose ENTIRE JOB
+is to discriminate one output from another, and which I had just finished
+arguing needs no mutant because arms 1 and 2 differ in output rather than in
+source text. That argument was right and it did not protect arm 4. The rule is
+in this coordinator's own memory, written down, and it was skipped anyway,
+while writing carefully, on a row about instrument correctness. A rule applied
+by judgement is applied when you remember it; the gate applies it every time,
+and that difference is the whole reason the gate step exists rather than a
+paragraph in a skill. Fixed by capturing the count and the token into
+variables — no arm in that fixture now consults a pipeline's exit status.
+THE CHANNEL IS RIGHT NOW AND THE GRANULARITY IS STILL WRONG. With 1198-7q95
+landed the live sweep reports exactly one candidate, 1155-jurn, and reports it
+as `claimant:windows`. That is the correct host string: it is what the claim
+recorded, and 772-4se9 makes the platform default deliberate. But esme and
+yolanda are BOTH windows, so the sweep that now reads the right channel still
+cannot say which of two hosts holds the row. An hour ago this coordinator
+asked the wrong host to release a live claim because the sweep read the wrong
+channel; the same wrong message is still constructible from a sweep that reads
+the right one, one layer down. That is 1201-hsf9, filed this cycle with three
+routes and no decision, and it is the transient counterpart to the operator's
+ruling that a BLOCKER names a capability: a blocker should name a capability
+because the roster is ephemeral, and a claim should name a workstation because
+only a workstation can be asked to let go.
+THE RECURRENCE INSTRUMENT HAS ZERO INPUTS, FLEET-WIDE, THREE DAYS AFTER THE
+RESTART. `scripts/loop-status-metrics-audit.sh` reports rows=23 stems=23 — no
+dropped stem, the check that matters for the two-host trigger — and then
+reports 23 of 23 stems NOT-PASTING. Every host, including macuahuitl: my own
+last paste was 2026-09-05. So `recur:` and `skippable:` have had no fleet data
+for ten days, which means the cross-host recurrence audit that is supposed to
+run once per pass has nothing to audit and cannot, even in principle, fire its
+two-or-more-hosts trigger. The audit's own rule says an empty result is a
+finding about the HOST and never "no candidates"; twenty-three empty results
+is a finding about the instrument's reach. It is an order-531 shape one level
+up: the audit reads as running because it produces output every pass, and the
+output is the same null every time. Not filed as a new row this pass — it
+belongs to the existing metrics work — but recorded here so the next
+coordinator does not read a clean audit line as a clean fleet.
