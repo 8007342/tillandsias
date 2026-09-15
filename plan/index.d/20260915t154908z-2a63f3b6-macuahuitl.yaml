@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    field: unscoreable
+    value: ''
+    ts: "2026-09-15T15:49:08Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    event:
+      type: note
+      ts: "2026-09-15T15:49:08Z"
+      host: macuahuitl
+      summary: |-
+        1136-n8sh discharge: the choice is recorded and pinned

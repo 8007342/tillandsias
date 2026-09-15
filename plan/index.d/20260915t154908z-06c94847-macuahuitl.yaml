@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    field: verifiable_closure
+    value: 'litmus:a-claim-names-a-workstation (scripts/test-a-claim-names-a-workstation.sh, pre-build, size instant, 6/6, gate step 375-1201-hsf9): on scratch ledgers driven through --index, `set-field <row> status in_progress` with no --host is REFUSED with the typed verdict refused:set-field:claim-without-a-host (arm 1) and WRITES NO FRAGMENT (arm 2 — a refusal that still lands the bad claim while printing an objection is worse than none, because the caller believes it did not land). Four controls against those two positives: an explicit --host is accepted (arm 3); an explicit --host naming the PLATFORM is also accepted (arm 4), because the defect is a silent default rather than the string; closing, releasing and a non-status field all still default their host exactly as 772-4se9 specifies (arm 5); and 772-4se9''s own writer_host_default unit test is EXECUTED rather than grepped (arm 6), because the row requires that guarantee unchanged and a structural check cannot tell a live assertion from a deleted one.'
+    ts: "2026-09-15T15:49:08Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    event:
+      type: note
+      ts: "2026-09-15T15:49:08Z"
+      host: macuahuitl
+      summary: |-
+        discharged the unscoreable: the decision is made and the guard exists
