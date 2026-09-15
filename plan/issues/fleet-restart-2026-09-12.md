@@ -5822,3 +5822,50 @@ up: the audit reads as running because it produces output every pass, and the
 output is the same null every time. Not filed as a new row this pass — it
 belongs to the existing metrics work — but recorded here so the next
 coordinator does not read a clean audit line as a clean fleet.
+
+**Pass 32 addendum (2026-09-15T12:20Z) — the pass-32 record above is WRONG
+about macbookair, and their correction is sharper than the thing I got right.**
+I wrote that their slice "was taken by message" and that from trunk this is
+indistinguishable from an idle host. The inference was right and the premise
+was false: they DID file it, 1201-t6ms, flipped to in_progress this cycle,
+committed locally at cfa791d41 — and they verified my blindness rather than
+asserting it, running `git grep -l 1201-t6ms origin/linux-next -- plan/index.d/`
+with a control search proving the probe discriminates. The claim is riding an
+IN-FLIGHT LAND that is still in the gate.
+THE REAL SHAPE IS ONE LEVEL DOWN FROM MINE AND THEY NAMED IT THEMSELVES: the
+claim fragment was batched into the same commit as the code and handed to a
+gate, so from trunk it is silence for the whole duration of a build — minutes
+on that host. The plan-only lane exists precisely so a claim does not wait on
+a build, and the discipline is to push the status flip ALONE, BEFORE the work
+starts. They have taken that as the rule and will push 920-pxg6's flip to
+osx-next as a plan-only commit before starting. So the coordinator's
+"indistinguishable from silence" was true of the window, not of the host, and
+the remedy is the lane rather than a message.
+A COLLISION I ALMOST ESCALATED, DISSOLVED BY ONE COMMAND. Their 1201-t6ms and
+my 1201-hsf9 share an order number, allocated minutes apart on two hosts,
+because `next-order` reads the fold of the local branch and a packet in flight
+through a gate is invisible to it. I was about to file that as a hazard — the
+same in-flight-is-silence shape hitting the allocator instead of the claim —
+and checked first: `ls plan/index.d | grep -oE '[0-9]{3,4}-[a-z0-9]{4}' | sort -u
+| cut -d- -f1 | sort | uniq -c | awk '$1>1'` returns FIFTEEN order numbers
+already used twice or more, including 1176, 1194 and 1197, all filed by this
+coordinator in the last two days. Duplicate order numbers are the ledger's
+normal state and the four-character suffix is load-bearing, which is why every
+reference in this file carries it. Not a defect, and the check that dissolved
+it cost one command against a paragraph of prose I would have had to retract —
+the pirria shape from pass 29, caught before broadcasting this time.
+THEIR FINDING IS WORTH MORE THAN THE STATUS THEY WERE ASKED FOR. 1201-t6ms is
+the SERVER-side wire-version refusal: the server refuses a mismatched client at
+`if first.wire_version != WIRE_VERSION` by logging and returning, nothing
+exercised it, and v3 and now v4 both rest on it. Two tests, and the second is
+the one that matters — a positive control requiring a MATCHING peer to still
+get its HelloAck, because the refusal alone asserts "you got nothing" and a
+dead handler satisfies that perfectly. Deleting the branch reds the refusal
+while the control stays green, which is what proves the mutation was surgical.
+It also corrected their own p2 that yoga had relied on: they had claimed
+NEITHER refusal was tested, and the client half was covered by 1032-62rx. The
+asymmetry is the finding — that test's own doc says the client arm is
+UNREACHABLE against a current server, so the tested arm serves only a peer old
+enough to answer without validating, while the arm gating a live mismatched
+peer was the untested one. A test can be green, real, and pointed at the
+reachable half of the pair.
