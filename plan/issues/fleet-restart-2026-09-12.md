@@ -5775,3 +5775,136 @@ next connect. NOT expired and NOT closed from here — closing on a message
 rather than evidence in hand is how unfinished work gets marked done, and the
 expiry sweep that would otherwise have swept it is itself under repair
 (1198-7q95), so acting on its list right now would compound two faults.
+
+**Pass 32 (2026-09-15T12:11Z) — nothing to relay, and the sharpest hazard of
+the pass is that the gate caught a rule its author already holds.** All three
+siblings level: windows-next 0 ahead, osx-next 0 ahead, main 0 ahead. Every
+host's landed work is on trunk, so there is no relay this pass and no land of
+somebody else's commits — the first pass since the restart where the
+coordinator's single-point-of-failure role had nothing queued behind it.
+ARM 4 OF MY OWN 1198-7q95 FIXTURE WAS WRITTEN AS `if ! <pipeline> && [ … ]`
+AND THE LAND REFUSED IT, rc 3, 795-imz3. The refusal is correct and the shape
+is 1076-kft9: under pipefail a SIGPIPE from `grep -q` can invert the guard, so
+the arm could have passed for the wrong reason — in a fixture whose ENTIRE JOB
+is to discriminate one output from another, and which I had just finished
+arguing needs no mutant because arms 1 and 2 differ in output rather than in
+source text. That argument was right and it did not protect arm 4. The rule is
+in this coordinator's own memory, written down, and it was skipped anyway,
+while writing carefully, on a row about instrument correctness. A rule applied
+by judgement is applied when you remember it; the gate applies it every time,
+and that difference is the whole reason the gate step exists rather than a
+paragraph in a skill. Fixed by capturing the count and the token into
+variables — no arm in that fixture now consults a pipeline's exit status.
+THE CHANNEL IS RIGHT NOW AND THE GRANULARITY IS STILL WRONG. With 1198-7q95
+landed the live sweep reports exactly one candidate, 1155-jurn, and reports it
+as `claimant:windows`. That is the correct host string: it is what the claim
+recorded, and 772-4se9 makes the platform default deliberate. But esme and
+yolanda are BOTH windows, so the sweep that now reads the right channel still
+cannot say which of two hosts holds the row. An hour ago this coordinator
+asked the wrong host to release a live claim because the sweep read the wrong
+channel; the same wrong message is still constructible from a sweep that reads
+the right one, one layer down. That is 1201-hsf9, filed this cycle with three
+routes and no decision, and it is the transient counterpart to the operator's
+ruling that a BLOCKER names a capability: a blocker should name a capability
+because the roster is ephemeral, and a claim should name a workstation because
+only a workstation can be asked to let go.
+THE RECURRENCE INSTRUMENT HAS ZERO INPUTS, FLEET-WIDE, THREE DAYS AFTER THE
+RESTART. `scripts/loop-status-metrics-audit.sh` reports rows=23 stems=23 — no
+dropped stem, the check that matters for the two-host trigger — and then
+reports 23 of 23 stems NOT-PASTING. Every host, including macuahuitl: my own
+last paste was 2026-09-05. So `recur:` and `skippable:` have had no fleet data
+for ten days, which means the cross-host recurrence audit that is supposed to
+run once per pass has nothing to audit and cannot, even in principle, fire its
+two-or-more-hosts trigger. The audit's own rule says an empty result is a
+finding about the HOST and never "no candidates"; twenty-three empty results
+is a finding about the instrument's reach. It is an order-531 shape one level
+up: the audit reads as running because it produces output every pass, and the
+output is the same null every time. Not filed as a new row this pass — it
+belongs to the existing metrics work — but recorded here so the next
+coordinator does not read a clean audit line as a clean fleet.
+
+**Pass 32 addendum (2026-09-15T12:20Z) — the pass-32 record above is WRONG
+about macbookair, and their correction is sharper than the thing I got right.**
+I wrote that their slice "was taken by message" and that from trunk this is
+indistinguishable from an idle host. The inference was right and the premise
+was false: they DID file it, 1201-t6ms, flipped to in_progress this cycle,
+committed locally at cfa791d41 — and they verified my blindness rather than
+asserting it, running `git grep -l 1201-t6ms origin/linux-next -- plan/index.d/`
+with a control search proving the probe discriminates. The claim is riding an
+IN-FLIGHT LAND that is still in the gate.
+THE REAL SHAPE IS ONE LEVEL DOWN FROM MINE AND THEY NAMED IT THEMSELVES: the
+claim fragment was batched into the same commit as the code and handed to a
+gate, so from trunk it is silence for the whole duration of a build — minutes
+on that host. The plan-only lane exists precisely so a claim does not wait on
+a build, and the discipline is to push the status flip ALONE, BEFORE the work
+starts. They have taken that as the rule and will push 920-pxg6's flip to
+osx-next as a plan-only commit before starting. So the coordinator's
+"indistinguishable from silence" was true of the window, not of the host, and
+the remedy is the lane rather than a message.
+A COLLISION I ALMOST ESCALATED, DISSOLVED BY ONE COMMAND. Their 1201-t6ms and
+my 1201-hsf9 share an order number, allocated minutes apart on two hosts,
+because `next-order` reads the fold of the local branch and a packet in flight
+through a gate is invisible to it. I was about to file that as a hazard — the
+same in-flight-is-silence shape hitting the allocator instead of the claim —
+and checked first: `ls plan/index.d | grep -oE '[0-9]{3,4}-[a-z0-9]{4}' | sort -u
+| cut -d- -f1 | sort | uniq -c | awk '$1>1'` returns FIFTEEN order numbers
+already used twice or more, including 1176, 1194 and 1197, all filed by this
+coordinator in the last two days. Duplicate order numbers are the ledger's
+normal state and the four-character suffix is load-bearing, which is why every
+reference in this file carries it. Not a defect, and the check that dissolved
+it cost one command against a paragraph of prose I would have had to retract —
+the pirria shape from pass 29, caught before broadcasting this time.
+THEIR FINDING IS WORTH MORE THAN THE STATUS THEY WERE ASKED FOR. 1201-t6ms is
+the SERVER-side wire-version refusal: the server refuses a mismatched client at
+`if first.wire_version != WIRE_VERSION` by logging and returning, nothing
+exercised it, and v3 and now v4 both rest on it. Two tests, and the second is
+the one that matters — a positive control requiring a MATCHING peer to still
+get its HelloAck, because the refusal alone asserts "you got nothing" and a
+dead handler satisfies that perfectly. Deleting the branch reds the refusal
+while the control stays green, which is what proves the mutation was surgical.
+It also corrected their own p2 that yoga had relied on: they had claimed
+NEITHER refusal was tested, and the client half was covered by 1032-62rx. The
+asymmetry is the finding — that test's own doc says the client arm is
+UNREACHABLE against a current server, so the tested arm serves only a peer old
+enough to answer without validating, while the arm gating a live mismatched
+peer was the untested one. A test can be green, real, and pointed at the
+reachable half of the pair.
+
+**Pass 32 addendum 2 (2026-09-15T12:24Z) — macneo answered with the REGIME and
+the regime was the whole answer, and the floor tier turns out to be blocked on
+tooling rather than on being the floor.** I asked for the yq question before
+the counts and named "yq is absent here too" as a complete answer; macneo
+returned exactly that and ran nothing, rather than producing 47 numbers that
+would have repeated pirria's caveat. A second DEGRADED run is not a second
+regime. That is the instruction working, and it is cheaper than the run.
+THEIR PROBE WAS BETTER THAN THE ASK. `command -v yq` was checked under BOTH
+the agent's non-login PATH and an augmented one carrying ~/.cargo/bin,
+/opt/homebrew/bin and /usr/local/bin — deliberately both, because PATH
+composition had produced a false MISSING on that host earlier this week — with
+`command -v jq` resolving to /usr/bin/jq as the control that the probe
+discriminates. They then checked the runner's SECOND source,
+${PROJECT_ROOT}/target/litmus-runtime/bin/yq, with a tree-wide find controlled
+by locating target/release/tillandsias-plan the same way. Two sources, two
+controls, one negative that can be trusted. This is 1172-dyvd axis 14 answered
+BEFORE it bit, on a host that had every reason to answer it carelessly.
+AND THE DISTINCTION THAT MAKES IT ACTIONABLE: pirria's yq is UNPROVISIONABLE —
+the runner's auto-provision branch requires `toolbox`, which is Silverblue-only
+— while macneo's is one command away, brew present at /opt/homebrew/bin/brew
+and yq a bottled stable formula at 4.53.6. So the 45 arms that currently have
+NO host in the fleet able to produce them have a candidate. macneo did NOT
+install it, and was right not to: adding a package to a workstation is a
+configuration change of the same class as the embed-endpoint provisioning
+already queued on 824-6qxh, and not a cargo-check-only lane's call to make
+unilaterally and report afterwards. It is now ONE operator decision, not two.
+THE SHAPE, WHICH MACNEO NAMED AND WHICH BELONGS HERE INDEPENDENT OF ANY ROW:
+this fleet now wants THREE floor-tier measurements from macneo — 824-6qxh's
+low-end bands, 1187-iij8's yq-present arms, and 1109-t8kw part 2 which they
+disqualified on SAFE — and TWO OF THE THREE ARE BLOCKED ON THAT HOST LACKING A
+TOOL OR AN ENDPOINT rather than on anything about its tier. This sharpens the
+standing rule that an under-provisioned locus is an instrument: it is an
+instrument for the code paths an equipped host cannot reach, and it is sparse
+in precisely the ways that stop it REPORTING what it reaches. Both halves are
+true at once. The remedy is not to "fix the floor" — that would destroy the
+instrument — but to distinguish the sparseness that is the measurement from
+the sparseness that is only a missing binary, and to provision the second
+while leaving the first alone. yq is the second kind; so is an embed endpoint.

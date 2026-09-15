@@ -8131,6 +8131,35 @@ fn expire_claim_candidates<'a>(
             }
         }
 
+        // ORDER 1198-7q95 — THE STATUS CHANNEL FIRST, HERE TOO.
+        //
+        // 1065-4t7t corrected the sibling `live_claims` for exactly this and
+        // left THIS function on the event channel, so the two halves of one
+        // instrument disagreed about who holds a claim. The event scan above
+        // finds the newest event whose summary READS like a claim, which is
+        // prose; the status entry that actually set `in_progress` is a fact,
+        // and the fold already records which entry won.
+        //
+        // MEASURED on the live ledger 2026-09-15: 888-miiy carried a status
+        // write of 2026-09-15T07:36:36Z (yoga's claim, 35 minutes old) and an
+        // unrelated `progress` event from 2026-09-01 by another host. This
+        // function reported "2026-09-01T23:04:53Z claimant:lenovinha", the
+        // coordinator acted on it and asked the wrong host to release work it
+        // had never held, and `--write` would have returned a live claim to
+        // ready — 1140-d6ni's duplication produced by the instrument built to
+        // prevent it.
+        //
+        // The event path stays as the fallback for a status that came from the
+        // base index, which carries no claimant; prose is the thing that
+        // failed, so it is not the primary.
+        let lease = ledger
+            .status_lease_of(pid)
+            .filter(|(h, t)| !h.is_empty() && !t.is_empty());
+        if let Some((h, t)) = lease {
+            claim_host = Some(h);
+            claim_ts = Some(t);
+        }
+
         let mut last_ts: Option<String> = None;
         if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
             for ev in seq {
@@ -8155,6 +8184,25 @@ fn expire_claim_candidates<'a>(
                 }
             }
         }
+
+        // ORDER 1198-7q95 — SETTING A CLAIM *IS* ACTIVITY, so the claim's own
+        // timestamp is a floor under the row's last activity, exactly as
+        // `live_claims` treats it ("a row whose only record is the claim
+        // itself takes the claim ts as its last activity").
+        //
+        // Without this floor the lease fix above would be half a fix: the
+        // event loop keeps only the CLAIMANT's own events, and a claimant
+        // recorded as a platform (`linux`, the deliberate default of
+        // 772-4se9) matches no event written by a workstation, so a freshly
+        // claimed row would fall through with last_ts = None and be reported
+        // as unknown-age rather than young. A claim made a minute ago is not
+        // a row of unknown age.
+        if let Some(ct) = claim_ts
+            && last_ts.as_deref().is_none_or(|cur| ct > cur)
+        {
+            last_ts = Some(ct.to_string());
+        }
+
         // ORDER 864-k8dp — A REAP HOLD THE REAPER CAN ACTUALLY SEE.
         //
         // The reaper decides on ONE fact: time since the last event. It cannot
