@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: one-litmus-fixture-that-does-not-name-its-own-timing-log-splits-the-metrics-log-and-blocks-the-entire-release-tier-on-that-host
+    field: status
+    value: completed
+    ts: "2026-09-15T19:00:35Z"
+    host: linux
+
+events:
+  - packet_id: one-litmus-fixture-that-does-not-name-its-own-timing-log-splits-the-metrics-log-and-blocks-the-entire-release-tier-on-that-host
+    event:
+      type: completed
+      ts: "2026-09-15T19:00:35Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 9e4ff2d62
+  - packet_id: one-litmus-fixture-that-does-not-name-its-own-timing-log-splits-the-metrics-log-and-blocks-the-entire-release-tier-on-that-host
+    event:
+      type: note
+      ts: "2026-09-15T19:00:35Z"
+      host: linux
+      summary: |-
+        build.sh's step loop now snapshots /tmp/tillandsias-timing.jsonl before each gate step and refuses on growth, naming the step — behavioural rather than a static scan, which the row's own criteria required (criterion 3 forbids a ritual declaration, criterion 2 demands verification by execution). test-litmus-budget-tally.sh names its four TILLANDSIAS_*_LOG paths into its scratch root. Criterion 2 done by execution across all 13 runner-driving fixtures, offenders=0. Criterion 4: the mcp-expert-health arm emits a self-naming skip token when its driver refused, admitted by a success_pattern that still reds a genuinely wrong shape, verified under a simulated split. NOT hosted in test-metrics-log-path-agreement.sh: that fixture is an orphan a prior adversarial sweep classified FIX_FIRST. Fixture 4/4, its first negative control was vacuous and was rebuilt to drive the runner directly. Landed 9e4ff2d62, ok:land:9e4ff2d62:attempt-2, gate 1286s no violations
