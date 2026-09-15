@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Asymmetry observed by pirria, who recorded it without judging it and left the call here.
+packets:
+  - packet_id: the-citation-convention-guard-scans-plan-issues-only-so-the-append-only-corpus-where-a-decayed-citation-can-never-be-fixed-goes-unchecked
+    order: 1208-greh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [ledger, fragments, citations, guard-gap, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-issue-citation-convention.sh
+    title: |
+      881-29me guards plan/issues but not plan/index.d, so the corpus that cannot be edited is the one that goes unchecked
+    context: |
+      OBSERVED BY pirria AFTER THE SAME GUARD CAUGHT BOTH OF US ON ONE FILE IN
+      ONE AFTERNOON, and recorded by them without a judgement: their 1207-4zwf
+      fragment landed carrying line-number citations, while identical prose in
+      a drill entry was REFUSED for exactly that. They named it and left the
+      call rather than arguing the lane should gate.
+      VERIFIED HERE. check-issue-citation-convention.sh takes its scope from
+      `ISSUE_DIR`, defaulting to `plan/issues`; the plan-only push lane
+      validates fragments with the plan binary (validate-yaml, check
+      --strict-fragments) and never runs the citation convention. MEASURED on
+      trunk: 29 fragments under plan/index.d already carry line-number
+      citations, the most-repeated being pre-push-local-gate.sh:1579 (6),
+      lib-cargo-sites.sh:68 (5) and gate-stamp.sh:359 (4).
+      THE IMMUTABILITY INVERTS THE COST, WHICH IS THE ARGUMENT. A drill entry
+      with a drifted citation can be corrected in place — this coordinator did
+      exactly that today, converting :1579-1581 to the symbol
+      `enforce_stamp_scope` when 881-29me refused the push. A FRAGMENT CANNOT
+      BE CORRECTED AT ALL. Fragments are append-only and immutable; the only
+      remedy is a new fragment declaring the same packet_id, which leaves the
+      decayed citation in place and adds a correction beside it that a reader
+      may or may not reach. So the corpus where a decayed citation is PERMANENT
+      is precisely the corpus the guard does not scan.
+      AND THE DEFECT IS SELF-DEMONSTRATING TWICE OVER. 881-29me exists because
+      six of six citations in one audit pointed at unrelated code. Today it
+      caught this coordinator's drill entry ABOUT A MISLEADING DIAGNOSTIC, and
+      then caught pirria's 1207-4zwf fragment WHOSE ENTIRE THESIS IS THAT A
+      DIAGNOSTIC NAMING THE WRONG PATHS TEACHES A FALSE MODEL. Both artifacts
+      complaining about decayed pointers were themselves written with pointers
+      that decay. pirria could fix theirs only because they caught it before it
+      hardened; the 29 already on trunk cannot be fixed.
+      NOT AN ARGUMENT THAT THE LANE SHOULD GATE, and pirria was explicit about
+      this. The plan-only lane is deliberately cheap because coordination has
+      to keep moving during a long gate, and loading it with checks recreates
+      the treadmill 930-i6x4 and 1142-85zx spent two orders removing. The
+      question is WHERE the check belongs, not whether the lane should carry it.
+      THE CAPABILITY ALREADY EXISTS, which narrows the work: the checker honours
+      TILLANDSIAS_ISSUE_CITATION_DIR, so pointing it at plan/index.d needs no
+      code change. What it needs is a RATCHET, because 29 pre-existing
+      violations would refuse everything on day one — the same shape as binding
+      an orphan fixture whose whole unreviewed body arrives at once.
+    exit_criteria:
+      - 'a NEWLY ADDED fragment carrying a line-number citation is refused or flagged, by whichever surface is chosen (pre-fix result: FAILS — 1207-4zwf landed with two such citations and nothing objected)'
+      - 'NEGATIVE CONTROL: the 29 pre-existing fragments do not refuse anything, so the check is a ratchet on new content and not a wall'
+      - 'NEGATIVE CONTROL: a fragment citing code by SYMBOL passes unchanged, and the cite-ok escape still works where a line number genuinely is the point'
+      - 'the chosen surface is NOT the plan-only lane unless someone measures the added cost and records it, because the lane being cheap is load-bearing (930-i6x4, 1142-85zx)'
+    unscoreable: |
+      unpinnable-until-the-surface-is-chosen: the check could run in the gate
+      over added fragments, in the fragment-writing path, or as an advisory
+      sweep with a ratchet file. Each has a different cost and a different
+      failure mode, and the one thing ruled out by the row's own reasoning is
+      loading the plan-only lane without measuring it first.
+    events:
+      - type: filed
+        ts: "2026-09-15T20:17:22Z"
+        agent_id: "linux-macuahuitl-claude-20260915t201722z"
+        host: macuahuitl
+        summary: |-
+          pirria observed the asymmetry against their own landed fragment and
+          declined to judge it. Verified and measured here: the guard scans
+          plan/issues only, and 29 fragments already carry line-number
+          citations that can never be corrected because fragments are immutable.
+          The corpus where the defect is permanent is the one going unchecked.

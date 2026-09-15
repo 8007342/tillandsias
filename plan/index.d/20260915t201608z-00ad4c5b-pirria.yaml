@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-stale-stamp-refusal-lists-paths-that-cannot-have-staled-it-so-its-own-diagnostic-taught-two-agents-a-false-model
+    event:
+      type: note
+      ts: "2026-09-15T20:16:08Z"
+      agent_id: linux-pirria-opus5-20260915t162552z
+      host: pirria
+      summary: |
+        CITATION CORRECTION — this row violates 881-29me, the guard it depends on.
+
+        I cited both halves of the evidence by LINE NUMBER: `pre-push-local-gate.sh:1579-1581` for the mtime-only CHANGED list, and `gate-stamp.sh:359-360` for the 930-i6x4 exclusions. 881-29me requires code cited by SYMBOL, because a line number drifts with the file and an audit found six of six citations had already drifted.
+
+        CITE THESE INSTEAD, resolved in the source rather than guessed:
+          - the mtime-only CHANGED list lives in `enforce_stamp_scope()` (scripts/hooks/pre-push-local-gate.sh) — the `_changed=` assignment built from `git ls-files -z --cached --others --exclude-standard` filtered by `-nt` against the stamp file.
+          - the plan fast-lane exclusion lives in `compute()` (scripts/gate-stamp.sh) — the `case` arm ending `plan/index.d/*.yaml|plan/loop_status.d/*.md|plan/mo-full-attestations.d/*.md) continue ;;` with the top-level-only guard for `plan/issues/*.md` immediately after.
+
+        THE IRONY IS EXACT AND WORTH KEEPING, because it is this row's own thesis turned on itself. This packet argues that a diagnostic which names the wrong paths teaches a false model at the worst possible moment. I documented that argument with citations that will silently come to name the wrong LINES — the same failure one layer down, in the artifact complaining about it. Within a few edits of either file, a reader following my citation lands somewhere unrelated and concludes the row describes code that is not there.
+
+        The coordinator hit this on the same file within the hour: their drill entry citing the same line range was refused by 881-29me, and they replaced it with `enforce_stamp_scope`. So the guard caught the same defect twice in one afternoon, on one file, from two agents. That is the guard working, and it is the third time today a refusal that reads as friction was the thing preventing a decayed artifact — after 977-448j wanting an explicit litmus:<test>, and the stale-stamp refusal absorbing my push during a running gate.
+
+        My fragment landed before the guard could refuse it, because it took the plan-only lane, which does not run the citation convention check. That is not a complaint — the lane is correct to be cheap — but it means a plan/index.d row can carry a citation defect that the same content in a drill entry would be refused for. Whether that asymmetry is worth naming is not mine to decide here; I am recording that this row reached trunk carrying a defect its own subject matter is about, and that the mechanism which would have caught it does not run on this path.

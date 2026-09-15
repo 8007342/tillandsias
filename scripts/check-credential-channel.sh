@@ -319,7 +319,29 @@ forge_upstream_auth_verdict() {
       return 1
       ;;
     *)
-      echo "[check-credential-channel] The mirror's upstream write-authorization probe reported '$best_state' — it could not determine authorization (network/transport failure?). Authorization is unproven; stop BEFORE worker drain and inspect the mirror's [upstream-auth] log." >&2
+      # ORDER 778-hb3x. This message used to assert "(network/transport
+      # failure?)" for EVERY error verdict, which is the same conflation the
+      # row complains about on the publishing side, sitting here on the
+      # reading side: an unseeded mirror and a dead network produced identical
+      # operator-facing text, and the remedy for one is futile for the other.
+      # The mirror now publishes WHICH error (809-w2xy's reason segment), so
+      # say it. An unknown or absent reason keeps the old wording, because an
+      # older mirror publishes error/<epoch> with no reason and a guard that
+      # got quieter against an older peer would be a regression.
+      case "$best_reason" in
+        no-local-heads)
+          echo "[check-credential-channel] The mirror's upstream write-authorization probe could not run: the mirror has NO LOCAL HEADS to probe with, so it is unseeded or its seed fetch is failing — this is NOT a network failure and NOT a credential refusal. Authorization is unproven and will stay unproven until the mirror seeds. Read the mirror's seed log for an UPSTREAM AUTH REFUSED line (777-i7hf) before touching any credential." >&2
+          ;;
+        unresolvable-head)
+          echo "[check-credential-channel] The mirror's upstream write-authorization probe could not run: a head exists but does not RESOLVE, which is a damaged mirror rather than an unseeded one. Authorization is unproven; inspect the mirror's object store rather than the credential." >&2
+          ;;
+        transport)
+          echo "[check-credential-channel] The mirror's upstream write-authorization probe reported '$best_state' — the advertisement was attempted and its output matched no known authorization token, so this reads as a network or transport failure. Authorization is unproven; stop BEFORE worker drain and inspect the mirror's [upstream-auth] log." >&2
+          ;;
+        *)
+          echo "[check-credential-channel] The mirror's upstream write-authorization probe reported '$best_state' — it could not determine authorization (network/transport failure?). Authorization is unproven; stop BEFORE worker drain and inspect the mirror's [upstream-auth] log." >&2
+          ;;
+      esac
       echo "blocked:upstream-auth-error"
       return 1
       ;;

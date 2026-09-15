@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-eligibility-probe-calls-podman-info-twice-per-invocation-and-that-second-call-is-half-the-probes-whole-cost-on-the-floor
+    field: status
+    value: completed
+    ts: "2026-09-15T20:15:53Z"
+    host: pirria
+
+events:
+  - packet_id: the-eligibility-probe-calls-podman-info-twice-per-invocation-and-that-second-call-is-half-the-probes-whole-cost-on-the-floor
+    event:
+      type: completed
+      ts: "2026-09-15T20:15:53Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: b9a82bf63 (9662f4a25 ancestor of trunk) — litmus:e2e-eligibility-probe-shape steps 8 and 9 GREEN at HEAD 08c8f46d5: 'ORDER 1202-jpzy: one podman info per invocation' [OK] and 'NEGATIVE CONTROL (1202-jpzy): a podman whose info FAILS still yields skip:podman-not-functional' [OK]; meta-orchestration suite PASS 23 / FAIL 0. On trunk podman_is_reachable appears 3x and 'podman info >/dev/null 2>&1' appears exactly ONCE. Mutation control run on pirria before landing: restoring the duplicate call reds step 8, reverting greens it.
