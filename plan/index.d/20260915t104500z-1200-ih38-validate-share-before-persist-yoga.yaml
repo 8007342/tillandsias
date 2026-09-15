@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# The remainder of 890-y72v, split out rather than left implied: the
+# discriminator landed and the thing that would let it say Rejected for the
+# reason the operator actually hit did not.
+packets:
+  - packet_id: the-guest-adopts-a-delivered-shamir-share-without-ever-asking-the-vault-whether-it-opens-so-the-new-accept-reject-discriminator-can-never-answer-rejected-for-the-case-that-produced-it
+    order: 1200-ih38
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [vault, control-wire, rust, fail-loud, linux]
+    estimated_hours: 4
+    parent_order: 890-y72v
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an authentication attempt whose failure is reported rather than swallowed. Future fixture scripts/test-delivered-share-is-authenticated.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: delivering a share that does NOT authenticate against a live vault yields DeliverCredentialsOutcome::Rejected naming authentication as the cause, and the share is NOT written to the fallback file; NEGATIVE CONTROL: a share that DOES authenticate still yields Accepted and is persisted, and a host with no vault running yields neither — it must not manufacture a rejection out of an absent vault, which is 888-miiy's class; pre-fix result: FAILS — every delivered share is persisted unvalidated and reports Accepted."
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+    title: |
+      set_in_vm_credentials persists a delivered Shamir share without ever attempting to unseal with it, so 890-y72v's Accepted means STORED, never AUTHENTICATED — and the one failure that produced the packet, a share that opens nothing, still reports success
+    context: |
+      SPLIT FROM 890-y72v, which landed the wire discriminator. That packet's
+      deliverable named three things: the control-wire outcome, the tray
+      delivery sites, and vault_bootstrap validate-before-persist. The first
+      two landed and this is the third, filed rather than folded in so the
+      landed `Accepted` is not read as more than it proves.
+
+      WHAT `Accepted` MEANS TODAY, from the code and stated in its own doc
+      comment: stored in memory and persisted to the fallback file. Two
+      non-success paths now report themselves — `Superseded` when a newer
+      in-guest handover is pending and the delivery is deliberately dropped,
+      and `Rejected` when the fallback write or the cache dir fails. Neither
+      of those is the operator's 2026-08-17 failure.
+
+      THAT FAILURE WAS A SHARE THAT DID NOT OPEN THE VAULT, and nothing on
+      this path asks. `set_in_vm_credentials` writes the share and returns;
+      the unseal attempt happens later and elsewhere, via
+      `ensure_vault_running`, spawned AFTER the reply has already been sent.
+      So the discriminator cannot answer `Rejected` for the case it was built
+      for. The word is honest about what it checks — the check is just not the
+      one that matters most.
+
+      WHAT TO BUILD, and the ordering is the whole difficulty: an
+      authentication attempt has to happen BEFORE the persist, or a share that
+      fails is already on disk when the failure is known. The vault may not be
+      running at delivery time, which is why the current code defers — so the
+      answer is probably not "unseal inline" but a validation that does not
+      need a live vault (share format and cryptographic well-formedness
+      against the known installation), plus a deferred re-report when the
+      unseal actually runs.
+
+      THE TRAP TO AVOID IS 888-miiy'S, one level over: a host with no vault
+      running must NOT manufacture `Rejected`. "Could not check" and "checked
+      and refused" are different answers and the outcome enum already has a
+      value for the first — `Unstated` — whose entire contract is that no
+      claim was made.
+    next_action: |
+      Read set_in_vm_credentials and ensure_vault_running together before
+      changing either; the deferral is deliberate and the reason it exists is
+      the constraint on the fix. Then decide what can be validated WITHOUT a
+      live vault and report only that, leaving the live-unseal verdict to a
+      later channel. Do not make the deliver path block on vault startup.

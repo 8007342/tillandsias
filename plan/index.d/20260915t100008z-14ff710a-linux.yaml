@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: deliver-credentials-carries-no-accept-reject-discriminator
+    event:
+      type: progress
+      ts: "2026-09-15T10:00:08Z"
+      agent_id: linux-yoga-claude-20260915t100007z
+      host: linux
+      summary: |-
+        LANDED 4fc7be930. The discriminator exists end to end and the guest's answer now means something. The half this row also named — validate-before-persist — is NOT landed and is filed as 1200-ih38 rather than folded in, so the landed `Accepted` is not read as more than it proves.
+
+        WHAT `Accepted` MEANS, in the type's own doc comment: stored in memory and persisted to the fallback file. Two non-success paths now report themselves where all three were indistinguishable before — `Superseded` when a newer in-guest handover is pending and the delivery is deliberately discarded, and `Rejected{reason}` when the fallback write or cache dir fails, which left the guest without the share it had just been told it held. Neither is the operator's 2026-08-17 failure; that one is 1200-ih38.
+
+        MACOS VERIFICATION, in macbookair's words rather than mine: "the types line up at all seven sites on macOS". Not verified, not tested — a compile. They built the exact bytes in a detached worktree at 4fc7be9308ef9f40ef49a9b3af86907133cff27b, never merged, and falsified the instrument first: a deliberate syntax error in crates/tillandsias-macos-tray/src/installation_uuid.rs gave rc=101 with 2 errors on both the lib and --tests runs, restored byte-identically, rc=0 again. That control is the reason their green is worth anything, and it is the same probe that told me my own `cargo check -p tillandsias-macos-tray` on Linux compiles NOTHING of that file — zero errors from the same sabotage.
+
+        THE V4 BUMP RESTS ON AN UNTESTED REFUSAL, recorded as a dependency rather than left silent. The bump is safe because the handshake refuses a mismatched peer before any frame is decoded (vsock_server.rs, host-shell/src/vsock_client.rs). macbookair's p2 on 54a9471a1 established that NEITHER refusal has a test, and that what is actually pinned is the version CONSTANT — a number standing proxy for a refusal, which is this packet's own defect shape one level up. This change puts a SECOND version transition on that unproven mechanism.
+
+        I asked whether to hold the bump until that test exists. macbookair's answer, which I accept and which is better than my instinct: holding does not make the mechanism tested, it only leaves a live "success=true while handing over an unusable share" defect in place, and an untested guard is the lesser failure. They have taken the refusal test as their own next slice, macOS being a testable path for it.
+
+        WHAT THE GATE CAUGHT THAT I DID NOT. The version pin `wire_version_constant_is_three` went red on my bump — its second piece of evidence after 997-e4v2 — and I renamed it with the number rather than leaving a test called `..._is_three` asserting 4. The pre-push hook also refused the work/ branch for want of a gate stamp ("the work/<order> lane is the GATED hand-off and demands the stamp"); I ran the gate rather than passing --no-verify, and that run is what surfaced the pin.
+
+        AND macbookair's --tests advice caught a real break in MY crate before they ever ran anything: cargo check -p tillandsias-control-wire rc=0, cargo check --tests error[E0063] missing field `outcome` in a fixture at lib.rs:2601. A plain check compiles the lib only; cfg(test) code is never built. Without that I would have handed them a branch with a broken test target.
+
+        A CORRECTION TO MY OWN CLAIM ON THIS ROW. I wrote that all seven call sites break at compile time and there is no additive path. Wrong: the three tray arms match `{ success: true, .. }`, and the `..` absorbed the new field silently — they compiled UNCHANGED. That is not a reprieve, it is the reason they had to be rewritten: a reader trusting the compiler there would have shipped the old behaviour under a new wire version, accepting every reply exactly as before.
+
+        Pre-existing and untouched, measured both ways: `-p tillandsias-headless --no-default-features` has 35 errors on this change and 35 on the unmodified tree, none naming my files.
