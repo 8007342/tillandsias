@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: evidence
+      ts: "2026-09-15T07:55:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t075539z
+      host: macos
+      summary: |
+        STEP (b) DONE — criterion 4 is now PINNED. And step (a) in this row's
+        next_action is STALE: it advertises work that is already landed, which cost me a
+        read to discover and would have cost the next reader a re-implementation.
+
+        STEP (a) IS ALREADY DELIVERED, END TO END, verified by reading the tree rather
+        than the row:
+          * HandshakeFailure exists with the three variants and classify()
+          * snow_err_with_frame wires it, and the io::ErrorKind now discriminates
+            (InvalidData / PermissionDenied / Other) for callers that never downcast
+          * Display renders "[{token}] noise: {snow} — {guidance}" plus the peer-frame
+            byte count, and that reaches action_host's
+            `secure control wire handshake failed: {e}`
+          * the discriminating fixture the row asks for exists, three arms, and the
+            crate is green at 16 passed
+        macneo initially reported (a) half-delivered and has retracted that on this row
+        (ad2ad8ad6): they grepped the tray for HandshakeFailure/HandshakeError/
+        downcast_ref, got zero, and read it as "the classification never reaches the
+        poll line". The tray does not NAME the type — it prints {e} and Display does the
+        work. Their words, worth keeping: a control on the wrong question still only
+        validates the wrong question.
+
+        THE TRAP ANYONE TAKING (c) MUST KNOW, measured in (a)'s own fixture and easy to
+        miss: a plaintext refusal of REALISTIC LENGTH reaches the AEAD check, so snow
+        reports Decrypt and THE CLASS ALONE IS INDISTINGUISHABLE FROM A REAL PSK
+        MISMATCH. Only a very short blob reads as Input. So peer_frame is the
+        discriminator, not the class: decode it FIRST and quote the peer's own words,
+        and treat crypto-disagreement as the answer only when it does not decode.
+        Otherwise a guest's order-137 Unauthorized notice is chased as a PSK question.
+
+        STEP (b), WHAT I FOUND AND WHAT I DID. The BEHAVIOUR was already correct —
+        headless_service_line splits `inactive` on the timestamp rather than the word,
+        and everything else falls to an arm saying "NOT a failure by itself". NOTHING
+        PINNED IT. Measured before writing, with a control so the zero is real:
+        `activating` appeared 0 times in diagnose.rs while `headless_service_state`
+        appeared 13. So a later edit could collapse the mid-boot arm into the failed
+        wording and no test would notice — and inventing a fault is the mirror of the
+        silence this packet exists to remove.
+
+        Added diagnose::tests::a_guest_still_coming_up_is_not_reported_as_failed_or_as_this_defect,
+        five arms:
+          1. `activating` is not FAILED and says so explicitly
+          2. `inactive` with no timestamp is NEVER STARTED, not FAILED
+          3. the literal `empty` sentinel reads identically to absent (the
+             implementation tests both; a guard that tests one is half blind)
+          4. never-started and started-then-exited must NOT render alike — the
+             discrimination this packet turns on, two explanations of one Error::Input
+          5. POSITIVE CONTROL: a genuinely `failed` unit must STILL say FAILED, so the
+             suite cannot be passed by blanket reassurance
+
+        FALSIFIED, not merely passing: collapsing the mid-boot arm into the failed
+        wording reds it at
+        "a unit still starting must not be reported as FAILED; got: Headless daemon:
+        activating — FAILED when provisioning finished." Restoring greens it.
+        1 selected / 1 passed / 133 filtered out; full crate 132 passed, 0 failed.
+        cargo zigbuild --target x86_64-unknown-linux-musl --tests rc=0 (with --tests;
+        without it the check compiles the lib only and cannot fail).
+
+        STEP (c) REMAINS macneo's AND IS NOT BLOCKED ON ME. They hold the two
+        checksum-verified guest images and will not let them be reaped. But their lane
+        is cargo-check-only and never a tray build, and macOS cannot mount the guest's
+        ext4 to read the running binary's hash — which is this packet's own "THE HOST
+        CANNOT ASK" and why criterion 1 is worded as it is. What the images unblock is
+        the LINUX-MOUNT route this row already names as the alternative, which needs a
+        Linux host and an operator ask. Routing that is the honest next move; neither
+        macOS host should pretend it can read that filesystem.
+
+        owned_files STILL WRONG, as the row itself notes: it lists
+        crates/tillandsias-control-wire/src/lib.rs, which no commit touched. The real
+        sites are crates/tillandsias-secure-channel/src/secure_stream.rs,
+        crates/tillandsias-macos-tray/src/action_host.rs and
+        crates/tillandsias-macos-tray/src/diagnose.rs.
