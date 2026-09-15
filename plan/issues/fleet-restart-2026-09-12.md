@@ -6418,3 +6418,51 @@ row claims it is unfinished — and it is pirria's evidence to cite, not this
 coordinator's to assume. lenovinha's own follow-up is the mirror of it: closing
 1204-3s2s they recorded that 1125-92xa's verification remains UNBOUND, which is
 1205-aipn's subject reported by its own discoverer against their own row.
+
+**Pass 36 addendum (2026-09-15T21:05Z) — yolanda returned, and the defect the
+operator hit is a correct guard whose input the tray lane cannot supply.**
+ROOT CAUSE, found by yolanda and VERIFIED HERE IN THE SOURCE rather than taken
+on report: `run_provider_login` runs the 759-vceg push-authorization probe
+between the login and the Vault write, and it resolves the target repository
+with `read_host_project_origin_url(Path::new("."))` — THE PROCESS'S CURRENT
+WORKING DIRECTORY. On None it returns a long, well-written refusal whose
+literal text includes "Nothing was written to Vault". Confirmed present.
+THE INPUT IS UNOBTAINABLE IN THAT LANE ON THIS HOST, measured by yolanda in the
+guest: `find / -maxdepth 6 -name .git -type d` returns NOTHING — not one git
+checkout anywhere in the VM — /home/forge/src exists and is EMPTY after the
+~/src removal, and a guest login shell's cwd is /root. So the None arm is
+guaranteed on every login attempt whatever token is pasted. THE GUARD IS
+CORRECT AND ITS PRECONDITION IS UNSATISFIABLE WHERE IT RUNS, which is a design
+gap rather than a bug in either half, and it bites Windows and macOS tray hosts
+first because their login always runs in the guest.
+THE OPERATOR'S ~/src INSTINCT WAS RIGHT BY A PATH NOBODY WAS LOOKING AT. Their
+hypothesis was that project listing still resolved through a checkout that no
+longer exists; yolanda and yoga both read the enumeration code and correctly
+withdrew it. It turned out the checkout dependency is upstream of enumeration
+entirely — in the LOGIN's authorization probe — so the symptom they reported
+(auth succeeds, projects never list) was produced by a checkout dependency, in
+a different function, two steps earlier.
+FOUR SELF-CORRECTIONS FROM ONE HOST IN ONE SESSION, each unprompted and each
+before it cost anyone else: the ~/src hypothesis withdrawn on yoga's reading;
+"the login script never writes to Vault" corrected after finding the separate
+write step; "run_podman_command_silent swallows stderr" corrected after this
+coordinator read the function (it returns stderr AS the error); and "exec #2
+was the Vault write" corrected to `gh auth status` once the timeline resolved —
+the Vault write NEVER RAN, which is why the secret is absent and why nothing in
+Vault was ever touched. They also proved the Vault path FUNCTIONAL by
+measurement rather than by reading, with operator authorisation, and cleaned up
+after: minted a real SecretID, wrote, read back, deleted, and verified
+`kv list secret/` identical to the pre-probe state.
+AND THEY NEARLY FILED A FALSE FINDING OFF A `| head`-TRUNCATED LIST — a missing
+AppRole that was below the cut — and flagged it rather than letting it travel.
+That is this fleet's own capped-enumeration rule, caught on their own work; the
+coordinator hit the same trap six hours earlier reading a refusal's "12 path(s)"
+as a complete set and needed three retractions to unwind it.
+CONSENT, RECORDED AS REPORTED AND NOT AS VERIFIED: yolanda states the operator
+confirmed destructive-teardown consent DIRECTLY to them, in session, for this
+host on 2026-09-15. This coordinator did not hear it from the operator and
+cannot verify a consent given to someone else, so it is recorded with its
+attribution and surfaced for the operator to confirm or correct. yolanda
+correctly refused to act on the coordinator's word earlier and has run NO
+destructive teardown — and on this diagnosis does not need one: nothing is
+corrupt, the flow is refusing correctly on a precondition the host cannot meet.
