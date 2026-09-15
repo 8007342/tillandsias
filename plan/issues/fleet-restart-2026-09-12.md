@@ -6493,3 +6493,54 @@ release channel at run time. The shim design preserves the property the long
 GitHub URLs were protecting: the site redeploys on commit while the release
 channel moves on its own, so the shims never need rebuilding when the app
 releases.
+
+**Pass 37 (2026-09-15T22:11Z) — the expiry sweep cannot see work that is
+committed but unlanded, and a guard was cfg-gated off every host that gates.**
+Nothing to relay: windows-next and osx-next both 0 ahead. Six rows in_progress,
+TWO expiry candidates, and NEITHER should be swept.
+1186-w3ph READS STALE AND ITS HOST IS THE MOST ACTIVE ON THE FLEET. The sweep
+reports claimant:yolanda with no activity since 2026-09-14T22:00Z, which is
+over the TTL. yolanda has been working all evening — three rows filed, a root
+cause found, four self-corrections — and their 1186-w3ph commits DO exist: at
+eb83f855e, on refs/heads/salvage/yolanda-windows/20260915-1186-w3ph, verified
+NOT an ancestor of trunk. So the work is committed and unlanded, and the ledger
+cannot see it. THE SWEEP MEASURES LANDED ACTIVITY AND CALLS IT HOST ACTIVITY.
+A host that commits, salvages, and is blocked on a gate or a decision looks
+identical to a host that walked away. This is the third distinct way this
+instrument has misread a live claim today, after the channel defect (1198-7q95)
+and the platform-versus-workstation attribution (1201-hsf9), and it is the
+first that is not a defect in the sweep at all — the sweep is reading the only
+signal it has.
+1155-jurn is the other candidate, unchanged all day: esme offline, finished
+work, left untouched by design.
+A GUARD WAS CFG-GATED OFF EVERY HOST THE FLEET GATES ON (yoga, 1213-ysme,
+completed and verified on trunk). The assertion forbidding a de-pipe of the
+GitHub-login wrapper lived inside a cfg(target_os = "windows") module, so on
+linux-next the doc comment warning a future debugger was PROSE: the change it
+forbids would have passed every gate available to whoever made it. Two hosts,
+same crate and filter — yoga 0 passed / 18 filtered out, a green ok over zero
+executed which 913-27ex settles is not a pass; yolanda 1 passed / 123 filtered.
+The fix was free because the assertion reads the file as text and never needed
+the module.
+AND THE DETECTION METHOD IS yolanda's, AND IT IS THE REUSABLE HALF: 105 tests
+exist on one host and not the other, and NEITHER OUTPUT SAYS SO. Comparing PASS
+counts cannot detect it — 0 and 1 are both plausible — but comparing
+FILTERED-OUT counts can. That is the first cheap test the fleet has for "this
+gate is not running what you think it is", and it needs no new machinery. They
+scoped their row to one crate and two hosts, flagged the generalisation as
+inferred, and named the cfg-gated modules as where to look without claiming any
+currently hides a guard.
+THE COORDINATOR'S OWN INSTRUMENT ERROR, CAUGHT BY CHECKING RATHER THAN BY CARE.
+Reading yoga's "roughly 17 cfg-gated module declarations", this coordinator
+counted 4 and was about to report the discrepancy. The query required `cfg` and
+`mod` on the SAME LINE, and the attribute normally sits on the line BEFORE the
+declaration — so it was structurally incapable of finding the ordinary case.
+Counted correctly: 17 in the attribute-then-declaration form, 2 same-line, 238
+cfg(target_os) attributes overall as the control. yoga's number was right. That
+is the fourth time today a wrong query produced a confident, plausible number.
+THE WEBSITE NOW CARRIES THE PROJECT'S UNTRACKED DEBT, filed as 1213-rbt9. Across
+the five levels at their pinned release: 38 published shortcomings, and FOURTEEN
+whose PATH line is the site's own sentinel, "No path to green is recorded in the
+repo." Five of the fourteen are security items. Levels 3 and 4 now link the
+tracking entry, so an outside reader who wants to argue with one — or report it
+— has somewhere to attach it rather than rediscovering it independently.
