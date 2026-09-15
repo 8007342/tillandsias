@@ -635,9 +635,26 @@ Hard rules:
   `run_in_background` waiters under memory pressure: on macuahuitl two
   polling loops were killed mid-`./build.sh --check` with "the system is
   running low on memory" while `free` showed 53 GiB — the `setsid nohup` job
-  survived both, a Monitor task on the same log survived. Launch `setsid
-  nohup <cmd> >log 2>&1 & disown` and watch the log with Monitor, never a
-  background shell. On Windows invoke from Git Bash so `with-wsl2-builder.sh`
+  survived both, a Monitor task on the same log survived. Launch it detached
+  from a script FILE and watch the log with Monitor, never a background shell.
+  **THE DETACH FORM IS PLATFORM-SPECIFIC — `setsid` DOES NOT EXIST ON macOS**
+  (macneo, 2026-09-15, where the prescribed line failed outright on both Macs
+  in the fleet):
+
+  ```bash
+  # linux
+  setsid nohup <script-file> < /dev/null > log 2>&1 &
+  # macos — no setsid; disown detaches from the job table
+  nohup <script-file> < /dev/null > log 2>&1 & disown
+  ```
+
+  Both load-bearing details are unchanged on either platform: a script FILE
+  rather than an inline command (an inline one re-exposes the sibling-match
+  trap, where a pgrep/kill pattern carried in the same command matches itself),
+  and a terminal `rc=` line for the Monitor to watch. This recipe was written
+  from Linux measurements and prescribed fleet-wide for weeks before a Mac ran
+  it — a remedy measured on one regime is a property of that regime until a
+  second one executes it. On Windows invoke from Git Bash so `with-wsl2-builder.sh`
   re-execs and exports its ext4 `CARGO_TARGET_DIR`; esme launched inside the
   distro to dodge the reaper, compiled against `./target` on drvfs for
   4050 s, and published a false ERROR and a tier ratio that were both the

@@ -6228,3 +6228,52 @@ keyring locked — the state it had silently depended on being false. That is
 budget-tally fixture, lenovinha's one, and two of this coordinator's own
 (1176-9vqn's hidden PATH candidate, 1198-7q95's if-not pipeline). Seven
 instrument failures against zero work failures, in one day, across four hosts.
+
+**Pass 34 (2026-09-15T16:11Z) — a remedy this coordinator broadcast fleet-wide
+never ran on half the fleet, and the sweep it triggered found two more
+instances than the host that reported it could reach.** osx-next +6 relayed
+(macbookair's 1201-t6ms closure, their drill correction, and a 690-w94k claim);
+windows-next 0.
+MY DETACH RECIPE IS LINUX-ONLY. `setsid` DOES NOT EXIST ON macOS, and
+`setsid nohup <script> …` fails outright on both Macs — macneo hit it running
+the very suites the operator had just provisioned yq for. This coordinator has
+prescribed that line as THE fleet standard for weeks, in two skills and in its
+own standing notes, and no Mac had ever executed it. Corrected in both skills
+with the platform pair written out, and the two load-bearing details confirmed
+unchanged on either platform: a script FILE rather than an inline command, and
+a terminal `rc=` marker for the Monitor. This is green-on-one-regime arriving
+at the author of that rule: a remedy measured on one regime is a property of
+THAT REGIME until a second one executes it, and "it works everywhere" is the
+assumption a coordinator is best placed to make and worst placed to check.
+THE PROVISIONING PAID FOR ITSELF IN ITS FIRST RUN, which is the argument for it
+made by it. With yq 4.53.6 installed and ZERO warn:litmus-degraded-no-yq,
+macneo produced the fleet's first undegraded readings of those suites:
+forge-environment-discoverability 18/0/7 in 24s, meta-orchestration 21/2/1 in
+117s. TWO ARMS THAT PASS DEGRADED FAIL ONCE THEY ACTUALLY EXECUTE, and macneo
+checked each rather than handing over a count: both are ARM defects, not
+product defects.
+THE SWEEP FOUND THREE SITES WHERE macneo COULD ONLY REACH ONE. Their find is
+BSD `wc -l` padding to width 8, so a hermetic arm's `[ "$dirt" = "0" ]` fails
+on whitespace alone while the gate under test is entirely correct — 1130-i6xj's
+class, with a positive control against an unpadded 0 isolating padding as the
+whole difference. Before fixing it this coordinator swept the corpus, and the
+discriminator is NOT "uses wc -l" (58 do) but "compares wc -l output as a
+STRING": `[ "$n" -eq 0 ]` tolerates the padding, `[ "$n" = 0 ]` does not. Three
+sites qualified — forge-findings-persistence-shape (macneo's),
+forge-experts-teardown-ephemeral, and plan-compaction-format-preservation —
+and the last carried TWO occurrences, caught only because the edit asserted its
+match count was 1 and refused when it was 2. A fourth candidate my own scan
+flagged, build-test-timing-telemetry-shape, was ALREADY detainted; the scan's
+negative lookahead had missed a `wc -l < $F | tr -d ' '`, so the scan was wrong
+in both directions and printing each site's actual assignment is what settled
+it. All three fixed with the project's own `| tr -d ' '` idiom; re-scan clean.
+THE OTHER ARM IS HANDED BACK RATHER THAN GUESSED AT. macneo's first failure is
+litmus:e2e-eligibility-probe-shape 6/7, which stubs a fake `podman` on PATH and
+requires `skip:live-runtime-present`; on macneo the probe answered `eligible`
+and the preflight reported services-no-podman. The arm is hermetic BY
+CONSTRUCTION — it builds its own stub — so the interesting question is WHY the
+stub did not take effect there, and this host cannot answer it: the stub
+resolves correctly here, so every fix written from this machine would be a
+guess dressed as a remedy. Shipping a `skip:` for a mechanism nobody has
+identified would convert an honest red into a silent skip, which is worse than
+the red. Handed back as a discriminating probe instead.
