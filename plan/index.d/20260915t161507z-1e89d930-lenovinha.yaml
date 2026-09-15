@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-tray-shutdown-atomicbool-sleep-to-notify
+    field: next_action
+    value: 'build the shutdown BROADCASTER first (signal_hook::iterator::Signals thread: set the existing AtomicBool, send on a watch channel, notify a Condvar), then convert mod.rs:807/813 (std::thread, awaits the Condvar) and mod.rs:4702-4706 (selects the watch edge, keeps a retry tick ONLY while emit_pending is set — the tick is 944-jaef''s cooldown retry, not a shutdown poll). Read wait_for_shutdown_signal (main.rs:17018, 690-xeda) first: it did the async half and records why the flag must stay'
+    ts: "2026-09-15T16:15:07Z"
+    host: lenovinha
+
+events:
+  - packet_id: linux-tray-shutdown-atomicbool-sleep-to-notify
+    event:
+      type: note
+      ts: "2026-09-15T16:15:07Z"
+      host: lenovinha
+      summary: |-
+        audit slice found the criterion presumes a feed that does not exist

@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-tray-shutdown-atomicbool-sleep-to-notify
+    event:
+      type: progress
+      ts: "2026-09-15T16:14:59Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        AUDIT SLICE, NO CODE CHANGED. The row's criterion 2 presumes a feed that does not exist, and that is the finding: "observed via tokio::sync::Notify or a watch::Receiver FED BY install_shutdown_signal_handlers" — install_shutdown_signal_handlers (main.rs:17008) returns an Arc<AtomicBool> and nothing else. There is no Notify and no watch to subscribe to, so this is not a swap of the wait primitive; it requires making the signal path a BROADCASTER first.
+
+        SITES RE-LOCATED BY FUNCTION NAME, because the cited lines have drifted AGAIN (the parent already warned they had):
+          watch_shutdown_and_mark_stopping_blocking   mod.rs:807, loop at 813   (row says ~L640-655)
+          async main wait loop                        mod.rs:4702-4706          (row says ~L4081-4082)
+          callers of the blocking watcher             1645 production, 6080 and 6135 tests
+
+        WHY SITE 1 IS NOT A SMALL CHANGE. It runs in a plain std::thread::spawn (1645), in a std::thread world — the control-socket accept loop beside it is also std::thread — so there is no runtime to await a watch::Receiver on. And the flag it polls is written by signal_hook's flag::register FROM THE SIGNAL HANDLER, where notifying a Condvar is not async-signal-safe. So the event edge has to come from something that is safe to wake from a handler: a signal_hook::iterator::Signals thread (self-pipe) that owns the edge and then both sets the atomic and notifies waiters. That is the broadcaster the criterion assumes.
+
+        PRECEDENT ALREADY IN TREE, and it should be read before building this: wait_for_shutdown_signal (main.rs:17018, order 690-xeda) did exactly this conversion for the ASYNC half using tokio::signal::unix, and its comment records two things this packet needs. First the measurement that justifies the work — the old poll was "the dominant idle wakeup source in the guest, 4/s at the old 250 ms cap and still 1/s after raising it". Second, that signal_hook's flag registration STAYS because other readers consume the AtomicBool — and it names "the tray phase watcher", which is site 1 here. So the design is: keep the flag, add the broadcast, convert readers.
+
+        THE TRAP THE PARENT WARNED ABOUT, NOW WITH ITS MECHANISM. The parent says the 4764 loop body's flush_pending_emit() must be preserved or coalescing is silently dropped. Reading it: the 250 ms tick is NOT a shutdown poll that happens to flush — it is the RETRY DRIVER for a cooldown-gated emit. emission_due() (mod.rs:1896) returns false and marks emit_pending while EMIT_COOLDOWN has not elapsed; flush_pending_emit() (1910) retries and only emits once the cooldown passes. So converting that loop to a pure event-await removes the retry and a coalesced burst's last state never reaches the shell — 944-jaef, exactly. Any conversion must keep a retry path for the pending case.
+
+        WHAT I WOULD BUILD, left for whoever takes it rather than half-started here:
+          1. a shutdown broadcaster fed by a signal_hook::iterator::Signals thread: sets the existing AtomicBool (so every current reader keeps working), sends on a watch channel for async waiters, and notifies a Condvar for blocking ones.
+          2. site 1 awaits the Condvar; sites in tests follow.
+          3. site 2 selects on the watch edge for shutdown, and keeps a tick ONLY while emit_pending is set — which removes the idle wakeup entirely when idle and preserves the retry during a burst. That is the shape that satisfies both this row and 944-jaef.
+
+        WHY I STOPPED HERE RATHER THAN STARTING IT. This is signal handling on the path that makes the process exit, at the end of a long session, and the criterion's own premise turned out to be wrong — the feed has to be built before the conversion. Starting it half-way would leave the tray with two shutdown mechanisms and no test, which is worse than the 250 ms poll it replaces. Released to ready with the design above so the next cycle starts from the shape rather than from the drifted line numbers.
+
+        Claim held 12 minutes, no files touched.

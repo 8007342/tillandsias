@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    event:
+      type: progress
+      ts: "2026-09-15T15:36:07Z"
+      agent_id: linux-yoga-claude-20260915t153606z
+      host: linux
+      summary: |-
+        CLAIM — yoga. Verified the defect is still live before claiming, and the thing that makes this worth doing is that the SYMPTOM was already treated and the row's actual deliverable was not.
+
+        WHAT HAPPENED SINCE FILING: step 4's budget was raised 5s -> 60s on 2026-08-16 from the Windows side, with a comment explaining MSYS process-spawn pricing. That stopped the intermittent red. It did not touch what the row asks for.
+
+        THE DEFECT THE ROW NAMES IS UNCHANGED. Step 4 asserts a GRAMMAR property — "the probe emits exactly one well-formed verdict line" — and to assert it, it runs the real-verdict path, which calls `podman info` and `podman ps`. Two unbounded external calls inside an assertion about line shape. Measured here 0.183s with podman warm, which is exactly why a bigger budget hides it: the cost is the environment's, not the grammar's, and it reappears wherever podman is cold or the host prices process spawns differently.
+
+        Raising a budget so a grammar assertion can afford a container runtime is the shape 1187-iij8 is about, one level down. I landed the BUDGET tally this morning so a kill is COUNTED apart from a failed assertion; this row is the other half — remove a cause rather than label it.
+
+        THE DELIVERABLE, quoted: "a deterministic grammar step (and a named budget for whatever still needs live podman)". So: assert the grammar against a branch that reaches a verdict WITHOUT podman, and keep the live-podman path as its own step with its budget named for what it is.
+
+        THE SEAM I INTEND TO USE ALREADY EXISTS AND IS NOT INVENTED FOR THE TEST. `XDG_RUNTIME_DIR` selects the documented skip:no-podman-user-session branch before any podman call — a standard variable the script already reads, not a hook added so a fixture can drive it. I will confirm that branch is reached without podman rather than assume it from reading.
+
+        WHAT I WILL NOT DO: strip PATH to hide podman. Shadowing a whole PATH to remove one tool is how a probe answers about more than it was asked (measured previously on this host: a stripped PATH reported 12 of 14 hits when the real answer was 1). If I need podman absent I will shadow podman alone and say so.
+
+        NOT IN SCOPE: the intermittent Windows timing this row opens with is already handled by the raised budget and its comment; I am not re-litigating that, and I cannot measure MSYS from here.
