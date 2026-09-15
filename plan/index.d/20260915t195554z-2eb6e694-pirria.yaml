@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-15gib-floor-is-a-repeated-observation-not-a-single-one-but-it-still-does-not-widen-the-range-section-4a-asks-for
+    event:
+      type: note
+      ts: "2026-09-15T19:55:54Z"
+      agent_id: linux-pirria-opus5-20260915t162552z
+      host: pirria
+      summary: |
+        CORRECTION to item 4 of this row's context, and to a claim I repeated in coordination all afternoon.
+
+        WHAT I WROTE HERE: "PLAN-BINARY REBUILD TREADMILL — ... the whole-tree stamp then re-staled on each rebase."
+
+        THE STAMP IS NOT WHOLE-TREE. Order 930-i6x4, extended by 1142-85zx, excludes the plan fast lane from the digest entirely: gate-stamp.sh:359-360 `continue`s past plan/index.d/*.yaml, plan/loop_status.d/*.md, plan/mo-full-attestations.d/*.md and TOP-LEVEL plan/issues/*.md. Those bytes never enter the hash. Code, specs, scripts, images, methodology and plan/index.yaml itself (the compacted base a fold rewrites) all still do. This shipped 2026-08-29, and its comment cites our exact symptom in its own words — "nine commits inside one ~10-minute gate, four rounds to push a cheatsheet" — with scripts/test-gate-stamp.sh cases 6-7 as its negative control.
+
+        SO WHAT ACTUALLY STALED MY STAMPS was real code landing from sibling hosts — crates/tillandsias-control-wire/src/lib.rs, Cargo.lock, build.sh — every one a hashing path. The plan/index.d fragments that appeared beside them in the refusal's CHANGED list were noise and could not have contributed.
+
+        HOW I GOT IT WRONG, since the mechanism is the reusable part: the refusal's own "CHANGED SINCE THE GATE RAN" list is built from `git ls-files` filtered by MTIME ALONE (pre-push-local-gate.sh:1579-1581), with no 930-i6x4 exclusion. Every sibling ledger landing updates those mtimes, so excluded fragments are printed in a list captioned as what changed since the gate ran, directly under a refusal. I read a list of paths under a refusal as the cause of that refusal, which is what such a list means everywhere else. Filed as its own row, 1207-4zwf, with the shared-predicate remedy.
+
+        I DID NOT DETECT THIS. The coordinator did, by being contradicted in a log they were watching — a retry lost a race to two plan-only landings and then reported `ok:land-adopts-valid-stamp` and skipped the gate, which the belief says is impossible. I verified both halves in the source before accepting it (the exclusion at gate-stamp.sh:359-360, its absence at pre-push-local-gate.sh:1579-1581) rather than taking the correction on report, but the detection was not mine.
+
+        WHAT THIS ROW STILL SUPPORTS, unchanged: item 4 remains a real cost — three push refusals cleared only by a 54s rebuild — and items 1, 2 and 3 are untouched, since none of them turned on what the stamp hashes. What changes is the ATTRIBUTION: the treadmill on this host was driven by sibling CODE landings against a 2217-2408s gate, not by ledger traffic. That is a narrower and more accurate statement of the same problem, and it leaves 1203-dzxn's surviving half intact — a slow host still cannot land CODE against a trunk whose CODE moves.
+
+        AND IT SHARPENS THE DECOUPLED-FRAGMENT TECHNIQUE rather than retiring it. Cherry-picking a fragment onto a branch taken from trunk still works and still lands without a gate, twice demonstrated — but for a different reason than I gave when I handed it over. The STAMP would have survived the fragment either way; what the technique defeats is the plan-only LANE, which judges the whole outgoing diff and so refuses a branch mixing plan and code paths even when the stamp is fine. The technique addresses the lane, not the stamp. Anyone applying it for the reason I originally stated would be right by accident.

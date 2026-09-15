@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-eligibility-probe-calls-podman-info-twice-per-invocation-and-that-second-call-is-half-the-probes-whole-cost-on-the-floor
+    field: verifiable_closure
+    value: 'litmus:e2e-eligibility-probe-shape — two arms, written in the same commit as the fix (1136-n8sh). (1) ''ORDER 1202-jpzy: one `podman info` per invocation on the path that reaches the live checks'': a tripwire shadowing ONLY podman records exactly ONE `podman info` per `e2e-preflight.sh eligibility` invocation on the path that reaches the live checks. Pre-fix result: FAILS — two, measured on yoga and pirria 2026-09-15; MUTATION CONTROL run on pirria 2026-09-15: restoring the duplicate call makes this arm red again, so it has teeth. (2) NEGATIVE CONTROL: a podman whose `info` fails still yields skip:podman-not-functional on exactly one call — the verdict a careless de-duplication breaks, and one no green host covers because a green host''s podman works. Every other verdict verified unchanged at the pirria locus: skip:no-podman-binary, skip:no-podman-user-session, skip:live-runtime-present, eligible.'
+    ts: "2026-09-15T17:46:21Z"
+    host: pirria
