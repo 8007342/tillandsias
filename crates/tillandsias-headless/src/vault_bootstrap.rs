@@ -23,6 +23,7 @@ use std::time::Duration;
 #[cfg(feature = "vault")]
 use keyring::Entry;
 
+use tillandsias_control_wire::DeliverCredentialsOutcome;
 use tillandsias_podman::{PodmanClient, podman_cmd_sync};
 use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, VaultError, auto_unseal};
 use zeroize::Zeroize;
@@ -72,16 +73,36 @@ pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock
 
 #[cfg(feature = "vault")]
 #[allow(dead_code)]
+/// ORDER 890-y72v. Returns WHAT HAPPENED, where this used to return unit.
+///
+/// The unit return was the whole defect at this end: every path through this
+/// function looked identical to its caller, so `vsock_server` had nothing to
+/// build a reply from and hardcoded `success: true`. Two of those paths are
+/// not success. The early return below drops the delivery on the floor, and a
+/// failed fallback write leaves the guest without the share it was just told
+/// it had.
+///
+/// `Accepted` here means STORED AND PERSISTED — in memory, and to the fallback
+/// file when a cache dir exists. It does NOT mean the share authenticates
+/// against a live vault; that is the larger half of this order and is NOT
+/// claimed by this value. Read `DeliverCredentialsOutcome`'s docs before
+/// treating an `Accepted` as proof the vault will open.
 pub fn set_in_vm_credentials(
     unseal_share_b64: Option<String>,
     installation_uuid: String,
     root_token: Option<String>,
-) {
+) -> DeliverCredentialsOutcome {
     // If we have a pending fresh handover, the VM's state is strictly newer than
     // whatever the host tray just delivered. Ignore the stale delivery to prevent
     // clobbering the fresh token in memory and the fallback file.
+    //
+    // 890-y72v: this return is CORRECT and was SILENT. The host was told
+    // success=true for a delivery this guest deliberately discarded, so a tray
+    // that delivered a stale share saw the same answer as one that delivered a
+    // working one. `Superseded` says the host's copy is stale without implying
+    // anything is broken.
     if get_pending_handover().1.is_some() {
-        return;
+        return DeliverCredentialsOutcome::Superseded;
     }
 
     let share_for_disk = unseal_share_b64.clone();
@@ -114,6 +135,13 @@ pub fn set_in_vm_credentials(
                 share_for_disk.as_deref(),
             ) {
                 report_fallback_write_failure("host delivery into the guest", &e.to_string());
+                // 890-y72v: the in-memory copy survives this process and the
+                // file does not, so the next launch has nothing. Reporting
+                // success here is how a guest tells the host it holds a
+                // credential it will have forgotten by morning.
+                return DeliverCredentialsOutcome::Rejected {
+                    reason: format!("fallback write failed: {e}"),
+                };
             }
         }
         Err(e) => {
@@ -121,8 +149,12 @@ pub fn set_in_vm_credentials(
                 "host delivery into the guest",
                 &format!("cache dir unavailable: {e}"),
             );
+            return DeliverCredentialsOutcome::Rejected {
+                reason: format!("cache dir unavailable: {e}"),
+            };
         }
     }
+    DeliverCredentialsOutcome::Accepted
 }
 
 #[cfg(feature = "vault")]
@@ -206,12 +238,17 @@ pub fn is_running_in_vm() -> bool {
     false
 }
 
+/// 890-y72v: the no-vault build stores nothing, so it must not answer
+/// `Accepted`. It is not a rejection either — there is no vault to reject
+/// anything — and `Unstated` is the value whose whole contract is "no claim
+/// was made", which is exactly true here.
 #[cfg(not(feature = "vault"))]
 pub fn set_in_vm_credentials(
     _unseal_share_b64: Option<String>,
     _installation_uuid: String,
     _root_token: Option<String>,
-) {
+) -> DeliverCredentialsOutcome {
+    DeliverCredentialsOutcome::Unstated
 }
 
 #[cfg(not(feature = "vault"))]
