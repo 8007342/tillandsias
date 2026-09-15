@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guard-forbidding-a-de-pipe-of-the-github-login-wrapper-is-cfg-gated-to-windows-so-on-every-host-the-fleet-actually-gates-on-it-reports-a-green-ok-having-executed-zero-tests
+    field: status
+    value: completed
+    ts: "2026-09-15T22:02:42Z"
+    host: linux
+
+events:
+  - packet_id: the-guard-forbidding-a-de-pipe-of-the-github-login-wrapper-is-cfg-gated-to-windows-so-on-every-host-the-fleet-actually-gates-on-it-reports-a-green-ok-having-executed-zero-tests
+    event:
+      type: completed
+      ts: "2026-09-15T22:02:42Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: caa724f70a984f351f93e6ae024250ad9ef6fb1c landed on linux-next with tests::github_login_wrapper_captures_full_output_on_every_host, which reports 1 passed on this host where the filter previously executed zero
