@@ -127,13 +127,36 @@ else
 fi
 
 echo "arm 2b — NEGATIVE CONTROL: no busctl at all (macOS, forge) still reads missing:"
-mk_bin "$W/bin-nobusctl" absent
-D="$(scratch nobusctl)"
-run_guard "$D" "$W/bin-nobusctl"
-if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
-    ok "missing:no-credential-channel with no busctl on PATH"
+# THIS ARM USED TO PREPEND ITS STUB DIR TO $PATH, which does not remove anything
+# — the system busctl at /usr/bin stayed reachable, so the guard probed THIS
+# host's real keyring. It passed for a year of minutes only because the keyring
+# happened to be unlocked at the time; the moment this host's login collection
+# re-locked, the arm reported "a host without busctl" while reading a host that
+# has one. That is 1109-t8kw's class exactly: a fixture asserting a property of
+# the environment it runs in. Build the PATH from nothing instead, the way arm 9
+# does, so "absent" means absent.
+_bin2b="$W/bin-nobusctl-real"
+mkdir -p "$_bin2b"
+for _t in bash sh git grep sed awk cat cut tr wc head tail date mktemp dirname \
+          basename sort uniq stat env printf id hostname find xargs jq rm mkdir chmod expr timeout; do
+    _p="$(command -v "$_t" 2>/dev/null)" && ln -sf "$_p" "$_bin2b/$_t"
+done
+cat > "$_bin2b/gh" <<'GH'
+#!/usr/bin/env bash
+exit 1
+GH
+chmod +x "$_bin2b/gh"
+if PATH="$_bin2b" command -v busctl >/dev/null 2>&1; then
+    bad "could not build a busctl-free PATH — this arm would assert about the wrong host"
 else
-    bad "a host without busctl must read missing:, got '$OUT'"
+    D="$(scratch nobusctl)"
+    OUT2B="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_HOST_KIND \
+              PATH="$_bin2b" bash "$GUARD" 2>/dev/null )"
+    if printf '%s' "$OUT2B" | grep -q '^missing:no-credential-channel$'; then
+        ok "missing:no-credential-channel with genuinely no busctl on PATH"
+    else
+        bad "a host without busctl must read missing:, got '$OUT2B'"
+    fi
 fi
 
 echo "arm 3 — NEGATIVE CONTROL: an UNLOCKED collection does not trip the lock arm"
