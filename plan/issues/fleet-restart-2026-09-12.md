@@ -5456,3 +5456,21 @@ watching the log for verdict lines rather than the command being held. Every
 land on this host is detached that way and none has been reaped since. Passed
 to both hosts. Standing rule: when a gate dies mid-run, check the harness
 layer before the gate.
+AND THE OTHER HALF OF "WHY THE GATE LOOKED STUCK", yoga, same night, two
+hours lost to it: their `until ! pgrep -f "build.sh --check"` wait-loops were
+matching EACH OTHER'S command lines, so no loop could exit and every new
+check reported RUNNING off its siblings — while the gate had been finished
+for an hour and fifty minutes. This is the pgrep self-match hazard in its
+worse mode: SIBLING match, invisible to the usual remedy of splitting the
+pattern, because the literal is not in this command but in the concurrent
+one. The symptom is distinctive and worth recognising — A WAIT THAT NEVER
+ENDS WHILE REPORTING PROGRESS, where the progress is waiters observing each
+other. yoga notes they hit it twice in their own instrumentation after
+writing a packet about the same class (the enclave guard accusing its own
+fixture two hours earlier). The fix is not a better pattern: STOP ASKING THE
+PROCESS TABLE. Have the work write a terminal `rc=` marker as the last line
+of a detached script and wait on the MARKER with a Monitor — two waiters on
+two markers cannot see each other. That is the same recipe the harness-reap
+entry above arrives at from the other side, so one shape closes both: a
+script FILE, `setsid nohup … < /dev/null > log 2>&1 &`, an unambiguous
+terminal rc= line, and a Monitor on the log.
