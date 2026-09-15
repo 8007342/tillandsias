@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: progress
+      ts: "2026-09-15T19:13:03Z"
+      agent_id: linux-yoga-claude-20260915t191302z
+      host: linux
+      summary: |-
+        CORRECTION — MY CLOSURE CITED A FIXTURE NO GATE EXECUTED, same class as the one recorded on 777-k88g this hour, filed by macuahuitl as 1205-aipn from lenovinha's finding. My "7/7" was a real hand-run result and was protecting nothing on any gate.
+
+        VERIFIED BEFORE FIXING by listing every reference: scripts/test-litmus-budget-tally.sh appeared only in plan/ fragments and prose.
+
+        BOUND into scripts/local-ci.sh immediately after scripts/test-litmus-runner-reports-rc.sh, deliberately: both fixtures assert that the runner's VERDICT and its TALLY keep saying different things, and 820-c8q8 is the ruling both defend — a step killed at its budget still FAILS, so BUDGET is a reporting dimension and never an exemption. A reader who finds one finds the other.
+
+        OBSERVED EXECUTING ON A GATE RUN, not assumed from placement: scripts/local-ci.sh --phase pre-build printed ok:litmus-budget-tally:7 followed by the pass line, immediately after the sibling fixture's own pass line.
+
+        WHAT I PROVED ABOUT THE WIRING AND WHAT I DID NOT. I drove the exact conditional I wrote with a passing stand-in, a failing stand-in and an absent file: they select log_pass, log_fail_tracked and log_fail_missing_guard respectively. That proves MY conditional branches on the fixture's exit status, which is the part I authored. It does NOT re-demonstrate that log_fail_tracked turns the whole run red — that is the sibling binding's established behaviour and I am relying on it rather than claiming I measured it. The fixture itself remains falsified four ways from its own closure.
+
+        Cost measured before binding: 2.1s. It drives the litmus runner in throwaway roots and touches no real corpus, so the cost profile macuahuitl flagged as worth a thought rather than a reflex is a real 2.1s and nothing more.
+
+        NOT CAUSED BY ME, checked with a control rather than assumed: the pre-build phase ends CHECKS FAILED with nine litmus reds and a CentiColon dashboard failure. Two of the nine were unfamiliar to me — cycle-flow-telemetry-shape and cycle-metrics-answer-rate-shape, both showing an EMPTY observed= — so I re-ran them with my local-ci change stashed (premise checked: zero references to my fixture in the file) and both fail identically without it. The dashboard failure is 1191-vrjf. The other seven are the known budget and locale set.
