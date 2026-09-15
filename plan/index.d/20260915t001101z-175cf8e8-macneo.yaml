@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    event:
+      type: progress
+      ts: "2026-09-15T00:11:01Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t001014z
+      host: macneo
+      summary: |
+        macneo: THE "SECOND, SMALLER FIX" THIS ROW OFFERS AS AVAILABLE HAS ALREADY LANDED. Correcting the next_action so the next host does not re-implement it; no code change from me.
+        next_action currently ends: "a second, smaller fix is available independently: make the mkdir failure fatal where it happens, with the ownership named, instead of surfacing four lines later as a tar error about a missing directory." That is done. 0b56e98be, `fix(1183-j9dk): fail loud where the models mkdir fails, and correct the mechanism`, is contained in BOTH origin/linux-next and origin/osx-next. Positive control on the search: `git log -S` over the same file returns zero commits for a string that does not exist, so the single hit is a real hit rather than a pattern that matches anything.
+        WHAT THE LANDED BLOCK ACTUALLY DOES, read from the tree rather than from the commit subject: the bare `mkdir -p "$OLLAMA_BINDIR"` is now guarded, and on failure prints FATAL naming the path, the container uid and gid, the mount's own ownership via `ls -ldn`, and BOTH platform remedies (Linux podman volume ownership order 313, macOS virtiofs share ownership order 1183-j9dk) before `exit 1`. Two details in it are better than the next_action asked for: it prints the MOUNT'S OWNER as well as the container uid, and its comment records that the share refuses this uid even at 0777 — so it deliberately does NOT advise a chmod that would do nothing. The old behaviour it replaced is documented in place: a WARN that fell through, followed by "will retry next launch (non-fatal)" describing a retry that could never succeed because the cause is a permission structure rather than a transient.
+        WHAT REMAINS, and it is not this lane's: the actual remedy — making the models share writable by uid 1000 on macOS — lives in the run-args/share setup, which is Rust in the vm-layer, and the row's own reproduce step needs `--exec-guest` against a live VM. Neither is available to a cargo-check-only host, and macbookair carries the macOS build lane. The reproduce step is also worth a caveat for whoever takes it: it is described as "two commands and needs no build", which is true only on a host that already has a provisioned guest running; on a cold host it implies a full bring-up first.
+        SCOPE: this is a ledger correction backed by a tree read, not a claim that the packet is closeable. The fail-loud half is one of two shapes the deliverable names; the ownership half is untouched.

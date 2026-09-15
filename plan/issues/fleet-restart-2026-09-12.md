@@ -4946,3 +4946,257 @@ the index has only ever held pre-build phases), the two release-tier
 litmus reds fixed forward, yoga's claim of 1110-c4nf. Stale rows 89/499,
 none handed. Audit rows=23 stems=23. Hosts silent this window (lenovinha,
 pirria): not directed.
+
+**Pass 26 hold — lenovinha restarted (18:25Z) and asked for instructions.**
+Synced, clean. Handed 1185-9qx6 (the release-tier freshness guard blind to
+ci-full) as a claim flip on trunk (973835b57; `next linux` reads 0), with
+1187-iij8 as the named fallback; cadence 2h at :51; no destructive smoke
+(no standing consent on this host); avoid list named (1186-w3ph yolanda,
+1110-c4nf yoga, 1183-j9dk/804-deux macbookair, 1109-t8kw part 1 needs an
+AT-RISK host). Yoga's 1110-c4nf fix landed at 86ac0e26d (the seed-override
+arm's 120s budget aborted the triage litmus before its own step ran — the
+budget was the defect, raised to 300s; 1187-iij8's class, on a fat host).
+Pirria restarted (18:35Z, CachyOS 7.2.4-3, synced, clean) and asserted that
+destructive resets are "expected and intended here" — a peer's standing
+consent is not the operator's: no destructive smoke ordered; the Linux
+curl-install smoke of v56.9.13.1 on pirria goes to the operator as a plain
+ask. Handed as measurements (floor tier, no build): the git-identity probe
+(verdict word + tier var; if AT-RISK, 1109-t8kw part 1's run-based re-sweep
+at the Linux-floor locus, separating MINGW-isms from floor-isms) and
+1187-iij8's two arms timed at their locus as a note on the row; cadence 4h
+at :21.
+Operator (18:45Z): "Yes I've authorized pirria to run system reset as per
+your directions." Recorded as standing consent for the smokes the
+coordinator directs on pirria (esme's and macbookair's shape); the
+v56.9.13.1 daily-channel curl-install smoke dispatched to pirria with the
+operator's words, results to land on linux-next through the lane.
+Operator (18:50Z): "Lenovinha is back, which is a much stronger silverblue
+host, and Yoga is also around, prefer them for interchangeable linux work."
+Routing rule from here: generic Linux rows go to lenovinha first, yoga
+second; macuahuitl keeps coordination, relays, the release-tier exercise,
+cuts, and host-specific work. Applies to the coordinator's own meta cycles:
+drain coordination-shaped rows, hand the rest as claim flips.
+Pirria (19:28Z): AT-RISK, TIER unset; 1187-iij8's two arms PASS at their
+locus (capability-manifest-guard 182.6s of 300s, build-cache-sweep-trigger
+1.7s of 30s; note on the row at 4b5593c4e) — THE FLOOR IS NOT ONE REGIME:
+esme and pirria are the same tier by the row's own criterion and the same
+arm sits 1.6x apart on opposite sides of the budget; tier does not predict
+speed, and a tier-keyed multiplier would find no key on either (TIER unset
+on both) — evidence for 1187-iij8's arm (a), a BUDGET tally distinct from
+FAIL, and against arm (b); esme's timeout reads as a MINGW-ism. Both spec
+suites green on pirria's Linux floor (24/0/1, 23/0/1), which is also part
+2's owed artifact on a Linux at-risk host — so the twelve reds esme found
+are MINGW-isms, not floor-isms. Caveat pirria did not hide: every
+invocation emitted warn:litmus-degraded-no-yq (yq absent, unprovisionable:
+the builder is Silverblue-only, pacman wants a sudo password); neither
+named arm references yq, so their two verdicts stand; the other 45 arms'
+counts need a re-run on a host with yq. 1109-t8kw part 1's run-based
+re-sweep flipped to pirria on trunk, to start after the smoke.
+Lenovinha (19:50Z): 1185-9qx6 implemented (option (a): record-ci-phase-
+result.sh + TILLANDSIAS_CI_RUN_ID through local-ci.sh + build.sh recording
+post-build and runtime with real status; fixture 8/8, arm 2 reproduces the
+pre-fix never; bound at 345-1185-9qx6), gated green in 993s — and REFUSED
+AT THE PUSH: refused:land:auth-failed, "could not read Username for
+https://github.com"; the preflight had answered ok:gh-keyring-push-verified
+at 18:52Z and answered missing:no-credential-channel at 19:47Z. The gh
+credential was EVICTED mid-cycle — 1025-a896's shape (a re-auth on a sibling
+host evicts the others'); no re-auth run on lenovinha. Stranded at a LOCAL
+salvage ref only (refs/heads/salvage/lenovinha/20260914-1185-9qx6 →
+2a9d48d43: dc4721a09 the fix, 2a9d48d43 the records incl. 1188-mm9y), which
+survives a re-clone only once someone pushes it. Operator ask: re-provision
+the gh credential on lenovinha. Lenovinha's scope correction, adopted:
+`./build.sh --ci-full` ALONE exits after the pre-build gate and never runs
+post-build or runtime — the tier is exercised only by `--ci-full --install`;
+the daily exercise's driver now runs `--ci-full --install` (1122-6sqz accepts
+the install). 1188-mm9y (filed, unpushed): the installed launcher's version
+label is include_str!(VERSION) at COMPILE time — v56.9.12.x beside a VERSION
+of 56.9.13.1 is equally consistent with a stale artifact and a current binary
+bumped after its build; nothing distinguishes them because the headless
+crate bakes no commit SHA.
+CORRECTION from lenovinha (20:00Z): NOT an eviction and NOT a sibling
+re-auth — the login keyring LOCKED on lenovinha between the 18:52Z check
+and the 19:37Z push (busctl: org.freedesktop.Secret.Collection Locked →
+true; gnome-keyring-daemon running; ~/.config/gh/hosts.yml unchanged since
+2026-08-20; `gh auth status` HANGS waiting on an unlock a headless session
+cannot answer — a sibling re-auth would have produced a clean 401). The
+operator's remedy is an UNLOCK on lenovinha, not a re-provision; a re-auth
+would have taken the fleet's token out for a lock that a passphrase fixes.
+Filed 1189-2ra5 (p1): check-credential-channel.sh has no arm for a
+locked-but-present keyring, so that state falls through to
+missing:no-credential-channel, whose obvious remedy is `gh auth login` —
+the one action 1025-a896 forbids; Locked is a boolean readable over a bus
+the guard already reaches; the arm is absent. The salvage ref now carries
+three local commits (67b6473dc). The coordinator's first ask to the operator
+("re-provision") was wrong and is corrected to "unlock the login keyring on
+lenovinha".
+Reconciliation reader on 1141-vf9w (not in the story, found on the way): four
+of five criteria met and green (test-dispatch-reap 11/11, test-no-competing-
+gate 13/13, test-competing-gate-consumer 14/14), but criterion 3 — build.sh
+refuses to start beside a stray gate — is unmet in TWO layers: build.sh's
+call site ends in `|| true` and discards the detector's exit code, so
+flipping TILLANDSIAS_COMPETING_GATE_ADVISORY=0 today changes nothing; and
+promotion still needs the detector to accuse a genuine stray on the host
+being promoted for, plus 1149-3v3n's wsl.exe host-side call. Yoga's row;
+recorded here so the flag is not read as a switch.
+Reconciliation on 1063-nraf: the fixture-orphan scan still does not exist
+(audit-guard-activation audits check-*.sh, the wrong population); an ad hoc
+rescan finds 14 scripts/test-*.sh referenced by nothing today, among them
+the coordinator's own test-gate-memory-floor-consumer.sh (1176-fn2p, written
+this morning, bound at 067-1176-fn2p this cycle) and macbookair's
+test-inference-mkdir-fatal-1183-j9dk.sh (told). A fixture written on the day
+of a fix and not bound the same day is the shape the scan exists to catch.
+Pirria (20:05Z): v56.9.13.1 daily-channel smoke PASS end-to-end on the
+Linux floor (install 262.6s, reset 20.8s, init-pristine 439.9s, forge-lane
+822.9s, health 0.2s; version line exact; vault initialized from a genuinely
+cold room; 1149-vgn2 verified from both sides). Report at
+plan/issues/smoke-e2e-findings-v56.9.13.1-2026-09-14-linux-pirria.md
+(2b9cc56a5). The ledger row's claim 900-z3kv is SPLIT: the end state works,
+the mechanism is incomplete — the clearer could not remove
+~/.cache/tillandsias/vault-data (subuid-owned 100100; rootless rm refused),
+printed warn:clear-vault-credentials:partial and EXITED 0 beside three
+empty-store assertions; `podman unshare rm -rf` removed it and flipped the
+probe warm→cold, and only then did --init derive the first-boot dummy key —
+the resync path ran for the first time, after a hand fix. Three findings
+filed: the partial clear (with the remedy), the smoke evidence dir never
+cleared between runs (a stale 03-init-exit.txt from 2026-09-13 read as this
+run's result to an out-of-band poll), and the cold-room lane never reaching
+committable work (filed on the in-forge agent's request, who refused to
+commit from a doomed container — correct). Coordinator's ruling: the
+guard-stop IS §4's expected cold-host outcome; no scoped token. 1134-u934
+is fixed in this cut and unclaimed (vault container stops in 1s, exit 0,
+against 10s grace; pre-fix 30s and Exited 137) — credited at the pass. Not
+checked, named: 1139-xe5m, 1154-8ywc/1165-xkjh, 1118-dwgx, 1159-g96c,
+1175-wuwr.
+RETRACTION from macbookair (20:15Z) of the 1183-j9dk mechanism recorded
+under their name at pass 24: the SELinux-confinement conclusion is
+WITHDRAWN. With an empty cache and a freshly booted guest, the packet's own
+plain reproduce (`-v <share>:…:rw`, no --security-opt, container uid 1000)
+SUCCEEDED 4/4 at 20:06–20:07Z; `ausearch -m avc </dev/null` shows only
+unrelated nft denials on /dev/ptmx. The SELinux inference rested on one
+discriminator (plain DENIED vs label=disable OK) and the plain run now
+succeeds, so label=disable distinguishes nothing; the original
+Unix-permissions claim was already dead on the mode-0777 arm. Three
+mechanisms asserted and withdrawn on one packet, all macbookair's, and the
+drill carried the third on their say-so. Checked-not-assumed invariants:
+inference image 91a800b57328 created 07:58Z (before the failing probes),
+guest provision.state 03:53Z, host share 501:20 0755 empty, virtiofs
+rw+seclabel, Enforcing, container_file_t — not a rebuilt image, not a
+reprovisioned guest, not a changed directory. Something state-dependent
+separates the ~11:56Z failing regime from the ~20:06Z passing one; NOT
+named. State: mechanism UNRESOLVED, defect NOT CURRENTLY REPRODUCING — no
+fix is to be implemented against this packet on current evidence.
+Recorded on the packet's next_action and in plan/issues/model-share-
+denial-mechanism-2026-09-14-macos-macbookair.md ("SECOND CORRECTION"). What
+survives: the fail-loud half, now bound (bddf183c1: "inference-mkdir-fatal-
+1183-j9dk: 7 passed, 0 failed" in the gate log), and binding it forced a
+fix — its uid-0 path called bad(), so a root gate would have refused every
+land with a content verdict about a guard it never ran (1141-vf9w's shape);
+now STEP_SKIP_EXIT=2, verified across four regimes with an id shim. 804-deux
+(a) may be unblocked; macbookair re-measuring through the real engine
+self-install path rather than the probe that disagreed with itself.
+THIRD CORRECTION from macbookair (20:20Z, supersedes the retraction above):
+1183-j9dk DOES reproduce — the probe was wrong, not the defect. The real
+engine self-install path fails now, empty cache, fresh guest: "mkdir: cannot
+create directory '/home/ollama/.ollama/models/.tools/ollama': Permission
+denied". The packet's own reproduce did a SINGLE-level `mkdir -p
+<mount>/.tools`; the product does TWO levels (`${OLLAMA_MODELS}.tools/ollama`);
+the first succeeds and the failure is creating a directory INSIDE the one
+just made — the 4/4 "succeeded" measured a different operation. The stated
+reproduce was insufficient and is itself a finding; replaced on the packet
+(use the nested form or run the image's entrypoint directly). Mechanism:
+first offered as virtiofs attribute-cache incoherence (the same directory
+listed 0 0 as a parent entry and 1000 1000 as itself), then NARROWED by
+macbookair themselves within minutes: on a fresh boot both reads agree at
+0 0, so the 1000 1000 was a within-session view — record it as a CANDIDATE,
+not a mechanism. What is solid and reproducible: (1) the entrypoint fails at
+the nested mkdir, repeatedly; (2) a single-level mkdir in the mount root
+succeeds as uid 1000; (3) a directory the container creates reads uid=0
+gid=0 mode=755 on a fresh read — the share does not hold non-root ownership;
+(4) chown in the share returns 0 and does not apply. Plain reading: the
+container can create an entry in the mount root, the entry comes back
+root-owned, so nothing can be created inside it — and the engine needs
+exactly that nested create; deliberately NOT called settled ("it accounts
+for the observations" was the claim the last three times). 804-deux (a)
+STAYS BLOCKED; the cache is left empty on both sides on purpose, because a
+populated .tools hides this completely — which is how it survived until the
+clean-room smoke. The guest's running image (91a800b57328, 07:58Z) predates
+the entrypoint fix, so it still prints the old order-313 WARN and falls
+through; once rebuilt, the same failure announces itself FATAL at the mkdir
+with the uid and mount owner named — the case the fail-loud half was landed
+for. Lesson macbookair states for the drill: three mechanisms asserted and
+withdrawn on one packet, and each time the pattern was asserting a mechanism
+before re-running the bare failure through the product's own path.
+Pass 26 (2026-09-14T20:11Z) state: windows-next +8 relayed (esme's 1155-jurn
+canary merged by yolanda with the second-host confirmation, 1183-2s7a,
+1184-jqqg, the 1171-ccf2 next-cut note) and osx-next +4 (macbookair's
+1183-j9dk fixture bound at 345-1183-j9dk with its root-path skip, the third
+correction). Trunk since pass 25: the 19:09Z reconciliation story
+(1140-i2b6 obsoleted, 966-7umc completed, four rows released with what is
+left), 067-1176-fn2p bound, pirria's smoke report and its three findings as
+rows (1188-vixu, 1189-7yvu, 1190-swen), 1134-u934 credited, 1109-t8kw part
+1 flipped to pirria, 1185-9qx6 flipped to lenovinha (stranded locally
+behind the locked keyring). Stale rows 88/503, none handed. Audit rows=23
+stems=23. Hand-offs this window: lenovinha (1185-9qx6, fallback 1187-iij8),
+pirria (two measurements, the smoke, then part 1), esme (part 2, done).
+Note for the next lander on any host: lenovinha's unpushed 345-1185-9qx6.step
+now collides with 345-1183-j9dk on trunk — the first real run of 1162-qbrx's
+allocator will be their land, and its `gate-step-prefix: … -> …` line is the
+live confirmation that row still owes.
+
+**Pass 27 hold — yoga (20:30Z): 1110-c4nf complete** (86ac0e26d /
+d616a1d96 / MO-FULL 6cb07aeee): step 23 of litmus-cycle-batch-triage-shape
+now diffs the porcelain and NAMES the paths that appeared instead of
+comparing two opaque strings — archive-plan-packets.sh --check's known leak
+is attributed by name and no longer convicts the selector; falsified in the
+useful direction with a seeded concurrent writer. Step 5's budget raised
+120s→300s (2m24s uncontended; it had been aborting the test before step 23
+ran; 26/26 now). Two reds left open OUTSIDE that packet, both uncontended on
+today's linux-next, same class (the selector at ~14s per invocation against
+a 120s arm budget — 1187-iij8's class on a FAT host): litmus:capability-
+routing-shape step 1/5 TIMEOUT, and litmus:local-ci-self-clean-evidence step
+4/5 rc=1 (centicolon dashboard render). Flagged, not claimed; yoga asked to
+file them through the lane as rows with their measurement and take them if
+their next cycle has room (interchangeable Linux → yoga/lenovinha).
+Yoga (20:45Z): both reds filed and landed at 8f7c1573c — 1191-vrjf and
+1192-xv4n, ready. 1191-vrjf is NOT the centicolon renderer: it is a NUMERIC-
+LOCALE defect — update-convergence-dashboard.sh formats percentages with
+bash printf under the CALLER's LC_NUMERIC, and yoga runs fr_FR.UTF-8;
+reduced at the prompt: `printf '%.1f' 89.8989898989899` → rc=1 "nombre non
+valable", `LC_ALL=C` → 89.9, and the values printf does accept come out as
+"89,0" with a decimal comma into a file other tools parse — the abort is the
+loud half, the comma the quiet one; the row says exporting a locale from the
+litmus step is not an acceptable fix. 1192-xv4n cites 1187-iij8 with a fact
+that row lacked: a FAT host misses the budget by 14% (test-capability-
+routing.sh 2m17s uncontended, 8/8 standalone, against 120s), and a second
+point in the same suite (cycle-batch-triage-shape step 5, 120s against
+2m24s, fixed in passing at 86ac0e26d). The general shape: a budget miss does
+not fail one arm, it TRUNCATES the test and the arms after it report nothing
+while looking covered; the row asks for a guard on budget-vs-last-measured-
+cost rather than a blind sweep. A new regime axis for the standing list: the
+caller's LOCALE — a numeric format under LC_NUMERIC≠C is a different
+program.
+Lenovinha (20:55Z): the operator unlocked the keyring; the salvage ref was
+pushed FIRST and verified on origin by ancestry (ok:salvaged:…:5fa2e038f),
+then 1185-9qx6 integrated, re-gated green and landed on attempt 1 — evidence
+1e3e1e01e (the rebase rewrote the SHA; the earlier dc4721a09 is a ghost,
+1024-c3h3), land ok:land:5e92fda4d:attempt-1; record-ci-phase-result.sh,
+test-release-tier-freshness-reads-ci-full.sh and 355-1185-9qx6.step verified
+on origin by tree. THE ALLOCATOR'S FIRST LIVE COLLISION: a sibling took 345
+(macbookair's 1183-j9dk step) during the hour lenovinha's push was blocked,
+so the blocked window became exactly 1162-qbrx's race; the land tool moved
+345 → 355 (ok:gate-step-prefix:reallocated:1) and landed without a re-gate.
+Lenovinha's line for the drill: A PUSH-BLOCKED HOST IS A PREFIX-COLLISION
+GENERATOR. 1189-2ra5 is now a real claim on trunk (the flip pushed; the
+selector reads 0), worked next on the :51 cadence. Salvage ref
+refs/heads/salvage/lenovinha/20260914-1185-9qx6 stays on origin until the
+sweep files its line and marks it (22:11Z), deletion the pass after.
+Pass 27 (2026-09-14T22:11Z) state: osx-next +2 relayed (macbookair's
+attestation); windows-next 0. Trunk since pass 26: yoga's 1191-vrjf and
+1192-xv4n filed, lenovinha's 1185-9qx6 landed through the allocator's first
+live collision (345 → 355), 1189-2ra5 claimed by lenovinha, the 1162-qbrx
+live note. Salvage sweep filed one line (lenovinha's 1185-9qx6 ref, ancestry
+none because the land rebased it); all four of its commits are
+patch-equivalent on trunk (`git cherry` −), line marked deleted, ref goes at
+00:11Z. Stale rows 88/505, none handed. Audit rows=23 stems=23. Hosts
+silent this window (esme, macneo): not directed; every capable host is on
+its own claim.
