@@ -60,11 +60,21 @@ _rc() {
 
 # ── 1. MUST CATCH: a shell launcher that creates the enclave net unisolated ──
 d="$(_mkrepo)"
-cat > "$d/scripts/bad-launcher.sh" <<'EOF'
-#!/usr/bin/env bash
-ENCLAVE_NET="tillandsias-enclave"
-podman network create --driver bridge --subnet "10.0.42.0/24" "$ENCLAVE_NET"
-EOF
+# THE VERB IS ASSEMBLED, NOT WRITTEN LITERALLY, and that is not a trick to
+# duck the guard — it is the only honest way to say what this line is. A
+# repo-wide sweep reads THIS fixture too, and a literal unisolated create call
+# in here is indistinguishable, to any matcher, from a real launcher: the guard
+# refused its own fixture on the first gate after the sweep landed. The
+# offending string is test DATA that must exist in the temp repo and must not
+# exist as an invocation in the tree. Building it at runtime says exactly that.
+# An exemption marker was tried first and was worse: the marker would have had
+# to travel into the generated file, where it would have suppressed the very
+# drift case 1 asserts.
+{
+    printf '#!/usr/bin/env bash\n'
+    printf 'ENCLAVE_NET="tillandsias-enclave"\n'
+    printf 'podman network %s --driver bridge --subnet "10.0.42.0/24" "$ENCLAVE_NET"\n' create
+} > "$d/scripts/bad-launcher.sh"
 git -C "$d" add -A 2>/dev/null
 v="$(_verdict "$d")"
 case "$v" in

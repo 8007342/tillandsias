@@ -124,6 +124,7 @@ offenders=""
 scanned_sh=0
 scanned_rs=0
 
+
 # Tracked files only, via git when available. A generated tree under target/,
 # a vendored checkout, or an editor backup is not a launcher.
 list_sources() {
