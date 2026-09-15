@@ -1138,6 +1138,61 @@ printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; d
     [ -n "$pid" ] || continue
     printf 'packet\t%s\t%s\t%s\n' "$order" "$pid" "$prio"
 done
+
+# ORDER 1199-aw6m — CARRY THE CONSTRAINT THE ROW ALREADY STATES.
+#
+# `pickup_role` says who can work the SUBJECT. A row's exit_criteria can name
+# who must produce the EVIDENCE, and only the first is a field this selector
+# reads. MEASURED on lenovinha 2026-09-15: 1132-r4mt was the p1 top pick with
+# pickup_role `any`, and its criterion 3 says "demonstrated on a host that has
+# actually reproduced the refusal (yoga or macuahuitl), not on a host that has
+# never seen it". This host never has — 5/5 standalone and 5/5 in three full
+# gates the same night — so it was claimed, read, and released three minutes
+# later. The next cycle offered it again, unchanged, because nothing carries the
+# constraint from the row to the offer.
+#
+# ADVISORY, NEVER A FILTER, and that is the load-bearing half. A host that
+# cannot CLOSE a row can still reproduce it, measure it, instrument it or split
+# it — all of which the fleet wants. Withholding the row would convert a
+# three-minute release into invisible work nobody does. So the row is still
+# offered, still claimable, and merely annotated.
+#
+# THE HOST VOCABULARY IS DERIVED FROM THE ROSTER, never a second list: a
+# hand-maintained list of host-scoped rows would drift the way every second list
+# in this repo has. If the roster is unavailable the annotation simply does not
+# appear, which is the same degradation the seeded pick already takes.
+if [ -n "${HOST_NAME:-}" ] && [ -n "${CAP_HOSTS:-}" ]; then
+    _hs_roster="$(printf '%s\n' "$CAP_HOSTS" | awk -F'\t' '$1 != "" {print tolower($1)}' | sort -u | tr '\n' ' ')"
+    _hs_orders="$(printf '%s\n' "$batch" | awk -F'\t' 'NF>=4 && $4 != "" {print $4}')"
+    [ -n "$_hs_orders" ] && printf '%s\n' "$_hs_orders" | while read -r _hs_pid; do
+        [ -n "$_hs_pid" ] || continue
+        # The packet's exit_criteria block: from its packet_id line to the next
+        # top-level key at the same depth. One pass per packet over the base plus
+        # fragments; the base is large, so the id match is anchored and exits early.
+        _hs_text="$(awk -v pid="$_hs_pid" '
+            $0 ~ ("packet_id: " pid "$") { inpkt = 1; incrit = 0; next }
+            inpkt && /^[[:space:]]*-[[:space:]]*packet_id:/ { inpkt = 0; incrit = 0 }
+            inpkt && /^[[:space:]]*exit_criteria:/ { incrit = 1; next }
+            inpkt && incrit && /^[[:space:]]*[a-z_]+:/ && !/^[[:space:]]*-/ { incrit = 0 }
+            inpkt && incrit { print }
+        ' plan/index.yaml plan/index.d/*.yaml 2>/dev/null | tr 'A-Z' 'a-z')"
+        [ -n "$_hs_text" ] || continue
+        # Named hosts that are NOT this one. If the criteria also name THIS host,
+        # say nothing: the row wants several hosts and this one is among them.
+        case " $_hs_text " in *" $HOST_NAME"*) continue ;; esac
+        _hs_named=""
+        for _hs_h in $_hs_roster; do
+            [ "$_hs_h" = "$HOST_NAME" ] && continue
+            case "$_hs_text" in
+                *"$_hs_h"*) _hs_named="${_hs_named:+$_hs_named,}$_hs_h" ;;
+            esac
+        done
+        [ -n "$_hs_named" ] || continue
+        _hs_order="$(printf '%s\n' "$batch" | awk -F'\t' -v p="$_hs_pid" '$4==p {print $3; exit}')"
+        printf 'host-scoped\t%s\tits exit criteria name %s and not %s — claimable and worth advancing, but the EVIDENCE must come from there (1199-aw6m)\n' \
+            "${_hs_order:-$_hs_pid}" "$_hs_named" "$HOST_NAME"
+    done
+fi
 # urgency_unscored (630-6hyc): ready packets with NEITHER an explicit priority
 # NOR a kind that maps to an urgency tier — rank 99. Reported so a missing
 # urgency signal is VISIBLE and gets fixed (backfill priority/kind), never
