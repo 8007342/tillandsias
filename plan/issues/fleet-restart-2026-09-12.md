@@ -5474,3 +5474,11 @@ two markers cannot see each other. That is the same recipe the harness-reap
 entry above arrives at from the other side, so one shape closes both: a
 script FILE, `setsid nohup … < /dev/null > log 2>&1 &`, an unambiguous
 terminal rc= line, and a Monitor on the log.
+THE GENERALISATION THAT OUTLIVES BOTH, yoga's, and the reason the recipe is
+written as mandatory rather than advisory: A RULE APPLIED BY JUDGEMENT GETS
+SKIPPED EXACTLY WHEN SOMEONE IS CONFIDENT, and confidence is what the author
+of the rule has — they hit the sibling-match hazard twice in their own
+instrumentation on the day they filed a packet about the class. So the
+detached-script-plus-rc-marker shape is to be used for EVERY long job, never
+for the ones that look risky enough to warrant it. A rule that asks "does
+this case need it?" has already lost to the person most sure it does not.
