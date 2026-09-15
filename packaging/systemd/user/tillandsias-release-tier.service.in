@@ -1,0 +1,31 @@
+# @trace order:890-27mv — rendered by scripts/install-release-tier-timer.sh
+# Carries placeholder tokens the installer substitutes; do not copy this .in
+# file into systemd directly. The literal placeholder spelling is deliberately
+# NOT written out here: the installer refuses any rendered unit still matching
+# the placeholder shape, and a comment demonstrating that shape is matched by
+# the very check it describes (890-27mv — it refused its own templates).
+[Unit]
+Description=Tillandsias release-tier run (the tier the release gates on, off the release path)
+Documentation=file:@CHECKOUT@/scripts/check-release-tier-freshness.sh
+
+[Service]
+Type=oneshot
+WorkingDirectory=@CHECKOUT@
+# scripts/local-ci.sh with NO --phase runs every phase, which is the whole
+# point: `--phase <p>` writes a record covering only that phase, and
+# check-release-tier-freshness.sh reads a phase-only record as no answer at
+# all (1174-6r4k). A timer that fired a phase-only run would keep this row's
+# defect while looking like its fix.
+ExecStart=@CHECKOUT@/scripts/local-ci.sh
+# The full tier is long and this is a background cadence, not a gate anybody
+# waits on. The outer bound is generous so a slow host reports a real verdict
+# rather than a timeout that reads like a failure.
+TimeoutStartSec=@TIMEOUT@
+# A red tier run is INFORMATION, not a unit failure to be retried: the record
+# it writes to target/convergence/check-logs.jsonl is what the freshness guard
+# consults, and it is written either way. Exiting non-zero here would mark the
+# unit failed and tell the operator nothing the log does not.
+SuccessExitStatus=0 1
+EnvironmentFile=-%h/.config/tillandsias/cycle.env
+StandardOutput=journal
+StandardError=journal
