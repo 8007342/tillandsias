@@ -489,7 +489,31 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     These are two different operations on the same field and the difference is
     the whole of this step. FINISHED work moves to its TERMINAL status (§7.2).
     Only work you did NOT finish goes back to `ready`, **in the same cycle you
-    abandon it**:
+    abandon it**.
+
+    **PUT FIRST THE BLOCK WHOSE MIS-COPY FAILS LOUD** — that is why the
+    terminal form is above the release form, and it is a SAFETY property rather
+    than a style choice, so do not reorder these on frequency. Copying `ready`
+    onto finished work is SILENT: the row advertises completed work to the whole
+    fleet and nothing objects. Copying `completed` onto unfinished work is
+    REFUSED by 650-dq6u, which wants a SHA and a named check result and cannot
+    be satisfied by fabrication. Frequency argues the other way and frequency is
+    the trap: MEASURED on macbookair 2026-09-15 and reproduced independently on
+    macuahuitl over all 76 `host: macos` fragments, cycle-end writes run `ready`
+    12 to `completed` 3, because a host draining multi-slice packets mostly ends
+    unfinished. A future editor who finds that ratio and helpfully reverses
+    these two blocks would be right about the frequency and wrong about the
+    risk.
+
+    FINISHED — the row is closed, and the gate will not let you fake it:
+
+    ```bash
+    tillandsias-plan set-field <packet-id> status completed \
+        --evidence "<sha> + <named check and its result>" \
+        --reason "closed at cycle end: <what the evidence shows>"
+    ```
+
+    UNFINISHED — the claim is released, and the row stays open honestly:
 
     ```bash
     tillandsias-plan set-field <packet-id> status ready \
@@ -517,6 +541,14 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     you write the field, and note that a row with claimable work REMAINING is
     correctly `ready` and correctly claimed-and-released at once — those are
     not in tension.
+
+    **A RULE WRITTEN FROM ONE FAILURE MODE READS AS ABSOLUTE ABOUT THE OTHER**
+    (macbookair, 2026-09-15). That is why "unconditionally" was written here by
+    someone who was also being careful: this step was built from 641-e2qa, saw
+    only the stranding direction, and stated its remedy without a boundary.
+    What is being corrected is not carelessness — it is a structure that
+    DEFEATS care, which is the only kind of correction worth making to a rule
+    that careful people were already following.
 
 5.  **The reaper is a backstop for a dead host, not your return path.**
 

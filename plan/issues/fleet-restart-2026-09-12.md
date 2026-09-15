@@ -6140,3 +6140,91 @@ which said `--lib` on a crate that has no lib target: a plain run there reports
 "0 passed; 525 filtered out" with rc=0 — success-shaped and measuring nothing.
 A closure that sends the next reader to a command that CANNOT FAIL is the same
 vacuity as a green arm over a run that executed nothing, one layer out.
+
+**Pass 33 addendum 2 (2026-09-15T14:52Z) — COMPLETING A PARTIAL FIX, and
+saying so rather than letting `fixed` mean two things in one file.** The
+heading correction landed at 0dbdb7ca3 and was HALF the defect. macbookair
+caught the other half while the gate was still running: §4's only code block
+showed the `ready` path. Three surfaces — heading, sole example, prose
+qualifier — and before the fix two of them were wrong for finished work while
+the correct one was the one a tired reader skims past. Fixing the heading alone
+would have left the example teaching the wrong ending under a heading that now
+reads as authoritative. This land adds the terminal block and the rule above
+both; the drill records it as completing a partial, not as a new fix, because a
+record that reads as complete when it is half done is the same failure as the
+heading.
+I GAVE THE RIGHT ORDER FOR A REASON I HAD NOT MEASURED. I said put the terminal
+block first because "the finished path is the common one". macbookair counted
+their lane: cycle-end writes run `ready` 12 to `completed` 3. I reproduced it
+here by a different method before conceding — all 76 fragments carrying
+`host: macos` in plan/index.d/, counted by status value, gives the same 12 and
+3 — and re-ran it uncapped, because my first pass used `head -400` and a capped
+enumeration read as a count is its own trap. My justification was a
+plausible-sounding assertion offered in the middle of a day spent catching
+exactly that, by both of us, in each other.
+THE REPLACEMENT RULE IS BETTER AND REACHES THE SAME ANSWER HARDER, and it is
+now written ABOVE the two blocks where a future editor will meet it: PUT FIRST
+THE BLOCK WHOSE MIS-COPY FAILS LOUD. Copying `ready` onto finished work is
+silent and advertises it fleet-wide — that was the bug, and it survived until a
+stale-row sweep. Copying `completed` onto unfinished work is refused by
+650-dq6u, which wants a SHA and a named check result and cannot be satisfied by
+fabrication. Frequency argues for `ready` first; asymmetry argues for
+`completed` first; asymmetry is right and FREQUENCY IS THE TRAP. Without the
+rule written down, the next editor finds the 12-to-3 and helpfully reverses the
+order, correct about the frequency and wrong about the risk. GENERALISED, and
+worth carrying past this step: when two examples sit together and one can be
+mis-copied silently while the other refuses, THEIR ORDERING IS A SAFETY
+PROPERTY, NOT A STYLE CHOICE.
+macbookair's sentence goes into the step verbatim because it is the only part
+that explains the original wording: A RULE WRITTEN FROM ONE FAILURE MODE READS
+AS ABSOLUTE ABOUT THE OTHER. This step was built from 641-e2qa, saw only the
+stranding direction, and stated its remedy without a boundary. What is being
+corrected is not carelessness but a structure that defeats care — which is the
+only kind of correction worth making to a rule careful people were already
+following.
+LENOVINHA IS PAUSED, NOT SILENT, AND THE EXPOSURE IS SMALLER THAN THIS
+COORDINATOR FIRST SAID. Their keyring has answered blocked:gh-keyring-locked
+for three consecutive cycles — the second lock tonight, the first having
+produced 1189-2ra5 — and they have cancelled the :51 drain rather than emit
+identical no-op reports, on the correct ground that a cadence reporting the
+same sentence asserts a freshness it does not have. No gh auth login, no
+refresh, no peer push, no --no-verify, no hook edit; the unlock is the
+operator's and is queued as such. Verified from here: their salvage ref
+refs/heads/salvage/lenovinha/20260915-1199-aw6m is NOT on origin (control: six
+salvage refs are, including their own 20260914 one, so the namespace and their
+access both work) and none of bbf70a8ba / cc6c5564b / 44b76c169 exist in this
+checkout.
+BUT THE HAZARD WAS NEVER "UNPUSHED" AND THIS COORDINATOR FRAMED IT WRONG.
+872-c9nd's actual hazard is work existing in ONE PLACE SOMETHING MIGHT DELETE.
+lenovinha wrote a bundle and a self-contained patch series OUTSIDE the
+checkout and sent the bundle off the machine entirely, which closes that
+without going near the credential. I had escalated it with deadline urgency it
+no longer carries, and the correction is mine: naming a pressure point is not
+the same as offering an alternative to it, and they found the alternative I
+should have.
+THEIR VERIFICATION IS THE DAY'S ONE INVERSE FINDING AND IT BELONGS BESIDE THE
+OTHERS FOR ITS POLARITY. Everything else this fleet caught today was a false
+GREEN — a vacuous arm over a run that executed nothing, a guard matching the
+comment documenting what it forbids, a stub PATH that removed nothing, a
+closure citing a command that cannot fail. Theirs is a false RED:
+`git bundle verify` PASSES, and the fetch into an EMPTY repo fails on "lacks
+these prerequisite commits: b61c1759a" — a prerequisite that is
+origin/linux-next's own tip, which every real clone has and only the test
+environment lacked. A CORRECT ARTIFACT READ AS BROKEN BECAUSE THE RECOVERY TEST
+RAN IN AN ENVIRONMENT THE RECOVERY WILL NEVER HAPPEN IN. Believing it would
+have meant rebuilding a working bundle, or concluding the work was
+unrecoverable while holding a good copy. The patch series, needing no
+prerequisite at all, is the artifact to reach for first precisely because it
+has no environment to get wrong.
+AND THEIR ARM 2b, WHICH IS THE SHARPEST INSTRUMENT FINDING OF THE DAY. The
+1189-2ra5 fixture arm whose stated subject is "a host with no busctl at all"
+built its PATH as "$stub:$PATH" — WHICH REMOVES NOTHING. It had been probing
+the host's real keyring all along and passed only while that keyring was
+unlocked; the re-lock is the only reason anyone found out. In their words, its
+passing history was never evidence about its stated subject, which is why they
+rebuilt it from nothing rather than patching the PATH. It now passes WITH the
+keyring locked — the state it had silently depended on being false. That is
+1109-t8kw's class, and today's tally in that class is: yoga's four in the
+budget-tally fixture, lenovinha's one, and two of this coordinator's own
+(1176-9vqn's hidden PATH candidate, 1198-7q95's if-not pipeline). Seven
+instrument failures against zero work failures, in one day, across four hosts.
