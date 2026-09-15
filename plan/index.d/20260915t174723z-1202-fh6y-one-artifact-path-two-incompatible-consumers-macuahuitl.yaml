@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from pirria's toolbox re-run of 1109-t8kw's yq chore, and reproduced
+# on macuahuitl within the hour by an unrelated ci-full.
+packets:
+  - packet_id: target-release-tillandsias-plan-has-two-incompatible-consumers-and-the-last-writer-wins-without-announcing-it-so-a-litmus-run-can
+    order: 1202-fh6y
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, toolbox, plan-binary, push-lane, fail-loud, multi-host]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/litmus-expert-capability-skew-honesty.yaml
+      - scripts/plan-binary-probe.sh
+    title: |
+      target/release/tillandsias-plan serves two consumers that need different linkage, and a litmus staging step silently rebuilds it
+    context: |
+      MEASURED ON TWO HOSTS, 2026-09-15, WITH OPPOSITE OUTCOMES, WHICH IS THE
+      REASON THIS IS STRUCTURAL RATHER THAN A pirria FINDING.
+      One artifact path has two consumers whose requirements conflict. The
+      push-time plan-only lane needs target/release/tillandsias-plan to be
+      HOST-runnable, because it resolves and executes it to validate fragments
+      before a push. An in-toolbox litmus run needs it TOOLBOX-runnable. The
+      staging step at litmus-expert-capability-skew-honesty.yaml:73 does NOT
+      honour TILLANDSIAS_PLAN_BIN: it runs its own `cargo build --release` and
+      copies from ${CARGO_TARGET_DIR:-target}. So whichever consumer wrote
+      last wins, and neither announces that it did.
+      pirria got the hostile face. Exporting only TILLANDSIAS_PLAN_BIN, the
+      staging step staged a HOST-built binary into a toolbox run and produced
+      EIGHT reds, every one of them
+      `/tmp/.litmus-569/bin/plan: /lib64/libm.so.6: version GLIBC_2.44 not
+      found`. None of the eight was real. They then observed the same step, left
+      alone, REBUILDING INTO target/ from inside the toolbox — and killed the
+      run mid-flight to stop it replacing the host-runnable copy the push lane
+      depends on.
+      macuahuitl got the benign face, one hour later, without looking for it.
+      This host's first-ever ci-full rebuilt target/release/tillandsias-plan at
+      17:03Z, MID-RUN (mtime confirms it), and the result stayed host-runnable
+      only because the rebuild resolved against /lib64 rather than a toolbox
+      glibc. Same mechanism, no symptom, nothing logged.
+      THAT ASYMMETRY IS THE DEFECT'S REAL SHAPE: whether you notice depends on
+      whether the two glibcs happen to match. A host where they match carries a
+      silently-swapped binary and finds out later, at push time, as the
+      plan-binary treadmill pirria reported earlier the same day — a plan-only
+      push refused because the binary was stale against crate sources, each
+      rebase pulling more and re-staling it, cleared only by a 54s rebuild.
+      That treadmill is this contention seen from the other side.
+      A READING INSTRUCTION THAT MUST TRAVEL WITH THIS ROW: a yq-present
+      TOOLBOX run of expert-capability-skew-honesty can produce eight reds that
+      are ALL artefacts of the staging step. Check the linkage error before
+      believing any of them. Without this written down, the next person to
+      repeat pirria's run reports eight tree defects.
+    exit_criteria:
+      - 'the staging step honours TILLANDSIAS_PLAN_BIN when it resolves, instead of building its own copy (pre-fix result: FAILS — it runs cargo build --release unconditionally at :73)'
+      - 'a litmus run cannot leave target/release/tillandsias-plan in a state the push lane cannot execute — either it does not write there, or it restores what it found'
+      - 'NEGATIVE CONTROL: with no usable TILLANDSIAS_PLAN_BIN the step still stages a working binary, so the fix does not turn a build into a skip'
+      - 'the eight-GLIBC-reds reading instruction is recorded where someone debugging that output will find it, not only in this row'
+    unscoreable: |
+      unpinnable-until-the-consumers-are-separated: the deliverable depends on
+      whether the fix is to honour the env var, to use a distinct staging path,
+      or to make the push lane resolve a binary it owns. Each is a different
+      change with a different blast radius, and the row is a choice before it is
+      a fix. What IS pinnable today and is pinned in the criteria: the staging
+      step must stop clobbering a path another consumer depends on.
+    events:
+      - type: filed
+        ts: "2026-09-15T17:47:23Z"
+        agent_id: "linux-macuahuitl-claude-20260915t174723z"
+        host: macuahuitl
+        summary: |-
+          Filed from pirria's toolbox re-run and reproduced on macuahuitl by an
+          unrelated ci-full within the hour. Two hosts, opposite outcomes, one
+          mechanism: the last writer to target/release/tillandsias-plan wins
+          and says nothing, and whether that is visible depends on whether the
+          host and toolbox glibcs match.
