@@ -6370,3 +6370,51 @@ worktree — `attempt_plan_only_lane` requires every outgoing PATH to be a new
 fragment, and uncommitted VERSION changes are in neither. Two filings went out
 unimpeded. I had asserted it twice before checking, which is the day's own
 lesson arriving one more time.
+
+**Pass 36 (2026-09-15T20:11Z) — the diagnostic that manufactured a false belief
+in two independent readers, and the asymmetry that makes it the worst of four.**
+osx-next +2 relayed (macbookair filing and claiming 1207-n96g, the eligibility
+arm this coordinator routed to them); windows-next 0. 1204-3s2s CLOSED by
+lenovinha at 4bb890517, guard landed 9e4ff2d62.
+THE FOURTH INSTANCE TODAY OF "THE REMEDY ALREADY EXISTED AND NOTHING POINTED AT
+IT", AND IT IS NOT LIKE THE OTHER THREE. macbookair's Darwin construction sat
+green in the same file; the orphan fixture was invisible to a search for
+enforcement; macneo's podman oracle had been retired deliberately. Those cost a
+search. THIS ONE THIS COORDINATOR ARGUED AGAINST: 930-i6x4 already excludes the
+plan fast lane from the gate stamp and 1142-85zx extended it, and I recorded
+that exact remedy on 1203-dzxn as an UNSAFE candidate WITH A DISPROOF, which
+pirria then strengthened with a supporting instance. Two signatures on a
+rejection of something that shipped. pirria's formulation is the one to keep: an
+unfound remedy costs a search; a remedy argued against, written down with
+reasoning and co-signed costs a search PLUS THE AUTHORITY OF THE REJECTION, and
+the more carefully the disproof is written the more expensive it is to dislodge.
+It took an accident to break — a retry reporting ok:land-adopts-valid-stamp in a
+log I happened to be watching — and accidents are not a retrieval strategy.
+THE PROXIMATE CAUSE IS A DIAGNOSTIC AND pirria FILED IT AS 1207-4zwf. The
+stale-stamp refusal builds its CHANGED SINCE list inside
+`enforce_stamp_scope` (pre-push-local-gate.sh), where `_changed` comes from
+`git ls-files --cached --others` filtered by MTIME ALONE, with no 930-i6x4 exclusion — so paths that DO NOT HASH appear
+in a list captioned "CHANGED SINCE THE GATE RAN" printed directly under a
+refusal, where a list of paths reads as the cause because that is what such a
+list means everywhere else. The code is not confused; the comment above `_changed` says mtime "is
+the cheap signal... it points straight at a live writer", which is a fine
+heuristic for catching a BACKGROUND WRITER. The defect is that the same output
+is consumed as the cause of THIS refusal.
+AND IT IS CAPPED, WHICH COMPOUNDS IT — verified here and added to their row. The
+construction ends in `head -12`, and the caption this coordinator received read
+"(12 path(s), newest-first by mtime)", EXACTLY THE CAP: a sample read as an
+enumeration, a shape this fleet already has a rule about. The newest-first sort
+means the twelve shown are the just-rebased ledger fragments while the real
+cause falls off the end — pirria established by looking properly that what
+staled their stamps was crates/tillandsias-control-wire/src/lib.rs, Cargo.lock
+and build.sh, all hashing, none of them shown. SO THE DIAGNOSTIC DOES NOT MERELY
+FAIL TO EXCLUDE THE INNOCENT PATHS; IT PREFERENTIALLY SHOWS THEM AND HIDES THE
+GUILTY ONE. Two independent readers formed the same false belief from that
+output on the same day, which is about as strong a demonstration as a diagnostic
+defect can get.
+SURFACED NOT CLOSED: 1202-jpzy's code is on trunk at b9a82bf63 and the row still
+reads in_progress. That is 1155-jurn's shape again — finished, landed work whose
+row claims it is unfinished — and it is pirria's evidence to cite, not this
+coordinator's to assume. lenovinha's own follow-up is the mirror of it: closing
+1204-3s2s they recorded that 1125-92xa's verification remains UNBOUND, which is
+1205-aipn's subject reported by its own discoverer against their own row.
