@@ -5200,3 +5200,47 @@ patch-equivalent on trunk (`git cherry` −), line marked deleted, ref goes at
 00:11Z. Stale rows 88/505, none handed. Audit rows=23 stems=23. Hosts
 silent this window (esme, macneo): not directed; every capable host is on
 its own claim.
+
+**Pass 28 (2026-09-15T05:39Z) — the coordinator was down for seven hours and
+the fleet did not stop.** macuahuitl's session ended when the operator's
+Fable credits ran out; the operator upgraded and restarted the host (kernel
+7.2.4 → 7.2.5) and brought the coordinator back on Opus 5 at 05:39Z, a gap
+from the 22:11Z pass. Session-only crons do not survive a restart and were
+re-armed by hand (2h coordination at :41 local, 4h meta at :09, daily
+release-tier at 09:09); the scratchpad path changed, so the ci-full driver
+and the land relay were re-seeded — the driver now runs `--ci-full --install`
+per lenovinha's 1185-9qx6 finding.
+WHAT THE GAP COST AND WHAT IT DID NOT. Relay backlog at return: windows-next
++11, osx-next +35, trunk +26 — the coordinator is still the only path by
+which platform CODE reaches trunk, and a seven-hour absence is a 46-commit
+queue. What it did NOT cost is plan visibility: macbookair and macneo pushed
+their fragments straight to trunk through scripts/push-plan-fragments-to-trunk.sh
+all evening ("plan(tlatoanis-macbook-air): 4 fragment(s) to linux-next from
+osx-next"), so claims, closures and filings stayed fleet-visible with no
+coordinator in the loop. That is 1153-j2nm doing exactly what it was built
+for, measured by a seven-hour natural experiment nobody designed.
+LANDED IN THE GAP, all by hosts working their own crons: lenovinha closed
+1189-2ra5 (a locked keyring is now named as locked, not as no credential at
+all — the row their own blocked window produced), 1125-92xa (the Rust writer
+joins the shared metrics path) and 1193-yw6u (TRUNK WAS RED ON MACOS: no
+macOS host could land code until the guard regression was fixed at
+660e092c8 — "the absence of coreutils is not an answer about the
+credential"); pirria landed 1109-t8kw part 1 (two fixtures assumed a plan
+binary the host supplies) and then corrected their own yq claim — the
+toolbox has it; yolanda got mechanisms 1 and 2 of 1186-w3ph (the PATH pin
+that omits where MINGW keeps git; emit_frame reading stdin by fd path, which
+MSYS jq cannot open) with a vacuity finding; esme measured 1187-iij8 on the
+floor and reports NEITHER PROPOSED FIX WORKS; macbookair and macneo worked
+690-w94k (a discarded CFRunLoopRunInMode result turned a park into a spin),
+830-xsk2 (the in-guest hop is blocked by seccomp alone) and the 1183-j9dk
+retraction chain.
+NEW ROWS FROM THE GAP, all three worth the fleet's attention: 1194-davi — a
+platform-scoped gate arm is invisible to every host not on that platform, so
+it lands through a gate that cannot run it (1194-smtb obsoleted into it as a
+duplicate, carrying the symmetry); 1195-m9vi — a macOS host can be wedged out
+of the plan lane entirely, not just slowed (macneo's stranded evidence;
+macbookair later retracted the independence half and narrowed the row);
+1196-5hva — the fleet heartbeat detects a blocker only from a plan/issues
+marker, so a blocker filed as a ledger packet is invisible to it (lenovinha,
+who then filed against their own exit criteria: "my own exit criteria do not
+match reality").
