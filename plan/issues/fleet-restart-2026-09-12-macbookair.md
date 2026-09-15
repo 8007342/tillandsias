@@ -401,3 +401,16 @@ looked"* will eventually be read as the former.
   to all macOS hosts. False — macneo was wedged out of the plan lane entirely in
   the same hour. Two hosts, one trunk, opposite outcomes. Correction recorded in
   1195-m9vi's context rather than left in a message.
+- 2026-09-15: 690-w94k item 1 LANDED (e43b3d06f) after trunk went green — the
+  parked fix was restored from the salvage branch and re-verified (guard + Linux
+  zigbuild) rather than trusted in its parked state. Trunk's return to green was
+  re-measured here in a pristine worktree rather than accepted on report: the
+  host that called it red is the right host to confirm it fixed.
+- 2026-09-15 (1196-5hva, yoga/lenovinha): filing a blocker as a LEDGER PACKET —
+  what the work loop teaches — makes it INVISIBLE to fleet-heartbeat.sh, which
+  reaches its blocked bucket only via plan/issues/*<host>*.md greps and reads
+  plan/index.d/ solely for liveness timestamps. So both macOS hosts read WEDGED
+  all cycle while a correctly-filed p1 sat on trunk, and WEDGED prescribes
+  "adjudicate its worktree" — pointing away from a trunk-wide red. My cycle is
+  the evidence in that row. A channel reporting NOTHING is indistinguishable
+  from one reporting FINE, and this is the most expensive instance of it today.
