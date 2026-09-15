@@ -7000,6 +7000,80 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 eprintln!("error: resolved packet has no packet_id");
                 std::process::exit(1);
             };
+
+            // ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION.
+            //
+            // `status: in_progress` is the one write whose whole purpose is to
+            // tell a coordinator WHOM TO ASK. Defaulted, it records the compiled
+            // platform (772-4se9, deliberate and unit-tested), so every host on
+            // one platform claims under the same name and the sweep that has to
+            // name one cannot. MEASURED 2026-09-15: this coordinator asked the
+            // wrong host to release a live claim, and after the channel fix
+            // (1198-7q95) the same wrong message was still constructible,
+            // because 1155-jurn reads `claimant:windows` and esme and yolanda
+            // are both windows.
+            //
+            // ROUTE (a) OF THE THREE THE ROW RECORDS, chosen because it is the
+            // only one that keeps 772-4se9's guarantee AND its test
+            // byte-identical: the default is untouched everywhere else, and the
+            // claim is refused rather than mis-attributed. It makes a discipline
+            // that was already written down mechanical — the worker skill's
+            // canonical claim has passed `--host "$(hostname -s)"` all along,
+            // and the claims that landed as `linux` were the ones that did not
+            // follow it.
+            //
+            // NARROW BY CONSTRUCTION. It fires only when the host would be the
+            // COMPILED PLATFORM: an explicit `--host` always wins (even
+            // `--host linux`), and TILLANDSIAS_HOST_KIND=forge still answers, so
+            // the forge lane is untouched. Only the platform fallback — the one
+            // string that cannot identify a machine — is refused.
+            //
+            // PLACED HERE, BEFORE THE LIST/SCALAR SPLIT, AND THAT IS LOAD-BEARING.
+            // set-field resolves the writer host in TWO places, once per branch
+            // (1184-tj2q added the list arm). The first draft of this guard went
+            // into the first `flagged("--host")` the file offered, which is the
+            // LIST arm — and `status` is a scalar, so the guard was never reached
+            // and a claim with no host still wrote `host: linux`. The fixture's
+            // arm 1 caught it. A guard that must hold for a field belongs above
+            // every branch that field can take.
+            //
+            // AN EXPLICIT --host ALWAYS WINS, INCLUDING `--host <platform>`.
+            // The defect is a SILENT DEFAULT producing a claim nobody can
+            // attribute; an explicit platform is a deliberate, traceable choice
+            // by someone who can be asked why. Refusing that too would leave no
+            // override at all, and a guard with no escape hatch is an argument
+            // for reaching past it — the same reasoning that makes a narrow
+            // override better than `--no-verify`. So the condition tests
+            // ABSENCE of the flag, not the value of the resolved host.
+            {
+                let host_flag_given = args.iter().any(|a| a == "--host");
+                let claim_host = resolve_writer_host();
+                if field == "status"
+                    && value == "in_progress"
+                    && !host_flag_given
+                    && claim_host == std::env::consts::OS
+                {
+                    eprintln!(
+                        "refused:set-field:claim-without-a-host — a claim on '{pid}' would record \
+                         its holder as '{claim_host}', the compiled platform, which every host on \
+                         this platform shares (1201-hsf9).\n\
+                         \n\
+                         WHY THIS IS REFUSED RATHER THAN DEFAULTED. A claim's whole purpose is to \
+                         tell a coordinator whom to ask to let go. Two hosts claiming as \
+                         '{claim_host}' are indistinguishable exactly when a sweep needs to name \
+                         one, and the coordinator then asks the wrong host — measured twice on \
+                         2026-09-15.\n\
+                         \n\
+                         REMEDY, which the worker skill already prescribes:\n\
+                           set-field {pid} status in_progress --host \"$(hostname -s)\" --reason ...\n\
+                         \n\
+                         An explicit --host always wins, including --host {claim_host} if you \
+                         genuinely mean the platform. Every other field and every other status \
+                         value is unaffected; the 772-4se9 platform default is unchanged."
+                    );
+                    std::process::exit(2);
+                }
+            }
             // ORDER 1184-tj2q — A LIST IS NOT AN UNSET SCALAR, AND TREATING IT
             // AS ONE MAKES THE ROW VANISH.
             //
