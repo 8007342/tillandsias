@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    event:
+      type: note
+      ts: "2026-09-15T16:25:52Z"
+      agent_id: linux-pirria-opus5-20260915t162552z
+      host: pirria
+      summary: |
+        FLOOR MEASUREMENT for the 60s budget (pirria, 2026-09-15). The budget has ~37x headroom warm, and the requested cold procedure is a NO-OP on this host — which is the more useful half.
+
+        THE STEP. litmus-e2e-eligibility-probe-shape.yaml:44-53, "the probe emits exactly one well-formed verdict line", timeout_ms 60000. Its comment sizes the 60s for MSYS process-spawn pricing measured 2026-08-16 on windows, citing plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md. That is an honest citation of a different platform's cost, which is what this row exists to replace with a Linux figure.
+
+        THE PROBE'S FIRST PODMAN CALL IS `podman info`, NOT `podman ps` — scripts/e2e-preflight.sh:76, with `podman ps` following at :80. Read rather than assumed, and it matters: the two differ by more than an order of magnitude below.
+
+        MEASURED, warm, three runs each:
+          podman info                       789 / 744 / 807 ms
+          podman ps --format '{{.Names}}'    57 /  53 /  54 ms
+          full step (bash scripts/e2e-preflight.sh eligibility, as the litmus invokes it)
+                                           1557 / 1618 ms, verdict_lines=1
+        So the step costs ~1.6s against a 60s budget: roughly 37x headroom. `podman info` is ~93% of the podman cost and ~48% of the whole step.
+
+        THE COLD PROCEDURE DOES NOT APPLY HERE, and this is the finding rather than an obstacle. On pirria `podman.socket` and `podman.service` are BOTH INACTIVE while two containers run (tillandsias-builder 16h, tillandsias-dev-inference 11h healthy) — rootless podman here is conmon-managed and does not need the user service at all. `systemctl --user stop podman.socket podman.service` returned 0, changed nothing, and left both containers up. Stopping the service therefore cannot produce a cold call on this host, and a number taken after it would be a warm number wearing a cold label.
+
+        WHAT ACTUALLY HOLDS THE RUNTIME is the transient `podman-pause-c4e014b3.scope`, the rootless user-namespace pause process. Stopping THAT would give a genuine cold start, and it would take down both running containers with it. I did not do it: it is materially more than "stop a user service", and the dev-inference container has been healthy for 11 hours and is not mine to end for a p2 budget justification. Offered rather than taken — say the word and I will, or route it to the operator.
+
+        I ALSO DID NOT START the services afterwards. They were never running, so "restart and confirm it came back" would have left the host in a state I did not find it in — a service enabled by a measurement is the measurement changing its subject.
+
+        WHAT THE NUMBER DOES NOT COVER, stated so it is not over-read. With containers up the probe returns `skip:live-runtime-present` (order 442), so it exits after `podman info` + `podman ps` and does NOT walk the full eligible-verdict path the step's own comment calls "the real-verdict path". Measuring that slowest path requires no tillandsias containers running — the same conflict as the cold measurement, for the same reason. So 1.6s is the cost of the path this host takes today, not a proven ceiling on the longest path.
+
+        EVEN SO, THE CEILING ARGUMENT SURVIVES, and it is worth stating because it is what the row wants. For the 60s budget to be wrong on Linux, the full-path cold cost would have to exceed the warm short-path cost by ~37x. `podman info` at 780ms warm would have to reach ~29s. Nothing in these numbers suggests that regime, and this is the floor: 4 cores, 15 GiB, NVMe (non-rotational, 18% full), load 0.28, podman 6.1.1 on overlay. A faster host cannot be slower than this one, so the ceiling holds upward from here even without the cold figure.
+
+        REGIME, attached because a cold-start figure without its conditions is the thing this fleet keeps catching: pirria, CachyOS kernel 7.2.4-3, 4 cores, 15 GiB total / 13 GiB available, load 0.28 0.08 0.02, uptime since 2026-09-14 17:25:41, store on /dev/nvme0n1p2 (473G, 18% used, rotational=0), podman 6.1.1, overlay driver, journald event logger. Concurrent during measurement: tillandsias-builder and tillandsias-dev-inference, nothing else; no build, gate or litmus run in flight.
+
+        No claim taken on the row — this is a measurement, like 1187-iij8's arms.

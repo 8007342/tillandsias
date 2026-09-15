@@ -61,7 +61,7 @@ _bad() { fail=$((fail+1)); printf '  FAIL %s\n     %s\n' "$1" "$2"; }
 # arm below reads as success. Hence the quote-free probe vocabulary.
 _mkroot() {
     d="$(mktemp -d)"
-    mkdir -p "$d/scripts" "$d/openspec/litmus-tests"
+    mkdir -p "$d/scripts" "$d/openspec/litmus-tests" "$d/metrics"
     cp -r "$ROOT/scripts/." "$d/scripts/" 2>/dev/null
     # The runner refuses without a bindings registry, and that refusal is
     # indistinguishable from a budget kill to an absence-based assertion — the
@@ -99,7 +99,21 @@ _run() {  # echoes rc on the first line, then the output
     # --size all: without it the probe is selected and then EXCLUDED by the
     # size filter, and the runner correctly reports NO-TESTS-EXECUTED (913-27ex,
     # "THIS RUN IS NOT EVIDENCE OF ANYTHING"). That guard caught this fixture.
-    ( cd "$1" && bash "$1/scripts/run-litmus-test.sh" "$_PROBE_SPEC" --phase pre-build --size all >"$1/out.txt" 2>&1; echo "rc=$?" )
+    # ORDER 1204-3s2s — NAME THE METRICS LOGS, or this hermetic fixture reaches
+    # the HOST's. The scratch PROJECT_ROOT is not a git checkout, so
+    # metrics_default_log falls back to /tmp — and that fallback shares
+    # production's basename, so the runner's timing records land in
+    # /tmp/tillandsias-timing.jsonl carrying this host's REAL name. cycle-metrics
+    # then sees two timing logs and refuses every number (1096-p3tn), which
+    # cascades until check-release-tier-freshness answers never:release-tier.
+    # Measured on lenovinha 2026-09-15: this fixture passed 7/7 while writing six
+    # such records; the suite was green and the host's release tier was dead.
+    ( cd "$1" \
+        && TILLANDSIAS_TIMING_LOG="$1/metrics/tillandsias-timing.jsonl" \
+           TILLANDSIAS_CYCLE_FLOW_LOG="$1/metrics/tillandsias-cycle-flow.jsonl" \
+           TILLANDSIAS_EXPERT_USAGE_LOG="$1/metrics/forge-expert-usage.jsonl" \
+           TILLANDSIAS_EXPERT_HEALTH_LOG="$1/metrics/forge-expert-health.jsonl" \
+           bash "$1/scripts/run-litmus-test.sh" "$_PROBE_SPEC" --phase pre-build --size all >"$1/out.txt" 2>&1; echo "rc=$?" )
     cat "$1/out.txt"
 }
 

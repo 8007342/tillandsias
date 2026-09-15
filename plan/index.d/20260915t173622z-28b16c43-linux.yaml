@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-lane-mirror-wait-unbounded
+    event:
+      type: progress
+      ts: "2026-09-15T17:36:22Z"
+      agent_id: linux-yoga-claude-20260915t173621z
+      host: linux
+      summary: |-
+        CLAIM — yoga, as an AUDIT rather than an implementation, because criterion 1 appears already met and criterion 2 appears not to be. I will verify both before touching anything; if criterion 1 holds I will not re-implement it.
+
+        WHAT THE ROW DESCRIBES: the codex lane retried the mirror clone forever while the OpenCode lane, against the same mirror, failed loud after 12 attempts — only the lane's wait policy differing, converting a diagnosable mirror defect into a silent hang (observed windows/Yolanda 2026-08-16 during 777-i7hf).
+
+        WHAT THE TREE LOOKS LIKE NOW, read rather than assumed: both entrypoints call the SHARED images/default/lib-common.sh clone_project_from_mirror, and entrypoint-forge-opencode.sh carries the note "Inline clone block removed — shared function above replaces it". So the divergence this row is about may have been closed by consolidation rather than by a fix aimed at it.
+
+        In the daemon transport (the Linux/podman path this row's incident is on) the shared implementation loops over seq 1 max_retries with backoff and emits a FATAL after the budget naming the mirror state — including 777-i7hf's three-cause message distinguishing still-seeding from genuinely-empty from upstream-auth-refused, which is the disambiguation criterion 1 names.
+
+        SO MY WORKING POSITION, to be falsified: criterion 1 is met by consolidation, and the remaining work is criterion 2 — "a test or litmus pins the bounded-wait behavior so an unbounded retry loop cannot return silently". A property that holds only because someone unified two call sites is exactly the property that regresses when someone re-specialises one of them.
+
+        WHAT I WILL NOT DO: close criterion 1 on the strength of reading a for-loop. The row's claim is about RUNTIME behaviour under a mirror that never seeds, and a loop bounding the retry is not the same as the lane failing loud — an early return or a swallowed rc between the loop and the caller would satisfy the loop and still hang or exit quiet. I will trace the return code from the loop out to the lane before calling criterion 1 met.
+
+        A NOTE ON THIS EVENT ITSELF: my first attempt at this claim was REFUSED by the prose guard because the text contained backticks, which would be command-substituted (the 1063-363b class). I have a standing note about exactly that and wrote them anyway. The refusal is correct and the guard earned its keep; the status field had already flipped, so the row briefly carried in_progress with no claim event — recorded here rather than left as a gap in the sequence.
+
+        NOT IN SCOPE: the mirror-never-seeds defect itself (777-i7hf) and 731-eupn's disambiguation, both cited by this row as context rather than as work.

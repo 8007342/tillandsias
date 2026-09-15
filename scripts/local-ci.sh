@@ -1533,6 +1533,29 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "litmus-runner-reports-rc" "skipped"
     fi
 
+    # ORDER 1187-iij8 arm (a), BOUND HERE because it was an orphan (1205-aipn).
+    # Its closure cited a 7/7 hand-run, which is true as a statement about that
+    # run and false as protection: nothing executed it on any gate, so the
+    # fail-open mutation it exists to catch could have landed unnoticed.
+    #
+    # Bound beside the rc-reporting fixture deliberately — both assert that the
+    # runner's VERDICT and its TALLY keep saying different things, and 820-c8q8
+    # is the ruling both defend: a step killed at its budget still FAILS, so
+    # BUDGET is a reporting dimension and never an exemption. Measured 2.1s on
+    # yoga; it drives the runner in throwaway roots and touches no real corpus.
+    if [[ -f "scripts/test-litmus-budget-tally.sh" ]]; then
+        if bash scripts/test-litmus-budget-tally.sh 2>&1 | tee /tmp/litmus-budget-tally.log; then
+            log_pass "Litmus runner tallies a budget kill apart from a failed assertion"
+            archive_check_log "litmus-budget-tally" "pass" /tmp/litmus-budget-tally.log
+        else
+            log_fail_tracked "litmus-budget-tally" "Litmus BUDGET tally regression (see /tmp/litmus-budget-tally.log)"
+            archive_check_log "litmus-budget-tally" "fail" /tmp/litmus-budget-tally.log
+        fi
+    else
+        log_fail_missing_guard "litmus-budget-tally" "scripts/test-litmus-budget-tally.sh"
+        archive_check_log "litmus-budget-tally" "skipped"
+    fi
+
     # Order 1004-inkc. `--expect none` disables the absent detection, which is
     # that order's entire subject: a production caller passing it restores a
     # health check that cannot fail on a DELETED service. The escape hatch was

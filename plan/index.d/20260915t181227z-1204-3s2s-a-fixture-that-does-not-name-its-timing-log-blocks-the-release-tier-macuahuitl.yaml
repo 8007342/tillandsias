@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by tracing this host's first-ever ci-full red (rc=1) to its cause.
+packets:
+  - packet_id: one-litmus-fixture-that-does-not-name-its-own-timing-log-splits-the-metrics-log-and-blocks-the-entire-release-tier-on-that-host
+    order: 1204-3s2s
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [litmus, metrics, release-gate, fail-loud, guard-gap]
+    estimated_hours: 3
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/metrics-log-path.sh
+    title: |
+      1096-p3tn's remedy is a convention with no guard, so one new fixture reintroduces the two-log split and the release tier becomes unreachable
+    context: |
+      TRACED FROM A SYMPTOM TO ITS CAUSE ACROSS SIX LAYERS, 2026-09-15, on
+      macuahuitl's first ci-full ever.
+      THE CHAIN, each link verified rather than inferred:
+      (1) A litmus fixture that does not export TILLANDSIAS_TIMING_LOG runs the
+      runner from a scratch dir that is not a git checkout, so
+      metrics_default_log correctly falls back to /tmp and writes records
+      carrying the REAL host name and real-looking step names into
+      /tmp/tillandsias-timing.jsonl — the production name in a shared path.
+      (2) cycle-metrics.sh then sees TWO timing logs and REFUSES, correctly:
+      `violation:metrics-log-split:<repo>/.cache/metrics/tillandsias-timing.jsonl=111164:/tmp/tillandsias-timing.jsonl=6`,
+      on the sound ground that a runs= or skippable: computed from either is a
+      PARTITION presenting as a TOTAL.
+      (3) The refusal makes cycle-metrics emit NOTHING, so every litmus arm
+      that drives it observes zeros — including its own negative controls.
+      (4) litmus:mcp-expert-health-probe-shape 18/20 therefore reported
+      `observed unexposed_lines=0 exposed_ok=0 exposed_outage=0` and failed with
+      `healthy-but-unexposed must be distinct from healthy`. THAT MESSAGE NAMES
+      THE WRONG SUBJECT: the feature is implemented and the arm is hermetic
+      about its inputs; exposed_ok=0 is the arm's OWN CONTROL reading zero,
+      which says the measurement did not happen. Two further cycle-metrics arms
+      in methodology-accountability were red the same way the same day.
+      (5) The pre-build phase therefore failed, so ci-full exited before
+      post-build and runtime, and the run recorded ci_phase=pre-build only.
+      (6) check-release-tier-freshness.sh consequently still answers
+      `never:release-tier` — A HOST CARRYING THIS DEFECT CAN NEVER RECORD A
+      FULL-TIER RUN, however often the cadence fires. 890-27mv's timer would
+      spend ~35 minutes daily and write a pre-build-only record every time.
+      THE ACTUAL DEFECT IS A GUARD GAP, NOT A FIXTURE SLIP. 1096-p3tn already
+      diagnosed this and fixed it BY HAND in eleven fixtures, documenting the
+      remedy in their comments: name your own log, deliberately NOT
+      tillandsias-timing.jsonl, so no reader can mistake fixture debris for
+      data. MEASURED TODAY: 10 of 16 litmus fixtures export
+      TILLANDSIAS_TIMING_LOG and 6 DO NOT, and no check-*.sh enforces it.
+      The rogue records here were litmus:budget-probe and litmus-suite at
+      2026-09-15T13:58Z, from a fixture that landed the same day — its author
+      had no way to know the convention existed. A remedy applied by hand to
+      the instances that existed, with nothing to catch the next one, is the
+      same shape this fleet recorded hours earlier about a rule held in a
+      standing note: applied when remembered, and the gate applies it every time.
+      IMMEDIATE STATE: the debris was removed on macuahuitl (6 records,
+      preserved as evidence first) and cycle-metrics immediately emitted
+      `mcp: servers=1 ... health=ok` again. That unblocks this host and fixes
+      nothing.
+    exit_criteria:
+      - 'a litmus fixture added without naming its own timing log is REFUSED by a gate step (pre-fix result: FAILS — no check-*.sh mentions the convention, and 6 of 16 fixtures do not follow it)'
+      - 'the remaining 6 fixtures name their own log, verified by execution rather than by grep — run each and assert /tmp/tillandsias-timing.jsonl is not created'
+      - 'NEGATIVE CONTROL: a fixture that legitimately has no timing output is not required to declare one, so the guard does not become a ritual line'
+      - 'an arm whose driver REFUSED must not report a verdict about the feature: cycle-metrics refusing makes the arm skip by name, not fail with a message accusing the subject'
+    unscoreable: |
+      unpinnable-until-the-guard-shape-is-chosen: the deliverable depends on
+      whether the enforcement is a static check on fixture sources, a runtime
+      assertion that the shared path is absent after a suite, or a change to
+      metrics_default_log so a non-checkout fallback is never the production
+      name. The chain above is measured and complete; which layer to fix is a
+      decision, and the cheapest is not obviously the most durable.
+    events:
+      - type: filed
+        ts: "2026-09-15T18:12:27Z"
+        agent_id: "linux-macuahuitl-claude-20260915t181227z"
+        host: macuahuitl
+        summary: |-
+          Traced from this host's first ci-full red back through a correct
+          refusal, an arm accusing the wrong subject, and a hand-applied remedy
+          with no guard. One missing env export in one fixture makes the entire
+          release tier unmeasurable on the host that runs it.

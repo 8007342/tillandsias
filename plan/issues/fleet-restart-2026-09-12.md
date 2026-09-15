@@ -6277,3 +6277,96 @@ resolves correctly here, so every fix written from this machine would be a
 guess dressed as a remedy. Shipping a `skip:` for a mechanism nobody has
 identified would convert an honest red into a silent skip, which is worse than
 the red. Handed back as a discriminating probe instead.
+
+**Pass 34 addendum (2026-09-15T17:02Z) — A PEER MEASURED THE COST OF A RULE
+THIS COORDINATOR WROTE AND WAS NOT FOLLOWING.** macbookair's macOS land refused
+twice on the mandated-merge guard, each refusal costing a full gate, and rather
+than calling it bad luck they measured the race: trunk taking a commit every
+~6.7 minutes against a gate longer than that. I checked their arithmetic against
+trunk before answering and IT IS WORSE THAN THEY REPORTED — 21 commits in three
+hours, 9 in the last hour, mean interval 5.5 MINUTES — and the attribution is
+the part that matters: EIGHT OF THE 21 ARE MINE. The coordinator is the single
+largest source of the churn the slow hosts cannot outrun.
+THE RULE ALREADY EXISTS AND IT IS MINE: "the coordinator's cadence is the churn
+slow hosts lose to; land once per pass, relay-land work/<order> branches,
+quiesce for a critical commit." Pass 33 landed twice. No pass today reached the
+third clause. A rule held in a standing note and applied by judgement is applied
+when you remember it — which is the same sentence this file already carries
+about the 795-imz3 refusal, now recurring at the level of cadence rather than
+syntax, and costing a peer two gates instead of one land.
+THEIR REASONING FOR TAKING THE RELAY REF IS THE PART TO KEEP. They declined the
+same hatch TWICE earlier today because the host could satisfy the guard then,
+and what changed their mind was the numbers rather than the inconvenience. A
+gate longer than trunk's inter-commit interval is not an unlucky sequence, it is
+arithmetic, and "a gate or merge policy your host cannot satisfy" is exactly the
+case the refusal text names — so taking the offered path is COMPLIANCE, not
+routing around the guard. The distinction is worth preserving because the same
+action taken for the wrong reason would be the thing the guard exists to stop.
+RELAYED AND QUIESCING. 5b249f35f merged and landing with this record. After it,
+NO FURTHER CODE LANDS FROM THIS HOST until the platform hosts have had a clear
+window; lenovinha (6 of the 21) is told the same. The window is worth more to
+them than to me, which is the whole content of the rule I was not following.
+THE REFUSAL WORDING IS FIXED, AND THEIR READING IS SHARPER THAN THE NOTE
+ALREADY IN THE FILE. 1064-r8fv fixed the dead-end half by adding a lane hint,
+but left "not a lost race, so retrying cannot help" absolute. It is TRUE of
+retrying the PUSH and FALSE of re-running the script, whose attempt loop merges
+trunk at attempt start and re-gates — the tool declines to use, for this
+condition, a remedy it already performs. A tired reader takes the sentence at
+face value and hand-merges, which is what that host did twice before measuring.
+The message now names which retrying is futile, names the step the tool already
+takes, and — the part their report earned — tells the reader to MEASURE the
+interval before spending another gate on it, with the command to do so.
+AND THEIR FIXTURE CARRIES THE CONTROL THE DAY'S OTHER VACUITY FINDINGS LACKED.
+It counts ZOMBIES through /bin/ps filtered to its own pid rather than grepping
+for `.wait()`, because a source-level test would have passed on the broken code
+THE MOMENT THE MISLEADING COMMENT WAS WRITTEN — and that comment, "Detached —
+let it complete in the background", is a specimen worth keeping: its second
+clause is true, which is precisely what makes the first sound reasoned rather
+than absent. The built-in control spawns raw children and REQUIRES zombies to
+appear, so the arm cannot pass vacuously if a platform ever auto-reaps.
+
+**Pass 35 (2026-09-15T18:11Z) — ONE MISSING ENV EXPORT IN ONE FIXTURE MADE THE
+ENTIRE RELEASE TIER UNMEASURABLE, and the arm that reported it accused the
+wrong subject.** osx-next +2 relayed (macbookair's 690-w94k relay-ref record and
+the trunk-race measurement); windows-next 0.
+THE CHAIN, TRACED FROM SYMPTOM TO CAUSE ACROSS SIX LAYERS, each link verified:
+a litmus fixture that does not export TILLANDSIAS_TIMING_LOG runs the runner
+from a scratch dir that is not a git checkout, so metrics_default_log correctly
+falls back to /tmp and writes records carrying the REAL host name into
+/tmp/tillandsias-timing.jsonl — the production name in a shared path.
+cycle-metrics.sh then sees two timing logs and REFUSES, correctly, on the
+ground that any runs= computed from either is a partition presenting as a
+total. The refusal makes cycle-metrics emit NOTHING, so every arm driving it
+observes zeros. litmus:mcp-expert-health-probe-shape 18/20 therefore failed
+with "healthy-but-unexposed must be distinct from healthy" while
+`exposed_ok=0` — ITS OWN CONTROL — was also zero. Pre-build failed, ci-full
+exited before post-build, the record carried ci_phase=pre-build only, and
+check-release-tier-freshness.sh still answers `never:release-tier`. A host
+carrying this defect CAN NEVER RECORD A FULL-TIER RUN however often the cadence
+fires.
+THE ARM NAMED THE WRONG SUBJECT AND THAT IS THE REUSABLE HALF. Its message
+accuses the FEATURE — which is implemented, with a long comment citing
+801-m9tk — when its own negative control reading zero says the measurement did
+not happen at all. A control at zero is not a failed comparison; it is the
+absence of one, and an arm that reports a verdict anyway sends a fixer at
+working code. That is 1109-t8kw's class reaching the release gate: a correct
+refusal scoring as an assertion failure.
+THE DEFECT IS A GUARD GAP, NOT A FIXTURE SLIP, and the author could not have
+known. 1096-p3tn diagnosed this exact split and fixed it BY HAND in eleven
+fixtures, documenting the remedy in their comments. MEASURED TODAY: 10 of 16
+litmus fixtures export TILLANDSIAS_TIMING_LOG and SIX DO NOT, and no check-*.sh
+enforces it. The rogue records were litmus:budget-probe and litmus-suite at
+13:58Z, from a fixture that landed the same day. A remedy applied by hand to
+the instances that existed, with nothing to catch the next one, is verbatim the
+shape this file recorded eleven hours earlier about a rule held in a standing
+note: applied when remembered, while a gate applies it every time. Filed
+1204-3s2s (p1). Debris removed on this host after preserving the six records;
+cycle-metrics immediately emitted `mcp: servers=1 ... health=ok` again, which
+unblocks macuahuitl and fixes nothing.
+AND A CLAIM OF MINE THAT WAS WRONG, CORRECTED BY READING RATHER THAN REPEATED.
+I told the operator the ci-full's VERSION bump had blocked this host's push
+lane. It had not: the plan-only lane scopes the OUTGOING DIFF, not the
+worktree — `attempt_plan_only_lane` requires every outgoing PATH to be a new
+fragment, and uncommitted VERSION changes are in neither. Two filings went out
+unimpeded. I had asserted it twice before checking, which is the day's own
+lesson arriving one more time.

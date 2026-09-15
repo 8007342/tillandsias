@@ -1,0 +1,121 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria from the 1109-t8kw yq re-run, at the coordinator's direction:
+# a fixture fragility that accuses the wrong subsystem, plus the reading
+# instruction for the eight artefact reds that sit beside it.
+packets:
+  - packet_id: a-fixture-prefixes-pwd-to-cargo-target-dir-so-an-absolute-one-reds-the-arm-and-the-failure-accuses-the-citation-code
+    order: 1203-46gj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, fixtures, low-end, fail-loud, toolbox]
+    estimated_hours: 1
+    parent_order: 1109-t8kw
+    owned_files:
+      - openspec/litmus-tests/litmus-citation-frame-and-caller-relation.yaml
+    verifiable_closure: |
+      litmus:citation-frame-and-caller-relation — the arm already exists, so this
+      packet pins the existing test rather than promising a new one.
+
+      With CARGO_TARGET_DIR set to an ABSOLUTE path, `bash scripts/run-litmus-test.sh
+      forge-environment-discoverability --phase pre-build` runs
+      litmus:citation-frame-and-caller-relation step 2 against a real binary and the
+      arm reports its own verdict (pass or fail on the citation property) rather than
+      rc=127 on a non-existent path. NEGATIVE CONTROL: with CARGO_TARGET_DIR unset, and
+      with it set to a RELATIVE path, the arm still resolves the same binary it does
+      today — the fix must not change the two cases that already work.
+      Pre-fix result: FAILS — rc=127, measured on pirria 2026-09-15 (see events).
+    title: |
+      litmus-citation-frame-and-caller-relation.yaml:80 builds its binary path as `PB="$PWD/${CARGO_TARGET_DIR:-target}/release/tillandsias-plan"`, prefixing $PWD unconditionally — so an ABSOLUTE CARGO_TARGET_DIR yields `$PWD` + `/tmp/...`, the arm dies rc=127 on a path that cannot exist, and the red reads as a citation defect when it is a path-construction defect.
+    context: |
+      MEASURED on pirria 2026-09-15 while re-running the 1109-t8kw suites inside
+      the tillandsias-builder toolbox. Observed output:
+
+        bash: line 1: /home/lapto/claudia/tillandsias//tmp/tb-target/release/tillandsias-plan: No such file or directory
+
+      WHY AN ABSOLUTE VALUE IS NOT AN EXOTIC CHOICE, which is the whole reason this
+      is worth a row. cargo supports an absolute CARGO_TARGET_DIR fully, and on this
+      host it was the NECESSARY choice: the toolbox build had to be kept out of the
+      repo's own target/, because the copy at target/release/tillandsias-plan must
+      stay HOST-runnable for the push-time plan-only lane, while a build made inside
+      fedora-toolbox:42 is not (the GLIBC boundary of lib-cargo-sites.sh:68-73). So
+      the fixture is LEAST RELIABLE EXACTLY WHERE REDIRECTING THE TARGET DIR IS MOST
+      NECESSARY — a host under no such pressure never redirects it and never sees this.
+
+      AND THE FAILURE ACCUSES THE WRONG SUBSYSTEM. The arm is named "a live
+      plan_answer citation carries the REAL HEAD as its commit". Its red is reported
+      against litmus:citation-frame-and-caller-relation, so a reader's first
+      hypothesis is the citation/freshness code — which is untouched and fine. The
+      cost of this bug is not the arm that did not run; it is the investigation it
+      points at the wrong place. That is what makes a one-line, build-free remedy
+      worth writing down rather than just doing.
+
+      THE REMEDY, for the claimer to confirm rather than take on faith: treat
+      CARGO_TARGET_DIR as authoritative when it is already absolute, e.g.
+        D="${CARGO_TARGET_DIR:-target}"; case "$D" in /*) PB="$D/release/tillandsias-plan" ;; *) PB="$PWD/$D/release/tillandsias-plan" ;; esac
+      No build is needed to make or verify this change. Before editing, REPRODUCE the
+      red with an absolute CARGO_TARGET_DIR (1109-t8kw's converse rule: symptom match
+      is not membership), and scan for siblings — the predicate is any fixture
+      interpolating ${CARGO_TARGET_DIR:-target} after $PWD, across scripts/test-*.sh
+      and openspec/litmus-tests/*.yaml. Record files-scanned / hits / fixed in the
+      closure event the way 51c0ad583 did.
+
+      NOT FIXED IN THE PASS THAT FOUND IT, deliberately. It surfaced after
+      1109-t8kw part 1's closure event was already written, and an edit appended to a
+      finished sweep is a change nobody reviewed riding on a review that already
+      happened. Named and reproduced here instead.
+    exit_criteria:
+      - 'an absolute CARGO_TARGET_DIR resolves to the real binary and the arm reports its own verdict (pre-fix result: FAILS — rc=127 on $PWD + the absolute path, pirria 2026-09-15)'
+      - 'NEGATIVE CONTROL: unset and relative CARGO_TARGET_DIR both still resolve exactly the binary they resolve today'
+      - 'the sibling scan is recorded with its predicate and counts, so a reader can tell a floor from a total'
+    events:
+      - type: filed
+        ts: "2026-09-15T18:05:00Z"
+        agent_id: "linux-pirria-opus5-20260915t162552z"
+        host: pirria
+        summary: |
+          Filed from the 1109-t8kw yq re-run at the coordinator's direction.
+
+          READING INSTRUCTION FOR ANYONE WHO MEETS THIS SUITE IN A TOOLBOX — this is
+          not part of the fix, it is what stops the next person filing eight false
+          tree defects. A yq-present run of forge-environment-discoverability INSIDE
+          tillandsias-builder can produce EIGHT reds across
+          litmus:expert-capability-skew-honesty, litmus:plan-answer-envelope-citability,
+          litmus:citation-frame-and-caller-relation, litmus:methodology-path-query-citability,
+          litmus:groundtruth-no-mutable-status-pin-shape, litmus:expert-groundtruth-harness,
+          litmus:project-answer-synthesis-refusal-typed and
+          litmus:generic-index-deterministic-subset. Measured on pirria 2026-09-15:
+          ALL EIGHT were artefacts, every one of them carrying
+
+            /tmp/.litmus-569/bin/plan: /lib64/libm.so.6: version `GLIBC_2.44' not found
+
+          The cause is that the staging step (litmus-expert-capability-skew-honesty.yaml:73)
+          does NOT honour TILLANDSIAS_PLAN_BIN — it runs its own
+          `cargo build -q -p tillandsias-plan --release` and copies from
+          ${CARGO_TARGET_DIR:-target} — so exporting TILLANDSIAS_PLAN_BIN stages the
+          HOST-built binary anyway, which cannot exec inside the toolbox. CHECK THE
+          LINKAGE ERROR BEFORE BELIEVING A SINGLE ONE OF THOSE REDS. With
+          CARGO_TARGET_DIR pointed at a toolbox-built tree the same suite returned
+          23 PASS / 1 FAIL / 1 SKIP, and that remaining 1 is this packet's subject.
+
+          SECOND-ORDER HAZARD FROM THE SAME STAGING STEP, recorded because it bites
+          silently: left alone it REBUILDS INTO target/ from inside the toolbox,
+          replacing the host-runnable release binary that the push-time plan-only lane
+          depends on. One artifact path, two incompatible consumers — the push lane
+          needs it host-runnable, in-toolbox litmus needs it toolbox-runnable, and the
+          last writer wins without announcing it. Observed on two hosts with OPPOSITE
+          outcomes within one hour: pirria got the hostile face (a toolbox-built binary
+          the host gate could not run, three push refusals and a 54s rebuild to clear),
+          macuahuitl got the benign face (its first ci-full rebuilt the same path
+          mid-run at 17:03Z and it stayed host-runnable because the rebuild resolved
+          against /lib64). Whether you notice depends on which glibc happens to match,
+          which is why it is worth stating as a property of the design rather than of
+          either host.
+
+          THE NEGATIVE RESULT THIS CAME OUT OF, stated so it is not mistaken for an
+          unfinished chore: the yq degradation on pirria HID NOTHING. meta-orchestration
+          re-run with yq present was 23/0/1, identical to the degraded host run, and
+          forge-environment-discoverability's single difference is this packet's
+          artefact rather than a tree defect.

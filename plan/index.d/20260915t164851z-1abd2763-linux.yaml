@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    field: status
+    value: completed
+    ts: "2026-09-15T16:48:51Z"
+    host: linux
+
+events:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    event:
+      type: completed
+      ts: "2026-09-15T16:48:51Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 149890343 + litmus:e2e-eligibility-probe-shape steps 4/5 split and two-way mutation proven; criterion 2 met by pirria's floor measurement with residue (2) retired on the call sequence
