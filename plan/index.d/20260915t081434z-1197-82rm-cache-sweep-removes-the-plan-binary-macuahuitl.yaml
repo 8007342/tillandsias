@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from its own 2026-09-15 daily maintenance: the sanctioned
+# end-of-cycle cache sweep removed the binary the plan lane needs, and the
+# consequence is invisible on hosts that happen to have an installed copy.
+packets:
+  - packet_id: the-end-of-cycle-build-cache-sweep-removes-the-plan-binary-the-plan-only-lane-needs-so-a-host-without-an-installed-copy-loses-its-ledger-lane-until-it-rebuilds
+    order: 1197-82rm
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [maintenance, plan-only-lane, tooling, low-end, fail-loud]
+    estimated_hours: 2
+    parent_order: 709-in2f
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the sweep rebuilding what it removed. Future litmus scripts/test-cache-sweep-leaves-a-plan-binary.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: after the sanctioned sweep runs, resolve_plan_binary resolves a binary INSIDE THE CHECKOUT rather than only on PATH, and the plan-only lane validates a fragment push with no manual rebuild; NEGATIVE CONTROL: with the rebuild step removed and no installed copy on PATH, the lane fails closed and its named remedy is still reachable; pre-fix result: FAILS — measured on macuahuitl 2026-09-15."
+    owned_files:
+      - scripts/check-build-cache-sweep.sh
+      - methodology.yaml
+    title: |
+      The end-of-cycle build-cache sweep runs a cargo clean, which deletes target/release/tillandsias-plan — the validator the plan-only push lane fails closed without — so a host with no installed copy on PATH cannot push a ledger record until it rebuilds, and on a floor host that rebuild is not cheap.
+    context: |
+      MEASURED on macuahuitl 2026-09-15, running the sanctioned sweep at the end
+      of a meta cycle exactly as build_cache_hygiene prescribes: target/ was
+      48 GiB (over the 40 GiB trigger), the clean removed 124,983 files and
+      55.8 GiB, and target/release/tillandsias-plan went with them. The very
+      next ledger read failed with "No such file or directory".
+      WHY IT DID NOT BREAK THIS HOST, and why that is the actual hazard:
+      resolve_plan_binary falls through to the copy on PATH, and this host has
+      an installed one at ~/.local/bin, so the lane kept working and the
+      sweep's consequence was INVISIBLE here. That is 1172-dyvd's axis 14 — the
+      host's own installed binary is a hidden candidate — arriving in the
+      maintenance path: the hosts where the sweep is harmless are exactly the
+      hosts that cannot observe it. A checkout with no installed copy (a fresh
+      clone, a forge, a host that has never run an install) resolves nothing,
+      and the plan-only lane FAILS CLOSED by design (1124-7f3u), so that host
+      cannot push a claim, a closure or a loop-status entry until it rebuilds.
+      THE COST IS TIER-DEPENDENT, which is why this is not a papercut
+      everywhere: the rebuild measured 40 s on macuahuitl (20 cores). The floor
+      hosts run the same daily maintenance, and on drvfs under WSL or on a
+      low-end Silverblue box a one-crate release build is minutes — paid at an
+      unpredictable moment, for a sweep the host did not ask for, while its
+      ledger lane is down.
+      WHAT TO BUILD: have the sweep rebuild what it removed, with the one-crate
+      release build of tillandsias-plan as part of the sanctioned action, and
+      say so in build_cache_hygiene beside the clean, so the policy and the
+      script cannot drift. The refusal a host currently hits is self-explaining
+      and names its remedy, so this is about not spending a floor host's
+      minutes, not about a silent failure.
+      NOT IN SCOPE: changing the sweep's trigger, or the nix_store_policy.
+    exit_criteria:
+      - 'after the sanctioned sweep, resolve_plan_binary resolves a binary inside the checkout and a fragment push takes the plan-only lane with no manual rebuild (pre-fix result: FAILS — measured 2026-09-15; only an installed PATH copy saved the lane)'
+      - 'NEGATIVE CONTROL: with the rebuild step removed and no installed copy on PATH, the lane fails closed and the fixture shows its named remedy still reachable, not merely that it broke'
+      - 'methodology build_cache_hygiene names the rebuild beside the clean, so the policy and the script cannot drift'
+    events:
+      - type: filed
+        ts: "2026-09-15T08:14:34Z"
+        agent_id: "linux-macuahuitl-opus5-20260915t081434z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator after its own daily maintenance removed the
+          plan binary; the fallback to an installed PATH copy is what hid it.

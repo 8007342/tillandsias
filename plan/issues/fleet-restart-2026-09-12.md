@@ -5547,3 +5547,82 @@ cycle, the way the relay taught everyone to push fragments. Worth a row if it
 recurs after the asks.
 Daily maintenance still reads due:stale:2026-09-14 after the host upgrade and
 restart; it belongs to the meta cycle, which takes it at its next fire.
+
+**Pass 30 (2026-09-15T08:11Z) — nothing to relay, and three instrument
+defects, one of them the coordinator's own.**
+THE COORDINATOR EXECUTED ITS OWN LEDGER PROSE. Filing 1197-82rm, I wrote the
+fragment through an UNQUOTED heredoc, which this drill and the coordinator's
+own standing memory forbid for exactly one reason: backticked prose is
+COMMAND SUBSTITUTION. Three phrases ran on the host — a cargo clean (which
+deleted the 586 MiB the meta cycle had just rebuilt), the plan binary with no
+arguments (which dumped its usage), and a one-crate release build (which put
+the binary back, 39.76 s). Net effect on the host: none, by luck. Effect on
+the fragment: three holes where the prose had been, reading "() as part of
+the sanctioned action" and "falls through to  on PATH".
+THE PART WORTH THE DRILL IS NOT THE MISTAKE, IT IS WHAT DID NOT CATCH IT.
+`validate-yaml` returned ok and `check --strict-fragments` returned ok on the
+corrupted fragment, because a hole in prose is still valid YAML — the guards
+were green on a document whose content had been replaced by command output.
+Caught only by reading the command's own output and asking why a cargo clean
+appeared in it. A quoted heredoc plus sed for the substitutions is the rule;
+the fragment was untracked and never committed, so it was deleted and
+rewritten rather than corrected in place.
+EXPIRE-CLAIMS AGES AND ATTRIBUTES BY THE WRONG RECORD — filed 1198-7q95, p1,
+and it nearly cost a live claim. The sweep reported
+"expire-candidate 888-miiy 2026-09-01T23:04:53Z claimant:lenovinha", and on
+that basis the coordinator asked lenovinha to release a two-week-old claim.
+lenovinha REFUSED THE PREMISE WITH EVIDENCE and was right: the only
+in_progress write on that row is dated 2026-09-15T07:36:36Z and landed as
+b2f1b4249 "claim(888-miiy): yoga" — 35 minutes before the ask, by a different
+host. Verified independently here before filing: both of the sweep's fields
+come from the row's newest EVENT (type=progress, 2026-09-01, host lenovinha),
+neither from the status write that set in_progress. Under --write it would
+have returned a live claim to ready — the 1140-d6ni shape produced by the
+instrument that exists to prevent it. A second defect sits beside it: the
+status write's host reads `linux`, the PLATFORM, because set-field defaults
+it, so two hosts on one platform are indistinguishable exactly when a sweep
+needs to know whose claim it is; the agent_id does carry the workstation.
+THE CACHE SWEEP REMOVES THE PLAN BINARY — filed 1197-82rm. The sanctioned
+end-of-cycle sweep ran a cargo clean and took target/release/tillandsias-plan
+with it; the next ledger read failed. It did not break THIS host only because
+resolve_plan_binary falls through to the installed copy on PATH — 1172-dyvd's
+axis 14 arriving in the maintenance path, so the hosts where the sweep is
+harmless are exactly the hosts that cannot observe it. A checkout without an
+installed copy loses its plan lane until it rebuilds: 40 s here, minutes on a
+floor host, at an unpredictable moment.
+LENOVINHA'S GENERALISATION, from their own cycle, and it names the night:
+EVERY INSTRUMENT FAILURE THEY HAD WAS IN THE THING WATCHING THE WORK, three
+times — a pkill that matched its own watcher shell, the harness reaping their
+background waiters twice, and a "stall" they reported that was their monitor
+hardcoding gate-attempt-1's log while the land had moved to attempt 2 after
+losing a push race. Add yoga's sibling-match wait-loops and this coordinator's
+own executed prose and the count for the night is five, none of them in the
+work itself. Their loop_status is fixed (559a17ae2) after the coordinator's
+ask, covering five landings it had skipped.
+MACNEO USED THE FREEZE WITHIN MINUTES of it landing, and brought back a
+control lesson about it: their hand query for refs/tillandsias/freeze/
+returned empty AND so did a control query for refs/tillandsias/* generally,
+so the absence proved nothing until they listed all 546 refs and found the
+only non-branch prefixes are HEAD and refs/pull/*. An uncontrolled empty
+reads identically whether the freeze is absent or the namespace is
+unqueryable. scripts/release-freeze.sh status already separates those — a
+failed ls-remote is refused:freeze:unreachable, an empty one from a reachable
+remote is ok:freeze-none — and the fixture's set-then-read round-trip is the
+namespace's positive control. Use the tool rather than a hand query.
+MACNEO on 824-6qxh, released rather than claimed: the floor tier cannot
+produce slice (2)'s low-end bands, and NOT for the hardware reason the row
+anticipates. measure-bands.sh (at scripts/refusal-calibration/, not scripts/ —
+macneo nearly reported the instrument missing after searching the wrong
+directory, caught by a positive control) requires --model, --index-dir and
+--questions, and its index and queries must share an embedder. On macneo:
+experts-probe reports l1=unset with no embed endpoint, and BOTH candidate
+index dirs exist but are EMPTY. Two independent blockers. So the slice is
+blocked on the floor host having a live embedder and a populated index, and
+the qualifying host has neither — an OPERATOR question (provision macneo as
+the floor-tier band reporter, or defer the low-end reading and take the bands
+from a host that has both), not plan work.
+TWO EXPIRY CANDIDATES, dispositioned rather than swept: 1155-jurn is FINISHED
+but still reads in_progress on trunk (esme's canary merged at e6f675d18, 7/7
+on both Windows hosts) — asked esme to land the closure, since closing on a
+message rather than evidence-in-hand is how unfinished work gets marked done.
+888-miiy is the false positive above; nothing expired.

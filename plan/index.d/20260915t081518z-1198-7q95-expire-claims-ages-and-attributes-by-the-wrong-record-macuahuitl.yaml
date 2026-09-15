@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl after its own coordination pass nearly asked the wrong
+# host to drop a claim set 35 minutes earlier by a different host.
+packets:
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    order: 1198-7q95
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, coordination, instrument, fail-loud, multi-host]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the reader. Future litmus scripts/test-expire-claims-reads-the-status-write.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: on a scratch ledger where a row carries an OLD event from host A and a RECENT in_progress status write from host B, expire-claims ages the claim from the STATUS WRITE and names host B, and does not list it as an expire candidate; NEGATIVE CONTROL: a genuinely old status write IS listed, with its own host; second NEGATIVE CONTROL: a row with events but no status write is not silently aged off an event; pre-fix result: FAILS — measured on the live ledger 2026-09-15."
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      expire-claims ages a claim by the newest EVENT on the row and attributes it to that event's host, not to the status write that set in_progress, so a claim made 35 minutes ago by one host is reported as a two-week-old claim belonging to another — and --write would return a live claim to ready.
+    context: |
+      MEASURED on the live ledger, macuahuitl 2026-09-15T08:11Z, and it nearly
+      cost a live claim. The coordination pass ran expire-claims, which reported:
+        expire-candidate  888-miiy  ...  2026-09-01T23:04:53Z  claimant:lenovinha
+      On that basis the coordinator asked lenovinha whether the two-week-old
+      claim was still theirs. lenovinha refused the premise WITH EVIDENCE and
+      was right. What the ledger actually holds:
+        - the only in_progress write on that row is
+          plan/index.d/20260915t073636z-35bca30d-linux.yaml, value=in_progress,
+          ts 2026-09-15T07:36:36Z, landed as b2f1b4249
+          "claim(888-miiy): yoga, criterion 4 WITH-endpoint half"
+        - the row's newest EVENT is type=progress, ts 2026-09-01T23:04:53Z,
+          host lenovinha, agent linux-lenovinha-claude-20260901t225307z
+      Both of expire-claims' fields come from the EVENT and neither from the
+      status write. The claim was 35 minutes old, not 14 days, and it belonged
+      to yoga, not lenovinha. Under --write the sweep would have returned a
+      live claim to ready while its holder was working it — which is the
+      1140-d6ni shape (a row worked twice) produced by the very instrument
+      that exists to prevent stale claims.
+      A SECOND DEFECT SITS BESIDE IT AND MUST BE FIXED TOO, or a corrected
+      reader still cannot name the holder: the status write's host field reads
+      `linux`, the PLATFORM, not `yoga`, the workstation, because set-field
+      defaulted it when no --host was passed. lenovinha reports the same on
+      their own closure fragments this cycle, which are named -linux.yaml for
+      the same reason. So two hosts on one platform are indistinguishable at
+      exactly the moment a sweep needs to know whose claim it is. Whether the
+      fix is set-field refusing to default the host, or deriving it from the
+      agent_id (which DOES carry the workstation:
+      linux-lenovinha-claude-..., linux-macuahuitl-opus5-...), is the
+      claimer's call — the agent_id route needs no new discipline from hosts
+      and is the one this row leans toward.
+      WHY p1 DESPITE THE DRY-RUN DEFAULT: the sweep is advisory today, but the
+      coordinator ACTS on its output, and did — the wrong host was asked to
+      release work it never held. An instrument a human follows is not made
+      safe by defaulting to dry-run.
+    exit_criteria:
+      - 'on a scratch ledger with an OLD event from host A and a RECENT in_progress status write from host B, expire-claims ages from the status write, names host B, and does not list the row (pre-fix result: FAILS — measured 2026-09-15: reported host A and the event ts)'
+      - 'NEGATIVE CONTROL: a genuinely old status write IS still listed as a candidate, with its own host'
+      - 'NEGATIVE CONTROL: a row carrying events but NO status write is not aged off an event at all'
+      - 'the claimant is resolvable to the WORKSTATION, not the platform — either set-field stops defaulting the host or the reader derives it from the agent_id'
+    events:
+      - type: filed
+        ts: "2026-09-15T08:15:18Z"
+        agent_id: "linux-macuahuitl-opus5-20260915t081518z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator after acting on the sweep's output and being
+          corrected by the host it wrongly named; lenovinha supplied the
+          disproof and macuahuitl verified it independently before filing.
