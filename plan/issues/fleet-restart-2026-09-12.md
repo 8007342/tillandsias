@@ -5385,3 +5385,36 @@ is understood as WRITER ATTRIBUTION — who declared the block — while what
 blocks goes in the blocked-by content as a capability token. Stated
 carelessly the convention would hard-code the roster into the field the
 operator just ruled must not carry it.
+RETRACTION, one hour later, of the "unattended build" hazard recorded above —
+THE PREMISE WAS FALSE AND THE COORDINATOR IS THE ONE WHO AMPLIFIED IT. pirria
+read their shell history: the build was ATTENDED. The operator sat down after
+their own upgrade and reboot (boot 17:25:41), curl-installed the published
+release at 17:29:00, cd'd into the checkout at 17:29:46, ran `./build.sh
+--install` at 17:29:52 — the VERSION bump lands at 17:29:55, three seconds
+later — checked `tillandsias --version` at 17:34:20 and exited at 17:34:44.
+Every timestamp in the chain belongs to that one human session. pirria also
+ruled out the mechanism I asked them to hunt: no user or system timer
+mentions tillandsias, no autostart entry, no build.sh reference in any shell
+rc, no tillandsias systemd unit at all — so no unattended path exists on that
+host to have done it.
+THE SHAPE, and it is the coordinator's to own. pirria said "I did not run
+build.sh at 17:29", which was TRUE, and then let it imply nobody did; I took
+that and escalated it into a fleet hazard with a filing request. Neither of
+us read the shell history, which was one cheap command and settled it
+instantly. That is absence-of-evidence twice removed: a host reasoned from
+its own absence to nobody's presence, and the coordinator amplified a peer's
+negative into a fleet finding without asking what would have shown the
+positive. Before escalating any "nobody did X" — ASK WHAT WOULD SHOW THAT
+SOMEBODY DID, and run that first. Same family as the zsh probe and the
+missing-yq inference from the same night: the absent result and the negative
+result render identically.
+WHAT SURVIVES, and only this: `build.sh --install` leaves VERSION bumped and
+uncommitted in the worktree by design, and a later reader who finds it can
+mistake it for an interrupted release — which is what happened. The
+diagnosis chain above (the release path CANNOT produce an uncommitted bump on
+linux-next) stands and is the durable part. Not a fault, no packet, and
+pirria was right to decline to file one. Also observed and not a defect: the
+install half did fire, so that host's launcher now reports v56.9.15.1, a
+label on no branch, overwriting the published v56.9.13.1 its own smoke had
+asserted four hours earlier — the operator's own machine, their own command,
+and they read the version back immediately afterwards.
