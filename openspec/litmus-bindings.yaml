@@ -640,6 +640,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:claims-fleet-visible
+  - litmus:release-freeze-holds-code
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape

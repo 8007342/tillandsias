@@ -184,13 +184,31 @@ refuse() {
 # 2026-08-24 retrospective checked; that is what "unusable safety net" looks
 # like from the outside: nothing fails, nothing is saved.
 _all_salvage=1
+_all_marker=1
 _any_ref=0
 _salvage_delete=""
 while read -r _l _ls _remote_ref _rs; do
     [[ -z "${_remote_ref:-}" ]] && continue
     _any_ref=1
     case "$_remote_ref" in
+        refs/tillandsias/*)
+            # COORDINATION MARKER REFS (order 1176-9vqn). refs/tillandsias/* is
+            # the namespace this fleet already uses for out-of-band signals the
+            # credential mirror publishes, and now for the release-freeze
+            # marker. They are not branches: no gate reads them, no release
+            # ships them, and the freeze marker points at a commit the remote
+            # already has, so setting one uploads nothing.
+            #
+            # THIS EXEMPTION IS LOad-BEARING, not a convenience. Without it the
+            # freeze tool's own push is gated by this hook, so declaring a
+            # freeze would require a green gate on the declaring host — which is
+            # exactly the host in the middle of a cut, and exactly the state
+            # where the stamp is busy. A freeze that cannot be declared without
+            # passing the gate it exists to protect is not a mechanism.
+            _all_salvage=0
+            ;;
         refs/heads/salvage/*)
+            _all_marker=0
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
             # deletions through with the same enthusiasm as rescues: during
             # 874-s8vf's bring-up a salvage ref was deleted with one command
@@ -203,9 +221,13 @@ while read -r _l _ls _remote_ref _rs; do
                 _salvage_delete="$_remote_ref"
             fi
             ;;
-        *) _all_salvage=0 ;;
+        *) _all_salvage=0; _all_marker=0 ;;
     esac
 done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
+    echo "${GRN}✓ local gate: coordination marker ref under refs/tillandsias/ — exempt by design (1176-9vqn); it is not a branch, no gate reads it and no release ships it${RST}" >&2
+    exit 0
+fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
     if [[ -n "$_salvage_delete" && "${TILLANDSIAS_SALVAGE_DELETE_OK:-0}" != "1" ]]; then
         refuse "deleting salvage ref $_salvage_delete — a salvage ref may be the ONLY copy of rescued work (874-w2gc)" \
@@ -1593,6 +1615,122 @@ if [[ -f scripts/gate-stamp.sh ]]; then
             ;;
     esac
 fi
+
+# ── 2b. A live freeze on the target branch holds CODE pushes (order 1176-9vqn) ─
+#
+# A release freeze used to be announced in ledger prose and enforced by NOTHING.
+# MEASURED on yolanda during the v56.9.13.1 cut: a merge carrying a claim event
+# that itself read "code held until the all-clear" was followed by a 2476 s gate
+# and a push, and every check here passed, because none of them was about a
+# freeze. That push was harmless only because it went to windows-next, a branch
+# the release gate does not read. The same sequence aimed at linux-next would
+# have pushed code into the frozen branch with every check green, and the only
+# thing standing between those outcomes was which branch the host happened to be
+# on. Nothing in the system knew either way — not the hook, not the land tool,
+# not the person.
+#
+# THE WINDOW IS THE MECHANISM, which is why a discipline rule cannot cover this.
+# `./build.sh --check` runs 41 minutes on yolanda and longer on the floor. A
+# freeze declared at any point inside that window is invisible to a land that
+# checked before it started, and the land pushes on completion without
+# re-asking. So the check has to happen AT the push, against origin — a local
+# file is only as fresh as the last fetch, which reintroduces the same window
+# one layer down.
+#
+# PLAN-ONLY PUSHES ARE EXEMPT, DELIBERATELY: the plan lane is how coordination
+# keeps moving during a cut, and every host used it under the last freeze. The
+# exempt set below is the declared cut-freeze policy — hold crates/ and
+# scripts/ landings; plan, docs and skills are exempt — not the plan-only
+# lane's narrower path set.
+#
+# THE FETCH-FAILURE TRADE, decided here rather than inherited (the filing row
+# left it open on purpose): THIS FAILS OPEN, loudly. The check queries the SAME
+# remote the push is about to contact, seconds before it does, so if the query
+# cannot reach origin the push will not reach it either — failing closed adds no
+# protection in the case it exists to protect against, while making every
+# genuinely offline push impossible. The residual exposure is the narrow window
+# where ls-remote fails transiently but the push then succeeds; that is bounded
+# and recoverable (the cut re-gates), and strictly smaller than stranding work
+# on a host that cannot push at all, which is the failure that cost four hours
+# in 872-c9nd. The warning names the check so a host that sees it knows the
+# freeze was not consulted.
+_freeze_t() { # bounded, so a hung network cannot hang every push
+    local s="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then timeout "$s" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$s" "$@"
+    else "$@"; fi
+}
+
+_freeze_path_is_exempt() { # <path> -> 0 when a freeze does not hold it
+    case "$1" in
+        plan/*|docs/*|skills/*|cheatsheets/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+enforce_release_freeze() {
+    local remote="$1"
+    local local_ref local_sha remote_ref remote_sha branch p carries_code rc markers ref rest who when now age
+    [[ -n "$REFS" ]] || return 0
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -n "$local_ref" ]] || continue
+        [[ "$local_sha" =~ ^0+$ ]] && continue
+        case "$remote_ref" in refs/heads/*) branch="${remote_ref#refs/heads/}" ;; *) continue ;; esac
+        # Only trunk-shaped names can carry a marker; the ref name encodes
+        # host and epoch after the branch, so a slash would be ambiguous.
+        case "$branch" in */*) continue ;; esac
+
+        # Does this ref carry anything the freeze holds? A push with no usable
+        # base cannot be classified, and is treated as code — conservative, and
+        # it only matters when the branch is frozen at all.
+        carries_code=1
+        if [[ ! "$remote_sha" =~ ^0+$ ]] && git cat-file -e "$remote_sha" 2>/dev/null; then
+            carries_code=0
+            while IFS= read -r p; do
+                [[ -n "$p" ]] || continue
+                if ! _freeze_path_is_exempt "$p"; then carries_code=1; break; fi
+            done < <(git diff --name-only --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
+        fi
+        [[ "$carries_code" -eq 1 ]] || continue
+
+        rc=0
+        markers="$(_freeze_t 10 git ls-remote "$remote" "refs/tillandsias/freeze/$branch/*" 2>/dev/null)" || rc=$?
+        if [[ "$rc" -ne 0 ]]; then
+            echo "${YLW}⚠ release-freeze check could not reach '$remote' (rc=$rc) — NOT blocking on it${RST}" >&2
+            echo "  The push below talks to the same remote; if it succeeds, the freeze was never consulted (1176-9vqn)." >&2
+            continue
+        fi
+        [[ -n "$markers" ]] || continue
+
+        ref="$(printf '%s\n' "$markers" | head -1 | cut -f2)"
+        rest="${ref#refs/tillandsias/freeze/$branch/}"
+        who="${rest%%/*}"; when="${rest##*/}"
+        now="$(date -u +%s)"
+        case "$when" in ''|*[!0-9]*) age="unknown" ;; *) age="$((now - when))s" ;; esac
+        refuse "'$branch' is FROZEN and this push carries code (order 1176-9vqn)" \
+               "marker: $ref" \
+               "  on:    $remote" \
+               "  by:    $who" \
+               "  since: $when (age ${age})" \
+               "" \
+               "A cut is in progress and the release gate reads this branch. Plan-only" \
+               "pushes are exempt and still work — that is how coordination keeps moving" \
+               "during a cut; split the ledger records out and push those now." \
+               "" \
+               "The freeze clears itself at the cut's back-merge push. To read it:" \
+               "  scripts/release-freeze.sh status $branch" \
+               "If you are the coordinator and the cut is done:" \
+               "  scripts/release-freeze.sh clear $branch"
+    done <<EOF
+$REFS
+EOF
+}
+
+_freeze_remote="origin"
+if [[ -n "${1:-}" ]] && git remote 2>/dev/null | grep -qxF -- "$1"; then
+    _freeze_remote="$1"
+fi
+enforce_release_freeze "$_freeze_remote"
 
 # ORDER 1069-5sp4, SECOND HALF — A VALID STAMP CANNOT VOUCH FOR PLAN FRAGMENTS,
 # BECAUSE IT DELIBERATELY DOES NOT HASH THEM.

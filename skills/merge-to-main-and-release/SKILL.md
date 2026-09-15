@@ -213,6 +213,26 @@ directory — `gh release download` from elsewhere fails with "not a git
 repository" and looks like a missing asset.
 
 ```bash
+# DECLARE THE FREEZE FIRST (order 1176-9vqn). Until this existed the freeze was
+# announced in ledger prose and enforced by nothing: MEASURED on yolanda during
+# the v56.9.13.1 cut, a host merged trunk, gated for 2476 s and pushed, and
+# every pre-push check passed because none of them was about a freeze. It was
+# harmless only because the push went to windows-next; aimed at linux-next it
+# would have put code into the frozen branch with every check green.
+#
+# THE WINDOW IS WHY A DISCIPLINE RULE CANNOT COVER THIS: the gate below runs
+# 41 minutes on yolanda and longer on the floor, so a freeze declared inside
+# that window is invisible to a land that checked before it started, and the
+# land pushes on completion without re-asking. The marker lives on origin and
+# the hook consults it AT the push.
+#
+# Plan-only pushes stay admitted by design — the plan lane is how coordination
+# keeps moving during a cut, and every host used it under the last freeze.
+scripts/release-freeze.sh set "${release_source_branch:-linux-next}" "cut ${new_tag}"
+# -> ok:freeze-set:refs/tillandsias/freeze/<branch>/<host>/<epoch>
+# A `refused:freeze:unreachable:*` here is a STOP: an unreachable origin means
+# the cut cannot publish either. Do not proceed with an undeclared freeze.
+
 # THE GATE. This is the whole safety net now — there is nothing server-side.
 ./build.sh --ci-full || { echo "gate failed — do NOT merge"; exit 1; }
 scripts/release-preflight.sh || { echo "preflight refused — do NOT merge"; exit 1; }
@@ -408,8 +428,22 @@ TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
                                # the merge changed VERSION, so the gate stamp is
                                # stale and the pushes below would be refused
 
+# CLEAR THE FREEZE BEFORE THE BACK-MERGE PUSH, and note WHY it is here rather
+# than at the end of the cut (order 1176-9vqn): the back-merge push below is
+# itself a CODE push to the frozen branch, carrying the VERSION bump merge. A
+# freeze still live at this line would refuse the cut's own push — correctly,
+# which is the point: the mechanism does not know you are the coordinator. So
+# the freeze's lifetime runs from the gate start to exactly here, which is the
+# declared policy (hold code lands on the release branch from the gate start to
+# the stage-2 back-merge push) expressed as a lifetime rather than a promise.
+scripts/release-freeze.sh clear "${release_source_branch:-linux-next}"
+# -> ok:freeze-cleared:<n>; clearing removes every marker for the branch,
+#    whoever set it, so a coordinator can always clear a freeze another host
+#    declared. `ok:freeze-cleared:0` means it was already clear — not an error.
+
 # NOW both pushes succeed. Order between them does not matter; both are gated
-# on the back-merge above, not on each other.
+# on the back-merge above, not on each other. The tag push is unaffected by a
+# freeze either way: the check only looks at refs/heads/*.
 git push origin "${new_tag}"
 git push origin "${release_source_branch:-linux-next}"
 ```
