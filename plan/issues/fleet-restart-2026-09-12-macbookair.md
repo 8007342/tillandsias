@@ -463,3 +463,19 @@ looked"* will eventually be read as the former.
   very short blob reads as Input. peer_frame is the discriminator, not the
   class. Anyone taking (c) on the class alone chases a PSK question that is
   actually the guest's order-137 Unauthorized notice.
+- 2026-09-15 (1197-y6g6): TRUNK RED AGAIN, second in two cycles.
+  test-pre-push-honours-a-live-freeze.sh ARM 3b fails on macOS — a plan-only
+  push with NO stamp is refused instead of admitted. 18/19, freeze logic fine.
+  Reproduced on a pristine worktree of origin/linux-next. Blocks this cycle's
+  attestation; the WORK landed before the finalize (5ba5e30ea).
+  Different shape from 1193-yw6u: that was a macOS-SCOPED prover row, this is a
+  generic script whose assumption fails on a clean macOS checkout, so
+  1194-davi's platform-scoped inventory would not catch it.
+  The arm is the executable statement that the plan-only lane is a STAMP-FREE
+  ESCAPE HATCH — the property 1195-m9vi turns on.
+- 2026-09-15, MY OWN ERROR worth recording: I wrote that fragment with an
+  UNQUOTED heredoc, so the shell evaluated the backticks and $() inside the
+  YAML and corrupted it — strict-fragments caught it immediately
+  ("1 fragment(s) could not be read"). Removed and rewrote with <<'YML' plus a
+  sed for the order token. Earlier fragments survived only because they happened
+  to contain no backticks. Use a QUOTED heredoc for ledger YAML, always.
