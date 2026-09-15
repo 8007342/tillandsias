@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# @trace order:1189-2ra5, spec:meta-orchestration
+#
+# test-credential-channel-names-a-locked-keyring.sh — pin the discriminator
+# between a keyring that is ABSENT and one that is merely LOCKED.
+#
+# WHY THIS MATTERS MORE THAN A VERDICT STRING. missing:no-credential-channel
+# means "there is no credential here", and the obvious response to that is to
+# make one: `gh auth login`. That is the one action 1025-a896 forbids, because a
+# re-auth on one host evicts the operator's token on EVERY other host. So a
+# locked keyring reported as missing turns one workstation's passphrase prompt
+# into a fleet-wide outage.
+#
+# MEASURED on lenovinha 2026-09-14: the guard read ok:gh-keyring-push-verified
+# at 18:52Z, a gated and integrated land was refused at the push at 19:37Z
+# ("could not read Username for 'https://github.com'"), and the guard read
+# missing:no-credential-channel at 19:47Z — while gnome-keyring-daemon was
+# running, org.freedesktop.secrets was on the bus, ~/.config/gh/hosts.yml was
+# intact since 2026-08-20, and the login collection read Locked=true.
+#
+# Hermetic: every arm drives a STUB busctl (and a stub gh) on PATH inside a
+# scratch repo, so no arm consults this host's real keyring and the fixture's
+# verdict is identical on a locked host, an unlocked host, and a host with no
+# secret service at all.
+#
+# THE ARMS THAT MATTER ARE 2 AND 3, the negative controls. If arm 2 goes red the
+# guard has started calling a genuinely credential-less host "locked", which
+# sends the operator to unlock a keyring that does not exist. If arm 3 goes red
+# the lock probe has begun firing on unlocked hosts, which would block every
+# cycle in the fleet on a working credential.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 3
+
+GUARD="$ROOT/scripts/check-credential-channel.sh"
+[ -f "$GUARD" ] || { echo "skip:locked-keyring:$GUARD is absent"; exit 3; }
+
+W="$(mktemp -d "${TMPDIR:-/tmp}/locked-keyring.XXXXXX")" || exit 3
+trap 'rm -rf "$W"' EXIT
+
+pass=0; fail=0
+ok()  { pass=$((pass + 1)); echo "  PASS  $1"; }
+bad() { fail=$((fail + 1)); echo "  FAIL  $1"; }
+
+# A stub gh that has NO token: every earlier arm of the guard declines, so the
+# run reaches the fall-through where the lock question is asked. That is the
+# real-world shape — a locked keyring is exactly a gh that cannot answer.
+mk_bin() { # mk_bin <dir> <busctl-behaviour>
+    local bin="$1" mode="$2"
+    mkdir -p "$bin"
+    cat > "$bin/gh" <<'GH'
+#!/usr/bin/env bash
+# No token: `auth status` fails, like gh against a keyring it cannot open
+# (bounded by the guard, so a real hang is not needed to reach the same arm).
+exit 1
+GH
+    chmod +x "$bin/gh"
+    case "$mode" in
+        absent) ;;   # no busctl at all on PATH
+        locked)
+            cat > "$bin/busctl" <<'BC'
+#!/usr/bin/env bash
+case "$*" in
+  *"/collection/login"*Locked*) echo "b true"; exit 0 ;;
+  *Locked*) echo "b false"; exit 0 ;;
+esac
+exit 1
+BC
+            chmod +x "$bin/busctl" ;;
+        unlocked)
+            cat > "$bin/busctl" <<'BC'
+#!/usr/bin/env bash
+case "$*" in
+  *Locked*) echo "b false"; exit 0 ;;
+esac
+exit 1
+BC
+            chmod +x "$bin/busctl" ;;
+        noservice)
+            # busctl EXISTS but no secret service answers — the macOS/forge and
+            # headless-server shape. It must read as missing, never as locked.
+            cat > "$bin/busctl" <<'BC'
+#!/usr/bin/env bash
+echo "Failed to get property: no such service" >&2
+exit 1
+BC
+            chmod +x "$bin/busctl" ;;
+    esac
+}
+
+scratch() {
+    local d="$W/$1"
+    mkdir -p "$d"
+    git -C "$d" init -q 2>/dev/null
+    git -C "$d" config core.hooksPath .git/hooks
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    printf '%s' "$d"
+}
+
+run_guard() { # run_guard <repo> <bin>; sets OUT and RC
+    local repo="$1" bin="$2"
+    OUT="$( cd "$repo" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_HOST_KIND \
+            PATH="$bin:$PATH" bash "$GUARD" 2>"$repo/.stderr" )"
+    RC=$?
+    ERR="$(cat "$repo/.stderr" 2>/dev/null || true)"
+}
+
+echo "arm 1 — a PRESENT but LOCKED collection reads blocked:gh-keyring-locked, not missing"
+mk_bin "$W/bin-locked" locked
+D="$(scratch locked)"
+run_guard "$D" "$W/bin-locked"
+if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^blocked:gh-keyring-locked$'; then
+    ok "blocked:gh-keyring-locked at rc=$RC"
+else
+    bad "expected blocked:gh-keyring-locked, got rc=$RC out='$OUT'"
+fi
+
+echo "arm 2 — NEGATIVE CONTROL: no secret service on the bus still reads missing:"
+mk_bin "$W/bin-nosvc" noservice
+D="$(scratch nosvc)"
+run_guard "$D" "$W/bin-nosvc"
+if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
+    ok "missing:no-credential-channel — absence of a probe is not evidence of a lock"
+else
+    bad "a host with no secret service must read missing:, got '$OUT'"
+fi
+
+echo "arm 2b — NEGATIVE CONTROL: no busctl at all (macOS, forge) still reads missing:"
+mk_bin "$W/bin-nobusctl" absent
+D="$(scratch nobusctl)"
+run_guard "$D" "$W/bin-nobusctl"
+if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
+    ok "missing:no-credential-channel with no busctl on PATH"
+else
+    bad "a host without busctl must read missing:, got '$OUT'"
+fi
+
+echo "arm 3 — NEGATIVE CONTROL: an UNLOCKED collection does not trip the lock arm"
+mk_bin "$W/bin-unlocked" unlocked
+D="$(scratch unlocked)"
+run_guard "$D" "$W/bin-unlocked"
+if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
+    ok "unlocked + no token reads missing:, not locked"
+else
+    bad "an unlocked collection must not read as locked, got '$OUT'"
+fi
+
+echo "arm 4 — the remedy names UNLOCK and FORBIDS the re-auth (1025-a896)"
+D="$(scratch remedy)"
+run_guard "$D" "$W/bin-locked"
+_r_unlock=0; _r_noauth=0; _r_order=0
+printf '%s' "$ERR" | grep -qi 'UNLOCK' && _r_unlock=1
+printf '%s' "$ERR" | grep -qi "do not run 'gh auth login'" && _r_noauth=1
+printf '%s' "$ERR" | grep -q '1025-a896' && _r_order=1
+if [ "$_r_unlock" -eq 1 ] && [ "$_r_noauth" -eq 1 ] && [ "$_r_order" -eq 1 ]; then
+    ok "remedy says unlock, says not to re-auth, and cites 1025-a896"
+else
+    bad "remedy incomplete (unlock=$_r_unlock no-reauth=$_r_noauth order=$_r_order): $ERR"
+fi
+
+echo "arm 5 — the lock probe is BOUNDED through _ccc_timeout (order 988)"
+if grep -q '_ccc_timeout [0-9]* busctl' "$GUARD"; then
+    ok "busctl is invoked through _ccc_timeout"
+else
+    bad "the busctl probe is not bounded through _ccc_timeout — order 988 forbids an unbounded probe here"
+fi
+
+echo "arm 6 — gh auth status is bounded too (it BLOCKS on a locked keyring)"
+if grep -qE '_ccc_timeout [0-9]+ gh auth status' "$GUARD"; then
+    ok "gh auth status runs under _ccc_timeout"
+else
+    bad "gh auth status is unbounded — against a locked keyring it blocks, hanging the guard itself"
+fi
+
+echo "arm 7 — a hanging probe cannot wedge the guard: the locked arm answers fast"
+_t0=$(date +%s)
+D="$(scratch timing)"
+run_guard "$D" "$W/bin-locked"
+_t1=$(date +%s)
+if [ $((_t1 - _t0)) -le 60 ]; then
+    ok "verdict in $((_t1 - _t0))s"
+else
+    bad "the locked arm took $((_t1 - _t0))s — a guard that hangs is the failure it reports"
+fi
+
+echo
+echo "locked-keyring discriminator: $pass passed, $fail failed"
+if [ "$fail" -gt 0 ]; then
+    echo "violation:locked-keyring-discriminator:$fail"
+    exit 1
+fi
+echo "ok:locked-keyring-discriminator:$pass"
+exit 0
