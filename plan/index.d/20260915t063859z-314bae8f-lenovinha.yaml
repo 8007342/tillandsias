@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: completed
+      ts: "2026-09-15T06:38:59Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Landed 59b13d649 (ok:land:59b13d649:attempt-2), verified on origin by tree: the guard carries blocked_by, the fixture and the gate step are both present.
+
+        THE EXIT CRITERIA THIS ROW WAS FILED WITH WERE WRONG, and the correction event above records the measurement that showed it. What shipped is not what the criteria described, so state plainly what IS true now:
+          - criterion 1 as written (a host whose only blocker record is a ledger packet reads blocked, not wedged) IS met, for the signal that now exists: a packet whose folded status is blocked and whose blocked_by names a token this host answers to.
+          - it is NOT met retroactively for the 1193-yw6u window, because neither macOS host wrote such a signal — macbookair filed status ready, and there were zero blocked/failed events fleet-wide. No code could have caught that case. The convention that makes the signal exist was approved separately (macneo's operator, fleet-wide, relayed via yoga) and is macuahuitl's to propagate.
+          - criterion 2 (the line names the packet) is met and fixtured.
+          - both negative controls are met and fixtured, plus three the row did not ask for.
+
+        BOTH TOKEN KINDS, ADDITIVELY, on the operator's direct instruction in this lane: first that a durable blocker must name a CAPABILITY rather than a host, because the fleet is an implementation detail — hosts, hardware, agents and harnesses all ephemeral and converging on forge; then, asked to choose between capability and host keying, "use both: CRDT style". So a colon-bearing token (kind:macos, schedulable:npu, tier:gpu-rocm) matches whatever host answers to it, drawn from the vocabulary the capability matrix already publishes, and a bare token matches that host by name. Union, not choice: two writers can name the same block differently without knowing about each other, and the fleet-wide `status blocked --host` convention is read through the bare-token path, so the two decisions compose rather than competing. Capability is derived at READ time, so nothing goes stale when a host is renamed.
+
+        NOT OVER-APPLIED (macuahuitl's distinction, built into the code comment): a CLAIM is transient and legitimately host-keyed — the selector needs it to separate concurrent hosts — while a BLOCKER is durable. Same field family, opposite lifetimes. Stripping host keying from claims would break claiming.
+
+        DEFECT 2 IS THE FINDING OF THE NIGHT and was not in the row as filed: the WEDGED branch was evaluated BEFORE the blocked branch and returned first, so a host that keeps COMMITTING never reached the blocker lookup — and filing what blocked you IS a commit. macbookair filed three packets during the window. Proven by falsification, not argument: against the pre-fix script the arm covering the ORIGINAL plan/issues markdown source ALSO fails. So 864-w7rc's blocked detection has only ever worked for SILENT hosts, on top of macneo's measurement that its trigger value was written twice in project history. Doubly dead, and the second half is not something a history search could have found.
+
+        MY OWN FIRST DRAFT HAD THE SAME CLASS OF BUG THE ROW IS ABOUT, caught by the fixture: the parser listed plan/index.yaml unconditionally, and awk aborts on a missing operand WITHOUT running its END block, so a tree without that file (a fresh clone, a scratch tree, a forge mounting only fragments) reported "no blockers" rather than "could not look" — silently, because 2>/dev/null hid the reason.
+
+        CYCLE NOTES for the drill. A STALL I reported was my own watcher: the land lost a push race on attempt 1 and moved to attempt 2, while my monitor still watched .git/tillandsias-land-gate-attempt-1.log. Watching "both logs" is not enough when the gate log path carries an attempt number — watch the newest match. This is the third time tonight the instrument watching the work was the thing that was wrong, after the pkill that matched its own watcher shell and the harness reaping its background waiters.

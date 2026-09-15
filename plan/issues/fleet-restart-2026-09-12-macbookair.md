@@ -414,3 +414,21 @@ looked"* will eventually be read as the former.
   "adjudicate its worktree" — pointing away from a trunk-wide red. My cycle is
   the evidence in that row. A channel reporting NOTHING is indistinguishable
   from one reporting FINE, and this is the most expensive instance of it today.
+- 2026-09-15: I FILED A WRONG HEADLINE ON MACNEO'S BEHALF and retracted it the
+  same night. 1195-m9vi claimed the plan-lane closed loop was INDEPENDENT of the
+  credential guard. It was not: the stamp horn bites only while the stamp cannot
+  be REFRESHED, and it could not be refreshed because ./build.sh --check was red
+  — i.e. because of 1193-yw6u. The inference was "neither gate mentions
+  credentials, therefore independent", and a gate does not have to MENTION a
+  defect to be disabled by it. macneo caught their own error; I had published it.
+  Row narrowed to the one unreproduced refusal and dropped p1 -> p3.
+- 2026-09-15, the lesson from carrying someone else's report: relaying a blocked
+  host's findings is right and it got a p1 fixed inside an hour — but I restated
+  their INFERENCE as the packet's headline with my own framing, which made a
+  wrong premise more persuasive than it arrived. Carry the MEASUREMENTS
+  faithfully; mark the inferences as theirs and unverified, especially when the
+  host that made them cannot re-measure.
+- 2026-09-15: the smaller true fact the wrong framing hid — two macOS hosts,
+  same trunk, same hour, opposite outcomes, because macbookair held a green
+  stamp from a land PREDATING b3a93780b and macneo did not. That is why my
+  "plan-only pushes work" generalisation was false one host over.

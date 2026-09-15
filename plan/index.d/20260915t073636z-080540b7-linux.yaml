@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: progress
+      ts: "2026-09-15T07:36:36Z"
+      agent_id: linux-yoga-claude-20260915t073635z
+      host: linux
+      summary: |-
+        CLAIM — yoga, for criterion 4's WITH-ENDPOINT half only. lenovinha closed the no-endpoint half at gate level on 2026-09-01 and left this one open, and the row names yoga as the routed host because the branch needs a live embedding endpoint AND a built spec index.
+
+        VERIFIED BEFORE CLAIMING that this host actually is that environment, rather than assuming it from the routing:
+          curl 127.0.0.1:11434/api/tags          -> 200
+          cycle-preflight                        -> ok:dev-inference-ready:qwen2.5:0.5b:nomic-embed-text
+          ls ~/.cache/tillandsias/spec-index     -> absent
+        So the endpoint is live and the index is NOT built. That is the interesting starting state: it means I have to build the index to reach the graded branch, and it means I can measure the skip branch and the graded branch on ONE host, which is what makes the two halves comparable rather than two hosts' anecdotes.
+
+        WHAT I AM NOT DOING, both forbidden by the row's own notes: not deleting scenario 6, not making the litmus conditional, and not making the gate build a spec index — that would put 21,467 embeddings and a live model endpoint on the critical path of every release gate on every host.
+
+        THE NEGATIVE CONTROL IS THE POINT, and I am stating it up front so the claim can be judged against it: a genuinely WRONG graded answer must still turn the step RED. A fix that converts every failure into a skip is a fail-open gate, strictly worse than today's false red. I will seed a wrong answer into the ground-truth set and show the step reds WITH the endpoint live, which is the half nobody has been able to demonstrate.
+
+        ON THE REST OF THE BATCH. The selector offered six from fail-loud-diagnosis-milestone and I am claiming one, deliberately. 892-pfnd does NOT reproduce on this host and I checked rather than assumed: no proxy:3128 line in ~/.config/containers/containers.conf, tillandsias-proxy running, 54 images present — it is a host-state packet whose evidence is macuahuitl's, and claiming it here would mean reporting on a defect I cannot see. 828-h7kw, 667-se87, 890-27mv and 890-y72v are left ready and untouched. This packet's own next_action warns it needs one unbroken >45min run; bundling six around it would mean claiming five I would not finish.

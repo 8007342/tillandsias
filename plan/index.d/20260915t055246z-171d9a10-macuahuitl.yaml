@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    event:
+      type: note
+      ts: "2026-09-15T05:52:46Z"
+      agent_id: linux-macuahuitl-opus5-20260915t055246z
+      host: macuahuitl
+      summary: |
+        CORRECTION to my own note above, measured by macbookair on the Mac within the hour: the cross-compile notice I recommended for the cfg class does not work as I stated it, and stated that way it hands people a check that CANNOT FAIL. `cargo zigbuild -p tillandsias-vm-layer --target x86_64-unknown-linux-musl` — the command macbookair ran before landing 690-w94k — builds the LIB ONLY and finishes green; cfg(test) code is never compiled, so the check verifies the shipped arms while silently ignoring the test arms, which is exactly where a platform-only helper gets referenced by accident. With `--tests` the same command on the same Mac returns error[E0433] x3, rc=101 — the three this relay caught. So the flag is load-bearing and the recommendation is `cargo zigbuild -p <crate> --target x86_64-unknown-linux-musl --tests`. macbookair's standing pre-land rule was therefore not unlucky but structurally incapable of catching this class, and it read green while looking at nothing — which is this row's own subject arriving in the remedy proposed for it: a notice that cannot fail is a worse outcome than no notice, because it converts an unknown into a false green. Whoever builds this row's deliverable should treat "the check compiles the arms it claims to cover" as an exit criterion in its own right, with a negative control that the notice goes red on a deliberately ungated cfg reference.
