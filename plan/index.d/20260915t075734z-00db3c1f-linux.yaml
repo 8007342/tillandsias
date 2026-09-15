@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: progress
+      ts: "2026-09-15T07:57:34Z"
+      agent_id: linux-yoga-claude-20260915t075733z
+      host: linux
+      summary: |-
+        CRITERION 4's WITH-ENDPOINT HALF DEMONSTRATED, at fixture AND gate level, and the branch it required turned out to contain this packet's own defect.
+
+        FIRST, A CORRECTION TO MY OWN CLAIM. I wrote that this host had no spec index, on the strength of `ls ~/.cache/tillandsias/spec-index` returning nothing. That was wrong. The index lives in the tillandsias-spec-index-tillandsias podman volume and `scripts/spec-index-ensure.sh` answered ok:spec-index:fresh:24793 instantly. I read ONE rung of a five-rung resolution ladder and reported the ladder's answer. The archived note on 789-nc2s records macuahuitl making the same mistake for the same reason — a path printed but never stat-ed — so this is a known shape and I walked into it anyway.
+
+        THE MEASUREMENT (yoga, endpoint live: curl 127.0.0.1:11434/api/tags -> 200, nomic-embed-text):
+          scripts/test-groundtruth-corpus-declaration.sh   -> ok:groundtruth-corpus-declaration-fixture:9, rc=0
+            scenario 6  ok: the committed groundtruth glob grades fail=0 with nothing skipped
+                           (sets=4 total=33 pass=33 fail=0 skipped=0)
+            scenario 7  ok: this host HAS an index — spec.answer graded rather than skipped
+                           (sets=1 total=5 pass=5 fail=0 skipped=0)
+            scenario 9  ok: a WRONG answer is still RED even alongside skipped cases
+                           (rc=1, sets=2 total=27 pass=26 fail=1 skipped=0)
+          scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size quick
+            -> litmus:expert-groundtruth-harness 124.3s, STEP 30/31 (the 786-kjke glob step whose red
+               blocked the 2026-08-25 release cut) OK, Status PASS, rc=0
+
+        Scenario 9 is the criterion's mandatory negative control and it ran on the GRADED path, not the skip path: a seeded wrong answer still reds with the endpoint up. That is the half that could not be shown from an endpoint-less host, because there the same case is skipped.
+
+        THE DEFECT THE BRANCH WAS HIDING. Scenario 7 derives sp_skip by sed-ing `skipped=N` out of a groundtruth-result line. When grade dies with a HARNESS ERROR it prints no result line at all, so sp_skip is EMPTY, ${sp_skip:-0} is 0, and the old condition read that as "nothing skipped, therefore graded" and announced `ok: this host HAS an index`. sp_rc is captured two lines earlier and was never consulted on that path.
+
+        That is 888-miiy's own class one level in — a harness error rendered as a graded result — sitting inside the arm written to fix it. It is invisible from every endpoint-less host, because those return at the skip branch above and never reach it. Only the WITH-endpoint side can see it, which is exactly the half this packet routed here.
+
+        FALSIFIED THREE WAYS, driving the fixture's own condition extracted VERBATIM from the file (I diffed my extraction against the source and it is identical modulo indentation, because a paraphrased condition would have proved nothing):
+          fixed logic + grader that cannot run  -> BRANCH-BAD  grade produced NO result line (rc=1) — a HARNESS ERROR
+          fixed logic + the real grader         -> BRANCH-OK   this host HAS an index (total=5 pass=5 skipped=0)
+          OLD logic  + that same dead grader    -> ok "this host HAS an index — spec.answer graded rather than skipped"
+        The middle row is the control that matters: the change moved the verdict that was wrong and left the one that was right alone.
+
+        A CONSEQUENCE WORTH RECORDING RATHER THAN BURYING. yoga's own audit of a neighbouring row on 2026-09-14 (fragment 20260914t135930z-06107586) cited this arm's green as evidence that "the index is supplied where it exists". That audit's CONCLUSION stands — the committed glob independently grades 33/33 — but the arm it quoted could not have distinguished a graded run from a dead grader. A green that cannot fail is not evidence, even when the thing it claims is true, and it was read as evidence by a careful host one day before.
+
+        SCOPE: the fixture keeps nine scenarios, so the litmus pin ok:groundtruth-corpus-declaration-fixture:9 is unchanged and still passes. No scenario deleted, nothing made conditional, and the gate still does not build an index — all three forbidden by the row's notes.
