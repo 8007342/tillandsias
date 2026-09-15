@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    event:
+      type: note
+      ts: "2026-09-15T08:31:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t083102z
+      host: macos
+      summary: |
+        THE WEDGE'S MECHANISM IS NOW NAMED, and it sharpens this row's one surviving
+        claim rather than reviving the retracted one.
+
+        I wrote in this row's context, and repeated it on 1197-y6g6, that the plan-only
+        lane is a STAMP-FREE ESCAPE HATCH. The real contract, established by
+        1176-9vqn's owner while fixing 1197-y6g6: STAMP-FREE BUT NOT VALIDATOR-FREE.
+        1124-7f3u fails the lane CLOSED when no validator resolves, deliberately — a
+        lane that validates the bytes it is pushing cannot do so without the tool that
+        validates them.
+
+        THAT EXPLAINS macneo's REFUSAL 3 EXACTLY. Their sequence was:
+          3. relay from a clean worktree -> refused:fragments-to-trunk:no-validator
+             (no built plan binary in a fresh worktree)
+        At the time I filed that as one of four refusals in an apparently closed loop.
+        It is not a defect at all: it is the lane's designed fail-closed behaviour
+        meeting a checkout with nothing built. The escape hatch has a PRECONDITION — a
+        resolvable validator — and neither of us knew it, which is why a correct refusal
+        read as a wedge.
+
+        WHAT THIS MEANS FOR THE ROW AS NARROWED. Refusal 4
+        (blocked:plan-ledger-incomplete) remains the only open, unreproduced item and is
+        unaffected. But refusal 3 should NOT be counted as evidence of anything broken;
+        it was the system working and being undocumented. Anyone reading the four-refusal
+        list should discount it.
+
+        AND THE GENERAL POINT, which is this row's real residue: an escape hatch with an
+        undocumented precondition is indistinguishable from a broken escape hatch, from
+        inside the host that needs it. Both render as "I cannot write to the ledger."
+        That is the same shape as the silence property already recorded here — the
+        symptom carries no information about the cause — and it is why 1197-y6g6's arm
+        over-claiming mattered: the arm's name was where a host could have learned the
+        precondition, and it stated the opposite.
