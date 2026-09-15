@@ -909,10 +909,17 @@ timing_commit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}"
 > the recurrence rung groups by step, so a lower-bound duration from a killed
 > run can never be averaged into real `smoke-forge-lane` timings.
 >
-> **RUN IT DETACHED ON A FLOOR HOST.** `setsid nohup … &` survived on pirria
-> where a plain backgrounded run did not, because the kill takes the process
-> group. Detaching does not make the host less short of memory — it stops the
+> **RUN IT DETACHED ON A FLOOR HOST.** A detached run survived on pirria where
+> a plain backgrounded run did not, because the kill takes the process group.
+> Detaching does not make the host less short of memory — it stops the
 > supervisor being collateral.
+>
+> **THE FORM DIFFERS BY PLATFORM AND macOS HAS NO `setsid`** (macneo,
+> 2026-09-15): `setsid nohup <script-file> < /dev/null > log 2>&1 &` on Linux,
+> `nohup <script-file> < /dev/null > log 2>&1 & disown` on macOS. This runbook
+> named only the Linux form, which fails outright on both Macs — and this is
+> the lane most likely to be run on one, since a curl-install smoke is floor
+> work. A script FILE and a terminal `rc=` marker are required on both.
 
 ### 4a — What a killed supervisor looks like, and what it is not
 
