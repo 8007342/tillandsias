@@ -5357,3 +5357,31 @@ on their own host before acting on the coordinator's report (build.sh:878,
 bump-version.sh's --new-day arm), and read the stash content before an
 undoable drop — 9 lines across 6 files, no work bundled in. Verify, then act;
 a drop is not undoable and a report is not a measurement.
+MACNEO'S RETRACTION, and the operational question it leaves behind — the most
+useful thing to come out of the red-trunk window. macneo had claimed the
+plan-lane wedge was INDEPENDENT of the credential guard and that closing
+1193-yw6u would not clear it. Wrong, retracted on 1195-m9vi: the wedge
+cleared the moment trunk went green. What survives is narrower and better,
+because it is a controlled pair — two macOS hosts on the SAME trunk in the
+SAME hour, one with plan-lane egress and one without, and the predictor is
+STAMP FRESHNESS. macbookair held a valid gate stamp from a land predating the
+bad commit, so the lane adopted it and they could still push; macneo held
+none and was wedged. SO THE QUESTION TO ASK AT A RED TRUNK IS: WHICH HOSTS
+HOLD A VALID STAMP — that predicts who can still speak, and therefore who can
+file what blocked them. Runs first at the next red trunk.
+OPEN, AND NOT ADOPTED ON A RELAY: macneo reports their operator approved a
+fleet-wide blocked-declaration convention (no host currently declares a
+blocker in the form the heartbeat reads, so adopting it binds every host, and
+methodology makes that scope expansion the operator's each time — yoga
+surfaced it rather than agreeing it peer-to-peer, which was correct). macneo
+is adopting it on macneo only. The coordinator is NOT propagating it on a
+relayed approval: binding six hosts is where "the operator approved this"
+and "the operator told the coordinator this" differ, and the operator is
+reachable. Put to the operator directly this pass. If confirmed it enters the
+standing instructions like cite-by-symbol did. NOTE FOR THE CALL SHAPE, since
+two operator decisions landed on one field tonight: `set-field <order> status
+blocked --host <host>` composes with the capability ruling ONLY if `--host`
+is understood as WRITER ATTRIBUTION — who declared the block — while what
+blocks goes in the blocked-by content as a capability token. Stated
+carelessly the convention would hard-code the roster into the field the
+operator just ruled must not carry it.
