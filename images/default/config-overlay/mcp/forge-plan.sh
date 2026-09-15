@@ -1161,12 +1161,38 @@ rpc_result_text() {
     # component in the chain. The bigger and more useful the answer, the more
     # certainly it is lost. litmus:expert-capability-skew-honesty caught it.
     #
-    # `--rawfile text /dev/stdin` reads the whole payload as a string with no
-    # argv involvement. Verified byte-identical to the old form on small
-    # payloads containing quotes and embedded newlines; `printf '%s'` (no
-    # trailing newline) is what keeps them equal.
-    emit_frame "$(printf '%s' "$_rr_text" | jq -cn --argjson id "$_rr_id" --rawfile text /dev/stdin \
-        '{jsonrpc:"2.0", id:$id, result:{content:[{type:"text", text:$text}]}}')"
+    # `-Rs` slurps the whole payload from STDIN as one string, with no argv
+    # involvement -- which is the property this line exists for, and it is
+    # preserved. Verified byte-identical to the old form on small payloads
+    # containing quotes and embedded newlines; `printf '%s'` (no trailing
+    # newline) is what keeps them equal.
+    #
+    # ORDER 1186-w3ph. THIS WAS `--rawfile text /dev/stdin` AND THAT IS NOT
+    # PORTABLE. On MSYS (Git Bash), jq resolves /dev/stdin through its
+    # /proc/self/fd/0 symlink to /proc/<pid>/fd/0, and MSYS's procfs does not
+    # publish an fd directory for that pid, so the open fails:
+    #
+    #   jq: Bad JSON in --rawfile text /proc/self/fd/0: Could not open ...
+    #
+    # Note the message names the RESOLVED path, not the one passed, which is
+    # why the string /proc/self/fd/0 appears nowhere in this tree. /dev/fd/0
+    # fails the same way and is not an escape.
+    #
+    # It is not a guest-only concern: litmus arms run this script directly with
+    # `bash` at whatever locus the suite runs on, which is exactly how the MCP
+    # surface is meant to be tested end to end. Measured on yolanda 2026-09-14,
+    # four BEHAVIOURAL arms across three specs failed with that single line as
+    # their entire output -- forge-plan-expert-build-shape 10/17,
+    # methodology-path-query-citability 18/21, expert-groundtruth-harness 18/31,
+    # expert-capability-skew-honesty 16/29 -- each reproduced individually,
+    # because a shared error text is a symptom match and not membership.
+    #
+    # Byte-identity was proved INSIDE the Linux distro, where both forms run,
+    # over four payload shapes: quotes/newlines/tabs/trailing spaces, empty, and
+    # a payload with a trailing newline. It could not be proved on the host,
+    # because there the old form does not run at all.
+    emit_frame "$(printf '%s' "$_rr_text" | jq -cRs --argjson id "$_rr_id" \
+        '{jsonrpc:"2.0", id:$id, result:{content:[{type:"text", text:.}]}}')"
 }
 
 rpc_error() {
