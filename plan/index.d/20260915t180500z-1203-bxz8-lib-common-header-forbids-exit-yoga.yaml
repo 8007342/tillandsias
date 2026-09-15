@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by yoga while auditing 777-k88g: the header's ban sent me looking for a
+# defect in the fail-loud path that turned out to be the intended behaviour.
+packets:
+  - packet_id: lib-common-header-forbids-exit-and-the-file-contains-six-of-them-so-the-invariant-a-reader-trusts-is-contradicted-by-the-code-that-implements-fail-loud
+    order: 1203-bxz8
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [forge, docs, fail-loud, tooling]
+    estimated_hours: 1
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is prose that matches the code, and a check that keeps them matched. Future arm on an existing image litmus; the claimer writes it in the same commit and moves this text into verifiable_closure: the header's statement about exit is true of the file as measured by a script that counts exit statements OUTSIDE heredoc bodies, and that count is asserted rather than eyeballed; NEGATIVE CONTROL: an exit added inside a generated-hook heredoc does NOT trip the check, because those are the contents of another file and counting them is the misreading this row is about."
+    owned_files:
+      - images/default/lib-common.sh
+    title: |
+      images/default/lib-common.sh says "It must NOT contain exit or exec statements" and contains six exit statements — five of them the fail-loud clone paths that 777-k88g depends on, so the file's own header tells a reader the mechanism it relies on is forbidden
+    context: |
+      MEASURED on yoga 2026-09-15 while auditing 777-k88g, by a script that
+      tracks heredoc state rather than grepping, because the naive count is
+      wrong in both directions here.
+
+      THE HEADER, lines 4-5: "This file is SOURCED (not executed) by per-type
+      entrypoint scripts. It must NOT contain `exit` or `exec` statements."
+
+      THE CODE: six exit statements that are real code — at the clone and
+      mirror failure paths, plus one further down. A seventh match, an exit 0,
+      is inside a generated post-commit hook heredoc and is NOT this file
+      exiting; it is the content of a file this file writes.
+
+      WHY IT MATTERS RATHER THAN BEING A STALE COMMENT. The exits ARE the
+      fail-loud mechanism: a sourced library that exits terminates the lane,
+      which is exactly what 777-k88g wants when the mirror never seeds. So a
+      reader who trusts the header concludes the fail-loud path is a violation
+      and goes looking for a defect. That is what happened here — the audit
+      spent a step deciding whether exit-in-a-sourced-file was the bug before
+      establishing it was the design.
+
+      AND THE HEREDOC HALF IS ITS OWN TRAP, which I walked into twice in one
+      session while reading this same file: a `set -uo pipefail` at line 503
+      looks like the file disabling errexit for every sourcing shell, and it is
+      the first line of a generated hook. Measured with a probe instead:
+      sourcing lib-common leaves errexit ON (read from the shell's own option
+      string, not inferred). Any check filed against this row must model
+      heredocs or it will reproduce the misreading it exists to prevent.
+
+      NOT A REQUEST TO REMOVE THE EXITS. They are the mechanism. The defect is
+      that the prose forbids them.
+    next_action: |
+      Decide which is true and make the file say it: either the ban is real and
+      the fail-loud paths should return non-zero to a caller that checks (a
+      behaviour change touching every lane, and NOT obviously an improvement
+      since set -e already propagates), or — far more likely — the ban is about
+      casual exits and the fail-loud ones are deliberate, in which case the
+      header should say so and name them. Then the counting check from
+      unscoreable, with the heredoc negative control, because a grep-based
+      version of this check is wrong on this very file.
