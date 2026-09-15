@@ -1506,7 +1506,12 @@ async fn serve_ready_stream(
                 installation_uuid,
                 root_token,
             } => {
-                crate::vault_bootstrap::set_in_vm_credentials(
+                // 890-y72v: the reply is built FROM this value now. It used
+                // to be discarded and the reply hardcoded `success: true`,
+                // which is how a delivery this guest deliberately dropped —
+                // superseded by a newer in-guest handover — reached the host
+                // as an acceptance.
+                let outcome = crate::vault_bootstrap::set_in_vm_credentials(
                     unseal_share_b64,
                     installation_uuid,
                     root_token,
@@ -1527,7 +1532,12 @@ async fn serve_ready_stream(
                     seq: env.seq,
                     body: ControlMessage::DeliverCredentialsReply {
                         seq_in_reply_to: seq,
+                        // Unchanged meaning, deliberately: frame-level receipt,
+                        // for peers that predate 890-y72v. The envelope did
+                        // arrive and was handled. `outcome` carries the answer
+                        // the host actually needs.
                         success: true,
+                        outcome,
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
