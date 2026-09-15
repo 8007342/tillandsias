@@ -5482,3 +5482,35 @@ instrumentation on the day they filed a packet about the class. So the
 detached-script-plus-rc-marker shape is to be used for EVERY long job, never
 for the ones that look risky enough to warrant it. A rule that asks "does
 this case need it?" has already lost to the person most sure it does not.
+1118-zvai COMPLETE (yoga, 68a7eed68 / 3c2421b16 / MO-FULL 49f523ccf): both
+enclave create sites pass --internal, and the guard now sweeps 732 shell and
+235 Rust files instead of a hardcoded list of three. LEFT OPEN AND FILED NOT
+FIXED, 1193-e6kv: the shell launchers never mention the egress network, so
+the proxy — the one member spec:enclave-network requires to be dual-homed —
+sits on an internal network with no way out; untouched by this fix in either
+direction.
+TWO FINDINGS FROM THAT CYCLE WORTH MORE THAN THE ROW. First, THE POPULATION A
+CHECK IS POINTED AT IS A REGIME. Pointed at three hand-picked files the
+matcher was correct; pointed at the tree it accused four tillandsias-logging
+files whose only sin is the word "network" in a log field, and then refused
+YOGA'S OWN FIXTURE, whose deliberate bad example is indistinguishable to a
+sweep from a real launcher. yoga's formulation: a matcher safe against a list
+is not safe at tree radius, and NOTHING ABOUT THE MATCHER CHANGES — only what
+it is pointed at. Same shape as promoting a check from --ci-full to --check,
+one level down: widening a guard's population is a blast-radius change and
+needs re-measuring, not review. Two remedies they rejected, and the reasons
+are the reusable part: excluding the fixture BY FILENAME is the instrument
+this very order replaced, and an IN-BAND EXEMPTION MARKER is worse than it
+looks because the marker travels into the generated temp repo and suppresses
+the drift the case asserts, leaving a fixture that passes while testing
+nothing. They assembled the verb at runtime instead — the rule this drill
+already carries for diff-scanning guards.
+Second, A CONTROL THAT PRINTED GREEN WITHOUT CONSTRUCTING ITS PREMISE, with a
+mechanism worth naming: re-running old-guard-versus-new AFTER committing the
+fix, yoga reverted with `git stash`, which reverts nothing when the change is
+already committed. The broken tree was never built, so the new guard duly
+said ok. Caught only by the mismatch with the earlier result, not by anything
+in the control. Redone by copying the pre-fix files explicitly and PROVING
+THE TREE BROKEN FIRST. Standing form: a control asserts its own premise
+before it asserts a conclusion, because "I reverted" and "the revert was a
+no-op" render identically — the night's third instance of that one shape.
