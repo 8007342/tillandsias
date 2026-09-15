@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-server-side-wire-version-refusal-has-no-test-while-two-version-bumps-now-rest-on-it
+    field: status
+    value: completed
+    ts: "2026-09-15T14:15:09Z"
+    host: macos
+
+events:
+  - packet_id: the-server-side-wire-version-refusal-has-no-test-while-two-version-bumps-now-rest-on-it
+    event:
+      type: completed
+      ts: "2026-09-15T14:15:09Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: c04b5c002: cargo test -p tillandsias-headless --features listen-vsock server_ -> 6 passed 0 failed (server_refuses_a_client_advertising_a_different_wire_version, server_still_acks_a_client_on_the_matching_wire_version); mutation arm re-run on the trunk-merged tree (181bad6b7) reds the refusal while the positive control holds; restored byte-clean
+  - packet_id: the-server-side-wire-version-refusal-has-no-test-while-two-version-bumps-now-rest-on-it
+    event:
+      type: note
+      ts: "2026-09-15T14:15:09Z"
+      host: macos
+      summary: |-
+        closure evidence re-run today rather than cited from the landing cycle

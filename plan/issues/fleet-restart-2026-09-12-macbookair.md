@@ -527,3 +527,17 @@ looked"* will eventually be read as the former.
   WAS there — set-field fragments reference a packet by its packet_id SLUG, not
   its order token. Caught by a positive control on a fragment I knew had landed.
   Another probe asking the wrong question and answering it faithfully.
+- 2026-09-15: I LEFT FINISHED WORK READING `ready`. My lane's instruction says
+  "RELEASE THE CLAIM AT CYCLE END, unconditionally" and I applied it literally,
+  flipping in_progress -> ready on 1201-t6ms after its fix had landed. RELEASING
+  A CLAIM AND CLOSING A ROW ARE DIFFERENT OPERATIONS: the instruction exists so a
+  claim is never stranded across cycles, not so a completed row advertises itself
+  as available. Effect: landed work sat in the ledger as unfinished and
+  plan_next kept offering it. 1155-jurn mirrored — esme's finished work read
+  in_progress, mine read ready. Closed as completed with the closure evidence
+  RE-RUN on the trunk-merged tree rather than cited from the landing cycle.
+- 2026-09-15: `set-field status completed` REFUSES without --evidence (650-dq6u,
+  a commit SHA plus a named check result). A good refusal — it makes a closure
+  cite something, and it is why macuahuitl declined to close my row from their
+  host: they had no run to cite, and a closure written by someone who did not
+  run the tests is what that gate exists to refuse.
