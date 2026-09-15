@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: progress
+      ts: "2026-09-15T12:40:29Z"
+      agent_id: linux-yoga-claude-20260915t124029z
+      host: linux
+      summary: |-
+        THE TIER HAS NOW BEEN ANSWERED ON THIS HOST FOR THE FIRST TIME, and the deliverable's in-repo half is written. The row does NOT close: its bar is a fresh GREEN and the run was red, for reasons that are mostly not this packet's.
+
+        BEFORE / AFTER, same guard, same command:
+          before  never:release-tier: no FULL-tier run in check-logs.jsonl — the newest
+                  run local-ci-20260914T135912Z covers only [ pre-build]
+          after   release-tier last exercised here: local-ci-20260915T114948Z (0d ago)
+                  verdict over that run: 34 pass, 3 fail, 0 skip, 0 unrecognised, 37 records
+        The newest record now carries ci_phase:"all" instead of a phase name. That is the difference between a host that has never answered the release's question and one that has.
+
+        WHAT THE FIRST ANSWER COST TO GET AND WHAT IT FOUND: thirteen red litmus tests on a machine that has completed attested cycles daily for weeks.
+          budget misses (1187-iij8 / 1192-xv4n's class, all NOT contended per the runner's own cpu.pressure line):
+            cycle-batch-triage-shape       step 14/26   15s budget
+            capability-routing-shape       step 1/5    120s budget  (already filed as 1192-xv4n)
+            forge-experts-discoverability  step 10/13   30s budget
+            mirror-sshd-posture-shape      step 2/3    300s budget, real container
+            mirror-host-cert-and-sshd      step 2/3    420s budget, real container
+          environment, not code:
+            forge-diagnostics-e2e          no valid capture under 24h
+            container-start-health         no container reached running
+            inference-deferred-model-pulls / inference-model-warm-timing   cold launch did not start
+            opencode-prompt-e2e-shape      forge launch
+            tray-new-surface-parity-gate   surface matrix
+          locale:
+            local-ci-self-clean-evidence   rc=1  (already filed as 1191-vrjf)
+          MINE, and the one that matters for this row:
+            guest-container-metrics-wire-shape step 2/7 — my own WIRE_VERSION 3 -> 4 from
+            890-y72v (4fc7be930) broke a pin held from the observability-metrics side.
+            It landed GREEN because ./build.sh --check does not execute the quick tier.
+            The pin worked; the cadence did not. Fixed in this same commit by editing
+            the literal and naming what earned it, exactly as that step's own comment
+            instructs the next bumper to do. Filed as its own row, 1201-9it2, at
+            macbookair's hand-off: 1194-davi keeps its platform scope by macuahuitl's
+            ruling, so the cross-TIER twin needed a row of its own.
+
+        That is this packet's thesis landing on its author's own change, days late, and it is better evidence than the argument I filed the row with in August.
+
+        WHAT LANDED HERE: packaging/systemd/user/tillandsias-release-tier.{service,timer}.in and scripts/install-release-tier-timer.sh, modelled on 856-s56y's cycle timer — completion-spaced so a slow run cannot stack, Persistent so a host asleep at the due moment answers once on wake rather than skipping silently, and the service runs scripts/local-ci.sh with NO --phase, because a phase-only run is not a release-tier answer (1174-6r4k) and a timer firing one would preserve this defect while looking like its fix.
+
+        scripts/test-release-tier-timer-render.sh, 8/8, hermetic and ARMING NOTHING: every case renders into a mktemp XDG_CONFIG_HOME, and one arm asserts afterwards that this host's real user session still knows no such unit. Mutation-tested three ways, each reddening only its own arm — a --phase added to ExecStart, the schedule removed, the placeholder refusal deleted.
+
+        TWO DEFECTS IN MY OWN WORK, caught by running it:
+          - The installer REFUSED ITS OWN TEMPLATES. Its guard rejects a rendered unit
+            still matching the placeholder shape, and my templates' header comment
+            spelled that shape out as prose explaining the convention. The
+            documentation of the check was matched by the check. Fixed by not writing
+            the spelling out, with a note saying why.
+          - Fixture arm 5 passed VACUOUSLY. `grep -l` over files that do not exist
+            prints nothing, which is indistinguishable from "no placeholders survived";
+            on the first run the render had failed entirely and the arm reported green.
+            It now refuses to conclude when there was nothing to search.
+
+        WHAT I DID NOT DO: arm the timer on this host. Installing a recurring job changes host state outside the checkout and keeps firing after this session ends; 856-s56y's precedent is that the operator runs the installer. The command is `scripts/install-release-tier-timer.sh --interval 24h` and it is the operator's to run, per host.
+
+        WHAT BLOCKS GREEN, and it is not mine to absorb: eleven of the thirteen reds belong to other rows or to host environment. The five budget misses are 1187-iij8's class and want the guard 1192-xv4n proposes rather than five hand-raised numbers.
