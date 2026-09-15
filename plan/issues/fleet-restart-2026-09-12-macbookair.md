@@ -479,3 +479,23 @@ looked"* will eventually be read as the former.
   ("1 fragment(s) could not be read"). Removed and rewrote with <<'YML' plus a
   sed for the order token. Earlier fragments survived only because they happened
   to contain no backticks. Use a QUOTED heredoc for ledger YAML, always.
+- 2026-09-15 (1197-y6g6 resolved): NOT A macOS DEFECT. The owner reproduced it
+  on LINUX by removing tillandsias-plan from PATH — 18/19, identical refusal.
+  The scratch has no target/, so resolve_plan_binary falls through to
+  `command -v`, which succeeds only on a host with an installed copy. That is
+  1172-dyvd axis 14 (a fixture must shadow or declare every path the code under
+  test consults), not the platform-scoping class — 1194-davi correctly keeps its
+  scope, because widening it would hand it an inventory it cannot derive.
+- 2026-09-15, I PROPAGATED AN OVER-CLAIM. ARM 3b's name asserted the plan-only
+  lane is a "stamp-free escape hatch". The real contract is STAMP-FREE BUT NOT
+  VALIDATOR-FREE (1124-7f3u fails it closed without one, by design). I repeated
+  the arm's claim as the PREMISE of an argument about 1195-m9vi before checking
+  it against the code. A test's NAME is an assertion like any other and deserves
+  the same scepticism as its body — this one was wrong and travelled two rows.
+- 2026-09-15: that also explains macneo's refusal 3
+  (refused:fragments-to-trunk:no-validator) — not a defect, the lane failing
+  CLOSED in a checkout with nothing built. An escape hatch with an undocumented
+  precondition is indistinguishable from a broken one from inside the host that
+  needs it; both render as "I cannot write to the ledger". The arm's name was
+  exactly where that precondition could have been learned, and it said the
+  opposite.
