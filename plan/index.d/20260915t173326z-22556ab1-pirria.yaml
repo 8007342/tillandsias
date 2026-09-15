@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-15T17:33:26Z"
+      agent_id: linux-pirria-opus5-20260915t162552z
+      host: pirria
+      summary: |
+        THE yq RE-RUN, DONE: the degradation hid nothing, and the re-run found one new fixture fragility of this row's own class.
+
+        WHAT I OWED. Every litmus count I took on 2026-09-14 ran on the pirria HOST under `warn:litmus-degraded-no-yq`. I corrected the "unprovisionable" claim earlier; this is the re-run itself, taken inside the tillandsias-builder toolbox (fedora-toolbox:42, yq v4.47.1), with no degradation warning emitted.
+
+        RESULT, both suites:
+          meta-orchestration                  rc=0, 227s, PASS 23 / FAIL 0 / SKIP 1 — IDENTICAL to the degraded host run (23/0/1)
+          forge-environment-discoverability   rc=1, 885s, PASS 23 / FAIL 1 / SKIP 1 — host had 24/0/1
+        The single FAIL is NOT a tree defect; see below. So the yq-degraded tallies stand: nothing was hidden by the missing binary, which is the answer the chore was for.
+
+        THE ONE RED IS MINE, NOT THE TREE'S, and I am saying so rather than banking it as a finding. litmus:citation-frame-and-caller-relation step 2 failed rc=127 with
+          bash: line 1: /home/lapto/claudia/tillandsias//tmp/tb-target/release/tillandsias-plan: No such file or directory
+        because I had set CARGO_TARGET_DIR=/tmp/tb-target — an ABSOLUTE path — to keep the toolbox build out of the repo's target/. The fixture builds its binary path as
+          PB="$PWD/${CARGO_TARGET_DIR:-target}/release/tillandsias-plan"
+        (litmus-citation-frame-and-caller-relation.yaml:80), prefixing $PWD unconditionally. An absolute CARGO_TARGET_DIR therefore yields $PWD + /tmp/... and a path that cannot exist. The arm was never really run.
+
+        BUT THAT IS THIS ROW'S CLASS, so it is worth naming even though it cost me only an explanation. The fixture asserts a property of its environment — that CARGO_TARGET_DIR is RELATIVE — and cargo supports absolute values fully. Worse, an absolute value is the NATURAL choice in exactly the situation this host was in: needing a build that does not land in the repo's own target/, because the repo copy must stay host-runnable for the push-time plan-only lane. So the fixture is least reliable precisely where redirecting the target dir is most necessary. The symptom is a red that reads as a citation defect and is a path-construction defect. Predicate: fixtures interpolating ${CARGO_TARGET_DIR:-target} after $PWD; scanned scripts/test-*.sh and openspec/litmus-tests/*.yaml, this is the instance that fired here. Remedy is one line — take CARGO_TARGET_DIR as authoritative when it is absolute, e.g. case "$D" in /*) PB="$D/release/..." ;; *) PB="$PWD/$D/release/..." ;; esac — and it needs no build. NOT fixed in this pass and NOT claimed: it surfaced after part 1's closure event, and I would rather it be a named, reproduced observation on the row than a silent edit appended to a finished sweep. Whoever takes it should reproduce with an absolute CARGO_TARGET_DIR first.
+
+        TWO OPERATIONAL NOTES FOR ANYONE RE-RUNNING SUITES IN THE TOOLBOX ON THIS HOST:
+        1. The staging steps do NOT honour TILLANDSIAS_PLAN_BIN. litmus-expert-capability-skew-honesty.yaml:73 runs `cargo build -q -p tillandsias-plan --release` and copies from ${CARGO_TARGET_DIR:-target}. A first attempt that exported only TILLANDSIAS_PLAN_BIN staged the HOST-built binary anyway and produced 8 reds, every one of them
+           /tmp/.litmus-569/bin/plan: /lib64/libm.so.6: version `GLIBC_2.44' not found
+           — the same toolbox boundary as the gate's, in the opposite direction. Those 8 were not real either.
+        2. Left alone, that staging step REBUILDS INTO target/ from inside the toolbox, which would silently replace the host-runnable release binary the push-time plan-only lane depends on. I stopped a run mid-flight to prevent it and confirmed target/release/tillandsias-plan was still the 09:38 host build. This is the structural tension worth recording: one artifact path, two incompatible consumers — the push lane needs it HOST-runnable, in-toolbox litmus needs it TOOLBOX-runnable, and whichever ran last wins silently.
