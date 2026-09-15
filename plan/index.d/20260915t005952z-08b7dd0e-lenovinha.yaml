@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-credential-channel-reports-a-locked-but-present-keyring-as-missing-no-credential-channel-which-names-re-auth-the-remedy-that-evicts-every-other-host-instead-of-unlock
+    event:
+      type: completed
+      ts: "2026-09-15T00:59:52Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Landed b3a93780b, verdict ok:land:b3a93780b:attempt-1, verified on origin by tree (the guard carries the new token, the fixture and the gate step are both present) rather than by the push's exit code.
+
+        WHAT SHIPPED. A bounded busctl probe before the guard's final fall-through answers blocked:gh-keyring-locked when a collection reports Locked=true, with a remedy that names UNLOCK and says explicitly not to re-auth, citing 1025-a896. This is the guard's own documented distinction — blocked:* means the channel EXISTS but cannot be used, missing:* means it is absent — applied to the one state that had no arm.
+
+        A SECOND DEFECT FOUND WHILE READING THE PATH, and fixed in the same commit: gh auth status was the ONE unbounded call left in this guard. Against a locked keyring it does not fail, it BLOCKS, waiting on an unlock no unattended session can answer — measured past 120s on lenovinha 2026-09-14, which is why the credential check itself had to be killed during that cycle. Order 988 already required every probe here to be bounded and explained why; this call was simply missed. It now runs under _ccc_timeout 15 with GH_PROMPT_DISABLED=1, matching the gh api user arm below it.
+
+        NEGATIVE CONTROLS KEPT, and they are the arms that matter: a host with no busctl (macOS, the forge), a host whose secret service does not answer, and a host with an unlocked collection all still read missing:no-credential-channel. Absence of the probe is never evidence of a lock, and the probe never fires on a healthy host.
+
+        FIXTURE scripts/test-credential-channel-names-a-locked-keyring.sh, 8/8, hermetic — stub busctl and stub gh on PATH inside a scratch repo, so the fixture's verdict is identical on a locked host, an unlocked host and a service-less one, and no arm consults this host's real keyring. FALSIFIED rather than assumed: reverting the new arm to the old echo drops it to 7/8 and reproduces the pre-fix missing:no-credential-channel exactly.
+
+        CYCLE NOTE for the drill. The first land attempt was killed by the agent harness reaping its own background waiter under memory pressure — the hazard the skill already documents. The gate SURVIVED as an orphan (pid 978410) while the land orchestration died, so nothing would have pushed when it finished; the orphan was allowed to complete rather than wasted, and the land was relaunched under setsid nohup, which the reaper cannot take. Separately, a STALL report from the first watcher was a false positive: it polled the land's own log, which is quiet by design while the gate streams to .git/tillandsias-land-gate-attempt-1.log. Watch whichever log is advancing, or a working gate reads as dead.
