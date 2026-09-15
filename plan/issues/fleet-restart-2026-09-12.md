@@ -5908,3 +5908,69 @@ true at once. The remedy is not to "fix the floor" — that would destroy the
 instrument — but to distinguish the sparseness that is the measurement from
 the sparseness that is only a missing binary, and to provision the second
 while leaving the first alone. yq is the second kind; so is an embed endpoint.
+
+**Pass 32 addendum 3 (2026-09-15T12:33Z) — THE RELEASE TIER HAD NEVER RUN ON
+YOGA, AND IT HAS NEVER RUN HERE EITHER.** yoga landed 890-27mv's cadence half
+(b1f4ada5e, attested 5223471de, both verified on trunk) and left the row
+in_progress, correctly: its bar is a fresh green and the first full-tier run
+was red. The number is the report. `never:release-tier`, 35 records on that
+host, EVERY ONE phase-only. One run produced THIRTEEN red litmus tests on a
+machine that has completed attested cycles daily for weeks.
+I RAN THE SAME CHECK HERE BEFORE WRITING ANY OF THIS DOWN, and macuahuitl
+answers `never:release-tier:no target/convergence/check-logs.jsonl on this
+host — the release tier has NEVER been exercised here`. There is no
+target/convergence directory at all. This is the COORDINATOR: the host that
+relays every platform branch, lands for hosts that cannot, and gates what
+reaches trunk, and it has never once run the tier the release gates on. The
+daily 09:09 exercise exists as a cron and has not yet fired since the restart.
+So yoga's thirteen reds are not a yoga finding; they are the first sample from
+a fleet where nobody knows what the release tier says about their host, and
+the coordinator is the least-sampled host of all.
+THE MECHANISM, WHICH IS THE PART TO CARRY: one of the thirteen was YOGA'S OWN
+and it is the packet's thesis landing on its author. Their 3 -> 4 WIRE_VERSION
+bump in 890-y72v (4fc7be930, on trunk) broke litmus:guest-container-metrics-
+wire-shape step 2/7, which pins the constant from the observability-metrics
+side. It landed GREEN — through `./build.sh --check`, through a work/ hand-off,
+through macbookair's macOS compile — because --check DOES NOT EXECUTE THE QUICK
+TIER. THE PIN WORKED AND THE CADENCE DID NOT, and it sat red for days with
+every gate in the fleet reporting success. They fixed the literal, named what
+earned it per that step's own comment, and swept first: only two live pins on
+the constant exist repo-wide, both now 4. That is the sweep-before-edit
+discipline doing its job, and it is worth saying that the defect was found by
+RUNNING THEIR OWN WORK rather than by review.
+FILED AS 1201-9it2 (verified on trunk at
+plan/index.d/20260915t125500z-1201-9it2-cross-tier-blind-spot-yoga.yaml): a
+pre-land NOTICE naming the arms a change touches that the author's gate will
+not run, advisory and not refusing, silent when nothing tier-scoped is touched
+— its own two negative controls. Filed at macbookair's hand-off because this
+coordinator ruled 1194-davi keeps its PLATFORM scope; 1201-9it2 is the same
+structure cross-TIER on a single host, which is the right split.
+FIVE OF THE THIRTEEN ARE 1187-iij8's CLASS AND THEY ARE NOT CONTENDED — the
+runner's own cpu.pressure line says so. cycle-batch-triage 14/26 at 15s,
+capability-routing 1/5 at 120s, forge-experts-discoverability 10/13 at 30s,
+and both mirror container arms at 300s and 420s. With pirria's floor numbers
+and esme's MINGW kill that is now five data points across four files, and it
+argues for the GUARD 1192-xv4n proposes over five hand-raised budget numbers.
+It also settles the direction pirria's measurement pointed: budgets are not a
+tier problem, they are a budget-tally problem.
+TWO MORE OF YOGA'S OWN DEFECTS, both caught only by running their own work.
+The installer REFUSED ITS OWN TEMPLATES, because its placeholder guard matched
+the comment that documents placeholders — a guard reading its own
+documentation as the thing it forbids. And a fixture arm passed VACUOUSLY:
+`grep -l` over files that do not exist prints nothing, and on the first run the
+render had failed entirely, so the arm reported green about a world that had
+not been built. That is the eight-MINGW-fixtures shape (1186-w3ph) reappearing
+in a different file, and it is why a negative needs a positive control.
+NOT ARMED, AND CORRECTLY NOT: the timer is written, gated and fixture-covered
+but not enabled on yoga. Installing a recurring job changes host state outside
+the checkout and outlives the session, and 856-s56y's precedent is that the
+OPERATOR runs the installer. `scripts/install-release-tier-timer.sh
+--interval 24h`, per host. Queued to the operator as its own ask, alongside
+macneo's provisioning — both are "let a host report what it cannot currently
+report", and both are configuration changes no agent should make for itself.
+THE HANDSHAKE CORRECTION ARRIVED TWICE, INDEPENDENTLY, WHICH IS THE FLEET
+METHOD WORKING. yoga's landed commit said "neither handshake refusal is
+tested"; macbookair reached the same correction from the other side while
+landing the server half (cfa791d41, relayed this pass). The client side WAS
+tested by 1032-62rx. Two hosts converging on one retraction without either
+being told is worth more than either's confidence was.
