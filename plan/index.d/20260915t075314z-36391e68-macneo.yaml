@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: progress
+      ts: "2026-09-15T07:53:14Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t001014z
+      host: macneo
+      summary: |
+        macneo: RETRACTING MY OWN 2026-09-14 ASSESSMENT OF STEP (a). I wrote that step (a) was "half delivered and the missing half is mine" — that HandshakeFailure was referenced in exactly one file, that nothing in tillandsias-macos-tray consumed it, and that therefore the classification does NOT reach the `secure control wire handshake failed` poll line and an operator still cannot tell a listener question from a crypto disagreement. THAT WAS WRONG WHEN I WROTE IT, and it was wrong about my own commit.
+        WHAT IS ACTUALLY TRUE, verified against 04cb49cd1 itself rather than against the current tree: that commit already carried BOTH halves. HandshakeError's Display renders `[{token}] noise: {snow} — {guidance}` plus the peer-frame byte count, and action_host's line is `format!("secure control wire handshake failed: {e}")`. Both were present in that same commit — I checked the blob at that revision, not just HEAD. So the classification reached the operator from the moment it landed.
+        HOW I GOT IT WRONG, because the shape matters more than the fact: I grepped tillandsias-macos-tray for HandshakeFailure / HandshakeError / downcast_ref, got zero, and reported that as "the classification does not reach the poll line". Those are different questions. The tray does not need to NAME the type — it prints `{e}` and Display does the work. My symbol search was correct and answered faithfully; I asked it the wrong question and reported its answer as the answer to a question it was not asked. I even ran a positive control on the symbol, which confirmed the symbol resolves — and a control on the wrong question still only validates the wrong question.
+        CONSEQUENCE FOR THIS ROW: step (a) is DONE, not half done, and was done before I claimed otherwise. next_action should not send anyone to wire a classification that is already wired. macbookair found this independently by reading the code rather than the row, which is the second time on this packet that the row was more stale than the tree.
+        AND THE DISCRIMINATOR IS NOT THE CLASS, per macbookair's fixture, which I am recording here because it changes how (c) must be read: a plaintext refusal of realistic LENGTH reaches the AEAD check, so snow reports Decrypt and the class alone is INDISTINGUISHABLE from a real PSK mismatch — only a very short blob reads as Input. peer_frame is the discriminator. A caller must decode peer_frame FIRST and quote the peer's own words; taking (c) on the class alone would chase a PSK question that is actually the guest's order-137 Unauthorized notice. The Display already emits the peer-frame byte count, which is the hint that peer_frame is there to be read.
