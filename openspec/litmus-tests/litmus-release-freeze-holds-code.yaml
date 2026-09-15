@@ -1,0 +1,50 @@
+# @trace spec:methodology-accountability
+# @trace order:1176-9vqn
+#
+# Order 1176-9vqn: a release freeze was announced in ledger prose and enforced
+# by nothing. MEASURED on yolanda during the v56.9.13.1 cut — a merge carrying
+# a claim event that itself read "code held until the all-clear", a 2476 s
+# gate, then a push that every pre-push check passed, because none of them was
+# about a freeze. Harmless only because it went to windows-next. Now a marker
+# on origin (refs/tillandsias/freeze/<branch>/<host>/<epoch>) is consulted by
+# the pre-push hook AT the push, for CODE pushes to the branch it names, with
+# plan-only pushes admitted by design.
+name: litmus:release-freeze-holds-code
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1176-9vqn hermetically: with a live marker, a code push to the named
+  branch is refused and the refusal names the marker and the branch, while a
+  plan-only push is admitted by both routes (fresh stamp and plan-only lane)
+  and a code push to an unnamed branch lands; an unreachable remote warns and
+  admits rather than stranding an offline host; a content-built mutant lands
+  the same push once the call site is stripped; and the freeze tool's
+  set/status/clear round-trip behaves, including refusing a branch name it
+  cannot parse back out of the ref.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-pre-push-honours-a-live-freeze.sh
+  - workspace contains scripts/release-freeze.sh and scripts/hooks/pre-push-local-gate.sh
+
+critical_path:
+  - step: "the freeze tool and the fixture parse and carry their exec bits"
+    command: "bash -n scripts/release-freeze.sh && bash -n scripts/test-pre-push-honours-a-live-freeze.sh && test -x scripts/release-freeze.sh && test -x scripts/test-pre-push-honours-a-live-freeze.sh && echo 'ok: release-freeze-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: release-freeze-parses"
+
+  - step: "a live freeze holds a code push to the branch it names, admits plan-only pushes by both routes, admits a code push elsewhere, warns rather than blocks when the remote is unreachable, and the mutant proves the check bites"
+    command: "bash scripts/test-pre-push-honours-a-live-freeze.sh | tail -1"
+    timeout_ms: 300000
+    expected_behavior: "PASS: pre-push-honours-a-live-freeze"
+
+  - step: "the marker namespace is exempt from the hook, or a freeze could not be declared from the host declaring it (the freeze tool's own push would need the gate it exists to protect)"
+    command: "printf 'refs/tillandsias/freeze/x/h/1 %s refs/tillandsias/freeze/x/h/1 %s\\n' $(git rev-parse HEAD) $(git rev-parse HEAD) | bash scripts/hooks/pre-push-local-gate.sh origin . 2>&1 | grep -c 'coordination marker ref'"
+    timeout_ms: 20000
+    expected_behavior: "1"
+
+  - step: "the cut runbook both SETS the freeze before the gate and CLEARS it before the back-merge push, so the marker's lifetime is the freeze's lifetime"
+    command: "S=skills/merge-to-main-and-release/SKILL.md; n=0; grep -q 'release-freeze.sh set' \"$S\" && n=$((n+1)); grep -q 'release-freeze.sh clear' \"$S\" && n=$((n+1)); [ \"$n\" -eq 2 ] && echo 'ok: runbook sets and clears the freeze'"
+    timeout_ms: 5000
+    expected_behavior: "ok: runbook sets and clears the freeze"

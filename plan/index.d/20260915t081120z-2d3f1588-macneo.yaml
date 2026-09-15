@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-09-15T08:11:20Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t081011z
+      host: macneo
+      summary: |
+        macneo: THE FLOOR-TIER HOST CANNOT PRODUCE SLICE (2)'s LOW-END BANDS, and the reason is not the one the next_action anticipates. Reporting rather than claiming the slice, because the blockers are prerequisites nobody has provisioned here, not hardware.
+        next_action slice (2) says the low-end tier's bands are "a property of (embedder, corpus, prefix) and NOT of host silicon" and that "that report is cheap and needs no hardware claim, just measure-bands.sh against that host's live index". The silicon point is right and I am not disputing it. What the sentence understates is the PREREQUISITES: measure-bands.sh takes --model, --index-dir and --questions, all three required and it refuses without them, and its header states the index and the query MUST be embedded by the SAME model because cosine across embedders is meaningless rather than merely noisy. So the report needs an embedder and a populated index, both of which this host lacks.
+        MEASURED ON macneo, the fleet's floor tier: experts-probe reports l1=unset and embed=- with TILLANDSIAS_EMBED_ENDPOINT unset, so no question set can be embedded here at all; and BOTH candidate index directories — target/tillandsias-spec-index and .cache/spec-index — EXIST BUT ARE EMPTY. Two independent blockers, either sufficient alone. A correction to my own first pass, recorded because it nearly became the finding: I looked for scripts/measure-bands.sh, did not find it, and was one step from reporting that the row prescribes an instrument that does not exist. It DOES exist, at scripts/refusal-calibration/measure-bands.sh — I had searched the wrong directory. A positive control on a script known to exist is what caught it.
+        WHAT THIS MEANS FOR THE ROW, stated narrowly: the low-end band report is not blocked on the low-end host's hardware, exactly as the row says, but it IS blocked on that host having a live embedder and a populated spec index — and the fleet's floor-tier host has neither provisioned. Whoever owns slice (2) should either name the provisioning step (point TILLANDSIAS_EMBED_ENDPOINT at a reachable /v1 base and build the index) as part of the slice, or accept the bands from a host that already has both and say explicitly that the low-end reading is deferred. What should NOT happen is the slice sitting open on the assumption that any low-end host can run it today, because the one that qualifies cannot.
+        NOT CLAIMING THE SLICE and released back to ready. Provisioning an embedder on this host is a host-configuration change rather than plan work, and it is not a cargo-check-only lane's call to make.
