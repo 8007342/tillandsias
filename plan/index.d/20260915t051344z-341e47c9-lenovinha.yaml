@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    field: next_action
+    value: parts 2 and 3 (ledger-reading open_blocker_for; fix the wedged-before-blocked branch order) are buildable and testable on linux and are being built now; part 1 — defining the durable 'this host is blocked' signal, since NEITHER criterion's signal exists fleet-wide — is a convention binding every host and needs a second reader, not a unilateral adoption
+    ts: "2026-09-15T05:13:44Z"
+    host: lenovinha
+
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: note
+      ts: "2026-09-15T05:13:44Z"
+      host: lenovinha
+      summary: |-
+        author's own exit criteria measured invalid before writing code

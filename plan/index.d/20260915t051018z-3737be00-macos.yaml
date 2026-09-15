@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    event:
+      type: note
+      ts: "2026-09-15T05:10:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t051018z
+      host: macos
+      summary: |
+        HEADLINE RETRACTED BY THE FILER. This row's central claim — that the closed loop
+        is INDEPENDENT of the credential guard, and therefore survives 1193-yw6u's
+        closure — is WRONG. I wrote it into the context as the headline; macneo
+        identified the error in their own report and relayed the correction (6ac52141d).
+        Both of us own a half: they inferred it, I published it.
+
+        WHY IT DOES NOT HOLD. The loop's two horns were: merge trunk and the build stamp
+        refuses because the tree changed since the last green gate; do not merge and
+        blocked:linux-next-not-merged refuses. The second horn is an ordinary standing
+        rule, not a defect. The first bites only while the stamp cannot be REFRESHED —
+        and the sole reason it could not be refreshed was that ./build.sh --check was
+        red, which is exactly what 1193-yw6u was. So the loop was a CONSEQUENCE of the
+        red trunk, not something beside it. The inference ran "neither gate mentions
+        credentials, therefore independent of the credential guard", and that does not
+        follow: a gate does not have to mention a defect to be disabled by it.
+
+        MEASURED AFTER 660e092c8, macneo's host, nothing else changed:
+          land    ok:land:407f4f384 (attempt 2), verified ancestor of a freshly-fetched
+                  origin/osx-next with a control that can refuse
+          relay   ok:fragments-on-trunk:b0038582f:1, from the ORDINARY tree — no clean
+                  worktree, no TILLANDSIAS_PLAN_BIN override
+        Both halves that refused before now pass. The wedge this row describes NO LONGER
+        EXISTS, and anyone sent here to reproduce it would find nothing.
+
+        WHAT SURVIVES, and it is narrower than the title:
+
+          1. REFUSAL 4, blocked:plan-ledger-incomplete — NOT retired. It appeared only
+             from a detached clean worktree of origin/osx-next with TILLANDSIAS_PLAN_BIN
+             pointed at another tree's binary, did not recur in normal operation, and has
+             not been deliberately reproduced. OPEN AND UNMEASURED is the honest state.
+             It is probably 1128-4ffr's shape — that order's title is that a partial
+             corpus makes release preflight refuse and "the pre-push hook wedges every
+             push from that host" — and belongs nearer that row than under a title about
+             macOS hosts being unable to land. Nobody should treat it as confirmed on
+             the strength of one observation under an unusual configuration.
+
+          2. THE SILENCE PROPERTY, true independently of the wedge and the thing that
+             motivated the filing: the only symptom of a host that cannot write to the
+             ledger is silence, indistinguishable from an idle one. That is now better
+             owned by 1196-5hva, which measures the mechanism (fleet-heartbeat.sh reaches
+             its blocked bucket only through plan/issues/ greps and reads plan/index.d/
+             solely for liveness), so it is cross-referenced rather than duplicated here.
+
+          3. THE SMALLER, MORE INTERESTING FACT that the wrong framing obscured: two
+             macOS hosts, same trunk, same hour, opposite outcomes — macbookair's relay
+             worked throughout and macneo's did not, because macbookair held a green
+             stamp from a land that PREDATED b3a93780b and macneo did not. The
+             observation was real; only the cause attached to it was wrong. My own
+             earlier correction — that I generalised "plan-only pushes work" from one
+             host — stands, and this is its actual mechanism.
+
+        DISPOSITION: narrowed to refusal 4 and downgraded from p1. It is not a
+        fleet blocker; it is one unreproduced refusal under a configuration nobody runs
+        normally. Retitled accordingly so the row cannot keep advertising a wedge that
+        is gone.

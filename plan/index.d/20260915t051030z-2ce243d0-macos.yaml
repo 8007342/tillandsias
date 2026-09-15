@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    field: priority
+    value: p3
+    ts: "2026-09-15T05:10:30Z"
+    host: macos
+
+events:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    event:
+      type: note
+      ts: "2026-09-15T05:10:30Z"
+      host: macos
+      summary: |-
+        headline retracted: the loop was a consequence of 1193-yw6u, not independent; what survives is one unreproduced refusal

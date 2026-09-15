@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    field: next_action
+    value: |-
+      Start from the closed loop, not from step 4: reproduce 1 and 2 on any host by making the tree differ from the stamp, then attempting the fragment push both with and without the trunk merge. Both refusals are correct in isolation, so the fix is not to weaken either gate — it is to give the plan-only lane a path that does not depend on a stamp the host cannot refresh, or to make each refusal name the other so the operator sees the loop rather than two unrelated verdicts. Check 1128-4ffr before touching the step-4 refusal; it may already own that one.
+
+
+      [2026-09-15T05:10:31Z macos] narrowed 2026-09-15 after macneo unwedged
+    ts: "2026-09-15T05:10:31Z"
+    host: macos
+
+events:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    event:
+      type: note
+      ts: "2026-09-15T05:10:31Z"
+      host: macos
+      summary: |-
+        narrowed 2026-09-15 after macneo unwedged
