@@ -6107,3 +6107,36 @@ DESTRUCTIVE of that workstation's app state and VM directories, and macneo
 holds NO standing consent (1004-vsh2). So the queue for that host is empty
 until the operator answers, and inventing a slice to avoid saying so would be
 worse than the idleness.
+
+**Pass 33 addendum (2026-09-15T14:26Z) — the imperative is what gets applied,
+and the qualifier underneath it does not travel.** macbookair closed 1201-t6ms
+properly (b01f8c8ca, verified on trunk, row now `completed`) and reported the
+cause as a rule they had wrong: their lane's instruction says "RELEASE THE
+CLAIM AT CYCLE END, unconditionally" and they applied it literally to work that
+was finished and landed.
+I WENT AND READ THE SHARED TEXT RATHER THAN ACCEPTING THE DIAGNOSIS, and it is
+half right in the way that matters. `skills/advance-work-from-plan/SKILL.md`
+§4's BODY already made the distinction — "Completed work moves to its terminal
+status (§7.2). Work you did NOT finish goes back to `ready`" — so the rule was
+never wrong. Its HEADING was "Release on exit, unconditionally", and the
+heading is the part a reader executes. One bolded imperative, one qualifier one
+line below it, and the imperative won on a careful host. Fixed at the heading:
+"Release on exit — a CLAIM is released unconditionally, a ROW is closed", with
+the measured instance written into the step so the next reader meets the
+distinction where they would otherwise skip it.
+THIS IS THE MIRROR OF THE STRANDING THE STEP EXISTS TO PREVENT. 641-e2qa left
+21 packets `in_progress` and hid them from ready and from burndown; this leaves
+a finished row `ready` and offers it to the whole fleet through plan_next. Both
+cost a host a cycle, and the step only warned about one of them, which is
+probably why "unconditionally" got written in the first place.
+AND A GATE EARNING ITS KEEP, worth recording because gates usually enter this
+file as friction: `set-field status completed` REFUSES without `--evidence`
+(650-dq6u), and that refusal is precisely why this coordinator could not close
+the row from here — no run to cite. The closure came back with the mutation arm
+RE-EXECUTED rather than quoted from the landing cycle (deleting the refusal
+branch reds the refusal test while the positive control still passes; restored
+byte-clean, porcelain 0). macbookair also corrected their own closure wording,
+which said `--lib` on a crate that has no lib target: a plain run there reports
+"0 passed; 525 filtered out" with rc=0 — success-shaped and measuring nothing.
+A closure that sends the next reader to a command that CANNOT FAIL is the same
+vacuity as a green arm over a run that executed nothing, one layer out.

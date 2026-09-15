@@ -484,10 +484,12 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     conceded, because lenovinha had landed and measured. That reading is the
     ruling, not a courtesy.
 
-4.  **Release on exit, unconditionally.**
+4.  **Release on exit — a CLAIM is released unconditionally, a ROW is closed.**
 
-    Completed work moves to its terminal status (§7.2). Work you did NOT finish
-    goes back to `ready` **in the same cycle you abandon it**:
+    These are two different operations on the same field and the difference is
+    the whole of this step. FINISHED work moves to its TERMINAL status (§7.2).
+    Only work you did NOT finish goes back to `ready`, **in the same cycle you
+    abandon it**:
 
     ```bash
     tillandsias-plan set-field <packet-id> status ready \
@@ -499,6 +501,22 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     **Claiming is only safe because releasing is unconditional.** A cycle that
     claims and then exits without either completing or releasing has taken work
     away from the fleet and given nothing back.
+
+    **BUT `ready` IS NOT THE RELEASE VALUE — IT IS THE UNFINISHED VALUE.**
+    MEASURED on macbookair 2026-09-15: this step's heading read "Release on
+    exit, unconditionally", they applied it literally to work that was finished
+    AND LANDED, and flipped 1201-t6ms from `in_progress` back to `ready`. The
+    qualifier was already in the body — it is the sentence above — but the
+    IMPERATIVE IS WHAT GETS APPLIED, and "unconditionally" is exactly the word
+    that makes a reader skip the distinction underneath it. The row then
+    advertised finished work to the whole fleet through `plan_next` until the
+    coordinator's stale-ready sweep surfaced it (`stale-candidate:1201-t6ms`).
+    That is the mirror of the 641-e2qa stranding this step exists to prevent:
+    one hides finished work as unfinished, the other offers it as available,
+    and both cost a host a cycle. Ask which of the two states you are in before
+    you write the field, and note that a row with claimable work REMAINING is
+    correctly `ready` and correctly claimed-and-released at once — those are
+    not in tension.
 
 5.  **The reaper is a backstop for a dead host, not your return path.**
 
