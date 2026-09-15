@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-credential-channel-reports-a-locked-but-present-keyring-as-missing-no-credential-channel-which-names-re-auth-the-remedy-that-evicts-every-other-host-instead-of-unlock
+    field: status
+    value: completed
+    ts: "2026-09-15T00:59:46Z"
+    host: linux
+
+events:
+  - packet_id: check-credential-channel-reports-a-locked-but-present-keyring-as-missing-no-credential-channel-which-names-re-auth-the-remedy-that-evicts-every-other-host-instead-of-unlock
+    event:
+      type: completed
+      ts: "2026-09-15T00:59:46Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: b3a93780b
+  - packet_id: check-credential-channel-reports-a-locked-but-present-keyring-as-missing-no-credential-channel-which-names-re-auth-the-remedy-that-evicts-every-other-host-instead-of-unlock
+    event:
+      type: note
+      ts: "2026-09-15T00:59:46Z"
+      host: linux
+      summary: |-
+        check-credential-channel.sh now answers blocked:gh-keyring-locked for a present-but-locked collection, with a remedy naming UNLOCK and forbidding the re-auth (1025-a896); gh auth status is additionally bounded through _ccc_timeout, having been the one unbounded probe left in the guard and the reason it hung past 120s against a locked keyring. Negative controls kept: no busctl, no secret service, and unlocked-collection all still read missing:. Fixture scripts/test-credential-channel-names-a-locked-keyring.sh 8/8 hermetic, falsified (reverting the arm gives 7/8 and reproduces the pre-fix missing:no-credential-channel), bound at scripts/gate-steps.d/360-1189-2ra5.step. Landed b3a93780b, verdict ok:land:b3a93780b:attempt-1

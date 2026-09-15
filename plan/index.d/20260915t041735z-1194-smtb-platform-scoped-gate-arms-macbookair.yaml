@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-platform-scoped-gate-arm-can-land-through-a-gate-that-cannot-run-it
+    order: 1194-smtb
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [gate, host-tools, cross-platform, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-host-tools.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable IS the check, so
+      naming a litmus nothing defines yet would be refused by 885-92iu. The
+      name is stated here instead: scripts/test-platform-scoped-arms-have-a-runner.sh,
+      to be written in the same commit as the thing it checks (1136-n8sh).
+
+      WHAT IT MUST ASSERT, so it is not weakened into something that always
+      passes: for every platform-scoped prover row in check-host-tools.sh, SOME
+      platform in the fleet's declared host matrix runs it — and a MUTATION ARM
+      must show the assertion reds when a row is scoped to a platform no host
+      declares. Without that arm it proves only that the file parses.
+    title: |
+      a gate arm scoped to one platform can land through a gate that never executes it, so a change green on every lane that ran it can red a lane that could not — measured live as 1193-yw6u
+    context: |
+      GENERALISED FROM 1193-yw6u, 2026-09-15, and from yoga's reading of it.
+
+      WHAT HAPPENED CONCRETELY. b3a93780b landed green through a Linux gate and
+      stopped BOTH macOS hosts from landing any code. check-host-tools.sh's
+      prover row for `timeout` carries platform field `macos`, so the arm that
+      went red runs only on macOS. The author had no signal: their gate was
+      correct and complete for the lane it ran on, and stayed green afterwards.
+
+      WHY IT IS NOT A check-host-tools BUG. The thing that decides COVERAGE —
+      the platform field in the row — is invisible from where the change is
+      made. yoga named the shape: it is the same family as a guard reading a
+      hardcoded file list, where what the check covers cannot be seen from the
+      code the check is about. The row is doing exactly what it says; nothing
+      tells the author that saying it excludes their own gate.
+
+      WHY A LINUX HOST SHOULD BUILD IT. The blind spot is symmetric — a macOS
+      host adding a linux-scoped row has the identical problem — so the check
+      needs no macOS hardware to construct or to falsify. yoga offered this
+      lane explicitly and can build both sides locally.
+
+      SCOPE NOTE, do not overreach: this is NOT a proposal to run every
+      platform's arms everywhere, which is impossible by construction (the
+      macOS arm needs a macOS host). It is a proposal to make the COVERAGE GAP
+      visible at the point of change — an arm scoped to a platform that no
+      declared host runs is unfalsifiable, and an arm whose only runner is a
+      lane the author is not on should say so out loud.
+    deliverable: |
+      Every platform-scoped arm in check-host-tools.sh has a declared runner,
+      and an arm scoped to a platform no host runs is refused rather than
+      silently uncovered — with a mutation arm proving the refusal fires.
+    next_action: >
+      Read 1193-yw6u first; it is the live instance and carries the bisect.
+      Then enumerate check-host-tools.sh's rows by their platform field and
+      compare against the fleet host matrix. The cheap first cut is a check
+      that every distinct platform value has at least one declared host; the
+      more useful second cut warns at land time when a change touches a row
+      the CURRENT host cannot execute, which is the signal b3a93780b's author
+      never got. Build the mutation arm first — a row scoped to a nonexistent
+      platform must red it — because without that this check passes on a file
+      it never really read.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-15 from the 1193-yw6u incident, at
+      yoga-silverblue's request and with their offer to take it on the Linux
+      lane. Cited by symbol and commit.
