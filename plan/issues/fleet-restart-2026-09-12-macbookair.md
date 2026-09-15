@@ -340,3 +340,95 @@ looked"* will eventually be read as the former.
   wrong calls came from explaining a result instead of first reproducing it
   faithfully. A reproduce command in a packet is not evidence that it reproduces
   the defect — it is a claim, and it needs falsifying like any other.
+
+- 2026-09-14 (cycle, 830-xsk2): settled the in-guest hop's open device question
+  by measurement rather than assumption, as the prior claimant asked. Four arms:
+  the container profile alone refuses AF_VSOCK socket creation (EPERM); adding
+  --device /dev/vsock does NOT help (still EPERM); relaxing seccomp WITHOUT the
+  device works. So seccomp is the sole blocker and the device is irrelevant —
+  neither of the two routes the packet framed. The container route costs one
+  narrow seccomp allowance on a dedicated forwarder container, leaving every
+  other consumer on the default filter, which removes the "touches every
+  consumer" objection that made --add-host look comparable.
+- 2026-09-14: recorded explicitly that seccomp=unconfined is the ISOLATION
+  instrument and not the fix. A blunt flag that makes the symptom go away is the
+  easiest thing to ship and the hardest to walk back once a consumer depends on
+  it.
+- 2026-09-14: ETIMEDOUT from the forwarder under --exec-guest is EXPECTED, per
+  this packet's own 2026-08-29 constraint (VZ retains guest connects until the
+  host pumps CFRunLoop). Noted on next_action so the next claimant does not read
+  the correct result as a broken forwarder — the failure mode that constraint
+  was written down to prevent.
+
+- 2026-09-15 (cycle, 690-w94k item 1): the discarded CFRunLoopRunInMode result
+  was NOT benign, as the packet suspected. Measured on a bare thread: a single
+  call returned kCFRunLoopRunFinished in 43.3us instead of the 250ms requested,
+  and the loop ran 3,471,102 iterations in 250ms — a saturated core across nine
+  call sites including the boot waits. Fixed to 34 iterations, wall clock
+  intact. Guard counts CFRunLoopRunInMode ENTRIES, because wall-clock cannot
+  distinguish park from spin: the loop honours its deadline either way.
+- 2026-09-15: macneo found this packet's line citations stale 3 of 3 (881-29me).
+  :870 and :1238 are inside the embedded provisioning SHELL script, and :1238
+  sits four lines from the provision.state write 1084-x8ya depends on. I reached
+  item 1's real site by grepping the symbol, so I missed the trap BY HABIT, not
+  by design. A line number is a claim about a file that has since moved.
+- 2026-09-15 (1193-yw6u): TRUNK IS RED ON macOS and no Linux host can see it.
+  b3a93780b (1189-2ra5) reds test-host-tools.sh; the prover row is macOS-scoped
+  so the arm never ran in the gate that landed it. Bisected in pristine
+  worktrees. Both macOS hosts blocked from landing any code.
+- 2026-09-15, THE PROCESS ERROR: I ran the pre-land gates BEFORE filing the new
+  packet, so check-scorable-obligation-added answered skip:no-new-packets and
+  the real refusal surfaced only at push. Run the gates AFTER the last ledger
+  write, not before.
+- 2026-09-15: three refusals in a chain worth knowing — the pre-push stamp
+  cannot be refreshed by a macOS host while trunk is red (split the plan half
+  onto a clean tree; salvage branch holds the code, no --no-verify); "plan
+  binary is STALE" is a validator-surface HASH not an mtime, cleared by
+  check-plan-binary-current.sh after a rebuild; and a verifiable_closure
+  beginning with a BACKTICK matches nothing because the accept patterns are
+  anchored to the first character. The last is documented in the checker's own
+  comments and I walked into it anyway.
+- 2026-09-15: `tillandsias-plan status <order>` reads the LOCAL FOLD, not the
+  fetched remote ref. I queried 1194-davi, got "no packet matches", and reported
+  it as possibly-misfiled — it was on trunk the whole time, 23 seconds after my
+  own duplicate. Absent and negative render identically AGAIN, this time inside
+  the ledger tooling. To ask whether a packet exists on trunk:
+  `git grep -l <order> origin/linux-next -- plan/index.d/` WITH A CONTROL search
+  that must return nothing. macneo hit the identical shape on 1145-iigx this
+  week; on a wedged host nobody's fold is current, because integrating is the
+  thing that cannot be done.
+- 2026-09-15: I generalised "plan-only pushes and the relay work" from THIS host
+  to all macOS hosts. False — macneo was wedged out of the plan lane entirely in
+  the same hour. Two hosts, one trunk, opposite outcomes. Correction recorded in
+  1195-m9vi's context rather than left in a message.
+- 2026-09-15: 690-w94k item 1 LANDED (e43b3d06f) after trunk went green — the
+  parked fix was restored from the salvage branch and re-verified (guard + Linux
+  zigbuild) rather than trusted in its parked state. Trunk's return to green was
+  re-measured here in a pristine worktree rather than accepted on report: the
+  host that called it red is the right host to confirm it fixed.
+- 2026-09-15 (1196-5hva, yoga/lenovinha): filing a blocker as a LEDGER PACKET —
+  what the work loop teaches — makes it INVISIBLE to fleet-heartbeat.sh, which
+  reaches its blocked bucket only via plan/issues/*<host>*.md greps and reads
+  plan/index.d/ solely for liveness timestamps. So both macOS hosts read WEDGED
+  all cycle while a correctly-filed p1 sat on trunk, and WEDGED prescribes
+  "adjudicate its worktree" — pointing away from a trunk-wide red. My cycle is
+  the evidence in that row. A channel reporting NOTHING is indistinguishable
+  from one reporting FINE, and this is the most expensive instance of it today.
+- 2026-09-15: I FILED A WRONG HEADLINE ON MACNEO'S BEHALF and retracted it the
+  same night. 1195-m9vi claimed the plan-lane closed loop was INDEPENDENT of the
+  credential guard. It was not: the stamp horn bites only while the stamp cannot
+  be REFRESHED, and it could not be refreshed because ./build.sh --check was red
+  — i.e. because of 1193-yw6u. The inference was "neither gate mentions
+  credentials, therefore independent", and a gate does not have to MENTION a
+  defect to be disabled by it. macneo caught their own error; I had published it.
+  Row narrowed to the one unreproduced refusal and dropped p1 -> p3.
+- 2026-09-15, the lesson from carrying someone else's report: relaying a blocked
+  host's findings is right and it got a p1 fixed inside an hour — but I restated
+  their INFERENCE as the packet's headline with my own framing, which made a
+  wrong premise more persuasive than it arrived. Carry the MEASUREMENTS
+  faithfully; mark the inferences as theirs and unverified, especially when the
+  host that made them cannot re-measure.
+- 2026-09-15: the smaller true fact the wrong framing hid — two macOS hosts,
+  same trunk, same hour, opposite outcomes, because macbookair held a green
+  stamp from a land PREDATING b3a93780b and macneo did not. That is why my
+  "plan-only pushes work" generalisation was false one host over.
