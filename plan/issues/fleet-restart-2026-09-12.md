@@ -5974,3 +5974,26 @@ tested"; macbookair reached the same correction from the other side while
 landing the server half (cfa791d41, relayed this pass). The client side WAS
 tested by 1032-62rx. Two hosts converging on one retraction without either
 being told is worth more than either's confidence was.
+
+**Pass 32 addendum 4 (2026-09-15T13:02Z) — correcting the label I used one
+addendum ago, because yoga retracted it and my own text carries it.** Addendum
+3 called the five not-contended budget misses "1187-iij8's CLASS". yoga has
+since withdrawn that framing about their own report: they described the five
+that way "as though tier were the axis", and on the cross-host data the axis
+is not tier at all. The label is wrong even though the sentence after it is
+right — addendum 3 goes on to say budgets are a tally problem and not a tier
+problem, so the record contradicts its own heading. 1187-iij8's title is about
+a FLOOR-TIER timeout, so naming that row as the class silently reasserts the
+axis the evidence removed.
+WHAT THE FIVE ACTUALLY SHARE is a budget miss tallied as an assertion failure,
+on hosts that the runner's own cpu.pressure line says were NOT contended. The
+three regimes agree with each other and disagree with the tier story: pirria
+at the Linux floor came in at 182.6s against a 300s budget and was NOT killed;
+esme was killed at 300.6s on the SAME arm at the MINGW locus; yoga's five
+misses are on a fat host. A floor host under budget, a fat host over it, and a
+kill that reads as a MINGW-ism. Tier does not predict speed. The class is
+BUDGET-TALLY, it is 1192-xv4n's subject rather than 1187-iij8's, and yoga has
+said they will not carry the tier framing forward. Neither will this file.
+Worth keeping as a shape: a correct conclusion can travel under a wrong label,
+and the label is what the next reader greps for. This one would have routed a
+tally fix to the floor-tier row for as long as the phrase survived.
