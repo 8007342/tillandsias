@@ -6324,3 +6324,49 @@ let it complete in the background", is a specimen worth keeping: its second
 clause is true, which is precisely what makes the first sound reasoned rather
 than absent. The built-in control spawns raw children and REQUIRES zombies to
 appear, so the arm cannot pass vacuously if a platform ever auto-reaps.
+
+**Pass 35 (2026-09-15T18:11Z) — ONE MISSING ENV EXPORT IN ONE FIXTURE MADE THE
+ENTIRE RELEASE TIER UNMEASURABLE, and the arm that reported it accused the
+wrong subject.** osx-next +2 relayed (macbookair's 690-w94k relay-ref record and
+the trunk-race measurement); windows-next 0.
+THE CHAIN, TRACED FROM SYMPTOM TO CAUSE ACROSS SIX LAYERS, each link verified:
+a litmus fixture that does not export TILLANDSIAS_TIMING_LOG runs the runner
+from a scratch dir that is not a git checkout, so metrics_default_log correctly
+falls back to /tmp and writes records carrying the REAL host name into
+/tmp/tillandsias-timing.jsonl — the production name in a shared path.
+cycle-metrics.sh then sees two timing logs and REFUSES, correctly, on the
+ground that any runs= computed from either is a partition presenting as a
+total. The refusal makes cycle-metrics emit NOTHING, so every arm driving it
+observes zeros. litmus:mcp-expert-health-probe-shape 18/20 therefore failed
+with "healthy-but-unexposed must be distinct from healthy" while
+`exposed_ok=0` — ITS OWN CONTROL — was also zero. Pre-build failed, ci-full
+exited before post-build, the record carried ci_phase=pre-build only, and
+check-release-tier-freshness.sh still answers `never:release-tier`. A host
+carrying this defect CAN NEVER RECORD A FULL-TIER RUN however often the cadence
+fires.
+THE ARM NAMED THE WRONG SUBJECT AND THAT IS THE REUSABLE HALF. Its message
+accuses the FEATURE — which is implemented, with a long comment citing
+801-m9tk — when its own negative control reading zero says the measurement did
+not happen at all. A control at zero is not a failed comparison; it is the
+absence of one, and an arm that reports a verdict anyway sends a fixer at
+working code. That is 1109-t8kw's class reaching the release gate: a correct
+refusal scoring as an assertion failure.
+THE DEFECT IS A GUARD GAP, NOT A FIXTURE SLIP, and the author could not have
+known. 1096-p3tn diagnosed this exact split and fixed it BY HAND in eleven
+fixtures, documenting the remedy in their comments. MEASURED TODAY: 10 of 16
+litmus fixtures export TILLANDSIAS_TIMING_LOG and SIX DO NOT, and no check-*.sh
+enforces it. The rogue records were litmus:budget-probe and litmus-suite at
+13:58Z, from a fixture that landed the same day. A remedy applied by hand to
+the instances that existed, with nothing to catch the next one, is verbatim the
+shape this file recorded eleven hours earlier about a rule held in a standing
+note: applied when remembered, while a gate applies it every time. Filed
+1204-3s2s (p1). Debris removed on this host after preserving the six records;
+cycle-metrics immediately emitted `mcp: servers=1 ... health=ok` again, which
+unblocks macuahuitl and fixes nothing.
+AND A CLAIM OF MINE THAT WAS WRONG, CORRECTED BY READING RATHER THAN REPEATED.
+I told the operator the ci-full's VERSION bump had blocked this host's push
+lane. It had not: the plan-only lane scopes the OUTGOING DIFF, not the
+worktree — `attempt_plan_only_lane` requires every outgoing PATH to be a new
+fragment, and uncommitted VERSION changes are in neither. Two filings went out
+unimpeded. I had asserted it twice before checking, which is the day's own
+lesson arriving one more time.
