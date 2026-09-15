@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    field: verifiable_closure
+    value: 'litmus:release-freeze-holds-code (scripts/test-pre-push-honours-a-live-freeze.sh, pre-build, size instant, 19/19): in a scratch bare remote with the REAL hook installed as .git/hooks/pre-push and a fresh full-scope gate stamp minted per arm (the freeze check sits AFTER the stamp dispatch, so without a stamp every code arm would refuse for the stamp and pass while testing nothing — asserted as a named PRECONDITION arm), with a live marker refs/tillandsias/freeze/linux-next/<host>/<epoch>: a CODE push to linux-next is refused, the branch does not move, and the refusal NAMES the marker ref and the branch; a content-built MUTANT that strips the call site lands the identical push, proving the check bites. NEGATIVE CONTROLS: a plan-only push is admitted by BOTH routes (with a fresh stamp, exercising the exempt-path logic, and with no stamp, exercising the plan-only lane which exits before the freeze check); a code push to windows-next, which no marker names, is admitted; an unreachable remote WARNS and admits, naming the check. Tool round-trip: status/set/set-again(ok:freeze-already)/clear/clear-again(0)/re-push-lands, plus refusals for an unknown flag (exit 2), a branch name containing a slash, and a branch the remote does not have. Litmus also pins that refs/tillandsias/* is exempt from the hook (without it the freeze tool''s own push would need the gate the freeze exists to protect) and that the cut runbook both sets and clears the marker.'
+    ts: "2026-09-15T07:50:01Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    event:
+      type: note
+      ts: "2026-09-15T07:50:01Z"
+      host: macuahuitl
+      summary: |-
+        discharged the unscoreable placeholder into the litmus that now exists (1136-n8sh shape)
