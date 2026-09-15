@@ -5757,3 +5757,21 @@ SILENTLY — so they needed rewriting rather than getting a reprieve, and "a
 reader trusting the compiler would have shipped the old behaviour under a new
 wire version". A rest pattern makes the compiler stop being a change detector
 exactly where you are relying on it to be one.
+
+**Pass 31 (2026-09-15T10:11Z) — osx-next relayed, and the coordinator's own
+red is closed on the macOS side too.** windows-next 0, main 0, osx-next +12
+relayed in one land: macbookair's 1084-x8ya criterion-4 pin (a guest still
+coming up is not a failure), step (b) landed at 5ba5e30ea with (c) routed on,
+and their records for 1197-y6g6 — including the sentence this coordinator
+adopted verbatim into the fixture, THE LANE IS STAMP-FREE BUT NOT
+VALIDATOR-FREE. One code path in the relay (the macOS tray's diagnose.rs), so
+a full gate rather than the lane. Stale rows 88/507, audit rows=23 stems=23,
+no live freeze, no gate-step prefix collision.
+1155-jurn REMAINS in_progress AND REMAINS UNTOUCHED. It is the one expiry
+candidate left after 888-miiy closed, and it is the finished-but-open case,
+not a stalled one: esme's canary merged at e6f675d18 with 7/7 on both Windows
+hosts. esme is offline and the ask to land its closure is queued for their
+next connect. NOT expired and NOT closed from here — closing on a message
+rather than evidence in hand is how unfinished work gets marked done, and the
+expiry sweep that would otherwise have swept it is itself under repair
+(1198-7q95), so acting on its list right now would compound two faults.
