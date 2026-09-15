@@ -5626,3 +5626,46 @@ but still reads in_progress on trunk (esme's canary merged at e6f675d18, 7/7
 on both Windows hosts) — asked esme to land the closure, since closing on a
 message rather than evidence-in-hand is how unfinished work gets marked done.
 888-miiy is the false positive above; nothing expired.
+888-miiy COMPLETE (yoga, d3c9c929d / 70f1fbea6 / MO-FULL d051efa66):
+criterion 4's WITH-endpoint half demonstrated at fixture and gate level, and
+lenovinha's no-endpoint half from 2026-09-01 stands as the other side. THE
+BRANCH IT REQUIRED CONTAINED THE PACKET'S OWN DEFECT, which is the
+transferable part. Scenario 7 of test-groundtruth-corpus-declaration.sh
+derives sp_skip by sed-ing `skipped=N` out of a groundtruth-result line; a
+HARNESS ERROR prints no result line at all, so the sed yields empty,
+${sp_skip:-0} becomes 0, and the condition reads 0 as "nothing skipped,
+therefore graded" and announces "ok: this host HAS an index". sp_rc was
+captured two lines above and never consulted on that path. A harness error
+rendered as a graded result — 888-miiy's own class, inside the arm written to
+fix it. THE SHELL DEFAULT IS THE MECHANISM: ${x:-0} did not paper over a
+missing value, it invented a FAVOURABLE one. Standing form: whenever a value
+is parsed out of a producer's output, consult the producer's exit status on
+the same path, and ask of every ${x:-N} what it says when the producer never
+ran — if the answer is a specific good number, the instrument cannot report
+its own absence.
+AND NO ENDPOINT-LESS HOST CAN REACH IT: they return at the skip branch above,
+so only the WITH-endpoint side sees it — exactly the half that had never run.
+That is the argument for insisting BOTH branches of a two-branch arm get
+exercised rather than one, and it generalises past this row.
+Falsified three ways on the fixture's own condition, extracted verbatim and
+diffed against the source first because a paraphrased condition proves
+nothing: fixed+dead grader → BAD naming the rc; fixed+real grader → OK,
+graded, unchanged; old+dead grader → the false green. THE MIDDLE ROW IS THE
+CONTROL — the change moved the wrong verdict and left the right one alone.
+TWO SELF-CORRECTIONS yoga put on the row rather than burying: they claimed
+this host had no spec index after checking ~/.cache alone, when it lives in
+the podman volume and the litmus precondition text enumerates all five rungs
+including that one — and the archived 789-nc2s note records macuahuitl making
+the same mistake for the same reason, so it is a repeat at fleet level. And
+yoga's own audit of a neighbouring packet on 2026-09-14 cited this arm's
+green as evidence the index was supplied; that conclusion survives on other
+grounds (the glob independently grades 33/33) but the evidence it leaned on
+could not tell a graded run from a dead grader.
+PROCESS, worth every host's records: yoga released the checkout lock while
+finalize was still pushing the MO-FULL record. Nothing contended and the
+record landed clean, but THE RELEASE BELONGS AFTER THE CYCLE'S LAST COMMIT,
+NOT AFTER THE MARKER LINE PRINTS — `mo-full-attest.sh record` moves HEAD, so
+the marker is derived at a head that still has to be pushed, and the lock has
+to cover that push. 892-pfnd checked and does not reproduce on yoga: no
+proxy:3128 in containers.conf, proxy running, 54 images — checked, not
+assumed.
