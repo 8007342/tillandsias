@@ -378,6 +378,20 @@ _PER_TEST_LOG=""
 LITMUS_LAST_TEST_TIMED_OUT=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
+# ORDER 1187-iij8. A SECOND DIMENSION ON THE SAME REDS, never a fourth bucket.
+#
+# Every test counted here is ALSO counted in TESTS_FAILED, deliberately. A
+# step killed at its budget has not passed, and 820-c8q8 settled that it still
+# FAILS — the rc=124 site says so in as many words ("Reported, never used to
+# change the verdict"). Making this an exemption would turn a noisy count into
+# a fail-open gate, which is strictly worse than the noise it replaced.
+#
+# What it buys: a closure row reads the COUNT, and "7 FAIL" cannot distinguish
+# seven broken assertions from seven steps that ran out of clock. The second
+# sends a fixer to re-fix something that is not broken — this row's whole
+# complaint, measured by esmeraldinha at the Git Bash locus 2026-09-14 and by
+# yoga across four files on a fat host 2026-09-15.
+TESTS_BUDGET_KILLED=0
 TESTS_RUN=0
 
 # Track which specs were tested. Portable bash-3.2 dedup+count (no
@@ -1706,6 +1720,10 @@ run_tests_for_spec() {
         # tell "took 30s" from "was stopped at 30s".
         if [[ "$_pt_rc" -ne 0 && "$LITMUS_LAST_TEST_TIMED_OUT" -eq 1 ]]; then
             _pt_rc=124
+            # 1187-iij8: counted IN ADDITION to the FAIL already recorded above.
+            # Note the ordering — log_test_result has already incremented
+            # TESTS_FAILED and nothing here decrements it.
+            TESTS_BUDGET_KILLED=$((TESTS_BUDGET_KILLED+1))
         fi
         if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
             _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
@@ -1745,6 +1763,13 @@ print_summary() {
 
     printf '  %bPASS%b:  %d\n' "${GREEN}" "${NC}" "$TESTS_PASSED" >&2
     printf '  %bFAIL%b:  %d\n' "${RED}" "${NC}" "$TESTS_FAILED" >&2
+    # 1187-iij8: printed only when non-zero, and worded as a SUBSET of the FAIL
+    # above rather than a sibling of it, so no reader can take it for a bucket
+    # that softens the verdict.
+    if [[ "$TESTS_BUDGET_KILLED" -gt 0 ]]; then
+        printf '  %bBUDGET%b: %d of those FAILs were killed at their budget, not failed assertions (still FAIL — 820-c8q8)\n' \
+            "${YELLOW}" "${NC}" "$TESTS_BUDGET_KILLED" >&2
+    fi
     printf '  %bSKIP%b:  %d (excluded from coverage)\n' "${YELLOW}" "${NC}" "$TESTS_SKIPPED" >&2
     printf '  %bTotal%b: %d (executed: %d, skipped: %d)\n' "${BOLD}" "${NC}" "$TESTS_RUN" "$total_executed" "$TESTS_SKIPPED" >&2
     echo "" >&2

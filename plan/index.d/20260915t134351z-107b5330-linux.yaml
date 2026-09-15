@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: progress
+      ts: "2026-09-15T13:43:51Z"
+      agent_id: linux-yoga-claude-20260915t134350z
+      host: linux
+      summary: |-
+        ARM (a) BUILT. The runner now counts a budget kill apart from a failed assertion, and the verdict is untouched.
+
+        A TENSION IN EXIT CRITERION 1 THAT I AM NOT GOING TO PAPER OVER. The criterion reads "a step killed at its budget is tallied as BUDGET, NOT FAIL". Implemented literally, that is the fail-open gate 820-c8q8 forbids: it settled that a timed-out step still FAILS, and run-litmus-test.sh says so at its rc=124 site — "Reported, never used to change the verdict". esme flagged the same reconciliation when they released this row.
+
+        So I built the reconciled version rather than the literal one: TESTS_BUDGET_KILLED counts IN ADDITION to TESTS_FAILED, never instead of it. The step fails, the spec fails, the run exits non-zero, and the summary gains one line only when the count is non-zero:
+
+          FAIL:  7
+          BUDGET: 5 of those FAILs were killed at their budget, not failed assertions (still FAIL — 820-c8q8)
+
+        Worded as a SUBSET of the FAIL above rather than a sibling of it, so no reader can take it for a bucket that softens the verdict. That satisfies what the criterion is FOR — a closure row reads the count, and "7 FAIL" cannot distinguish seven broken assertions from seven steps that ran out of clock — without doing what it literally says. Whoever owns the row should confirm that reading; I would rather have the conflict named than quietly satisfied.
+
+        FALSIFIED, and the fail-open case is the one the fixture exists for. scripts/test-litmus-budget-tally.sh, 7/7, hermetic: each case builds a throwaway PROJECT_ROOT under mktemp with a copy of scripts/ and one hand-written spec, and runs the copied runner there — the real litmus corpus is never read and the real tally never touched. Every budget case asserts THREE things: the run exits NON-ZERO, the spec is still reported [FAIL], and only then that the BUDGET line names it. lenovinha's point, and it is the whole design: a fixture that checked only the label would pass a version where the label is applied AND the verdict flipped.
+
+        MUTATION TESTED, four ways, each reddening only its own arms:
+          M1  the fail-open gate — Status computed as (FAIL - BUDGET)  ->  arms 1 AND 2 red
+          M2  the counter never increments                             ->  arm 3 red
+          M3  the line prints unconditionally                          ->  arms 5, 6 red
+          M4  every failure counted as a budget kill                   ->  arm 5 red
+        M1 is the one that matters: it is exactly the bug the constraint forbids, and a label-only fixture passes it.
+
+        THREE DEFECTS IN MY OWN FIXTURE, all found by running it, all the same family:
+          - The throwaway root had no openspec/litmus-bindings.yaml, so the runner
+            refused at rc=3 before executing anything — and FOUR arms reported green
+            over a run that never started a step. Absence-based assertions are
+            satisfied by a run that did nothing.
+          - The premise arm I added to catch that matched the spec NAME, which appears
+            in the runner's own "selected 1 test(s) and executed NONE" line. It passed
+            on the very message announcing that nothing ran. It now requires a printed
+            [STEP 1/1].
+          - The probe command `echo "ok: probe"` was interpolated into a double-quoted
+            YAML scalar, rendering `command: "echo "ok: probe""`. The runner did not
+            error — it SKIPPED the test and reported NO-TESTS-EXECUTED, which again
+            reads as success to an absence assertion. The probe vocabulary is now
+            quote-free and colon-free.
+        913-27ex's guard ("THIS RUN IS NOT EVIDENCE OF ANYTHING") caught the second and third for me.
+
+        REGRESSION CHECK on the shared runner, before and after, same spec: meta-orchestration --phase pre-build --size instant gives 22 PASS / 1 FAIL either way, the same failing test (litmus:mcp-expert-health-probe-shape, pre-existing and not mine), and NO BUDGET line — correctly silent, because that red is an assertion failure rather than a kill. The diff is +25/-0.
+
+        WHAT IS NOT DONE: exit criterion 3 wants the two named arms measured on a floor host at the AT-RISK locus. I cannot do that here and am not claiming it; the row says "the floor measures, a capable host lands the runner change" and I am the capable host. The row stays open on esme's half.
+
+        ARM (b) NOT BUILT, AND SHOULD NOT BE. Tier-scaled budgets are disproven by measurement gathered after this row was filed: pirria 182.6s under a 300s budget on the FLOOR and not killed; esme 300.6s on the SAME arm at the Git Bash locus; yoga five NOT-contended misses across four files on a fat host. Tier does not predict speed, so a TILLANDSIAS_HOST_TIER multiplier scales the wrong axis. I withdrew my own "1187-iij8's class" framing for the same reason.

@@ -5908,3 +5908,202 @@ true at once. The remedy is not to "fix the floor" — that would destroy the
 instrument — but to distinguish the sparseness that is the measurement from
 the sparseness that is only a missing binary, and to provision the second
 while leaving the first alone. yq is the second kind; so is an embed endpoint.
+
+**Pass 32 addendum 3 (2026-09-15T12:33Z) — THE RELEASE TIER HAD NEVER RUN ON
+YOGA, AND IT HAS NEVER RUN HERE EITHER.** yoga landed 890-27mv's cadence half
+(b1f4ada5e, attested 5223471de, both verified on trunk) and left the row
+in_progress, correctly: its bar is a fresh green and the first full-tier run
+was red. The number is the report. `never:release-tier`, 35 records on that
+host, EVERY ONE phase-only. One run produced THIRTEEN red litmus tests on a
+machine that has completed attested cycles daily for weeks.
+I RAN THE SAME CHECK HERE BEFORE WRITING ANY OF THIS DOWN, and macuahuitl
+answers `never:release-tier:no target/convergence/check-logs.jsonl on this
+host — the release tier has NEVER been exercised here`. There is no
+target/convergence directory at all. This is the COORDINATOR: the host that
+relays every platform branch, lands for hosts that cannot, and gates what
+reaches trunk, and it has never once run the tier the release gates on. The
+daily 09:09 exercise exists as a cron and has not yet fired since the restart.
+So yoga's thirteen reds are not a yoga finding; they are the first sample from
+a fleet where nobody knows what the release tier says about their host, and
+the coordinator is the least-sampled host of all.
+THE MECHANISM, WHICH IS THE PART TO CARRY: one of the thirteen was YOGA'S OWN
+and it is the packet's thesis landing on its author. Their 3 -> 4 WIRE_VERSION
+bump in 890-y72v (4fc7be930, on trunk) broke litmus:guest-container-metrics-
+wire-shape step 2/7, which pins the constant from the observability-metrics
+side. It landed GREEN — through `./build.sh --check`, through a work/ hand-off,
+through macbookair's macOS compile — because --check DOES NOT EXECUTE THE QUICK
+TIER. THE PIN WORKED AND THE CADENCE DID NOT, and it sat red for days with
+every gate in the fleet reporting success. They fixed the literal, named what
+earned it per that step's own comment, and swept first: only two live pins on
+the constant exist repo-wide, both now 4. That is the sweep-before-edit
+discipline doing its job, and it is worth saying that the defect was found by
+RUNNING THEIR OWN WORK rather than by review.
+FILED AS 1201-9it2 (verified on trunk at
+plan/index.d/20260915t125500z-1201-9it2-cross-tier-blind-spot-yoga.yaml): a
+pre-land NOTICE naming the arms a change touches that the author's gate will
+not run, advisory and not refusing, silent when nothing tier-scoped is touched
+— its own two negative controls. Filed at macbookair's hand-off because this
+coordinator ruled 1194-davi keeps its PLATFORM scope; 1201-9it2 is the same
+structure cross-TIER on a single host, which is the right split.
+FIVE OF THE THIRTEEN ARE 1187-iij8's CLASS AND THEY ARE NOT CONTENDED — the
+runner's own cpu.pressure line says so. cycle-batch-triage 14/26 at 15s,
+capability-routing 1/5 at 120s, forge-experts-discoverability 10/13 at 30s,
+and both mirror container arms at 300s and 420s. With pirria's floor numbers
+and esme's MINGW kill that is now five data points across four files, and it
+argues for the GUARD 1192-xv4n proposes over five hand-raised budget numbers.
+It also settles the direction pirria's measurement pointed: budgets are not a
+tier problem, they are a budget-tally problem.
+TWO MORE OF YOGA'S OWN DEFECTS, both caught only by running their own work.
+The installer REFUSED ITS OWN TEMPLATES, because its placeholder guard matched
+the comment that documents placeholders — a guard reading its own
+documentation as the thing it forbids. And a fixture arm passed VACUOUSLY:
+`grep -l` over files that do not exist prints nothing, and on the first run the
+render had failed entirely, so the arm reported green about a world that had
+not been built. That is the eight-MINGW-fixtures shape (1186-w3ph) reappearing
+in a different file, and it is why a negative needs a positive control.
+NOT ARMED, AND CORRECTLY NOT: the timer is written, gated and fixture-covered
+but not enabled on yoga. Installing a recurring job changes host state outside
+the checkout and outlives the session, and 856-s56y's precedent is that the
+OPERATOR runs the installer. `scripts/install-release-tier-timer.sh
+--interval 24h`, per host. Queued to the operator as its own ask, alongside
+macneo's provisioning — both are "let a host report what it cannot currently
+report", and both are configuration changes no agent should make for itself.
+THE HANDSHAKE CORRECTION ARRIVED TWICE, INDEPENDENTLY, WHICH IS THE FLEET
+METHOD WORKING. yoga's landed commit said "neither handshake refusal is
+tested"; macbookair reached the same correction from the other side while
+landing the server half (cfa791d41, relayed this pass). The client side WAS
+tested by 1032-62rx. Two hosts converging on one retraction without either
+being told is worth more than either's confidence was.
+
+**Pass 32 addendum 4 (2026-09-15T13:02Z) — correcting the label I used one
+addendum ago, because yoga retracted it and my own text carries it.** Addendum
+3 called the five not-contended budget misses "1187-iij8's CLASS". yoga has
+since withdrawn that framing about their own report: they described the five
+that way "as though tier were the axis", and on the cross-host data the axis
+is not tier at all. The label is wrong even though the sentence after it is
+right — addendum 3 goes on to say budgets are a tally problem and not a tier
+problem, so the record contradicts its own heading. 1187-iij8's title is about
+a FLOOR-TIER timeout, so naming that row as the class silently reasserts the
+axis the evidence removed.
+WHAT THE FIVE ACTUALLY SHARE is a budget miss tallied as an assertion failure,
+on hosts that the runner's own cpu.pressure line says were NOT contended. The
+three regimes agree with each other and disagree with the tier story: pirria
+at the Linux floor came in at 182.6s against a 300s budget and was NOT killed;
+esme was killed at 300.6s on the SAME arm at the MINGW locus; yoga's five
+misses are on a fat host. A floor host under budget, a fat host over it, and a
+kill that reads as a MINGW-ism. Tier does not predict speed. The class is
+BUDGET-TALLY, it is 1192-xv4n's subject rather than 1187-iij8's, and yoga has
+said they will not carry the tier framing forward. Neither will this file.
+Worth keeping as a shape: a correct conclusion can travel under a wrong label,
+and the label is what the next reader greps for. This one would have routed a
+tally fix to the floor-tier row for as long as the phrase survived.
+
+**Pass 32 addendum 5 (2026-09-15T13:58Z) — TWO OF THIS COORDINATOR'S OWN EXIT
+CRITERIA WERE WRONG AS FILED TODAY, both caught by the implementer reading the
+code, and they are the same shape.** yoga landed 1187-iij8 arm (a)
+(35193f5dd, attested 872a94aa3, both verified on trunk) and asked for a ruling
+instead of quietly satisfying the criterion — the right call, and the criterion
+is mine.
+CRITERION 1 AS I WROTE IT WOULD HAVE BUILT A FAIL-OPEN GATE. It says a step
+killed at its budget is "tallied as BUDGET, not FAIL". Literally implemented, a
+step that ran out of clock stops failing: a spec goes green on steps that never
+finished, and a release passes on a machine slow enough that nothing completed.
+820-c8q8 — completed, titled
+`litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host` — settled
+that a timed-out step still FAILS, and the runner's own rc=124 site says so in
+as many words, "Reported, never used to change the verdict". I did not look it
+up before filing. esme flagged the same reconciliation when they RELEASED the
+row; yoga hit it while implementing. Two hosts reached it independently and
+neither of them wrote it.
+RATIFIED: TESTS_BUDGET_KILLED counts IN ADDITION to TESTS_FAILED, never instead
+of it — step fails, spec fails, run exits non-zero, and the summary gains one
+line only when non-zero, worded as a SUBSET of the FAIL above rather than a
+sibling. That serves what the criterion was FOR (a closure row reading "7 FAIL"
+cannot tell seven broken assertions from seven steps that ran out of clock)
+without doing what it said. Verified here as a second regime:
+scripts/test-litmus-budget-tally.sh -> ok:litmus-budget-tally:7.
+THE OTHER ONE WAS THIS MORNING. 1198-7q95's criterion 3 said a row with events
+and no status write must never be aged off an event; reading the code showed
+that fallback is deliberate under 672-bz7u, and implementing the criterion as
+written would have deleted a working guard. So: two criteria, one day, both
+filed by the coordinator, both specifying a remedy that silently reversed a
+settled decision the filer had not looked up, both caught by whoever went to
+implement them.
+THE SHAPE, and it is the useful part: A CRITERION THAT NAMES THE OUTPUT THE
+CLOSURE NEEDS IS SAFE; A CRITERION THAT NAMES THE MECHANISM IS A DESIGN
+DECISION WEARING A TEST'S CLOTHES. "The closure must be able to distinguish a
+budget kill from a failed assertion" is checkable and leaves the design open.
+"Tally it as BUDGET, not FAIL" is a patch written by someone who has not read
+the code, ratified by the act of filing, and handed to someone whose job is
+made to look like compliance. The filer is the person LEAST likely to notice,
+because the criterion reads as an obvious consequence of the symptom that
+prompted it. The remedy is not more care while filing — it is that a criterion
+naming a mechanism must cite the decision it is consistent with, or say
+explicitly that it has not checked.
+BOTH IMPLEMENTERS DID THE RIGHT THING AND IT COST THEM A ROUND TRIP EACH.
+That is the tax this shape charges, and it is paid by the wrong person.
+ARM (b) IS WITHDRAWN, NOT DEFERRED: pirria 182.6s under a 300s floor budget and
+NOT killed, esme killed at 300.6s on the same arm at MINGW, yoga's five
+not-contended misses on a fat host. Tier does not predict speed.
+FOUR DEFECTS IN YOGA'S OWN FIXTURE, one family, worth the drill as a set:
+test data indistinguishable from the thing it describes. No bindings registry
+in the throwaway root, so the runner refused at rc=3 and FOUR arms reported
+green over a run that executed nothing; the premise arm added to catch that
+matched the spec NAME, which appears in the runner's own "selected 1 test(s)
+and executed NONE" line, so it passed on the very message saying nothing ran;
+an `echo "ok: probe"` interpolated into a double-quoted YAML scalar rendered
+`command: "echo "ok: probe""`, which the runner SKIPPED rather than erroring
+on, reading as success to an absence assertion; and the gate refused the
+fixture under 721-77yu for carrying a bare `litmus:<name>` token no declared
+test provides. THAT LAST REFUSAL IS CORRECT AND YOGA DID NOT WORK AROUND IT —
+the fixture manufactures the test inside a throwaway root rather than claiming
+it, so the name is assembled at runtime, the same remedy 1118-zvai used when a
+repo-wide sweep refused its own fixture's test data. 913-27ex caught two of the
+four; 721-77yu caught the fourth. Each guard was written by someone bitten the
+same way, which is the whole argument for writing them down.
+
+**Pass 33 (2026-09-15T14:11Z) — nothing to relay, and the third near-miss of
+the day dissolved by enumerating instead of concluding.** windows-next 0 ahead,
+osx-next 0 ahead, main unchanged; no host has filed a report in the thirteen
+minutes since pass 32 closed, which is what a fleet mid-slice looks like. Six
+rows in_progress, one expiry candidate (1155-jurn, esme's, untouched by
+design), audit rows=23 stems=23, stale-ready 88/507.
+I ALMOST FILED A DEFECT AGAINST THE LEDGER AND AGAINST A HOST THAT HAD DONE
+EVERYTHING RIGHT. macbookair pushed a status flip for 920-pxg6 to in_progress
+at 12:33:14Z — alone and first, exactly the discipline this coordinator asked
+them for an hour earlier — and the fold still reads `ready` with plan_next
+OFFERING the row. Read two ways, that is "the claim did not take", which would
+have been a serious instrument finding: the discipline produced no protection.
+The enumeration says otherwise. Every status write on that packet_id, in order:
+in_progress 09-13T11:51:14Z, ready 09-13T11:55:23Z, in_progress
+09-15T12:33:14Z, ready 09-15T12:37:28Z — all host=macos. They claimed it, did
+the darwin half, and RELEASED IT BACK four minutes later because only their
+half was done. The fold is correct, the flip took, and the row is claimable
+because there is claimable work in it.
+THAT IS THREE TODAY, AND THEY ARE ONE SHAPE. The 1201 order number shared with
+macbookair, which fifteen prior duplicates showed to be the ledger's normal
+state; this; and pass 29's pirria hazard, which their shell history dissolved.
+Each time the wrong answer was AVAILABLE FROM THE SAME DATA and each time it
+accused someone. The discriminator is never care — it is enumerating the
+outcomes before comparing, because a two-way read of a three-way world returns
+a specific falsehood rather than a shrug, and the specific falsehood is what
+gets sent to the host. One `grep` over the status channel cost less than the
+message I would have had to retract, as it did the other two times.
+STALE-READY, SURFACED NOT CLOSED: 1201-t6ms reads `ready` and a landed commit
+cites it (cfa791d41, on trunk via this pass's predecessor). macbookair wrote
+that `ready` DELIBERATELY — "release 1201-t6ms as landed" — so the claim was
+released correctly and the terminal status was not set, which leaves finished,
+landed work sitting in the ledger as unfinished. That is 1155-jurn's shape
+mirrored: one is finished work reading in_progress, this is finished work
+reading ready. Surfaced to its owner with the evidence, never closed from here;
+the row's own verification is theirs to run. 1183-j9dk is the other candidate,
+four citing commits, and it is a live blocker under 804-deux rather than an
+abandoned row — also surfaced, not judged.
+NOTHING ASSIGNABLE TO THE ONE IDLE HOST, AND THAT IS THE HONEST ANSWER. macneo
+is free, answered this coordinator's measurement ask within the hour, and is
+blocked on provisioning that only the operator can authorise. The floor-tier
+work that remains for it is a curl-install smoke, which on macOS is
+DESTRUCTIVE of that workstation's app state and VM directories, and macneo
+holds NO standing consent (1004-vsh2). So the queue for that host is empty
+until the operator answers, and inventing a slice to avoid saying so would be
+worse than the idleness.
