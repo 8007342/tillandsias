@@ -5709,3 +5709,51 @@ every path the code under test consults). Widening 1194-davi to cover both
 would hand it an inventory it cannot derive and blur the one thing it can
 mechanise. Recorded instead as the third axis-14 recurrence; 1197-82rm is the
 maintenance-path instance of the same axis, filed an hour before this one.
+890-y72v COMPLETE (yoga, 4fc7be930 / 8f19d7671 / MO-FULL 359438f00): wire
+v3→v4, DeliverCredentialsReply carries an accept/reject discriminator, three
+tray sites consult it. CLOSED PARTIALLY ON PURPOSE, with the remainder filed
+as 1200-ih38 and the trap named: `Accepted` means STORED AND PERSISTED, not
+"authenticates against a live vault", and the share that does not open the
+vault — the operator's 2026-08-17 failure, the case that produced the packet
+— still reports Accepted, because nothing on the deliver path asks the vault
+anything (the unseal happens later in ensure_vault_running, spawned after the
+reply is sent). Widening the word would have reintroduced this packet's own
+failure mode one level up. The trap on the remainder: a host with no vault
+running must NOT manufacture a Rejected, because "could not check" and
+"checked and refused" are different answers and `Unstated` already exists for
+the first — a three-way world, refusing to be flattened into two.
+THE VERIFICATION LESSON, and it is the fleet's third instrument finding today:
+`cargo check -p tillandsias-macos-tray` on Linux COMPILES ONLY THE CRATE'S
+DEPENDENCIES — a deliberate syntax error planted in the target file produces
+ZERO errors and rc 0. "I cross-checked it" can mean nothing was checked. yoga
+held the change unlanded on work/890-y72v until macbookair compiled it, and
+macbookair falsified their own instrument first: planted error → rc 101, two
+errors on lib AND --tests; restored byte-identically → rc 0. Neither host
+overclaimed — the report reads "the types line up at all seven sites on
+macOS", NOT "macOS verified", because a compile is not a run and the v3→v4
+behaviour against a live guest is unproven by either. Same shape as
+macbookair's zigbuild-without---tests finding this morning: PLANT A
+DELIBERATE ERROR AND CONFIRM THE INSTRUMENT REPORTS IT before trusting its
+green.
+A NUMBER STANDING PROXY FOR A REFUSAL, made explicit rather than left silent:
+the v4 bump is safe only because the handshake refuses a mismatched peer, and
+macbookair's p2 on 54a9471a1 established that neither refusal is tested —
+what is pinned is the version CONSTANT. yoga's change lays a second
+transition on that unproven mechanism; they offered to hold, macbookair
+argued that holding does not make the refusal tested and only leaves a live
+defect standing, and yoga accepted. macbookair has taken the refusal test as
+their next slice. Ask of any constant-pinning guard what BEHAVIOUR the number
+stands in for, and whether that behaviour is tested anywhere.
+THREE THINGS CAUGHT BY GUARDS RATHER THAN BY THE AUTHOR, which is the system
+working: the version pin went red on the legitimate bump; the pre-push hook
+refused the work/ branch for want of a gate stamp, and RUNNING THE GATE
+RATHER THAN REACHING FOR --no-verify is what surfaced the pin; and
+macbookair's --tests advice found error[E0063] in yoga's OWN crate — plain
+check rc=0, --tests found a broken fixture — before anything else ran.
+AND YOGA'S SELF-CORRECTION, which is the sharpest line of the exchange: they
+said all seven sites would break at compile time. Three did not. Those three
+match `{ success: true, .. }` and THE REST PATTERN ABSORBED THE NEW FIELD
+SILENTLY — so they needed rewriting rather than getting a reprieve, and "a
+reader trusting the compiler would have shipped the old behaviour under a new
+wire version". A rest pattern makes the compiler stop being a change detector
+exactly where you are relying on it to be one.
