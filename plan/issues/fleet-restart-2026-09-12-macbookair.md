@@ -359,3 +359,45 @@ looked"* will eventually be read as the former.
   host pumps CFRunLoop). Noted on next_action so the next claimant does not read
   the correct result as a broken forwarder — the failure mode that constraint
   was written down to prevent.
+
+- 2026-09-15 (cycle, 690-w94k item 1): the discarded CFRunLoopRunInMode result
+  was NOT benign, as the packet suspected. Measured on a bare thread: a single
+  call returned kCFRunLoopRunFinished in 43.3us instead of the 250ms requested,
+  and the loop ran 3,471,102 iterations in 250ms — a saturated core across nine
+  call sites including the boot waits. Fixed to 34 iterations, wall clock
+  intact. Guard counts CFRunLoopRunInMode ENTRIES, because wall-clock cannot
+  distinguish park from spin: the loop honours its deadline either way.
+- 2026-09-15: macneo found this packet's line citations stale 3 of 3 (881-29me).
+  :870 and :1238 are inside the embedded provisioning SHELL script, and :1238
+  sits four lines from the provision.state write 1084-x8ya depends on. I reached
+  item 1's real site by grepping the symbol, so I missed the trap BY HABIT, not
+  by design. A line number is a claim about a file that has since moved.
+- 2026-09-15 (1193-yw6u): TRUNK IS RED ON macOS and no Linux host can see it.
+  b3a93780b (1189-2ra5) reds test-host-tools.sh; the prover row is macOS-scoped
+  so the arm never ran in the gate that landed it. Bisected in pristine
+  worktrees. Both macOS hosts blocked from landing any code.
+- 2026-09-15, THE PROCESS ERROR: I ran the pre-land gates BEFORE filing the new
+  packet, so check-scorable-obligation-added answered skip:no-new-packets and
+  the real refusal surfaced only at push. Run the gates AFTER the last ledger
+  write, not before.
+- 2026-09-15: three refusals in a chain worth knowing — the pre-push stamp
+  cannot be refreshed by a macOS host while trunk is red (split the plan half
+  onto a clean tree; salvage branch holds the code, no --no-verify); "plan
+  binary is STALE" is a validator-surface HASH not an mtime, cleared by
+  check-plan-binary-current.sh after a rebuild; and a verifiable_closure
+  beginning with a BACKTICK matches nothing because the accept patterns are
+  anchored to the first character. The last is documented in the checker's own
+  comments and I walked into it anyway.
+- 2026-09-15: `tillandsias-plan status <order>` reads the LOCAL FOLD, not the
+  fetched remote ref. I queried 1194-davi, got "no packet matches", and reported
+  it as possibly-misfiled — it was on trunk the whole time, 23 seconds after my
+  own duplicate. Absent and negative render identically AGAIN, this time inside
+  the ledger tooling. To ask whether a packet exists on trunk:
+  `git grep -l <order> origin/linux-next -- plan/index.d/` WITH A CONTROL search
+  that must return nothing. macneo hit the identical shape on 1145-iigx this
+  week; on a wedged host nobody's fold is current, because integrating is the
+  thing that cannot be done.
+- 2026-09-15: I generalised "plan-only pushes and the relay work" from THIS host
+  to all macOS hosts. False — macneo was wedged out of the plan lane entirely in
+  the same hour. Two hosts, one trunk, opposite outcomes. Correction recorded in
+  1195-m9vi's context rather than left in a message.
