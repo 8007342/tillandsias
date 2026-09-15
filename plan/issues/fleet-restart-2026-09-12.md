@@ -5418,3 +5418,41 @@ install half did fire, so that host's launcher now reports v56.9.15.1, a
 label on no branch, overwriting the published v56.9.13.1 its own smoke had
 asserted four hours earlier — the operator's own machine, their own command,
 and they read the version back immediately afterwards.
+THE CAPABILITY RULING IS A UNION, NOT A SUBSTITUTION — refinement relayed by
+yoga, and it corrects what this drill said two entries ago. Asked directly
+whether the field should be host or capability, the operator answered "use
+both: CRDT style". So blocked_by takes BOTH token kinds ADDITIVELY: a
+colon-bearing token is a capability (kind:macos, schedulable:npu,
+tier:gpu-rocm) matching whatever host answers to it, a bare token is a host
+identity, and the reader unions them — two writers can name one block
+differently without knowing about each other, and neither write needs
+rewriting when the roster turns over. `status blocked --host` therefore works
+through the bare-token path exactly as approved. The coordinator had written
+"capability, never a host" from the first relay and was about to propagate a
+rule that strips a half the operator kept; corrected. The durable guidance is
+weaker and truer: prefer the capability, because a bare name is the half that
+dies when a host is renamed or retired — do not forbid it. THREE references
+now, not two: a CLAIM (who holds the row, host-keyed, expires within the
+hour), WRITER ATTRIBUTION on a blocked declaration (who DECLARED it,
+host-keyed), and BLOCKED-BY CONTENT (what the row NEEDS, capability
+preferred). macneo's cron text named only `--host` and stopped, which says
+nothing about the content and would have put the blocker's identity in the
+only field the text names; rewritten once pointed out, which is the failure
+mode to watch for when the instruction goes out.
+A KILLED GATE IS NOT A GATE DEFECT — macneo, correcting their own suggestion
+to yoga, and it closes an open question rather than opening one. They had
+proposed yoga's killed gate was check-gate-memory-floor.sh failing to refuse
+by name; yoga measured instead of accepting it, and the gate's floor check
+fired CORRECTLY, reporting 12510MB available against a 1024MB floor with zero
+kernel OOM records. The actual killer was the AGENT HARNESS's own low-memory
+guard reaping the background command it was tracking — a layer above both the
+gate and the kernel, which the gate cannot see, on a 14GB host, so it is not
+a floor-tier property and a tier-scoped fix would miss it. 1176-fn2p worked.
+This is the same shape macuahuitl measured during a cargo gate with 50 GiB
+free, and the REMEDY IS ALREADY IN DAILY USE HERE: take the process out of
+the harness's hands — `setsid nohup <script> < /dev/null > log 2>&1 &` from a
+script FILE, the script echoing a terminal `rc=` marker, and a Monitor
+watching the log for verdict lines rather than the command being held. Every
+land on this host is detached that way and none has been reaped since. Passed
+to both hosts. Standing rule: when a gate dies mid-run, check the harness
+layer before the gate.
