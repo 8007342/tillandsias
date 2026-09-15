@@ -98,6 +98,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "loop-status-verify",
     "methodology",
     "methodology-ask",
+    "metrics-log-path",
     "methodology-index",
     "next",
     "next-order",
@@ -404,6 +405,16 @@ const USAGE: &str = concat!(
     "                                     then answer it. Unrouted questions are unsupported.\n",
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
+    "           metrics-log-path <basename> [repo-root]\n",
+    "                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:\n",
+    "                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when\n",
+    "                                     there is no writable checkout. Mirrors scripts/metrics-log-path.sh,\n",
+    "                                     which a Rust binary cannot source — this subcommand exists so the\n",
+    "                                     two implementations can be COMPARED by a gate (arm 1b of\n",
+    "                                     scripts/test-metrics-log-path-agreement.sh) instead of drifting.\n",
+    "                                     Before it, the CLI wrote usage records to a hardcoded /tmp while\n",
+    "                                     every shell reader looked in .cache/metrics: 901 records written,\n",
+    "                                     0 readable. Reads no ledger, so it answers on a broken one.\n",
     "           append-event <id|order> <type> (--summary-file <path>|-) --ts <ISO> [--agent A] [--host H]\n",
     "                                     Prose comes from a FILE or stdin so the shell cannot expand it (971-7muc).\n",
     "                                     A literal <summary> argument still works but is REFUSED when it carries\n",
@@ -2409,15 +2420,96 @@ fn utc_now_iso() -> String {
     }
 }
 
-/// ORDER 706-jmi7. Record direct CLI invocations to the shared telemetry channel
-/// (${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}).
+/// ORDER 1125-92xa. Resolve a metrics log path the way `scripts/metrics-log-path.sh`
+/// does, because a Rust binary cannot source a shell file.
+///
+/// THE DEFECT THIS CLOSES. `log_cli_usage` hardcoded `/tmp/forge-expert-usage.jsonl`
+/// while every shell participant resolved `<checkout>/.cache/metrics/…` through the
+/// shared rule. Writer and reader were on different paths BY CONSTRUCTION, so nothing
+/// could fail and nothing reported. MEASURED on pirria 2026-09-12T02:26Z: 901 records
+/// written to `/tmp`, 0 readable by their own reader — and the file grew during the
+/// measurement, because the new records were the measuring agent's own gate CLI calls.
+/// The instrument recorded the act of being examined, into a file its reader could not
+/// open.
+///
+/// WHY THIS IS A SECOND IMPLEMENTATION AND NOT A SECOND RULE. 1125-92xa warns against
+/// "a second hardcoded default in Rust that merely agrees with the shell today", and it
+/// is right — two copies of a rule drift. The options it offers are deriving the path,
+/// or refusing to log unless every caller names the log. Refusing is wrong here:
+/// `log_cli_usage` is on the hot path of every CLI invocation including a human typing
+/// `tillandsias-plan status`, so refusal would either spam stderr or silence the
+/// channel. Shelling out to the rule file is worse — it costs a process per invocation
+/// and assumes `scripts/` is beside the binary, which is false for an installed one.
+///
+/// So the algorithm is duplicated ON PURPOSE and the DRIFT is what gets gated: the
+/// `metrics-log-path` subcommand below exposes this function's answer, and arm 1 of
+/// `scripts/test-metrics-log-path-agreement.sh` compares it against the shell rule's
+/// answer for the same root. A divergence cannot land silently, which is the property
+/// the single-file rule was protecting. Keep the two in step, and change them together.
+pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf {
+    // Mirrors metrics_default_log() in scripts/metrics-log-path.sh: a writable
+    // checkout wins, /tmp is the documented fallback for a forge or an
+    // out-of-repo call. `.git` may be a directory (normal clone) or a file (a
+    // worktree or submodule), and the shell's `-d` test accepts only the first;
+    // `exists()` here would answer differently inside a linked worktree, so this
+    // deliberately matches the shell's is_dir check rather than improving on it.
+    let root = match repo_root {
+        Some(r) => Some(r.to_path_buf()),
+        None => find_repo_root(),
+    };
+    if let Some(root) = root
+        && root.join(".git").is_dir()
+    {
+        let dir = root.join(".cache").join("metrics");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            return dir.join(basename);
+        }
+    }
+    PathBuf::from("/tmp").join(basename)
+}
+
+/// Find the checkout THIS BINARY came from — not the one the caller happens to
+/// be standing in.
+///
+/// ANCHOR ON THE EXECUTABLE, BECAUSE THE SHELL RULE ANCHORS ON ITS OWN FILE.
+/// `metrics_default_log` in scripts/metrics-log-path.sh defaults its root from
+/// `${BASH_SOURCE[0]}/..` — the checkout the RULE lives in. The first draft of
+/// this function walked up from the current directory instead, which looks
+/// equivalent and is not: the CLI is run from arbitrary directories, so it
+/// started creating `.cache/metrics/` inside any git repo that happened to be
+/// the cwd. The gate caught it immediately — the issue-capture-lane litmus builds
+/// scratch repos, invokes the binary inside them, and saw an unexpected
+/// untracked file that no .gitignore there covers, failing two arms about
+/// something else entirely.
+///
+/// Anchoring on the executable also gets the installed case right by falling
+/// out naturally: a binary in ~/.local/bin has no checkout above it, so this
+/// returns None and the caller uses /tmp — which is exactly the documented
+/// "there is no writable checkout" fallback, not a special case.
+fn find_repo_root() -> Option<PathBuf> {
+    let mut dir = std::env::current_exe().ok()?;
+    // .../<checkout>/target/{debug,release}/tillandsias-plan -> pop to the file's dir
+    dir.pop();
+    loop {
+        if dir.join(".git").is_dir() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// ORDER 706-jmi7, path corrected by 1125-92xa. Record direct CLI invocations to
+/// the shared telemetry channel
+/// (${TILLANDSIAS_EXPERT_USAGE_LOG:-<checkout>/.cache/metrics/forge-expert-usage.jsonl}).
 pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
     if std::env::var_os("TILLANDSIAS_NO_TELEMETRY").is_some() {
         return;
     }
     let log_path = std::env::var("TILLANDSIAS_EXPERT_USAGE_LOG")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp/forge-expert-usage.jsonl"));
+        .unwrap_or_else(|_| metrics_default_log("forge-expert-usage.jsonl", None));
 
     let ts = utc_now_iso();
     let line = format!(
@@ -3374,6 +3466,34 @@ fn main() {
     // validates that shape (`^[a-z][a-z0-9-]*$`) and treats anything else —
     // a usage dump, a warning, an empty stream — as "this binary predates the
     // manifest", which is its own named state rather than a guess.
+    // ORDER 1125-92xa. Print where THIS BINARY would put a metrics log, so the
+    // agreement fixture can compare the Rust participant's answer against the
+    // shell rule's for the same root. Without a probe the two implementations
+    // could only be compared by reading them, which is what let the writer and
+    // the reader sit on different paths for 901 records.
+    //
+    // Deliberately early, beside `capabilities`: it must not need the ledger, so
+    // it stays answerable on a host where the ledger is broken — and cheap
+    // enough that the fixture can call it per arm.
+    //
+    // Optional second argument is the repo root, mirroring the shell rule's
+    // second parameter, so the fixture can ask about a root that is NOT the cwd
+    // (that is how the outside-a-checkout negative control is driven).
+    if args[0] == "metrics-log-path" {
+        let base = args.get(1).map(String::as_str).unwrap_or("");
+        if base.is_empty() {
+            eprintln!("usage: tillandsias-plan metrics-log-path <basename> [repo-root]");
+            std::process::exit(2);
+        }
+        let root = args.get(2).map(PathBuf::from);
+        emit(
+            metrics_default_log(base, root.as_deref())
+                .to_string_lossy()
+                .as_ref(),
+        );
+        return;
+    }
+
     if args[0] == "capabilities" {
         for token in capability_tokens() {
             emit(token);

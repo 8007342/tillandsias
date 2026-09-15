@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-shared-metrics-path-rule-is-a-shell-file-so-the-rust-writer-cannot-ask-it-and-901-usage-records-are-unreadable-by-their-own-reader
+    event:
+      type: completed
+      ts: "2026-09-15T03:11:25Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Landed df65f1377, verdict ok:land:df65f1377:attempt-1, verified on origin by tree.
+
+        THE CROSS-LANGUAGE RULE, decided as the row asked and stated here so nobody has to infer it. The Rust side DERIVES the path; it does not re-hardcode one. The row is right that a second copy of a rule drifts, so the DRIFT is what is gated: the new metrics-log-path subcommand exposes the binary's own answer and arm 1b compares it against the shell rule's for the same root. Refusing to log without an explicit env var was the alternative and is wrong here, because log_cli_usage is on the hot path of every invocation including a human typing `tillandsias-plan status` — refusal would either spam stderr or silence the channel. Shelling out to the rule file costs a process per call and assumes scripts/ sits beside the binary, which is false for an installed one.
+
+        THE MISTAKE WORTH RECORDING, because it is the same class as the defect. The first draft anchored on the CURRENT DIRECTORY. The shell rule anchors on its OWN FILE (${BASH_SOURCE[0]}/..) — the checkout the rule lives in — and those look equivalent until you remember the CLI is run from arbitrary directories. It began creating .cache/metrics inside any git repo that happened to be the cwd. The gate caught it within one run: the issue-capture-lane litmus builds scratch repos, invokes the binary inside them, and saw an untracked file no .gitignore there covers — two arms red, about something else entirely. Anchoring on the executable also gets the installed case right for free: a binary in ~/.local/bin has no checkout above it, so it falls back to /tmp, which is the documented "no writable checkout" branch rather than a special case.
+
+        WHY ARM 1C EXISTS, measured rather than argued. Arm 1b compares RESOLVERS, and a resolver that agrees proves nothing about where log_cli_usage actually appends — the probe and the writer can drift exactly as the shell and Rust sides did. Falsification: reverting ONLY the writer while keeping the probe leaves arm 1b GREEN and arm 1c catches it. Without 1c this fixture would have passed a broken writer, which is the same shape as the original defect: an instrument that cannot report that it could not look.
+
+        THE SECOND HALF. The /tmp stub was in three scripts, not one. cycle-metrics.sh was fixed by 1096-p3tn; check-mcp-expert-health.sh (WRITER of forge-expert-health.jsonl) and check-mcp-surface.sh (its READER) still carried it byte-identical, both DROPPING repo_root so they answered /tmp even inside a writable checkout. Both now take 1096-p3tn's shape. The distinction preserved is load-bearing: metrics_default_log's own /tmp fallback is correct and the forge depends on it; what refuses is being unable to ask the question at all.
+
+        EXISTING RECORDS, the row's question 4: MERGED on this host. 1223 records appended to the canonical path, which was absent, so nothing could be lost or double-counted. Independently reproduces pirria's finding on a second host. /tmp is volatile, so for any other host the honest reading is "declare historical" — the same one-line append recovers them where wanted.
+
+        CYCLE NOTE. Six gate runs, five of them red on something that was NOT the defect being fixed, every one a real problem this change introduced: a clippy collapsible-if, the crate's own every-dispatch-arm-is-documented-in-usage test, a hardcoded target/ probe refused by check-plan-binary-probe-usage.sh (704-zcgi), the cwd-anchoring above, and a `litmus:` token in a COMMENT that the pin guard correctly read as a verification claim this fixture does not make — the "quoted history lives in comments, guards scan declarations" hazard, from the other side. Also of note for the drill: a `pkill -f 'build.sh --check'` matched the watching shell's own command line and killed the monitor along with the gate, and the harness reaped its background waiter under memory pressure twice more; the land itself, run under setsid, survived both.

@@ -40,6 +40,127 @@ else
     bad "a health-log participant still hardcodes its own path (probe=$health_decl surface=$surface_decl report=$metrics_decl)"
 fi
 
+# ── arm 1b: THE RUST PARTICIPANT AGREES WITH THE SHELL RULE (1125-92xa) ───────
+#
+# The rule lives in a SHELL file, and a Rust binary cannot source one — so
+# tillandsias-plan was never a participant at all. It hardcoded
+# /tmp/forge-expert-usage.jsonl while every shell reader resolved
+# <checkout>/.cache/metrics/. Writer and reader on different paths BY
+# CONSTRUCTION: nothing failed, nothing reported, and on pirria 2026-09-12T02:26Z
+# the usage log held 901 records that its own reader could not open — growing as
+# it was measured, because the new records were the measuring agent's own gate
+# CLI calls.
+#
+# 1125-92xa's remedy duplicates the ALGORITHM in Rust rather than the RULE, and
+# this arm is the reason that is safe: it compares the binary's own answer to the
+# shell rule's answer for the same root, so the two cannot drift apart silently.
+# That is the property the single-file rule was protecting, kept by a gate
+# instead of by a shared file, because no shared file can span the two languages.
+#
+# It asks the BINARY, not the source, for the same reason arm 1 asks the scripts:
+# a participant that forgets to consult the rule must be caught, not assumed.
+# RESOLVE THE BINARY THROUGH THE SHARED PROBE, never a hardcoded target/ path
+# (704-zcgi, 721-nyev). The first draft of this arm walked target/debug then
+# target/release itself and was refused by check-plan-binary-probe-usage.sh,
+# correctly: three scripts had already written that same wrong probe, and the
+# Windows/WSL target/ layout is not the one a hand-written search assumes. An
+# executable bit is a claim; running the binary is evidence.
+rust_bin=""
+if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
+    # shellcheck source=scripts/plan-binary-probe.sh
+    . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(resolve_plan_binary 2>/dev/null || true)"
+fi
+# ABSOLUTISE IT. The probe answers with a repo-relative path ("./target/release/…"),
+# and arm 1c below runs the binary from a scratch checkout — a relative path
+# resolves against THAT directory and silently does not exist. It cost a cycle:
+# the arm reported "no usage record was written by either path", which is the
+# honest skip it is supposed to emit when it observed nothing, and was correct —
+# it had observed nothing, because the command never ran.
+case "$rust_bin" in
+    "") ;;
+    /*) ;;
+    *) rust_bin="$ROOT/${rust_bin#./}" ;;
+esac
+if [ -z "$rust_bin" ]; then
+    # NOT a pass. An absent binary means this participant was not examined, and
+    # saying so by name is the whole point of the packet this arm comes from.
+    printf 'skip: no tillandsias-plan binary to ask (build it to exercise the Rust participant)\n'
+else
+    rust_usage="$("$rust_bin" metrics-log-path forge-expert-usage.jsonl "$ROOT" 2>/dev/null)"
+    shell_usage="$(
+        . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null || true
+        metrics_default_log forge-expert-usage.jsonl "$ROOT"
+    )"
+    if [ -z "$rust_usage" ]; then
+        bad "the binary does not answer 'metrics-log-path' — the Rust writer cannot be asked where it writes, which is the 1125-92xa defect"
+    elif [ "$rust_usage" = "$shell_usage" ]; then
+        ok "the Rust writer and the shell rule resolve the same usage-log path"
+    else
+        bad "Rust writer and shell rule DISAGREE: rust=$rust_usage shell=$shell_usage"
+    fi
+
+    # ── arm 1c: THE WRITER ACTUALLY USES THE RESOLVER, not just exposes it ────
+    #
+    # Arm 1b compares RESOLVERS, and a resolver that agrees proves nothing about
+    # where log_cli_usage actually appends: the probe subcommand and the writer
+    # could drift apart exactly as the shell and Rust sides did. That is the same
+    # class of gap as the original defect — an instrument that cannot report that
+    # it could not look — so this arm drives the real writer end to end and reads
+    # the file it lands in.
+    #
+    # The scratch dir is a git repo the binary is RUN FROM, not the one it
+    # belongs to. The record must land in the BINARY's checkout — the path the
+    # shell reader reads — and must not appear here: a writer that anchored on
+    # the cwd would create .cache/metrics inside any repo it was invoked in,
+    # which is untracked-and-unignored there. That is not hypothetical; it broke
+    # two arms of the issue-capture-lane litmus (named without its pin prefix on
+    # purpose: a guard scans scripts for that token and reads it as a
+    # verification claim this fixture does not make), about something else,
+    # within one gate of being written.
+    _wr="$(mktemp -d "${TMPDIR:-/tmp}/metrics-writer.XXXXXX")"
+    mkdir -p "$_wr/.git"
+    _tmp_usage="/tmp/forge-expert-usage.jsonl"
+    _tmp_before=0
+    [ -f "$_tmp_usage" ] && _tmp_before="$(wc -l < "$_tmp_usage" 2>/dev/null || echo 0)"
+    _canon="$shell_usage"
+    _canon_before=0
+    [ -f "$_canon" ] && _canon_before="$(wc -l < "$_canon" 2>/dev/null || echo 0)"
+    # A subcommand that actually reaches log_cli_usage. `capabilities` returns
+    # early and logs nothing, which the arm reported honestly as a skip rather
+    # than as agreement — keep it that way if this one ever stops logging.
+    ( cd "$_wr" && "$rust_bin" --index "$ROOT/plan/index.yaml" capability-matrix --hosts >/dev/null 2>&1 || true )
+    _stray="$_wr/.cache/metrics/forge-expert-usage.jsonl"
+    _tmp_after=0
+    [ -f "$_tmp_usage" ] && _tmp_after="$(wc -l < "$_tmp_usage" 2>/dev/null || echo 0)"
+    _canon_after=0
+    [ -f "$_canon" ] && _canon_after="$(wc -l < "$_canon" 2>/dev/null || echo 0)"
+    if [ -e "$_stray" ]; then
+        bad "the writer created $_stray — it anchored on the CWD, so it will litter every repo it is run from"
+    elif [ "$_canon_after" -gt "$_canon_before" ]; then
+        ok "the CLI writer appends to the canonical path the reader reads (${_canon_before} -> ${_canon_after})"
+    elif [ "$_tmp_after" -gt "$_tmp_before" ]; then
+        bad "the CLI writer still appends to $_tmp_usage — 1125-92xa is back"
+    else
+        # Nothing grew anywhere: this binary logged nothing at all, so the arm
+        # did not observe the writer. Say that rather than counting it as
+        # agreement — an instrument that cannot report that it could not look is
+        # the class of defect this whole packet is about.
+        printf 'skip: no usage record was written by any path (telemetry off, or no logging subcommand ran)\n'
+    fi
+    rm -rf "$_wr"
+
+    # NEGATIVE CONTROL for the Rust half: outside a checkout it must still fall
+    # back to /tmp, exactly as the shell rule does. A fix that made the binary
+    # always write into a checkout would break the forge.
+    rust_outside="$("$rust_bin" metrics-log-path forge-expert-usage.jsonl "/nonexistent-checkout-$$" 2>/dev/null)"
+    if [ "$rust_outside" = "/tmp/forge-expert-usage.jsonl" ]; then
+        ok "outside a checkout the Rust writer falls back to /tmp (forge path preserved)"
+    else
+        bad "Rust no-checkout fallback broke: $rust_outside"
+    fi
+fi
+
 # ── arm 2: inside a checkout the default is repo-relative, not /tmp ───────────
 case "$probe_path" in
     "$ROOT/.cache/metrics/"*) ok "in-checkout default is repo-relative: ${probe_path#"$ROOT"/}" ;;

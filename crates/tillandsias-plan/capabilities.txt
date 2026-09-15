@@ -58,6 +58,7 @@ loop-status-verify
 methodology
 methodology-ask
 methodology-index
+metrics-log-path
 next
 next-order
 # One filename, two readers, so the "available now" and "available after a

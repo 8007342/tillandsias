@@ -1,0 +1,28 @@
+# Gate step 1189-2ra5 — data, not code.
+#
+# Binds the locked-vs-absent keyring discriminator. Hermetic: every arm drives a
+# STUB busctl and a stub gh on PATH inside a scratch repo, so the fixture reads
+# the same on a locked host, an unlocked host, and a host with no secret service.
+#
+# WHY A VERDICT STRING IS WORTH A GATE STEP. missing:no-credential-channel means
+# "there is no credential here", whose obvious remedy is `gh auth login` — the
+# one action 1025-a896 forbids, because a re-auth on one host evicts the
+# operator's token on every other host. A locked keyring reported as missing
+# therefore trades a fleet-wide outage for a passphrase prompt. That happened on
+# lenovinha 2026-09-14 and cost a gated land its push.
+#
+# THE ARMS THAT MATTER ARE THE NEGATIVE CONTROLS (2, 2b, 3): a host with no
+# secret service, no busctl at all, or an unlocked collection must still read
+# missing:. If those go red the probe has started calling credential-less hosts
+# "locked" (sending operators to unlock nothing) or firing on healthy ones
+# (blocking every cycle in the fleet on a working credential).
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a locked keyring is named as locked, not reported as no credential at all (1189-2ra5)"
+STEP_SCRIPT="scripts/test-credential-channel-names-a-locked-keyring.sh"
+STEP_ERROR="the locked-keyring discriminator regressed (1189-2ra5) — either a present-but-locked keyring is again reported as missing:no-credential-channel, whose remedy is the fleet-evicting re-auth 1025-a896 forbids, or the lock probe has widened and hosts with no secret service are being told to unlock one; see the failing arm above"
+STEP_OK="locked-keyring credential discriminator check passed"
+# Exit 3 means the guard is absent — nothing was examined, and the fixture says
+# so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/check-credential-channel.sh is absent, so the discriminator could not be exercised"

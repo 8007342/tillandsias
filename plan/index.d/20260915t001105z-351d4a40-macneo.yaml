@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    field: next_action
+    value: |-
+      Reproduce first, it is two commands and needs no build: empty ~/Library/Caches/tillandsias/models on a macOS host, then `--exec-guest 'podman run --rm -v /root/.cache/tillandsias/models:/home/ollama/.ollama/models:rw --entrypoint sh localhost/tillandsias-inference:latest -c "id; mkdir -p /home/ollama/.ollama/models/.tools && echo OK || echo FAILED"'` — expect uid=1000 and FAILED. Then pick a shape from the deliverable. Read order 313 first: it is the same lesson on the volume side and its remedy may transfer. Note that the entrypoint already ANTICIPATES this failure in its WARN text and then proceeds to a fatal tar anyway, so a second, smaller fix is available independently: make the mkdir failure fatal where it happens, with the ownership named, instead of surfacing four lines later as a tar error about a missing directory.
+
+
+      [2026-09-14T15:55:14Z macos] mechanism corrected by measurement 2026-09-14
+
+      [2026-09-14T20:08:54Z macos] second correction 2026-09-14T20:06Z: does not reproduce; SELinux explanation retracted
+
+      [2026-09-14T20:11:30Z macos] third correction 20:10Z: DOES reproduce via the real nested mkdir; probe was not equivalent
+
+      [2026-09-15T00:11:05Z macneo] macneo 2026-09-15: THE SECOND, SMALLER FIX THIS ROW OFFERED IS DONE — do not re-implement it. 0b56e98be (fix(1183-j9dk): fail loud where the models mkdir fails, and correct the mechanism) is contained in both origin/linux-next and origin/osx-next; verified by tree read with a positive control on the search. The entrypoint now guards the mkdir and on failure prints FATAL with the path, the container uid/gid, the mount ownership via ls -ldn, and both platform remedies (Linux podman volume ownership order 313; macOS virtiofs share ownership 1183-j9dk) before exit 1 — and deliberately does NOT advise a chmod, because its comment records that the share refuses this uid even at 0777. ONLY THE OWNERSHIP HALF REMAINS: make the models share writable by uid 1000 on macOS. That lives in the run-args/share setup (Rust, vm-layer) and its reproduce step needs --exec-guest against a live VM, so it needs the macOS build lane rather than a cargo-check-only host. CAVEAT ON THE REPRODUCE STEP for whoever takes it: "two commands and needs no build" holds only on a host that already has a provisioned guest running; on a cold host it implies a full bring-up first, which is not two commands.
+    ts: "2026-09-15T00:11:05Z"
+    host: macneo
+
+events:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    event:
+      type: note
+      ts: "2026-09-15T00:11:05Z"
+      host: macneo
+      summary: |-
+        the fail-loud half landed at 0b56e98be; only the ownership half remains

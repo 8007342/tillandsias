@@ -86,6 +86,15 @@ fi
 #                                  fine, which is the question this guard asks.
 #                                  NOT a credential fault, so NOT blocked:*
 #                                  (order 886-qmdz)
+#   blocked:gh-keyring-locked      the secret service is PRESENT and its
+#                                  collection reports Locked=true. The channel
+#                                  exists and the token is in it; nothing can
+#                                  open the box, so `gh auth status` blocks and
+#                                  pushes fall back to prompting. REMEDY IS AN
+#                                  UNLOCK, never a re-auth — `gh auth login`
+#                                  here evicts every other host (1025-a896).
+#                                  Order 1189-2ra5; before it, this state fell
+#                                  through to missing:no-credential-channel.
 #   blocked:interactive-credential-helper  gh has a token but git's configured
 #                                  helper is interactive-only; remedy printed
 #   blocked:gh-cli-only            gh has a token, the push probe failed, no
@@ -357,9 +366,17 @@ credential_channel_verdict() {
     echo "unverified:github-token-env"
     return 0
   fi
+  # ORDER 1189-2ra5 — THIS PROBE WAS THE ONE UNBOUNDED CALL IN THE GUARD.
+  # `gh auth status` does not FAIL against a locked keyring, it BLOCKS, waiting
+  # on an unlock that no unattended session can answer. Unbounded, that hangs
+  # the guard itself: measured on lenovinha 2026-09-14, this call ran past 120s
+  # and the cycle's own credential check had to be killed. Order 988 already
+  # requires every probe here to be bounded and says why — an unbounded probe is
+  # the 860-g798 incident. This one was simply missed, and GH_PROMPT_DISABLED=1
+  # matches the `gh api user` arm below so gh fails fast instead of prompting.
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
      && command -v gh >/dev/null 2>&1 \
-     && gh auth status >/dev/null 2>&1; then
+     && GH_PROMPT_DISABLED=1 _ccc_timeout 15 gh auth status >/dev/null 2>&1; then
     # ORDER 860-g798 — `gh auth status` PROVES THE WRONG THING. It proves the
     # gh CLI holds a token; it says nothing about whether GIT can use it. On a
     # fresh clone git's credential.helper resolves to the system default —
@@ -697,6 +714,60 @@ credential_channel_verdict() {
     echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but the git mirror is unreachable for this checkout (git ls-remote origin failed): no usable push channel. Fix the mirror export/DNS or provide a forge credential channel; do NOT import host credentials." >&2
     echo "missing:no-credential-channel"
     return 1
+  fi
+  # ORDER 1189-2ra5 — A LOCKED KEYRING IS NOT A MISSING ONE, AND THE
+  # DIFFERENCE DECIDES WHETHER THE FLEET STAYS UP.
+  #
+  # Everything above has failed to find a usable channel. Before saying there is
+  # none, ask whether there is one we simply cannot OPEN. The distinction is not
+  # cosmetic: missing:no-credential-channel means "there is no credential here",
+  # and the obvious response to that is to create one — `gh auth login`. That is
+  # the single action 1025-a896 forbids, because a re-auth on one host evicts the
+  # operator's token on every other host. So the wrong verdict here converts one
+  # workstation's locked keyring into a fleet-wide outage, while the right one
+  # asks for a passphrase.
+  #
+  # MEASURED on lenovinha 2026-09-14. The guard answered ok:gh-keyring-push-verified
+  # at 18:52Z; a gated, integrated land was refused at the push at 19:37Z with
+  # "could not read Username for 'https://github.com'"; the guard answered
+  # missing:no-credential-channel at 19:47Z. The channel was never missing —
+  # gnome-keyring-daemon was running, org.freedesktop.secrets was on the bus,
+  # ~/.config/gh/hosts.yml was intact and unchanged since 2026-08-20, and the
+  # login collection read Locked=true. The token was in the box the whole time.
+  #
+  # This is the guard's own documented distinction (blocked:* means the channel
+  # EXISTS but cannot be used; missing:* means it is absent) applied to the one
+  # state that had no arm. Locked is a boolean on a bus this script can already
+  # reach, so there is nothing to infer.
+  #
+  # ORDER 988 STILL BINDS: the probe is bounded through _ccc_timeout, and a host
+  # with no busctl or no secret service — every macOS host, the forge, a headless
+  # server — falls straight through to missing: exactly as before. Absence of the
+  # probe is never evidence of a lock.
+  if command -v busctl >/dev/null 2>&1; then
+    _ccc_locked_any=0
+    for _ccc_coll in login default; do
+      _ccc_locked="$(_ccc_timeout 5 busctl --user get-property \
+          org.freedesktop.secrets \
+          "/org/freedesktop/secrets/collection/${_ccc_coll}" \
+          org.freedesktop.Secret.Collection Locked 2>/dev/null || true)"
+      case "$_ccc_locked" in
+        *"b true"*) _ccc_locked_any=1; break ;;
+      esac
+    done
+    if [ "$_ccc_locked_any" -eq 1 ]; then
+      echo "[check-credential-channel] The secret service is present and its '${_ccc_coll}' collection is LOCKED." >&2
+      echo "  This is NOT a missing credential. The token is very likely still in the" >&2
+      echo "  keyring; nothing can open it, so \`gh auth status\` BLOCKS rather than" >&2
+      echo "  failing and every push falls back to asking for a username." >&2
+      echo "  REMEDY: UNLOCK the login keyring on this host (log into the desktop" >&2
+      echo "  session, or run a secret-service unlock), then re-run this guard." >&2
+      echo "  DO NOT run 'gh auth login' or 'gh auth refresh' (order 1025-a896): a" >&2
+      echo "  re-auth on one host EVICTS the operator's token on every other host," >&2
+      echo "  and it would be trading a fleet-wide outage for a passphrase prompt." >&2
+      echo "blocked:gh-keyring-locked"
+      return 1
+    fi
   fi
   echo "missing:no-credential-channel"
   return 1
