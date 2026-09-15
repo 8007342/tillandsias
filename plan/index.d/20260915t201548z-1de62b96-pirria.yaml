@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-eligibility-probe-calls-podman-info-twice-per-invocation-and-that-second-call-is-half-the-probes-whole-cost-on-the-floor
+    event:
+      type: progress
+      ts: "2026-09-15T20:15:48Z"
+      agent_id: linux-pirria-opus5-20260915t162552z
+      host: pirria
+      summary: |
+        CLOSED — the deliverable is on trunk and its arms are green AT HEAD, verified rather than asserted.
+
+        Surfaced by the coordinator as a 1155-jurn shape (a row reading in_progress while its work has landed). They declined to close it for me and asked for my evidence rather than assuming it, which is right — the claimant knows what was owed.
+
+        LANDED: `git merge-base --is-ancestor 9662f4a25 origin/linux-next` → yes. Merged to trunk at b9a82bf63 via the work/1202-jpzy relay ref.
+
+        THE DELIVERABLE, checked against trunk's bytes rather than my memory of them:
+          - `podman_is_reachable` appears 3x in scripts/e2e-preflight.sh on trunk — the definition plus both call sites.
+          - `podman info >/dev/null 2>&1` appears EXACTLY ONCE, inside the helper. That single count is the closure: the duplicate probe is gone by construction, not by intention.
+          - Both arms present in litmus-e2e-eligibility-probe-shape.yaml.
+
+        GREEN AT HEAD, run just now at 08c8f46d5, not quoted from the commit that introduced it:
+          [STEP 8/10] ORDER 1202-jpzy: one `podman info` per invocation ... [OK]
+          [STEP 9/10] NEGATIVE CONTROL (1202-jpzy): a podman whose `info` FAILS still yields skip:podman-not-functional ... [OK]
+          meta-orchestration: PASS 23 / FAIL 0, Status [PASS]
+
+        AGAINST THE verifiable_closure, item by item, since that is what closure means here:
+          (1) tripwire shadowing ONLY podman records exactly one `podman info` per invocation on the path reaching the live checks — GREEN above. Pre-fix result was two, measured on yoga and on this host.
+          (2) MUTATION CONTROL — run on pirria before landing: restoring the duplicate call inside live_runtime_is_present turned step 8 red, and reverting turned it green again. The arm has teeth; an arm nobody has seen fail proves nothing.
+          (3) NEGATIVE CONTROL — a podman whose `info` fails still yields skip:podman-not-functional, on exactly one call. GREEN above. This is the verdict no green host covers, because a green host's podman works.
+          (4) every other verdict unchanged, verified at this locus before landing: skip:no-podman-binary, skip:no-podman-user-session, skip:live-runtime-present, eligible.
+
+        NOTHING REMAINS OWED, and I am stating that rather than letting the status imply it. The trap the row named — that skip:podman-not-functional is the verdict a careless de-duplication breaks — is covered by arm (3) and was the reason the fix MEMOISES rather than removes: podman_is_reachable still probes for real on first use and caches only the answer it got, so neither site ever trusts an absent or stale result. The memo is cleared at the top of e2e_eligibility_verdict so "one invocation" holds even when the file is sourced and the verdict taken twice in one process.
+
+        NOT CLAIMED BY THIS ROW, so the next reader does not inherit a false scope: the ~48% figure came from the 740-88hz floor measurement on this host (podman info 789/744/807ms warm against a whole-step 1557/1618ms). This row removes ONE of the two calls; it does not make `podman info` faster, and the remaining call is still roughly half the step. Anyone wanting that has a different packet to write.

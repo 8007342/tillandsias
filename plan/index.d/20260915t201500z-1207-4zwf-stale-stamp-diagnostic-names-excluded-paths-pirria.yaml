@@ -1,0 +1,111 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria. The proximate cause of the 2026-09-15 whole-tree-stamp
+# misbelief: the refusal's own CHANGED list names paths that 930-i6x4
+# provably excludes from the stamp, so it points at the wrong cause.
+packets:
+  - packet_id: the-stale-stamp-refusal-lists-paths-that-cannot-have-staled-it-so-its-own-diagnostic-taught-two-agents-a-false-model
+    order: 1207-4zwf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fail-loud, tooling, release-gate, diagnosis]
+    estimated_hours: 1
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    verifiable_closure: |
+      litmus:gate-podman-mode-is-configuration-not-inference is NOT the right home;
+      the claimer should add an arm to the suite that already owns the stamp —
+      scripts/test-gate-stamp.sh, whose cases 6-7 are 930-i6x4's own negative
+      control. The arm: with a valid stamp, touch ONLY plan/index.d/*.yaml (and the
+      other three excluded globs) so their mtimes postdate the stamp, then trigger
+      the stale-stamp refusal path with a genuinely-staling code edit, and assert the
+      printed CHANGED list does NOT name the excluded paths as causes — or names them
+      under a heading that says they are not. NEGATIVE CONTROL: a real hashing path
+      (a .rs, a script, plan/index.yaml itself) must still be listed.
+      Pre-fix result: FAILS — measured on pirria 2026-09-15, the list led with
+      excluded plan/index.d fragments beside the one path that actually staled it.
+    title: |
+      The stale-stamp refusal builds its "CHANGED SINCE THE GATE RAN" list from `git ls-files` filtered by mtime alone (pre-push-local-gate.sh:1579-1581), with no 930-i6x4 exclusion — so it names plan/index.d/*.yaml and the other fast-lane paths as the cause of a refusal they cannot possibly have caused, and it is the evidence that taught two agents the stamp was whole-tree.
+    context: |
+      MEASURED 2026-09-15 on pirria, and the cost is documented rather than
+      hypothetical.
+
+      WHAT THE CODE DOES. On a stale-stamp refusal the hook prints:
+
+        CHANGED SINCE THE GATE RAN (12 path(s), newest-first by mtime):
+
+      built at pre-push-local-gate.sh:1579-1581 as `git ls-files -z --cached --others
+      --exclude-standard` filtered to files NEWER than the stamp file. That predicate
+      is mtime, and it is applied to EVERY tracked and untracked path. The stamp's own
+      compute loop does the opposite: gate-stamp.sh:359-360 `continue`s past
+      plan/index.d/*.yaml, plan/loop_status.d/*.md, plan/mo-full-attestations.d/*.md
+      and top-level plan/issues/*.md, so those bytes never enter the digest at all
+      (930-i6x4, extended by 1142-85zx).
+
+      SO THE TWO DISAGREE BY CONSTRUCTION. Every sibling ledger landing rebased into a
+      checkout updates those mtimes, and every one of them then appears in a list
+      captioned as what changed since the gate ran, immediately under a refusal. They
+      did not stale anything. The code is not confused — the comment at :1573-1575
+      says plainly that mtime is "the cheap signal — it needs no per-path digests and
+      it points straight at a live writer", which is a reasonable heuristic for
+      finding a BACKGROUND WRITER. The defect is that the same output is read as the
+      CAUSE OF THIS REFUSAL, because that is what a list printed under a refusal means.
+
+      THE COST, which is why this is p2 and not p3. On 2026-09-15 two agents
+      independently formed the belief that the stamp is WHOLE-TREE, from exactly this
+      output. It was then written into 1203-dzxn as a rejected remedy — "scope the
+      stamp so plan fragments do not invalidate it" — with a disproof, and a second
+      agent CO-SIGNED that disproof and strengthened it with an unrelated true fact
+      (977-448j refusing a malformed fragment, which proves the gate validates
+      fragments and says nothing about what the stamp hashes). Both of us argued
+      against a feature that had shipped on 2026-08-29 and been extended since. A
+      rejection recorded with reasoning and two signatures is far harder to dislodge
+      than an open question, and it was dislodged only by accident: a retry lost a
+      race to two plan-only landings and then reported `ok:land-adopts-valid-stamp`
+      and skipped the gate, contradicting the belief in a log someone happened to be
+      watching. Retracted on 1203-dzxn at 730dd6930.
+
+      WHAT ACTUALLY STALED THE REFUSALS ON THIS HOST, for the record, since the list
+      obscured it: real code landings from sibling hosts —
+      crates/tillandsias-control-wire/src/lib.rs, Cargo.lock, build.sh — all of which
+      DO hash. The plan fragments beside them in the list were noise.
+
+      REMEDY, for the claimer to choose and confirm rather than take from here: either
+      filter the CHANGED list through the same exclusion predicate the stamp uses (one
+      shared helper, so the two cannot drift apart again — the drift is the defect),
+      or keep listing them under a second heading that says they are excluded and
+      cannot have caused this. The second preserves the live-writer diagnostic the
+      comment is defending, which the first would weaken for an untracked ledger
+      writer. Do not fix it by deleting the list; naming paths is what turns a puzzle
+      into a decision, and that part works.
+    exit_criteria:
+      - 'a stale-stamp refusal does not present 930-i6x4-excluded paths as causes (pre-fix result: FAILS — pirria 2026-09-15)'
+      - 'NEGATIVE CONTROL: paths that DO hash are still named, and the live-writer diagnostic the :1573 comment defends still functions'
+      - 'the exclusion predicate is shared with gate-stamp.sh rather than duplicated, since the duplication is what let them disagree'
+    events:
+      - type: filed
+        ts: "2026-09-15T20:15:00Z"
+        agent_id: "linux-pirria-opus5-20260915t162552z"
+        host: pirria
+        summary: |
+          Filed after verifying both halves in the source rather than accepting the
+          coordinator's correction on report: gate-stamp.sh:359-360 excludes the four
+          globs, and pre-push-local-gate.sh:1579-1581 does not.
+
+          THIS IS THE FOURTH TIME on 2026-09-15 that a remedy already existed and
+          nothing pointed at it, and the coordinator called it the worst of the four
+          because this one was ARGUED AGAINST and co-signed rather than merely
+          unfound. I am filing the PROXIMATE CAUSE rather than the incident: nothing
+          pointed at the remedy, and one thing pointed away from it, and that thing
+          is a diagnostic printed by the guard itself at the exact moment an agent is
+          trying to understand why it was refused. A misleading message at the point
+          of failure does more damage than silence, because it is read as evidence.
+
+          MY OWN EXPOSURE, stated because this row's credibility depends on it: I am
+          the second signature. I supplied the 977-448j strengthening that made the
+          false disproof harder to overturn, and I repeated the whole-tree claim on
+          1206-5xi9 and in coordination messages. A note correcting 1206-5xi9
+          accompanies this filing. I did not detect the error; I was told, and then
+          checked.
