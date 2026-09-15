@@ -5869,3 +5869,42 @@ UNREACHABLE against a current server, so the tested arm serves only a peer old
 enough to answer without validating, while the arm gating a live mismatched
 peer was the untested one. A test can be green, real, and pointed at the
 reachable half of the pair.
+
+**Pass 32 addendum 2 (2026-09-15T12:24Z) — macneo answered with the REGIME and
+the regime was the whole answer, and the floor tier turns out to be blocked on
+tooling rather than on being the floor.** I asked for the yq question before
+the counts and named "yq is absent here too" as a complete answer; macneo
+returned exactly that and ran nothing, rather than producing 47 numbers that
+would have repeated pirria's caveat. A second DEGRADED run is not a second
+regime. That is the instruction working, and it is cheaper than the run.
+THEIR PROBE WAS BETTER THAN THE ASK. `command -v yq` was checked under BOTH
+the agent's non-login PATH and an augmented one carrying ~/.cargo/bin,
+/opt/homebrew/bin and /usr/local/bin — deliberately both, because PATH
+composition had produced a false MISSING on that host earlier this week — with
+`command -v jq` resolving to /usr/bin/jq as the control that the probe
+discriminates. They then checked the runner's SECOND source,
+${PROJECT_ROOT}/target/litmus-runtime/bin/yq, with a tree-wide find controlled
+by locating target/release/tillandsias-plan the same way. Two sources, two
+controls, one negative that can be trusted. This is 1172-dyvd axis 14 answered
+BEFORE it bit, on a host that had every reason to answer it carelessly.
+AND THE DISTINCTION THAT MAKES IT ACTIONABLE: pirria's yq is UNPROVISIONABLE —
+the runner's auto-provision branch requires `toolbox`, which is Silverblue-only
+— while macneo's is one command away, brew present at /opt/homebrew/bin/brew
+and yq a bottled stable formula at 4.53.6. So the 45 arms that currently have
+NO host in the fleet able to produce them have a candidate. macneo did NOT
+install it, and was right not to: adding a package to a workstation is a
+configuration change of the same class as the embed-endpoint provisioning
+already queued on 824-6qxh, and not a cargo-check-only lane's call to make
+unilaterally and report afterwards. It is now ONE operator decision, not two.
+THE SHAPE, WHICH MACNEO NAMED AND WHICH BELONGS HERE INDEPENDENT OF ANY ROW:
+this fleet now wants THREE floor-tier measurements from macneo — 824-6qxh's
+low-end bands, 1187-iij8's yq-present arms, and 1109-t8kw part 2 which they
+disqualified on SAFE — and TWO OF THE THREE ARE BLOCKED ON THAT HOST LACKING A
+TOOL OR AN ENDPOINT rather than on anything about its tier. This sharpens the
+standing rule that an under-provisioned locus is an instrument: it is an
+instrument for the code paths an equipped host cannot reach, and it is sparse
+in precisely the ways that stop it REPORTING what it reaches. Both halves are
+true at once. The remedy is not to "fix the floor" — that would destroy the
+instrument — but to distinguish the sparseness that is the measurement from
+the sparseness that is only a missing binary, and to provision the second
+while leaving the first alone. yq is the second kind; so is an embed endpoint.
