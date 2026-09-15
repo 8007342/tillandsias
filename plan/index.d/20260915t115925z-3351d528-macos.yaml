@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-server-side-wire-version-refusal-has-no-test-while-two-version-bumps-now-rest-on-it
+    event:
+      type: evidence
+      ts: "2026-09-15T11:59:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t115925z
+      host: macos
+      summary: |
+        DONE AND FALSIFIED. The server-side wire-version refusal now has a test, and it
+        has teeth.
+
+        ADDED to vsock_server.rs's test module, two tests that only mean something
+        together:
+          server_refuses_a_client_advertising_a_different_wire_version
+          server_still_acks_a_client_on_the_matching_wire_version
+
+        THE REFUSAL IS A CLOSE, NOT A MESSAGE. The handler logs and returns without
+        writing anything, so the peer observes EOF. The assertion is therefore "read
+        reaches end-of-stream", bounded by a 5s timeout — because a regression that
+        leaves the connection OPEN would otherwise HANG the suite rather than fail it,
+        and a hanging test reports nothing at all.
+
+        THE POSITIVE CONTROL IS NOT DECORATION. The refusal test asserts "you got
+        nothing", which a wholly dead handler satisfies perfectly. The control requires a
+        MATCHING peer to still receive its HelloAck, so a broken server cannot pass the
+        pair.
+
+        FALSIFIED BY REMOVING THE BRANCH ITSELF — deleting
+        `if first.wire_version != WIRE_VERSION { warn!(...); return; }`:
+
+          refuses ... FAILED  "a client advertising WIRE_VERSION + 1 must be closed with
+                               NO reply; the server sent at least one byte instead"
+          still_acks ... ok   <- the control STAYED GREEN during the mutation, which is
+                               what proves the mutation was surgical rather than having
+                               broken the server wholesale
+
+        Restored: both green. Gate feature pass
+        (cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock)
+        run as the gate runs it.
+
+        IT WILL ACTUALLY FIRE, checked rather than assumed — the lesson of the fixture I
+        landed three days ago that no gate ran. The module is
+        #[cfg(feature = "listen-vsock")], so a plain `cargo test -p tillandsias-headless`
+        does NOT compile it: my first run reported "0 passed; 525 filtered out" with
+        rc=0, which reads exactly like success. scripts/local-ci.sh runs the headless
+        tests with --features tray,listen-vsock and build.sh documents that pass, so the
+        gate reaches these two.
+
+        A CORRECTION TO MY OWN EARLIER CLAIM, which is how this row exists at all. My p2
+        on 54a9471a1 said NEITHER wire-version refusal has a test. Half wrong: the CLIENT
+        side was covered by 1032-62rx. Re-measuring before filing is what surfaced the
+        asymmetry — and the asymmetry is the point, because 1032-62rx's own doc records
+        that against a CURRENT server the client arm is UNREACHABLE (the server validates
+        and returns before any HelloAck). So the tested arm serves only a peer old enough
+        to answer without validating, while the arm that gates a live mismatched peer was
+        the untested one. yoga carried my stale phrasing into 890-y72v's dependency note
+        in good faith; this closes the half that was actually open.
+
+        WHAT THIS DOES NOT DO: it does not test the SECURE path. Both tests ask for
+        SecureControlWireMode::Off explicitly (972-umik: the shipped default is On and a
+        test wanting plaintext must say so). The version refusal sits before the mode
+        branch, but a secure-path equivalent is not covered here and I am not claiming it.
