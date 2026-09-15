@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    event:
+      type: progress
+      ts: "2026-09-15T09:35:08Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        IMPLEMENTATION COMPLETE AND GATED; BLOCKED ON THE KEYRING, not on the work.
+
+        WHAT IS BUILT. select-work-batch.sh emits an advisory line beside the batch when an offered row's exit_criteria name hosts this one is not:
+          host-scoped  1132-r4mt  its exit criteria name macuahuitl,yoga and not lenovinha — claimable and worth advancing, but the EVIDENCE must come from there (1199-aw6m)
+        Host vocabulary is DERIVED from the roster the selector already resolves, so a host joining the fleet is understood without editing the code. The documented `packet` line shape is untouched; the annotation is its own line, so nothing parsing the batch breaks.
+
+        ADVISORY, NEVER A FILTER, and the fixture's arm 3 pins it: a host that cannot CLOSE a row can still reproduce, measure, instrument or split it. Withholding it would convert a three-minute release into invisible work nobody does.
+
+        COST MEASURED RATHER THAN ASSUMED: 17.3s with the annotation against a 16.9s baseline, about 0.4s / 2%. The selector was already slow; the first reading of "17s" would have sent me optimising the wrong thing.
+
+        FIXTURE scripts/test-selector-flags-host-scoped-criteria.sh, 5/5, bound at scripts/gate-steps.d/370-1199-aw6m.step. Its first draft SKIPPED against the pre-fix selector instead of failing — the toothless shape this repo keeps finding, where deleting the annotation would read as "inconclusive batch" forever. It now re-derives the answer independently from the offered rows and FAILS if it finds a host-scoped row the selector missed: 1 failure against pre-change, 5/5 after.
+
+        GATE: ./build.sh --check green, 866s, no violations, ok:gate-fresh. Both new steps reported passing.
+
+        BLOCKER: the login keyring on this host RE-LOCKED (busctl reads `b true` on /org/freedesktop/secrets/collection/login), so check-credential-channel.sh answers blocked:gh-keyring-locked and land-on-platform-branch.sh was refused at the push with refused:land:auth-failed. No gh auth login or refresh was run (1025-a896). This is the second lock on this host in one night; the first was 18:52Z-19:37Z and produced 1189-2ra5.
+
+        PRESERVED: ok:salvaged-local:refs/heads/salvage/lenovinha/20260915-1199-aw6m:cc6c5564b680ee2fa0932f3e49c1031759bddfd4 — LOCAL ONLY, and it survives a re-clone only once someone pushes it. Two commits: cc6c5564b (this row) and bbf70a8ba (the 1189-2ra5 fixture repair below). Recovery when the keyring is unlocked: git push origin refs/heads/salvage/lenovinha/20260915-1199-aw6m, then scripts/land-on-platform-branch.sh linux-next.
+
+        A SECOND DEFECT FOUND BY THE RE-LOCK, in my own 1189-2ra5 fixture, and it is the reason the first gate went red. Arm 2b claims to test "a host with no busctl at all — the macOS and forge shape" and built its PATH as "$stub:$PATH", which removes nothing: the system busctl stayed reachable, so the guard probed THIS host's real keyring. It passed every run until now only because the keyring happened to be unlocked. That is 1109-t8kw's class — a fixture asserting a property of the environment it runs in — and it means the arm was never testing its stated subject. Rebuilt from nothing the way arm 9 does, and it now refuses rather than asserting if a busctl-free PATH cannot be constructed. 9/9 with the keyring LOCKED, which is the state it was silently depending on being false.
+
+        ALSO MINE, AND THE SECOND TONIGHT: the first gate on this work went red on a ghost trace, spec:plan-ledger, which I invented rather than checking openspec/specs/ — exactly as I invented spec:agent-observability earlier. Re-pointed to spec:ci-release, which select-work-batch.sh and plan-binary-probe.sh already use.
