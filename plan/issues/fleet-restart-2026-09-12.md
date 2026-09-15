@@ -5200,3 +5200,350 @@ patch-equivalent on trunk (`git cherry` −), line marked deleted, ref goes at
 00:11Z. Stale rows 88/505, none handed. Audit rows=23 stems=23. Hosts
 silent this window (esme, macneo): not directed; every capable host is on
 its own claim.
+
+**Pass 28 (2026-09-15T05:39Z) — the coordinator was down for seven hours and
+the fleet did not stop.** macuahuitl's session ended when the operator's
+Fable credits ran out; the operator upgraded and restarted the host (kernel
+7.2.4 → 7.2.5) and brought the coordinator back on Opus 5 at 05:39Z, a gap
+from the 22:11Z pass. Session-only crons do not survive a restart and were
+re-armed by hand (2h coordination at :41 local, 4h meta at :09, daily
+release-tier at 09:09); the scratchpad path changed, so the ci-full driver
+and the land relay were re-seeded — the driver now runs `--ci-full --install`
+per lenovinha's 1185-9qx6 finding.
+WHAT THE GAP COST AND WHAT IT DID NOT. Relay backlog at return: windows-next
++11, osx-next +35, trunk +26 — the coordinator is still the only path by
+which platform CODE reaches trunk, and a seven-hour absence is a 46-commit
+queue. What it did NOT cost is plan visibility: macbookair and macneo pushed
+their fragments straight to trunk through scripts/push-plan-fragments-to-trunk.sh
+all evening ("plan(tlatoanis-macbook-air): 4 fragment(s) to linux-next from
+osx-next"), so claims, closures and filings stayed fleet-visible with no
+coordinator in the loop. That is 1153-j2nm doing exactly what it was built
+for, measured by a seven-hour natural experiment nobody designed.
+LANDED IN THE GAP, all by hosts working their own crons: lenovinha closed
+1189-2ra5 (a locked keyring is now named as locked, not as no credential at
+all — the row their own blocked window produced), 1125-92xa (the Rust writer
+joins the shared metrics path) and 1193-yw6u (TRUNK WAS RED ON MACOS: no
+macOS host could land code until the guard regression was fixed at
+660e092c8 — "the absence of coreutils is not an answer about the
+credential"); pirria landed 1109-t8kw part 1 (two fixtures assumed a plan
+binary the host supplies) and then corrected their own yq claim — the
+toolbox has it; yolanda got mechanisms 1 and 2 of 1186-w3ph (the PATH pin
+that omits where MINGW keeps git; emit_frame reading stdin by fd path, which
+MSYS jq cannot open) with a vacuity finding; esme measured 1187-iij8 on the
+floor and reports NEITHER PROPOSED FIX WORKS; macbookair and macneo worked
+690-w94k (a discarded CFRunLoopRunInMode result turned a park into a spin),
+830-xsk2 (the in-guest hop is blocked by seccomp alone) and the 1183-j9dk
+retraction chain.
+NEW ROWS FROM THE GAP, all three worth the fleet's attention: 1194-davi — a
+platform-scoped gate arm is invisible to every host not on that platform, so
+it lands through a gate that cannot run it (1194-smtb obsoleted into it as a
+duplicate, carrying the symmetry); 1195-m9vi — a macOS host can be wedged out
+of the plan lane entirely, not just slowed (macneo's stranded evidence;
+macbookair later retracted the independence half and narrowed the row);
+1196-5hva — the fleet heartbeat detects a blocker only from a plan/issues
+marker, so a blocker filed as a ledger packet is invisible to it (lenovinha,
+who then filed against their own exit criteria: "my own exit criteria do not
+match reality").
+Pass 28, the relay's own finding: the union gate refused with three E0433s
+in crates/tillandsias-vm-layer/src/vz.rs — 690-w94k's new test calls
+`boot::pump_cf_loop_for`, and `pub mod boot` is #[cfg(target_os = "macos")]
+while `mod tests` is #[cfg(test)] only, so it compiles on the author's Mac
+and on no other platform. The eleventh regime axis (cfg(target_os)) for the
+third time in this file: the two tests immediately BELOW it already carry a
+comment from 804-deux naming the failure and the fix, and the new one was
+written above them without it. A precedent recorded as a comment beside the
+code did not reach the next author — which is the argument for 1194-davi's
+notice, recorded there as the mirror-direction instance. Fixed forward on
+the relay (gate the test, not the module: a CFRunLoop park-versus-spin is
+genuinely macOS-only). Standing rule for macOS hosts, unchanged since
+2026-09-13: when a struct or module changes under a cfg, compile the other
+platform's arms before landing — `cargo zigbuild -p <crate> --target
+x86_64-unknown-linux-musl` does it on a Mac and the lane already has zig.
+Pass 28, three more from the hosts while the relay gated:
+OPERATOR RULING (via lenovinha, 1196-5hva) — A DURABLE LEDGER SIGNAL NAMES A
+CAPABILITY, NEVER A HOST. Their reasoning is the part that outlives the row:
+which hosts exist, how many, what hardware, which agents and harnesses run
+them are all ephemeral and subject to change, and the system is meant to
+converge on "forge" and be agent-agnostic. So a blocker reads "blocked by
+linux builder" / "blocked by igpu host" / "blocked by npu host", in some
+CRDT-compatible blocked-by field, and never "blocked by yoga". This retired
+lenovinha's own design before it landed (it attributed blocks through the
+status channel's host field) and needed no new inventory, since the
+capability matrix is already the roster source. The distinction to keep: a
+CLAIM is a transient fact about who holds a row now and is legitimately
+host-keyed; a BLOCKER is a durable statement about what the row NEEDS and
+must be a capability token. Applies to this drill's own prose and to
+next_action text, which have been writing "needs esme" where they should
+write "needs an at-risk low-end host that can gate".
+LENOVINHA, 1196-5hva part 3, independent of that redesign and landing on its
+own: 864-w7rc's blocked detection HAS ONLY EVER WORKED FOR SILENT HOSTS. The
+wedged branch returns before the blocked branch, so a host that keeps
+committing never reaches the blocker lookup — and filing what blocked you IS
+a commit. A detector that cannot see a host that is talking reports quiet as
+healthy. On top of macneo's finding that its trigger value was written twice
+in project history: doubly dead.
+MACBOOKAIR, correcting the coordinator's own recommendation on 1194-davi
+within the hour: `cargo zigbuild --target x86_64-unknown-linux-musl` without
+`--tests` builds the LIB ONLY, so it never compiles cfg(test) code and reads
+green while looking at nothing — the check their standing pre-land rule ran
+before landing the ungated test. With `--tests`: error[E0433] x3, rc=101 on
+their Mac. A recommended check that cannot fail is worse than none. Their
+probe lesson from the same hour, the shape that bit three lanes tonight:
+`git show "$ref:path"` in a for loop under zsh mangles the ref, `2>/dev/null`
+hides the failure, and `grep -c` on an empty stream answers 0 — THE ABSENT
+RESULT AND THE NEGATIVE RESULT RENDER IDENTICALLY. Byte counts and a positive
+control are the standing remedy.
+Pass 28, pirria's report and one artifact worth the diagnosis:
+AN ORPHANED VERSION BUMP IS NOT AN INTERRUPTED RELEASE. pirria found VERSION
+56.9.13.1 → 56.9.15.1 plus Cargo.lock and four crate manifests, uncommitted
+and unattributed, written 2026-09-15T00:29Z, and correctly refused to resume
+it — tagging and firing a workflow_dispatch is outward-facing and was not
+their cadence to take. Diagnosis, positive rather than by absence: build.sh's
+install path calls `scripts/bump-version.sh --bump-build` unconditionally
+unless TILLANDSIAS_SKIP_VERSION_BUMP=1, and on a new UTC day bump-version.sh
+yields <y>.<m>.<d>.1 — 00:29Z is 29 minutes into 2026-09-15, so 56.9.15.1 is
+exactly what a local build produces. The release path is EXCLUDED, not merely
+unevidenced: merge-to-main-and-release computes its candidate version in a
+layout-preserving SCRATCH directory precisely so the real VERSION file is
+never touched, and the real bump lands on a release/version-bump-<v> branch
+committed in the same breath — an interrupted release leaves a committed
+bump on a branch or nothing, never an uncommitted bump on linux-next.
+Corroborating: VERSION reads 56.9.13.1 on both linux-next and main, no
+v56.9.14 or v56.9.15 tag exists anywhere, and there is no open PR
+linux-next→main. Stash dropped; the daily cut goes to the operator as a
+question, never inferred from an artifact.
+1109-t8kw PART 1 LANDED (224c0f16c, b3ed43dae), and the result is the
+argument for the method change rather than just a pass: across 713 files the
+three GREP-SHAPED predicates found nothing — tier 13→0, hostname 22→0,
+inherited git identity 67→0 — while the fourth, tools-assumed, found two real
+hits AND BOTH WERE FOUND BY RUNNING. Hit 2 is the sharper one:
+litmus-plan-only-push-lane-shape.yaml step 11 is step 10's mutation control
+and was PASSING FOR THE WRONG REASON, because a host with no resolvable plan
+binary hands it the refusal it expects for free — the same family as an exit
+criterion the unfixed code already satisfies, one level up, in a control.
+methodology-accountability at that locus 26/3 → 28/1.
+AND WHY THAT LOCUS FOUND THEM: yq was absent from pirria's host PATH, and a
+yq-present environment clears the lane's first validator gate and never
+reaches the fold check behind it — so an equipped host's sweep would have
+reported a clean floor. That is an argument for KEEPING at least one
+deliberately under-provisioned locus, not for provisioning this one; nobody
+should "fix" that host's tooling on the grounds that it is missing something.
+pirria's own correction beside it: they had called yq "unprovisionable" after
+reading a script header instead of asking the host, which has it in a
+toolbox at v4.47.1 — the degraded counts are owed a re-run as a local chore.
+NAMED AND DELIBERATELY NOT CLAIMED by pirria: litmus:release-gates-run-locally
+step 20 (gate-stamp memoization, 765-tkq2) passes standalone 14/14 there and
+fails only inside the spec run, so the mechanism reads as git-dir-local stamp
+state shared across steps 13–20, not a host-inherited precondition. Symptom
+match is not membership; left for a linux builder with the mechanism named.
+HAZARD from the same artifact, and it survives the diagnosis: pirria did NOT
+run that build. Their last gate finished before their 16:35 commit and the
+session ended there, so SOMETHING ON THAT HOST RAN A BUILD AT 00:29Z WITH NO
+PERSON PRESENT. The bump is harmless; the caller may not be, because
+bump-version.sh sits in build.sh's INSTALL path — the path that ends by
+replacing the host's installed launcher. An unattended build is an
+unattended reinstall, and the fleet already has that shape on record (a gate
+run replaced an operator's local build with the tree's label, 2026-09-11),
+diagnosable then only because a person had run the gate. pirria is filing it
+with local evidence: the build log or $GIT_DIR gate stamp and its mtime,
+`systemctl --user list-timers` and any tillandsias unit, whether the tray or
+a forge was up at 00:29Z and whether either builds unprompted, and the
+installed launcher's --version against trunk's VERSION — if the installed
+label moved to 56.9.15.1 the install half fired too, and THAT is the finding
+rather than the bump. Standing consequence meanwhile: never reason about
+what a host did from its worktree VERSION.
+Practice worth copying, from the same exchange: pirria verified the mechanism
+on their own host before acting on the coordinator's report (build.sh:878,
+bump-version.sh's --new-day arm), and read the stash content before an
+undoable drop — 9 lines across 6 files, no work bundled in. Verify, then act;
+a drop is not undoable and a report is not a measurement.
+MACNEO'S RETRACTION, and the operational question it leaves behind — the most
+useful thing to come out of the red-trunk window. macneo had claimed the
+plan-lane wedge was INDEPENDENT of the credential guard and that closing
+1193-yw6u would not clear it. Wrong, retracted on 1195-m9vi: the wedge
+cleared the moment trunk went green. What survives is narrower and better,
+because it is a controlled pair — two macOS hosts on the SAME trunk in the
+SAME hour, one with plan-lane egress and one without, and the predictor is
+STAMP FRESHNESS. macbookair held a valid gate stamp from a land predating the
+bad commit, so the lane adopted it and they could still push; macneo held
+none and was wedged. SO THE QUESTION TO ASK AT A RED TRUNK IS: WHICH HOSTS
+HOLD A VALID STAMP — that predicts who can still speak, and therefore who can
+file what blocked them. Runs first at the next red trunk.
+OPEN, AND NOT ADOPTED ON A RELAY: macneo reports their operator approved a
+fleet-wide blocked-declaration convention (no host currently declares a
+blocker in the form the heartbeat reads, so adopting it binds every host, and
+methodology makes that scope expansion the operator's each time — yoga
+surfaced it rather than agreeing it peer-to-peer, which was correct). macneo
+is adopting it on macneo only. The coordinator is NOT propagating it on a
+relayed approval: binding six hosts is where "the operator approved this"
+and "the operator told the coordinator this" differ, and the operator is
+reachable. Put to the operator directly this pass. If confirmed it enters the
+standing instructions like cite-by-symbol did. NOTE FOR THE CALL SHAPE, since
+two operator decisions landed on one field tonight: `set-field <order> status
+blocked --host <host>` composes with the capability ruling ONLY if `--host`
+is understood as WRITER ATTRIBUTION — who declared the block — while what
+blocks goes in the blocked-by content as a capability token. Stated
+carelessly the convention would hard-code the roster into the field the
+operator just ruled must not carry it.
+RETRACTION, one hour later, of the "unattended build" hazard recorded above —
+THE PREMISE WAS FALSE AND THE COORDINATOR IS THE ONE WHO AMPLIFIED IT. pirria
+read their shell history: the build was ATTENDED. The operator sat down after
+their own upgrade and reboot (boot 17:25:41), curl-installed the published
+release at 17:29:00, cd'd into the checkout at 17:29:46, ran `./build.sh
+--install` at 17:29:52 — the VERSION bump lands at 17:29:55, three seconds
+later — checked `tillandsias --version` at 17:34:20 and exited at 17:34:44.
+Every timestamp in the chain belongs to that one human session. pirria also
+ruled out the mechanism I asked them to hunt: no user or system timer
+mentions tillandsias, no autostart entry, no build.sh reference in any shell
+rc, no tillandsias systemd unit at all — so no unattended path exists on that
+host to have done it.
+THE SHAPE, and it is the coordinator's to own. pirria said "I did not run
+build.sh at 17:29", which was TRUE, and then let it imply nobody did; I took
+that and escalated it into a fleet hazard with a filing request. Neither of
+us read the shell history, which was one cheap command and settled it
+instantly. That is absence-of-evidence twice removed: a host reasoned from
+its own absence to nobody's presence, and the coordinator amplified a peer's
+negative into a fleet finding without asking what would have shown the
+positive. Before escalating any "nobody did X" — ASK WHAT WOULD SHOW THAT
+SOMEBODY DID, and run that first. Same family as the zsh probe and the
+missing-yq inference from the same night: the absent result and the negative
+result render identically.
+WHAT SURVIVES, and only this: `build.sh --install` leaves VERSION bumped and
+uncommitted in the worktree by design, and a later reader who finds it can
+mistake it for an interrupted release — which is what happened. The
+diagnosis chain above (the release path CANNOT produce an uncommitted bump on
+linux-next) stands and is the durable part. Not a fault, no packet, and
+pirria was right to decline to file one. Also observed and not a defect: the
+install half did fire, so that host's launcher now reports v56.9.15.1, a
+label on no branch, overwriting the published v56.9.13.1 its own smoke had
+asserted four hours earlier — the operator's own machine, their own command,
+and they read the version back immediately afterwards.
+THE CAPABILITY RULING IS A UNION, NOT A SUBSTITUTION — refinement relayed by
+yoga, and it corrects what this drill said two entries ago. Asked directly
+whether the field should be host or capability, the operator answered "use
+both: CRDT style". So blocked_by takes BOTH token kinds ADDITIVELY: a
+colon-bearing token is a capability (kind:macos, schedulable:npu,
+tier:gpu-rocm) matching whatever host answers to it, a bare token is a host
+identity, and the reader unions them — two writers can name one block
+differently without knowing about each other, and neither write needs
+rewriting when the roster turns over. `status blocked --host` therefore works
+through the bare-token path exactly as approved. The coordinator had written
+"capability, never a host" from the first relay and was about to propagate a
+rule that strips a half the operator kept; corrected. The durable guidance is
+weaker and truer: prefer the capability, because a bare name is the half that
+dies when a host is renamed or retired — do not forbid it. THREE references
+now, not two: a CLAIM (who holds the row, host-keyed, expires within the
+hour), WRITER ATTRIBUTION on a blocked declaration (who DECLARED it,
+host-keyed), and BLOCKED-BY CONTENT (what the row NEEDS, capability
+preferred). macneo's cron text named only `--host` and stopped, which says
+nothing about the content and would have put the blocker's identity in the
+only field the text names; rewritten once pointed out, which is the failure
+mode to watch for when the instruction goes out.
+A KILLED GATE IS NOT A GATE DEFECT — macneo, correcting their own suggestion
+to yoga, and it closes an open question rather than opening one. They had
+proposed yoga's killed gate was check-gate-memory-floor.sh failing to refuse
+by name; yoga measured instead of accepting it, and the gate's floor check
+fired CORRECTLY, reporting 12510MB available against a 1024MB floor with zero
+kernel OOM records. The actual killer was the AGENT HARNESS's own low-memory
+guard reaping the background command it was tracking — a layer above both the
+gate and the kernel, which the gate cannot see, on a 14GB host, so it is not
+a floor-tier property and a tier-scoped fix would miss it. 1176-fn2p worked.
+This is the same shape macuahuitl measured during a cargo gate with 50 GiB
+free, and the REMEDY IS ALREADY IN DAILY USE HERE: take the process out of
+the harness's hands — `setsid nohup <script> < /dev/null > log 2>&1 &` from a
+script FILE, the script echoing a terminal `rc=` marker, and a Monitor
+watching the log for verdict lines rather than the command being held. Every
+land on this host is detached that way and none has been reaped since. Passed
+to both hosts. Standing rule: when a gate dies mid-run, check the harness
+layer before the gate.
+AND THE OTHER HALF OF "WHY THE GATE LOOKED STUCK", yoga, same night, two
+hours lost to it: their `until ! pgrep -f "build.sh --check"` wait-loops were
+matching EACH OTHER'S command lines, so no loop could exit and every new
+check reported RUNNING off its siblings — while the gate had been finished
+for an hour and fifty minutes. This is the pgrep self-match hazard in its
+worse mode: SIBLING match, invisible to the usual remedy of splitting the
+pattern, because the literal is not in this command but in the concurrent
+one. The symptom is distinctive and worth recognising — A WAIT THAT NEVER
+ENDS WHILE REPORTING PROGRESS, where the progress is waiters observing each
+other. yoga notes they hit it twice in their own instrumentation after
+writing a packet about the same class (the enclave guard accusing its own
+fixture two hours earlier). The fix is not a better pattern: STOP ASKING THE
+PROCESS TABLE. Have the work write a terminal `rc=` marker as the last line
+of a detached script and wait on the MARKER with a Monitor — two waiters on
+two markers cannot see each other. That is the same recipe the harness-reap
+entry above arrives at from the other side, so one shape closes both: a
+script FILE, `setsid nohup … < /dev/null > log 2>&1 &`, an unambiguous
+terminal rc= line, and a Monitor on the log.
+THE GENERALISATION THAT OUTLIVES BOTH, yoga's, and the reason the recipe is
+written as mandatory rather than advisory: A RULE APPLIED BY JUDGEMENT GETS
+SKIPPED EXACTLY WHEN SOMEONE IS CONFIDENT, and confidence is what the author
+of the rule has — they hit the sibling-match hazard twice in their own
+instrumentation on the day they filed a packet about the class. So the
+detached-script-plus-rc-marker shape is to be used for EVERY long job, never
+for the ones that look risky enough to warrant it. A rule that asks "does
+this case need it?" has already lost to the person most sure it does not.
+1118-zvai COMPLETE (yoga, 68a7eed68 / 3c2421b16 / MO-FULL 49f523ccf): both
+enclave create sites pass --internal, and the guard now sweeps 732 shell and
+235 Rust files instead of a hardcoded list of three. LEFT OPEN AND FILED NOT
+FIXED, 1193-e6kv: the shell launchers never mention the egress network, so
+the proxy — the one member spec:enclave-network requires to be dual-homed —
+sits on an internal network with no way out; untouched by this fix in either
+direction.
+TWO FINDINGS FROM THAT CYCLE WORTH MORE THAN THE ROW. First, THE POPULATION A
+CHECK IS POINTED AT IS A REGIME. Pointed at three hand-picked files the
+matcher was correct; pointed at the tree it accused four tillandsias-logging
+files whose only sin is the word "network" in a log field, and then refused
+YOGA'S OWN FIXTURE, whose deliberate bad example is indistinguishable to a
+sweep from a real launcher. yoga's formulation: a matcher safe against a list
+is not safe at tree radius, and NOTHING ABOUT THE MATCHER CHANGES — only what
+it is pointed at. Same shape as promoting a check from --ci-full to --check,
+one level down: widening a guard's population is a blast-radius change and
+needs re-measuring, not review. Two remedies they rejected, and the reasons
+are the reusable part: excluding the fixture BY FILENAME is the instrument
+this very order replaced, and an IN-BAND EXEMPTION MARKER is worse than it
+looks because the marker travels into the generated temp repo and suppresses
+the drift the case asserts, leaving a fixture that passes while testing
+nothing. They assembled the verb at runtime instead — the rule this drill
+already carries for diff-scanning guards.
+Second, A CONTROL THAT PRINTED GREEN WITHOUT CONSTRUCTING ITS PREMISE, with a
+mechanism worth naming: re-running old-guard-versus-new AFTER committing the
+fix, yoga reverted with `git stash`, which reverts nothing when the change is
+already committed. The broken tree was never built, so the new guard duly
+said ok. Caught only by the mismatch with the earlier result, not by anything
+in the control. Redone by copying the pre-fix files explicitly and PROVING
+THE TREE BROKEN FIRST. Standing form: a control asserts its own premise
+before it asserts a conclusion, because "I reverted" and "the revert was a
+no-op" render identically — the night's third instance of that one shape.
+
+**Pass 29 (2026-09-15T06:11Z) — a quiet pass, and the quiet is the finding.**
+Drift zero on both platform branches, nothing to relay, trunk unmoved since
+the previous push. Stale rows 89/506, audit rows=23 stems=23. Three live
+claims after yoga closed 1118-zvai: 1186-w3ph (yolanda), 1196-5hva
+(lenovinha), 1109-t8kw (pirria). No host reported idle and none was directed.
+NINE ROWS FILED IN THE LAST TWELVE HOURS SIT READY AND UNHELD: 1187-iij8,
+1188-vixu, 1189-7yvu, 1190-swen, 1191-vrjf, 1192-xv4n, 1193-e6kv, 1194-davi,
+1195-m9vi. That is a healthy backlog rather than a stall — every capable host
+is either holding a claim or draining plan_next on its own cron — but it is
+worth naming that the night produced findings faster than the fleet consumed
+them, which is what a coordinator outage plus five hosts measuring in
+parallel looks like. One of them is LOCUS-BOUND and should not be picked by
+whoever is free: 1191-vrjf (bash printf under LC_NUMERIC) reproduces only on
+a host whose locale is not C, which today means yoga; a C-locale host would
+find it green and report it fixed.
+HAZARD, and it is about the fleet's own record rather than the product: THE
+PER-HOST CYCLE RECORD HAS GONE STALE WHILE THE WORK IS REAL. Newest
+loop_status entries by host at this pass — macuahuitl 09-15, macneo 09-15,
+pirria 09-14, yoga 09-14, lenovinha 09-12, tlatoanis-macbook-air 09-06,
+yolanda 09-06 — while yolanda landed 1186-w3ph mechanisms tonight, macbookair
+landed 690-w94k and the 1183-j9dk chain, and lenovinha closed three rows.
+loop_status is where a host's cycle is durably legible to everyone else, and
+the metrics audit passes on stem COUNT (rows=23 stems=23) without noticing
+that a stem's newest entry is nine days old — so the instrument reports
+healthy while the record decays. The cross-host recurrence audit reads the
+NEWEST entry per host by design, which means it has been reading nine-day-old
+cycles for two hosts and calling that current. Plain ask to each host at its
+next report, not a directive: write the loop_status entry at the end of the
+cycle, the way the relay taught everyone to push fragments. Worth a row if it
+recurs after the asks.
+Daily maintenance still reads due:stale:2026-09-14 after the host upgrade and
+restart; it belongs to the meta cycle, which takes it at its next fire.

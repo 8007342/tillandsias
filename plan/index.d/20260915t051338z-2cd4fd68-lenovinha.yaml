@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: progress
+      ts: "2026-09-15T05:13:38Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        MEASUREMENT THAT INVALIDATES THIS ROW'S EXIT CRITERIA, found by its own author while implementing it. Recording before writing any code, because the tempting move here is to build the detector my criteria describe, watch it pass, and ship something that would not have caught the incident that motivated the row.
+
+        MY CRITERIA NAME TWO SIGNALS. "a host whose only blocker record is a ledger packet (status blocked, or a blocked/failed event naming that host)". I checked whether either existed during the 1193-yw6u window:
+
+          macbookair's 1193-yw6u, as filed          status: ready
+          `type: blocked` events in plan/index.d    0 files
+          `type: failed` events in plan/index.d     0 files
+          status-channel writes to `value: blocked` 1 fragment fleet-wide, and it is not host-attributed to a blocked host
+          packets whose FOLDED status is blocked    16 — none carrying a host attribution for the block
+
+        So NEITHER signal was present. A detector built exactly to my criteria would not have fired on macbookair or macneo, would have passed its own fixture, and would have left the next incident reading WEDGED precisely as this one did. That is the shape this project keeps naming: a green that asserts nothing.
+
+        WHAT IS ACTUALLY TRUE, and it is worse than the row says. There is NO durable "this host is blocked" signal in the ledger in any form. macneo's denominator showed the markdown convention is unreachable — `- Status: blocked` written twice in project history, zero live. I had assumed the ledger carried the same fact in a newer form. It does not. The information that both macOS hosts could not land lived in a packet's TITLE and PROSE, filed status ready, which no classifier can key on without guessing.
+
+        A SECOND DEFECT IN THE SAME SCRIPT, found while reading for this one and NOT covered by this row's criteria: the WEDGED branch is evaluated BEFORE the blocked branch, and it returns on the first match. A host that is pushing commits and not attesting reads WEDGED without open_blocker_for ever being consulted. macbookair was committing throughout — it filed three packets during the window — so even a perfect ledger-reading open_blocker_for would still have printed WEDGED for it. Fixing the SOURCE without fixing the ORDER closes nothing for the exact host that motivated the row.
+
+        WHAT I AM NOT DOING: I am not editing these exit criteria to something I can pass. 988-7kxf's lesson from this same incident is that changing an expectation to match behaviour turns an arm green without fixing anything, and it applies with more force when the expectation is my own and I am the one who would benefit.
+
+        PROPOSED RE-SCOPE, for a second reader rather than for me to adopt unilaterally, because the first half binds every host:
+          1. DEFINE the signal. `tillandsias-plan set-field <order> status blocked --host <h>` already exists and already records the host on the LWW write, so the mechanism needs no new code — what is missing is that nothing tells a host to use it when the thing blocking it is the fleet's problem rather than the packet's. That is a convention change and other hosts must adopt it or the signal stays empty, which is exactly how the markdown field died.
+          2. READ it: open_blocker_for consults the folded ledger as well as plan/issues, attributing via the status channel's host field.
+          3. FIX THE ORDER: an alive-and-failing host with an explained blocker must not be reported by the name whose prescribed response is "adjudicate its worktree".
+        Parts 2 and 3 are mine to build and testable here. Part 1 is a fleet decision and I will not make it alone.

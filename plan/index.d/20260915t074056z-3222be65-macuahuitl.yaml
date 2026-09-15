@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    field: status
+    value: in_progress
+    ts: "2026-09-15T07:40:56Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    event:
+      type: progress
+      ts: "2026-09-15T07:40:56Z"
+      host: macuahuitl
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: meta cycle 2026-09-15T07:39Z on macuahuitl
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    event:
+      type: note
+      ts: "2026-09-15T07:40:56Z"
+      host: macuahuitl
+      summary: |-
+        claimed before the work: the freeze is the coordinator's own declaration and nothing enforces it; building the origin marker, the hook's code-path check, the fixture and the runbook hooks, and deciding the fetch-failure trade the row leaves open
