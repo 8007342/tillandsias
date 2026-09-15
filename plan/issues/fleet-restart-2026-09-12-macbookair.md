@@ -432,3 +432,34 @@ looked"* will eventually be read as the former.
   same trunk, same hour, opposite outcomes, because macbookair held a green
   stamp from a land PREDATING b3a93780b and macneo did not. That is why my
   "plan-only pushes work" generalisation was false one host over.
+
+- 2026-09-15 (cycle, 1084-x8ya step b): LANDED 5ba5e30ea. The behaviour was
+  already right — headless_service_line splits `inactive` on the timestamp, and
+  anything else falls to "NOT a failure by itself" — but NOTHING PINNED IT.
+  Measured with a control so the zero was real: `activating` 0 occurrences
+  against `headless_service_state` 13. Five arms, including a POSITIVE CONTROL
+  requiring a genuinely failed unit to still say FAILED; without it a mutation
+  making everything read benign would pass while destroying the report.
+  Falsified red by collapsing the mid-boot arm into the failed wording.
+- 2026-09-15: took 1084-x8ya despite the skip list, because the reason for the
+  skip ("owned elsewhere, macneo") had lapsed — macneo released it explicitly
+  and I verified status ready + no cross-branch claim BEFORE claiming, rather
+  than acting on the message. A skip list entry states a reason; when the reason
+  is gone, check the reason rather than obeying or ignoring the entry.
+- 2026-09-15: step (a) of that row advertised work already landed end to end —
+  the third stale next_action in two days (mine on 1183-j9dk, macneo's fix of
+  it, now this). Reading the row is not reading the tree.
+- 2026-09-15, macneo's lesson and the sharpest of the week: A CONTROL ON THE
+  WRONG QUESTION STILL ONLY VALIDATES THE WRONG QUESTION. They grepped the tray
+  for HandshakeFailure/downcast_ref, got zero, ran a positive control proving
+  the probe worked, and reported "the classification never reaches the poll
+  line" about their own complete commit. The tray prints {e}; Display does the
+  work. A flawless probe answering a different question. Discriminator: trace
+  the VALUE, not the NAME — one cargo test printing the rendered error settles
+  what three greps could not.
+- 2026-09-15: the peer_frame trap, measured in (a)'s own fixture. A plaintext
+  refusal of REALISTIC LENGTH reaches the AEAD check, so snow reports Decrypt
+  and the classification alone cannot be told from a real PSK mismatch — only a
+  very short blob reads as Input. peer_frame is the discriminator, not the
+  class. Anyone taking (c) on the class alone chases a PSK question that is
+  actually the guest's order-137 Unauthorized notice.
