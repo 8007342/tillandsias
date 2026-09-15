@@ -424,10 +424,41 @@ if want symlink; then
     D="$(mktemp -d "${TMPDIR:-/tmp}/salvage-net-test.XXXXXX")"
     mk_fixture "$D"
     echo edited > "$D/work/tracked.txt"
-    ( cd "$D/work" && ln -s /nonexistent/target dangling )
+    ( cd "$D/work" && ln -s /nonexistent/target dangling ) 2>/dev/null
 
+    # ORDER 1186-w3ph. THE SUBSTRATE MAY REFUSE TO BUILD THIS WORLD AT ALL, and
+    # that is a SKIP, not a failure. Git for Windows emulates a symlink by
+    # COPYING its target, so a missing target leaves nothing to copy and `ln -s`
+    # fails outright: `ln: failed to create symbolic link 'dangling': No such
+    # file or directory` (measured, yolanda 2026-09-14). WSL git on the same
+    # drvfs path creates it fine -- the axis is the git/shell, not the
+    # filesystem.
+    #
+    # Before this, the scenario ran on regardless and emitted four reds: the
+    # counterfactual correctly refusing, then three assertions about a path that
+    # was never created. That reads as "salvage's skip branch is broken" when it
+    # means "this host cannot pose the question". A red that names the wrong
+    # subsystem costs a reader a whole investigation, which is the same harm
+    # 1109-t8kw is about.
+    #
+    # LOUD, and keeping its teeth elsewhere: the skip names the substrate and the
+    # scenario, and it fires ONLY when the symlink is genuinely absent. On any
+    # host that CAN create it -- every Linux host, and WSL on this very path --
+    # nothing changes and the counterfactual still has to pass before the skip
+    # branch is exercised.
+    if [ ! -L "$D/work/dangling" ]; then
+        echo "skip:salvage-net:symlink:substrate-cannot-create-a-dangling-symlink"
+        echo "  \`ln -s /nonexistent/target\` failed here, so the unstageable-path"
+        echo "  scenario has no subject. This is the substrate refusing to pose the"
+        echo "  question, not salvage answering it wrongly (1186-w3ph)."
+        rm -rf "$D"
+        D=""
+    fi
+fi
+
+if want symlink && [ -n "${D:-}" ]; then
     # COUNTERFACTUAL FIRST: prove THIS filesystem stages the dangling symlink
-    # fine unaided — otherwise the skip below is not exercising anything.
+    # fine unaided -- otherwise the skip below is not exercising anything.
     ( cd "$D/work" && git add -A -- dangling ) 2>/dev/null
     rc=$?
     ( cd "$D/work" && git reset -q -- dangling ) 2>/dev/null
