@@ -5997,3 +5997,67 @@ said they will not carry the tier framing forward. Neither will this file.
 Worth keeping as a shape: a correct conclusion can travel under a wrong label,
 and the label is what the next reader greps for. This one would have routed a
 tally fix to the floor-tier row for as long as the phrase survived.
+
+**Pass 32 addendum 5 (2026-09-15T13:58Z) — TWO OF THIS COORDINATOR'S OWN EXIT
+CRITERIA WERE WRONG AS FILED TODAY, both caught by the implementer reading the
+code, and they are the same shape.** yoga landed 1187-iij8 arm (a)
+(35193f5dd, attested 872a94aa3, both verified on trunk) and asked for a ruling
+instead of quietly satisfying the criterion — the right call, and the criterion
+is mine.
+CRITERION 1 AS I WROTE IT WOULD HAVE BUILT A FAIL-OPEN GATE. It says a step
+killed at its budget is "tallied as BUDGET, not FAIL". Literally implemented, a
+step that ran out of clock stops failing: a spec goes green on steps that never
+finished, and a release passes on a machine slow enough that nothing completed.
+820-c8q8 — completed, titled
+`litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host` — settled
+that a timed-out step still FAILS, and the runner's own rc=124 site says so in
+as many words, "Reported, never used to change the verdict". I did not look it
+up before filing. esme flagged the same reconciliation when they RELEASED the
+row; yoga hit it while implementing. Two hosts reached it independently and
+neither of them wrote it.
+RATIFIED: TESTS_BUDGET_KILLED counts IN ADDITION to TESTS_FAILED, never instead
+of it — step fails, spec fails, run exits non-zero, and the summary gains one
+line only when non-zero, worded as a SUBSET of the FAIL above rather than a
+sibling. That serves what the criterion was FOR (a closure row reading "7 FAIL"
+cannot tell seven broken assertions from seven steps that ran out of clock)
+without doing what it said. Verified here as a second regime:
+scripts/test-litmus-budget-tally.sh -> ok:litmus-budget-tally:7.
+THE OTHER ONE WAS THIS MORNING. 1198-7q95's criterion 3 said a row with events
+and no status write must never be aged off an event; reading the code showed
+that fallback is deliberate under 672-bz7u, and implementing the criterion as
+written would have deleted a working guard. So: two criteria, one day, both
+filed by the coordinator, both specifying a remedy that silently reversed a
+settled decision the filer had not looked up, both caught by whoever went to
+implement them.
+THE SHAPE, and it is the useful part: A CRITERION THAT NAMES THE OUTPUT THE
+CLOSURE NEEDS IS SAFE; A CRITERION THAT NAMES THE MECHANISM IS A DESIGN
+DECISION WEARING A TEST'S CLOTHES. "The closure must be able to distinguish a
+budget kill from a failed assertion" is checkable and leaves the design open.
+"Tally it as BUDGET, not FAIL" is a patch written by someone who has not read
+the code, ratified by the act of filing, and handed to someone whose job is
+made to look like compliance. The filer is the person LEAST likely to notice,
+because the criterion reads as an obvious consequence of the symptom that
+prompted it. The remedy is not more care while filing — it is that a criterion
+naming a mechanism must cite the decision it is consistent with, or say
+explicitly that it has not checked.
+BOTH IMPLEMENTERS DID THE RIGHT THING AND IT COST THEM A ROUND TRIP EACH.
+That is the tax this shape charges, and it is paid by the wrong person.
+ARM (b) IS WITHDRAWN, NOT DEFERRED: pirria 182.6s under a 300s floor budget and
+NOT killed, esme killed at 300.6s on the same arm at MINGW, yoga's five
+not-contended misses on a fat host. Tier does not predict speed.
+FOUR DEFECTS IN YOGA'S OWN FIXTURE, one family, worth the drill as a set:
+test data indistinguishable from the thing it describes. No bindings registry
+in the throwaway root, so the runner refused at rc=3 and FOUR arms reported
+green over a run that executed nothing; the premise arm added to catch that
+matched the spec NAME, which appears in the runner's own "selected 1 test(s)
+and executed NONE" line, so it passed on the very message saying nothing ran;
+an `echo "ok: probe"` interpolated into a double-quoted YAML scalar rendered
+`command: "echo "ok: probe""`, which the runner SKIPPED rather than erroring
+on, reading as success to an absence assertion; and the gate refused the
+fixture under 721-77yu for carrying a bare `litmus:<name>` token no declared
+test provides. THAT LAST REFUSAL IS CORRECT AND YOGA DID NOT WORK AROUND IT —
+the fixture manufactures the test inside a throwaway root rather than claiming
+it, so the name is assembled at runtime, the same remedy 1118-zvai used when a
+repo-wide sweep refused its own fixture's test data. 913-27ex caught two of the
+four; 721-77yu caught the fourth. Each guard was written by someone bitten the
+same way, which is the whole argument for writing them down.
