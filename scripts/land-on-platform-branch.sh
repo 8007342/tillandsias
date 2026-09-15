@@ -563,8 +563,21 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # though they were all of them. Narrowing a pattern is not the same as
         # enumerating what it must still cover.
         if ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
-            echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
+            # 1064-r8fv named the LANE but left the sentence absolute. MEASURED
+            # on macbookair 2026-09-15: "retrying cannot help" is true of
+            # retrying THIS PUSH and false of re-running this script, whose
+            # attempt loop merges trunk at attempt start and re-gates — which is
+            # exactly the remedy for the mandated-merge refusal it fires on. A
+            # tired reader takes the sentence at face value and hand-merges;
+            # that host did, twice, before measuring the race. Say which
+            # retrying is futile, and name the step the tool already performs.
+            echo "refused:land:push-failed — retrying THIS PUSH cannot help (not a lost race); merge trunk and re-gate:" >&2
             sed -n '1,6p' "$_plog" >&2
+            echo "  Re-running this script does that for you: each attempt merges origin/$BRANCH" >&2
+            echo "  first, then re-gates. That is worth one more gate ONLY if your gate is" >&2
+            echo "  shorter than trunk's inter-commit interval — on 2026-09-15 that interval" >&2
+            echo "  was 5.5 minutes and a macOS gate lost the race twice. Measure before" >&2
+            echo "  spending a third: git log --since=1.hours --oneline origin/$BRANCH | wc -l" >&2
             # ORDER 1064-r8fv. NAME THE LANE, DO NOT TAKE IT. A refusal that
             # says only "retrying cannot help" reads as a dead end; four
             # consecutive refusals on yolanda ended in a hand-rolled loop

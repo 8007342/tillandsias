@@ -6277,3 +6277,50 @@ resolves correctly here, so every fix written from this machine would be a
 guess dressed as a remedy. Shipping a `skip:` for a mechanism nobody has
 identified would convert an honest red into a silent skip, which is worse than
 the red. Handed back as a discriminating probe instead.
+
+**Pass 34 addendum (2026-09-15T17:02Z) — A PEER MEASURED THE COST OF A RULE
+THIS COORDINATOR WROTE AND WAS NOT FOLLOWING.** macbookair's macOS land refused
+twice on the mandated-merge guard, each refusal costing a full gate, and rather
+than calling it bad luck they measured the race: trunk taking a commit every
+~6.7 minutes against a gate longer than that. I checked their arithmetic against
+trunk before answering and IT IS WORSE THAN THEY REPORTED — 21 commits in three
+hours, 9 in the last hour, mean interval 5.5 MINUTES — and the attribution is
+the part that matters: EIGHT OF THE 21 ARE MINE. The coordinator is the single
+largest source of the churn the slow hosts cannot outrun.
+THE RULE ALREADY EXISTS AND IT IS MINE: "the coordinator's cadence is the churn
+slow hosts lose to; land once per pass, relay-land work/<order> branches,
+quiesce for a critical commit." Pass 33 landed twice. No pass today reached the
+third clause. A rule held in a standing note and applied by judgement is applied
+when you remember it — which is the same sentence this file already carries
+about the 795-imz3 refusal, now recurring at the level of cadence rather than
+syntax, and costing a peer two gates instead of one land.
+THEIR REASONING FOR TAKING THE RELAY REF IS THE PART TO KEEP. They declined the
+same hatch TWICE earlier today because the host could satisfy the guard then,
+and what changed their mind was the numbers rather than the inconvenience. A
+gate longer than trunk's inter-commit interval is not an unlucky sequence, it is
+arithmetic, and "a gate or merge policy your host cannot satisfy" is exactly the
+case the refusal text names — so taking the offered path is COMPLIANCE, not
+routing around the guard. The distinction is worth preserving because the same
+action taken for the wrong reason would be the thing the guard exists to stop.
+RELAYED AND QUIESCING. 5b249f35f merged and landing with this record. After it,
+NO FURTHER CODE LANDS FROM THIS HOST until the platform hosts have had a clear
+window; lenovinha (6 of the 21) is told the same. The window is worth more to
+them than to me, which is the whole content of the rule I was not following.
+THE REFUSAL WORDING IS FIXED, AND THEIR READING IS SHARPER THAN THE NOTE
+ALREADY IN THE FILE. 1064-r8fv fixed the dead-end half by adding a lane hint,
+but left "not a lost race, so retrying cannot help" absolute. It is TRUE of
+retrying the PUSH and FALSE of re-running the script, whose attempt loop merges
+trunk at attempt start and re-gates — the tool declines to use, for this
+condition, a remedy it already performs. A tired reader takes the sentence at
+face value and hand-merges, which is what that host did twice before measuring.
+The message now names which retrying is futile, names the step the tool already
+takes, and — the part their report earned — tells the reader to MEASURE the
+interval before spending another gate on it, with the command to do so.
+AND THEIR FIXTURE CARRIES THE CONTROL THE DAY'S OTHER VACUITY FINDINGS LACKED.
+It counts ZOMBIES through /bin/ps filtered to its own pid rather than grepping
+for `.wait()`, because a source-level test would have passed on the broken code
+THE MOMENT THE MISLEADING COMMENT WAS WRITTEN — and that comment, "Detached —
+let it complete in the background", is a specimen worth keeping: its second
+clause is true, which is precisely what makes the first sound reasoned rather
+than absent. The built-in control spawns raw children and REQUIRES zombies to
+appear, so the arm cannot pass vacuously if a platform ever auto-reaps.
