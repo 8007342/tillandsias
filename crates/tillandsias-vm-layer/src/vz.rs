@@ -3019,6 +3019,17 @@ mod tests {
     /// pins the DEFECT rather than the timing of a particular machine — a
     /// spinning loop overshoots it by ~7000x, and no correct implementation
     /// comes near it.
+    // 690-w94k landed this on osx-next, where `pub mod boot` is compiled — the
+    // THIRD instance of the shape the two tests below already carry a comment
+    // about (804-deux). `pub mod boot` is #[cfg(target_os = "macos")] and this
+    // `mod tests` is #[cfg(test)] ONLY, so on Linux the test references a module
+    // that does not exist and the lib-test target fails with E0433, taking
+    // `cargo test --workspace` down with it — measured here on the relay of
+    // 2026-09-15, which is the first compiler these arms meet. Gated at the TEST
+    // and not at the module: a CFRunLoop park-versus-spin is genuinely macOS-only
+    // behaviour, so skipping it off-macOS is honest, whereas widening the cfg on
+    // `mod tests` would silently drop the platform-independent tests beside it.
+    #[cfg(target_os = "macos")]
     #[test]
     fn pump_cf_loop_parks_instead_of_spinning_with_no_sources() {
         let before = boot::PUMP_CF_ITERATIONS.load(std::sync::atomic::Ordering::Relaxed);

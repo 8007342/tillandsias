@@ -5244,3 +5244,18 @@ macbookair later retracted the independence half and narrowed the row);
 marker, so a blocker filed as a ledger packet is invisible to it (lenovinha,
 who then filed against their own exit criteria: "my own exit criteria do not
 match reality").
+Pass 28, the relay's own finding: the union gate refused with three E0433s
+in crates/tillandsias-vm-layer/src/vz.rs — 690-w94k's new test calls
+`boot::pump_cf_loop_for`, and `pub mod boot` is #[cfg(target_os = "macos")]
+while `mod tests` is #[cfg(test)] only, so it compiles on the author's Mac
+and on no other platform. The eleventh regime axis (cfg(target_os)) for the
+third time in this file: the two tests immediately BELOW it already carry a
+comment from 804-deux naming the failure and the fix, and the new one was
+written above them without it. A precedent recorded as a comment beside the
+code did not reach the next author — which is the argument for 1194-davi's
+notice, recorded there as the mirror-direction instance. Fixed forward on
+the relay (gate the test, not the module: a CFRunLoop park-versus-spin is
+genuinely macOS-only). Standing rule for macOS hosts, unchanged since
+2026-09-13: when a struct or module changes under a cfg, compile the other
+platform's arms before landing — `cargo zigbuild -p <crate> --target
+x86_64-unknown-linux-musl` does it on a Mac and the lane already has zig.
