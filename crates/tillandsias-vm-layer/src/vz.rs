@@ -1702,6 +1702,7 @@ impl std::error::Error for OpenVsockError {}
 pub mod boot {
     use std::os::raw::c_int;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{Duration, Instant};
 
     use objc2::ClassType;
@@ -1993,6 +1994,32 @@ pub mod boot {
             ) -> i32;
             static kCFRunLoopDefaultMode: *const std::ffi::c_void;
         }
+        // ORDER 690-w94k, item 1. CFRunLoopRunInMode's RESULT IS LOAD-BEARING and
+        // was discarded here (`let _rc = ...`).
+        //
+        // THE CONTRACT: the call parks the thread only while the mode has at
+        // least one source or timer registered. With none, it does NOT wait the
+        // requested seconds — it returns kCFRunLoopRunFinished IMMEDIATELY. The
+        // loop then recomputes a still-positive `remaining` and calls straight
+        // back in, so the intended park becomes a busy spin for the whole
+        // duration.
+        //
+        // MEASURED on this host (macbookair, 2026-09-15) on a bare thread with
+        // no sources: a single call returned rc=1 (Finished) in 43.3µs rather
+        // than the 250ms requested, and this loop as written ran 3,471,102
+        // iterations in 250ms — a saturated core. Nine call sites use this,
+        // including the boot waits, so it is not a corner.
+        //
+        // THE HANDLING: on Finished there is nothing for CoreFoundation to wait
+        // on, so we sleep instead of re-entering. The nap is SHORT and bounded
+        // rather than the whole remaining time, because a source can appear
+        // while we wait (VZ completion handlers arrive via dispatch_async to the
+        // main queue, which registers one) and this function's documented job is
+        // to let those fire promptly. 5ms keeps delivery latency in the same
+        // order as before while taking the iteration count from millions to
+        // tens: MEASURED 3,471,102 -> 34 entries for the same 250ms, with the
+        // wall-clock contract intact (251.7ms elapsed for a 250ms request).
+        const CF_RUN_FINISHED: i32 = 1;
         let deadline = Instant::now() + dur;
         loop {
             let remaining = deadline
@@ -2001,9 +2028,22 @@ pub mod boot {
             if remaining <= 0.0 {
                 break;
             }
-            let _rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
+            PUMP_CF_ITERATIONS.fetch_add(1, Ordering::Relaxed);
+            let rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
+            if rc == CF_RUN_FINISHED {
+                let nap = Duration::from_millis(5).min(Duration::from_secs_f64(remaining));
+                std::thread::sleep(nap);
+            }
         }
     }
+
+    /// Counts `CFRunLoopRunInMode` entries made by [`pump_cf_loop_for`].
+    ///
+    /// Always on, not `cfg(test)`-gated, so the regression test exercises the
+    /// SHIPPED loop rather than a variant compiled only for tests. A relaxed
+    /// increment costs nanoseconds against a loop that now runs tens of times
+    /// per second rather than millions (order 690-w94k).
+    pub static PUMP_CF_ITERATIONS: AtomicU64 = AtomicU64::new(0);
 
     /// Schedule `f` onto libdispatch's main queue. VZ start/stop APIs assert
     /// queue affinity, while the tray calls into this runtime from worker
@@ -2959,6 +2999,48 @@ impl VmRuntime for VzRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 690-w94k item 1 — the pump must PARK, not SPIN, when the run
+    /// loop mode has no sources.
+    ///
+    /// WHY A BARE THREAD. `CFRunLoopRunInMode` waits only while the mode has a
+    /// source or timer; with none it returns kCFRunLoopRunFinished immediately.
+    /// A freshly spawned thread has registered nothing, which is precisely the
+    /// no-sources regime — and the regime several `pump_cf_loop_for` callers
+    /// run in.
+    ///
+    /// WHY AN ITERATION COUNT rather than CPU time: this crate has no `libc`
+    /// dependency, and wall-clock is identical either way (the loop honours its
+    /// deadline whether it parks or spins) — so elapsed time cannot tell the
+    /// two apart. The iteration count can, by four orders of magnitude.
+    ///
+    /// MEASURED BEFORE THE FIX on this host: 3,471,102 iterations in 250ms.
+    /// After: single digits. The bound below is deliberately loose (500) so it
+    /// pins the DEFECT rather than the timing of a particular machine — a
+    /// spinning loop overshoots it by ~7000x, and no correct implementation
+    /// comes near it.
+    #[test]
+    fn pump_cf_loop_parks_instead_of_spinning_with_no_sources() {
+        let before = boot::PUMP_CF_ITERATIONS.load(std::sync::atomic::Ordering::Relaxed);
+        let handle = std::thread::spawn(|| {
+            boot::pump_cf_loop_for(Duration::from_millis(250));
+        });
+        handle.join().expect("pump thread panicked");
+        let iterations =
+            boot::PUMP_CF_ITERATIONS.load(std::sync::atomic::Ordering::Relaxed) - before;
+
+        assert!(
+            iterations > 0,
+            "the counter never moved ({iterations}) — the test measured nothing, \
+             which is not the same as the loop behaving"
+        );
+        assert!(
+            iterations < 500,
+            "pump_cf_loop_for spun: {iterations} CFRunLoopRunInMode entries in 250ms. \
+             With no sources the call returns kCFRunLoopRunFinished immediately, so a \
+             loop that does not handle that result burns a core (order 690-w94k)."
+        );
+    }
 
     /// Order 804-deux, THE LOAD-BEARING TEST. Two shares reach the VZ
     /// configuration as two devices.
