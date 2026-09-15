@@ -182,8 +182,44 @@ EXPECTED="${TILLANDSIAS_MCP_EXPECTED:-$EXPECTED_DEFAULT}"
 # /tmp is not one place across the WSL boundary. Shared rule, best-effort source.
 # shellcheck source=scripts/metrics-log-path.sh
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/metrics-log-path.sh" 2>/dev/null || true
-command -v metrics_default_log >/dev/null 2>&1 || { metrics_default_log() { printf '/tmp/%s' "$1"; }; }
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(metrics_default_log forge-expert-health.jsonl)}"
+# ORDER 1125-92xa — THE STUB WAS THE DEFECT THE RULE FILE EXISTS TO PREVENT.
+#
+# It silently returned /tmp AND DROPPED THE repo_root ARGUMENT, so it answered
+# /tmp even inside a perfectly writable checkout where the real rule returns
+# .cache/metrics. The WRITER of this log (this script) and its READER
+# (check-mcp-surface.sh) both carried it, byte-identical — precisely the
+# writer/reader split metrics-log-path.sh was written to end, reproduced one
+# subsystem over, which that file's own header warned would happen.
+#
+# Same shape as 1096-p3tn's fix for cycle-metrics.sh, and the distinction it
+# preserves is load-bearing: metrics_default_log's OWN /tmp fallback — "there is
+# no writable checkout" — is correct and must keep working for the forge and for
+# out-of-repo calls. What refuses here is the case where the RULE FILE ITSELF
+# could not be sourced, i.e. we cannot even ask the question. Conflating the two
+# would refuse every out-of-repo invocation.
+#
+# The refusal is LAZY, firing only if something actually has to be DEFAULTED: a
+# caller that named its own log has already answered the question and does not
+# need the rule file at all.
+if ! command -v metrics_default_log >/dev/null 2>&1; then
+    metrics_default_log() {
+        echo "refused:metrics:unresolvable-log-path" >&2
+        {
+            echo "  scripts/metrics-log-path.sh could not be sourced, and this"
+            echo "  invocation needs it to default a path for '${1:-?}'."
+            echo "  The old behaviour — silently substituting /tmp/<name> — put this"
+            echo "  log's writer and its reader on different paths (1125-92xa:"
+            echo "  901 records written, 0 readable by their own reader)."
+            echo "  FIX: restore the file, or name the log explicitly, in which case"
+            echo "  this rule is not needed at all —"
+            echo "    TILLANDSIAS_EXPERT_HEALTH_LOG=<path> $0 ..."
+        } >&2
+        exit 2
+    }
+fi
+# PASS repo_root. Dropping it is what made the stub answer /tmp inside a checkout.
+_mcp_repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(metrics_default_log forge-expert-health.jsonl "$_mcp_repo_root")}"
 PROBE_TIMEOUT="${TILLANDSIAS_MCP_PROBE_TIMEOUT:-10}"
 PROBE_MAXLINES="${TILLANDSIAS_MCP_PROBE_MAXLINES:-500}"
 PROBE_ID=1
