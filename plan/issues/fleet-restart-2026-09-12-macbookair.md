@@ -499,3 +499,31 @@ looked"* will eventually be read as the former.
   needs it; both render as "I cannot write to the ledger". The arm's name was
   exactly where that precondition could have been learned, and it said the
   opposite.
+
+- 2026-09-15 (1201-t6ms): LANDED c04b5c002 after the first land refused on the
+  mandated-merge guard — trunk moved during a multi-minute gate, so osx-next no
+  longer contained origin/linux-next. The guard was right. I declined the
+  offered work/<order> relay-ref escape: that exists for a host that CANNOT
+  satisfy the merge policy, and mine can. Worth noting as a lane property: the
+  longer the gate runs, the likelier trunk moves beneath it, so a slow gate
+  makes its own push refusal more probable.
+- 2026-09-15 (920-pxg6 task 4.5, darwin half): a passing test can ride a CACHED
+  build and answer a different question than the one asked. mlua is `vendored`,
+  so portability is about compiling Lua's C source HERE — my first measurement
+  used a cached mlua and would have been reported as portability evidence.
+  Destroyed the cache and re-measured: 32 C objects, liblua5.4.a at ARM64,
+  7/7 runtime tests including both sandbox arms.
+- 2026-09-15, AND THE CLEAN NEEDED ITS OWN CONTROL: I printed "cleaned" from my
+  own echo after a `cargo clean -p mlua-sys 2>/dev/null` whose failure would
+  have been invisible. The 11s rebuild that never mentioned mlua was the tell.
+  A second clean reported "Removed 60 files, 7.6MiB" — THAT is the evidence the
+  clean applied. Never suppress the stderr of a command whose silence you are
+  about to treat as success.
+- 2026-09-15: pushed the 920-pxg6 claim flip ALONE and FIRST, plan-only, before
+  starting work — the rule taken from macuahuitl's status ask. Batching a claim
+  into the same commit as code hands it to a gate, and for the whole duration of
+  a build trunk cannot distinguish the claim from an idle host.
+- 2026-09-15: searching trunk for "920-pxg6" found ZERO while the claim fragment
+  WAS there — set-field fragments reference a packet by its packet_id SLUG, not
+  its order token. Caught by a positive control on a fragment I knew had landed.
+  Another probe asking the wrong question and answering it faithfully.
