@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-agreement-fixtures-end-to-end-writer-arm-appends-to-the-hosts-real-metrics-and-asserts-on-counts-of-a-concurrently-written-file-so-binding-it-would-be-intermittent
+    field: status
+    value: completed
+    ts: "2026-09-15T21:14:13Z"
+    host: linux
+
+events:
+  - packet_id: the-agreement-fixtures-end-to-end-writer-arm-appends-to-the-hosts-real-metrics-and-asserts-on-counts-of-a-concurrently-written-file-so-binding-it-would-be-intermittent
+    event:
+      type: completed
+      ts: "2026-09-15T21:14:13Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: d00b8142b
+  - packet_id: the-agreement-fixtures-end-to-end-writer-arm-appends-to-the-hosts-real-metrics-and-asserts-on-counts-of-a-concurrently-written-file-so-binding-it-would-be-intermittent
+    event:
+      type: note
+      ts: "2026-09-15T21:14:13Z"
+      host: linux
+      summary: |-
+        arm 1c now anchors the binary in a scratch checkout so it writes there, and the fixture scopes its own usage log for the cycle-metrics arms; the host's forge-expert-usage.jsonl is byte-stable across consecutive runs (4821 -> 4821 -> 4821), 18/18. Arm 1c keeps its teeth: falsified against a writer reverted to a hardcoded /tmp path, it still FAILS (17/1), so the rework did not degrade it into a resolver comparison. Landed d00b8142b — NOT the pre-land 41c3ba7df, which the integrate rewrote and which exists nowhere upstream (1024-c3h3). Gate 1219s, no violations
