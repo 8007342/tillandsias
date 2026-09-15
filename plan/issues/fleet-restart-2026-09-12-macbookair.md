@@ -388,3 +388,16 @@ looked"* will eventually be read as the former.
   beginning with a BACKTICK matches nothing because the accept patterns are
   anchored to the first character. The last is documented in the checker's own
   comments and I walked into it anyway.
+- 2026-09-15: `tillandsias-plan status <order>` reads the LOCAL FOLD, not the
+  fetched remote ref. I queried 1194-davi, got "no packet matches", and reported
+  it as possibly-misfiled — it was on trunk the whole time, 23 seconds after my
+  own duplicate. Absent and negative render identically AGAIN, this time inside
+  the ledger tooling. To ask whether a packet exists on trunk:
+  `git grep -l <order> origin/linux-next -- plan/index.d/` WITH A CONTROL search
+  that must return nothing. macneo hit the identical shape on 1145-iigx this
+  week; on a wedged host nobody's fold is current, because integrating is the
+  thing that cannot be done.
+- 2026-09-15: I generalised "plan-only pushes and the relay work" from THIS host
+  to all macOS hosts. False — macneo was wedged out of the plan lane entirely in
+  the same hour. Two hosts, one trunk, opposite outcomes. Correction recorded in
+  1195-m9vi's context rather than left in a message.
