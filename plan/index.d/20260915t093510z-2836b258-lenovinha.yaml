@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    field: next_action
+    value: operator unlocks the login keyring on lenovinha; then git push origin refs/heads/salvage/lenovinha/20260915-1199-aw6m and scripts/land-on-platform-branch.sh linux-next to land cc6c5564b
+    ts: "2026-09-15T09:35:10Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    event:
+      type: note
+      ts: "2026-09-15T09:35:10Z"
+      host: lenovinha
+      summary: |-
+        gated and complete, blocked only on the push
