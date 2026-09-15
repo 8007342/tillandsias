@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by yoga while closing 740-88hz criterion 2: pirria's floor numbers made
+# the duplication expensive enough to name.
+packets:
+  - packet_id: the-eligibility-probe-calls-podman-info-twice-per-invocation-and-that-second-call-is-half-the-probes-whole-cost-on-the-floor
+    order: 1202-jpzy
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [podman, litmus, tooling, low-end]
+    estimated_hours: 1
+    parent_order: 740-88hz
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is one fewer external call per invocation. Future arm on litmus:e2e-eligibility-probe-shape; the claimer writes it in the same commit and moves this text into verifiable_closure: a tripwire shadowing ONLY podman records exactly ONE `podman info` per `e2e-preflight.sh eligibility` invocation on the path that reaches the live checks (pre-fix result: FAILS — two, measured on yoga 2026-09-15); NEGATIVE CONTROL: every verdict this probe can emit is unchanged, including skip:podman-not-functional, which is the one the de-duplication could plausibly break."
+    owned_files:
+      - scripts/e2e-preflight.sh
+    title: |
+      e2e_eligibility_verdict runs `podman info` and then calls live_runtime_is_present, which runs `podman info` again — two identical reachability probes per invocation, and on the floor that second call is ~780ms of a ~1.6s step
+    context: |
+      MEASURED. yoga 2026-09-15, with a tripwire shadowing ONLY podman (never a
+      stripped PATH): one `eligibility` invocation on the path that reaches the
+      live checks produces THREE podman calls — `info`, `info`, `ps`.
+
+      Reading the two sites rather than inferring: the Linux branch of
+      `e2e_eligibility_verdict` calls `podman info` directly as its
+      podman-not-functional gate, then calls `live_runtime_is_present`, whose
+      own first act after `command -v podman` is another `podman info` with the
+      identical purpose — the 723-fndi reachability-before-inference check. Both
+      are correct in isolation. The predicate cannot assume its caller probed,
+      because it is also reachable from the macOS and Windows branches, and the
+      caller cannot skip its own gate because it needs the verdict.
+
+      THE COST IS NOT THEORETICAL, from pirria's floor measurement taken for
+      740-88hz criterion 2: `podman info` 789/744/807ms warm, `podman ps`
+      57/53/54ms warm, and the whole step 1557/1618ms. So `info` is ~93% of the
+      podman cost and ~48% of the entire step, and the probe pays it twice. On
+      the floor that is roughly 780ms per invocation for an answer already in
+      hand.
+
+      WHY IT IS WORTH ONE HOUR AND NOT MORE: this probe runs in the
+      meta-orchestration gate on every host, every cycle. It is not a
+      correctness defect — both verdicts are right today — and the fix is a
+      cache or a parameter, not a redesign.
+
+      THE TRAP: `skip:podman-not-functional` is the verdict that exists BECAUSE
+      info can fail, and it is the one a careless de-duplication breaks. A fix
+      that makes the caller trust a stale or absent result would turn a
+      reachability gate into an assumption, which is the shape 723-fndi was
+      filed about in the first place.
+    next_action: |
+      Decide between memoising the reachability answer for the life of one
+      invocation and passing it into live_runtime_is_present as an argument;
+      prefer whichever keeps the predicate independently callable, since the
+      macOS and Windows branches also use it. Then the tripwire arm from
+      unscoreable, and exercise skip:podman-not-functional explicitly — a
+      verdict that only appears when podman is broken is the one no green run
+      covers.
