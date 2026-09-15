@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-shared-metrics-path-rule-is-a-shell-file-so-the-rust-writer-cannot-ask-it-and-901-usage-records-are-unreadable-by-their-own-reader
+    field: status
+    value: completed
+    ts: "2026-09-15T03:11:17Z"
+    host: linux
+
+events:
+  - packet_id: the-shared-metrics-path-rule-is-a-shell-file-so-the-rust-writer-cannot-ask-it-and-901-usage-records-are-unreadable-by-their-own-reader
+    event:
+      type: completed
+      ts: "2026-09-15T03:11:17Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: df65f1377
+  - packet_id: the-shared-metrics-path-rule-is-a-shell-file-so-the-rust-writer-cannot-ask-it-and-901-usage-records-are-unreadable-by-their-own-reader
+    event:
+      type: note
+      ts: "2026-09-15T03:11:17Z"
+      host: linux
+      summary: |-
+        the Rust CLI writer now derives the metrics-log path the shell rule prescribes, anchored on the EXECUTABLE's checkout (as the shell rule anchors on its own file, not the cwd); new metrics-log-path subcommand exposes the binary's answer so arm 1b can compare it against the shell rule and the duplicated algorithm cannot drift silently; check-mcp-expert-health.sh and check-mcp-surface.sh take 1096-p3tn's lazy-refusal shape and stop dropping repo_root. Fixture 17/17 with arm 1b (resolvers agree) and arm 1c (the writer actually uses the resolver, end to end); both halves falsified — reverting only the writer leaves 1b green and 1c red, which is why 1c exists. 1223 historical /tmp records merged into the canonical path on this host. Landed df65f1377, verdict ok:land:df65f1377:attempt-1, gate 913s no violations
