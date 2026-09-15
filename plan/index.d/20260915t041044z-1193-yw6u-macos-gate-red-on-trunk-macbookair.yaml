@@ -65,6 +65,19 @@ packets:
       it was tested; reading (b) would mean editing the expectation, which is
       the move that turns a red guard green without fixing anything. Do not
       pick by convenience.
+    verifiable_closure: |
+      scripts/test-host-tools.sh exits 0 on a macOS host at origin/linux-next
+      — the arm "without timeout, check-credential-channel.sh reports
+      blocked:gh-cli-only" passes rather than failing with
+      got=[missing:no-credential-channel]. The fixture EXISTS today and is
+      already red here, so this is a pin on a live test rather than a name
+      nothing defines yet (885-92iu).
+
+      AND the distinction stays falsifiable, which is the point of the prover
+      (988-7kxf): whichever side changes, omitting `timeout` must remain
+      DISTINGUISHABLE from having no credential channel at all. A fix that
+      makes both cases report the same verdict turns this arm green while
+      destroying what it measures, and must be refused.
     deliverable: |
       ./build.sh --check passes on a macOS host at origin/linux-next, with the
       verdict question settled deliberately rather than by editing whichever
