@@ -1,0 +1,18 @@
+# Gate step 1198-7q95 — data, not code.
+#
+# Binds the fixture for the claim-expiry sweep's channel: age and attribute a
+# claim from the STATUS WRITE that set in_progress, not from the newest event
+# on the row. 1065-4t7t corrected the sibling live_claims() for exactly this
+# and left expire_claim_candidates() on the event channel, so one instrument
+# disagreed with itself about who holds a claim — and the coordinator acted on
+# the wrong half, asking a host to release work it had never held.
+#
+# Arms 1 and 2 are the behavioural discriminators and fail on the pre-fix
+# code; arm 3 pins that the event fallback for a base-born in_progress is
+# DELIBERATE and survives the fix.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the claim-expiry sweep ages and attributes from the status write, not the newest event (1198-7q95)"
+STEP_SCRIPT="scripts/test-expire-claims-reads-the-status-write.sh"
+STEP_ERROR="the claim-expiry sweep is reading the event channel again — it would return live claims to ready and name the wrong host (1198-7q95)"
+STEP_OK="claim-expiry sweep reads the status write"

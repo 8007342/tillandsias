@@ -1,0 +1,43 @@
+# @trace spec:methodology-accountability
+# @trace order:1198-7q95
+#
+# Order 1198-7q95: 1065-4t7t corrected the sibling live_claims() to read the
+# status channel and left expire_claim_candidates() on the event channel, so
+# one instrument disagreed with itself about who holds a claim. MEASURED on
+# the live ledger 2026-09-15: a row claimed 35 minutes earlier by one host was
+# reported as a two-week-old claim belonging to another, the coordinator acted
+# on it and asked the wrong host to release work it had never held, and
+# --write would have returned a live claim to ready.
+name: litmus:expire-claims-reads-the-status-write
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1198-7q95 on scratch ledgers at a fixed --now-epoch: a recent status
+  write beside a two-week-old event is not an expire candidate, a genuinely
+  old claim is still listed and is attributed to the host that WROTE the
+  status rather than the last toucher, the deliberate event fallback for a
+  base-born in_progress survives, and a fresh claim whose host matches no
+  event is neither expired nor unknown-age because setting a claim is itself
+  activity.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-expire-claims-reads-the-status-write.sh
+  - a runnable tillandsias-plan is resolvable, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-expire-claims-reads-the-status-write.sh && test -x scripts/test-expire-claims-reads-the-status-write.sh && echo 'ok: expire-claims-status-write-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: expire-claims-status-write-parses"
+
+  - step: "age and attribution come from the status write; the event fallback and the claim-as-activity floor both hold"
+    command: "bash scripts/test-expire-claims-reads-the-status-write.sh | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: expire-claims-reads-the-status-write"
+
+  - step: "the two readers of one claim agree: live_claims and expire_claim_candidates both consult status_lease_of"
+    command: "n=$(grep -c 'status_lease_of(pid)' crates/tillandsias-plan/src/main.rs); [ \"$n\" -ge 2 ] && echo 'ok: both readers consult the lease'"
+    timeout_ms: 10000
+    expected_behavior: "ok: both readers consult the lease"
