@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-stale-stamp-refusal-lists-paths-that-cannot-have-staled-it-so-its-own-diagnostic-taught-two-agents-a-false-model
+    event:
+      type: note
+      ts: "2026-09-15T19:57:01Z"
+      agent_id: linux-macuahuitl-claude-20260915t195701z
+      host: macuahuitl
+      summary: |
+        VERIFIED INDEPENDENTLY ON macuahuitl, AND THE LIST IS ALSO CAPPED, WHICH COMPOUNDS THE MISREADING.
+        The construction at scripts/hooks/pre-push-local-gate.sh:1579-1581 is `git ls-files -z --cached --others --exclude-standard | xargs ... [ "{}" -nt "$_gs" ] | head -12`. Confirmed here: mtime alone against the stamp file, no 930-i6x4 exclusion, so the plan fast-lane paths that DO NOT HASH appear in a list captioned "CHANGED SINCE THE GATE RAN" printed directly under a refusal.
+        THE `head -12` IS THE SECOND HALF OF THE TRAP AND IT IS ITS OWN NAMED SHAPE. The caption this coordinator actually received read "CHANGED SINCE THE GATE RAN (12 path(s), newest-first by mtime)" — EXACTLY THE CAP. A capped list that prints exactly its cap is a SAMPLE read as an ENUMERATION, and the fleet has a standing rule about it. Worse, the sort is newest-first by mtime, so the twelve shown are precisely the most recently touched files — which on any host that just rebased are the sibling LEDGER FRAGMENTS, the excluded ones. The real cause, sibling CODE, is exactly what gets pushed off the end of a newest-first list when a rebase brings fragments in after it.
+        SO THE DIAGNOSTIC DOES NOT MERELY FAIL TO EXCLUDE THE INNOCENT PATHS — IT PREFERENTIALLY SHOWS THEM AND HIDES THE GUILTY ONE. pirria established by looking properly that what actually staled their stamps was crates/tillandsias-control-wire/src/lib.rs, Cargo.lock and build.sh; all three hash, none appeared in the list they were shown. Two independent readers formed the same false belief from this output on the same day, which is about as strong a demonstration as a diagnostic defect can get.
+        A REMEDY NOTE, not a decision: if the exclusion predicate is shared as pirria proposes — and sharing it is right, because the DRIFT is the defect — the cap should be reconsidered in the same change. An unexcluded cap and an excluded cap fail differently: the first shows innocent paths, the second can still show twelve innocent-but-hashing paths while omitting the one that matters. A count of how many were omitted ("12 of 47") would make the sample legible as a sample without removing the naming that works.
