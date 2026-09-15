@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    event:
+      type: evidence
+      ts: "2026-09-15T03:56:19Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t035619z
+      host: macos
+      summary: |
+        ITEM 1 DONE, AND THE PACKET'S LINE CITATIONS ARE STALE — read this before
+        taking any other item.
+
+        THE CITATIONS DO NOT RESOLVE (881-29me shape, 3 of 3 checked). vz.rs is
+        byte-identical between this host and origin/linux-next, so this is real drift,
+        not a checkout difference. On trunk right now:
+
+          :400   -> a comment ("// Sync`, so use an atomic (Cell is not Sync).")
+          :870   -> a comment INSIDE the embedded guest provisioning SHELL script
+          :1238  -> also inside that heredoc'd shell script (a journalctl line)
+
+        NONE is the Rust the packet describes. The dangerous one is :1238: four lines
+        on sits the provision.state write emitting guest_binary_sha256, which macneo's
+        1084-x8ya assessment concluded now satisfies that packet's criteria 1 and 3. An
+        edit placed there BY LINE NUMBER would have removed a mechanism another packet
+        depends on while touching nothing this packet names. Credit to macneo for
+        catching it before I wrote anything.
+
+        RE-DERIVE BY SYMBOL. Real locations on trunk:
+          CFRunLoopRunInMode -> 85 (doc), 1989 (extern decl), 2004 (the call)
+          spawn_blocking     -> 536, 549, 567, 574, 1527, 1661, 1675, 2345
+        For the spawn_blocking items, name the call by its SURROUNDING FUNCTION; there
+        are eight and an offset will not disambiguate them.
+
+        ITEM 1, MEASURED NOT ASSUMED, as the context line instructed. On a bare thread
+        (no sources registered in the default mode — the regime several callers run in):
+
+          single call:  rc=1 (kCFRunLoopRunFinished) returned in 43.3us, NOT the 250ms requested
+          the loop as written: 3,471,102 iterations in 250ms
+
+        So the discarded result was not benign: with no sources the call returns
+        immediately, the loop recomputes a still-positive remaining and re-enters, and
+        the intended park becomes a saturated core. Nine call sites use
+        pump_cf_loop_for, including the boot waits.
+
+        THE FIX: the result is now checked against kCFRunLoopRunFinished and the
+        no-sources case handled by a SHORT bounded sleep rather than re-entry. Bounded
+        (5ms) rather than sleeping the whole remainder, because a source can appear
+        while we wait — VZ completion handlers arrive by dispatch_async to the main
+        queue, which registers one — and this function exists to let those fire
+        promptly. The comment names the contract, per the exit criterion.
+
+          after: 34 iterations for the same 250ms, wall clock 251.7ms
+          ~100,000x fewer entries, deadline contract intact.
+
+        GUARDED by vz::tests::pump_cf_loop_parks_instead_of_spinning_with_no_sources.
+        Falsified: reverting ONLY the rc handling (counter and test untouched) reds it
+        at 3,260,779 entries with a diagnostic message, and restoring greens it.
+        1 selected, 1 passed, 117 filtered out; full lib suite 118 passed, 0 failed.
+        Linux arms checked with cargo zigbuild --target x86_64-unknown-linux-musl.
+
+        The iteration counter is deliberately NOT cfg(test)-gated, so the test exercises
+        the shipped loop rather than a test-only variant. Wall-clock cannot distinguish
+        park from spin here (the loop honours its deadline either way), which is why the
+        guard counts entries.
+
+        REMAINING ITEMS UNTOUCHED: exit criteria 2-4 (VzRuntime::start contract, keychain
+        off the async worker, helper reaping) are not addressed here.
