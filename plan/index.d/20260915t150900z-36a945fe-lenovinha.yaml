@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    event:
+      type: completed
+      ts: "2026-09-15T15:09:00Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        Landed 2df3eeb95 (ok:land:2df3eeb95:attempt-2) after the operator unlocked this host's login keyring. Verified on origin by tree, not by the push's exit code: the annotation is in select-work-batch.sh, the fixture and the gate step are present, and the 1189-2ra5 arm-2b repair rode with it.
+
+        WHAT SHIPPED. An offered row whose exit_criteria name hosts this one is not now carries that constraint into the offer:
+          host-scoped  1132-r4mt  its exit criteria name macuahuitl,yoga and not lenovinha — claimable and worth advancing, but the EVIDENCE must come from there (1199-aw6m)
+        Host vocabulary is DERIVED from the roster the selector already resolves, so a host joining the fleet is understood without editing code; a second list is the thing that goes stale while reading as authoritative. The documented `packet` line shape is untouched — the annotation is its own line, so nothing parsing the batch breaks.
+
+        ADVISORY, NEVER A FILTER, pinned by arm 3: a host that cannot CLOSE a row can still reproduce, measure, instrument or split it, and withholding it would convert a three-minute release into invisible work nobody does.
+
+        THE FIXTURE'S FIRST DRAFT WAS TOOTHLESS and that is the part worth keeping: against the pre-fix selector it SKIPPED rather than failed, so deleting the annotation would have read as "inconclusive batch" forever. It now re-derives the answer independently from the offered rows and fails if it finds a host-scoped row the selector missed — 1 failure against pre-change, 5/5 after.
+
+        COST MEASURED RATHER THAN ASSUMED: 17.3s with the annotation against a 16.9s baseline, so ~0.4s / 2%. The selector was already slow; a first reading of "17s" would have sent me optimising the wrong thing.
+
+        THE KEYRING INTERLUDE, recorded because the recovery is the reusable part. This host's login keyring re-locked mid-cycle (second time in one night; the first produced 1189-2ra5), check-credential-channel.sh answered blocked:gh-keyring-locked, and the land was refused at the push. Three gated commits then existed on ONE disk — 872-c9nd's shape exactly, where the boundary guard protects a directory somebody later deletes. macuahuitl confirmed by ls-remote that the salvage ref was absent from origin.
+
+        WHAT CLOSED THE EXPOSURE WITHOUT TOUCHING THE CREDENTIAL: a git bundle and a format-patch series written OUTSIDE the checkout, plus a copy sent off the machine entirely. The hazard in 872-c9nd is not "unpushed", it is "exists in one place something might delete", and those two artifacts close that while the credential stays the operator's. No gh auth login, no refresh, no peer pushing on this host's behalf — that last would be credential laundering rather than recovery.
+
+        A FALSE RED, AND IT IS THE INVERSE OF EVERY OTHER FINDING TODAY. `git bundle verify` passed, and fetching the bundle into an EMPTY repo failed with "lacks these prerequisite commits: b61c1759a" — which is origin/linux-next's own tip, present in every real clone and absent only from my test environment. A CORRECT ARTIFACT READ AS BROKEN BECAUSE THE RECOVERY TEST RAN IN AN ENVIRONMENT THE RECOVERY WILL NEVER HAPPEN IN. Believing it would have meant rebuilding a working bundle, or concluding the work was unrecoverable while holding a good copy. Re-run against a clone of the actual repo: all three commits restore. The patch series is the better artifact precisely because it needs no prerequisite and so has no environment to get wrong.
+
+        AND ONE MORE LOCAL-TIME TRAP, mine, minutes before this close: `stat --time-style=+%FT%TZ` prints LOCAL time with a literal Z suffix, so a gate log 11 minutes old read as 7 hours old and briefly looked like a dead land. The methodology already warns that a bare stat mtime is local time; the trap is that a format string can make it LOOK like UTC.
