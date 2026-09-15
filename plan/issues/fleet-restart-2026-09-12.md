@@ -5336,3 +5336,24 @@ step 20 (gate-stamp memoization, 765-tkq2) passes standalone 14/14 there and
 fails only inside the spec run, so the mechanism reads as git-dir-local stamp
 state shared across steps 13–20, not a host-inherited precondition. Symptom
 match is not membership; left for a linux builder with the mechanism named.
+HAZARD from the same artifact, and it survives the diagnosis: pirria did NOT
+run that build. Their last gate finished before their 16:35 commit and the
+session ended there, so SOMETHING ON THAT HOST RAN A BUILD AT 00:29Z WITH NO
+PERSON PRESENT. The bump is harmless; the caller may not be, because
+bump-version.sh sits in build.sh's INSTALL path — the path that ends by
+replacing the host's installed launcher. An unattended build is an
+unattended reinstall, and the fleet already has that shape on record (a gate
+run replaced an operator's local build with the tree's label, 2026-09-11),
+diagnosable then only because a person had run the gate. pirria is filing it
+with local evidence: the build log or $GIT_DIR gate stamp and its mtime,
+`systemctl --user list-timers` and any tillandsias unit, whether the tray or
+a forge was up at 00:29Z and whether either builds unprompted, and the
+installed launcher's --version against trunk's VERSION — if the installed
+label moved to 56.9.15.1 the install half fired too, and THAT is the finding
+rather than the bump. Standing consequence meanwhile: never reason about
+what a host did from its worktree VERSION.
+Practice worth copying, from the same exchange: pirria verified the mechanism
+on their own host before acting on the coordinator's report (build.sh:878,
+bump-version.sh's --new-day arm), and read the stash content before an
+undoable drop — 9 lines across 6 files, no work bundled in. Verify, then act;
+a drop is not undoable and a report is not a measurement.
