@@ -2549,6 +2549,89 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 mod tests {
     use tillandsias_control_wire::secure_wire_mode::{SecureWireMode, parse_secure_wire_mode};
 
+    use super::headless_service_line;
+
+    /// ORDER 1084-x8ya, CRITERION 4 — a guest that is STILL COMING UP must not
+    /// be reported as this defect, and must not be called failed.
+    ///
+    /// WHY IT NEEDED A TEST AND NOT A FIX. The behaviour is already right:
+    /// `inactive` splits on the timestamp rather than the word, and anything
+    /// else (`activating`, `deactivating`, `reloading`) falls to an arm that
+    /// says "NOT a failure by itself". Nothing PINNED it. Measured before
+    /// writing this: `activating` appeared ZERO times in this file while
+    /// `headless_service_state` appeared 13, so the gap was real and not a
+    /// search artefact. A later edit could collapse that arm into the `failed`
+    /// wording and no test would notice — and the packet exists because
+    /// inventing a fault is the mirror of the silence it set out to remove.
+    ///
+    /// THE POSITIVE CONTROL IS LOad-BEARING. Arms 1-3 assert "does not say
+    /// FAILED". On their own a mutation that made EVERY state read as benign
+    /// would satisfy them while destroying the report. Arm 5 requires the
+    /// genuinely failed unit to still say FAILED, so the suite cannot be
+    /// passed by blanket reassurance.
+    #[test]
+    fn a_guest_still_coming_up_is_not_reported_as_failed_or_as_this_defect() {
+        // ARM 1 — `activating`: the record is written moments after
+        // `systemctl start --no-block`, so this is the expected mid-boot word.
+        let activating = headless_service_line(Some("activating"), None, None);
+        assert!(
+            !activating.contains("FAILED"),
+            "a unit still starting must not be reported as FAILED; got: {activating}"
+        );
+        assert!(
+            activating.contains("NOT a failure by itself"),
+            "the report must say plainly that a mid-boot state is expected; got: {activating}"
+        );
+
+        // ARM 2 — `inactive` with NO timestamp: never started. Not a failure of
+        // the unit and not a crypto question.
+        let never = headless_service_line(Some("inactive"), None, None);
+        assert!(
+            !never.contains("FAILED"),
+            "a unit that never started must not be reported as FAILED; got: {never}"
+        );
+        assert!(
+            never.contains("NEVER STARTED"),
+            "the never-started case must name itself; got: {never}"
+        );
+
+        // ARM 3 — the literal sentinel `empty` is the same case as absent. The
+        // implementation tests both; so must this, or half the guard is blind.
+        let never_sentinel = headless_service_line(Some("inactive"), Some("empty"), None);
+        assert_eq!(
+            never, never_sentinel,
+            "an `empty` timestamp sentinel must read identically to an absent one"
+        );
+
+        // ARM 4 — THE DISCRIMINATION THIS PACKET TURNS ON. `inactive` is two
+        // states: never-started, and started-then-died. They are different
+        // explanations of the same Error::Input and must not render alike.
+        let died = headless_service_line(
+            Some("inactive"),
+            Some("Mon 2026-09-15 03:00:00 UTC"),
+            Some("exit-code"),
+        );
+        assert_ne!(
+            never, died,
+            "never-started and started-then-exited must be distinguishable — they are \
+             different explanations of the same handshake error"
+        );
+        assert!(
+            died.contains("NO LONGER RUNNING"),
+            "a unit that ran and exited must say so; got: {died}"
+        );
+
+        // ARM 5 — POSITIVE CONTROL. A genuinely failed unit MUST still be
+        // called FAILED, or arms 1-3 could be satisfied by reassuring about
+        // everything.
+        let failed = headless_service_line(Some("failed"), None, Some("exit-code"));
+        assert!(
+            failed.contains("FAILED"),
+            "a unit that actually failed must still be reported as FAILED, or this \
+             suite could be passed by blanket reassurance; got: {failed}"
+        );
+    }
+
     /// 972-umik. THE macOS LANE PAIRS SERVER AND CLIENT UNDER THE SHARED
     /// READER'S `On`.
     ///
