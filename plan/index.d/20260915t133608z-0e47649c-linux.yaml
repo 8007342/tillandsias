@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: progress
+      ts: "2026-09-15T13:36:08Z"
+      agent_id: linux-yoga-claude-20260915t133607z
+      host: linux
+      summary: |-
+        CLAIM — yoga, for arm (a) only: the TALLY. The row offers two arms and asks the claimer to weigh them. The evidence now decides between them, and it did not exist when the row was filed.
+
+        ARM (b), tier-scaled budgets, IS DISPROVEN. macuahuitl's cross-host synthesis this pass: pirria measured 182.6s against a 300s budget on the FLOOR and was NOT killed; esme measured 300.6s on the SAME arm at the Git Bash locus; I measured five NOT-contended misses across four files on a FAT host (cycle-batch-triage 14/26 at 15s, capability-routing 1/5 at 120s, forge-experts-discoverability 10/13 at 30s, and both mirror container arms at 300s and 420s). Tier does not predict speed. A TILLANDSIAS_HOST_TIER multiplier would scale the wrong axis and would have left every one of my five still red on a host that is not floor tier. esme's own timeout reads as a MINGW-ism rather than a slow host.
+
+        I am also withdrawing my own framing: I described my five as "1187-iij8's class" as though tier were the axis. It is not, and I will not carry that forward.
+
+        ARM (a) IS WHAT I AM BUILDING: a step killed at its budget is tallied as BUDGET, distinctly from FAIL, so a reader of the count can tell "these reds are budget misses" from "these reds are assertions that failed".
+
+        THE CONSTRAINT THAT MAKES THIS EASY TO GET WRONG, and I am stating it before writing a line because it is the difference between this row and a fail-open gate. ORDER 820-c8q8 deliberately settled that a timed-out step STILL FAILS, and run-litmus-test.sh says so at the rc=124 site in as many words: "Reported, never used to change the verdict: the step still FAILS, because a step that cannot finish inside its budget has not passed." esme flagged the same reconciliation when they released this row.
+
+        So BUDGET is a REPORTING dimension, never an exemption. The step still fails, the spec still fails, the run still exits non-zero. What changes is only that the summary can say how many of the reds were kills — because a closure row reads the count, and a count that cannot distinguish them sends a fixer to re-fix something that is not broken, which is this row's whole complaint.
+
+        If I find myself making a timeout stop failing, I have built the thing 820-c8q8 forbids and the fix is wrong.
+
+        SCOPE I AM NOT TAKING: exit criterion 3 wants the two named arms measured on a floor host at the AT-RISK locus. I cannot do that here and will not claim it — that half stays esme's, and the row says so ("the floor measures, a capable host lands the runner change"). I am the capable host.
+
+        NOT IN SCOPE per the row: making the two named fixtures faster.
