@@ -1,0 +1,27 @@
+# Gate step 1196-5hva — data, not code.
+#
+# The first fixture fleet-heartbeat.sh has ever had. Hermetic: each arm builds a
+# throwaway repo with its own plan/ tree, git history and a STUB plan binary
+# injected through TILLANDSIAS_PLAN_BIN, so no arm reads this checkout's ledger
+# or the real fleet's state.
+#
+# WHY A CLASSIFIER'S BUCKET NAMES ARE WORTH A GATE STEP: they are instructions.
+# WEDGED means "adjudicate its worktree", BLOCKED means "read the record it
+# filed". During 1193-yw6u both macOS hosts read WEDGED while a ledger packet
+# named a trunk-wide red another host had already diagnosed, so the advice
+# pointed at local dirt that was not there.
+#
+# THE ARMS THAT MATTER ARE THE NEGATIVE CONTROLS (3, 4, 6, 7). A detector that
+# resurrects a lifted block from an immutable fragment, or invents one when it
+# cannot fold the ledger, or takes another host's block for this one's, says
+# "blocked" about everything — worse than the silence it replaced.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a blocker filed in the ledger is named BLOCKED, not WEDGED (1196-5hva)"
+STEP_SCRIPT="scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh"
+STEP_ERROR="the fleet heartbeat's blocked detection regressed (1196-5hva) — either a host that filed its blocker reads WEDGED again (whose prescribed response, adjudicate the worktree, points away from a cause the host already named), or the detector has widened and is calling unexplained silence 'blocked'; see the failing arm above"
+STEP_OK="fleet-heartbeat ledger-blocker classification check passed"
+# Exit 3 means the classifier is absent — nothing was examined, and the fixture
+# says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/fleet-heartbeat.sh is absent, so the classification could not be exercised"
