@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha from 1193-yw6u: the author's gate could not run the arm the
+# author's change broke, and never will.
+packets:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    order: 1194-davi
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, ci, cross-platform, fail-loud, instrument]
+    estimated_hours: 4
+    parent_order: 1193-yw6u
+    unscoreable: "unpinnable-until-the-instrument-exists: the deliverable is the visibility. Future litmus scripts/test-platform-scoped-arms-are-visible-to-their-authors.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: a change touching a file that a platform-scoped gate arm exercises is NAMED as such before it lands, on a host that cannot run that arm (pre-fix result: FAILS — nothing on a Linux host mentions the macos-scoped rows at all, measured 2026-09-15); NEGATIVE CONTROL: a change touching nothing platform-scoped says nothing, and the notice never becomes a refusal on the authoring host — a gate that blocks Linux work on an unrunnable macOS arm is worse than the gap."
+    owned_files:
+      - scripts/check-host-tools.sh
+    title: |
+      A platform-scoped gate arm can only fail on the platform it is scoped to, so a change that breaks it lands green everywhere else and STAYS green — the author's gate is structurally incapable of running the test their change broke, and nothing tells them the arm exists.
+    context: |
+      MEASURED, and the measurement is 1193-yw6u itself. b3a93780b (my own
+      1189-2ra5 fix, lenovinha) wrapped `gh auth status` in _ccc_timeout.
+      check-host-tools.sh carries a prover row for `timeout` with platform field
+      `macos`, so that arm runs ONLY on macOS. The change went green through a
+      full ./build.sh --check on Linux, landed, and took BOTH macOS hosts'
+      ability to land with it for a day. macbookair bisected it in pristine
+      worktrees and reproduced it on a pristine clone of origin/linux-next:
+          b3a93780b^  rc=0, zero FAIL lines
+          b3a93780b   rc=1, host-tools 1/24 red (989-ykks)
+      Every Linux and Windows land since was green and correct and would have
+      stayed green forever. THERE IS NO SIGNAL ON THE AUTHORING SIDE AT ALL.
+      THE GENERALISATION, which is why this is filed separately from the fix:
+      any host adding or editing a row scoped to a platform it is not on has
+      exactly this blind spot, in either direction. The scoping is CORRECT — a
+      Linux host genuinely cannot prove macOS's `timeout` story — so the remedy
+      is not to unscope the arms. The remedy is that the author must be TOLD,
+      before landing, that the file they touched is exercised by an arm their
+      gate did not run, and by which arm on which platform.
+      WHAT MADE IT RECOVERABLE was luck plus a curated PATH: the 1193-yw6u state
+      reproduces on Linux by putting a token-bearing gh and no timeout(1) on
+      PATH, which is now arm 9 of
+      scripts/test-credential-channel-names-a-locked-keyring.sh. That works for
+      THIS arm because the platform difference is a missing binary. It does not
+      generalise — an arm scoped for a real kernel or filesystem difference
+      cannot be faked — which is why the deliverable here is NOTICE, not
+      simulation.
+      NOT A DUPLICATE of 1193-yw6u: that row is the specific credential-verdict
+      regression and is being fixed now. This row is the class, and it survives
+      that fix.
+    exit_criteria:
+      - 'a change touching a file exercised by a gate arm scoped to another platform prints a notice naming the arm and the platform, on the authoring host, before the land (pre-fix result: FAILS — silence; b3a93780b landed with no mention that a macos-scoped prover row covers check-credential-channel.sh)'
+      - 'the inventory of platform-scoped arms is derived from the rows themselves, never a hand-maintained second list that drifts'
+      - 'NEGATIVE CONTROL: a change touching nothing platform-scoped prints nothing'
+      - 'NEGATIVE CONTROL: the notice is ADVISORY on the authoring host — it must never refuse a Linux land for a macOS-only arm, which would trade this gap for a worse one'
+    events:
+      - type: filed
+        ts: "2026-09-15T04:17:58Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed by the author of the change that proved it. My gate could not run
+          the arm my change broke, and no future Linux gate ever will; two macOS
+          hosts paid for it. yoga-silverblue relayed macbookair's bisect and
+          observed that it reads like a rule rather than a one-off. It does.
