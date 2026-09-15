@@ -5293,3 +5293,46 @@ probe lesson from the same hour, the shape that bit three lanes tonight:
 hides the failure, and `grep -c` on an empty stream answers 0 — THE ABSENT
 RESULT AND THE NEGATIVE RESULT RENDER IDENTICALLY. Byte counts and a positive
 control are the standing remedy.
+Pass 28, pirria's report and one artifact worth the diagnosis:
+AN ORPHANED VERSION BUMP IS NOT AN INTERRUPTED RELEASE. pirria found VERSION
+56.9.13.1 → 56.9.15.1 plus Cargo.lock and four crate manifests, uncommitted
+and unattributed, written 2026-09-15T00:29Z, and correctly refused to resume
+it — tagging and firing a workflow_dispatch is outward-facing and was not
+their cadence to take. Diagnosis, positive rather than by absence: build.sh's
+install path calls `scripts/bump-version.sh --bump-build` unconditionally
+unless TILLANDSIAS_SKIP_VERSION_BUMP=1, and on a new UTC day bump-version.sh
+yields <y>.<m>.<d>.1 — 00:29Z is 29 minutes into 2026-09-15, so 56.9.15.1 is
+exactly what a local build produces. The release path is EXCLUDED, not merely
+unevidenced: merge-to-main-and-release computes its candidate version in a
+layout-preserving SCRATCH directory precisely so the real VERSION file is
+never touched, and the real bump lands on a release/version-bump-<v> branch
+committed in the same breath — an interrupted release leaves a committed
+bump on a branch or nothing, never an uncommitted bump on linux-next.
+Corroborating: VERSION reads 56.9.13.1 on both linux-next and main, no
+v56.9.14 or v56.9.15 tag exists anywhere, and there is no open PR
+linux-next→main. Stash dropped; the daily cut goes to the operator as a
+question, never inferred from an artifact.
+1109-t8kw PART 1 LANDED (224c0f16c, b3ed43dae), and the result is the
+argument for the method change rather than just a pass: across 713 files the
+three GREP-SHAPED predicates found nothing — tier 13→0, hostname 22→0,
+inherited git identity 67→0 — while the fourth, tools-assumed, found two real
+hits AND BOTH WERE FOUND BY RUNNING. Hit 2 is the sharper one:
+litmus-plan-only-push-lane-shape.yaml step 11 is step 10's mutation control
+and was PASSING FOR THE WRONG REASON, because a host with no resolvable plan
+binary hands it the refusal it expects for free — the same family as an exit
+criterion the unfixed code already satisfies, one level up, in a control.
+methodology-accountability at that locus 26/3 → 28/1.
+AND WHY THAT LOCUS FOUND THEM: yq was absent from pirria's host PATH, and a
+yq-present environment clears the lane's first validator gate and never
+reaches the fold check behind it — so an equipped host's sweep would have
+reported a clean floor. That is an argument for KEEPING at least one
+deliberately under-provisioned locus, not for provisioning this one; nobody
+should "fix" that host's tooling on the grounds that it is missing something.
+pirria's own correction beside it: they had called yq "unprovisionable" after
+reading a script header instead of asking the host, which has it in a
+toolbox at v4.47.1 — the degraded counts are owed a re-run as a local chore.
+NAMED AND DELIBERATELY NOT CLAIMED by pirria: litmus:release-gates-run-locally
+step 20 (gate-stamp memoization, 765-tkq2) passes standalone 14/14 there and
+fails only inside the spec run, so the mechanism reads as git-dir-local stamp
+state shared across steps 13–20, not a host-inherited precondition. Symptom
+match is not membership; left for a linux builder with the mechanism named.
