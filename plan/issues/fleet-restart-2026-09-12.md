@@ -5514,3 +5514,36 @@ in the control. Redone by copying the pre-fix files explicitly and PROVING
 THE TREE BROKEN FIRST. Standing form: a control asserts its own premise
 before it asserts a conclusion, because "I reverted" and "the revert was a
 no-op" render identically — the night's third instance of that one shape.
+
+**Pass 29 (2026-09-15T06:11Z) — a quiet pass, and the quiet is the finding.**
+Drift zero on both platform branches, nothing to relay, trunk unmoved since
+the previous push. Stale rows 89/506, audit rows=23 stems=23. Three live
+claims after yoga closed 1118-zvai: 1186-w3ph (yolanda), 1196-5hva
+(lenovinha), 1109-t8kw (pirria). No host reported idle and none was directed.
+NINE ROWS FILED IN THE LAST TWELVE HOURS SIT READY AND UNHELD: 1187-iij8,
+1188-vixu, 1189-7yvu, 1190-swen, 1191-vrjf, 1192-xv4n, 1193-e6kv, 1194-davi,
+1195-m9vi. That is a healthy backlog rather than a stall — every capable host
+is either holding a claim or draining plan_next on its own cron — but it is
+worth naming that the night produced findings faster than the fleet consumed
+them, which is what a coordinator outage plus five hosts measuring in
+parallel looks like. One of them is LOCUS-BOUND and should not be picked by
+whoever is free: 1191-vrjf (bash printf under LC_NUMERIC) reproduces only on
+a host whose locale is not C, which today means yoga; a C-locale host would
+find it green and report it fixed.
+HAZARD, and it is about the fleet's own record rather than the product: THE
+PER-HOST CYCLE RECORD HAS GONE STALE WHILE THE WORK IS REAL. Newest
+loop_status entries by host at this pass — macuahuitl 09-15, macneo 09-15,
+pirria 09-14, yoga 09-14, lenovinha 09-12, tlatoanis-macbook-air 09-06,
+yolanda 09-06 — while yolanda landed 1186-w3ph mechanisms tonight, macbookair
+landed 690-w94k and the 1183-j9dk chain, and lenovinha closed three rows.
+loop_status is where a host's cycle is durably legible to everyone else, and
+the metrics audit passes on stem COUNT (rows=23 stems=23) without noticing
+that a stem's newest entry is nine days old — so the instrument reports
+healthy while the record decays. The cross-host recurrence audit reads the
+NEWEST entry per host by design, which means it has been reading nine-day-old
+cycles for two hosts and calling that current. Plain ask to each host at its
+next report, not a directive: write the loop_status entry at the end of the
+cycle, the way the relay taught everyone to push fragments. Worth a row if it
+recurs after the asks.
+Daily maintenance still reads due:stale:2026-09-14 after the host upgrade and
+restart; it belongs to the meta cycle, which takes it at its next fire.
