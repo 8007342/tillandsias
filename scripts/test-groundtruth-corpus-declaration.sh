@@ -211,8 +211,27 @@ if [ "${sp_skip:-0}" -gt 0 ] \
    && [ "${sp_total:-0}" -eq "${sp_skip:-0}" ] \
    && [ "$sp_rc" -eq 0 ]; then
     ok "an absent index SKIPS loudly, counted in the denominator (rc=0, $sp_line)"
-elif [ "${sp_skip:-0}" -eq 0 ]; then
+elif [ -n "$sp_line" ] && [ "$sp_rc" -eq 0 ] && [ "${sp_total:-0}" -gt 0 ] \
+     && [ "${sp_skip:-0}" -eq 0 ]; then
     ok "this host HAS an index — spec.answer graded rather than skipped ($sp_line)"
+elif [ -z "$sp_line" ]; then
+    # ORDER 888-miiy, found from the WITH-ENDPOINT side, which is the only side
+    # that reaches this branch. `sp_skip` is sed'd out of the result line, so
+    # when grade dies with a HARNESS ERROR and prints no result line at all,
+    # sp_skip is EMPTY, ${sp_skip:-0} is 0, and the old condition read that as
+    # "0 skipped, therefore graded" — the arm announced "this host HAS an index"
+    # while nothing had been graded and nothing had been indexed. `sp_rc` was
+    # captured two lines above and never consulted on that path.
+    #
+    # That is THIS PACKET'S OWN DEFECT, one level in: a harness error rendered
+    # as a graded result. The fix for the release gate was written correctly and
+    # the arm verifying it carried the same conflation, where no endpoint-less
+    # host could ever see it, because every such host takes the skip branch
+    # above and returns before reaching here.
+    #
+    # An absence and a zero are not the same measurement. This branch is the
+    # difference.
+    bad "grade produced NO result line (rc=$sp_rc) — a HARNESS ERROR, not a graded run with nothing skipped"
 else
     bad "absent-index skip is not properly accounted: rc=$sp_rc line=$sp_line"
 fi
