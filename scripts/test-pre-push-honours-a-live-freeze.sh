@@ -34,6 +34,12 @@ FREEZE="$ROOT/scripts/release-freeze.sh"
 pass=0; fail=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; fail=$((fail+1)); }
+# A NAMED SKIP IS NOT A PASS and is not a failure: a host that cannot
+# construct an arm must say so by name rather than red the gate for missing
+# tooling — the lesson test-pre-push-plan-lane-after-merge.sh paid for when
+# it took macOS out of the landing path.
+skipped=0
+skip() { echo "skip: $1"; skipped=$((skipped+1)); }
 for f in "$GUARD" "$FREEZE" "$ROOT/scripts/gate-stamp.sh"; do
     [ -f "$f" ] || { echo "FAIL: missing $f"; echo "FAIL: pre-push-honours-a-live-freeze 0/1 (1176-9vqn)"; exit 1; }
 done
@@ -63,6 +69,25 @@ git push -q -u origin linux-next
 git push -q origin linux-next:windows-next
 printf '#!/bin/sh\nexec bash scripts/hooks/pre-push-local-gate.sh "$@"\n' > .git/hooks/pre-push
 chmod +x .git/hooks/pre-push
+
+# THE PLAN-ONLY LANE IS STAMP-FREE BUT NOT VALIDATOR-FREE (1124-7f3u), and
+# ARM 3b is the only arm that depends on it. Resolve the checkout's own
+# binary HERE, in the checkout, where the probe can see it — a scratch repo
+# has no target/, so resolve_plan_binary would walk past every checkout
+# candidate and reach `command -v tillandsias-plan`, which succeeds on a host
+# with an installed copy on PATH and fails on one without. That is exactly
+# 1172-dyvd's axis 14, and it is how this fixture passed 19/19 on its author's
+# host and turned trunk RED on macOS: the arm was green because of a candidate
+# nobody had declared (macbookair, 2026-09-15, reproduced here by stripping
+# PATH). Exporting the resolved path makes the dependency explicit; when none
+# resolves, ARM 3b says so by name instead of failing.
+_validator="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _validator=""
+case "$_validator" in ./*) _validator="$ROOT/${_validator#./}" ;; esac
+# Decide on _validator, never on TILLANDSIAS_PLAN_BIN: the probe honours that
+# variable on EXISTENCE alone (1060-wxdh), so an inherited but broken value
+# would leave it set while resolving nothing, and a guard reading it would
+# run the arm anyway and fail instead of skipping.
+if [ -n "$_validator" ]; then export TILLANDSIAS_PLAN_BIN="$_validator"; else unset TILLANDSIAS_PLAN_BIN; fi
 
 freeze() { bash scripts/release-freeze.sh "$@"; }
 stamp()  { GATE_STAMP_REQUIRE_TOKEN=0 bash scripts/gate-stamp.sh write >/dev/null 2>&1; }   # the token guard exists so a RED gate cannot stamp; a fixture minting a stamp is its sanctioned off-switch
@@ -141,12 +166,17 @@ fi
 printf 'packets: []\n' > plan/index.d/20200101t000001z-fixture.yaml
 G add -A >/dev/null; G commit -q -m "plan(fixture): a second ledger record, no stamp"
 rm -f "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp"
-before="$(tip linux-next)"
-rc=0; out="$(G push origin linux-next 2>&1)" || rc=$?
-if [ "$rc" -eq 0 ] && [ "$(tip linux-next)" != "$before" ]; then
-    ok "ARM 3 (negative control): a plan-only push with NO stamp is admitted under the live freeze — the lane exits before the freeze check"
+if [ -z "$_validator" ]; then
+    skip "ARM 3b: no runnable tillandsias-plan on this host, so the plan-only lane cannot validate fragments and the stamp-free route cannot be constructed here — the lane is stamp-free, NOT validator-free (1124-7f3u). Build one: cargo build --release -p tillandsias-plan"
 else
-    bad "ARM 3b: rc=$rc"; printf '%s\n' "$out" | grep -m2 -E 'FROZEN|refused' | sed 's/^/      /'
+    before="$(tip linux-next)"
+    rc=0; out="$(G push origin linux-next 2>&1)" || rc=$?
+    if [ "$rc" -eq 0 ] && [ "$(tip linux-next)" != "$before" ]; then
+        ok "ARM 3 (negative control): a plan-only push with NO stamp but WITH a resolvable validator is admitted under the live freeze — the lane exits before the freeze check"
+    else
+        bad "ARM 3b: rc=$rc — the stamp-free lane declined; its own reason follows"
+        printf '%s\n' "$out" | grep -m4 -E 'plan-only lane|FROZEN|refused|✗' | sed 's/^/      /'
+    fi
 fi
 
 # ── ARM 4: NEGATIVE CONTROL — a branch the marker does not name ────────────
@@ -203,6 +233,7 @@ out="$(freeze set no-such-branch 2>/dev/null | tail -1)"
 [ "$out" = "refused:freeze:no-such-branch:no-such-branch" ] && ok "ARM 6: freezing a branch the remote does not have is refused" || bad "ARM 6g: '$out'"
 
 total=$((pass+fail))
+[ "$skipped" -gt 0 ] && echo "note: $skipped arm(s) skipped by name — see the skip: lines above"
 if [ "$fail" -eq 0 ]; then
     echo "ok:pre-push-refuses-code-under-a-live-freeze"
     echo "PASS: pre-push-honours-a-live-freeze $pass/$total (1176-9vqn)"

@@ -5669,3 +5669,43 @@ the marker is derived at a head that still has to be pushed, and the lock has
 to cover that push. 892-pfnd checked and does not reproduce on yoga: no
 proxy:3128 in containers.conf, proxy running, 54 images — checked, not
 assumed.
+TRUNK WENT RED ON macOS A SECOND TIME IN TWO CYCLES, AND THE SECOND ONE WAS
+THE COORDINATOR'S (1197-y6g6, macbookair; fixed at 490492074). ARM 3b of
+test-pre-push-honours-a-live-freeze.sh — landed by macuahuitl an hour
+earlier — failed 18/19 on a PRISTINE detached worktree of origin/linux-next
+with "./build.sh --check has never run in this checkout". Reproduced here
+before changing anything, by running the same fixture with tillandsias-plan
+absent from PATH: identical failure on Linux.
+THE MECHANISM IS 1172-dyvd's AXIS 14 FOR THE THIRD TIME TONIGHT. The scratch
+repo has no target/, so resolve_plan_binary walks past every checkout
+candidate and reaches `command -v tillandsias-plan`, which succeeds on a host
+with an installed copy and fails on one without. The arm was green on its
+author's host because of a candidate NOBODY HAD DECLARED. Of the three lane
+fixtures in this tree, the new one was the only one that did not export
+TILLANDSIAS_PLAN_BIN — and test-pre-push-plan-lane-after-merge.sh carries a
+header about paying for precisely this, read two hours before the fixture was
+written. A precedent recorded as a comment beside the code did not reach the
+next author, which is the same sentence this drill wrote about 690-w94k
+yesterday.
+THE OVER-CLAIM IS WORTH MORE THAN THE RED, and it is macbookair's finding:
+ARM 3b read as "the plan-only lane is a STAMP-FREE ESCAPE HATCH", and the real
+contract is stamp-free but NOT validator-free (1124-7f3u fails it closed
+without one). That distinction is load-bearing because the escape hatch is
+what a host with a red trunk depends on to keep writing to the ledger at all
+— 1195-m9vi's subject — so an unwritten precondition on it is worth STATING
+rather than papering over. The arm was not made to pass by restoring the
+stamp it deliberately removes: it now names the real contract, resolves and
+exports the validator, prints the lane's own decline reason on failure
+instead of grepping only for FROZEN|refused and swallowing it, and SKIPS BY
+NAME when no validator resolves so a host without tooling cannot red the gate
+for missing tooling. Verified both ways: 19/19 with a validator, named skip
+and 18/18 without.
+SCOPING CALL on 1194-davi, since macbookair asked and the coordinator holds
+that row's shape: IT KEEPS ITS SCOPE. 1194-davi is about arms SCOPED to a
+platform, in both directions, and its deliverable is a notice derived from the
+scoping itself. What bit here is a different class with an established remedy
+— an undeclared host candidate (1172-dyvd: a fixture must shadow or declare
+every path the code under test consults). Widening 1194-davi to cover both
+would hand it an inventory it cannot derive and blur the one thing it can
+mechanise. Recorded instead as the third axis-14 recurrence; 1197-82rm is the
+maintenance-path instance of the same axis, filed an hour before this one.
