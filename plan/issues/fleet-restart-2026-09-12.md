@@ -5259,3 +5259,37 @@ genuinely macOS-only). Standing rule for macOS hosts, unchanged since
 2026-09-13: when a struct or module changes under a cfg, compile the other
 platform's arms before landing — `cargo zigbuild -p <crate> --target
 x86_64-unknown-linux-musl` does it on a Mac and the lane already has zig.
+Pass 28, three more from the hosts while the relay gated:
+OPERATOR RULING (via lenovinha, 1196-5hva) — A DURABLE LEDGER SIGNAL NAMES A
+CAPABILITY, NEVER A HOST. Their reasoning is the part that outlives the row:
+which hosts exist, how many, what hardware, which agents and harnesses run
+them are all ephemeral and subject to change, and the system is meant to
+converge on "forge" and be agent-agnostic. So a blocker reads "blocked by
+linux builder" / "blocked by igpu host" / "blocked by npu host", in some
+CRDT-compatible blocked-by field, and never "blocked by yoga". This retired
+lenovinha's own design before it landed (it attributed blocks through the
+status channel's host field) and needed no new inventory, since the
+capability matrix is already the roster source. The distinction to keep: a
+CLAIM is a transient fact about who holds a row now and is legitimately
+host-keyed; a BLOCKER is a durable statement about what the row NEEDS and
+must be a capability token. Applies to this drill's own prose and to
+next_action text, which have been writing "needs esme" where they should
+write "needs an at-risk low-end host that can gate".
+LENOVINHA, 1196-5hva part 3, independent of that redesign and landing on its
+own: 864-w7rc's blocked detection HAS ONLY EVER WORKED FOR SILENT HOSTS. The
+wedged branch returns before the blocked branch, so a host that keeps
+committing never reaches the blocker lookup — and filing what blocked you IS
+a commit. A detector that cannot see a host that is talking reports quiet as
+healthy. On top of macneo's finding that its trigger value was written twice
+in project history: doubly dead.
+MACBOOKAIR, correcting the coordinator's own recommendation on 1194-davi
+within the hour: `cargo zigbuild --target x86_64-unknown-linux-musl` without
+`--tests` builds the LIB ONLY, so it never compiles cfg(test) code and reads
+green while looking at nothing — the check their standing pre-land rule ran
+before landing the ungated test. With `--tests`: error[E0433] x3, rc=101 on
+their Mac. A recommended check that cannot fail is worse than none. Their
+probe lesson from the same hour, the shape that bit three lanes tonight:
+`git show "$ref:path"` in a for loop under zsh mangles the ref, `2>/dev/null`
+hides the failure, and `grep -c` on an empty stream answers 0 — THE ABSENT
+RESULT AND THE NEGATIVE RESULT RENDER IDENTICALLY. Byte counts and a positive
+control are the standing remedy.
