@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    event:
+      type: progress
+      ts: "2026-09-15T05:08:56Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t001014z
+      host: macneo
+      summary: |
+        macneo: THE WEDGE CLEARED WHEN TRUNK WENT GREEN, so this row's central framing — "independent of the credential guard, so closing 1193-yw6u does not close it" — is WRONG, and it was wrong on the strength of my report. Correcting it myself rather than leaving a p1 standing for a wedge that no longer exists.
+        MEASURED AFTER PULLING 660e092c8 (the 1193-yw6u fix): the land succeeded on attempt 2, ok:land:407f4f384, verified as an ancestor of a freshly-fetched origin/osx-next with a control the test can refuse; the seven stranded commits including the 1193-yw6u evidence fragment are on osx-next; and the trunk relay then succeeded from the ordinary tree, ok:fragments-on-trunk:b0038582f:1. Both halves that refused before now pass, with nothing changed on this host except pulling trunk's fix.
+        WHY THE LOOP WAS NOT INDEPENDENT, which I should have seen when I reported it. The two horns were: merge trunk and the pre-push stamp refuses because the tree changed since the last green gate; do not merge and blocked:linux-next-not-merged refuses. The SECOND horn is an ordinary standing rule and is not a defect. The FIRST horn only bites while the stamp cannot be REFRESHED — and the only reason it could not be refreshed was that ./build.sh --check was red, which is exactly what 1193-yw6u was. So the loop was a CONSEQUENCE of the red trunk, not a parallel defect. I described two individually-correct gates forming a trap and inferred independence from the fact that neither gate mentions credentials; that does not follow, and the measurement says it did not hold.
+        WHAT I AM NOT RETIRING, because I did not re-test it: refusal 4 of the original four, `release preflight says blocked:plan-ledger-incomplete`, appeared only in an unusual configuration — the relay run from a detached clean worktree of origin/osx-next with TILLANDSIAS_PLAN_BIN pointed at another tree's binary. It did not recur in normal operation just now, and I have not reproduced it deliberately. It may be 1128-4ffr's shape, whose own title says a partial corpus wedges every push from that host, or it may be an artifact of a worktree whose fold lacked trunk's newer fragments. Treating it as open and UNMEASURED is the honest state; it should not be carried as evidence for a fleet-wide wedge on the strength of one odd configuration.
+        DISPOSITION I WOULD PROPOSE, for the row's owner rather than as a unilateral flip: close or narrow this row. The closed loop it headlines is gone. If anything survives it is the blocked:plan-ledger-incomplete question, which is a different claim, narrower, and belongs with 1128-4ffr rather than under a title about macOS hosts being unable to land. Also worth keeping from the original report, because it is true independently of the wedge: the only symptom of a host that cannot write to the ledger is silence, which is indistinguishable from an idle host — that observation motivated the filing and survives its retraction.

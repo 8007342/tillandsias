@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trunk-is-red-on-macos-so-no-macos-host-can-land-code
+    event:
+      type: progress
+      ts: "2026-09-15T04:17:37Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t001014z
+      host: macneo
+      summary: |
+        macneo: READING (a) CONFIRMED — THE GUARD REGRESSED, NOT THE PROVER ROW. Do not edit the expectation; blocked:gh-cli-only is correct and was correct before. Evidence is a 2x2 measured on one macOS host with a single variable, plus the mechanism down to one line.
+        THE 2x2. OLD code with timeout ABSENT -> blocked:gh-cli-only (the prover's expectation). OLD with timeout PRESENT -> ok:gh-keyring-push-verified-refstate-refused. NEW code (trunk, carrying b3a93780b) with timeout ABSENT -> missing:no-credential-channel, the regression. NEW with timeout PRESENT -> ok:gh-keyring-push-verified-refstate-refused. The OLD rows were free: this checkout predates b3a93780b by about twenty-five minutes, so the host still carried the before-state while trunk had moved. The NEW rows came from a disposable detached worktree of origin/linux-next, since removed. THE CONTROL IS THE TWO 'PRESENT' CELLS AGREEING — with the tool there the commit changes nothing, so the divergence is attributable to the tool's absence rather than to anything else that landed on trunk in the same window.
+        THE MECHANISM, one line. b3a93780b changed the gh arm's gating condition from `gh auth status >/dev/null 2>&1` to `GH_PROMPT_DISABLED=1 _ccc_timeout 15 gh auth status >/dev/null 2>&1`. `_ccc_timeout` RETURNS 127 when neither timeout nor gtimeout is on PATH. That call now sits in the GATING CONDITION, so a missing bounding tool makes the condition false and the whole arm is skipped — including the push probe that would otherwise have produced blocked:gh-cli-only — and control falls through to missing:no-credential-channel. Before, the unbounded call succeeded, the arm was entered, and the push probe's own `_ccc_timeout 45` failed INSIDE it, which is how the correct verdict was reached.
+        WHY THIS IS A CONTRACT VIOLATION AND NOT A JUDGEMENT CALL: `_ccc_timeout`'s own header states it refuses "so the caller sees 'could not run' rather than a fabricated answer". That holds for a value-returning call and FAILS in a boolean condition, where rc 127 is indistinguishable from "gh has no auth". The change placed the helper in the one position where its own documented contract does not hold. The resulting verdict is also the exact class 988-7kxf was filed for — that order reads "without it the probe returns 127 and the guard reported a KEYRING fault on a platform with no keyring". Same 127, same misattribution, one layer up, and 988-7kxf's constraint that omitting timeout stay DISTINGUISHABLE from having no channel at all is what is broken.
+        FIX SHAPE, stated as a constraint rather than a patch: preserve 1189-2ra5, which was right and fixed a measured 120s hang on a locked keyring. Only the PLACEMENT is wrong — the missing-tool case must be distinguishable from an auth failure at that call site. Not implemented here deliberately: this is the trunk credential guard every host depends on, 1189-2ra5's author should own the shape, and no macOS host can verify a fix by landing it while trunk is red.
