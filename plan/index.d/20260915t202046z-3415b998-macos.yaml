@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-eligibility-litmus-arm-asserts-an-oracle-723-fndi-retired-so-it-cannot-pass-on-darwin
+    event:
+      type: evidence
+      ts: "2026-09-15T20:20:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t202046z
+      host: macos
+      summary: |
+        DONE AND FALSIFIED; handed to work/1207-n96g for a trunk merge.
+
+        SCOPE, MEASURED NOT ASSUMED: exactly one step was failing. The fake-podman
+        live-runtime step returned "eligible" where it wanted
+        "skip:live-runtime-present"; the neighbouring wiring step passes at count=3, so
+        nothing else in the file was implicated.
+
+        WHY IT COULD NEVER PASS (macneo's mechanism, verified here by symbol): 723-fndi
+        removed podman from the Darwin path DELIBERATELY, because asking it there
+        printed skip:live-runtime-present both with nothing running AND with a live VM
+        (2026-08-17). A CONSTANT IS NOT A PROBE. So the more thoroughly the step stubbed
+        podman, the more certainly it failed — it asserted the oracle that was retired
+        for being uninformative.
+
+        THE REMEDY ALREADY EXISTED, which changed the scope: `scripts/e2e-preflight.sh
+        fixture` is green 4/4 on Darwin and already does exactly what the hand-off
+        described — temp image, TILLANDSIAS_VZ_IMAGE_OVERRIDE, hold it open, a genuine
+        verdict through the real vz_guest_is_live. The defect was that the litmus arm
+        did not USE the construction beside it. Third instance this week of a remedy
+        that existed with nothing pointing at it.
+
+        FIX: the step branches on uname. Darwin drives the real path via the override;
+        the podman stub stays for non-Darwin. Declaring Darwin out of scope was the
+        other available fix and is worse — the held-image case is the ONLY coverage the
+        VZ liveness branch has, and that branch is what stops an e2e wiping a live stack.
+
+        EVIDENCE:
+          real harness (meta-orchestration spec): STEP 7/8 [OK], spec rc=0
+          SURGICAL falsification: removing ONLY `exec 9< "$img"` — keeping the
+          background process, the sleep, the kill and the wait — reds it with
+          output=eligible against expected=skip:live-runtime-present
+          A FIRST, CRUDER MUTATION IS WORTH RECORDING AS A NEAR-MISS: holder=$$ made
+          the step kill its own shell, so it reded by TIMEOUT. That proves a step CAN
+          fail; it does not prove the step is sensitive to the property it asserts, and
+          almost any step in the suite would have reded the same way. Re-run properly
+          rather than banked.
+          caveat: the run emits warn:litmus-degraded-no-yq. This step calls no yq, so
+          its verdict stands — stated rather than left beside a cited green.
+
+        A TIER FACT THE NEXT READER NEEDS, instrumented during the land: THIS ARM DOES
+        NOT EXECUTE IN ./build.sh --check. The gate runs the litmus META tier — YAML
+        parse gate, bindings reconciliation, coverage query, kill-time adjudicator — and
+        no spec's tests. "The gate does not run litmus" would be false and I nearly
+        wrote it; the log mentions litmus 122 times. So the gate DOES validate that this
+        arm parses and that its bindings reconcile (which covers the escaping risk of
+        writing the command as a quoted YAML string — no litmus in the tree uses block
+        scalars and I would not introduce an untested YAML shape into a gate), and it
+        does NOT evaluate the assertion. The assertion's green rests on the direct run
+        recorded above. Same shape as yoga's cross-tier finding under 890-27mv: the pin
+        works, the cadence does not run it.
+
+        Mechanism, the 723-fndi citation and the override hook: macneo. Routing:
+        macuahuitl. Verification, the already-green fixture finding and the scope
+        correction: this host.

@@ -587,3 +587,34 @@ looked"* will eventually be read as the former.
   merges trunk at attempt start. Taken at face value it sends you to hand-merge,
   twice, before you think to measure. Reported to macuahuitl as wording rather
   than filed as a defect: nothing incorrect landed and the guard is right.
+
+- 2026-09-15 (1207-n96g): the eligibility litmus arm asserted an oracle 723-fndi
+  RETIRED. podman was removed from the Darwin path deliberately because its
+  verdict printed skip:live-runtime-present with nothing running AND with a live
+  VM — a constant is not a probe. So the more thoroughly the arm stubbed podman,
+  the more certainly it failed. Scope measured: exactly ONE step, the
+  neighbouring wiring step passing at count=3.
+- 2026-09-15: THE REMEDY ALREADY EXISTED — scripts/e2e-preflight.sh's `fixture`
+  subcommand is green 4/4 on Darwin and already holds an override image open to
+  get a genuine verdict. The gap was that the litmus did not USE it. Third
+  instance this week of a remedy with nothing pointing at it (the others: a
+  next_action advertising landed work, and a symbol search asking whether a
+  consumer NAMES a type when it only prints its Display).
+- 2026-09-15, A NEAR-MISS ON MY OWN FALSIFICATION worth keeping: my first
+  mutation set holder=$$, so the step killed its own shell and reded by TIMEOUT.
+  It WAS red, and I could have banked it. But a mutation that reds a step for an
+  unrelated reason proves only that a step CAN fail — almost any step in the
+  suite would red the same way. Re-ran surgically (removing ONLY `exec 9<`,
+  keeping the process, sleep, kill and wait): output=eligible against
+  expected=skip:live-runtime-present. THE MUTATION MUST BREAK THE PROPERTY, NOT
+  THE STEP.
+- 2026-09-15: instrumented the land and found THIS ARM DOES NOT EXECUTE IN
+  ./build.sh --check. "The gate does not run litmus" would be FALSE and I nearly
+  wrote it — the log mentions litmus 122 times, but they are the META tier (YAML
+  parse gate, bindings reconciliation, coverage query, kill-time adjudicator),
+  not any spec's tests. So the gate validates that an arm PARSES and BINDS, and
+  never evaluates its assertion. Yoga's cross-tier finding, on my own change.
+- 2026-09-15: macuahuitl's refusal-wording fix is live — "retrying THIS PUSH
+  cannot help (not a lost race); merge trunk and re-gate". Fifth consecutive
+  lost race, and this time I went straight to the relay instead of re-running,
+  which is what the measurements argued for.
