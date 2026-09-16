@@ -7039,3 +7039,47 @@ so `_unpushed_merges` was 0 and the tool rebased. The rule is unchanged and now
 has three witnesses: a local sha is not a shared address until it is on origin,
 and the sender can tell which arm applies with `git rev-list --merges --count
 origin/<branch>..HEAD` BEFORE quoting one.
+
+## Pass 44 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=352, `osx-next` ahead=0
+behind=131. `main` behind=612. One land this pass, batched — see below.
+
+**I REPRODUCED PASS 42's OWN DEFECT IN THIS PASS's FIRST MEASUREMENT.** Pass 42
+recorded that commit author NAME does not identify the host and that the remedy
+is to count by `%ae`. This pass opened its activity read with `%ae` and then
+printed `${e%%@*}` — stripping the domain, which is the only part that names the
+host — so macuahuitl and yoga both rendered as `tlatoani` and the first reading
+of trunk composition was unusable. The recipe was followed and the DISPLAY threw
+away what the recipe exists to preserve. Re-measured with full addresses; filed
+as **1223-wzc4**, p3, because the corrected recipe lives in prose and prose gets
+retyped. The precedent is exact and already in the coordination skill: the
+loop-status metrics audit was typed from memory on 2026-09-05, lost both its
+fixes, and was moved into a script with "RUN THE SCRIPT. DO NOT RETYPE THE LOOP."
+above it. The host-activity read has the same shape and no such script.
+
+**TRUNK COMPOSITION, 3h, by host (the corrected read):**
+
+```
+macuahuitl 10  (8 plan-only, 2 code)   yoga 3   macneo 3   lenovinha 3   gmail-bucket 2
+```
+
+Ten of twenty-one commits are this host's, eight of them plan-only — the same
+proportion that produced yoga's `refused:land:attempts-exhausted:4`. The
+batching commitment made last pass holds: this pass makes ONE plan-only push
+carrying both records instead of one per item.
+
+**THE EXPIRY SWEEP IS UNCHANGED AND NEITHER CANDIDATE WAS ACTIONED.** Same two
+rows as pass 41 — `1155-jurn` (claimant `windows`, a platform not a host; its
+`work/1155-jurn` ref IS contained in trunk, so expiring strands nothing) and
+`1186-w3ph` (yolanda's salvage ref still not contained, three files still
+carrying changes trunk lacks, so expiring would strand work). `--write` applies
+both together; nothing was written. The blind spot is filed as 1220-zb7q.
+
+**NO REASSIGNMENT, AND EVERY HOST HEARD FROM IS WORKING.** lenovinha claimed
+`679-rp9m` (the login Vault poll) this pass; yoga landed `1132-r4mt`'s criterion 4
+as CODE after four attempts and said criterion 2 remains unanswered rather than
+letting the delivered half imply it; macneo relayed a ledger-only cycle and
+emitted its first token record; macbookair holds `690-w94k` criterion 3. Seven
+rows are `in_progress`. Nobody reported idle, nobody asked, and no claim was
+flipped onto anyone.

@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-fix-for-mis-attributing-host-activity-lives-in-prose-so-the-coordinator-retyped-it-wrong-one-pass-after-recording-it
+    order: 1223-wzc4
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [coordination, metrics, instrument, fleet, tooling]
+    estimated_hours: 2
+    owned_files: []
+    title: |
+      Every coordination pass re-derives "which host is active" by hand, and the corrected recipe lives in prose — so it was retyped wrong one pass after being recorded
+    context: |
+      MEASURED ACROSS THREE CONSECUTIVE COORDINATION PASSES ON macuahuitl, and the
+      third is the evidence rather than the complaint.
+      PASS 42 found that commit AUTHOR NAME does not identify the host: eleven
+      distinct (name, email) pairs over seven days, `Tlatoani` mapping to four
+      emails and `Tlatoāni` to two, so a `%an` count MERGED macuahuitl with an
+      unattributed bucket into one row of 159 and LOST macneo entirely — its 9
+      commits folded into that row, making a working host read as silent. The
+      remedy was recorded as prose: "count by %ae, prefer the
+      <user>@<host>.ayahuitlcalpan.com form, and treat bulloncito@gmail.com as an
+      unattributed bucket".
+      PASS 44, two passes later, the same coordinator opened its activity read
+      with `%ae` and then printed `${e%%@*}` — stripping the domain, which is the
+      ONLY part that names the host. macuahuitl and yoga both rendered as
+      `tlatoani`, and the pass's first reading of trunk composition was
+      unusable until it was re-measured. THE RECIPE WAS FOLLOWED AND THE
+      DISPLAY THREW AWAY WHAT THE RECIPE EXISTS TO PRESERVE.
+      THIS IS 1049-class ARRIVING FOR THE THIRD TIME — a corrected instrument
+      that lives in prose gets retyped, and a retyped command is a new command
+      with none of the corrections. The precedent is exact and already in the
+      coordination skill: on 2026-09-05 the loop-status metrics audit was typed
+      from memory instead of run, the paraphrase dropped both of its hard-won
+      fixes, and two figures filed into a packet came from the wrong entry. That
+      audit's remedy was to MOVE IT INTO A SCRIPT
+      (scripts/loop-status-metrics-audit.sh) with "RUN THE SCRIPT. DO NOT RETYPE
+      THE LOOP." written above it. The host-activity read has the same shape and
+      no such script.
+      WHAT THE SCRIPT WOULD HAVE TO CARRY, because these are the corrections that
+      keep getting lost: count by EMAIL not name; print the full address or at
+      minimum the host part, never the local part; report
+      non-<host>.ayahuitlcalpan.com addresses as an UNATTRIBUTED BUCKET rather
+      than as a host (order 1012-hu7d's rule, which the loop-status audit already
+      enforces for platform-label stems and which the git-author view does not);
+      and classify each commit PLAN-ONLY versus CODE, because the two have
+      different costs of entry to trunk and the distinction is what makes the
+      count mean anything (see the land-fairness condition recorded in the drill).
+      NOT URGENT AND FILED p3 DELIBERATELY. The cost today is one re-measure per
+      pass by a coordinator who knows to check. It becomes expensive when a pass
+      ACTS on the first reading — reassigning a host that read as silent, or
+      reporting a host as idle to the operator — which is exactly what this pass
+      exists to do and what pass 42's numbers would have supported.
+    exit_criteria:
+      - 'a script answers "which hosts were active on trunk in window W, and what did each land" by email, and the coordination skill says RUN IT rather than describing the query (pre-fix result: FAILS — the recipe exists only as drill prose and was retyped wrong within two passes, verbatim above)'
+      - 'addresses that do not name a host are reported as an unattributed bucket and are never rendered as a host row'
+      - 'each commit is classified PLAN-ONLY or CODE, so a count can be read against the two different costs of landing'
+      - 'NEGATIVE CONTROL: a host that landed nothing in the window is reported as absent from the window, NOT as idle — idleness is established by asking (1005-class) and this instrument must not appear to answer it'
+    unscoreable: |
+      output-shape-not-chosen: whether this is a standalone script, a mode of
+      scripts/loop-status-metrics-audit.sh (which already solves the identical
+      retyping problem for a sibling read), or a plan CLI subcommand is undecided.
+      The three passes of evidence are measured and re-checkable from git log;
+      the placement is not chosen.
+    events:
+      - type: filed
+        ts: "2026-09-16T09:00:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t090000z"
+        host: macuahuitl
+        summary: |-
+          Filed by the coordinator against its own pass, after reproducing in
+          pass 44 the exact defect it had recorded in pass 42. The third
+          instance is what makes it a row rather than a note: the remedy was
+          written down, was read, and still did not survive being retyped.
