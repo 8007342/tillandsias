@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    order: 1224-zpek
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, testing, gate, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-macos-tray/tests/exec_guest_stdin.rs
+    verifiable_closure: |
+      cargo test -p tillandsias-macos-tray --test exec_guest_stdin reports the
+      two stdin tests as SKIPPED BY NAME and exits 0 WHEN A TRAY IS RUNNING, so
+      ./build.sh --check can go green on that host.
+
+      WITH NO TRAY RUNNING, the two tests still RUN and still assert — proven by
+      a mutation that breaks the stdin path and must red them. A skip that
+      swallows the real assertion is worse than the failure it replaces, which
+      is what makes the no-tray arm the load-bearing half.
+    title: |
+      exec_guest_stdin's two tests ASSERT on the live-tray refusal instead of skipping, so a macOS host cannot pass ./build.sh --check while the product it builds is running
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-16, two cycles running. The
+      operator installed a release and left the tray up; both tests then fail:
+
+        stderr: Error: --exec-guest needs to boot the VM, but a running
+                Tillandsias tray owns it.
+        assert: "one-shot exited on the order-277 live-tray refusal, so it never
+                reached the stdin path — THIS TEST PROVED NOTHING."
+
+      THE DEFECT IS IN ONE SENTENCE OF THE TEST'S OWN MESSAGE: it says it proved
+      nothing, and then FAILS. A failure asserts something about the subject —
+      that the stdin path is broken. The truth is that the stdin path was never
+      exercised. Those are different claims and only one of them is true.
+
+      THIS IS 1141-vf9w's SHAPE, already settled elsewhere in this tree. There a
+      fixture's honest "I could not look" collapsed into the step's content
+      verdict and refused every macOS land on an otherwise green trunk; the
+      remedy was an explicit skip channel (STEP_SKIP_EXIT / STEP_SKIP_DESC)
+      naming what did and did not run. The same distinction applies here.
+
+      WHAT WAS CHOSEN, and this is NOT an oversight about vacuity: the guard's
+      comment says it exists to "guard against a vacuously-passing assertion".
+      The author considered PASS-vacuously versus FAIL and correctly rejected
+      passing. The third option — SKIP, named, which is neither a false pass nor
+      a false failure — is the one not taken. So this row is not "they forgot";
+      it is "the available choices were two and there are three".
+
+      THIRD DISTINCT CAUSE FOR THESE TWO TESTS, and the history is why this row
+      is worth its cost. They have already been diagnosed twice:
+        1. gate CONCURRENCY (two runs sharing target/) — asserted as PROVEN on a
+           forced solo run, then retracted: that green was a lucky link order,
+           not a control;
+        2. 1043-kvvn — macos-tray and windows-tray both declared
+           [[bin]] name = "tillandsias-tray", so CARGO_BIN_EXE resolved to the
+           Windows stub. Real, and never concurrency.
+      The recorded method error from that episode: "across three occurrences I
+      compared PASS/FAIL between isolated and full-suite runs and never opened
+      the transcript to read WHY the test failed." This cause was read from the
+      transcript: the stderr names the live-tray refusal in plain text, the host
+      has exactly one tray process, and the failure reproduces with the change
+      under test STASHED (both fail identically on the pre-change tree), so it
+      is environmental and not a regression.
+
+      A BOOTSTRAP PROPERTY WORTH KNOWING BEFORE ANYONE PLANS THE FIX: the fix
+      cannot be LANDED from a host whose tray is blocking its gate, because
+      landing requires the gate this defect reds. It needs either a host with no
+      tray running, an operator willing to quit theirs once, or a relay ref
+      landed by another host. That is not a reason to avoid the fix — it is a
+      reason not to assign it to a host that is currently blocked by it.
+    deliverable: |
+      The two tests skip by name when a tray owns the VM, and still assert when
+      one does not.
+    next_action: >
+      Read 1141-vf9w's STEP_SKIP_EXIT/STEP_SKIP_DESC treatment first — the
+      distinction and its wording are settled there and should not be
+      re-litigated. The change is in assert_reached_stdin_path: on the live-tray
+      refusal, report a named skip rather than asserting. Rust's test harness has
+      no first-class skip, so the honest forms are an explicit early return with
+      an eprintln naming WHY it did not run, or #[ignore] driven by a
+      tray-detection helper — pick whichever the crate's existing idiom
+      supports, and make the message say what was NOT exercised rather than
+      going silent. THEN prove the no-tray arm still has teeth: with no tray
+      running, break the stdin path and watch both tests red. A skip that
+      swallows the assertion is the worse defect, and this row should not be
+      closed without that mutation.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-16 after the blocker recurred across
+      two cycles and left completed work (690-w94k criterion 3, committed
+      b3eb557a9) unlandable. Cause read from the transcript, not inferred from
+      isolated-versus-suite behaviour — which is the method error the earlier
+      misdiagnoses of these same two tests recorded. Cited by symbol.
