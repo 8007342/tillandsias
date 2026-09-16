@@ -112,3 +112,31 @@ reference: it reads as precision and costs the next reader the time to discover
 it resolves to nothing. Corrected rather than silently replaced, because the
 error is instructive about how this list should be read: **verify every sha in
 section 4 against origin before acting on it.**
+
+## 8. The measured cost of section 4 having no gate — verified timestamps
+
+Relayed independently by macbookair-macos from the host it happened on, and
+re-verified here against origin rather than repeated:
+
+```
+release v56.9.13.1 published   2026-09-14T01:57:30Z
+e15c81e6d committed            2026-09-15T21:28:45Z   fix(1211-34v6)
+operator hit the refusal       2026-09-16, hours after that commit
+```
+
+The fix postdates the artefact by **1 day 19 hours 31 minutes** — and it was
+**already on trunk when the operator walked into it**. Not missing, not
+unwritten, not unreviewed: landed, green, and sitting in a branch no artefact
+had been cut from. The operator read the exact sentence that commit deletes.
+
+That is the concrete cost of 1218-25z3 and the reason this document exists. The
+operator's own emphasis, in their words via macbookair: timing does not matter
+to them — what matters is that fixes REACH MAIN AND A RELEASE.
+
+**Recorded next to the complaint, because the complaint reads harsher without
+it:** the guard behaved correctly. It refused, wrote nothing to Vault, cited
+759-vceg and 803-49re by order, and explained why seeding on authentication
+alone is the failure that looked healthy and broke the operator forty minutes
+later. The single defect was the remedy line. A guard that fails closed with a
+wrong remedy is still far better than one that seeds and breaks at first push.
+
