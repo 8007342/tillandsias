@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full
+    event:
+      type: note
+      ts: "2026-09-16T23:16:23Z"
+      agent_id: linux-macuahuitl-claude-20260916t231622z
+      host: macuahuitl
+      summary: |
+        Checked the release-gate claim by reading the producer, and it is NOT CONFIRMED.
+        Every ERROR arm in verify_binaries returns 1 (scripts/build-guest-binaries.sh,
+        the verify function's eight error branches). The script sets errexit at its top,
+        and the only bare verify_binaries call outside an if-condition is followed by
+        exit 0 under that errexit, so a failure there exits non-zero rather than zero.
+        The one print-then-exit-zero path is the --verify SKIP arm, which prints SKIP
+        rather than ERROR, states its reason (order 447, host staging state not a code
+        regression) and emits the machine token verify:skip-stale-staging. build.sh
+        calls the script bare under its own set -euo pipefail.
+        So the obvious paths are correct and the claimed false green is not visible in
+        them. Three readings remain open: the claim is about a subtler path I did not
+        reach, the claim is wrong, or the forge's own unrelayed change altered what I
+        am now reading. This does NOT clear the gate and it does not block the cut
+        either — it means exit criterion 3 must be settled by RUNNING the producer and
+        reading its exit code, not by reading it, which is what that criterion says.
+        Recorded so the next reader does not repeat the source read and reach the same
+        undecided answer.
