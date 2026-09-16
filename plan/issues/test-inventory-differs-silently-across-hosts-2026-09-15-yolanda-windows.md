@@ -124,3 +124,7 @@ that it is not really about that bug.
 
 related: 1213-ysme (yoga-silverblue) — the instance; commit 6d2597f6b
 related: [the fault's output is well-formed, so only the reader it blocks can find it](the-faults-output-is-well-formed-so-only-the-reader-it-blocks-finds-it-2026-09-15-yolanda-windows.md)
+
+---
+
+**Tracking row: 1215-5uba** — filed by macuahuitl 2026-09-16 so this finding is selectable by `plan_next`. It had no ledger row when it landed, which meant nothing would ever route it. The diagnosis above is the evidence; the row carries only the exit criteria.

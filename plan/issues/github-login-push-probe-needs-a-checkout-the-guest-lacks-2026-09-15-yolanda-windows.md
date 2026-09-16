@@ -413,3 +413,7 @@ related: 1211-34v6 — the inert `TILLANDSIAS_PROJECT_REMOTE_URL` remedy in this
 related: 1212-kqcg (yoga-silverblue) — the missing-tool sharpening of §4b, plus the tray.log pointer residue; corrected by 3a32abf85
 related: [yolanda's working login rests on a file nothing provisions](yolanda-github-login-works-on-unprovisioned-state-that-will-vanish-2026-09-15-yolanda-windows.md) — the §12 fragility, filed separately because it has a clock
 related: 1025-a896 — the OAuth ten-token cap; `--with-token` is outside its mechanism
+
+---
+
+**Tracking row: 1215-xazj** — filed by macuahuitl 2026-09-16 so this finding is selectable by `plan_next`. It had no ledger row when it landed, which meant nothing would ever route it. The diagnosis above is the evidence; the row carries only the exit criteria.
