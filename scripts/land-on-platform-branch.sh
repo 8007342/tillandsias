@@ -368,6 +368,47 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # the push is the one point every land passes through.
     bash "$ROOT/scripts/check-unrunnable-platform-arms.sh" --base "origin/$BRANCH" || true
 
+    # ORDER 1201-9it2 — and this is the SIBLING of the block above, not a
+    # duplicate of it. They answer different questions and a change can trip
+    # either without the other:
+    #   1194-davi (above) — arms this host's gate CANNOT run, because they are
+    #                       scoped to another platform.
+    #   1201-9it2 (here)  — arms this gate DID NOT run, because ./build.sh
+    #                       --check executes NO litmus at all.
+    #
+    # The second is deliberate: build.sh:2508 (748-tkjx) says the suite is
+    # minutes and "a gate that slow gets bypassed with --no-verify". So a green
+    # gate is silent about every litmus arm asserting on the files just changed,
+    # and that silence has let a red ride a green gate to trunk THREE times:
+    # images/default/lib-common.sh leaving startup-context-addendum-shape red on
+    # 2026-08-15; 921-vtf4 finding three tests red back to af745f3fd on
+    # 2026-08-28; and 4fc7be930 bumping WIRE_VERSION 3 -> 4 against a pin of 3 on
+    # 2026-09-15, found three hours later by 890-27mv's cadence, not by the gate.
+    #
+    # ADVISORY BY CONSTRUCTION, for the reason the block above gives and one
+    # more: closing a VISIBILITY gap by slowing the gate trades it for a bypass
+    # problem, which is unmeasurable once it starts because the evidence of a
+    # bypass is the absence of a run.
+    #
+    # NO NEW MACHINERY: scripts/litmus-covering-specs.sh is 748-tkjx's own
+    # reverse map, built for exactly this question. Only the asking was missing.
+    # Counterfactual against real history rather than a chosen input: for
+    # 4fc7be930's changed paths it names litmus:guest-container-metrics-wire-shape,
+    # the arm that was actually red.
+    if [ -x "$ROOT/scripts/litmus-covering-specs.sh" ]; then
+        _lcs_changed="$(git diff --name-only "origin/$BRANCH...HEAD" 2>/dev/null)"
+        if [ -n "$_lcs_changed" ]; then
+            _lcs_out="$(printf '%s\n' "$_lcs_changed" | xargs -r bash "$ROOT/scripts/litmus-covering-specs.sh" 2>/dev/null)" || true
+            _lcs_specs="$(printf '%s\n' "$_lcs_out" | awk -F'\t' '$2 ~ /^spec:/ {print $2}' | sort -u | grep -c . || true)"
+            if [ "${_lcs_specs:-0}" -gt 0 ]; then
+                echo "land: NOTICE — ${_lcs_specs} litmus spec(s) assert on the files you are pushing, and ./build.sh --check ran NONE of them (748-tkjx, 1201-9it2):"
+                printf '%s\n' "$_lcs_out" | awk -F'\t' '$2 ~ /^spec:/ {print "         " $2 "  " $3 "  " $5}' | sort -u | head -20
+                echo "         Advisory, refusing nothing. To run them: scripts/run-litmus-test.sh <spec> --phase pre-build"
+                echo "         The release tier runs them; this gate does not, and that is deliberate."
+            fi
+        fi
+    fi
+
     echo "land: attempt $attempt — push"
     # No pipeline: the exit status must be git push's own. KEEP THE OUTPUT — an
     # earlier version discarded it, so a push that failed for a NON-RETRYABLE
