@@ -1895,7 +1895,38 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # competitor. Without --host-side the check now says so and stops. On a host
     # that does NOT re-exec, this is the host side, and wiring the assertion
     # here is the follow-up rather than a silent widening.
-    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
+    #
+    # ORDER 1221-vkbj: it now SAYS WHICH SILENCE, and this caller reads the code.
+    #
+    # The context is decided on TILLANDSIAS_WRAPPER_TOKEN, not on container
+    # markers. The markers are the enumeration this check already inverted away
+    # from — yolanda measured a WSL distro with TOOLBOX_PATH, container,
+    # /run/.toolboxenv, /run/.containerenv and /.dockerenv ALL absent while
+    # genuinely inside a dispatch, so a marker sweep answers "undispatched"
+    # there and lies. The token is a positive fact about OUR wrapper, which is
+    # the only dispatch this check has an opinion about: with-tillandsias-builder.sh
+    # exports it into the dispatched process, so its presence here means a
+    # tillandsias wrapper ran, and its absence means none did.
+    #
+    # Still advisory, still no --host-side from here: see the long note in
+    # check-no-competing-gate.sh about why asserting from an undispatched gate
+    # would manufacture a vacuous clean.
+    if [ -n "${TILLANDSIAS_WRAPPER_TOKEN:-}" ]; then
+        _cg_ctx=dispatched
+    else
+        _cg_ctx=undispatched
+    fi
+    _cg_rc=0
+    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" \
+        --caller-context "$_cg_ctx" 2>&1 || _cg_rc=$?
+    case "$_cg_rc" in
+        0) : ;;                       # answered clean, or advisory-downgraded
+        1) echo "  advisory: a competing gate was reported above (1141-vf9w)" ;;
+        2) echo "  CALLER CONTRACT BUG at this call site (1150-q462): the competing-gate check refused the way it was invoked. This is NOT a substrate limit and will not fix itself — read the line above and fix build.sh." ;;
+        3) : ;;                       # cannot answer here; the cause line says which
+        *) echo "  UNKNOWN competing-gate exit code $_cg_rc — the four-code grammar (1150-q462) has grown a fifth and this consumer does not know it. Do not read silence as clean." ;;
+    esac
+    unset _cg_ctx _cg_rc
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
