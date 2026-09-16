@@ -658,7 +658,7 @@ looked"* will eventually be read as the former.
   pointed at the innocent test. Now reaps by captured pid. I only found it
   because I ran the FULL suite this time — last cycle I ran my own test before
   and after and called that the selftest rule satisfied.
-- 2026-09-16: the citation gate caught me writing `main.rs:150` into this drill
+- 2026-09-16: the citation gate caught me writing `main.rs:150` into this drill <!-- cite-ok: the drifted citation IS the evidence — this bullet records what was written wrongly, so replacing it with a symbol would erase the finding -->
   one hour after my own evidence event said "line numbers are a snapshot; the
   FORMS are the durable handle". Fixed by citing the form. Knowing a rule and
   applying it are different acts — macuahuitl's sentence, now mine.
@@ -669,3 +669,30 @@ looked"* will eventually be read as the former.
   host right now. Proven environmental: both fail identically on the pre-change
   tree. So this crate's work is committed and UNLANDED until the tray is down;
   I am not quitting the operator's running application to land a commit.
+- 2026-09-16 (1224-zpek): filed the live-tray gate blocker. exec_guest_stdin's
+  two tests ASSERT on the live-tray refusal while their own message says "this
+  test proved nothing" — a failure claims the stdin path is broken; the truth is
+  it was never exercised. 1141-vf9w's shape, already settled: an honest "I could
+  not look" must not collapse into a content verdict. NOT an oversight about
+  vacuity — the guard's comment shows PASS-vacuously vs FAIL was weighed and
+  FAIL correctly chosen; SKIP-by-name is the third option nobody had.
+- 2026-09-16: this is the THIRD distinct cause for these same two tests. They
+  were blamed on gate concurrency (asserted PROVEN on a solo green that was
+  lucky link order, not a control), then correctly traced to 1043-kvvn's
+  duplicate [[bin]] name. The recorded method error was "never opened the
+  transcript to read WHY the test failed". I read it: the stderr names the
+  live-tray refusal in plain text, one tray process, and both fail identically
+  with my change stashed — environmental, not a regression.
+- 2026-09-16, A BOOTSTRAP PROPERTY: the fix for "a live tray reds the gate"
+  cannot be LANDED from a host whose tray is redding its gate, because landing
+  needs that gate. It wants a host with no tray, an operator quitting theirs
+  once, or another host landing a relay ref.
+- 2026-09-16: hit the anchored-pattern trap AGAIN. check-scorable-obligation
+  matches the FIRST characters (scripts/*.sh*, litmus:*, cargo test*), and my
+  closure opened "With a tray RUNNING, cargo test ..." so it matched nothing.
+  Two days ago the same checker refused a closure opening with a BACKTICK. I
+  recorded that in memory and still wrote the variant.
+- 2026-09-16: used the citation gate's `cite-ok` escape for the first time, and
+  legitimately — the bullet ABOVE quotes the drifted citation AS the evidence,
+  so replacing it with a symbol would erase the finding. That is the case the
+  escape documents, not a way around the rule.
