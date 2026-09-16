@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    event:
+      type: evidence
+      ts: "2026-09-16T03:53:15Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260916t035315z
+      host: macos
+      summary: |
+        SITE INVENTORY — the artifact the closure's ten-site mutation depends on, and
+        you cannot write that mutation without it.
+
+        THE ROW'S "TEN SITES ACROSS SIX CRATES" IS CORRECT. I nearly reported it as
+        drifted, and the near-miss is worth recording because it is this week's
+        recurring error in a new costume: my first probe searched only
+        `wire_version != WIRE_VERSION` and found EIGHT across FIVE crates. Two sites use
+        the EQUALITY form. A faithful search of an incomplete pattern, about to be
+        published as a correction to a row that was right.
+
+        THE TEN, by symbol:
+
+          form A — `wire_version != WIRE_VERSION`   (8)
+            tillandsias-vm-layer/src/vsock_exec.rs        :592 :853 :1029 :1113
+            tillandsias-host-shell/src/vsock_client.rs    :182
+            tillandsias-headless/src/vsock_server.rs      :887
+            tillandsias-windows-tray/src/hvsocket.rs      :141
+            tillandsias-macos-tray/src/pty_vsock_bridge.rs:229
+
+          form B — `wire_version == WIRE_VERSION`   (2)
+            tillandsias-vm-layer/src/vsock_exec.rs        :1251
+            tillandsias-router-sidecar/src/main.rs        :150
+
+          six crates: vm-layer, host-shell, headless, windows-tray, macos-tray,
+          router-sidecar. Line numbers are a snapshot; the FORMS are the durable handle,
+          and this row's own history is why — re-derive by symbol before editing.
+
+        COVERAGE: 2 of 10.
+          vsock_client.rs:182   TESTED — handshake_refuses_a_server_advertising_a_
+                                different_wire_version (1032-62rx's own test)
+          vsock_server.rs:887   TESTED — server_refuses_a_client_advertising_a_
+                                different_wire_version (1201-t6ms, landed 2026-09-15)
+          the other eight       NO mismatch test. Measured: `WIRE_VERSION + 1` appears
+                                in exactly two files in the tree, and they are those two.
+
+        SO THE TITLE IS NOW STALE AND THE ROW IS NOT: "untested on BOTH SIDES" was true
+        when filed and is not true today — both named sides are covered. What remains is
+        the other eight sites, which is what the closure actually asks for and what the
+        title obscures. Anyone reading the title alone would either close this row
+        wrongly or re-do the two tests that exist.
+
+        PLATFORM OWNERSHIP OF THE REMAINING EIGHT, because this row cannot be finished by
+        one host:
+          vsock_exec.rs (5 sites)     vm-layer — macOS-testable, this host
+          pty_vsock_bridge.rs (1)     macos-tray — this host
+          hvsocket.rs (1)             windows-tray — needs a Windows host
+          router-sidecar main.rs (1)  runs in a Linux container — needs that lane
+        The closure's deletion arm ("deleting all ten in ONE mutation turns at least one
+        RED") is satisfiable from any host once the tests exist, but WRITING the tests
+        is split across three platforms. That is the same shape as 920-pxg6 task 4.5,
+        where pickup_role is single-valued and cannot express it.
+
+        NOT DONE THIS CYCLE: no new tests. The inventory is the deliverable here and the
+        eight uncovered sites are named so the next taker starts from a list rather than
+        a grep they might write as incompletely as I first did.
