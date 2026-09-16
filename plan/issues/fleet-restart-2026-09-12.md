@@ -7562,10 +7562,9 @@ of these are release-tier-only, because `./build.sh --check` runs no litmus
 ANSWER.** Two `spec.answer` cases graded `FABRICATED citation` here and SKIP
 entirely on an index-less host. The published index entry records its own build
 commit in `.commit`: `5bef283cb`, 2026-09-14, an ancestor of HEAD. At that
-commit `fn forge_uses_host_mount` sits at main.rs:6274 and
-`fn effective_inference_tier` at 4524 — **exactly the two cited spans**; at HEAD
-they are at 6358 and 4608. Retrieval, chunk and recorded commit are all correct.
-Only the reader stands elsewhere.
+commit `fn forge_uses_host_mount` sits at main.rs:6274 and `fn effective_inference_tier` at 4524 — **exactly the two cited spans**; at HEAD they are at 6358 and 4608. <!-- cite-ok: these ARE the drifted citations, quoted as the evidence. The finding IS that these line numbers moved 84 lines under a fixed index; a symbol reference would erase the measurement it reports. 881-29me's own named exception. -->
+Retrieval, chunk and recorded commit are all correct. Only the reader stands
+elsewhere.
 
 I reconstructed that by walking main.rs backwards through 25 revisions. **The
 `.commit` file answers it in one read**, and yoga said so. A marker written
@@ -7573,11 +7572,12 @@ precisely so nobody has to do the walk is worth checking before doing the walk.
 
 **THE MECHANISM EXISTED AND THREE CALL SITES CHOSE THE WRONG SIBLING** (filed
 1229-2862, claimed to yoga, who implemented it the same night with two mutation
-controls that red): `groundtruth.rs:615` drops `entry.commit` one line after
-loading it, `:699` stamps `Freshness::for_source` — this checkout's HEAD — where
+controls that red): the `spec_index` loader in `groundtruth.rs` drops
+`entry.commit` one line after loading it, its `spec.answer` arm stamps
+`Freshness::for_source` — this checkout's HEAD — where
 `build_envelope_scored_with_freshness` exists for the entry's own frame, and
-`:396` calls the frame-blind `answer::verify` where `main.rs:3570` picked
-`audit` and said why in place. Order 801-g9nn built the whole stale-versus-
+`grade_envelope` calls the frame-blind `answer::verify` where the
+`verify-answer` subcommand picked `answer::audit` and said why in place. Order 801-g9nn built the whole stale-versus-
 fabricated separation for this and `audit` has ONE non-test caller in the tree.
 
 **A MIS-STAMPED FRAME IS WORSE THAN AN ABSENT ONE** and this is the part that
@@ -7613,8 +7613,8 @@ at gate start); the `cargo fmt` refusal cost one minute. The ninety seconds buys
 one minute, not forty-one — the forty was bought back by a discipline, not a
 tool. Filed as stated it would have shipped a tool recommendation carrying a
 discipline problem's savings. The row is still worth having, on a regime
-argument a fat host cannot make: `cargo fmt --check` sits at `build.sh:1788`,
-and the cost of walking there is what a floor host pays. `scripts/land-on-
+argument a fat host cannot make: the `cargo fmt --check` step sits early in
+build.sh's own gate, and the cost of walking to it is what a floor host pays. `scripts/land-on-
 platform-branch.sh` has no cheap pre-gate check at all.
 
 **THE SALVAGE AUDIT SURFACED LIVE WORK FOR THE FIRST TIME.** 38 refs scanned;
