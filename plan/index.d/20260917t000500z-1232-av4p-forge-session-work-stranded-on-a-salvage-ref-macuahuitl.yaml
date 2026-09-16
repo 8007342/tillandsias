@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    order: 1232-av4p
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [coordination, forge, salvage, claim-visibility, audit, release-gate]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/fleet-restart-2026-09-12.md
+    title: |
+      an OpenCode forge session that cannot be messaged completed EIGHT packets and 441 lines of code onto a salvage ref — all eight read `ready` on trunk, and one of them claims the release gate has a false green
+    context: |
+      FOUND BY THE COORDINATION PASS 2026-09-16T23:55Z, by running
+      scripts/salvage-audit.sh rather than by anyone reporting it. The operator
+      had said a BigPickle/OpenCode session was running inside a Tillandsias
+      Forge on Yolanda's hardware, that it could not be controlled or messaged
+      from the fleet, and that "I think it just claimed some packets and will
+      hopefully complete them". It did complete them.
+      THE REF: salvage/unknown/20260916-920-cluster-forge-20260916, tip
+      6db5aa8b8, pushed 2026-09-16T22:33:38Z, two commits ahead of 5a7cdee07,
+      subject "salvage(unknown): dirty worktree preserved before a cycle
+      refusal". So 872-c9nd's net did exactly its job: the cycle refused on a
+      dirty tree and the work went to origin instead of sitting in a directory.
+      This row exists because the net is where the story is SUPPOSED to
+      continue, and nothing continues it automatically.
+      WHAT IS ON IT: 22 plan fragments and 441 lines of code across 11 files —
+      build.sh, crates/tillandsias-headless/src/{main.rs,pty_handler.rs,
+      tray/mod.rs}, crates/tillandsias-plan/src/{fragments.rs,main.rs},
+      images/default/cli/tellme, images/default/lib-common.sh,
+      openspec/litmus-tests/litmus-mcp-discoverability-shape.yaml,
+      scripts/check-capability-row.sh, and a new
+      scripts/test-populate-hot-paths-negative-control.sh.
+      The fragments are in three waves by timestamp: eight `in_progress` claims
+      at 21:36, eight event-only notes at 21:55:0x, eight `implemented` status
+      writes at 21:55:3x, plus two later events on two further packets. The
+      agent id is forge-tillandsias-opencode-20260916t214000z.
+      THE COORDINATION DEFECT, MEASURED. All eight packets read `ready` on
+      trunk. Verified directly for four of them
+      (build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full,
+      build-check-and-release-flag-combination-hard-fails,
+      populate-hot-paths-fails-silent-and-traces-success,
+      ledger-fold-silently-ignores-inert-fragments) with
+      `tillandsias-plan status`. So `plan_next` would offer another host work
+      that is already finished, by a host nobody can ask. This is 1034-whsp's
+      relay gap with the relay horizon at INFINITY rather than at two hours: a
+      platform host's claim reaches trunk when a coordinator relays the branch,
+      but a forge session's claim reaches trunk only if someone runs the salvage
+      audit and chooses to act on it.
+      ONE OF THE EIGHT IS A RELEASE-GATE INTEGRITY CLAIM AND IT IS WHY THIS IS
+      p1: `build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-
+      full`. If that is accurate, the gate this fleet uses to decide whether to
+      ship prints an error and exits zero — a false green inside the release
+      decision itself. It is a CLAIM, not an established fact, and it is
+      unverified here.
+      DO NOT RELAY THE CODE ON THE STRENGTH OF THIS ROW. A forge session's
+      landings have narrated mechanisms that were never invoked and cited orders
+      that did not apply; the standing rule is audit before trust. 441 lines
+      touching the headless crate, build.sh and the guest images, arriving
+      during a release window, is the worst possible thing to sweep in
+      unexamined. The claims are relayed because they are TRUE AS WRITTEN — the
+      forge did claim these at 21:36 — and the `implemented` writes are NOT
+      relayed, because `implemented` on trunk with the implementation on a
+      salvage ref is a statement the ledger would carry and nothing would
+      support.
+      WHY THIS IS NOT SIMPLY "RELAY IT LATER". The forge cannot be told anything.
+      It cannot be asked whether it is still working, whether the salvage ref is
+      its final state, or whether it will push again. Every other host in this
+      fleet can be sent a message and answer. This one produced eight closures
+      and a refusal, and the only channel it has is a ref name.
+    exit_criteria:
+      - 'the eight packets do not read `ready` on trunk while a live claim exists elsewhere, so plan_next cannot offer finished work to a second host (pre-fix result: FAILS — measured 2026-09-16, four of four sampled read `ready` on trunk with in_progress + implemented writes sitting on the salvage ref)'
+      - 'the 441 lines are audited file by file against the packets they claim to close, and each file is relayed or refused with a reason recorded on its own row — a blanket relay and a blanket refusal are both wrong'
+      - 'the release-gate claim in build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full is checked by running the producer and reading its exit code, BEFORE the next cut, and the answer is recorded whichever way it goes'
+      - 'NEGATIVE CONTROL: no packet is marked `implemented` on trunk whose implementation is not on trunk'
+      - 'the coordination pass gains a step that surfaces unrelayed forge work by NAME, so the next instance is found by the routine rather than by a coordinator happening to read a salvage audit closely'
+    unscoreable: |
+      audit-scope-not-decidable-in-advance: how much of the 441 lines survives
+      audit is unknown until someone reads it, and the honest outcomes range
+      from "all of it, relay wholesale" to "none of it, and the eight closures
+      are wrong". The measurement that this row rests on — eight packets
+      claimed and closed on a ref, all reading ready on trunk — is complete and
+      re-checkable with scripts/salvage-audit.sh and `tillandsias-plan status`.
+      The disposition of the work is not.
+    events:
+      - type: filed
+        ts: "2026-09-17T00:05:00Z"
+        agent_id: "linux-macuahuitl-claude-20260917t000500z"
+        host: macuahuitl
+        summary: |-
+          Filed from the coordination pass. The eight `in_progress` claim
+          fragments are relayed verbatim in this same commit, byte-identical to
+          the ref (8 of 8 hash-compared), because they are true as written and
+          they stop plan_next offering finished work. The eight `implemented`
+          writes are deliberately NOT relayed and the code is deliberately NOT
+          relayed: the operator asked for a release in two days and 441
+          unaudited lines through the headless crate and the guest images is not
+          something to decide at the end of a long night.
