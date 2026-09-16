@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: mcp-json-launcher-host-kind-compatibility
+    event:
+      type: verified-by
+      ts: "2026-09-16T08:11:44Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260916t081040z
+      host: macneo
+      summary: |
+        macneo: HOST-KIND REPORT FOR macos, which is this row's exit criterion — what `bash` resolves to here, whether the experts answer, and which of A-D apply, each with a reason.
+        (1) WHAT `bash` RESOLVES TO: /bin/bash, GNU bash 3.2.57 — Apple's, and it is the ONLY bash on this host. Identical under the agent harness's non-login PATH and under an augmented PATH carrying /opt/homebrew/bin and /usr/local/bin, so unlike esmeraldinha's case there is no PATH-order ambiguity to resolve. Verified three ways because a single-source claim is what this row exists to distrust: a loop over six candidate prefixes, `which -a bash` returning exactly one line, and `brew list --formula | grep -cx bash` returning 0. The loop's search space was real rather than empty — /bin holds 37 executables, /usr/bin 884, /opt/homebrew/bin 1 — so "found in exactly one" is a measured one rather than a loop that looked nowhere.
+        (2) DO THE EXPERTS ANSWER: YES. Both stdio servers start clean under 3.2.57 — forge-plan.sh and project-info.sh each rc=0 with stdin closed and a 15s bound, emitting `[lib-dev-env] model tier: cpu -> qwen2.5:0.5b`. A scan for bash-4-only idioms (declare -A, ${x^^}, readarray, mapfile, &>>) found nothing executable; the two hits were glob text inside JSON descriptions, not shell.
+        (3) OPTIONS, FOR THE macos HOST KIND:
+          A — LEAVE UNCHANGED, FIX PER-HOST. COMPATIBLE, and on this host it is currently a NO-OP: there is one bash, it resolves unambiguously, and nothing needs fixing. Its stated cost applies exactly though — the inconsistency stays implicit, and on macOS the implicit thing is not a runtime but a DIALECT.
+          B — NAME THE INTERPRETER EXPLICITLY. COMPATIBLE, and beneficial here for a reason the option does not state: pinning /bin/bash would make the 3.2 DIALECT declared rather than emergent, which is what this project's bash-dialect guard (761-g36m) already assumes but cannot enforce at the launcher. The option's stated risk stands — .mcp.json is consumed by several harnesses — and is not a macOS-specific risk.
+          C — MAKE THE SERVER SELF-LOCATING. NOT APPLICABLE. The re-exec exists to cross a runtime boundary; macOS has none. The binary is a native Mach-O and bash is bash, so a self-locating re-exec would be a no-op at best and a new failure mode at worst.
+          D — NATIVE ARTIFACT PER RUNTIME. NOT APPLICABLE for the same reason: the artifact is already native and there is no second runtime to build for.
+        THE macOS ANALOGUE OF THIS ROW'S HAZARD, offered because it is what a "next new host rediscovers" here: the risk is not a runtime split, it is a DIALECT split that does not exist YET. Today `bash` is unambiguous because there is exactly one. Install Homebrew bash 5 — an ordinary developer action, one command — and `bash` becomes PATH-order-dependent between 3.2 and 5, silently changing which dialect the MCP servers run in. That is the same failure this row describes, one axis over, and option B is the only one of the four that would prevent it.
+        SCOPE: this is a host-kind report, not a vote. I am not recommending an option for the fleet; the packet says each verifying host reports its own compatibility and no option is recommended, and macOS's answers do not generalise to the hosts where a real runtime boundary exists.
