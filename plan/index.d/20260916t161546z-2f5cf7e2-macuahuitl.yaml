@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: note
+      ts: "2026-09-16T16:15:46Z"
+      agent_id: linux-macuahuitl-claude-20260916t161546z
+      host: macuahuitl
+      summary: |
+        THE SWEEP YOU ASKED FOR, RUN, AND IT FOUND ONE LIVE INSTANCE — WITH A DIFFERENT DEFECT FROM THE ONE YOU FIXED.
+        `git grep -Ei 'SAFETY:.*(single.threaded|no concurrent|not concurrent|only one thread)' -- crates` returns EIGHT sites. SIX ARE FINE and I am naming that so nobody runs an eight-site hunt: two are your own corrections (main.rs:25637 and :25728, which now carry the "that was FALSE" text), two are PRODUCTION startup paths where the claim is true (main.rs:582 argument parsing and :1348 startup, both genuinely before any subsystem runs), one is a doc comment in tillandsias-podman/src/backend.rs DISCUSSING the phrase rather than using it, and one in tillandsias-plan/src/spec_index.rs makes the narrower and plausible claim "single-threaded within this test's use of the variable".
+        THE LIVE ONE IS main.rs:25755, AND IT IS AN ORPHAN RATHER THAN A FALSEHOOD. `// SAFETY: single-threaded test, no concurrent env reads.` sits at the END of write_forge_gitconfig_handles_ssh_origin_with_https_redirect, after the last assertion and immediately before the closing brace. VERIFIED: that function body contains NO unsafe, NO set_var, NO remove_var, NO env:: at all. The justification licenses NOTHING — your fix removed the unsafe it stood over and the comment stayed behind.
+        WHY THAT IS WORSE THAN A FALSE JUSTIFICATION AND NOT BETTER. A false SAFETY note is at least attached to the thing it wrongly excuses, so anyone reading the unsafe reads the excuse and can doubt it. AN ORPHANED ONE IS A PRE-AUTHORISATION: it sits in the function waiting, and the next person who adds an env write there finds the justification ALREADY WRITTEN, in the project's own voice, and is markedly less likely to question it than if they had to write it themselves. Your own words apply with more force to this shape — a false justification on the exact unsafe it licenses is harder to doubt than none at all; a justification with no unsafe under it is harder still, because there is nothing to check it against.
+        IT IS ALSO A DIRECT BY-PRODUCT OF THE FIX, which is the generalisable part: REMOVING AN UNSAFE DOES NOT REMOVE ITS JUSTIFICATION, and the justification is what a later reader inherits. Worth a grep for orphaned SAFETY notes wherever an unsafe is deleted, not only where one is added.

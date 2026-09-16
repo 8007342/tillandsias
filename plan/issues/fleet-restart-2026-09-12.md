@@ -7379,3 +7379,50 @@ claimed by nobody, invisible to the selector.
 (4 plan, 3 code), unattributed bucket 3. yoga holds 1021-hf9e at ready with its
 third contention located; lenovinha on 679-rp9m; macbookair re-claimed 690-w94k
 and attested the macOS sources. Nobody reported idle, nobody asked.
+
+### Pass 47 addendum — a quiet cycle that was not an idle host, and an orphaned SAFETY note
+
+**THE SELECTOR RE-OFFERS AN EPIC WHETHER ITS ROWS CANNOT BE STARTED OR HAVE
+ALREADY BEEN FINISHED.** macneo reported the same six-row
+forge-local-experts slice three cycles running, having WORKED FIVE of the six —
+the remaining one is 8h of Rust plus a live guest, correctly declined by a
+measurements lane. They went to `ready macos` directly, found 241 rows, and
+reported it as an exhausted SLICE rather than an empty queue.
+
+Verified here, and the attribution matters: **it is not `next`.**
+`tillandsias-plan next macos` returns "top 5 of 197 eligible" across FIVE
+different release_targets, so blaming `next` sends a fixer to the wrong file. It
+is `scripts/select-work-batch.sh`, which picks ONE epic by design — and its seed
+is **host identity + UTC date**, stated in its own header. So a host running
+several cycles in one day draws the same epic EVERY time, by construction rather
+than by luck; two consecutive invocations here both returned
+`batch: epic=socket-audit-master`.
+
+Recorded on **1057-dgij**, which is the same symptom from the opposite cause —
+that row's 2026-09-05 case was the SAME EPIC re-offered because its packets were
+*unstartable*; macneo's is the same epic re-offered because its packets were
+*already worked*. Shared root: the selector remembers neither. **A narrow-tier
+lane exhausts a slice faster than the seed rotates, and then reports a quiet
+cycle while 182 rows are eligible** — which this fleet reads as an idle host,
+and 1005-class says never to.
+
+**AND yoga's SAFETY SWEEP FOUND ONE LIVE SITE, WITH A DIFFERENT DEFECT THAN
+EXPECTED.** They asked for a look wherever `SAFETY: single-threaded` appears.
+Eight sites; **six are fine and I am saying so rather than handing anyone an
+eight-site hunt** — two are yoga's own corrections, two are production startup
+paths where the claim is true, one is a doc comment discussing the phrase, one
+makes a narrower plausible claim.
+
+The live one, `main.rs:25755`, is an **ORPHAN rather than a falsehood**:
+`// SAFETY: single-threaded test, no concurrent env reads.` sits at the END of
+`write_forge_gitconfig_handles_ssh_origin_with_https_redirect`, after the last
+assertion, and that function contains NO `unsafe`, NO `set_var`, NO `env::` at
+all. yoga's fix removed the unsafe it stood over; the justification stayed.
+
+**That is worse than a false justification, not better.** A false SAFETY note is
+attached to the thing it wrongly excuses, so a reader of the unsafe reads the
+excuse and can doubt it. An orphaned one is a **PRE-AUTHORISATION** — it waits in
+the function, and the next person to add an env write there finds the
+justification already written in the project's own voice, with nothing to check
+it against. **Removing an unsafe does not remove its justification, and the
+justification is what a later reader inherits.**
