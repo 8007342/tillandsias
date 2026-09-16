@@ -6716,3 +6716,81 @@ release note must say out loud.
 accept/reject discriminator — a WIRE v4 bump, so host and guest must move
 together), 1201-t6ms and 1211-34v6, plus the 1171-ccf2 fix. Those want the next
 cut and their own blessing round, not a rushed promotion.
+
+## Pass 40 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY, AND THAT IS A MEASUREMENT RATHER THAN AN ABSENCE.** Both
+platform branches are fully contained in trunk: `windows-next` at 34796b2fd
+(ahead=0, behind=299) and `osx-next` at 5560b12bd (ahead=0, behind=78). No land
+this pass. `main` sits at 6b8342f3f — which IS v56.9.13.1 — behind=559.
+
+**FIVE OF SEVEN UNLANDED REFS ARE SUPERSEDED, AND ANCESTRY ALONE WOULD HAVE
+MISREAD ALL SEVEN.** Seven refs on origin are not ancestors of trunk. Checking
+each against its ROW rather than its ancestry: `1185-9qx6`, `1189-2ra5` and
+`1199-aw6m` are **completed**, `1069-c9w6` and `1087-h2z9` are **verified**. So
+five carry work that landed by another route, exactly as 1032-class warns —
+"integrated is proven by ancestry" cuts both ways, and a ref that is not an
+ancestor is not thereby outstanding. The two `salvage/unknown/20260902-opsx-*`
+refs are a fortnight old and belong to a cycle-refusal snapshot.
+
+**THE ONE LIVE ONE IS 1186-w3ph, AND "UNLANDED, WANTING A GATE" WAS TOO COARSE
+TO ACT ON.** The row is `in_progress` (yolanda's) and its salvage ref carries 11
+files. Compared by CONTENT, not by ancestry: **7 are byte-identical on trunk**
+already, and three `fix(1186-w3ph)` commits landed on 2026-09-14 (79b222739,
+125ae5d21, plus the claim and the mechanisms record). Of the four that differ,
+direction matters and splits them:
+
+- `litmus-forge-upstream-auth-gate.yaml` — **trunk is AHEAD** (371dde08a,
+  2026-09-15T20:07Z, after the 08:21Z salvage snapshot). The salvage is stale here.
+- `litmus-plan-answer-envelope-citability.yaml`, `post-commit-expert-refresh.sh`,
+  `test-salvage-net.sh` — trunk last touched them 2026-08-17, 2026-08-28 and
+  2026-09-14T10:14Z respectively, all BEFORE the snapshot, so these three carry
+  changes trunk lacks.
+
+Not acted on: the row is yolanda's claim, they have not reported this pass, and a
+salvage ref is a dirty-tree snapshot rather than a gated branch — three files
+differing is a question for its author, not a licence to land. Recorded so
+whoever resumes it inherits the split instead of re-deriving it.
+
+**THE CYCLE-METRICS PASTE HAS BEEN DEAD FLEET-WIDE FOR ELEVEN DAYS AND THE
+AUDIT THAT SAYS SO IS RUN BY THE HOST THAT ALSO STOPPED.** `rows=23 stems=23`
+(no dropped stem, so the count is trustworthy), and EVERY stem reads
+NOT-PASTING. Last pastes cluster in early September and then stop:
+macuahuitl 2026-09-05T22:58Z, yoga 2026-09-05T01:29Z, yolanda 2026-09-05T03:34Z,
+macbookair 2026-09-04T23:00Z, lenovinha 2026-09-04T21:55Z.
+
+The obvious reading — thirteen hosts each forgot — is wrong, and the
+discriminating checks say so:
+
+- the instrument WORKS. `scripts/cycle-metrics.sh` runs clean, rc=0, and emits
+  the full block including `recur:` (29683 runs, 640 steps), `skippable:` (96
+  candidates) and `tokens:`.
+- the instruction EXISTS, in **five** skills — advance-work-from-plan,
+  meta-orchestration, coordinate-multihost-work, smoke-curl-install-and-test-e2e,
+  deslop-sweep.
+- compliance has ALWAYS been poor and is now zero: **82 of 586** loop_status
+  entries ever carried a metrics line (14%), and tonight's entries from macneo
+  and macuahuitl carry none.
+- **1001-q3zf, the row that built it, is `completed`.**
+
+So the instrument was built, the row closed as done, and the consumption never
+happened — while the audit has reported NOT-PASTING every pass since and nothing
+changed, including about the host running the audit. THIS IS 1218-25z3's SHAPE
+ONE FLOOR OVER: an instruction with no gate. A blocker list nobody is required
+to open and a metrics paste nobody is required to make are the same object —
+protection that exists, is never consulted, and reports nothing when it fails to
+fire. The difference is that this one has an audit that DOES report, every pass,
+and is itself ignored, which is worse: a live alarm nobody silences and nobody
+acts on trains its readers to skip the line.
+
+Not filed as a new row this pass. It belongs to whoever takes 1218-25z3, as the
+second instance proving the shape is general rather than a release-path quirk.
+
+**NO REASSIGNMENT, AND THE FLEET IS NOT IDLE.** Three hosts reported since the
+last pass and all three closed cleanly with self-determined next work: macneo
+(cycle closed, clean, back on hourly cadence), yoga (story complete, taking
+1218-25z3 before the 1217-54vw costing), macbookair (cycle closed, 690-w94k
+criterion 3 released because it was claimed and never started, back on cadence).
+None asked for work and none is stuck, so nothing was flipped on anyone's
+behalf. 1215-5uba's second-instance measurement suits a floor-tier host and is
+`ready` with `pickup_role: any` — available to whoever drains next, not assigned.
