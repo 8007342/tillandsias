@@ -1,0 +1,31 @@
+# Gate step 1201-9it2 — data, not code.
+#
+# Binds the pre-push notice that names litmus arms ./build.sh --check did not run.
+#
+# WHY A NOTICE AND NOT A GATE, which is the whole design and not a compromise:
+# --check executes NO litmus, deliberately (748-tkjx, build.sh:2508 — the suite
+# is minutes and "a gate that slow gets bypassed with --no-verify"). Closing a
+# VISIBILITY gap by slowing the gate trades it for a bypass problem, which is
+# strictly worse and unmeasurable once it starts, because the evidence of a
+# bypass is the absence of a run.
+#
+# ARM 2 IS THE LOAD-BEARING ONE and it is a counterfactual against real history,
+# not a synthetic input: the notice must name litmus:guest-container-metrics-wire-shape
+# from 4fc7be930's changed paths — the arm that was actually red when that commit
+# landed green. If it cannot name that, the notice would not have helped and the
+# row is decoration.
+#
+# ARMS 3 AND 4 ARE THE CONTROLS THAT KEEP IT USEFUL. Silence on an uncovered
+# path, because a notice that fires on every push is noise and a reader learns to
+# skip it — the same end state as no notice, reached more expensively. And no
+# failing exit inside the block, so it can never refuse a land.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the land tool names the litmus arms this gate did not run (1201-9it2)"
+STEP_SCRIPT="scripts/test-land-notice-names-unrun-litmus.sh"
+STEP_ERROR="the pre-push litmus notice regressed (1201-9it2) — either the land tool no longer names the arms asserting on the changed files (so a red rides a green gate to trunk unseen, as it did three times: 2026-08-15, 921-vtf4 on 2026-08-28, and 4fc7be930 on 2026-09-15), or the notice has become a refusal, which 748-tkjx says trades a visibility gap for a bypass problem; see the failing arm above"
+STEP_OK="land-time litmus notice check passed"
+# Exit 3 means the land tool or the covering-specs map is absent — nothing was
+# exercised, and the fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/land-on-platform-branch.sh or scripts/litmus-covering-specs.sh is absent, so the notice could not be exercised"
