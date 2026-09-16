@@ -2813,8 +2813,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # buys determinism at negative cost on this host, and the interference is
     # filed separately — serial execution is a mitigation, not a cure, and the
     # shared state is still there for anyone who runs the suite by hand.
+    # ORDER 1021-hf9e CLOSES THE ABOVE. The shared process-global state those
+    # suites carried is REMOVED, not serialised: host_mount and the gitconfig
+    # cache root are parameters now, and the tests that used to redirect them by
+    # writing HOME no longer touch it. MEASURED on yoga 2026-09-16 at one commit:
+    #   headless bin suite, TEN consecutive default parallel runs -> 544 passed,
+    #     identical (empty) failure set every time
+    #   cargo test --workspace, FIVE consecutive default parallel runs -> 74
+    #     result lines, zero failures, identical sets
+    # So the set is a function of the tree again and the pin is no longer load-
+    # bearing for determinism.
+    #
+    # THE SPEED ARGUMENT ABOVE INVERTS TOO, and for the same reason: serial was
+    # faster only because the contention cost more than the threads won. With
+    # the contention gone the bin suite runs 1.9s parallel against 4.7s serial.
+    #
+    # WHAT THIS EVIDENCE DOES NOT COVER: it is one host. A platform whose tests
+    # carry their own process-global state would still contend, and the failure
+    # would land on the ratchet as new-red. If that happens, restoring
+    # `-- --test-threads=1` here is a one-line mitigation and the real defect is
+    # the shared state on that host, not this line.
     _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
-        -- --test-threads=1 2>&1 |
+        2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"
