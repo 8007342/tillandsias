@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# New packet declaration (G-Set, additive).
+packets:
+  - packet_id: the-relay-ref-escape-is-documented-only-inside-the-refusal-that-makes-you-need-it
+    order: 1216-ewaz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - coordination
+      - fail-loud
+      - docs
+      - multi-host
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    unscoreable: |
+      unpinnable-until-the-destination-exists. The closure is a property of a
+      DOCUMENT that has not been chosen yet — whichever operator-facing surface
+      the relay ref should live on (the skill's landing section, the drill, or
+      methodology/multi-host-development.yaml) — so any litmus named now
+      resolves to nothing and 885-92iu refuses the row. The sanctioned exit
+      (1136-n8sh).
+
+      FUTURE LITMUS FILENAME: scripts/test-relay-ref-is-discoverable.sh — assert
+      the refs/heads/work/ escape appears in at least one surface a host reads
+      BEFORE a land, not only in land-on-platform-branch.sh's refusal text. Move
+      this text into verifiable_closure in the same commit.
+    title: |
+      the refs/heads/work/ relay ref is the only path that does not require winning the gate-versus-trunk race, and it is documented ONLY inside the refusal text you see after already losing it — a path you can learn about only by first failing is not a documented path
+    context: |
+      MEASURED on macneo 2026-09-16. scripts/land-on-platform-branch.sh refused
+      with `pre-push: refused — osx-next does not contain origin/linux-next`
+      after trunk moved during the gate. Its refusal text offers the escape:
+      push the GATED tree to refs/heads/work/<order> for a trunk host to merge,
+      which matches no platform pattern so the mandated-merge guard does not
+      apply while the local gate stamp still does.
+
+      THE ARITHMETIC THAT MAKES IT THE ONLY PATH, and why this is not a
+      documentation nicety. origin/linux-next ran 19 commits in the hour
+      measured from macneo and 21 in the hour measured independently from
+      macuahuitl — ~2.9 to ~3 min mean — against a ~17 min macOS gate. Trunk
+      moves five or six times per gate, so the race is unwinnable by arithmetic
+      rather than by luck. A floor-tier macOS host therefore CANNOT land on a
+      busy trunk by re-gating, at any level of diligence, and the relay ref is
+      not a fallback for that host, it is the mechanism.
+
+      WHY DISCOVERY-BY-FAILURE IS THE DEFECT. A host learns this path only after
+      spending at least one full gate and losing. On this host that is ~17
+      minutes to be told there was a cheaper route all along, and a cycle that
+      stops at the refusal without reading its body — which is the ordinary
+      outcome when a verdict line is what gets logged — never learns it at all.
+      The same shape the fleet has been filing all week: the information exists
+      and sits where the reader is not looking.
+
+      NOT A WEDGE. The plan-only lane still relays from this host, so macneo can
+      SPEAK but not LAND. That asymmetry is 1142-85zx's clock seen by the host
+      paying the gate, and this row is the escape-hatch half of it.
+    exit_criteria:
+      - the refs/heads/work/ relay ref is described on at least one surface a host reads BEFORE attempting a land, not only in a refusal
+      - that surface names WHO merges the ref afterwards, since the escape is only complete if a trunk host picks it up
+      - 'NEGATIVE CONTROL: a host that has never seen a land refusal can find the path from the pre-land surface alone'
+    provenance: |
+      Found by macneo-macos 2026-09-16 after declining to spend a third gate on
+      an unwinnable race. macuahuitl-fedora fixed the adjacent defect in the same
+      refusal block (it told the caller to measure origin/$BRANCH, the branch
+      being pushed, where a mandated-merge refusal names the ref your branch must
+      CONTAIN) and offered to file this one; macneo filed it, since the plan-only
+      lane relays from here even when the code lane cannot.
