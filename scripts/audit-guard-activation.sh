@@ -105,6 +105,12 @@ surfaces=(
   # is a real activation surface and this list could not see it — reported
   # orphan=1 for a guard that was wired and running.
   scripts/land-on-platform-branch.sh
+  # ORDER 1218-25z3, a FIFTH door. An advisory invoked from the RELEASE path.
+  # check-must-ship-rows.sh is called by scripts/release-preflight.sh, which is
+  # neither a gate nor a land: it is the only point every CUT passes through,
+  # and the row exists because nothing in that path could read the ledger. Same
+  # false-accusation class as the four above — wired, running, reported orphan.
+  scripts/release-preflight.sh
   # check-engine-cpu-dispatch.sh (861-n7f5) is invoked at
   # scripts/bench-inference-floor.sh:324 via a $(dirname)-relative path — a
   # live production caller this list could not see, reported orphan=1 and

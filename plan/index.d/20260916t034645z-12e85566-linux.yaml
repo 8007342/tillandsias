@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    event:
+      type: progress
+      ts: "2026-09-16T03:46:45Z"
+      agent_id: linux-yoga-claude-20260916t033521z
+      host: linux
+      summary: |
+        IMPLEMENTED AND LANDING IN THIS COMMIT, with the strength decision recorded rather than settled silently — criterion 4 asks for exactly that.
+
+        THE STRENGTH DECISION: IT REPORTS, IT DOES NOT BLOCK. The reasons, so the coordinator can overrule on them rather than on my preference:
+          - A blocking gate at cut time is bypassed, not obeyed. 748-tkjx already settled the general form: a gate inconvenient at the wrong moment gets routed around, and then protects nothing. A cut under a freeze window is that moment.
+          - The cutter may legitimately ship without a marked row. A gate that cannot express "yes, I know" converts a judgement into an obstacle.
+          - The measured defect was that NOBODY WAS TOLD. 1211-34v6 missed a cut with nothing reporting it; it was never that someone overrode a warning. Reporting closes the measured gap completely.
+          - The tray-parity completeness check is the local precedent for a release-scoped advisory the operator can override.
+        REVERSIBLE, and deliberately the cheaper direction first: if a marked row is missed AFTER this reports it, that is new evidence and the strength should be revisited. Advisory-to-blocking is a one-line change; the reverse costs a release.
+
+        HOW A ROW IS MARKED: tillandsias-plan set-field <order> must_ship next. THREE MECHANISMS WERE MEASURED AND TWO ARE BLOCKED, so this was not a free choice:
+          - capability_tags IS projected and IS exactly filterable, but set-field REFUSES list-valued fields (1184-tj2q) — writing one reads the existing list as unset and replaces it with a string, after which the row matches NO tag query at all. An existing row therefore cannot be tagged, and declarations are immutable. I tried this first and the refusal is what redirected me.
+          - an EVENT of a distinctive type is appendable by any host, but plan-events prints type and timestamp per packet with no bulk reader by type, so finding marked rows would mean one invocation per packet.
+          - a novel top-level SCALAR validates under check --strict-fragments and set-field can write it, but query --json is an explicit key ALLOWLIST, so until this commit it was writable and UNREADABLE. must_ship is now in that allowlist, for the reason 627-cx24 records twenty lines above it in the same file: a projection that silently drops a field a consumer reads fails in a direction nothing observes.
+
+        HOW "IS THE FIX IN THE CUT" IS DECIDED, and the discriminator is load-bearing: a commit IS a row's fix when its SUBJECT carries the order in the project's type(order) convention. MEASURED: git log --grep=1211-34v6 on trunk returns FIVE commits, three of which merely MENTION the order in their body — including my own correction commits from earlier tonight. Subject-anchored returns TWO, the fix and its closure. Counting mentions would report a row as shipped because someone discussed it.
+
+        VALIDATED AGAINST THE ROW'S OWN MEASURED INSTANCE, which is the strongest evidence available and is real history rather than a synthetic case:
+          against HEAD             ok:must-ship:0 outstanding of 2 marked
+          against v56.9.13.1       advisory:must-ship:2 outstanding of 2 marked
+        The second reproduces exactly the miss this row was filed for: 1211-34v6 landed on trunk and was not in the cut that followed, so the promoted stable still misdirects every operator who reads its refusal.
+
+        I ALSO MARKED THE TWO ROWS THE OPERATOR'S INSTRUCTION COVERS, which is the instruction finally having somewhere to live: 1211-34v6 and 1215-xazj both carry must_ship next with their reasons.
+
+        A STALE BINARY IS THE DANGEROUS CASE HERE AND IT IS PROBED, NOT ASSUMED. A tillandsias-plan predating this commit answers the same query with must_ship silently absent, and a consumer reading nothing concludes "no rows are marked" — the answer that looks like success. Before trusting a zero the script builds a throwaway index containing a marked row and checks the field survives the projection. That is falsifying the instrument on the exact question rather than reading a version number.
+
+        TWO DEFECTS IN MY OWN WORK, FOUND BY MUTATION AND RECORDED BECAUSE BOTH PRINTED GREEN:
+          1. ARMS 5 AND 6 RE-IMPLEMENTED THE MATCHING RULE INSIDE THE FIXTURE and asserted on their own awk. Mutating the GUARD to count naive mentions left the fixture at 10 of 10 — a test asserting about its own copy cannot see the subject change. They now synthesise an ORPHAN commit whose subject names an unrelated order while its body mentions a marked one, point the REAL guard at it, and require OUTSTANDING. The same mutation now reds.
+          2. MY FIRST FALSIFICATION OF THE NEW ACTIVATION SURFACE WAS A PARTIAL MUTATION. I deleted the call line and left the `if [ -x ... ]` test that still names the script, so the auditor still saw it and reported orphan=0 — which I nearly read as "the surface does not matter". Removing every reference gives orphan=1; restoring gives 0.
+
+        BINDING: the advisory is invoked from scripts/release-preflight.sh, ON STDERR ONLY because that file's contract is one line on stdout and nothing else — an advisory that broke its grammar would be a worse defect than the one it closes, and a fixture arm asserts the contract still holds. The fixture runs in BOTH gates. audit-guard-activation.sh refused the guard as an orphan until its surface list learned that the RELEASE PATH is an activation surface — a fifth door onto the same class, after gate-steps.d, a second-level invoker, a data-declared binding and the land path.

@@ -1443,6 +1443,27 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         "capability_tags",
         "deliverable",
         "depends_on",
+        // ORDER 1218-25z3. `must_ship` marks a row as REQUIRED IN THE NEXT CUT,
+        // and scripts/check-must-ship-rows.sh reads it from this projection.
+        //
+        // IT IS HERE RATHER THAN AS A TAG BECAUSE THE ALTERNATIVES WERE
+        // MEASURED AND BLOCKED, not because a field was the first idea:
+        //   * capability_tags IS projected and IS exactly filterable, but
+        //     set-field REFUSES list-valued fields (1184-tj2q) — writing one
+        //     would read the existing list as unset and replace it with a
+        //     string, after which the row matches NO tag query. So an existing
+        //     row cannot be marked, and declarations are immutable.
+        //   * a novel top-level field validates fine under `check
+        //     --strict-fragments` but never reaches this JSON, so it would be
+        //     writable and unreadable.
+        // `must_ship` is a SCALAR, so set-field can write it on any row today.
+        //
+        // Adding it here is the same lesson 627-cx24 records twenty lines up: a
+        // projection that silently drops a field a consumer reads fails in a
+        // direction nothing observes. A consumer of THIS field reading nothing
+        // would report "no rows are marked" — the answer that looks like
+        // success.
+        "must_ship",
     ] {
         if let Some(value) = packet.get(key) {
             obj.insert(

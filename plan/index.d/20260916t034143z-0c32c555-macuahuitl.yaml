@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: readme-release-ledger-wiring
+    event:
+      type: progress
+      ts: "2026-09-16T03:41:43Z"
+      agent_id: linux-macuahuitl-claude-20260916t034143z
+      host: macuahuitl
+      summary: |
+        CLOSING. All three criteria assessed AGAINST THE TREE, not against the filing, and the last open item is fixed rather than waived.
+        CRITERION 1 — "appends a row every release (verified by the next two releases)": MET, by three consecutive releases rather than two. v56.9.12.1, v56.9.12.2 and v56.9.13.1 each carry EXACTLY ONE row (grep -cE per tag = 1,1,1). The 2026-09-03 note left this open on a real defect rather than on missing evidence — the append was NOT IDEMPOTENT and v0.4.260826.1 and v0.4.260817.1 each had two rows, the pairs not copies. BOTH HALVES ARE NOW RESOLVED. (a) The duplicates are gone: f51aa955e folded twelve v0.4 rows into one DISTILLED span during the v56.9.13.1 cut, and the span row itself records that two of them were duplicates — so nobody had to delete a human's prose, which is why it had stalled. (b) THE MECHANISM IS FIXED IN THIS CYCLE, which is the part that stops it recurring.
+        WHAT (b) ACTUALLY WAS, because the old text made the duplicate inevitable rather than accidental. The step read "Also append a row to the README release ledger ... one new row at the TOP". PROMOTE-EXISTING promotes a tag that was CUT EARLIER, so its row EXISTS BY CONSTRUCTION — the cut wrote it — and an unconditional append puts a second row on the same release every time. The step now branches on the TAG rather than on which step you are in, with the discriminator written as a command: grep -cE "^\| ${new_tag}( |\()" README.md, 0 -> append, 1 -> EDIT, >1 -> a duplicate already exists. VERIFIED IN BOTH DIRECTIONS before shipping, because a command in prose gets retyped: an existing tag returns 1, a nonexistent tag returns 0.
+        AND IT WAS EXERCISED BY HAND FIRST, WHICH IS WHY THE FIX IS SPECIFIC. Promoting v56.9.13.1 to stable on 2026-09-16 was the first promotion after the duplicates were cleared, and the correct action was to EDIT the existing cut row — marking it promoted, by flag flip rather than a fresh cut, and naming the two defects that ship stable with it. Appending would have produced the third instance of this defect on the same table. The skill now says to do what that promotion did, and says why.
+        CRITERION 2 — "smoke-curl consults the ledger and cites it": DONE 2026-08-26 by macbookair, two live references in the smoke skill.
+        CRITERION 3 — "distillation policy documented; oldest rows distilled once >10 rows": MET. Policy documented in two places, and it has FIRED TWICE — 66d615e3f (v0.3 rows, 2026-09-03) and f51aa955e (twelve v0.4 rows, 2026-09-13). The table is down from 19 rows to 10 with two DISTILLED spans.
+        RESIDUE DELIBERATELY NOT CLOSED HERE: 914-nkc4 holds "nothing RUNS the policy", which is a different claim from "the policy has no effect" and is untouched by this closure. See the note filed on that row this cycle.

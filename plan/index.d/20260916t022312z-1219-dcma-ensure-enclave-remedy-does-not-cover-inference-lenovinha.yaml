@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha after following the guard's own remedy and fixing nothing.
+packets:
+  - packet_id: the-enclave-health-guard-prescribes-ensure-enclave-for-a-dead-inference-service-but-that-command-ensures-only-vault-and-proxy-so-the-remedy-succeeds-and-changes-nothing
+    order: 1219-dcma
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [enclave, podman, fail-loud, diagnostics, inference]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-remedy-is-accurate: the deliverable is a remedy that matches the service class. Future litmus scripts/test-enclave-remedy-covers-the-named-service.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: for each service class the health guard can report dead, the remedy it prints either restores that class or says explicitly that it does not (pre-fix result: FAILS — for tillandsias-inference the guard prescribes `tillandsias --ensure-enclave`, which exits 0 printing ok:enclave-ensured:proxy=running and leaves the service Exited(137), measured on lenovinha 2026-09-16); NEGATIVE CONTROL: for a dead PROXY the same remedy must still be prescribed and must still work, so the fix must not blanket-disclaim a command that is correct for the classes it does cover."
+    owned_files:
+      - scripts/check-enclave-service-health.sh
+    title: |
+      check-enclave-service-health.sh prescribes `tillandsias --ensure-enclave` for a dead tillandsias-inference, but that command ensures only vault and proxy — so an operator who follows the remedy exactly gets rc=0, an ok: line, and the same dead service.
+    context: |
+      MEASURED END TO END on lenovinha 2026-09-16, by following the guard's own
+      instruction rather than by reading it:
+        scripts/check-enclave-service-health.sh
+          fail:enclave-service-dead:service=tillandsias-inference:state=exited:rc=137:signal=SIGKILL:age=3d1h:restarts=0
+          REMEDY: ... bring the enclave up through the orchestration:
+                  'tillandsias --ensure-enclave' (idempotent), NOT 'podman start <service>'
+        ./target/debug/tillandsias --ensure-enclave
+          ok:enclave-ensured:proxy=running          rc=0
+        scripts/check-enclave-service-health.sh
+          degraded:enclave-service-health:services=5:up=3:down=2:dead=1
+        podman ps -a --filter name=tillandsias-inference
+          tillandsias-inference   Exited (137) 3 days ago
+      CONFIRMED IN THE SOURCE rather than inferred from the output:
+      crates/tillandsias-headless/src/main.rs:9198-9208 ensures vault (feature
+      gated) then ensure_proxy_running(), then prints ok:enclave-ensured:proxy=.
+      Inference is never touched. The guard counts inference among its five
+      services; the remedy covers two of them.
+      WHY THIS IS P1 RATHER THAN A DOC NIT. The guard is the fail-loud instrument
+      for enclave health, and it is CORRECT about the condition — the service is
+      genuinely dead. What it gets wrong is the way out, and it forecloses the
+      alternative in the same breath: "NOT 'podman start <service>'", with a
+      reasoned argument (975-rsgm, the proxy's CA key precondition) that is sound
+      FOR THE PROXY and is applied to every class. So an operator is sent to a
+      command that cannot work and told not to use the one that might. The
+      failure mode is the one this fleet has been finding all day, relocated from
+      the detector to the REMEDY: the operation succeeds, prints ok:, and the
+      subject is untouched.
+      AND NOTHING NOTICED FOR THREE DAYS. restarts=0, age 3d1h, and the preflight
+      has printed `degraded:container-start-failed` on every cycle since. I read
+      that token roughly a dozen times tonight without looking at it, which is
+      the other half of the finding: a degraded verdict that appears in every run
+      becomes part of the wallpaper.
+      NOT AN OOM, AND THIS MATTERS BECAUSE rc=137 INVITES THAT READING. The
+      guard's own text says "137=SIGKILL", and the natural next thought is memory
+      pressure. Measured: journalctl -k over the window shows NO out-of-memory,
+      oom-kill or killed-process record, and the journal is reachable (a control:
+      `journalctl -n 1` succeeds). The service's own log simply stops mid
+      /api/version healthcheck at 2026-09-13 01:07:58 with no error. So it was
+      killed from outside, not by the kernel, and a reader who assumes OOM will
+      go looking at memory and find nothing wrong.
+    exit_criteria:
+      - 'for a dead tillandsias-inference the guard prints a remedy that actually restores it, or states plainly that --ensure-enclave does not cover this class and names what does (pre-fix result: FAILS — the prescribed command exits 0, prints ok:enclave-ensured:proxy=running, and the service stays Exited(137))'
+      - 'the remedy is derived from the SERVICE CLASS being reported, not printed once for every class'
+      - 'NEGATIVE CONTROL: for a dead PROXY the existing remedy is still prescribed and still works — the fix must not blanket-disclaim a command that is correct where it applies, nor re-legitimise `podman start` for the proxy, whose CA-key precondition 975-rsgm documents'
+      - 'NEGATIVE CONTROL: the guard still REFUSES on a dead service; making the remedy accurate must not soften the detection, which was correct throughout'
+    events:
+      - type: filed
+        ts: "2026-09-16T02:23:12Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Found by following the guard's remedy exactly and watching it succeed
+          without changing anything. The detection was right for three days; the
+          way out was wrong for this service class the whole time.

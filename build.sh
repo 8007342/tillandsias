@@ -1895,7 +1895,38 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # competitor. Without --host-side the check now says so and stops. On a host
     # that does NOT re-exec, this is the host side, and wiring the assertion
     # here is the follow-up rather than a silent widening.
-    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
+    #
+    # ORDER 1221-vkbj: it now SAYS WHICH SILENCE, and this caller reads the code.
+    #
+    # The context is decided on TILLANDSIAS_WRAPPER_TOKEN, not on container
+    # markers. The markers are the enumeration this check already inverted away
+    # from — yolanda measured a WSL distro with TOOLBOX_PATH, container,
+    # /run/.toolboxenv, /run/.containerenv and /.dockerenv ALL absent while
+    # genuinely inside a dispatch, so a marker sweep answers "undispatched"
+    # there and lies. The token is a positive fact about OUR wrapper, which is
+    # the only dispatch this check has an opinion about: with-tillandsias-builder.sh
+    # exports it into the dispatched process, so its presence here means a
+    # tillandsias wrapper ran, and its absence means none did.
+    #
+    # Still advisory, still no --host-side from here: see the long note in
+    # check-no-competing-gate.sh about why asserting from an undispatched gate
+    # would manufacture a vacuous clean.
+    if [ -n "${TILLANDSIAS_WRAPPER_TOKEN:-}" ]; then
+        _cg_ctx=dispatched
+    else
+        _cg_ctx=undispatched
+    fi
+    _cg_rc=0
+    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" \
+        --caller-context "$_cg_ctx" 2>&1 || _cg_rc=$?
+    case "$_cg_rc" in
+        0) : ;;                       # answered clean, or advisory-downgraded
+        1) echo "  advisory: a competing gate was reported above (1141-vf9w)" ;;
+        2) echo "  CALLER CONTRACT BUG at this call site (1150-q462): the competing-gate check refused the way it was invoked. This is NOT a substrate limit and will not fix itself — read the line above and fix build.sh." ;;
+        3) : ;;                       # cannot answer here; the cause line says which
+        *) echo "  UNKNOWN competing-gate exit code $_cg_rc — the four-code grammar (1150-q462) has grown a fifth and this consumer does not know it. Do not read silence as clean." ;;
+    esac
+    unset _cg_ctx _cg_rc
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
@@ -2194,6 +2225,32 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "cross-platform unrunnable-arm advisory fixture passed"
+
+    # ORDER 1218-25z3. The advisory runs from the RELEASE path
+    # (release-preflight.sh), not from this gate; its fixture belongs in both
+    # gates, where fixtures run. Hermetic apart from two real-history arms that
+    # read this repo's own log, and those skip rather than fail when a tag is
+    # absent from a shallow clone.
+    _step "Checking the must-ship-next release advisory (1218-25z3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-must-ship-rows.sh" 2>&1; then
+        _error "the must-ship advisory regressed — a row required in the next cut can again be missed with nothing reporting it"
+        exit 1
+    fi
+    _info "must-ship-next release advisory fixture passed"
+
+    # Sibling advisory, same surface and same strength (order 914-nkc4). The
+    # README release-ledger distillation policy was documented in two places
+    # with its destination line already present, and NOTHING RAN IT — measured
+    # at 19 rows against its own ~10 threshold, with no row ever distilled. The
+    # fixture's teeth are HISTORICAL REFS: the live table sits AT threshold, so
+    # a run against HEAD can only print ok:, and a check that only ever prints
+    # ok: on a healthy tree cannot be told from a broken one.
+    _step "Checking the release-ledger distillation advisory (914-nkc4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-distillation-advisory.sh" 2>&1; then
+        _error "the ledger-distillation advisory regressed — the release ledger can again outgrow its own policy with nothing reporting it"
+        exit 1
+    fi
+    _info "release-ledger distillation advisory fixture passed"
 
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #

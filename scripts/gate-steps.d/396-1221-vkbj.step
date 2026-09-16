@@ -1,0 +1,39 @@
+# Gate step 1221-vkbj — data, not code.
+#
+# Binds the check that a competing-gate SILENCE names which silence it is, and
+# that build.sh reads the exit code instead of discarding it.
+#
+# THE DEFECT, measured on lenovinha 2026-09-16 by running build.sh's own
+# invocation by hand: on a host where no dispatch had happened, the check
+# printed could-not-run:competing-gate:no-host-side-assertion — this file's
+# vocabulary for a caller that OMITTED something, whose sibling refusal says
+# "FIX THE CALL SITE" outright — where there was no call site to fix. Then
+# `|| true` discarded it. The detector 1141-vf9w built to be "exercised every
+# gate" was, at the one site that runs every gate, never exercised at all.
+#
+# ARMS 4-7 AND 9 ARE THE LOAD-BEARING CONTROLS, because there are two
+# over-corrections here and each is worse than the defect:
+#
+#   - a cause that SWALLOWS wiring bugs. If no-dispatch answers any caller that
+#     did not assert, a wrapper that forgot --host-side stops being loud and
+#     1140-i6ct's collapse (a wiring bug read as an unsupported substrate) is
+#     back. Arm 4 pins that the omitting caller's message is unchanged.
+#   - a VACUOUS CLEAN. Letting an undispatched caller assert --host-side yields
+#     the only verdict the classifier can reach with one process and no
+#     container side: ok:no-competing-gate. 1141-vf9w's promotion criterion is
+#     "once it has run clean across hosts", so that green would be eaten as
+#     evidence for making this check refuse fleet-wide. Arm 6 pins that
+#     build.sh never asserts it.
+#
+# ARM 9 pins that this row changed what is SAID and what is READ, never whether
+# a gate refuses — the staging argument stays 1141-vf9w's to settle.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a competing-gate silence names its own cause, and build.sh reads it (1221-vkbj)"
+STEP_SCRIPT="scripts/test-competing-gate-no-dispatch-cause.sh"
+STEP_ERROR="the competing-gate no-answer path regressed (1221-vkbj) — either an undispatched or in-dispatch caller is again told it failed to assert (sending a reader to fix a call site that does not exist), or the new cause has widened to swallow a genuine wiring bug, or build.sh has gone back to discarding the exit code, or it has begun asserting --host-side and is manufacturing a vacuous clean for 1141-vf9w's promotion gate to consume; see the failing arm above"
+STEP_OK="competing-gate cause and consumer check passed"
+# Exit 3 means the check script is absent — nothing was examined, and the
+# fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/check-no-competing-gate.sh is absent, so the no-answer path could not be exercised"

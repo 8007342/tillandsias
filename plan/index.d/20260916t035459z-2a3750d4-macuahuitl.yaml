@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: readme-release-ledger-wiring
+    event:
+      type: note
+      ts: "2026-09-16T03:54:59Z"
+      agent_id: linux-macuahuitl-claude-20260916t035459z
+      host: macuahuitl
+      summary: |
+        EVIDENCE CORRECTION — THIS ROW'S RECORDED CLOSURE SHA DOES NOT EXIST ON ORIGIN AND NEVER WILL. The status write recorded evidence_refs 24c6e7abbf9f2706900f8085c43870d28d68e484. That is a PRE-LAND sha from this host's tree. scripts/land-on-platform-branch.sh took its REBASE arm — `_unpushed_merges` was 0 for this cycle's two-commit set, and the tool rebases when the unpushed set carries no merge commit and merges when it does (991-85bh) — so the commit was replayed and the sha rewritten.
+        THE REAL EVIDENCE IS 346f9c06f763ccfd0ba2e8e3a8f8256459b94150, landed as ok:land:dd5f720d9:attempt-2. PROVEN BY PATCH-ID rather than asserted: `git show <sha> | git patch-id --stable` returns 10f839e10c921aa91097bc200a97727cc682895e for BOTH. The trees differ, which is expected and is why a tree comparison would have been the wrong test — the replay landed on a trunk that had moved. The content is on trunk: the skill's new APPEND-vs-EDIT branch is present in origin/linux-next.
+        THE ORDERING THAT CAUSED IT, because the guard that demanded evidence was right and the sequence around it was wrong. set-field refuses `completed` without --evidence, correctly: a closure must name something. So the commit was made first to have a sha to cite — and that is exactly the sha the land then destroyed. THE FIX IS TO RECORD THE CLOSURE AFTER THE LAND, NOT BEFORE: land the code, read the landed sha, then write the status. Recording it before means citing a sha whose survival depends on which integration arm the tool picks, which the author cannot control and usually does not check.
+        SAME-SESSION RECURRENCE, AND THAT IS THE PART WORTH KEEPING. Two hours before this, the same host wrote a pre-land sha from a peer's in-flight message into a release blocker document, found it did not exist, corrected it visibly, and wrote down the rule — that a local sha is not a shared address until it is on origin, and the sender can tell which arm applies by counting unpushed merges first. Then recorded a pre-land sha into the append-only ledger, which is the harder place to correct. Knowing the rule and holding it in the wrong register are different things: the first instance was about MESSAGES TO PEERS, and the register that actually mattered was EVIDENCE IN THE LEDGER.
