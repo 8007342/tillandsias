@@ -1556,6 +1556,23 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "litmus-budget-tally" "skipped"
     fi
 
+    # Order 1194-davi. The advisory it falsifies is invoked from the LAND path,
+    # not from this gate, because a land that adopts a valid stamp skips the
+    # gate entirely (1174-u5wp) and an advisory inside the gate would be silent
+    # on exactly those lands. Its FIXTURE belongs here, where fixtures run.
+    if [[ -f "scripts/test-unrunnable-platform-arms.sh" ]]; then
+        if bash scripts/test-unrunnable-platform-arms.sh 2>&1 | tee /tmp/unrunnable-platform-arms.log; then
+            log_pass "Cross-platform gate-arm advisory names arms this host cannot run"
+            archive_check_log "unrunnable-platform-arms" "pass" /tmp/unrunnable-platform-arms.log
+        else
+            log_fail_tracked "unrunnable-platform-arms" "Cross-platform arm advisory regression (see /tmp/unrunnable-platform-arms.log)"
+            archive_check_log "unrunnable-platform-arms" "fail" /tmp/unrunnable-platform-arms.log
+        fi
+    else
+        log_fail_missing_guard "unrunnable-platform-arms" "scripts/test-unrunnable-platform-arms.sh"
+        archive_check_log "unrunnable-platform-arms" "skipped"
+    fi
+
     # Order 1004-inkc. `--expect none` disables the absent detection, which is
     # that order's entire subject: a production caller passing it restores a
     # health check that cannot fail on a DELETED service. The escape hatch was

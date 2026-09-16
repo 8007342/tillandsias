@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-hosts-test-inventory-differs-silently-from-its-siblings-and-only-the-filtered-out-count-exposes-it
+    order: 1215-5uba
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, cross-host, cfg-gating, instrument-defect, green-on-one-regime]
+    estimated_hours: 4
+    owned_files: []
+    title: |
+      Two hosts run the same test command at the same commit and get two green, complete-looking results describing different test suites; only the filtered-out count discriminates
+    context: |
+      FILED BY THE COORDINATOR FROM yolanda-windows' landed finding (with
+      yoga-silverblue), which had no ledger row. Evidence:
+      plan/issues/test-inventory-differs-silently-across-hosts-2026-09-15-yolanda-windows.md.
+      THE MEASUREMENT. cargo test -q -p tillandsias-windows-tray github_login_wrapper_captures
+        yoga-silverblue (Linux)     0 passed;  18 filtered out
+        yolanda-windows (Windows)   1 passed; 123 filtered out
+      105 tests exist on one host and not the other. NEITHER OUTPUT SAYS SO. Each
+      is independently truthful, green, and gives no indication it measured a
+      different suite from its sibling.
+      THIS NEEDS NO ACCIDENT AND NO RECURRENCE — IT IS THE STEADY STATE. The cause
+      in the observed instance is ordinary and intended: a #[cfg(target_os =
+      "windows")] module with a non-Windows stub, so an entire module's tests are
+      absent from the Linux build. What is not intended is that the absence is
+      unobservable from either side. "0 passed" reads as "the filter matched
+      nothing here", a normal and unalarming result; "1 passed" reads as a healthy
+      pass; both exit 0 and both print ok. An agent reading its own host's output
+      has NO SIGNAL AT ALL. The discrepancy exists only between hosts, and nothing
+      routinely compares them.
+      THE ACTIONABLE HALF. Pass counts cannot detect this and filtered-out counts
+      can. Exit code, verdict word and passed count are all non-discriminating —
+      0 and 1 are both entirely plausible outcomes of a filter. 18 against 123 for
+      the same crate at the same commit cannot both be right about one source
+      tree. A CROSS-HOST CHECK SHOULD COMPARE TEST INVENTORY, NOT TEST RESULTS.
+      SCOPE, stated so this row is not read wider than its evidence. MEASURED: one
+      crate, two hosts, one filter, one commit; the counts above are verbatim.
+      INFERRED, NOT MEASURED: that the same blindness applies to other crates and
+      other cfg splits. It is plausible — the mechanism is generic to conditional
+      compilation and the repo carries about 17 #[cfg(target_os = ...)] module
+      declarations, including linux-gated blocks in tillandsias-headless and
+      macos-gated ones in tillandsias-macos-tray — but no second instance has been
+      measured, and an implementer should expect to find more rather than assume
+      the count.
+      TRACE: 913-27ex (zero-executed is not a pass) is the nearest neighbour and
+      this is its cross-host form: 913-27ex catches a suite that ran nothing on
+      ONE host, this catches two hosts that each ran something and ran different
+      things.
+    exit_criteria:
+      - 'a check reports when two hosts running the same filter at the same commit see different test INVENTORIES, using the filtered-out count rather than the pass count (pre-fix result: FAILS — 0 passed/18 filtered and 1 passed/123 filtered both report ok and exit 0, verbatim above)'
+      - 'the check names the crate and the two counts, so a reader can tell an intended cfg split from an unintended one rather than only that they differ'
+      - 'NEGATIVE CONTROL: two hosts with genuinely identical inventories produce no report, so an intended platform split does not become permanent noise'
+      - 'at least one SECOND instance is measured on another crate before the row claims the mechanism is general — or the row records that the sweep found none, which is equally a result'
+    unscoreable: |
+      unpinnable-until-the-comparison-locus-is-chosen: a cross-host inventory
+      comparison needs somewhere to compare FROM, and this fleet has no place that
+      sees two hosts' test output at once. Whether that is a ledger-recorded
+      inventory per host, a gate step that publishes counts, or a coordinator
+      sweep is undecided. The measurement is complete; the mechanism is not.
+    events:
+      - type: filed
+        ts: "2026-09-16T01:18:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t011800z"
+        host: macuahuitl
+        summary: |-
+          Coordinator-filed to make the finding routable. The measurement is
+          yolanda-windows' and yoga-silverblue's, taken while working 1213-ysme;
+          this row adds only the exit criteria and the second-instance
+          requirement, because the generalisation is explicitly inferred.

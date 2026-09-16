@@ -2182,6 +2182,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "pre-push empty-ref-list fixture passed"
 
+    # ORDER 1194-davi. The advisory itself runs from the LAND path (a land that
+    # adopts a valid stamp skips this gate entirely, 1174-u5wp), but its fixture
+    # belongs in BOTH gates. Wired here as well as in local-ci.sh deliberately:
+    # at 0.15s hermetic it is far too cheap to justify a declared divergence,
+    # and 1087-h2z9's ratchet is for differences worth keeping, not for ones
+    # nobody measured.
+    _step "Checking the cross-platform unrunnable-arm advisory (1194-davi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-unrunnable-platform-arms.sh" 2>&1; then
+        _error "the cross-platform arm advisory regressed — an author can again break an arm their gate cannot run, with no signal"
+        exit 1
+    fi
+    _info "cross-platform unrunnable-arm advisory fixture passed"
+
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
     # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo

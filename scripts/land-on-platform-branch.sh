@@ -355,6 +355,19 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # The gate just built this exact tree, union included, so the debt is paid.
     if [ -s "$_um" ]; then rm -f "$_um"; fi
 
+    # ORDER 1194-davi: name the arms this change touches that THIS HOST'S GATE
+    # CANNOT RUN, because they are scoped to another platform. ADVISORY — it
+    # exits 0 on every finding, and `|| true` is deliberate belt-and-braces:
+    # refusing a linux land over an unrunnable macos arm would trade a
+    # visibility gap for a worse one, which the row names as a negative control.
+    #
+    # IT LIVES HERE AND NOT IN build.sh ON PURPOSE. A land that finds a valid
+    # full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp, the adoption path
+    # above). An advisory inside the gate is silent on exactly those lands, and
+    # adoption is the common case for a plan-only or re-attempted land. Before
+    # the push is the one point every land passes through.
+    bash "$ROOT/scripts/check-unrunnable-platform-arms.sh" --base "origin/$BRANCH" || true
+
     echo "land: attempt $attempt — push"
     # No pipeline: the exit status must be git push's own. KEEP THE OUTPUT — an
     # earlier version discarded it, so a push that failed for a NON-RETRYABLE
