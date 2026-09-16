@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-15T21:21:39Z"
+      agent_id: windows-yolanda-opus5-20260915t212128z
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows instance: the mandated merge also makes the PLAN-ONLY lane unreachable from a platform branch, not merely expensive. Filing three plan-only rows on windows-next, the push was refused with blocked:linux-next-not-merged:windows-next; merging origin/linux-next then fast-forwarded 267 files of code changes, and the next push was refused for a stale stamp naming crates/tillandsias-plan/src/main.rs among others. The two rules bind: plan-only content cannot escape the stamp because the merge that the not-merged rule mandates is itself what invalidates it. This extends the row cause (2), the mandated merge stales the stamp anyway, to a case where gate DURATION is not the complaint - the lane whose purpose is to let a host record findings without paying a full gate is simply unusable from the branches that most need it. SCOPE FLAG, not a claim: yoga-silverblue reads this as narrower than this row (which is about the land retry loop and stamp adoption) and distinct from 1195-m9vi (macOS-framed, and narrowed by macneo once 1193-yw6u landed). Recorded here on macuahuitl direction to add it as evidence rather than open a new row; re-scope or split as you see fit.

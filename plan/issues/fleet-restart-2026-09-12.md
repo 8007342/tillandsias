@@ -6544,3 +6544,253 @@ whose PATH line is the site's own sentinel, "No path to green is recorded in the
 repo." Five of the fourteen are security items. Levels 3 and 4 now link the
 tracking entry, so an outside reader who wants to argue with one — or report it
 — has somewhere to attach it rather than rediscovering it independently.
+
+**Pass 38 (2026-09-16T00:11Z) — a technique rediscovered three times in one
+night, and an escalation routed before its author could double-claim it.**
+Nothing to relay: windows-next and osx-next both 0 ahead. Eight rows
+in_progress, two expiry candidates, NEITHER swept — 1155-jurn (esme, offline,
+finished work) and 1186-w3ph (yolanda, commits on a salvage ref), both
+established last pass as false positives of a sweep that measures landed
+activity and calls it host activity.
+THE DECOUPLED-FRAGMENT LANE WAS REDISCOVERED INDEPENDENTLY THREE TIMES TONIGHT
+and each rediscovery cost a refusal first — pirria twice, macbookair once. It is
+now recorded as a recipe on 1203-dzxn rather than as three anecdotes. Branch
+from origin/linux-next, cherry-pick ONLY the fragment, push that: the plan-only
+lane judges the OUTGOING DIFF, not the worktree, so a branch taken fresh from
+trunk carries no code and needs no stamp. A platform host whose mandated merge
+brought code can therefore still make a claim visible without spending a gate.
+AND ITS TRAP IS A DIAGNOSTIC DEFECT, NOT A LANE DEFECT. The fresh branch carries
+TRUNK's tree, so a newly-landed plan crate leaves the resolved binary stale and
+the push refuses with "full gate required" when the remedy is a 25-second
+rebuild. This coordinator hit it twice and macbookair once. macbookair's
+phrasing is the one recorded: THE REFUSAL TEXT DOES NOT DISTINGUISH "you need a
+full gate" FROM "you need a 25-second rebuild". Same family as 1207-4zwf, where
+a correct refusal names paths that are not the cause — both point at a remedy
+more expensive than the situation requires.
+A CONFLATION WORTH KEEPING, caught by macbookair against themselves. They
+argued a message to the coordinator satisfied the claim-first rule because the
+coordinator is the consumer and was reading it. THE CONSUMER IS THE SELECTOR. A
+host draining plan_next reads the ledger, not anyone's inbox, so telling the
+coordinator separates nobody from anybody. They noted it slipped past them
+precisely because they were arguing economics at the time — the substitution of
+"the coordinator knows" for "the fleet can see" is invisible while you are
+defending the cost of the alternative.
+AND THE CHECK THAT NEARLY MISSED IT WAS MINE. Asked whether another host could
+still take 690-w94k, I ran `next` for three roles, got zero each time, and
+nearly ruled the risk absent. `next` returns "top 5 of 194 eligible" — a zero
+means NOT IN THE TOP FIVE, not "not offered". The row IS eligible. Fifth wrong
+number from a capped or mis-scoped query on this host today.
+ROUTED 1201-9it2 TO lenovinha BEFORE ITS AUTHOR COULD DOUBLE-CLAIM IT. yoga
+filed it, disproved its own headline, eliminated five candidates and explicitly
+asked for it to be routed rather than absorbed — then said they would take it on
+their next cron if still unowned. Both are the right instinct and together they
+are a double-claim, which the flip prevents. WHOEVER READS THAT ROW MUST READ
+ITS EVENTS AND NOT ITS TITLE: the title still carries the disproved explanation
+because a base fragment is immutable, and a reader starting from it would
+re-derive a disproof that already exists.
+
+## Pass 39 — 2026-09-16, macuahuitl (coordinator)
+
+**A HOST THAT CAN SPEAK BUT CANNOT LAND IS NOT A WEDGE, AND THE ARITHMETIC IS THE
+REPORT.** macneo-macos refused its own land after two attempts rather than
+spending a third gate, and sent numbers instead of a feeling: origin/linux-next
+ran 19 commits in the hour at ~3 min mean against a ~17 min macOS gate. I
+reproduced the same order on the trunk side minutes later — 21 commits, ~2.9 min
+mean — three of them mine, which is worth naming because the coordinator's own
+cadence is part of the interval a slow host cannot land against. The race is
+unwinnable BY ARITHMETIC, not by luck. macneo's plan-only relays all succeeded,
+so the host can speak and cannot land; that asymmetry is 1142-85zx's clock seen
+from the side that pays it.
+
+**THE BINDING CONSTRAINT IS GATE DURATION AGAINST TRUNK VELOCITY, NOT DIFF SIZE.**
+macneo's sharpest point, and the one a reader of 1142-85zx will most easily miss:
+shortening the gate for plan-only diffs helps that host land NOTHING, because the
+diff it cannot land is the one carrying trunk's own mandated merge.
+
+**I POINTED A CORRECTED REMEDY AT THE WRONG REF, AND A PEER CAUGHT IT IN UNDER AN
+HOUR.** Earlier tonight I rewrote land-on-platform-branch.sh's push-failed block
+after macbookair showed the old "retrying cannot help" sentence was absolute
+where it should have been specific. My replacement told the reader to measure
+`origin/$BRANCH` — the branch being pushed. For a mandated-merge refusal that is
+the wrong ref: the refusal names the ref the branch must CONTAIN. macneo followed
+the text literally, measured osx-next, found it quiet at 0 commits for the hour,
+and the text therefore said "quiet, spend the gate" about the one ref that was
+not racing them. THE SHAPE: a correction that fixes the sentence and leaves the
+subject wrong reads more confidently than the error it replaced, because it now
+names a specific command. Fixed to say MEASURE THE REF NAMED IN THE REFUSAL, with
+macneo's numbers and a stop rule.
+
+**SIX DIAGNOSES LANDED AS PROSE WITH NO LEDGER ROW, SO NOTHING WOULD EVER ROUTE
+THEM.** yolanda-windows' Windows login batch landed eight files; the two ledger
+fragments both belonged to one unrelated packet, and the six issue documents had
+no packet at all. Four were actionable and are now filed (1215-xazj, 1215-cxgb,
+1215-8jui, 1215-5uba); the other two are correctly not work items — one is
+WITHDRAWN by its own author and one is a pattern synthesis. MEASURED while
+filing, and stated with its caveat rather than as a defect: 436 of 609
+plan/issues documents carry no ledger row. Most are legitimately not work items —
+drill logs, smoke reports, audit records — so that number is NOT 436 dropped
+rows, and reading it that way would be the two-way-compare-over-a-three-way-world
+error. What it does mean is that an actionable finding filed as prose is routable
+only if someone happens to notice it.
+
+**ONE OF THE FOUR HAS A CLOCK AND IS ADDRESSED TO THE OPERATOR, NOT TO A HOST.**
+1215-cxgb: yolanda-windows' working GitHub login depends on a hand-written
+`.git/config` nothing provisions, inside a guest the tray reprovisions on its own
+(observed 2026-09-12). Its three options all cost the operator's own workstation
+something, so `pickup_role: operator` — routing it to a working host would hand a
+peer a decision about somebody else's machine, which a peer cannot make. yolanda
+filed it unclaimed for the same reason and said so.
+
+**AND ONE IS LATENT FLEET-WIDE WHILE LOOKING HOST-SPECIFIC.** 1215-xazj: the
+759-vceg push probe resolves its repository from the process CWD, and the tray
+always runs the login in the guest where no checkout exists. Any host that has
+not re-authenticated since the ~/src removal is running on a credential seeded
+while a checkout still existed — it works, and keeps working, until the next
+login. Established by controlled experiment with the operator running both arms,
+one variable. The guard is correct and is vindicated twice in that record: it
+refused three times when it could not verify, and the once it did verify, the
+credential it approved genuinely pushed.
+
+**I OFFERED TO ABSORB A LIMITATION THE HOST DID NOT HAVE, AND IT DECLINED THE
+OFFER CORRECTLY.** I asked macneo whether they wanted me to file the relay-ref
+row here, reasoning that adding a row to "a host that cannot land" was
+unkind. What I had measured was a host that cannot land CODE; filing is a
+plan-only write, and they had just done three of them in the same cycle. They
+filed it themselves as 1216-ewaz (verified on trunk, 4d50d48e3) and said why:
+"declining a ledger row on that basis would have been me accepting a limitation
+I do not have." THE SHAPE, and it is a coordinator-specific one: a courtesy
+extended from a measurement read one notch too wide moves work off the host that
+has the evidence and onto the host with the merge button, for no reason. The
+generous reading and the accurate one were not the same reading.
+
+**1216-ewaz IS THE ESCAPE-HATCH HALF OF 1142-85zx.** The refs/heads/work/ relay
+is the only route that does not require winning the gate-versus-trunk race, and
+it is documented ONLY INSIDE THE REFUSAL YOU GET AFTER LOSING THAT RACE. A path
+you can learn about only by first failing is not a documented path. macneo's
+first exit criterion is the one I would have missed: the surface must name WHO
+MERGES THE REF AFTERWARDS, because a gated tree sitting on a ref nobody watches
+is a slower version of the same starvation. Negative control: a host that has
+never seen a land refusal must find the path from the pre-land surface alone.
+
+## Promotion — v56.9.13.1 to stable, 2026-09-16, on the operator's instruction
+
+**PROMOTE-EXISTING, NOT A CUT, AND THE DISTINCTION SAVED THE BLESSING.** The
+operator installed from tillandsias.org on macbookair over dinner, got
+v56.9.12.2 (2026-09-12), and asked how far we were from a release carrying the
+git-mirror fixes. The answer was already on the shelf: v56.9.13.1 had been cut
+2026-09-14, was GREEN on ./build.sh --ci-full at 7a089997d (33/33 checks,
+358/358 pre-build litmus), and had been smoked PASS on ALL THREE PLATFORMS —
+esmeraldinha (Windows), pirria (Linux), macbookair (macOS, the same machine the
+operator was holding). 952-mrsl's rule applies exactly: a fresh cut would have
+discarded the artifacts that blessing verified. Flipped instead:
+`gh release edit v56.9.13.1 --prerelease=false --latest`.
+
+**NO MAIN MERGE WAS NEEDED AND THE SKILL'S LITERAL TEXT WOULD HAVE BEEN WRONG
+HERE.** merge-to-main-and-release's PROMOTE-EXISTING path says to merge
+linux-next into main first. That step assumes you are promoting shortly after a
+cut, when trunk and main are close. MEASURED: origin/main was 6b8342f3f, which
+IS v56.9.13.1 exactly, and trunk was 540 commits ahead. Merging trunk into main
+would have put 540 unreleased commits on main under a tag that does not contain
+them — a de-facto release with no tag and no gate. The promotion is a flag flip
+on an existing tag and needs no branch movement at all. Verified the tag was
+already an ancestor of main before flipping, rather than assuming it.
+
+**VERIFIED THROUGH THE PATH THE OPERATOR ACTUALLY USED, NOT THE ONE I CHANGED.**
+`gh release list` showing Latest is the API's answer, not the installer's. The
+website shims default to `${TILLANDSIAS_RELEASE_BASE:-.../releases/latest/download}`,
+so the check that matters is whether that redirect moved: it now 302s to
+tag/v56.9.13.1, and Tillandsias.dmg and install-macos.sh both return 200 through
+it. No website deploy was required — the shims resolve the channel at run time,
+which is the property they were built for.
+
+**WHAT THE PROMOTION DOES NOT FIX, STATED BEFORE IT WAS ASKED.** Two defects
+ship with this stable and both were named to the operator before the flip:
+1171-ccf2, the Windows zip not carrying tillandsias-headless.exe — `implemented`
+on trunk, NOT in this tag, so Windows hosts still hit it; and 1215-xazj, p1 and
+unfixed in stable, in the daily AND on trunk, so the tray's --github-login is
+broken at a newer version number rather than repaired by it. A promotion that
+raises the version while leaving a p1 in place is exactly the kind of thing a
+release note must say out loud.
+
+**STILL UNRELEASED ON TRUNK:** 890-y72v (DeliverCredentialsReply carries an
+accept/reject discriminator — a WIRE v4 bump, so host and guest must move
+together), 1201-t6ms and 1211-34v6, plus the 1171-ccf2 fix. Those want the next
+cut and their own blessing round, not a rushed promotion.
+
+## Pass 40 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY, AND THAT IS A MEASUREMENT RATHER THAN AN ABSENCE.** Both
+platform branches are fully contained in trunk: `windows-next` at 34796b2fd
+(ahead=0, behind=299) and `osx-next` at 5560b12bd (ahead=0, behind=78). No land
+this pass. `main` sits at 6b8342f3f — which IS v56.9.13.1 — behind=559.
+
+**FIVE OF SEVEN UNLANDED REFS ARE SUPERSEDED, AND ANCESTRY ALONE WOULD HAVE
+MISREAD ALL SEVEN.** Seven refs on origin are not ancestors of trunk. Checking
+each against its ROW rather than its ancestry: `1185-9qx6`, `1189-2ra5` and
+`1199-aw6m` are **completed**, `1069-c9w6` and `1087-h2z9` are **verified**. So
+five carry work that landed by another route, exactly as 1032-class warns —
+"integrated is proven by ancestry" cuts both ways, and a ref that is not an
+ancestor is not thereby outstanding. The two `salvage/unknown/20260902-opsx-*`
+refs are a fortnight old and belong to a cycle-refusal snapshot.
+
+**THE ONE LIVE ONE IS 1186-w3ph, AND "UNLANDED, WANTING A GATE" WAS TOO COARSE
+TO ACT ON.** The row is `in_progress` (yolanda's) and its salvage ref carries 11
+files. Compared by CONTENT, not by ancestry: **7 are byte-identical on trunk**
+already, and three `fix(1186-w3ph)` commits landed on 2026-09-14 (79b222739,
+125ae5d21, plus the claim and the mechanisms record). Of the four that differ,
+direction matters and splits them:
+
+- `litmus-forge-upstream-auth-gate.yaml` — **trunk is AHEAD** (371dde08a,
+  2026-09-15T20:07Z, after the 08:21Z salvage snapshot). The salvage is stale here.
+- `litmus-plan-answer-envelope-citability.yaml`, `post-commit-expert-refresh.sh`,
+  `test-salvage-net.sh` — trunk last touched them 2026-08-17, 2026-08-28 and
+  2026-09-14T10:14Z respectively, all BEFORE the snapshot, so these three carry
+  changes trunk lacks.
+
+Not acted on: the row is yolanda's claim, they have not reported this pass, and a
+salvage ref is a dirty-tree snapshot rather than a gated branch — three files
+differing is a question for its author, not a licence to land. Recorded so
+whoever resumes it inherits the split instead of re-deriving it.
+
+**THE CYCLE-METRICS PASTE HAS BEEN DEAD FLEET-WIDE FOR ELEVEN DAYS AND THE
+AUDIT THAT SAYS SO IS RUN BY THE HOST THAT ALSO STOPPED.** `rows=23 stems=23`
+(no dropped stem, so the count is trustworthy), and EVERY stem reads
+NOT-PASTING. Last pastes cluster in early September and then stop:
+macuahuitl 2026-09-05T22:58Z, yoga 2026-09-05T01:29Z, yolanda 2026-09-05T03:34Z,
+macbookair 2026-09-04T23:00Z, lenovinha 2026-09-04T21:55Z.
+
+The obvious reading — thirteen hosts each forgot — is wrong, and the
+discriminating checks say so:
+
+- the instrument WORKS. `scripts/cycle-metrics.sh` runs clean, rc=0, and emits
+  the full block including `recur:` (29683 runs, 640 steps), `skippable:` (96
+  candidates) and `tokens:`.
+- the instruction EXISTS, in **five** skills — advance-work-from-plan,
+  meta-orchestration, coordinate-multihost-work, smoke-curl-install-and-test-e2e,
+  deslop-sweep.
+- compliance has ALWAYS been poor and is now zero: **82 of 586** loop_status
+  entries ever carried a metrics line (14%), and tonight's entries from macneo
+  and macuahuitl carry none.
+- **1001-q3zf, the row that built it, is `completed`.**
+
+So the instrument was built, the row closed as done, and the consumption never
+happened — while the audit has reported NOT-PASTING every pass since and nothing
+changed, including about the host running the audit. THIS IS 1218-25z3's SHAPE
+ONE FLOOR OVER: an instruction with no gate. A blocker list nobody is required
+to open and a metrics paste nobody is required to make are the same object —
+protection that exists, is never consulted, and reports nothing when it fails to
+fire. The difference is that this one has an audit that DOES report, every pass,
+and is itself ignored, which is worse: a live alarm nobody silences and nobody
+acts on trains its readers to skip the line.
+
+Not filed as a new row this pass. It belongs to whoever takes 1218-25z3, as the
+second instance proving the shape is general rather than a release-path quirk.
+
+**NO REASSIGNMENT, AND THE FLEET IS NOT IDLE.** Three hosts reported since the
+last pass and all three closed cleanly with self-determined next work: macneo
+(cycle closed, clean, back on hourly cadence), yoga (story complete, taking
+1218-25z3 before the 1217-54vw costing), macbookair (cycle closed, 690-w94k
+criterion 3 released because it was claimed and never started, back on cadence).
+None asked for work and none is stuck, so nothing was flipped on anyone's
+behalf. 1215-5uba's second-instance measurement suits a floor-tier host and is
+`ready` with `pickup_role: any` — available to whoever drains next, not assigned.

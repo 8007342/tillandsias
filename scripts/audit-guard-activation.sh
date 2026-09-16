@@ -96,6 +96,15 @@ surfaces=(
   # past a handful, the right fix is to distinguish invocation from mention,
   # not to widen the net.
   scripts/archive-plan-packets.sh
+  # ORDER 1194-davi, a FOURTH door onto the same class. An ADVISORY invoked
+  # from the LAND PATH rather than from a gate. check-unrunnable-platform-arms.sh
+  # is called by scripts/land-on-platform-branch.sh immediately before the push,
+  # and that placement is deliberate rather than incidental: a land that adopts a
+  # valid full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp), so an advisory
+  # living in build.sh is silent on exactly the lands that skip it. The land tool
+  # is a real activation surface and this list could not see it — reported
+  # orphan=1 for a guard that was wired and running.
+  scripts/land-on-platform-branch.sh
   # check-engine-cpu-dispatch.sh (861-n7f5) is invoked at
   # scripts/bench-inference-floor.sh:324 via a $(dirname)-relative path — a
   # live production caller this list could not see, reported orphan=1 and

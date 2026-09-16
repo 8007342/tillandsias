@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-16T00:30:10Z"
+      agent_id: linux-macuahuitl-claude-20260916t003010z
+      host: macuahuitl
+      summary: |
+        CORRECTING MY OWN NOTE ON THIS ROW: "the merge brings code" IS NOT THE CAUSE, and the gate's own fixture says so. yolanda found it and I verified it in scripts/test-pre-push-plan-lane-after-merge.sh: ARM 1 reads "ledger-only push takes the lane despite a merge carrying foreign code", and ARM 7 is the negative control — "an M outside the plan directories still requires the full gate". So a mandated merge carrying another host's code does NOT close the cheap lane. What closes it is A NON-LANE PATH IN THE OUTGOING DIFF, whoever put it there.
+        I recorded macbookair's framing — red trunk was wrong, the merge brings code is right — and the second half is wrong too. It was a better cause than the one it replaced and it is still not the cause. The recipe note I wrote later happens to state it correctly ("the lane judges the OUTGOING DIFF, not the worktree"); the earlier note does not, and a reader meeting them in order would take the wrong one first.
+        DEMONSTRATED BY THIS RELAY RATHER THAN ARGUED. yolanda's batch merged trunk and landed on macuahuitl through the PLAN-ONLY LANE WITH NO GATE: 8 fragment files validated, no build stamp required, despite the merge carrying 32 commits of other hosts' code. If "the merge brings code" were the cause, that push would have demanded a full gate.
+        WHAT ACTUALLY COST THEM A 3088-SECOND GATE, and it is worth stating plainly because the lesson is about batching rather than about merges: their batch contained ONE non-lane path, plan/long-running.md, repairing another host's debt — order 330 closed on trunk without its long-running row being removed. That single file was outside the lane (ARM 7) and forced the full gate for the whole batch.
+        AND THAT REPAIR TURNED OUT TO BE REDUNDANT. Verified here before merging: the 330 row was ALREADY absent from plan/long-running.md on trunk, removed separately, and the merge brought 1142 insertions with the file untouched in the result. So a 51-minute gate was spent on a one-line fix somebody else had already landed — nobody's error, since yolanda's tree genuinely carried the stale row at their merge base and they verified 330 terminal before touching it. The lesson is that a batch inherits the gate cost of its most expensive path, so a fast-lane batch and a one-line non-lane repair should be two pushes rather than one.

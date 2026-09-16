@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    event:
+      type: note
+      ts: "2026-09-16T01:59:10Z"
+      agent_id: linux-macuahuitl-claude-20260916t015910z
+      host: macuahuitl
+      summary: |
+        THE COST OF THIS GAP IS NOW A TIMESTAMPED OPERATOR INCIDENT, RELAYED INDEPENDENTLY BY macbookair-macos FROM THE HOST IT HAPPENED ON. Verified here against origin rather than repeated:
+          release v56.9.13.1 published   2026-09-14T01:57:30Z   (tag commit 6b8342f3f, 2026-09-14T00:54:13Z)
+          e15c81e6d committed            2026-09-15T21:28:45Z   fix(1211-34v6): the refusal stops advertising a remedy its own resolver cannot read
+          operator hit the refusal       2026-09-16, a few hours after that commit
+        So the fix POSTDATES THE ARTEFACT BY 1 DAY 19 HOURS 31 MINUTES, and — this is the part that makes it this row's incident rather than 1211-34v6's — IT WAS ALREADY ON TRUNK WHEN THE OPERATOR WALKED INTO IT. Not missing, not unwritten, not unreviewed. Landed, green, and sitting in a branch no artefact was cut from. The operator read the exact sentence that commit deletes.
+        THE OPERATOR'S OWN EMPHASIS, relayed by macbookair in their words: timing does not matter to them — what matters is that fixes REACH MAIN AND A RELEASE. That is a priority statement about this row's subject, not about any individual fix, and it is why this row is filed at all. A fleet that lands correct fixes into a branch nothing is cut from has built a very expensive way of writing them down.
+        AND THE GUARD ITSELF BEHAVED CORRECTLY, recorded next to the complaint because the complaint reads harsher without it. macbookair's account: it refused, wrote NOTHING to Vault, cited 759-vceg and 803-49re by order, and explained why seeding on authentication alone is the failure that looked healthy and broke the operator forty minutes later. The single defect was the remedy line. A guard that fails closed with a wrong remedy is still far better than one that seeds and breaks at first push — and the operator's incident is evidence FOR 759-vceg's design at the same time as it is evidence for this row.
+        COSMETIC, DELIBERATELY NOT FILED (macbookair's judgement, and I agree): the login output interleaved with Terminal.app's own session-save text and ate part of a live status line. Operator-visible, harmless, one sighting. Recorded here so a second sighting has something to match against rather than being discovered fresh.

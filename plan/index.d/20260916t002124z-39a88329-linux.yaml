@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    field: next_action
+    value: |-
+      Build the notice, not a new gate. The cheap version is a map from changed paths to the litmus arms asserting on them, emitted by the land tool BEFORE the push, naming the arm and the tier that would run it. Both negative controls in unscoreable are load-bearing: silence when nothing tier-scoped is touched, and advisory-not-refusing on the authoring host. Cite 1194-davi as the platform twin and 890-27mv as the cadence half; this row is neither, it is the notice.
+
+      CAUSE NOW FOUND (lenovinha, 2026-09-16) AND IT STRENGTHENS THE ABOVE RATHER THAN CHANGING IT: ./build.sh --check executes NO litmus at all, deliberately (748-tkjx, build.sh:2508), and the pre-push hook only verifies a --check stamp. So the tier that runs this test exists and is correct — litmus-tests is a local-ci pre-build CHECK_ID — it simply is not the tier guarding a push. 'Not a new gate' is therefore right for a reason stronger than cost: 748-tkjx says a minutes-long gate gets bypassed with --no-verify, which is strictly worse. And the notice is exactly the missing piece, because scripts/litmus-covering-specs.sh ALREADY provides the reverse map the notice needs; what is missing is emitting it at the moment of the push. Note also that 748-tkjx's own comment records TWO prior instances of this shape (2026-08-15, and 921-vtf4's three tests back to af745f3fd on 2026-08-28), so this is the third.
+
+      [2026-09-16T00:21:04Z linux] linux
+
+      [2026-09-16T00:21:24Z linux] THE ONE-WORD LINE ABOVE READING "linux" IS A MALFORMED WRITE OF MINE, not content. I passed set-field's flags before its positional <value>, so the value parsed as the argument to --host. It is append-only and stays; ignore it. I am not using --replace to scrub it, because this row is in_progress on another host and a wholesale rewrite of a long-form field could clobber a concurrent edit — which is the exact harm 1151-td46's refusal exists to prevent.
+
+      NOW THE THING I CAME TO SAY. READ THE EVENTS BEFORE THE TITLE. This row's headline is wrong in two ways and a base fragment is immutable, so it cannot be corrected where it is read.
+
+      WRONG IN MECHANISM, and lenovinha's paragraph above has the cause right. The title blames a cadence that never runs a quick-tier pin. build.sh --check executes NO litmus at all — not a tier it misses, none. Verified independently on yoga by grepping a real --check gate log: zero occurrences of the runner's Executing-litmus line, the only litmus mentions being source-scanning guards. In build.sh the symbol _run_litmus_phase is defined once and called twice, both under FLAG_CI_FULL. Cite it by SYMBOL and not by line: the line number for this differs between two hosts at the same instant, because every host carries unlanded work by design.
+
+      WRONG IN DURATION. The title and context say the red sat for days. lenovinha measured the window at 02:44:09 to 05:40:50 the same morning — under three hours. A reader who takes only the mechanism correction will still carry "days" forward, which is why both are here.
+
+      AND THE FACT THAT REFUTES THE HEADLINE WITH NO ARGUMENT AROUND IT: the red was found by order 890-27mv's own cadence work, whose commit subject is "the red it immediately found". A row whose headline says a cadence never runs, describing a red a cadence caught in under three hours.
+
+      HOW THE WRONG HEADLINE SURVIVED, recorded because the mechanism outlives the error. I filed this row and I supplied the premise all three hosts reasoned from: I ran the litmus runner against the spec at --phase pre-build --size instant and watched it select and execute the test in 11.1 seconds. Every word is true. It measured what the RUNNER does when invoked; the question was about the CALLER, which never invokes it. Two other hosts then built multi-step eliminations on that premise without testing it, precisely BECAUSE it carried its method — "I ran it rather than inferring" is the phrasing that makes a claim sound tested, and is therefore most dangerous when the SUBJECT is the part that is wrong.
+
+      A WORKED PRECEDENT FOR THE EMITTING HALF, landed since this row was filed: order 1194-davi, commit 0b53dc6b5, the cross-PLATFORM twin of this notice. scripts/check-unrunnable-platform-arms.sh derives its inventory from existing rows rather than a second list, is invoked from scripts/land-on-platform-branch.sh immediately before the push, and is advisory with every verdict exiting 0. PUT THIS ONE IN THE LAND PATH TOO, not in a gate: a land that adopts a valid full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp), and that is the common case rather than a corner — it was observed on BOTH attempts of 1194-davi's own land, where the advisory ran and the gate did not. An advisory living in build.sh is silent on exactly the lands that skip it. One more trap from building it: audit-guard-activation.sh will report a new guard as an ORPHAN and refuse the land at rc=3 until its activation-surface list learns about the land path; the surface is now listed, so a second guard invoked the same way will pass.
+    ts: "2026-09-16T00:21:24Z"
+    host: linux
+
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: note
+      ts: "2026-09-16T00:21:24Z"
+      host: linux
+      summary: |-
+        correcting my own malformed append above, and adding the in-band title warning (mechanism and duration)

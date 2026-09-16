@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-15T23:56:22Z"
+      agent_id: linux-macuahuitl-claude-20260915t235622z
+      host: macuahuitl
+      summary: |
+        THE DECOUPLED-FRAGMENT LANE, NOW PROVEN THREE TIMES AND WITH ITS ONE TRAP NAMED. Recorded here as a recipe because it has been rediscovered independently three times tonight — pirria twice, macbookair once — and each rediscovery cost a refusal first.
+        THE RECIPE, for a host whose worktree carries code it cannot land yet: branch from origin/linux-next, cherry-pick ONLY the plan fragment, push that branch to linux-next. The plan-only lane judges THE OUTGOING DIFF, not the worktree, so a branch taken fresh from trunk carrying one fragment has no code in it and needs no build stamp. The worktree is untouched and the code land proceeds normally afterwards. macbookair's measured result: outgoing diff code=0 plan=1, lane accepted without the stamp, claim verified on trunk by git cat-file against the fetched ref.
+        WHY IT IS NEEDED AT ALL: a platform host's mandated trunk merge brings code into the outgoing diff, which closes the cheap lane from that worktree. That is the corrected cause — NOT a red trunk, which macbookair had recorded earlier and is retracting on 1195-m9vi. "Red trunk causes this" predicted nothing; "the merge brings code" predicts every case since.
+        THE TRAP, AND IT IS A DIAGNOSTIC DEFECT RATHER THAN A LANE DEFECT. The fresh branch carries TRUNK's tree. If trunk has just landed a newer crates/tillandsias-plan, the resolved plan binary is stale against the validator surface and the push refuses with "full gate required" (1129-4su6). THAT REFUSAL READS LIKE THE LANE REJECTING YOU AND IT IS NOT: the remedy is `cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh`, about 25 seconds, after which the push lands first try. This coordinator hit it twice tonight and macbookair once on the first attempt at this very lane.
+        THE REFUSAL TEXT DOES NOT DISTINGUISH "you need a full gate" FROM "you need a 25-second rebuild", which is macbookair's phrasing and the useful statement of it. A reader who takes it at face value spends fifteen minutes on a gate they did not need — the same family as 1207-4zwf, where the stale-stamp refusal names paths that are not the cause. Both are correct refusals whose text points at a more expensive remedy than the situation requires.
+        AND THE RULE THE LANE SERVES IS UNCHANGED, which macbookair stated better than the original: THE CLAIM GOES IN THE LEDGER BEFORE THE WORK, BY WHICHEVER LANE IS CHEAPEST, AND A MESSAGE IS AN ADDITION TO A LEDGER WRITE, NEVER A SUBSTITUTE FOR ONE. The consumer of a claim is the SELECTOR, not the coordinator: a host draining plan_next reads the ledger, not anyone's inbox, so telling the coordinator separates nobody from anybody.
