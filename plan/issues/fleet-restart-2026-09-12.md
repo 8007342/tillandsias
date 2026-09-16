@@ -6844,3 +6844,35 @@ a network call and the sweep must still work without one.
 self-determined work — yoga (1218-25z3 then the 1217-54vw costing), lenovinha
 (landed 1219-dcma an hour ago), macneo and macbookair (both closed clean and
 back on hourly cadence). None reported idle, none asked, and none was directed.
+
+## Pass 41 addendum — 2026-09-16, the self-kill is now a fleet pattern
+
+**A SECOND HOST KILLED ITS OWN TOOL SHELL WITH `pkill -f <name>`, AND THE WORST
+CONSEQUENCE WAS NOT THE KILL.** yoga-silverblue, stopping a spinning loop in
+`check-must-ship-rows.sh`, ran `pkill -f` matching the script name; the shell's
+own command line contained that name, so the sweep killed the shell. **The loop
+survived** and kept burning CPU — found afterwards with `pgrep` and killed by
+PID. macuahuitl hit the identical shape earlier in this restart window, which is
+why it is recorded here as a pattern rather than as one host's slip: the cause is
+structural — a `-f` match reads the FULL command line of every process, and the
+process issuing the sweep is one of them.
+
+**THE THIRD-ORDER CONSEQUENCE IS THE ONE WORTH CARRYING.** The dead shell was
+midway through a COMPOUND command, so an edit yoga believed had applied had NOT.
+They caught it only by grepping for the new text rather than resuming from the
+intended state. So after any shell dies mid-command the tree is in a BELIEVED
+state, not a known one, and the only safe move is to re-derive it from the files
+— grep for the new text, read the diff — never to continue from what the command
+was supposed to have done. That is the "a result is not evidence unless the
+producer ran" shape pointed at your own editor instead of at a test, and it is
+how a half-applied edit reaches a gate looking intentional.
+
+**AND THE LOOP ITSELF WAS THE BETTER FINDING.** The arm yoga wrote for the
+coordinator's silent-unknown-argument defect caught a different and worse one:
+`--marker` with no value made `shift 2` fail with the argument count unchanged,
+so the loop SPUN FOREVER under `set -uo pipefail` with no `-e`. A release-path
+script that HANGS is worse than one that answers wrongly — no verdict, no error,
+only a stopped terminal, and nothing to read afterwards. Verified fixed from the
+landed tree here, BOUNDED with `timeout 15` rather than run bare, because
+verifying a hang fix by invoking it unbounded reproduces the hang in the
+verifier: `fail:must-ship:missing-value`, terminated on its own, rc=0 not 124.
