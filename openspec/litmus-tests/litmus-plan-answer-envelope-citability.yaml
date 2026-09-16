@@ -103,7 +103,7 @@ critical_path:
     expected_behavior: "ok: span-contains-claim"
 
   - step: "the answer TEXT names every packet it cites (no decorative citations)"
-    command: "ans=$(jq -r '.answer' /tmp/.litmus-394b-env.json); for id in $(jq -r '.citations[].authority.packet_id' /tmp/.litmus-394b-env.json); do printf '%s' \"$ans\" | grep -qF \"$id\" || exit 1; done; echo 'ok: every-citation-is-claimed'"
+    command: "ans=$(jq -r '.answer' /tmp/.litmus-394b-env.json); for id in $(jq -r '.citations[].authority.packet_id' /tmp/.litmus-394b-env.json | tr -d '\\r'); do printf '%s' \"$ans\" | grep -qF \"$id\" || exit 1; done; echo 'ok: every-citation-is-claimed'"
     timeout_ms: 10000
     expected_behavior: "ok: every-citation-is-claimed"
 

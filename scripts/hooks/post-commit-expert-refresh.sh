@@ -116,7 +116,17 @@ if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
 
         # Resolve target directory from CARGO_TARGET_DIR or default repository target/
         if [ -n "${CARGO_TARGET_DIR:-}" ]; then
-            if [[ "$CARGO_TARGET_DIR" = /* ]]; then
+            # ORDER 1186-w3ph. A WINDOWS-ABSOLUTE PATH IS STILL ABSOLUTE.
+            # `= /*` tests POSIX-absoluteness only. On a Windows host, MSYS
+            # converts a POSIX path in the environment to a drive-letter path
+            # when it hands it to the NATIVE git.exe that runs this hook, so
+            # CARGO_TARGET_DIR arrives as `C:/Users/.../custom_target`. That
+            # fails `= /*`, is taken for a relative path, and is joined onto
+            # REPO_ROOT -- producing `<repo>/C:/Users/.../custom_target` and the
+            # log line "built artifact ... missing or unreadable" for a binary
+            # cargo had just written successfully. Measured on yolanda
+            # 2026-09-14; the artifact was present the whole time.
+            if [[ "$CARGO_TARGET_DIR" = /* ]] || [[ "$CARGO_TARGET_DIR" =~ ^[A-Za-z]:[/\\] ]]; then
                 TARGET_DIR="$CARGO_TARGET_DIR"
             else
                 TARGET_DIR="$REPO_ROOT/$CARGO_TARGET_DIR"
