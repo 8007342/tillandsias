@@ -6931,3 +6931,155 @@ than repaired here.
 yoga closed the 1217-54vw costing and released the claim, lenovinha closed
 1219-dcma, macneo and macbookair are on hourly cadence. None reported idle and
 none asked. No claim was flipped onto anyone.
+
+## Pass 43 — 2026-09-16, macuahuitl (coordinator)
+
+**RUN READ-ONLY WHILE AN MO CYCLE HELD THE CHECKOUT.** The coordination prompt
+arrived with this host's own meta-orchestration cycle mid-flight: a land gating,
+914-nkc4 unclosed, no attestation yet, and `cycle-checkout-lock.sh status`
+answering `skip:overlap-lock-held:lane=operator-prompt pid=22560`. The branch
+audit, the activity read and the host reports need no writes, so they ran; the
+drill entry and every ledger write were HELD until the gate finished. Writing
+plan fragments underneath a running gate is the lapse yoga-silverblue
+self-reported an hour earlier — the digest skips `plan/index.d/*.yaml`
+(gate-stamp.sh, the fast-lane `continue`), so the STAMP is safe, but the
+ledger checks inside `./build.sh --check` read a tree that would be changing
+beneath them. The lock said so and was obeyed rather than argued with.
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=336, `osx-next` ahead=0
+behind=115. `main` behind=596.
+
+**PASS 42's AUTHORSHIP HAZARD NOW HAS A NAMED HOST, AND IT IS NOT A RELAY
+ARTEFACT.** Pass 42 found that `bulloncito@gmail.com` is an unattributed bucket
+carrying 59 commits in 24h. This pass identifies it: **macbookair commits
+directly under the operator's own identity and has no host-identified git
+address anywhere.** Across BOTH branches over 14 days there are nine distinct
+author emails and not one of them names that host:
+
+```
+bulloncito@gmail.com          bulloncito@hotmail.com
+bulloncito+lenovinha@gmail.com  bulloncito@outlook.com
+esmeraldinha@esmeraldinha…    lenovinha@lenovinha…
+tlatoani@macuahuitl…          tlatoani@Tlatoanis-MacBook-Neo.local (macneo)
+tlatoani@yoga…
+```
+
+CHECKED BEFORE RECORDING, because "fragments FROM macbookair" reads like relayed
+work, and a relayed commit is legitimately authored by the relayer. It is not
+relay: `plan(690-w94k): claim criterion 3` and `plan(690-w94k): release criterion
+3 unstarted` are macbookair's OWN actions under `bulloncito@gmail.com`. The
+contrast is in the same query — this host's relays say so in the subject
+(`plan(coordination): relay macbookair's 690-w94k…`) and are authored by
+macuahuitl. So the fleet is SPLIT: macneo, lenovinha, yoga, esmeraldinha and
+macuahuitl carry per-host identities; macbookair carries the operator's, and its
+work is distinguishable only by PROSE IN A SUBJECT LINE.
+
+**AN INSTRUMENT DEFECT OF MINE IN THIS PASS, recorded because it is the shape
+this drill exists for.** Probing for a macbookair email I wrote
+`grep … | head; echo "  (empty = none)"` — the label prints UNCONDITIONALLY,
+whatever the grep returns. It returned `Tlatoanis-MacBook-Neo.local` (macneo's
+host, not macbookair's) and my own output then announced "empty = none"
+underneath a non-empty result. A hardcoded conclusion beside a real result is
+worse than no label: it reads as the instrument's verdict. Caught by reading the
+two lines together; the corrected form asks what the matched line IS.
+
+**NO REASSIGNMENT, AND THE FLEET IS WORKING.** By email over the last two hours:
+lenovinha 6 commits (closed 1221-vkbj plus a 1132-r4mt measurement, attested),
+macuahuitl 2, and macbookair 2 under the shared identity — it RE-CLAIMED
+690-w94k criterion 3, the row it released earlier tonight as claimed-and-never-
+started, which is a host taking work back up rather than an idle one. yoga closed
+the 1217-54vw costing and released that claim. Nobody reported idle, nobody
+asked, and no claim was flipped onto anyone.
+
+## Pass 43 addendum — 2026-09-16, a code land exhausted its attempt budget, and the coordinator is the traffic
+
+**yoga-silverblue hit `refused:land:attempts-exhausted:4` on a CODE land**, and
+reported it as a fleet condition rather than a blocker, explicitly not asking for
+a change. Recording it with the part they were too polite to compute.
+
+**THE MECHANISM, WHICH IS A FAIRNESS PROPERTY AND NOT A DEFECT.** A host landing
+CODE pays a full gate — 921s in their measurement, ~690-750s here — before its
+FIRST push. A host landing PLAN-ONLY pays none: the fast lane admits it without
+a build stamp. So on a shared branch the two classes have wildly different costs
+of entry, and if plan traffic is dense enough the code host can lose every push
+race inside its four attempts and retire with the work unlanded, while every
+plan-only push succeeds immediately. Nobody does anything wrong and nothing is
+broken.
+
+**THE STAMP DESIGN ALREADY SOFTENS IT, and this is the part worth carrying.**
+`gate-stamp.sh`'s digest EXCLUDES the plan fast lane (the `continue` arm for
+`plan/index.d/*.yaml`, `plan/loop_status.d/*.md`,
+`plan/mo-full-attestations.d/*.md`), so merging plan-only commits does NOT stale
+a code stamp. A code land racing plan-only traffic therefore pays ONE gate, not
+one per collision — later attempts are PURE PUSH RACES and adopt the earlier
+gate's stamp (1174-u5wp). Verified independently here twice tonight: both of
+this host's lands showed attempt 1 running a real gate and attempt 2 adopting
+that same stamp, each time confirmed by matching the gate log's mtime to the
+stamp timestamp rather than trusting the message.
+
+**THE COORDINATOR IS THE LARGEST SINGLE SOURCE OF THAT TRAFFIC. MEASURED:** of
+14 trunk commits in the 90 minutes around yoga's exhausted land, **12 were
+plan-only and SIX of those were macuahuitl's** — coordination records, ledger
+notes and row filings, pushed one at a time as each was written. That is the
+1005-class rule arriving as a measurement instead of a maxim: the coordinator's
+cadence is the churn slow hosts lose to.
+
+**WHAT CHANGES HERE, self-imposed and not asked for:** plan-only pushes from this
+host BATCH to one per pass instead of one per item. Six pushes carrying six
+records is six race losses for anyone gating; one push carrying six records is
+one. It costs this host nothing — the records are written either way — and it is
+the only lever the coordinator holds that does not trade another host's latency
+for its own. yoga was right not to ask for the attempt budget to be raised;
+raising it would have moved the cost onto whoever gates next.
+
+**AND yoga's OWN SHA WAS REWRITTEN AGAIN.** They reported the work as local at
+`b41e992ae`; it landed as `0f8616a22`. Third instance tonight of the land's
+rebase arm rewriting a pre-land sha — the unpushed set carried no merge commit,
+so `_unpushed_merges` was 0 and the tool rebased. The rule is unchanged and now
+has three witnesses: a local sha is not a shared address until it is on origin,
+and the sender can tell which arm applies with `git rev-list --merges --count
+origin/<branch>..HEAD` BEFORE quoting one.
+
+## Pass 44 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=352, `osx-next` ahead=0
+behind=131. `main` behind=612. One land this pass, batched — see below.
+
+**I REPRODUCED PASS 42's OWN DEFECT IN THIS PASS's FIRST MEASUREMENT.** Pass 42
+recorded that commit author NAME does not identify the host and that the remedy
+is to count by `%ae`. This pass opened its activity read with `%ae` and then
+printed `${e%%@*}` — stripping the domain, which is the only part that names the
+host — so macuahuitl and yoga both rendered as `tlatoani` and the first reading
+of trunk composition was unusable. The recipe was followed and the DISPLAY threw
+away what the recipe exists to preserve. Re-measured with full addresses; filed
+as **1223-wzc4**, p3, because the corrected recipe lives in prose and prose gets
+retyped. The precedent is exact and already in the coordination skill: the
+loop-status metrics audit was typed from memory on 2026-09-05, lost both its
+fixes, and was moved into a script with "RUN THE SCRIPT. DO NOT RETYPE THE LOOP."
+above it. The host-activity read has the same shape and no such script.
+
+**TRUNK COMPOSITION, 3h, by host (the corrected read):**
+
+```
+macuahuitl 10  (8 plan-only, 2 code)   yoga 3   macneo 3   lenovinha 3   gmail-bucket 2
+```
+
+Ten of twenty-one commits are this host's, eight of them plan-only — the same
+proportion that produced yoga's `refused:land:attempts-exhausted:4`. The
+batching commitment made last pass holds: this pass makes ONE plan-only push
+carrying both records instead of one per item.
+
+**THE EXPIRY SWEEP IS UNCHANGED AND NEITHER CANDIDATE WAS ACTIONED.** Same two
+rows as pass 41 — `1155-jurn` (claimant `windows`, a platform not a host; its
+`work/1155-jurn` ref IS contained in trunk, so expiring strands nothing) and
+`1186-w3ph` (yolanda's salvage ref still not contained, three files still
+carrying changes trunk lacks, so expiring would strand work). `--write` applies
+both together; nothing was written. The blind spot is filed as 1220-zb7q.
+
+**NO REASSIGNMENT, AND EVERY HOST HEARD FROM IS WORKING.** lenovinha claimed
+`679-rp9m` (the login Vault poll) this pass; yoga landed `1132-r4mt`'s criterion 4
+as CODE after four attempts and said criterion 2 remains unanswered rather than
+letting the delivered half imply it; macneo relayed a ledger-only cycle and
+emitted its first token record; macbookair holds `690-w94k` criterion 3. Seven
+rows are `in_progress`. Nobody reported idle, nobody asked, and no claim was
+flipped onto anyone.

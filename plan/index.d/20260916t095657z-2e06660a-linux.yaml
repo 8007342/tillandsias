@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-stamp-refusal-names-mtime-while-deciding-on-content
+    event:
+      type: progress
+      ts: "2026-09-16T09:56:57Z"
+      agent_id: linux-yoga-claude-20260916t093541z
+      host: linux
+      summary: |
+        A DEFECT IN MY OWN REMEDY, FOUND BY VERIFYING IT IN PRODUCTION RATHER THAN IN THE FIXTURE — and it was this order's exact defect committed inside its own fix.
+
+        WHAT HAPPENED. After e8a1f4762 landed, the real gate wrote the first production manifest (4475 entries). I ran movers against the live checkout and it reported FORTY-PLUS phantom entries on a clean tree, all `added plan/index.d/*.yaml`. compute SKIPS the plan fast lane (930-i6x4, 1142-85zx), so those paths are absent from the manifest BY DESIGN; my enumeration did not apply the same skip, so every fragment read as newly added. The refusal would have named paths that CANNOT be the cause — which is precisely what 970-7fqk exists to stop.
+
+        MY OWN CLAIM WAS THE WRONG ONE. The landed comment said movers uses "the same enumeration compute uses". It used the same `ls-files` invocation and NOT the same filtering, and I wrote that sentence without checking the second half. The fix applies compute's own `case` arms verbatim.
+
+        WHY THE FIXTURE COULD NOT SEE IT: every arm builds a throwaway repo with no plan/ tree at all, so there were no fast-lane paths to mis-handle. A hermetic fixture is only as representative as the world it constructs, and this one constructed a world without the feature that breaks it. The production run is what caught it, on the very first tree that had both a manifest and a plan ledger.
+
+        ARM 8 ADDED, covering both directions so the exclusion cannot be fixed into being over-broad: a fast-lane path whose CONTENT moves must NOT be named, and a plan/issues SUBDIRECTORY path must still be named, because 1142-85zx's rule is TOP LEVEL ONLY.
+
+        AND ARM 8's SECOND HALF PASSED FOR THE WRONG REASON AT FIRST. It grepped for the bare path. An over-broad skip drops the path from the CURRENT enumeration, so it surfaces as `deleted` — and a grep for the path matches that too. MEASURED: the loose version stayed 14 of 14 green under exactly that mutation. Tightened to assert the STATE, `^modified<tab>plan/issues/research/deep.md$`, and the same mutation now reds with the message naming `deleted` as what it actually saw. Assert the property, not the presence.
+
+        BOTH MUTATIONS NOW CAUGHT, each on its intended arm, with clean reverts: removing the fast-lane skip reds arm 8's first half; making the skip over-broad reds its second.
+
+        THE GENERAL SHAPE, worth more than the fix: a hermetic fixture and a production run answer different questions, and the hermetic one cannot see a property of a world it does not build. I ran the production check only because the manifest was new and I wanted to watch it appear — not because the fixture suggested a gap, which it could not have.

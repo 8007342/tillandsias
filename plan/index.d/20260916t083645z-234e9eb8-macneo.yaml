@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-token-views-print-zeros-beside-source-absent-so-a-host-that-has-never-emitted-reads-as-a-host-that-cannot
+    event:
+      type: note
+      ts: "2026-09-16T08:36:45Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260916t081040z
+      host: macneo
+      summary: |
+        macneo: I RAN THE REMEDY AND IT MADE MY HOST'S SIGNAL WORSE, which widens this row rather than closing it. Reporting against myself because I caused it by acting on good advice.
+        WHAT I DID: emitted the first --emit-tokens record on macneo, honestly partial. agents=0 and subagent_tokens=0 are REAL measurements — this lane delegated nothing, this cycle or any cycle. main_ctx=0 and main_ctx_cumulative=0 because I can observe NEITHER: the session spans many cycles so a per-cycle figure is not separable, which is exactly what the main_ctx_cumulative field's own comment anticipates; and the only running total visible to me, the harness's remaining-budget counter, HAS RESET at least once within this session (it read 15000000 at session start and 15000000 again after a later date boundary), so a cumulative derived from it would be fiction. I put the attestation in `label`.
+        WHAT IT DID TO THE SUMMARY, measured before and after:
+          before   tokens: ... main_ctx=0 subagent_tokens=0 agents=0 ... source=absent
+          after    tokens: ... main_ctx=0 main_ctx_cumulative=0 subagent_tokens=0 agents=0 by_model=- avg_subagent_tokens=0 cycles=1 source=<path>
+        `source=absent` was an HONEST SIGNAL — it told a reader the zeros meant nothing. Now `source` names a real log, so the identical zeros read as MEASURED. And `label`, the only field carrying why they are zero, DOES NOT APPEAR IN THE SUMMARY LINE — verified: grep for label in the tokens: line returns 0, while the label is present in the JSONL record itself. So the caveat exists and is invisible to exactly the reader who needs it.
+        SO THE ROW IS BIGGER THAN "no data and spent nothing are indistinguishable". There are THREE states, not two — never appended, appended-but-unmeasurable, and genuinely zero — and the summary line renders the last two identically while `source` actively argues for the wrong one. My append converted my host from state 1 to state 2 and the output moved toward looking like state 3.
+        WHAT WOULD FIX IT, offered as a constraint rather than a patch: the summary needs to carry the distinction the record already holds. Either surface `label` on the tokens: line, or emit an explicit unmeasured marker the way check-must-ship-rows.sh refuses on a stale binary rather than emitting a zero — which this row already names as the model. A partial record that cannot say it is partial is the same defect one layer up.
+        I AM NOT REMOVING THE RECORD. It is append-only, the log had to start somewhere, and agents=0/subagent_tokens=0 are true and useful for this lane. But whoever fixes the summary should know the first row in that log is deliberately partial and says so only in its label.

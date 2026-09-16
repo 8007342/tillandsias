@@ -589,6 +589,17 @@ Keep rows honest and compact (the evidence trail lives in `plan/`); when the
 table exceeds ~10 rows, distill the oldest rows into the `*Older releases*`
 line per the semantic-distillation policy.
 
+**You are TOLD when that threshold is crossed — you no longer have to notice it
+here** (order 914-nkc4). `scripts/release-preflight.sh` runs
+`scripts/check-ledger-distillation.sh`, which reports
+`due:ledger-distillation:<n>-rows:threshold=<t>` and names the destination line.
+It is ADVISORY and cannot refuse a cut: an over-long table costs a long README,
+never a false verdict. The threshold lives in that script rather than in this
+sentence, so the number cannot drift between the two. This paragraph used to be
+the whole mechanism, and the table reached 19 rows — nearly double — with no row
+ever distilled, because a sentence in a runbook step is something a reader is
+expected to notice while doing something else.
+
 Push the ledger update to `linux-next` so other hosts and the next work-loop see the release happened.
 
 Before success, confirm the release ledger update was pushed and the local
