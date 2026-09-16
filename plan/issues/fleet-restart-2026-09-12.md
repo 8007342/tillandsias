@@ -7477,3 +7477,58 @@ create and what these aged rows still carry.
 
 **NO REASSIGNMENT.** Four hours by email: macuahuitl 8, macneo 2, yoga 2,
 unattributed bucket 1. Nobody reported idle, nobody asked.
+
+## Pass 49 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=397,
+`osx-next` ahead=0 behind=176 — **BUT THE AUDIT FIX FROM AN HOUR AGO PAID FOR
+ITSELF IMMEDIATELY.**
+
+`scripts/salvage-audit.sh` surfaced
+`salvage/tlatoanis-macbook-air/20260916-690-w94k-crit2-spawn-blocking` holding
+`action_host.rs` as `ref-may-be-AHEAD`. **macbookair had not reported it.** That
+ref sits in `refs/heads/work`-adjacent territory the audit covered by default
+only since 1227-fegu landed an hour earlier; before that it was invisible,
+exactly as the eleven-day-old lenovinha event had been. Relayed at d44909353.
+
+**THE FIX IS SOUND AND STATES ITS OWN REASONING.** `VzRuntime::start` declares
+in-body that it bridges VZ's dispatch-queue completion handler through an mpsc
+channel and PUMPS CFRunLoop on the calling thread until a result arrives or 30s
+elapses — so a caller on an async runtime must use `spawn_blocking`. Awaiting it
+directly parked a tokio worker for that entire window while `on_phase` consumers
+were live on the same runtime.
+
+**IT UN-ATTESTED THE FILE, PREDICTED BEFORE LANDING AND CONFIRMED AFTER.** The
+attested hash for `action_host.rs` was 48632ca51e0d; the salvage version is
+9a791b323e87. The verdict moved from `ok:sources-verified:macos-only:7` to
+`stale:sources-drifted:macos-only:1` on landing, and trunk's blob is now exactly
+9a791b323e87. **That is the attestation working — it covers BYTES and the bytes
+changed — and must not be read as a regression.** Re-attesting costs macbookair
+one `--bins` run with their tray up, which is how they attested this morning.
+
+**THE EXPIRE POPULATION IS ACCELERATING: four last pass, SIX now**, and three
+carry `claimant:linux` — a platform, not a host:
+
+```
+778-hb3x   claimant:linux     1109-t8kw  claimant:pirria
+890-27mv   claimant:linux     1155-jurn  claimant:windows
+1187-iij8  claimant:linux     1186-w3ph  claimant:yolanda  (WOULD STRAND)
+```
+
+Five are the defaulted shape 1201-hsf9 now refuses to create; one holds three
+outstanding files. `--write` still applies all six, so **nothing was expired for
+the fifth consecutive pass** and the ratio is now 5:1. 1220-zb7q's missing
+granularity is costing more each pass, and each held row is substantive work
+`plan_next` cannot offer because it reads as claimed.
+
+**A GREP PATTERN OF MINE WAS WRONG AGAIN, AND THE CONTRADICTION IS WHAT CAUGHT
+IT.** Verifying the relay I grepped trunk's `action_host.rs` for
+`spawn_blocking contract` and got 0 — while the attestation simultaneously
+reported that same file as DRIFTED. Two of my own instruments disagreeing is
+what exposed it: the string is in the COMMIT SUBJECT, not the file. Re-grepped
+for text actually in the file: 6 matches, blob 9a791b323e87, relay present.
+**A pattern assembled from a commit message will not match the code it
+describes** — and today that has produced a false zero four separate times.
+
+**NO REASSIGNMENT.** Three hours by email: macuahuitl 7, yoga 4, unattributed
+bucket 1. Nobody reported idle, nobody asked.
