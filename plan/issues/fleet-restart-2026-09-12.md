@@ -7427,3 +7427,53 @@ the function, and the next person to add an env write there finds the
 justification already written in the project's own voice, with nothing to check
 it against. **Removing an unsafe does not remove its justification, and the
 justification is what a later reader inherits.**
+
+## Pass 48 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=386,
+`osx-next` ahead=0 behind=165 — **BUT THE AUDIT FOUND AN ELEVEN-DAY-OLD LEDGER
+EVENT STRANDED ON A `work/` REF, AND ITS OWN DEFAULT PATTERN WOULD NEVER HAVE
+LOOKED THERE.**
+
+`scripts/salvage-audit.sh` defaults to `refs/heads/salvage/*`. Running it with
+`--pattern 'refs/heads/work/*'` audits **24 further refs** and turned up
+`work/1069-c9w6` carrying
+`plan/index.d/20260905t185305z-013bda76-lenovinha.yaml` — **ABSENT from trunk**,
+a `note` event on 1069-c9w6 written 2026-09-05. Restored and relayed in this
+pass's land; it validates clean and the ledger folds to 1005 packets.
+
+**THAT IS A GAP IN THE INSTRUMENT I BUILT YESTERDAY.** 1226-jb8y's row and the
+coordination skill both say RUN THE SCRIPT — and with the default pattern it
+looks at one of the two stranding surfaces. `work/` refs are the OTHER one, and
+the land tool's own refusal text recommends them as the escape hatch when a host
+cannot win the gate race, so they are where a blocked host is TOLD to put work.
+The default should cover both, or the skill should say to run it twice. Recorded
+rather than fixed this pass: the fix is a code land and this pass lands
+plan-only.
+
+**THE EXPIRE BACKLOG IS GROWING AND ONE ROW IS HOLDING THREE HOSTAGE.** Four
+candidates now, up from three last pass and two before that:
+
+```
+890-27mv   claimant:linux    platform default, nothing stranded          SAFE
+1109-t8kw  claimant:pirria   work/1109-t8kw holds nothing outstanding     SAFE
+1155-jurn  claimant:windows  platform default, nothing stranded          SAFE
+1186-w3ph  claimant:yolanda  three files outstanding on its salvage ref  WOULD STRAND
+```
+
+Classifying `1109-t8kw` required the `work/` pattern too — a ref exists for it
+and the audit had to be pointed at that namespace to show it carries nothing.
+**`--write` applies all four**, so three safe expiries are blocked by one unsafe
+one, and NOTHING WAS EXPIRED for the fourth consecutive pass. That is 1220-zb7q's
+missing granularity, now quantified: the ratio is 3:1 and the backlog grows each
+pass.
+
+**AND 890-27mv IS CLAIMED BY NOBODY WHILE WORK IS BEING DONE ON IT.** The
+release-tier exercise ran this host's criterion-1 cadence half (b) an hour ago —
+41 minutes, rc=1, freshness unchanged — on a row sitting `in_progress` under
+`claimant:linux`, a platform rather than a host. The claim neither reserves the
+row nor reflects who is working it, which is what 1201-hsf9 now refuses to
+create and what these aged rows still carry.
+
+**NO REASSIGNMENT.** Four hours by email: macuahuitl 8, macneo 2, yoga 2,
+unattributed bucket 1. Nobody reported idle, nobody asked.
