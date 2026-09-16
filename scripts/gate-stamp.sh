@@ -740,6 +740,18 @@ case "${1:-verify}" in
         # Current per-path digests, from the SAME enumeration compute uses, so a
         # path set difference is a real add/delete and not two walks disagreeing.
         while IFS= read -r -d '' _p; do
+            # THE SAME FAST-LANE SKIP compute applies (930-i6x4, 1142-85zx).
+            # Without it every plan fragment reads as `added`, because compute
+            # excludes them from the digest so they are absent from the
+            # manifest — and this subcommand would name paths that CANNOT be
+            # the cause, which is the exact defect 970-7fqk exists to remove,
+            # committed inside its own remedy. FOUND IN PRODUCTION: the
+            # hermetic fixture's throwaway repos have no plan/ tree, so it
+            # could not see this. A clean checkout reported 40+ phantom adds.
+            case "$_p" in
+                plan/index.d/*.yaml|plan/loop_status.d/*.md|plan/mo-full-attestations.d/*.md) continue ;;
+                plan/issues/*.md) case "${_p#plan/issues/}" in */*) : ;; *) continue ;; esac ;;
+            esac
             if [[ -L "$REPO_ROOT/$_p" ]]; then
                 printf '%s\t%s\n' "$(readlink "$REPO_ROOT/$_p" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" "$_p"
             elif [[ -f "$REPO_ROOT/$_p" ]]; then

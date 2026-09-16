@@ -115,6 +115,45 @@ _after="$(cat "$R/.git/tillandsias-gate-stamp-manifest")"
 [ "$_before" = "$_after" ] && ok "verify did not rewrite the manifest, even with the flag exported" \
                            || bad "verify REWROTE the manifest; the refusal would diff the tree against itself"
 
+echo "ARM 8: PLAN FAST-LANE paths are excluded, exactly as compute excludes them"
+# FOUND IN PRODUCTION, NOT HERE, and that is the point of the arm. compute skips
+# plan/index.d/*.yaml and its siblings (930-i6x4, 1142-85zx), so those paths are
+# absent from the manifest by design. movers first enumerated without that skip
+# and reported EVERY fragment as `added` — 40+ phantom paths on a clean
+# checkout, naming files that cannot be the cause, which is this order's own
+# defect committed inside its own remedy. The earlier arms could not see it:
+# their throwaway repos have no plan/ tree at all.
+R="$TMP/r8"; _mkrepo "$R"
+mkdir -p "$R/plan/index.d" "$R/plan/issues"
+printf 'packets: []\n' > "$R/plan/index.d/00000000t000000z-probe-linux.yaml"
+printf 'note\n'        > "$R/plan/issues/a-top-level-note.md"
+( cd "$R" && git add -A && git commit -qm plan ) >/dev/null 2>&1
+_stamp "$R"
+# Move a fast-lane path's CONTENT. The digest ignores it, so movers must too.
+printf 'packets: [changed]\n' > "$R/plan/index.d/00000000t000000z-probe-linux.yaml"
+printf 'changed\n'            > "$R/plan/issues/a-top-level-note.md"
+out="$(_movers "$R")"
+if [ -z "$out" ]; then
+    ok "fast-lane paths are excluded from movers, as they are from the digest"
+else
+    bad "movers named a path the digest ignores — it cannot be the cause: [$out]"
+fi
+# And a NON-fast-lane path under plan/issues/ subdir IS covered, per 1142-85zx's
+# top-level-only rule, so the exclusion is not over-broad.
+mkdir -p "$R/plan/issues/research"
+printf 'deep\n' > "$R/plan/issues/research/deep.md"
+( cd "$R" && git add -A && git commit -qm deep ) >/dev/null 2>&1
+_stamp "$R"
+printf 'deep-CHANGED\n' > "$R/plan/issues/research/deep.md"
+out="$(_movers "$R")"
+# ASSERT THE STATE, not merely the path. An over-broad skip drops the path from
+# the CURRENT enumeration, so it surfaces as `deleted` -- and a grep for the bare
+# path matches that too, passing for the wrong reason. MEASURED: the loose
+# version stayed green under exactly that mutation.
+printf '%s' "$out" | /usr/bin/grep -q "^modified	plan/issues/research/deep.md$" \
+    && ok "a plan/issues SUBDIRECTORY path is still covered (the skip is top-level only)" \
+    || bad "the exclusion is over-broad: a subdirectory path was skipped too: [$out]"
+
 echo "ARM 7: the REFUSAL PATH itself runs — it is only reached when someone is blocked"
 # The hook calls `gate-stamp.sh movers` from $REPO_ROOT. An undefined variable
 # there (the first version of this change used $HOOK_ROOT, which the composition
