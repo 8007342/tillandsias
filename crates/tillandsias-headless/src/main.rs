@@ -15344,6 +15344,11 @@ fn build_forge_agent_run_args_with_vault(
 
 /// Build the full host-terminal command for an interactive tray launch.
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
+// ORDER 1021-hf9e, second pass. Same reason the sibling builders carry this:
+// `host_mount` crosses clippy's threshold, and taking it as an argument is the
+// entire point — reading it from the process env in here is the shared state
+// being removed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_argv(
     project_path: &Path,
     project_name: &str,
@@ -15352,6 +15357,12 @@ pub(crate) fn build_forge_agent_run_argv(
     version: &str,
     mode: ForgeAgentMode,
     debug: bool,
+    // ORDER 1021-hf9e. The FIRST pass moved the env read out of the two arg
+    // builders and into THIS function's body, which left it still inside a
+    // function eight tests call — so forge_credential_quarantine_mounts_present
+    // kept failing in 2 of 10 parallel runs. Moving a global read one level up
+    // is not removing it. It is now the caller's to resolve.
+    host_mount: bool,
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
@@ -15386,9 +15397,7 @@ pub(crate) fn build_forge_agent_run_argv(
         version,
         mode,
         debug,
-        // ORDER 1021-hf9e: the process env is read HERE, in production, once —
-        // not inside the builder where a concurrent test's write could reach it.
-        forge_uses_host_mount(),
+        host_mount,
     ));
     argv
 }
@@ -15720,6 +15729,9 @@ pub(crate) fn launch_forge_agent(
             VERSION.trim(),
             mode,
             debug,
+            // ORDER 1021-hf9e: the process env is read HERE, in the production
+            // launcher, and nowhere a test can reach concurrently.
+            forge_uses_host_mount(),
         )
     };
 
@@ -20227,6 +20239,7 @@ mod tests {
             "1.2.3",
             ForgeAgentMode::Maintenance,
             true,
+            false,
         );
 
         assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
@@ -20641,6 +20654,7 @@ mod tests {
                 "1.2.3",
                 mode,
                 false,
+                false,
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -20716,6 +20730,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
+            false,
             false,
         );
 
@@ -20814,6 +20829,7 @@ mod tests {
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            false,
         );
 
         let mut found_ssh = false;
@@ -20892,6 +20908,7 @@ mod tests {
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            false,
         );
         let joined = argv.join(" ");
         assert!(
@@ -20925,6 +20942,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
+            false,
             false,
         );
         let joined = argv.join(" ");
@@ -20982,6 +21000,7 @@ mod tests {
             "0.2.260518",
             ForgeAgentMode::Claude,
             true,
+            false,
         );
         eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
         for (i, a) in argv.iter().enumerate() {
@@ -24458,6 +24477,7 @@ esac
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Codex,
+            false,
             false,
         );
 

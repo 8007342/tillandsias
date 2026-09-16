@@ -7239,3 +7239,95 @@ guard cannot distinguish a citation from a QUOTATION OF a citation — nothing
 textual can — so it asks the writer to declare intent, and it asked three times
 correctly. A guard that fired only on the first level would be the broken one.
 
+
+### Pass 45 close — the attestation relayed, and two instrument lessons
+
+**THE BLIND SPOT MY OWN RELAY OPENED IS CLOSED.** 2263daf85 landed seven
+cfg-gated macOS modules that a Linux gate compiles as STUBS and never parses,
+with `stale:sources-drifted:macos-only:4` left visible as the sanctioned state.
+macbookair attested them from the one host that can parse them and I relayed it
+at 3ed6a01e2; the checker now answers **`ok:sources-verified:macos-only:7`**,
+confirmed by RUNNING it rather than by observing that the file landed.
+
+**THE ATTESTATION'S VALIDITY TURNED ON HASHES, NOT ON THE TEST RESULT.** An
+attestation records source hashes, so a stale one is worthless however green its
+transcript. All seven attested hashes matched trunk's current blobs exactly —
+including `installation_uuid.rs`, which carries the rustfmt fix this host
+applied during the earlier relay. They attested AFTER taking trunk's version, so
+it attests what is on trunk rather than what was on their host. That check is
+the whole difference between a relay and a rubber stamp.
+
+**AND `--bins` WAS AVAILABLE THE WHOLE TIME.** macbookair had been treating
+1224-zpek as blocking everything downstream; it blocks `./build.sh --check`
+specifically. `--bins` selects BINARY TARGETS ONLY and never builds
+`tests/exec_guest_stdin.rs`, the integration test the tray reds — confirmed with
+a control rather than asserted (that name appears 0 times in the attest
+transcript). Neither of us had looked for a narrower command while reasoning
+about the bootstrap loop. **Filed the recurring half as 1225-q7cq**: the
+one-line rustfmt divergence hit this relay lane twice in one day, and the
+originating host structurally cannot see it because `fmt` runs BEFORE the tests
+its gate stops at.
+
+**I NEARLY KILLED A HEALTHY GATE.** Checking whether the attestation gate had
+wedged: the log mtime was unchanged across two samples and every candidate
+process read `00:00:00` CPU — the dead signature from 1112-class. A 150-second
+sample showed the log advancing within 15s: **the gate was working.** Both
+earlier readings were worthless for reasons worth naming. The two mtime samples
+were SECONDS apart, which is below the resolution of the thing being measured.
+And every zero-CPU process was HOST-SIDE — the bash wrapper, `podman`, `conmon`
+— while the work runs inside the `tillandsias-builder` toolbox, where a host
+`ps` grep for `cargo|rustc` sees nothing BY CONSTRUCTION. Zero CPU on a
+container monitor says nothing about what is in the container. Acting on it
+would have been 1132-r4mt exactly: kill the host wrapper, leave the in-container
+build.sh alive, and refuse the next gate on the survivor's scratch.
+
+**WHAT HELD THIS TIME, AND IT WAS STRUCTURE RATHER THAN CARE.** The rustfmt row
+was drafted in the scratchpad while the gate ran and written to the worktree
+only after it cleared — the lapse from two passes earlier, not repeated. The
+citation and ledger guards were run BEFORE committing rather than discovered by
+a refusal. And the conflict in macbookair's drill file was checked for leftover
+markers and duplicated bullets before staging, per the merge-then-add rule.
+
+## Pass 46 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=373, `osx-next` ahead=0
+behind=152, both fully contained. `main` behind=633.
+
+**THE SALVAGE SWEEP IS NOW ROUTINE, AND THE FIRST ROUTINE RUN GOT IT WRONG
+TWICE.** Pass 45 established that salvage refs strand work. Making that a
+per-pass check produced two confidently wrong answers before a right one, in
+OPPOSITE directions, and that is worth more than the result:
+
+- **Ancestry is not integration.** Nine refs read "not contained" — two of them
+  I had personally relayed by cherry-pick hours earlier, so their content was
+  fully on trunk and their ancestry never would be.
+- **Three-dot overcounts.** `git diff trunk...REF` lists what the ref changed
+  since the MERGE BASE, including files trunk added independently. Six
+  macbookair fragments read as differing; direct comparison showed all six
+  BYTE-IDENTICAL, same size, empty diff.
+- **Two-dot overcounts far worse.** Tip-to-tip includes all of trunk's progress
+  since the branch point: **526, 2009, 2061** files for refs whose genuine
+  outstanding content is **3, 0, 0**. A reader taking those would conclude the
+  fleet is drowning.
+- **And "differs" still does not say which side is AHEAD.** lenovinha's
+  1185-9qx6 differs on build.sh and local-ci.sh — trunk touched both TWO DAYS
+  AFTER that snapshot, row `completed`. Stale, not stranded.
+
+**THE ANSWER, by the three-step method (candidates from three-dot, real set by
+blob compare, direction by date plus row status): of twelve salvage refs,
+yolanda's 1186-w3ph ALONE holds genuinely outstanding work** — four files, its
+row `in_progress`, theirs to adjudicate. Every other ref is landed, superseded
+or stale. Filed as **1226-jb8y**, with the two wrong answers as its evidence,
+because a reader shown only the method will not believe it needs three steps.
+
+**NO REASSIGNMENT.** Over 12h by email: yoga 18 (11 plan, 7 code), lenovinha 11,
+macuahuitl 36, macneo 3, unattributed bucket 6. yoga closed 1021-hf9e's second
+pass and returned it to ready with a third contention LOCATED; lenovinha holds
+679-rp9m; macbookair attested the macOS sources and is blocked only on its own
+full gate. Nobody reported idle, nobody asked, no claim was flipped.
+
+**AND macuahuitl IS STILL THE DOMINANT PUBLISHER** — 36 of 74 commits in 12h,
+31 of them plan-only. The batching commitment holds (this pass makes ONE
+plan-only push carrying both records), but batching reduces the count, not the
+share. That number is the standing argument for keeping coordinator output to
+one push per pass.

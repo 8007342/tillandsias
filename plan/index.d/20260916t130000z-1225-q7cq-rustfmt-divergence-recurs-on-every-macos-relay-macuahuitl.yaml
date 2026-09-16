@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-hosts-format-the-same-file-differently-and-each-takes-its-own-on-merge-so-a-one-line-rustfmt-difference-re-enters-trunk-on-every-macos-relay
+    order: 1225-q7cq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [toolchain, rustfmt, multi-host, relay, gate, silent-divergence]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      Two hosts format the same file differently and each takes its own on merge, so a one-line rustfmt difference re-enters trunk on every macOS relay — and the originating host structurally cannot see it
+    context: |
+      MEASURED TWICE IN ONE DAY ON ONE LINE, 2026-09-16, both times during a
+      relay of macbookair's work:
+        macbookair's source:  use super::{spawn_bounded, SECURITY_CALL_BUDGET};
+        macuahuitl's rustfmt: use super::{SECURITY_CALL_BUDGET, spawn_bounded};
+        macuahuitl rustfmt 1.9.0-stable (48a229ceae 2026-09-01)
+        macbookair rustfmt version UNRECORDED — that gap is part of the finding
+      FIRST OCCURRENCE: relaying 690-w94k criterion 3, this host's gate REFUSED
+      on exactly that line. `cargo fmt --all` changed one line in one file and
+      the relay landed. SECOND OCCURRENCE, hours later: relaying their macOS
+      source attestation, trunk's copy differed from theirs by the same line and
+      they took trunk's on merge. Their words: "worth pinning which rustfmt is
+      canonical before the next relay, or this recurs silently every time."
+      WHY IT IS NOT COSMETIC, AND THE DIRECTION IT IS SILENT IN IS THE POINT.
+      `fmt` runs BEFORE the tests in ./build.sh --check. macbookair's gate stops
+      at its tray-red integration tests (1224-zpek), which come AFTER — so THAT
+      HOST CAN NEVER OBSERVE THE DIFFERENCE ITS OWN TOOLCHAIN PRODUCES. The
+      relaying host discovers it, fixes it, and lands; the originating host
+      re-creates it next time from the same toolchain. Neither side learns
+      anything durable, and the fix does not accumulate.
+      IT ALSO COSTS THE SCARCEST THING. While 1224-zpek stands, the relay lane
+      is the ONLY path macOS work has to trunk, and each occurrence costs the
+      relaying host a full gate — ~12 minutes here — on a branch where a code
+      land already loses push races to plan-only traffic (the fairness condition
+      recorded in the drill). A recurring, silent, gate-priced defect on the one
+      lane that has no alternative.
+      CANDIDATE SHAPES, NONE CHOSEN, and the blast radii genuinely differ:
+        (a) pin the toolchain — rust-toolchain.toml with an exact channel, so
+            every host's rustfmt agrees by construction. WIDEST: it pins the
+            COMPILER too, on hosts whose local toolchain may be newer, and this
+            fleet spans Fedora, Silverblue, CachyOS, macOS and Windows.
+        (b) pin rustfmt alone — rustfmt.toml plus a documented required version
+            and a gate step that REPORTS a mismatch rather than refusing. Narrow,
+            and consistent with how 739-6r6n and 1218-25z3 handle blind spots.
+        (c) record each host's rustfmt version in the capability matrix, so a
+            divergence is visible before it costs a gate, and fix nothing else.
+            Cheapest; leaves the recurrence in place but stops it being silent.
+      NOT A CRITICISM OF EITHER HOST. Both formatted correctly for their own
+      toolchain and both took the other's on merge without argument. The defect
+      is that the fleet has no canonical answer, so "correct" is host-local.
+    exit_criteria:
+      - 'two hosts running `cargo fmt --check` on the same commit either agree, or the divergence is REPORTED naming BOTH versions (pre-fix result: FAILS — measured twice on one line in one day, and the second host version is still unrecorded)'
+      - 'the report names the two rustfmt versions, because "formatting differs" without them sends the reader to reformat rather than to reconcile toolchains'
+      - 'the ORIGINATING host learns of the divergence without needing a relay to discover it — a fix visible only to the relaying host reproduces the current state'
+      - 'NEGATIVE CONTROL: a host whose rustfmt matches the canonical one produces no report, so this cannot be satisfied by always warning'
+    unscoreable: |
+      shape-not-chosen: pinning the whole toolchain, pinning rustfmt alone, or
+      only recording versions per host differ in what they break on five
+      platforms. The divergence is measured and reproducible; which of the three
+      the fleet wants is a judgement about how much toolchain uniformity it is
+      willing to enforce, and macbookair's rustfmt version must be recorded
+      before any of them can be evaluated.
+    events:
+      - type: filed
+        ts: "2026-09-16T13:00:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t130000z"
+        host: macuahuitl
+        summary: |-
+          Filed by the relaying host after hitting the same one-line divergence
+          twice in one day, and at macbookair's explicit request that it be
+          pinned before the next relay. Drafted while a gate was running and
+          written to the worktree only after it finished.
