@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    field: status
+    value: completed
+    ts: "2026-09-16T07:15:25Z"
+    host: linux
+
+events:
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    event:
+      type: completed
+      ts: "2026-09-16T07:15:25Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: f706e97390c1bbf396280ed0f735e43a13698334
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    event:
+      type: note
+      ts: "2026-09-16T07:15:25Z"
+      host: linux
+      summary: |-
+        landed on origin/linux-next: --caller-context distinguishes no-dispatch from inside-dispatch from a caller that omitted the assertion, build.sh consumes rc per 1150-q462's grammar and asserts no verdict; fixture 11/11 falsified 7-of-11, bound at gate-steps.d/396-1221-vkbj.step; gate green 1187s

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-16T06:55:11Z"
+      agent_id: linux-lenovinha-claude-20260916t054500z
+      host: lenovinha
+      summary: |-
+        SECOND-HOST CONFIRMATION OF REFINEMENT 2, and it is the cheap half of this row's protocol.
+
+        yoga's 2026-09-13 investigation recorded that ONE ps SUFFICES ON THIS HOST, not two — the suggested check was 'inside and outside the toolbox', but yoga's toolbox shares the host PID namespace, so both listings are the same listing — and said explicitly it was 'worth confirming per host rather than assuming'. Confirmed on lenovinha 2026-09-16:
+
+            host shell                  ps -o comm= -p 1   ->  systemd
+                                        /proc/[0-9]* count ->  496
+            toolbox tillandsias-builder ps -o comm= -p 1   ->  systemd (pid 1)
+                                        /proc/[0-9]* count ->  501
+
+        Same pid 1, same order of magnitude, five apart because the two reads are seconds apart on a live host. So on lenovinha too the stray is fully visible host-side and the protocol is half the work: capture ps ONCE, host-side, with ppids.
+
+        NOT EVIDENCE ABOUT THE REFUSAL ITSELF, stated because the absence is tempting to read. This host has never reproduced 1132-r4mt's in-gate refusal, and exit criterion 3 rightly requires a host that has. Nothing here is a sample of the surviving-gate claim; it only says that when this host DOES take a sample, one listing is enough.
+
+        NOT CLAIMING THIS ROW. Its live next_action is yoga's standing instruction on the host that reproduces, and two hosts on one row is worse than one. Appended additively so the per-host answer lives on the row rather than in a session.
