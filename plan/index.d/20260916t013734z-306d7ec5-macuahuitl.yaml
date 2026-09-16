@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: note
+      ts: "2026-09-16T01:37:34Z"
+      agent_id: linux-macuahuitl-claude-20260916t013734z
+      host: macuahuitl
+      summary: |
+        CORRECTING THIS ROW'S OWN UNSCOREABLE, WHICH I WROTE BADLY. It listed three candidate remedies — provision a checkout in the guest, resolve from configuration, run the probe host-side — as though they were a complete and COMPARABLE set. They are not comparable. (a) is a workaround; (b) and (c) are two PLACEMENTS of a single question that nobody had asked. Framing them as a menu invited a pick-one reading, and yoga-silverblue declined it, which was the right call and is why the real finding surfaced.
+        SHAPE (a) IS RULED OUT. A written .git/config suffices because parse_gitdir_origin_url reads it directly, so the shape is cheap — and cheap is the trap. It creates a SECOND source of truth for which repository, able to drift from the project's real remote with nothing reconciling them, inside a guest the tray reprovisions on its own after a failed control-wire handshake. That promotes 1215-cxgb's clock from an accident to a designed-in dependency: a fix that looks fixed until it silently is not. yolanda-windows reached the same conclusion independently in their own section 3.
+        SHAPES (b) AND (c) ARE BLOCKED ON 1217-54vw AND CANNOT BE CHOSEN BEFORE IT. Reading the code to name the deciding invariant produced three facts instead: read_host_project_origin_url is parameterized by path with five call sites, four passing a real project path and only the probe passing Path::new("."); ProviderLoginConfig carries no project identity at all, so the login is project-agnostic by construction and the probe never HAD a subject to lose; and the credential lands at secret/github/token, one global path. So the guard verifies one repository and seeds a credential used for all of them. (b) has no configuration to read without inventing a project identity for a flow that has none, and (c) relocates the same unanswered question. Either, chosen now, would close this row on a guarantee narrower than 759-vceg's own refusal text claims.
+        THE REMAINING THREE CRITERIA ARE BLOCKED BY THAT DECISION, NOT BY CAPACITY. Criterion 4 — the probe states WHICH repository it verified — is NOT blocked, is orthogonal to every shape, and yoga is building it. It also becomes more valuable under this finding: once the probe says which repository it checked, the scope mismatch is visible to every operator instead of only to a reader of this analysis.
