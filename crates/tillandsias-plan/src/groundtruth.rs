@@ -266,18 +266,47 @@ impl CitationMatch {
 
 // ── grading ─────────────────────────────────────────────────────────────────
 
-/// The result of grading one case. `failures` EMPTY means PASS.
+/// The result of grading one case. `failures` EMPTY and `stale` EMPTY means PASS.
 #[derive(Debug)]
 pub struct Outcome {
     pub id: String,
     pub engine: String,
     pub failures: Vec<String>,
+    /// ORDER 1229-2862 — citations that are SOUND at the frame they were read
+    /// in and wrong in this checkout. A third outcome beside pass and fail,
+    /// accounted exactly the way 888-miiy accounts a skip: named per case,
+    /// counted in the summary, and counted in the denominator.
+    ///
+    /// NOT A PASS: the answer really is unusable here, and calling it green
+    /// would certify line numbers a reader cannot follow. NOT A FAIL either:
+    /// nothing is wrong with the answer, the index is behind the code, and
+    /// reddening for a host artifact is the false red this order removes.
+    pub stale: Vec<String>,
 }
 
 impl Outcome {
+    /// Graded and green. A stale case is NOT passed — see [`Outcome::stale`].
     pub fn passed(&self) -> bool {
-        self.failures.is_empty()
+        self.failures.is_empty() && self.stale.is_empty()
     }
+
+    /// Purely stale: no genuine failure, at least one stale citation.
+    ///
+    /// REAL FAILURES DOMINATE, and that asymmetry is load-bearing. If a case
+    /// with both a genuine failure and a stale citation counted as STALE, a
+    /// stale index would become a place for real regressions to hide — worse
+    /// than the false red this order exists to remove, because a false red at
+    /// least says something is wrong.
+    pub fn is_stale(&self) -> bool {
+        self.failures.is_empty() && !self.stale.is_empty()
+    }
+}
+
+/// What grading one case found, separated by KIND (order 1229-2862).
+#[derive(Debug, Default)]
+pub struct GradeFindings {
+    pub failures: Vec<String>,
+    pub stale: Vec<String>,
 }
 
 type SpanCache = BTreeMap<String, Option<Vec<String>>>;
@@ -290,6 +319,25 @@ type SpanCache = BTreeMap<String, Option<Vec<String>>>;
 /// envelope, so a new expert cannot be graded more leniently than an old one.
 /// `root` is the checkout the citation paths resolve against.
 pub fn grade_envelope(envelope: &Envelope, expect: &Expect, root: &Path) -> Vec<String> {
+    // DELEGATES, and folds the two buckets back together. Callers on this
+    // signature keep EXACTLY today's strictness: a stale citation was reported
+    // as a failure before 1229-2862 and still is here. Separating the two is
+    // opt-in via `grade_envelope_audited`, so this cannot become a fail-open
+    // door for a caller that has not been taught the difference.
+    let found = grade_envelope_audited(envelope, expect, root);
+    let mut all = found.failures;
+    all.extend(found.stale);
+    all
+}
+
+/// Grade ONE envelope, separating genuine failures from frame-stale citations
+/// (order 1229-2862).
+///
+/// The argument contract above is unchanged and deliberately so — no corpus, no
+/// ledger, no engine. Only the RETURN is richer, which is the 920-pxg6 move
+/// next door: a sibling that carries what the older form had nowhere to put.
+pub fn grade_envelope_audited(envelope: &Envelope, expect: &Expect, root: &Path) -> GradeFindings {
+    let mut stale: Vec<String> = Vec::new();
     let mut failures: Vec<String> = Vec::new();
     let mut cache: SpanCache = BTreeMap::new();
 
@@ -393,12 +441,30 @@ pub fn grade_envelope(envelope: &Envelope, expect: &Expect, root: &Path) -> Vec<
     }
 
     if expect.verify {
-        for v in answer::verify(envelope, root) {
+        // ORDER 1229-2862: `audit`, not the frame-blind `verify`.
+        //
+        // main.rs chose `audit` for verify-answer and said why in place — "the
+        // reader-side audit, not the frame-blind `verify`". Grading was left on
+        // the other side of that distinction, so 801-g9nn's whole stale-vs-
+        // fabricated separation was unreachable from `grade` and a sound
+        // citation read through a moved file was certified as a fabrication.
+        //
+        // This is not a relaxation. `frame_holds` rescues a finding ONLY when
+        // the span genuinely verifies at the named commit; an unresolvable
+        // frame, a missing path there, or a span that was never right anywhere
+        // all stay violations. Measured on yoga 2026-09-16 against the real
+        // drift: correct frame -> stale; mistyped sha -> FABRICATED; a span
+        // valid at no commit -> FABRICATED.
+        let verdict = answer::audit(envelope, root);
+        for v in verdict.violations {
             failures.push(format!("394b verify: {v}"));
+        }
+        for sv in verdict.stale {
+            stale.push(format!("394b verify: {sv}"));
         }
     }
 
-    failures
+    GradeFindings { failures, stale }
 }
 
 /// `Ok(())` when the citation satisfies every constraint; `Err` names the
@@ -530,6 +596,13 @@ pub struct Harness {
     cheatsheets: Option<Vec<crate::spec::Chunk>>,
     spec_vectors: Option<Vec<Vec<f32>>>,
     spec_chunks: Option<Vec<crate::spec::Chunk>>,
+    /// ORDER 1229-2862 — the FRAME the loaded entry serves answers from.
+    ///
+    /// Cached beside the vectors it belongs to, because it is a property of the
+    /// published entry and not of this process. Dropping it was the defect: the
+    /// envelope then took `Freshness::for_source`, i.e. THIS CHECKOUT'S HEAD,
+    /// and stamped it onto spans the index read at a different commit.
+    spec_freshness: Option<crate::answer::Freshness>,
 }
 
 /// ORDER 888-miiy. Marks an engine error as a HOST CAPABILITY GAP rather than
@@ -571,6 +644,7 @@ impl Harness {
             cheatsheets: None,
             spec_vectors: None,
             spec_chunks: None,
+            spec_freshness: None,
         }
     }
 
@@ -613,6 +687,11 @@ impl Harness {
             // the ENGINE_UNAVAILABLE framing above stay grading-specific.
             let dir = resolve_spec_index_dir()?;
             let entry = crate::spec_index::SpecIndexEntry::load_dir(Path::new(&dir))?;
+            // 1229-2862: TAKE THE FRAME BEFORE DESTRUCTURING. `entry.freshness()`
+            // borrows the entry, so it must be read here rather than reconstructed
+            // later from a path — reconstructing it from a path is precisely the
+            // `Freshness::for_source` mistake this order removes.
+            self.spec_freshness = Some(entry.freshness());
             self.spec_vectors = Some(entry.vectors);
             self.spec_chunks = Some(entry.chunks);
         }
@@ -696,7 +775,28 @@ impl Harness {
                     Some(a) => a.to_string(),
                     None => crate::spec::retrieval_only_answer(&plain),
                 };
-                Ok(crate::spec::build_envelope_scored(&answer, &picked, &root))
+                // ORDER 1229-2862. THE FRAME IS THE INDEX'S, NOT THIS CHECKOUT'S.
+                //
+                // This read `build_envelope_scored(&answer, &picked, &root)`,
+                // whose freshness is `Freshness::for_source(root)` — git_head_sha
+                // of the checkout this process stands in (answer.rs:335). The
+                // spans came out of a published entry built at a DIFFERENT commit,
+                // so the envelope claimed a frame in which its own line numbers had
+                // never been read. Once code moved under the index, 801-g9nn's
+                // frame check re-read the span at the reader's HEAD, found the
+                // wrong bytes, and reported a sound citation as FABRICATED.
+                //
+                // 920-pxg6 built this sibling for exactly this caller and nothing
+                // ever called it from here. `entry.freshness()` is the entry's own
+                // `.commit` + chunks.jsonl mtime, or the literal `unknown` for a
+                // frameless entry — never a fabricated sha, and never HEAD.
+                let freshness = self
+                    .spec_freshness
+                    .clone()
+                    .expect("spec_index() caches the frame beside the vectors");
+                Ok(crate::spec::build_envelope_scored_with_freshness(
+                    &answer, &picked, freshness,
+                ))
             }
             "cheatsheet.ask" => {
                 let root = self.root.clone();
@@ -775,10 +875,17 @@ pub fn grade_all(harness: &mut Harness, sets: &[QuerySet]) -> Result<Vec<Outcome
         for case in &qs.cases {
             let envelope = harness.run(case)?;
             let root = harness.root().to_path_buf();
+            // 1229-2862: the audited form here too, so the structure survives
+            // for in-crate callers. `passed()` is unchanged for every case:
+            // before, a stale citation was a failure and the case was not
+            // passed; now it is stale and the case is still not passed. What
+            // changes is only that the reason is no longer flattened away.
+            let found = grade_envelope_audited(&envelope, &case.expect, &root);
             out.push(Outcome {
                 id: case.id.clone(),
                 engine: case.engine.clone(),
-                failures: grade_envelope(&envelope, &case.expect, &root),
+                failures: found.failures,
+                stale: found.stale,
             });
         }
     }
@@ -1206,5 +1313,210 @@ citations_include:
             None
         );
         assert_eq!(crate::spec_index::resolve_from(&[], &[]), None);
+    }
+
+    // ── ORDER 1229-2862: the frame the grader reads a span in ────────────────
+
+    /// The world macuahuitl-fedora measured on 2026-09-16: an index published
+    /// at commit `a`, code that moved at commit `b`, and a reader at `b`.
+    fn repo_where_the_span_moves(tag: &str) -> (crate::gitref::testrepo::Repo, String, String) {
+        let r = crate::gitref::testrepo::repo(tag);
+        r.write(
+            "openspec/specs/x/spec.md",
+            "intro\n## egress-default-deny\nbody\n",
+        );
+        let a = r.commit("a");
+        // Three lines land above it, so the heading moves 2 -> 5. Nothing about
+        // the content changes; only its offset does.
+        r.write(
+            "openspec/specs/x/spec.md",
+            "new\nnew\nnew\nintro\n## egress-default-deny\nbody\n",
+        );
+        let b = r.commit("b");
+        (r, a, b)
+    }
+
+    fn moved_span_envelope(commit: &str) -> Envelope {
+        serde_json::from_value(serde_json::json!({
+            "answer": "The egress-default-deny section says to deny by default.",
+            "citations": [{
+                "path": "openspec/specs/x/spec.md",
+                "line_start": 2, "line_end": 2,
+                "kind": "spec",
+                "authority": { "key": "egress-default-deny" },
+            }],
+            "freshness": { "source_commit": commit, "indexed_at": "2026-09-14T00:00:00Z" },
+            "confidence": "retrieved",
+        }))
+        .expect("envelope deserializes")
+    }
+
+    fn verify_only_expect() -> Expect {
+        serde_json::from_value(serde_json::json!({ "confidence": "retrieved" }))
+            .expect("expect deserializes")
+    }
+
+    /// THE DEFECT, GRADED. A citation sound at the index's commit and wrong in
+    /// this checkout must land in `stale`, never in `failures`.
+    #[test]
+    fn a_span_that_moved_grades_stale_and_not_fabricated() {
+        let (r, a, b) = repo_where_the_span_moves("gt-moved");
+        r.checkout(&b); // the reader is ahead of the index
+
+        let found =
+            grade_envelope_audited(&moved_span_envelope(&a), &verify_only_expect(), r.path());
+        assert!(
+            found.failures.is_empty(),
+            "a span that verifies at its own commit must not be a failure: {:?}",
+            found.failures
+        );
+        assert_eq!(
+            found.stale.len(),
+            1,
+            "expected exactly one stale finding: {found:?}"
+        );
+        assert!(
+            found.stale[0].contains("VERIFIES at"),
+            "the stale finding must say where it does hold: {:?}",
+            found.stale
+        );
+    }
+
+    /// NEGATIVE CONTROL: the frame must not launder a real fabrication. Same
+    /// repo, same reader, same named commit — a span that is wrong THERE TOO.
+    #[test]
+    fn a_span_wrong_at_its_own_commit_is_still_a_failure() {
+        let (r, a, b) = repo_where_the_span_moves("gt-fabricated");
+        r.checkout(&b);
+
+        let mut env = serde_json::to_value(moved_span_envelope(&a)).expect("serialize");
+        env["citations"][0]["line_start"] = serde_json::json!(3);
+        env["citations"][0]["line_end"] = serde_json::json!(3);
+        let env: Envelope = serde_json::from_value(env).expect("envelope deserializes");
+
+        let found = grade_envelope_audited(&env, &verify_only_expect(), r.path());
+        assert!(
+            found.stale.is_empty(),
+            "a span that holds at NO commit must not be rescued as stale: {:?}",
+            found.stale
+        );
+        assert!(
+            !found.failures.is_empty(),
+            "a fabricated citation must stay a failure"
+        );
+        assert!(
+            found.failures.iter().any(|f| f.contains("FABRICATED")),
+            "{:?}",
+            found.failures
+        );
+    }
+
+    /// The OLD signature keeps exactly today's strictness: a stale citation was
+    /// a failure before this order and is still one through `grade_envelope`.
+    /// Without this, separating the buckets would silently relax every caller
+    /// that was never taught the third outcome.
+    #[test]
+    fn the_unaudited_signature_still_reports_a_stale_citation() {
+        let (r, a, b) = repo_where_the_span_moves("gt-folded");
+        r.checkout(&b);
+
+        let failures = grade_envelope(&moved_span_envelope(&a), &verify_only_expect(), r.path());
+        assert_eq!(
+            failures.len(),
+            1,
+            "the folded form must still surface it: {failures:?}"
+        );
+    }
+
+    /// A case carrying BOTH a genuine failure and a stale citation is a FAIL.
+    /// If it graded STALE, a stale index would become somewhere real
+    /// regressions sit quietly — worse than the false red this order removes.
+    #[test]
+    fn a_real_failure_dominates_a_stale_citation() {
+        let outcome = Outcome {
+            id: "x".into(),
+            engine: "spec.answer".into(),
+            failures: vec!["394b verify: something genuinely wrong".into()],
+            stale: vec!["394b verify: ... VERIFIES at abc123".into()],
+        };
+        assert!(!outcome.passed(), "not a pass");
+        assert!(
+            !outcome.is_stale(),
+            "a case with a genuine failure must grade FAIL, not STALE"
+        );
+    }
+
+    /// WIRE 2, AT THE CALLER. The spec.answer engine must stamp the INDEX's
+    /// frame, not this checkout's HEAD.
+    ///
+    /// Deliberately NOT a test that hands `build_envelope_scored_with_freshness`
+    /// a freshness and checks it comes back: the defect was a CALLER picking the
+    /// wrong subject, and a test that supplies the subject is green by
+    /// construction. This one drives `Harness::run` and reads the frame off the
+    /// envelope that comes out, which is the only place the caller's choice is
+    /// observable.
+    #[test]
+    fn the_spec_engine_stamps_the_index_frame_not_the_readers_head() {
+        let r = crate::gitref::testrepo::repo("gt-frame");
+        r.write(
+            "openspec/specs/x/spec.md",
+            "intro\n## egress-default-deny\nbody\n",
+        );
+        let head = r.commit("a");
+
+        // A published entry whose commit is NOT this checkout's HEAD.
+        const INDEX_COMMIT: &str = "5bef283cb08e23b80cd8c4e761f38158decc370d";
+        assert_ne!(INDEX_COMMIT, head, "the fixture must differ from HEAD");
+        let idx = r.path().join("published-index");
+        std::fs::create_dir_all(&idx).expect("mkdir index");
+        let chunk = serde_json::json!({
+            "id": 0,
+            "path": "openspec/specs/x/spec.md",
+            "line_start": 2, "line_end": 2,
+            "kind": "spec",
+            "key": "egress-default-deny",
+            "content_hash": "deadbeef",
+            "text": "## egress-default-deny",
+        });
+        std::fs::write(idx.join("chunks.jsonl"), format!("{chunk}\n")).expect("chunks");
+        std::fs::write(idx.join("vectors.jsonl"), "[1.0,0.0]\n").expect("vectors");
+        std::fs::write(idx.join(".commit"), format!("{INDEX_COMMIT}\n")).expect("commit marker");
+        std::fs::write(r.path().join("q.json"), "[1.0,0.0]").expect("query vector");
+
+        let case: Case = serde_json::from_value(serde_json::json!({
+            "id": "frame-probe",
+            "engine": "spec.answer",
+            "query": "egress default",
+            "query_vec": "q.json",
+            "expect": { "confidence": "retrieved" },
+        }))
+        .expect("case deserializes");
+
+        let prev = std::env::var("TILLANDSIAS_SPEC_INDEX_DIR").ok();
+        // SAFETY: restored before this test returns; no sibling reads it.
+        unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_DIR", &idx) };
+        let mut h = Harness::new(
+            r.path().to_path_buf(),
+            r.path().join("plan/index.yaml"),
+            "plan/index.yaml".to_string(),
+        );
+        let envelope = h.run(&case);
+        match prev {
+            Some(v) => unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_DIR", v) },
+            None => unsafe { std::env::remove_var("TILLANDSIAS_SPEC_INDEX_DIR") },
+        }
+
+        let envelope = envelope.expect("the spec engine answers from the published entry");
+        assert_eq!(
+            envelope.freshness().source_commit(),
+            INDEX_COMMIT,
+            "the envelope must carry the INDEX's commit"
+        );
+        assert_ne!(
+            envelope.freshness().source_commit(),
+            head,
+            "stamping the reader's HEAD is the 1229-2862 defect: spans read at one \
+             commit were being attributed to another"
+        );
     }
 }

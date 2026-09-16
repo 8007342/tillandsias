@@ -1809,15 +1809,19 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                     id: selected[0].1.id.clone(),
                     engine: format!("{} (captured envelope)", selected[0].1.engine),
                     failures: vec![format!("input is not an answer envelope: {e}")],
+                    // A malformed envelope has no citations to be stale ABOUT.
+                    stale: Vec::new(),
                 });
                 report(&outcomes, &[], &sets, started);
                 return 1;
             }
         };
+        let found = groundtruth::grade_envelope_audited(&envelope, &selected[0].1.expect, &root);
         outcomes.push(groundtruth::Outcome {
             id: selected[0].1.id.clone(),
             engine: format!("{} (captured envelope)", selected[0].1.engine),
-            failures: groundtruth::grade_envelope(&envelope, &selected[0].1.expect, &root),
+            failures: found.failures,
+            stale: found.stale,
         });
     } else {
         // One harness PER RESOLVED CORPUS, cached: a set that declares its own
@@ -1900,10 +1904,15 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 }
             };
             let grade_root = harnesses[slot].1.clone();
+            // ORDER 1229-2862: the AUDITED form, which separates a frame-stale
+            // citation from a genuine failure. `grade_envelope` folds the two
+            // back together and is kept for callers that have no third outcome.
+            let found = groundtruth::grade_envelope_audited(&envelope, &case.expect, &grade_root);
             outcomes.push(groundtruth::Outcome {
                 id: case.id.clone(),
                 engine: case.engine.clone(),
-                failures: groundtruth::grade_envelope(&envelope, &case.expect, &grade_root),
+                failures: found.failures,
+                stale: found.stale,
             });
         }
     }
@@ -1921,15 +1930,34 @@ fn report(
     started: std::time::Instant,
 ) -> usize {
     let mut failed = 0;
+    let mut stale = 0;
     for o in outcomes {
         if o.passed() {
             println!("PASS  {}  [{}]", o.id, o.engine);
+            continue;
+        }
+        // ORDER 1229-2862. STALE is checked BEFORE fail and is defined as "no
+        // genuine failure", so a case carrying both grades FAIL and its stale
+        // citations are printed underneath it. A stale index must never become
+        // somewhere a real regression can sit quietly.
+        if o.is_stale() {
+            stale += 1;
+            println!(
+                "STALE {}  [{}]  NOT VALID in this checkout: the index is behind the code",
+                o.id, o.engine
+            );
+            for sv in &o.stale {
+                println!("        - {sv}");
+            }
             continue;
         }
         failed += 1;
         println!("FAIL  {}  [{}]", o.id, o.engine);
         for f in &o.failures {
             println!("        - {f}");
+        }
+        for sv in &o.stale {
+            println!("        - (also stale) {sv}");
         }
     }
     // ORDER 888-miiy. A SKIPPED case is printed per-case and counted in the
@@ -1943,16 +1971,36 @@ fn report(
     let mut engines: Vec<&str> = skipped.iter().map(|(_, e, _)| e.as_str()).collect();
     engines.sort_unstable();
     engines.dedup();
+    // ORDER 1229-2862. Stale engines are named in the summary for the same
+    // reason skipped ones are: a condition that shrinks what a run CERTIFIES
+    // must be legible from the one machine-readable line, not only from the
+    // per-case output a consumer may be tailing away.
+    let mut stale_engines: Vec<&str> = outcomes
+        .iter()
+        .filter(|o| o.is_stale())
+        .map(|o| o.engine.as_str())
+        .collect();
+    stale_engines.sort_unstable();
+    stale_engines.dedup();
     // `total` counts every case the set DECLARED, so pass+fail+skipped == total
     // and a skip cannot quietly shrink the denominator. A shrinking bar is a
     // lowered bar (the same rule the committed-set step already enforces).
+    // `total` still counts every case the set DECLARED, so
+    // pass+fail+stale+skipped == total. A stale case may no more shrink the
+    // denominator than a skipped one may (1229-2862 keeping 888-miiy's rule).
     println!(
-        "groundtruth-result: sets={} total={} pass={} fail={} skipped={}{} elapsed_ms={}",
+        "groundtruth-result: sets={} total={} pass={} fail={} stale={} skipped={}{}{} elapsed_ms={}",
         sets.len(),
         outcomes.len() + skipped.len(),
-        outcomes.len() - failed,
+        outcomes.len() - failed - stale,
         failed,
+        stale,
         skipped.len(),
+        if stale_engines.is_empty() {
+            String::new()
+        } else {
+            format!(" stale_engines={}", stale_engines.join(","))
+        },
         if engines.is_empty() {
             String::new()
         } else {
@@ -1960,6 +2008,13 @@ fn report(
         },
         started.elapsed().as_millis()
     );
+    if stale > 0 {
+        eprintln!(
+            "WARNING: {} case(s) cite spans that are SOUND at the index's own commit but stale in this checkout (engines: {}). The index is behind the code; scripts/spec-index-ensure.sh republishes one. This run does not certify those cases.",
+            stale,
+            stale_engines.join(",")
+        );
+    }
     if !skipped.is_empty() {
         eprintln!(
             "WARNING: {} case(s) were NOT GRADED on this host (engines: {}). This run does not certify those engines; it certifies the {} case(s) it could grade.",
