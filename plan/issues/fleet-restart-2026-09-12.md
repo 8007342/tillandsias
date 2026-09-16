@@ -7410,10 +7410,11 @@ and 1005-class says never to.
 EXPECTED.** They asked for a look wherever `SAFETY: single-threaded` appears.
 Eight sites; **six are fine and I am saying so rather than handing anyone an
 eight-site hunt** — two are yoga's own corrections, two are production startup
-paths where the claim is true, one is a doc comment discussing the phrase, one
-makes a narrower plausible claim.
+paths where the claim is true (`main.rs` argument parsing and startup), one is a
+doc comment in `tillandsias-podman` discussing the phrase, one in
+`tillandsias-plan` `spec_index.rs` makes a narrower plausible claim.
 
-The live one, `main.rs:25755`, is an **ORPHAN rather than a falsehood**:
+The live one is an **ORPHAN rather than a falsehood**, in `main.rs` `write_forge_gitconfig_handles_ssh_origin_with_https_redirect`:
 `// SAFETY: single-threaded test, no concurrent env reads.` sits at the END of
 `write_forge_gitconfig_handles_ssh_origin_with_https_redirect`, after the last
 assertion, and that function contains NO `unsafe`, NO `set_var`, NO `env::` at
