@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    field: status
+    value: ready
+    ts: "2026-09-16T13:38:41Z"
+    host: linux
+
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: progress
+      ts: "2026-09-16T13:38:41Z"
+      host: linux
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: 9 of 10 parallel runs clean; third contention located at write_forge_gitconfig via cache_root reading XDG_CACHE_HOME/HOME
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: note
+      ts: "2026-09-16T13:38:41Z"
+      host: linux
+      summary: |-
+        claim released by yoga: measured increment landed, the next contention is named with its fix shape
