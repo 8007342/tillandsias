@@ -1,12 +1,12 @@
 {
   "scope": "macos-only",
   "host": "macos",
-  "attested_at": "2026-09-16T12:46:32Z",
-  "commit": "9e92b3bdd8a3cd8d20efcff9447874709ae1bcf7",
+  "attested_at": "2026-09-16T20:26:23Z",
+  "commit": "ee86d15f9f0f7a398d37169e63a4adcef41d4f9b",
   "command": "cargo test -p tillandsias-macos-tray --bins",
-  "result": "test result: ok. 135 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.36s",
+  "result": "test result: ok. 136 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.36s",
   "sources": {
-    "crates/tillandsias-macos-tray/src/action_host.rs": "48632ca51e0dcb2b344b924cbe0f761d97253d20",
+    "crates/tillandsias-macos-tray/src/action_host.rs": "9a791b323e87761538496c36f6b1b5291d2ed0df",
     "crates/tillandsias-macos-tray/src/diagnose.rs": "ebf458e50519135883ab9624525773e4ac7f8037",
     "crates/tillandsias-macos-tray/src/guest_binary.rs": "b0a9ce8e581d13f8a7ceba76fa1dd741061d830a",
     "crates/tillandsias-macos-tray/src/installation_uuid.rs": "02cdcee40fce0d89876474a9c55e82d96bb38c09",
