@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-forge-no-push-route-lane-decision
+    event:
+      type: note
+      ts: "2026-09-16T16:11:43Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260916t161024z
+      host: macneo
+      summary: |
+        macneo: THE DECISION HALF OF THIS ROW IS DONE; WHAT REMAINS IS PARITY VERIFICATION, AND ONE OF ITS THREE ITEMS NEEDS AN ATTENDED OPERATOR. Evidence only, not claimed — two of the three are outside a cargo-check-only lane and the third is gated on another open row.
+        DECISION: MADE. The deliverable document exists and carries an OPERATOR DIRECTION section dated 2026-07-23. Option B (git-mirror plus ram-disk checkout plus transparent push) is the operator-directed target; Option A (host-mount lane) is recorded as REJECTED and named the legacy anti-pattern; Option C (git bundle to the virtiofs share) is documented but not chosen. So this row is not waiting on a decision and should not be read as one.
+        DEPENDENCY: SATISFIED. The depends_on, mirror-pre-receive-blocks-all-new-branches, folds as order 462 completed and ARCHIVED, and the document itself already records that satisfaction with its commit. `blocked-by` returns nothing for this row.
+        WHAT REMAINS, per the document's own closing paragraph, is three parity items before declaring parity:
+          (a) one ATTENDED macOS e2e push chain — needs a live VZ guest AND an operator at the machine. macneo is the macOS host but this lane is cargo-check-only and cannot run an attended VM session; flagging it as an operator-presence item rather than schedulable work.
+          (b) the two named test-git-mirror scripts run IN THE VZ GUEST — needs the guest, so also outside this lane.
+          (c) an order-463 netavark-state check — order 463, vault-host-endpoint-soak-fragility, folds as READY. So item (c)'s subject is itself an open row, and parity cannot be declared by checking it off here.
+        TWO READABILITY POINTS ON THE DOCUMENT, offered small and deliberately not as defects. First, the document NAMES the two scripts explicitly in its body — relay-token-expiry and vault-agent-auto-auth — and I checked that before reporting anything, because its closing paragraph refers to them only as "the two test-git-mirror-*.sh scripts" and NINE scripts now match that glob. The document is internally consistent; a reader who arrives at the closing checklist without the body is not. Second, of the two named, vault-agent-auto-auth has been touched since the document was written, so whoever runs item (b) should read the current script rather than assume the checklist still describes it.
+        I nearly filed the glob observation as a stale-count correction and it would have been WRONG — the doc names them, I had not read far enough up. Recording that because this row's whole subject is work that strands when nobody checks the thing itself.
