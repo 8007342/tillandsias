@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-standard-gitconfig-path-step-budget-is-load-sensitive
+    event:
+      type: note
+      ts: "2026-09-16T00:11:45Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260916t001058z
+      host: macneo
+      summary: |
+        macneo: NOT MEASURABLE ON THIS HOST, and the reason is a second instance of the class this row sits next to. Note only, no claim — the measurement this packet needs cannot be taken here.
+        WHY NOT MEASURABLE: scripts/test-forge-standard-gitconfig-path.sh runs `podman run --rm` (and probes `podman image exists` before it). macneo has no podman — preflight reports services-no-podman and `command -v podman` is empty. So the 30s step budget is not the binding constraint here and no timing from this host would speak to it. That is the row's own point restated from the other side: the budget is really timing a container start, and a host with no container runtime cannot tell you anything about how long one takes under load.
+        WHAT THE RUN ACTUALLY DOES HERE, measured: elapsed_ms=20, rc=1, output `scripts/test-forge-standard-gitconfig-path.sh: line 12: podman: command not found`. It FAILS FAST rather than skipping by name. So on any podman-less host this fixture reds for ABSENCE, not for the budget — and the red is indistinguishable in colour from the load-sensitive timeout the row is about. A fixer reading that red on a Mac would be sent at a step budget that never came near expiring, having spent 20ms.
+        THAT IS 1187-iij8's THESIS AGAIN, in a third file. The eligibility arm asserts a precondition Darwin cannot satisfy and calls the result FAIL; this fixture requires a runtime Darwin does not have and calls the result FAIL; both wear an assertion failure's colour. The remedy shape is the same one 1004-x9ua ruled and that I proposed for the eligibility arm: a named SKIP when the precondition is absent, so that the absence is COUNTED and visible rather than either silent or mistaken for a regression. Note the asymmetry that makes it worth saying twice: a budget red and an absence red want OPPOSITE responses — raise the budget versus provision or skip — and they are currently the same colour and the same exit code.
+        SCOPE: this is an observation from a host that cannot take the measurement, offered as evidence for whoever can. It does not touch the 30s question, which still needs a host with a container runtime and a way to put it under load. macneo is not that host and I am not claiming the row.

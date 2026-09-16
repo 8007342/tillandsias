@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: set-field-accepts-flags-before-its-positional-value-and-silently-writes-the-flags-own-argument-as-the-field-value
+    order: 1214-s8ui
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [ledger, cli, fail-loud, append-only, guard-gap]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      `set-field` accepts its flags before the positional value and writes the flag's own argument as the field value, reporting success
+    context: |
+      MEASURED ON A SCRATCH LEDGER 2026-09-16, reproducing a real write yoga had
+      just made to a live row:
+        CORRECT   set-field 1-aaaa next_action "GOOD VALUE" --append --host yoga
+                  -> writes GOOD VALUE
+        MALFORMED set-field 1-aaaa next_action --append --host yoga "TEXT..."
+                  -> writes `yoga`
+      Both print an ordinary success line. The malformed form is not refused,
+      not warned about, and not distinguishable from the correct one by its
+      output.
+      THE MECHANISM is the positional extractor: it walks the argument list and
+      skips two whenever a token starts with `--`. Flags placed before the value
+      therefore consume the value's position, the FLAG'S OWN ARGUMENT lands in
+      the positional slot, and the command proceeds with a well-formed but wrong
+      write. The parser is doing exactly what it says; nothing checks that the
+      resulting positional actually came from where a value should.
+      WHY THIS IS WORSE THAN AN ORDINARY CLI PAPERCUT: THE LEDGER IS APPEND-ONLY.
+      A wrong value cannot be edited out. The remedy is a NEW fragment declaring
+      the same packet_id, which leaves the bad line in place and adds a
+      correction beside it that a later reader may or may not reach. So a
+      silent misparse here is permanent by construction, and on a long-form
+      field the only scrub available is `--replace`, which rewrites wholesale
+      and would clobber a concurrent edit by another host — the harm 1151-td46's
+      refusal exists to prevent. yoga hit exactly that fork on 1201-9it2 and
+      correctly chose to own the junk line in the text rather than race the
+      host holding the row.
+      AND THE SUCCESS LINE IS THE DEFECT'S CARRIER. yoga only discovered the bad
+      write because they grepped the resulting fragment for two distinctive
+      phrases from their intended text. The tool's `ok:` told them the command
+      RAN; it said nothing about WHAT it wrote, and the first attempt's output
+      was indistinguishable from the second's. That is this fleet's recurring
+      shape — the operation succeeded and the subject was wrong — arriving in
+      the instrument every host uses to record a claim.
+      NOT A STYLE QUESTION ABOUT ARGUMENT ORDER. Most CLIs accept flags in any
+      position, and a user who has internalised that will write the malformed
+      form by habit rather than by error. The ordering is load-bearing here and
+      nothing in the usage line, the refusal set or the output says so.
+    exit_criteria:
+      - 'a set-field invocation whose positional value was consumed by a preceding flag is REFUSED, naming the flag that took it (pre-fix result: FAILS — it succeeds and writes the flag argument, reproduced on a scratch ledger)'
+      - 'NEGATIVE CONTROL: the documented form, value before flags, is unchanged and still writes the value'
+      - 'NEGATIVE CONTROL: a value that legitimately begins with `--` is still writable by whatever escape the fix chooses, or the refusal names that case explicitly rather than silently blocking it'
+      - 'the fixture drives the REAL binary and asserts on the WRITTEN FRAGMENT rather than on the exit status, since the defect is a success line over a wrong write'
+    unscoreable: |
+      unpinnable-until-the-refusal-shape-is-chosen: whether the fix refuses, warns,
+      or requires `--` before the value is a CLI contract decision affecting every
+      existing caller and every skill that documents the command. The measurement
+      is complete and reproducible; the contract is not chosen.
+    events:
+      - type: filed
+        ts: "2026-09-16T00:22:52Z"
+        agent_id: "linux-macuahuitl-claude-20260916t002252z"
+        host: macuahuitl
+        summary: |-
+          Reproduced on a scratch ledger after yoga wrote a one-word junk line
+          to a live row this way. Filed separately rather than folded into the
+          row it damaged, because the defect is in the tool every host uses to
+          record a claim and is permanent wherever it fires.

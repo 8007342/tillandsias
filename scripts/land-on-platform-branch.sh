@@ -355,30 +355,46 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # The gate just built this exact tree, union included, so the debt is paid.
     if [ -s "$_um" ]; then rm -f "$_um"; fi
 
-    # ORDER 1201-9it2 — NAME THE ARMS THIS GATE DID NOT RUN, before the push.
+    # ORDER 1194-davi: name the arms this change touches that THIS HOST'S GATE
+    # CANNOT RUN, because they are scoped to another platform. ADVISORY — it
+    # exits 0 on every finding, and `|| true` is deliberate belt-and-braces:
+    # refusing a linux land over an unrunnable macos arm would trade a
+    # visibility gap for a worse one, which the row names as a negative control.
     #
-    # ./build.sh --check executes NO litmus, deliberately (748-tkjx: the suite is
-    # minutes, and a gate that slow gets bypassed with --no-verify, which is
-    # strictly worse). So a green gate is silent about every litmus arm asserting
-    # on the files just changed. That silence has now let a red ride a green gate
-    # to trunk THREE times: images/default/lib-common.sh leaving
-    # startup-context-addendum-shape red on 2026-08-15; 921-vtf4 finding three
-    # tests red back to af745f3fd on 2026-08-28; and 4fc7be930 bumping
-    # WIRE_VERSION 3 -> 4 on 2026-09-15 against a pin of 3, found three hours
-    # later by 890-27mv's cadence rather than by the gate.
+    # IT LIVES HERE AND NOT IN build.sh ON PURPOSE. A land that finds a valid
+    # full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp, the adoption path
+    # above). An advisory inside the gate is silent on exactly those lands, and
+    # adoption is the common case for a plan-only or re-attempted land. Before
+    # the push is the one point every land passes through.
+    bash "$ROOT/scripts/check-unrunnable-platform-arms.sh" --base "origin/$BRANCH" || true
+
+    # ORDER 1201-9it2 — and this is the SIBLING of the block above, not a
+    # duplicate of it. They answer different questions and a change can trip
+    # either without the other:
+    #   1194-davi (above) — arms this host's gate CANNOT run, because they are
+    #                       scoped to another platform.
+    #   1201-9it2 (here)  — arms this gate DID NOT run, because ./build.sh
+    #                       --check executes NO litmus at all.
     #
-    # ADVISORY, AND THAT IS THE DESIGN RATHER THAN A CONCESSION. It refuses
-    # nothing and its exit status is ignored. Closing a VISIBILITY gap by slowing
-    # the gate would trade it for a bypass problem — and a bypass problem is
-    # unmeasurable once it starts, because the evidence is the absence of a run.
-    # The author still decides; they simply stop deciding blind.
+    # The second is deliberate: build.sh:2508 (748-tkjx) says the suite is
+    # minutes and "a gate that slow gets bypassed with --no-verify". So a green
+    # gate is silent about every litmus arm asserting on the files just changed,
+    # and that silence has let a red ride a green gate to trunk THREE times:
+    # images/default/lib-common.sh leaving startup-context-addendum-shape red on
+    # 2026-08-15; 921-vtf4 finding three tests red back to af745f3fd on
+    # 2026-08-28; and 4fc7be930 bumping WIRE_VERSION 3 -> 4 against a pin of 3 on
+    # 2026-09-15, found three hours later by 890-27mv's cadence, not by the gate.
     #
-    # NO NEW MACHINERY: scripts/litmus-covering-specs.sh (748-tkjx's own reverse
-    # map, built for exactly this question) already answers it. The only thing
-    # that was missing is asking it at the moment of the push. Counterfactual,
-    # measured on the commit that motivated the row: for 4fc7be930's changed
-    # paths it names 12 specs, including litmus:guest-container-metrics-wire-shape
-    # — the arm that was red.
+    # ADVISORY BY CONSTRUCTION, for the reason the block above gives and one
+    # more: closing a VISIBILITY gap by slowing the gate trades it for a bypass
+    # problem, which is unmeasurable once it starts because the evidence of a
+    # bypass is the absence of a run.
+    #
+    # NO NEW MACHINERY: scripts/litmus-covering-specs.sh is 748-tkjx's own
+    # reverse map, built for exactly this question. Only the asking was missing.
+    # Counterfactual against real history rather than a chosen input: for
+    # 4fc7be930's changed paths it names litmus:guest-container-metrics-wire-shape,
+    # the arm that was actually red.
     if [ -x "$ROOT/scripts/litmus-covering-specs.sh" ]; then
         _lcs_changed="$(git diff --name-only "origin/$BRANCH...HEAD" 2>/dev/null)"
         if [ -n "$_lcs_changed" ]; then

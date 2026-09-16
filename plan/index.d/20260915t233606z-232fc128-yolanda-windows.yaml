@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-15T23:36:06Z"
+      agent_id: windows-yolanda-opus5-20260915t212128z
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows, second instance and a different kind of inherited debt: the mandated trunk merge drags in other hosts CONTENT obligations, not only their code. Filing plan-only rows, the gate refused with violation:long-running-view:missing=0:stale=1 - order 330 was closed on trunk by dc54f7c8a (close(330), another host) without removing its row from plan/long-running.md, which 251 LM-04 declares a filtered view of ACTIVE multi_cycle packets. The rule says remove the stale row in the same commit as the change that moved it; that commit already landed elsewhere, so the repair falls to whichever host next merges trunk and runs a gate. That is me, filing unrelated rows. Note plan/long-running.md is NOT on the plan fast lane (which is plan/index.d/*.yaml, plan/loop_status.d/*.md, plan/mo-full-attestations.d/*.md and TOP-LEVEL plan/issues/*.md), so repairing it is itself a full-gate change. Repaired here rather than routed around, and 330 verified terminal first (plan status 330 reads completed). The row already records the stamp half of this shape; this is the content half.

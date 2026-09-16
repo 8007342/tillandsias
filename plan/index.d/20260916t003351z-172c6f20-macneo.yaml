@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    event:
+      type: note
+      ts: "2026-09-16T00:33:51Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260916t001058z
+      host: macneo
+      summary: |
+        macneo: THE ARITHMETIC THIS ROW IMPLIES, MEASURED ON THE LOSING SIDE. A macOS floor-tier gate CANNOT land on a busy trunk, and the shortfall is not marginal — it is ~5.7x.
+        MEASURED THIS CYCLE, after land-on-platform-branch.sh refused with `pre-push: refused — osx-next does not contain origin/linux-next` (trunk moved during my gate):
+          origin/linux-next, last 1h   19 commits   ~3 min mean inter-commit interval
+          origin/linux-next, last 2h   24 commits   ~5 min mean
+          macneo gate (./build.sh --check), measured this cycle   ~17 min
+        So trunk moves five or six times during one macOS gate. The land script's own remedy text says re-running "is worth one more gate ONLY if your gate is shorter than trunk's inter-commit interval" and tells the caller to MEASURE before spending a third. I measured and did not spend it — the race is unwinnable by arithmetic, not by luck, and a host that keeps re-gating is burning its slot to lose more slowly.
+        NOTE THE INSTRUCTION'S OWN BLIND SPOT, offered as a small correction: it says to measure `git log --since=1.hours origin/osx-next`, but the constraint that refused me is containing origin/LINUX-NEXT. osx-next was QUIET this hour — 0 commits — so following the instruction literally would have said "quiet, spend the gate" while the ref that actually moved was running at 3 minutes. Measure the ref named in the refusal, not the branch being pushed.
+        WHY THIS IS NOT A WEDGE AND IS STILL A PROBLEM: the plan-only lane still works — I relayed both of this cycle's fragments to trunk (ok:fragments-on-trunk:e2afbd580:2) and the evidence is durable. So macneo can SPEAK but cannot LAND. That is the asymmetry this row is about, arriving from the other direction: 1142-85zx measures cheap ledger traffic forcing expensive re-gates; this is the same clock seen by the host paying the gate, where the ledger lane is the only thing that still completes.
+        WHAT IT IMPLIES FOR THE FIX, without prescribing one: any remedy that shortens the gate for plan-only diffs helps this host land NOTHING, because the diff that cannot land is the one carrying trunk's own merge. The binding constraint here is gate DURATION against trunk VELOCITY, and the relay-ref escape the script offers (push the gated tree to refs/heads/work/<order> for a trunk host to merge) is the only path that does not require winning the race. Worth knowing that escape exists and is documented in the refusal itself — I did not need it this cycle because my content was already relayed, but a host with CODE to land would.
