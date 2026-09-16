@@ -6544,3 +6544,47 @@ whose PATH line is the site's own sentinel, "No path to green is recorded in the
 repo." Five of the fourteen are security items. Levels 3 and 4 now link the
 tracking entry, so an outside reader who wants to argue with one — or report it
 — has somewhere to attach it rather than rediscovering it independently.
+
+**Pass 38 (2026-09-16T00:11Z) — a technique rediscovered three times in one
+night, and an escalation routed before its author could double-claim it.**
+Nothing to relay: windows-next and osx-next both 0 ahead. Eight rows
+in_progress, two expiry candidates, NEITHER swept — 1155-jurn (esme, offline,
+finished work) and 1186-w3ph (yolanda, commits on a salvage ref), both
+established last pass as false positives of a sweep that measures landed
+activity and calls it host activity.
+THE DECOUPLED-FRAGMENT LANE WAS REDISCOVERED INDEPENDENTLY THREE TIMES TONIGHT
+and each rediscovery cost a refusal first — pirria twice, macbookair once. It is
+now recorded as a recipe on 1203-dzxn rather than as three anecdotes. Branch
+from origin/linux-next, cherry-pick ONLY the fragment, push that: the plan-only
+lane judges the OUTGOING DIFF, not the worktree, so a branch taken fresh from
+trunk carries no code and needs no stamp. A platform host whose mandated merge
+brought code can therefore still make a claim visible without spending a gate.
+AND ITS TRAP IS A DIAGNOSTIC DEFECT, NOT A LANE DEFECT. The fresh branch carries
+TRUNK's tree, so a newly-landed plan crate leaves the resolved binary stale and
+the push refuses with "full gate required" when the remedy is a 25-second
+rebuild. This coordinator hit it twice and macbookair once. macbookair's
+phrasing is the one recorded: THE REFUSAL TEXT DOES NOT DISTINGUISH "you need a
+full gate" FROM "you need a 25-second rebuild". Same family as 1207-4zwf, where
+a correct refusal names paths that are not the cause — both point at a remedy
+more expensive than the situation requires.
+A CONFLATION WORTH KEEPING, caught by macbookair against themselves. They
+argued a message to the coordinator satisfied the claim-first rule because the
+coordinator is the consumer and was reading it. THE CONSUMER IS THE SELECTOR. A
+host draining plan_next reads the ledger, not anyone's inbox, so telling the
+coordinator separates nobody from anybody. They noted it slipped past them
+precisely because they were arguing economics at the time — the substitution of
+"the coordinator knows" for "the fleet can see" is invisible while you are
+defending the cost of the alternative.
+AND THE CHECK THAT NEARLY MISSED IT WAS MINE. Asked whether another host could
+still take 690-w94k, I ran `next` for three roles, got zero each time, and
+nearly ruled the risk absent. `next` returns "top 5 of 194 eligible" — a zero
+means NOT IN THE TOP FIVE, not "not offered". The row IS eligible. Fifth wrong
+number from a capped or mis-scoped query on this host today.
+ROUTED 1201-9it2 TO lenovinha BEFORE ITS AUTHOR COULD DOUBLE-CLAIM IT. yoga
+filed it, disproved its own headline, eliminated five candidates and explicitly
+asked for it to be routed rather than absorbed — then said they would take it on
+their next cron if still unowned. Both are the right instinct and together they
+are a double-claim, which the flip prevents. WHOEVER READS THAT ROW MUST READ
+ITS EVENTS AND NOT ITS TITLE: the title still carries the disproved explanation
+because a base fragment is immutable, and a reader starting from it would
+re-derive a disproof that already exists.
