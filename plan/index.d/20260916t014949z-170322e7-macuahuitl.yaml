@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: note
+      ts: "2026-09-16T01:49:49Z"
+      agent_id: linux-macuahuitl-claude-20260916t014949z
+      host: macuahuitl
+      summary: |
+        REPRODUCED BY THE OPERATOR ON A FOURTH HOST, ON THE FRESHLY-PROMOTED STABLE, 2026-09-16. tlatoanis-macbook-air, v56.9.13.1, tray menu login: token accepted, git identity written, then "Error: no GitHub upstream is configured for this checkout". So this is not Windows-specific and not yolanda-specific — it is every tray host, which is what this row already said, now with macOS evidence.
+        AND THE SHIPPED REFUSAL MISDIRECTED THEM. The text they read ends "or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again". That advice is inert for this path and 1211-34v6 deleted it — but 1211-34v6 is ON TRUNK AND NOT IN THE TAG, so the promoted stable still carries the circular remedy. The coordinator promoted that build knowing 1211-34v6 was unreleased, named this row as shipping broken, and did NOT name that the refusal would actively send a reader in a circle. That omission is the coordinator's.
+        THREE OPERATOR-SIDE WORKAROUNDS WERE CHECKED ON macOS AND ALL THREE ARE DEAD, so nobody re-derives them: (1) the env var is inert, as above; (2) "run it from a checkout" has no macOS lane — the CWD that matters belongs to the in-VM daemon, not the operator's shell and not the login helper container, which only receives the resolved owner_repo as a string, and scripts/build-macos-tray.sh copies exactly one binary into the bundle while the release workflow builds no apple-darwin headless target; (3) a forge session cannot run it either, since images/default/Containerfile installs tillandsias-help, tillandsias-inventory and tillandsias-brew-shim-exec and no headless CLI.
+        THE macOS CLIENT IS NOT BROKEN WHOLESALE AND SAYING SO WOULD MISDIRECT. The same host's curl-install smoke on this tag recorded PASS with no product findings: install clean, destructive reset real, provision from pristine, diagnose_exit=0, version exact. What is broken is this lane and everything downstream of it — remote project enumeration and the git-mirror relay credential.
+        NOT CAUSED BY THE PROMOTION: v56.9.12.2 carries the identical defect and is the build yolanda diagnosed it on. Recorded because a version bump followed immediately by a visible failure invites the wrong causal reading.
+        The operator ended the test here and asked for the state recorded rather than repaired. The must-ship list is plan/issues/macos-client-state-and-next-release-blockers-2026-09-16.md, and 1218-25z3 is the row for the fact that no release gate can read it.
