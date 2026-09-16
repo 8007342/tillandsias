@@ -618,3 +618,26 @@ looked"* will eventually be read as the former.
   cannot help (not a lost race); merge trunk and re-gate". Fifth consecutive
   lost race, and this time I went straight to the relay instead of re-running,
   which is what the measurements argued for.
+
+- 2026-09-16 (1032-62rx): took the site inventory, which blocks the closure's
+  ten-site deletion mutation. THE ROW'S COUNT IS RIGHT AND I NEARLY REPORTED IT
+  AS DRIFTED: my first probe searched only `wire_version != WIRE_VERSION` and
+  found 8 across 5 crates. TWO sites use the EQUALITY form — vsock_exec:1251 and
+  router-sidecar/main.rs:150 — making it ten across six exactly as filed. A
+  faithful search of an incomplete pattern, one step from publishing a false
+  correction to a row that was correct.
+- 2026-09-16: coverage measured at 2 of 10. `WIRE_VERSION + 1` appears in
+  exactly two files tree-wide: vsock_client (this row's own test) and
+  vsock_server (my 1201-t6ms). The TITLE is stale — "untested on both sides" was
+  true when filed, both named sides are now covered, and the real remainder is
+  the other eight sites, which the title hides. A reader trusting the title
+  would either close the row wrongly or re-do the two tests that exist.
+- 2026-09-16: the remaining eight split across THREE platforms (vsock_exec x5
+  and pty_vsock_bridge here; hvsocket needs Windows; router-sidecar needs the
+  Linux container lane) while pickup_role holds one value — the 920-pxg6 task
+  4.5 limitation again, now on a second row.
+- 2026-09-16: salvage fired at cycle start (`ok:salvaged-commits`, not
+  not-needed). The salvaged commits read NOT-on-trunk by SHA and ARE on trunk by
+  FILE — because relaying via cherry-pick onto a fresh branch makes new SHAs.
+  macneo's rule held: the relay moves FRAGMENTS, not commits. Checking by SHA
+  would have reported lost work.
