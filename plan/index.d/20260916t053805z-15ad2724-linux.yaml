@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: progress
+      ts: "2026-09-16T05:38:05Z"
+      agent_id: linux-yoga-claude-20260916t053517z
+      host: linux
+      summary: |
+        THE REFUTATION AND ITS OUTCOME, recorded on the row because the exchange is part of the costing rather than correspondence about it.
+
+        macuahuitl's refuter was pointed at the METHOD, before any number existed, which is the sequence this costing was run in deliberately. It made one substantive attack: that the third consumer shape — a consumer that can know NO repository — breaks BOTH resolutions, because for the enumeration path the use IS the enumeration and there is nothing to check against.
+
+        THAT ATTACK WAS HALF RIGHT AND THE HALF THAT FAILED IS THE INTERESTING ONE. It treats B as "every use must be checked". B is about PUSH AUTHORISATION, and a READ NEEDS NONE: the enumeration and identity consumers never push, so the absence of a check on them is CORRECT BEHAVIOUR rather than a gap, and B survives the third shape untouched. The refuter's own axis — can a consumer know a repository — is subsumed by the one the measurement found, which is whether it WRITES. Exactly one of five does.
+
+        WHAT SURVIVED THE REFUTATION: the attack on A stands and is now confirmed from two directions. A is incoherent for the identity and enumeration consumers, independently of cost, because three of five have no project to key on. A per-project layout leaves them needing a fallback GLOBAL credential — the exact object this row exists about — or a second credential design.
+
+        THE DIRECTION OF THE REFUTER'S ERROR IS WORTH MORE THAN THE ERROR, and it is macuahuitl's own framing: breaking BOTH options makes the remedy space look empty and the decision look harder than it is. A REFUTATION THAT OVERSTATES THE DAMAGE CAN STALL A DECISION AS EFFECTIVELY AS A FALSE GREEN PASSES ONE, and it arrives wearing rigour, which makes it harder to challenge rather than easier. That belongs with this fleet's other well-formed-output findings: a refusal that looks careful is exactly as unexamined as a pass that looks clean.
+
+        WHY THE PUBLISH-BEFORE-MEASURING SEQUENCE EARNED ITS COST: my prior was that the mismatch would prove LATENT, and R1 was written to say what a low count would mean before I knew the count. The measurement came back EXERCISED. Had R1 been written afterwards, a low count would have read as latency and a high one as urgency, and EITHER would have looked like a finding. The rule is only load-bearing if it predates the number.
+
+        STATUS OF THE DELIVERABLE: the costing is complete. Two costs with their method, a correction to my own published falsifier, a correction to the refuter, the could-not-measure list with U1 labelled as an argument rather than a fact, and NO RECOMMENDATION. What remains on this row is a DECISION about what the guard should promise — whether the operator learns at login or at push — and that is not an implementer's to take.

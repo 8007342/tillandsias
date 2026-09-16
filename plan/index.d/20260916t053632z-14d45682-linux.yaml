@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: progress
+      ts: "2026-09-16T05:36:32Z"
+      agent_id: linux-yoga-claude-20260916t053517z
+      host: linux
+      summary: |
+        THE NUMBERS, against the method published before them. Two costs, the could-not-measure list, and NO recommendation.
+
+        M1 — EVERY CONSUMER OF secret/github/token, and whether each knows a repository AT READ TIME. Cited by symbol; 22 files mention the path, of which these are the consumers that READ it to use it:
+          1. probe_github_username (remote_projects)      NO repository — identity only.
+          2. is_github_logged_in (remote_projects)        NO repository — presence only.
+          3. fetch_github_projects (remote_projects)      ALL owned repositories. It runs gh api user/repos with type=owner.
+          4. clone_project_from_github_with_debug         AN ARBITRARY repository, taken as an argument: gh repo clone "$1" "$2".
+          5. the git-mirror post-receive hook             ONE repository, per push. git_service_profile's own doc states the hook reads this path AT PUSH TIME, and that the mirror volume is mounted DYNAMICALLY PER-PROJECT.
+        Writers, distinct from consumers: vault_bootstrap writes the path and does a presence-only check.
+
+        M2 — DOES ANY CONSUMER USE IT FOR MORE THAN ONE REPOSITORY TODAY? YES, BY CONSTRUCTION, not by circumstance. Consumer 3 enumerates every owned repository in a single call; consumer 4 clones whatever it is handed; consumer 5 serves projects mounted dynamically. So the mismatch is EXERCISED, not latent, and R1's high-count branch applies: this row is urgent rather than theoretical, and resolution A rises accordingly. I record that I expected the opposite — I framed the probe as likely-latent when I wrote the method, and the measurement contradicted me.
+
+        M3 — COST OF A (per-project credential). Touches: the Vault path layout; the write and the presence check in vault_bootstrap; the git-mirror-policy that grants access to the path; and all five consumers. AND IT HAS A STRUCTURAL PROBLEM, not merely a size: CONSUMERS 1, 2 AND 3 HAVE NO PROJECT TO KEY ON. An identity probe and an enumeration over all repositories cannot name a project by construction, so a per-project layout leaves them needing either a fallback global credential — which reintroduces exactly the object this row is about — or a separate identity credential, which is a second design. A is therefore not "the same change, larger"; it is a change that does not cover three of its five consumers.
+
+        M4 — COST OF B (check at use). The only consumer that PUSHES is 5, and it knows its repository: the hook runs per push, for the project whose mirror is mounted. Consumers 1-4 do not push at all — they read — so they need no push authorisation and the absence of a check there is correct rather than a gap. A use-time check therefore has a natural home and covers the actual push path.
+          ITS COST IS NOT IN LINES AND MUST NOT BE READ AS CHEAPNESS. B MOVES THE FAILURE TO PUSH TIME, which is precisely the failure 759-vceg was created to prevent: a credential that looks accepted and fails at the first push. That is the 803-49re incident, where a release looked healthy and broke the operator forty minutes later. B does not reintroduce the unverified-seed defect — the check still happens — but it relocates the operator-visible failure from login back to push. Whether that trade is acceptable is a judgement about the guarantee, not about cost, and R2 forbids me converting B's smaller blast radius into a recommendation.
+
+        M5 — OPERATOR-VISIBLE FAILURE MODE, as observable behaviour:
+          A: refusal at LOGIN, per project, naming the project. The operator learns before any work.
+          B: login succeeds; refusal at PUSH, naming the repository that was refused. The operator learns at the moment of use, accurately, having possibly done work first.
+
+        WHAT WOULD HAVE FALSIFIED THIS COSTING, from the method, and what actually happened: I said that if any consumer CANNOT know a repository at read time then B is unavailable. THREE CONSUMERS CANNOT — and B survives anyway, because those three do not push. My dichotomy was wrong: the axis that matters is not knows-a-repo versus not, it is PUSHES versus READS. The refuter's question about a third shape was the right one and this is it. That correction moves the finding toward B on coverage, which is exactly why I am not the one to choose.
+
+        COULD NOT MEASURE, unchanged from the method:
+          U1. The seeded credential's ACTUAL scope. Reading it sends the operator's identity outward from a host that does not hold it. So "its scope exceeds the one repository verified" remains an ARGUMENT from how GitHub grants scopes in general, NOT a fact about the token in play. The M1-M2 findings above do not depend on it: they are facts about what this code DOES with the credential, whatever its scope.
+          U2. Which repositories the operator INTENDS it to serve.
+          U3. Whether a use-time refusal is acceptable UX. Presented above as an observable, deliberately unscored.
+
+        NO RECOMMENDATION. A covers the guarantee but not three of its five consumers; B covers the push path but relocates the failure to the moment 759-vceg exists to protect. Both are coherent and they fail in different directions. The choice is a judgement about what the guard should PROMISE, and 1161-42pc is this fleet's precedent that such a shape, specified from a keyboard rather than ruled, had to be withdrawn.
