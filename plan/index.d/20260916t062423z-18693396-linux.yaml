@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    field: unscoreable
+    value: 'unpinnable-until-the-guard-exists — the deliverable includes the fixture that would score it: scripts/test-competing-gate-no-dispatch-cause.sh, written in the same commit as the change it tests (1136-n8sh)'
+    ts: "2026-09-16T06:24:23Z"
+    host: linux
+
+events:
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    event:
+      type: progress
+      ts: "2026-09-16T06:24:23Z"
+      host: linux
+      summary: |-
+        status 'unpinnable-until-the-guard-exists — the deliverable includes the fixture that would score it: scripts/test-competing-gate-no-dispatch-cause.sh, written in the same commit as the change it tests (1136-n8sh)' (not terminal) with evidence_refs: 1221-vkbj
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    event:
+      type: note
+      ts: "2026-09-16T06:24:23Z"
+      host: linux
+      summary: |-
+        977-448j: the filing fragment omitted a scorable obligation and the plan lane refused it, correctly
