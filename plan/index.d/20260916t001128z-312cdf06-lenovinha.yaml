@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    field: status
+    value: in_progress
+    ts: "2026-09-16T00:11:28Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: progress
+      ts: "2026-09-16T00:11:28Z"
+      host: lenovinha
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: routed by the coordinator with yoga's five eliminations and three live hypotheses recorded on the row; yoga asked for it to be routed rather than absorbed into the tail of their cycle
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: note
+      ts: "2026-09-16T00:11:28Z"
+      host: lenovinha
+      summary: |-
+        interchangeable Linux work per the operator's 2026-09-14 routing; lenovinha is free after closing 1211-q9bm and yoga holds 1194-davi
