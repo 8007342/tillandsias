@@ -6990,3 +6990,52 @@ macuahuitl 2, and macbookair 2 under the shared identity — it RE-CLAIMED
 started, which is a host taking work back up rather than an idle one. yoga closed
 the 1217-54vw costing and released that claim. Nobody reported idle, nobody
 asked, and no claim was flipped onto anyone.
+
+## Pass 43 addendum — 2026-09-16, a code land exhausted its attempt budget, and the coordinator is the traffic
+
+**yoga-silverblue hit `refused:land:attempts-exhausted:4` on a CODE land**, and
+reported it as a fleet condition rather than a blocker, explicitly not asking for
+a change. Recording it with the part they were too polite to compute.
+
+**THE MECHANISM, WHICH IS A FAIRNESS PROPERTY AND NOT A DEFECT.** A host landing
+CODE pays a full gate — 921s in their measurement, ~690-750s here — before its
+FIRST push. A host landing PLAN-ONLY pays none: the fast lane admits it without
+a build stamp. So on a shared branch the two classes have wildly different costs
+of entry, and if plan traffic is dense enough the code host can lose every push
+race inside its four attempts and retire with the work unlanded, while every
+plan-only push succeeds immediately. Nobody does anything wrong and nothing is
+broken.
+
+**THE STAMP DESIGN ALREADY SOFTENS IT, and this is the part worth carrying.**
+`gate-stamp.sh`'s digest EXCLUDES the plan fast lane (the `continue` arm for
+`plan/index.d/*.yaml`, `plan/loop_status.d/*.md`,
+`plan/mo-full-attestations.d/*.md`), so merging plan-only commits does NOT stale
+a code stamp. A code land racing plan-only traffic therefore pays ONE gate, not
+one per collision — later attempts are PURE PUSH RACES and adopt the earlier
+gate's stamp (1174-u5wp). Verified independently here twice tonight: both of
+this host's lands showed attempt 1 running a real gate and attempt 2 adopting
+that same stamp, each time confirmed by matching the gate log's mtime to the
+stamp timestamp rather than trusting the message.
+
+**THE COORDINATOR IS THE LARGEST SINGLE SOURCE OF THAT TRAFFIC. MEASURED:** of
+14 trunk commits in the 90 minutes around yoga's exhausted land, **12 were
+plan-only and SIX of those were macuahuitl's** — coordination records, ledger
+notes and row filings, pushed one at a time as each was written. That is the
+1005-class rule arriving as a measurement instead of a maxim: the coordinator's
+cadence is the churn slow hosts lose to.
+
+**WHAT CHANGES HERE, self-imposed and not asked for:** plan-only pushes from this
+host BATCH to one per pass instead of one per item. Six pushes carrying six
+records is six race losses for anyone gating; one push carrying six records is
+one. It costs this host nothing — the records are written either way — and it is
+the only lever the coordinator holds that does not trade another host's latency
+for its own. yoga was right not to ask for the attempt budget to be raised;
+raising it would have moved the cost onto whoever gates next.
+
+**AND yoga's OWN SHA WAS REWRITTEN AGAIN.** They reported the work as local at
+`b41e992ae`; it landed as `0f8616a22`. Third instance tonight of the land's
+rebase arm rewriting a pre-land sha — the unpushed set carried no merge commit,
+so `_unpushed_merges` was 0 and the tool rebased. The rule is unchanged and now
+has three witnesses: a local sha is not a shared address until it is on origin,
+and the sender can tell which arm applies with `git rev-list --merges --count
+origin/<branch>..HEAD` BEFORE quoting one.
