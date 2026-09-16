@@ -6794,3 +6794,53 @@ criterion 3 released because it was claimed and never started, back on cadence).
 None asked for work and none is stuck, so nothing was flipped on anyone's
 behalf. 1215-5uba's second-instance measurement suits a floor-tier host and is
 `ready` with `pickup_role: any` — available to whoever drains next, not assigned.
+
+## Pass 41 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY; TRUNK HAS NOT MOVED SINCE THE MO CYCLE CLOSED.** Both
+platform branches remain fully contained — `windows-next` ahead=0 behind=309,
+`osx-next` ahead=0 behind=88 — and `origin/linux-next` is still 059173270, this
+host's own attestation head. No new host reports and no peer messages since pass
+40, so the quiet is a short interval rather than a fleet state, and no idleness
+is inferred from it (1005-class: idleness is established by asking, never by a
+timestamp).
+
+**THE CLAIM-EXPIRY SWEEP OFFERED TWO CANDIDATES THAT LOOK IDENTICAL AND WANT
+OPPOSITE RESPONSES.** Run READ-ONLY, no `--write`:
+
+```
+expire-candidate  1155-jurn   2026-09-14T07:56:09Z  claimant:windows
+expire-candidate  1186-w3ph   2026-09-14T22:00:00Z  claimant:yolanda
+summary: in_progress=6 expired=2 held=0 unknown_age=0 ttl_hours=24 mode=dry-run
+```
+
+Checked each by hand, because the output does not distinguish them:
+
+- **1155-jurn is SAFE to expire.** `refs/heads/work/1155-jurn` IS an ancestor of
+  trunk — the work landed. And its claimant is `windows`, a PLATFORM rather than
+  a workstation: 772-4se9's old default, the exact shape 1201-hsf9 now refuses at
+  write time. This is a pre-fix defaulted claim on a row whose work is done.
+- **1186-w3ph would STRAND WORK.** yolanda's salvage ref is not contained and
+  THREE files still carry changes trunk lacks, verified by content rather than
+  ancestry. Returning it to ready invites a second host onto work whose holder
+  has real changes parked on origin.
+
+`--write` applies both together. NOTHING WAS EXPIRED THIS PASS, and the reason
+is recorded per candidate rather than as a blanket caution.
+
+**FILED 1220-zb7q FOR THE BLIND SPOT ITSELF.** The sweep reads only the ledger,
+so it cannot see unlanded work on an origin ref, and a coordinator must redo
+this ancestry-and-content check by hand every pass — the kind of manual step
+that gets skipped on the pass where it matters. THIS IS 1187-iij8's SHAPE IN THE
+LEDGER TOOL: there a floor-tier timeout and a real assertion failure wore the
+same colour and sent a fixer to something not broken; here a landed claim and a
+claim holding parked work wear the same verdict word. The instrument is not
+wrong about what it measures — it is silent about the fact that changes the
+answer. Filed asking for an ANNOTATION with three outcomes (contained / not
+contained / could not check), explicitly not for a refusal: consulting origin is
+a network call and the sweep must still work without one.
+
+**NO REASSIGNMENT.** The four hosts heard from recently all hold
+self-determined work — yoga (1218-25z3 then the 1217-54vw costing), lenovinha
+(landed 1219-dcma an hour ago), macneo and macbookair (both closed clean and
+back on hourly cadence). None reported idle, none asked, and none was directed.
