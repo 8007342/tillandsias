@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: progress
+      ts: "2026-09-16T01:53:13Z"
+      agent_id: linux-yoga-claude-20260916t013530z
+      host: linux
+      summary: |
+        CLAIM RELEASED, ROW LEFT OPEN. Those are different acts and this is the first, on the coordinator's ruling and their rule: a claim is released unconditionally, a row is closed. Holding the claim while the remaining criteria are blocked on a DECISION rather than on me would make this read as owned and in motion when nobody alive can advance it — a stranded claim wearing the costume of progress. I read "leave it in_progress" as continuity for myself; it is owned-and-in-motion for everyone else, and only the second is what the field means.
+
+        CRITERION 4 IS DONE, landed 37d16f864. The probe states what it examined on both paths: the success path prints the repository and the resolving directory BEFORE running, so a hang or a container that will not start still tells the operator what was about to be checked; the refusal carries a WHAT WAS CHECKED line. It also splits two facts the None arm conflated — an absent origin and a non-GitHub origin produced the identical no-GitHub-upstream message, so an operator with a GitLab origin read a message about absence. Pinned by tests::github_login_refusal_states_the_subject_it_examined.
+
+        CRITERIA 1, 2 AND 3 ARE BLOCKED ON 1217-54vw, not on effort. That row holds the scope mismatch macuahuitl found while ruling on the remedy shape: read_host_project_origin_url is parameterized with five call sites, four passing a real project path and only the 759-vceg probe passing the process CWD; ProviderLoginConfig carries no project at all, so the login is project-agnostic by construction; and the credential lands at one global secret/github/token. A one-shot single-repo check guards a credential used for all repositories. The CWD dependency is a SYMPTOM, and no choice of where to read the repository from fixes a scope mismatch, which is why shape (a) was ruled out and (b) and (c) are both unrulable today.
+
+        A WARNING FOR WHOEVER BUILDS THE GUARD ON 1217-54vw, earned by a mutation against my own work in this cycle. That row's defect IS A CALLER CHOOSING THE WRONG SUBJECT. A test that hands a checker its subject is green against that defect BY CONSTRUCTION — not likely to miss it, structurally incapable of seeing it, while printing the output of a passing check. I proved the small version on myself here: I built the subject string inline at the call site and asserted over subject strings the test itself wrote, and the mutation collapsing the two arms left it GREEN. Extracting github_login_probe_subject so the decision takes the CALL SITE'S inputs made the same mutation red. The rule for that guard: derive the subject the way production does, from the same inputs the real call site takes, and make its falsifying mutation a change to the CALLER, not to the checker.
+
+        NEXT, AND NOT PART OF THIS CLAIM: costing 1217-54vw's two coherent resolutions — per-project credentials versus a check at use — as measurement rather than preference, with the method published and no recommendation. Its reading rule is fixed in advance, deliberately: a low count of consumers means the mismatch is UNEXERCISED, not absent, and under no outcome does the guard's text stop over-claiming. One input is unavailable and is labelled rather than leaned on: the actual scope of the credential the operator seeded, which would require sending their identity outward and is theirs to authorize, not mine to run.
