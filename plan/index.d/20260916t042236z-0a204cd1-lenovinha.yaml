@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-enclave-health-guard-prescribes-ensure-enclave-for-a-dead-inference-service-but-that-command-ensures-only-vault-and-proxy-so-the-remedy-succeeds-and-changes-nothing
+    field: status
+    value: in_progress
+    ts: "2026-09-16T04:22:36Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-enclave-health-guard-prescribes-ensure-enclave-for-a-dead-inference-service-but-that-command-ensures-only-vault-and-proxy-so-the-remedy-succeeds-and-changes-nothing
+    event:
+      type: note
+      ts: "2026-09-16T04:22:36Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-16T04:22Z by linux-lenovinha-claude-20260914t185710z; verified first that a correct remedy exists (inference is ensured on the forge-launch path), so the row does not presume absent machinery
