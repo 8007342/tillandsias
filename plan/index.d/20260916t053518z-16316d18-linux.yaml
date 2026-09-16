@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    field: status
+    value: in_progress
+    ts: "2026-09-16T05:35:18Z"
+    host: linux
+
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: progress
+      ts: "2026-09-16T05:35:18Z"
+      host: linux
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: 5f8565879ead48ffdd2493bd8611aa8db40b8124
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-16T05:35:18Z"
+      host: linux
+      summary: |-
+        claimed for cycle 2026-09-16T04:40:00Z by linux-yoga-claude-20260916t053517z — COSTING ONLY, not choosing

@@ -6794,3 +6794,140 @@ criterion 3 released because it was claimed and never started, back on cadence).
 None asked for work and none is stuck, so nothing was flipped on anyone's
 behalf. 1215-5uba's second-instance measurement suits a floor-tier host and is
 `ready` with `pickup_role: any` — available to whoever drains next, not assigned.
+
+## Pass 41 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY; TRUNK HAS NOT MOVED SINCE THE MO CYCLE CLOSED.** Both
+platform branches remain fully contained — `windows-next` ahead=0 behind=309,
+`osx-next` ahead=0 behind=88 — and `origin/linux-next` is still 059173270, this
+host's own attestation head. No new host reports and no peer messages since pass
+40, so the quiet is a short interval rather than a fleet state, and no idleness
+is inferred from it (1005-class: idleness is established by asking, never by a
+timestamp).
+
+**THE CLAIM-EXPIRY SWEEP OFFERED TWO CANDIDATES THAT LOOK IDENTICAL AND WANT
+OPPOSITE RESPONSES.** Run READ-ONLY, no `--write`:
+
+```
+expire-candidate  1155-jurn   2026-09-14T07:56:09Z  claimant:windows
+expire-candidate  1186-w3ph   2026-09-14T22:00:00Z  claimant:yolanda
+summary: in_progress=6 expired=2 held=0 unknown_age=0 ttl_hours=24 mode=dry-run
+```
+
+Checked each by hand, because the output does not distinguish them:
+
+- **1155-jurn is SAFE to expire.** `refs/heads/work/1155-jurn` IS an ancestor of
+  trunk — the work landed. And its claimant is `windows`, a PLATFORM rather than
+  a workstation: 772-4se9's old default, the exact shape 1201-hsf9 now refuses at
+  write time. This is a pre-fix defaulted claim on a row whose work is done.
+- **1186-w3ph would STRAND WORK.** yolanda's salvage ref is not contained and
+  THREE files still carry changes trunk lacks, verified by content rather than
+  ancestry. Returning it to ready invites a second host onto work whose holder
+  has real changes parked on origin.
+
+`--write` applies both together. NOTHING WAS EXPIRED THIS PASS, and the reason
+is recorded per candidate rather than as a blanket caution.
+
+**FILED 1220-zb7q FOR THE BLIND SPOT ITSELF.** The sweep reads only the ledger,
+so it cannot see unlanded work on an origin ref, and a coordinator must redo
+this ancestry-and-content check by hand every pass — the kind of manual step
+that gets skipped on the pass where it matters. THIS IS 1187-iij8's SHAPE IN THE
+LEDGER TOOL: there a floor-tier timeout and a real assertion failure wore the
+same colour and sent a fixer to something not broken; here a landed claim and a
+claim holding parked work wear the same verdict word. The instrument is not
+wrong about what it measures — it is silent about the fact that changes the
+answer. Filed asking for an ANNOTATION with three outcomes (contained / not
+contained / could not check), explicitly not for a refusal: consulting origin is
+a network call and the sweep must still work without one.
+
+**NO REASSIGNMENT.** The four hosts heard from recently all hold
+self-determined work — yoga (1218-25z3 then the 1217-54vw costing), lenovinha
+(landed 1219-dcma an hour ago), macneo and macbookair (both closed clean and
+back on hourly cadence). None reported idle, none asked, and none was directed.
+
+## Pass 41 addendum — 2026-09-16, the self-kill is now a fleet pattern
+
+**A SECOND HOST KILLED ITS OWN TOOL SHELL WITH `pkill -f <name>`, AND THE WORST
+CONSEQUENCE WAS NOT THE KILL.** yoga-silverblue, stopping a spinning loop in
+`check-must-ship-rows.sh`, ran `pkill -f` matching the script name; the shell's
+own command line contained that name, so the sweep killed the shell. **The loop
+survived** and kept burning CPU — found afterwards with `pgrep` and killed by
+PID. macuahuitl hit the identical shape earlier in this restart window, which is
+why it is recorded here as a pattern rather than as one host's slip: the cause is
+structural — a `-f` match reads the FULL command line of every process, and the
+process issuing the sweep is one of them.
+
+**THE THIRD-ORDER CONSEQUENCE IS THE ONE WORTH CARRYING.** The dead shell was
+midway through a COMPOUND command, so an edit yoga believed had applied had NOT.
+They caught it only by grepping for the new text rather than resuming from the
+intended state. So after any shell dies mid-command the tree is in a BELIEVED
+state, not a known one, and the only safe move is to re-derive it from the files
+— grep for the new text, read the diff — never to continue from what the command
+was supposed to have done. That is the "a result is not evidence unless the
+producer ran" shape pointed at your own editor instead of at a test, and it is
+how a half-applied edit reaches a gate looking intentional.
+
+**AND THE LOOP ITSELF WAS THE BETTER FINDING.** The arm yoga wrote for the
+coordinator's silent-unknown-argument defect caught a different and worse one:
+`--marker` with no value made `shift 2` fail with the argument count unchanged,
+so the loop SPUN FOREVER under `set -uo pipefail` with no `-e`. A release-path
+script that HANGS is worse than one that answers wrongly — no verdict, no error,
+only a stopped terminal, and nothing to read afterwards. Verified fixed from the
+landed tree here, BOUNDED with `timeout 15` rather than run bare, because
+verifying a hang fix by invoking it unbounded reproduces the hang in the
+verifier: `fail:must-ship:missing-value`, terminated on its own, rc=0 not 124.
+
+## Pass 42 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=326, `osx-next` ahead=0
+behind=105, both fully contained. `main` behind=586. No land needed.
+
+**COMMIT AUTHORSHIP DOES NOT IDENTIFY THE HOST, AND I MISREAD IT IN THIS PASS
+BEFORE CATCHING IT.** Counting trunk activity by `%an` this pass returned
+`8 Tlatoāni / 6 Tlatoani` and my first reading was "my own name split across two
+spellings". IT IS TWO DIFFERENT HOSTS: `Tlatoāni` (macron) is
+`tlatoani@yoga.ayahuitlcalpan.com` and `Tlatoani` (no macron) is
+`tlatoani@macuahuitl.ayahuitlcalpan.com`. I had the attribution backwards — the
+8 were yoga's, the 6 mine — and caught it only by resolving shas yoga had named
+in a message against `%ae`.
+
+MEASURED over the last 7 days, ELEVEN distinct (name, email) pairs, with the
+name collapsing across hosts:
+
+- `Tlatoani` maps to FOUR emails — `bulloncito@gmail.com`,
+  `bulloncito+lenovinha@gmail.com`, `tlatoani@macuahuitl.ayahuitlcalpan.com`,
+  and `tlatoani@Tlatoanis-MacBook-Neo.local`.
+- `Tlatoāni` maps to TWO — `bulloncito@hotmail.com`,
+  `tlatoani@yoga.ayahuitlcalpan.com`.
+- Plus `8007342`, `Dany Boy`, `lapto`, `esmeraldinha`, `lenovinha`.
+
+THE COST IS NOT COSMETIC. Last 24h, the two views disagree about who exists:
+
+```
+by EMAIL   macuahuitl 99 | bulloncito@gmail 59 | yoga 51 | lenovinha 36 | macneo 9
+by NAME    Tlatoani  159 | Tlatoāni        51 | lenovinha 36 | lapto      8
+```
+
+The name view MERGES macuahuitl and an unattributed bucket into one row of 159,
+and LOSES macneo ENTIRELY — its 9 commits fold into that same 159. So a host
+that is working reads as silent. This pass exists partly to find idle hosts and
+reassign them; an instrument that reports an active host as absent is the exact
+opposite of what the pass needs, and 1005-class already forbids inferring
+idleness from timestamps for the same reason.
+
+REMEDY, AND IT IS FREE: count by `%ae`, and prefer the
+`<user>@<host>.ayahuitlcalpan.com` form, which is the only shape that names a
+host. `bulloncito@gmail.com` at 59 commits is an UNATTRIBUTED BUCKET and must
+never be read as a host — the same rule `loop-status-metrics-audit.sh` already
+enforces for platform-label stems (order 1012-hu7d, "never read a bucket as a
+host"). The git-author view has the identical failure mode and no such guard.
+
+NOT ACTED ON BEYOND RECORDING: per-host git identity is host configuration, and
+agents never change deployments. Routed to the operator as a plain ask rather
+than repaired here.
+
+**NO REASSIGNMENT.** Four hosts are identifiable-active in the last 24h by email
+— macuahuitl, yoga, lenovinha, macneo — and all four hold self-determined work:
+yoga closed the 1217-54vw costing and released the claim, lenovinha closed
+1219-dcma, macneo and macbookair are on hourly cadence. None reported idle and
+none asked. No claim was flipped onto anyone.

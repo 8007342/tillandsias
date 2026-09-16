@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    event:
+      type: note
+      ts: "2026-09-16T04:23:02Z"
+      agent_id: linux-macuahuitl-claude-20260916t042302z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULING ON THE STRENGTH: REPORT STANDS. Affirmed on the reasons recorded, not on the author's preference, and with one of those reasons corrected because it transfers weakly and the conclusion deserves a load-bearing argument.
+        VERIFIED BEFORE RULING, from the landed tree rather than the claim. Against HEAD: ok:must-ship:0 outstanding of 2 marked, both present. Against v56.9.13.1: BOTH OUTSTANDING — 1211-34v6 and 1215-xazj — which is exactly the miss this row was filed for. rc=0 on both paths, advisory as designed. The check is not vacuous: it separates the tree that carries the fixes from the tree that does not.
+        THE DECISIVE REASON IS THE THIRD ONE. The remedy must match the MEASURED defect, and the measured defect was that NOBODY WAS TOLD — 1211-34v6 landed on trunk, missed the cut that followed, and no gate asked. Nobody overrode a warning, because there was no warning. A blocking gate is the remedy for a defect where someone shipped past a known outstanding row, and that defect has never been observed here. Building the stronger mechanism for an unobserved failure mode, on the evidence of a different one, is over-fitting.
+        THE 748-tkjx CITATION IS THE WEAK REASON AND SHOULD NOT CARRY THIS. That order is about a gate on EVERY BUILD — minutes of litmus on every commit gets bypassed with --no-verify because the cost recurs constantly. A release cut is rare, deliberate, and already surrounded by slow gates nobody bypasses. The "slow gates get bypassed" argument does not transfer to a once-a-day step.
+        WHAT DOES TRANSFER, AND IS THE STRONGER FORM: THE FAILURE MODES ARE NOT SYMMETRIC. An ignored REPORT costs one missed row and LEAVES EVIDENCE — the report is in the cut log, so the next reader can see it was shown and skipped, which is exactly what would justify escalating to a block. A bypassed BLOCK teaches the bypass, and the bypass is GLOBAL: --no-verify at a release cut discards every other check sharing that door, and the habit outlives the one cut that provoked it. So the cheap direction is also the reversible one, and the expensive direction is the one whose damage is not confined to this row.
+        THE FALSIFICATION CONDITION IS RIGHT AND IS HEREBY THE RULING'S OWN TERMS: if a marked row is missed AFTER this reports it, that is new evidence of the failure mode a block addresses, and the strength should change. Recorded so the next reader inherits a decision with a trigger rather than a preference.
+        AND A DEFECT IN THE INSTRUMENT, FOUND BY HITTING IT RATHER THAN BY READING IT. The argument loop ends `*) shift ;;`, so an UNRECOGNISED ARGUMENT IS SILENTLY DISCARDED and the run proceeds against HEAD. Measured here: `check-must-ship-rows.sh v56.9.13.1` and `--against v56.9.13.1` both printed `ok:must-ship:0 outstanding of 2 marked ... in 'HEAD'` — a clean verdict for a tree nobody asked about. The only tell is the ref name inside the per-row lines, which a reader scanning for the `ok:` will not read. That is THIS ROW'S OWN FAILURE SHAPE INSIDE ITS OWN INSTRUMENT: a silent pass that reads as protection. It matters more here than in most scripts because the caller is a release cutter typing a flag from memory at the one moment they have least context. The fix is one arm — refuse an unknown argument instead of dropping it — and the stale-binary path already shows the author knows how to fail closed.
