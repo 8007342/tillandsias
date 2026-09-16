@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: readme-ledger-distillation-policy-has-never-fired
+    event:
+      type: progress
+      ts: "2026-09-16T08:15:29Z"
+      agent_id: linux-macuahuitl-claude-20260916t081529z
+      host: macuahuitl
+      summary: |
+        CLOSING. The deliverable was an either/or — enforce the policy, or restate the ~10-row trigger as the advisory it was — and this took the FIRST branch: something now runs it.
+        CRITERION 1, "either a check reports when the table exceeds the threshold, or the figure is restated as advisory with the reason": MET by the check. scripts/check-ledger-distillation.sh reports due:/ok: and names the destination line; wired into scripts/release-preflight.sh beside 1218-25z3's must-ship advisory — same surface, same strength, same reason. VERIFIED FIRING IN SITU rather than by grep: a full release-preflight run prints ok:must-ship, then ok:ledger-distillation:10-rows:threshold=10, then ok:release-preflight.
+        CRITERION 2, "the ~10 number and the actual row count stop disagreeing silently": MET, and by construction rather than by diligence. The threshold now lives in the script and the runbook sentence points AT the script instead of restating a number, so the two cannot drift apart — which was the failure mode, not the specific gap.
+        CRITERION 3, the NEGATIVE CONTROL, "a table UNDER the threshold reports clean, so the check cannot be satisfied by always firing (or by never firing, which is the current state)": MET and it is the load-bearing one. The live table sits AT threshold, so a bare run can only ever print ok:, and a check that only prints ok: on a healthy tree cannot be told from a broken one. Both legs therefore drive the LIVE README through --threshold: --threshold 0 gives due:ledger-distillation:10-rows:threshold=0 and --threshold 9999 gives ok:ledger-distillation:10-rows:threshold=9999.
+        VERIFIABLE_CLOSURE SATISFIED AS WRITTEN, not substituted for. It named litmus:release-runbook-external-preconditions-shape (bound) with two legs. Pinned there as STEP 5/6 and STEP 6/6, both OK under scripts/run-litmus-test.sh ci-release --phase pre-build. A second step pins the STRENGTH decision itself — a due: verdict still exits 0, so table length can never refuse a cut — and that an unreadable ref reports skipped: rather than zero, because "could not look" and "no rows" are different answers and only one is about the ledger. The fixture scripts/test-ledger-distillation-advisory.sh is 8/8 and wired into build.sh beside its sibling, so it is not a test nobody runs.
+        THE ROW'S OWN TITLE WAS REFUTED BEFORE THIS AND THE CLAIM SURVIVED IT. "has never fired" stopped being true on 2026-09-03 (66d615e3f) and again on 2026-09-13 (f51aa955e), taking the table from 19 rows to 10. Both firings happened because somebody NOTICED, which is the condition the row actually named. What changes here is that noticing is no longer required. That distinction is why this closes on the mechanism rather than on the row count.
+        EVIDENCE: implementation 2e2652ec68a9efee09c640fa9d939a35a8c77dae, closure pinning 83f8e0ad0a6e86ca06fd1448d4292de6f42d9814. Both verified as ancestors of origin/linux-next BEFORE being cited, because the land's rebase arm rewrites a pre-land sha and this host cited a dead one earlier tonight.
+        PROCESS COST, RECORDED: this cycle used TWO lands rather than one. I built the check and its fixture before reading the verifiable_closure, which named a binding I then had to add in a second commit. Reading the closure first would have made it one.
