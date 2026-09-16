@@ -669,3 +669,54 @@ looked"* will eventually be read as the former.
   host right now. Proven environmental: both fail identically on the pre-change
   tree. So this crate's work is committed and UNLANDED until the tray is down;
   I am not quitting the operator's running application to land a commit.
+- 2026-09-16 (1224-zpek): filed the live-tray gate blocker. exec_guest_stdin's
+  two tests ASSERT on the live-tray refusal while their own message says "this
+  test proved nothing" — a failure claims the stdin path is broken; the truth is
+  it was never exercised. 1141-vf9w's shape, already settled: an honest "I could
+  not look" must not collapse into a content verdict. NOT an oversight about
+  vacuity — the guard's comment shows PASS-vacuously vs FAIL was weighed and
+  FAIL correctly chosen; SKIP-by-name is the third option nobody had.
+- 2026-09-16: this is the THIRD distinct cause for these same two tests. They
+  were blamed on gate concurrency (asserted PROVEN on a solo green that was
+  lucky link order, not a control), then correctly traced to 1043-kvvn's
+  duplicate [[bin]] name. The recorded method error was "never opened the
+  transcript to read WHY the test failed". I read it: the stderr names the
+  live-tray refusal in plain text, one tray process, and both fail identically
+  with my change stashed — environmental, not a regression.
+- 2026-09-16, A BOOTSTRAP PROPERTY: the fix for "a live tray reds the gate"
+  cannot be LANDED from a host whose tray is redding its gate, because landing
+  needs that gate. It wants a host with no tray, an operator quitting theirs
+  once, or another host landing a relay ref.
+- 2026-09-16: hit the anchored-pattern trap AGAIN. check-scorable-obligation
+  matches the FIRST characters (scripts/*.sh*, litmus:*, cargo test*), and my
+  closure opened "With a tray RUNNING, cargo test ..." so it matched nothing.
+  Two days ago the same checker refused a closure opening with a BACKTICK. I
+  recorded that in memory and still wrote the variant.
+- 2026-09-16: used the citation gate's `cite-ok` escape for the first time, and
+  legitimately — the bullet ABOVE quotes the drifted citation AS the evidence,
+  so replacing it with a symbol would erase the finding. That is the case the
+  escape documents, not a way around the rule.
+- 2026-09-16, THE LESSON I PAID FOR TWICE: I concluded criterion 3 was
+  UNLANDABLE and macuahuitl confirmed the relay ref does not escape either — and
+  all the while 872-c9nd's salvage net had ALREADY PUSHED
+  salvage/tlatoanis-macbook-air/20260916-restart-20260916-115025 to origin,
+  reachable by any host with a working gate. It landed from there (2263daf85).
+  Both of us reasoned about escape routes while the work sat on a ref neither
+  queried. BEFORE CONCLUDING WORK IS UNREACHABLE, LIST THE SALVAGE REFS —
+  `git ls-remote --heads origin 'refs/heads/salvage/<host>*'`; this host has 3.
+- 2026-09-16: `cargo test -p tillandsias-macos-tray --bins` runs the crate's 135
+  tests WITH A TRAY UP, because --bins selects binary targets only and never
+  builds tests/exec_guest_stdin.rs. So 1224-zpek blocks ./build.sh --check and
+  does NOT block verifying macOS-only sources. Attested from that transcript:
+  ok:sources-attested:macos-only:7, verdict now ok:sources-verified:macos-only:7.
+  A blocker that stops one thing is not a blocker on everything downstream of
+  it, and I had been treating it as one.
+- 2026-09-16: macuahuitl corrected their own claim that a Linux gate compiles
+  this crate — per 739-6r6n it is FULLY cfg-gated and Linux compiles STUBS, so
+  those seven modules land UNVERIFIED and only a macOS host can attest them.
+  That is why the attestation above is worth a cycle rather than bookkeeping.
+- 2026-09-16: trunk's copy of installation_uuid.rs differed from mine by ONE
+  line — `use super::{SECURITY_CALL_BUDGET, spawn_bounded}` versus my reversed
+  order — a rustfmt difference between hosts, not a logic change. Took trunk's
+  on merge. Worth knowing before the next relay: my fmt and macuahuitl's
+  (1.9.0-stable, 48a229ceae) disagree on import ordering.
