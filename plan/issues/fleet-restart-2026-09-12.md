@@ -6931,3 +6931,62 @@ than repaired here.
 yoga closed the 1217-54vw costing and released the claim, lenovinha closed
 1219-dcma, macneo and macbookair are on hourly cadence. None reported idle and
 none asked. No claim was flipped onto anyone.
+
+## Pass 43 — 2026-09-16, macuahuitl (coordinator)
+
+**RUN READ-ONLY WHILE AN MO CYCLE HELD THE CHECKOUT.** The coordination prompt
+arrived with this host's own meta-orchestration cycle mid-flight: a land gating,
+914-nkc4 unclosed, no attestation yet, and `cycle-checkout-lock.sh status`
+answering `skip:overlap-lock-held:lane=operator-prompt pid=22560`. The branch
+audit, the activity read and the host reports need no writes, so they ran; the
+drill entry and every ledger write were HELD until the gate finished. Writing
+plan fragments underneath a running gate is the lapse yoga-silverblue
+self-reported an hour earlier — the digest skips `plan/index.d/*.yaml`
+(gate-stamp.sh, the fast-lane `continue`), so the STAMP is safe, but the
+ledger checks inside `./build.sh --check` read a tree that would be changing
+beneath them. The lock said so and was obeyed rather than argued with.
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=336, `osx-next` ahead=0
+behind=115. `main` behind=596.
+
+**PASS 42's AUTHORSHIP HAZARD NOW HAS A NAMED HOST, AND IT IS NOT A RELAY
+ARTEFACT.** Pass 42 found that `bulloncito@gmail.com` is an unattributed bucket
+carrying 59 commits in 24h. This pass identifies it: **macbookair commits
+directly under the operator's own identity and has no host-identified git
+address anywhere.** Across BOTH branches over 14 days there are nine distinct
+author emails and not one of them names that host:
+
+```
+bulloncito@gmail.com          bulloncito@hotmail.com
+bulloncito+lenovinha@gmail.com  bulloncito@outlook.com
+esmeraldinha@esmeraldinha…    lenovinha@lenovinha…
+tlatoani@macuahuitl…          tlatoani@Tlatoanis-MacBook-Neo.local (macneo)
+tlatoani@yoga…
+```
+
+CHECKED BEFORE RECORDING, because "fragments FROM macbookair" reads like relayed
+work, and a relayed commit is legitimately authored by the relayer. It is not
+relay: `plan(690-w94k): claim criterion 3` and `plan(690-w94k): release criterion
+3 unstarted` are macbookair's OWN actions under `bulloncito@gmail.com`. The
+contrast is in the same query — this host's relays say so in the subject
+(`plan(coordination): relay macbookair's 690-w94k…`) and are authored by
+macuahuitl. So the fleet is SPLIT: macneo, lenovinha, yoga, esmeraldinha and
+macuahuitl carry per-host identities; macbookair carries the operator's, and its
+work is distinguishable only by PROSE IN A SUBJECT LINE.
+
+**AN INSTRUMENT DEFECT OF MINE IN THIS PASS, recorded because it is the shape
+this drill exists for.** Probing for a macbookair email I wrote
+`grep … | head; echo "  (empty = none)"` — the label prints UNCONDITIONALLY,
+whatever the grep returns. It returned `Tlatoanis-MacBook-Neo.local` (macneo's
+host, not macbookair's) and my own output then announced "empty = none"
+underneath a non-empty result. A hardcoded conclusion beside a real result is
+worse than no label: it reads as the instrument's verdict. Caught by reading the
+two lines together; the corrected form asks what the matched line IS.
+
+**NO REASSIGNMENT, AND THE FLEET IS WORKING.** By email over the last two hours:
+lenovinha 6 commits (closed 1221-vkbj plus a 1132-r4mt measurement, attested),
+macuahuitl 2, and macbookair 2 under the shared identity — it RE-CLAIMED
+690-w94k criterion 3, the row it released earlier tonight as claimed-and-never-
+started, which is a host taking work back up rather than an idle one. yoga closed
+the 1217-54vw costing and released that claim. Nobody reported idle, nobody
+asked, and no claim was flipped onto anyone.
