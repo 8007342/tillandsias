@@ -7331,3 +7331,51 @@ full gate. Nobody reported idle, nobody asked, no claim was flipped.
 plan-only push carrying both records), but batching reduces the count, not the
 share. That number is the standing argument for keeping coordinator output to
 one push per pass.
+
+## Pass 47 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=378, `osx-next` ahead=0
+behind=157. `main` behind=638. First pass run entirely through the two
+instruments built this cycle rather than by re-deriving the queries.
+
+**THE SALVAGE AUDIT IN ONE COMMAND, where pass 46 needed three wrong attempts
+and a manual reconstruction:** of twelve refs, only two hold genuinely
+outstanding content — lenovinha's 1185-9qx6 (one gate step, row `completed`) and
+yolanda's 1186-w3ph (three files). Everything else reports nothing, including
+both macbookair refs this host relayed by cherry-pick, which ancestry would
+still call stranded.
+
+**THE TWO INSTRUMENTS COMPOSE, AND THAT IS THE PASS'S FINDING.** `expire-claims`
+offered THREE candidates:
+
+```
+890-27mv   claimant:linux     platform, not a host   0 salvage refs   SAFE
+1155-jurn  claimant:windows   platform, not a host   0 salvage refs   SAFE
+1186-w3ph  claimant:yolanda   3 files outstanding                     WOULD STRAND
+```
+
+The first two are 772-4se9's defaulted-claim shape, the one 1201-hsf9 now
+refuses at write time. The third is provably unsafe — and it took one command to
+know that, because 1226-jb8y's audit answers what the sweep cannot see. That is
+exactly the ranking 1220-zb7q asked for, now available OUTSIDE the sweep.
+
+**AND THE SWEEP STILL CANNOT USE IT.** `expire-claims` accepts no order and no
+selection flag — verified, `expire-claims 890-27mv` returns `error: unknown
+expire-claims flag`. `--write` applies every candidate together. So the choice
+is strand yolanda's work or expire nothing. **Nothing was expired, third
+consecutive pass, and the reason has shifted from "cannot tell" to "CAN tell and
+cannot act".** Recorded on 1220-zb7q: the remedy it asked for was an annotation,
+and what is actually missing is GRANULARITY — an annotation would leave the same
+all-or-nothing write at the end of it.
+
+**A COST THAT IS GROWING:** the defaulted-platform-claim population is up from
+one to two — 1155-jurn in passes 41 and 44, now 890-27mv. Each is a substantive
+row sitting `in_progress` under a claimant that is not a host, so `plan_next`
+does not offer it and the work is HIDDEN rather than queued. 890-27mv is "the
+recurring-loops gate and the release gate are different tiers". Real work,
+claimed by nobody, invisible to the selector.
+
+**NO REASSIGNMENT.** Six hours by email: macuahuitl 16 (13 plan, 3 code), yoga 7
+(4 plan, 3 code), unattributed bucket 3. yoga holds 1021-hf9e at ready with its
+third contention located; lenovinha on 679-rp9m; macbookair re-claimed 690-w94k
+and attested the macOS sources. Nobody reported idle, nobody asked.
