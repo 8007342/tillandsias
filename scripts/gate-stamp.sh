@@ -216,6 +216,20 @@ GIT_DIR="$(git rev-parse --absolute-git-dir 2>/dev/null)" || {
     exit 2
 }
 STAMP_FILE="$GIT_DIR/tillandsias-gate-stamp"
+# ORDER 970-7fqk. The per-path digests the stamp's walk already computes, kept
+# beside it so a refusal can name the paths whose CONTENT MOVED rather than the
+# paths whose MTIME moved. Those are different questions and the refusal used to
+# answer the second while the decision was made on the first.
+#
+# It lives in $GIT_DIR, never the worktree: a manifest inside the tree would be
+# enumerated by the very walk that writes it.
+STAMP_MANIFEST="$GIT_DIR/tillandsias-gate-stamp-manifest"
+# Cleared unconditionally so an INHERITED value cannot turn manifest emission on
+# during `verify`. Only the write path's inline assignment enables it; without
+# this line an exported variable would silently make a verify rewrite the
+# manifest to describe the tree being checked instead of the tree that was
+# stamped — the one the refusal must diff against.
+GATE_STAMP_EMIT_MANIFEST=""
 
 compute() {
     # Hash the CONTENT of every tracked and untracked file in the worktree.
@@ -478,13 +492,30 @@ compute() {
         fi
     done
 
+    # ORDER 970-7fqk. The manifest is emitted FROM THE FRAMES THEMSELVES, in the
+    # loop whose bytes become the digest — not from a second walk. A separate
+    # enumeration could disagree with the digest, which is the two-questions-one
+    # -answer defect this order removes, reintroduced one layer down.
+    #
+    # Truncated here and appended per frame. If the write fails the digest is
+    # unaffected: the manifest is a DIAGNOSTIC, and a diagnostic that could fail
+    # a stamp would trade an explanation for an outage.
+    if [[ -n "${GATE_STAMP_EMIT_MANIFEST:-}" ]]; then
+        : > "$STAMP_MANIFEST" 2>/dev/null || true
+    fi
     local fidx=0 sidx=0
     for ((i = 0; i < ${#paths[@]}; i++)); do
         if [[ "${kinds[i]}" == symlink ]]; then
             printf 'symlink\0%s\0%s\0' "${paths[i]}" "${symlink_digests[sidx]}"
+            [[ -n "${GATE_STAMP_EMIT_MANIFEST:-}" ]] \
+                && printf 'symlink\t-\t%s\t%s\n' "${symlink_digests[sidx]}" "${paths[i]}" \
+                    >> "$STAMP_MANIFEST" 2>/dev/null
             sidx=$((sidx + 1))
         else
             printf 'file\0%s\0%s\0%s\0' "${paths[i]}" "${execbits[i]}" "${file_digests[fidx]}"
+            [[ -n "${GATE_STAMP_EMIT_MANIFEST:-}" ]] \
+                && printf 'file\t%s\t%s\t%s\n' "${execbits[i]}" "${file_digests[fidx]}" "${paths[i]}" \
+                    >> "$STAMP_MANIFEST" 2>/dev/null
             fidx=$((fidx + 1))
         fi
     done | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1
@@ -651,7 +682,11 @@ case "${1:-verify}" in
                 fi
             done
         fi
-        digest="$(compute)" || {
+        # ORDER 970-7fqk: only the WRITE path emits the manifest. `verify`
+        # calls compute too, and a verify that rewrote the manifest would
+        # describe the tree being CHECKED rather than the tree that was
+        # STAMPED — which is the one the refusal needs to diff against.
+        digest="$(GATE_STAMP_EMIT_MANIFEST=1 compute)" || {
             echo "stale:cannot-write-stamp"
             exit 1
         }
@@ -669,7 +704,75 @@ case "${1:-verify}" in
             echo "stale:cannot-write-stamp"
             exit 1
         }
+        # ORDER 970-7fqk. Written from `compute`'s OWN arrays, in the same
+        # invocation that produced the digest above, so the manifest and the
+        # digest cannot describe different trees. Deriving it from a second walk
+        # would reintroduce exactly the two-questions-one-answer defect this
+        # order exists to remove.
+        #
+        # A failure here is NOT fatal: the stamp is valid without it and the
+        # refusal degrades to saying it cannot name content movers. A manifest
+        # that could fail a stamp would trade a diagnosis for an outage.
         echo "ok:gate-stamped"
+        ;;
+    movers)
+        # ORDER 970-7fqk. Print the paths whose CONTENT differs from the stamped
+        # tree, one per line, as `<state>\t<path>`: modified | added | deleted.
+        #
+        # THIS IS THE QUESTION THE STALENESS DECISION ACTUALLY ASKS. The refusal
+        # used to answer a different one — `[ "$f" -nt "$stamp" ]`, pure mtime —
+        # so a merge or a regeneration that rewrote bytes IDENTICALLY was named
+        # as the cause while a genuine digest-mover could be absent entirely.
+        # Measured twice on 2026-09-02; one host spent ~25 minutes and three
+        # extra gates concluding the CHECK was mtime-based, which it never was.
+        # The message taught a false mechanism, and they designed against it.
+        #
+        # Exit 0 with output = movers found. Exit 0 with NO output = the content
+        # matches. Exit 2 = CANNOT ANSWER (no manifest), which callers must not
+        # render as "nothing moved" — that is the silence this fleet keeps
+        # mistaking for a pass.
+        if [[ ! -f "$STAMP_MANIFEST" ]]; then
+            echo "unavailable:no-manifest" >&2
+            exit 2
+        fi
+        _mv_tmp="$(mktemp -d "${TMPDIR:-/tmp}/gate-stamp-movers.XXXXXX")" || exit 2
+        trap 'rm -rf "$_mv_tmp"' EXIT
+        # Current per-path digests, from the SAME enumeration compute uses, so a
+        # path set difference is a real add/delete and not two walks disagreeing.
+        while IFS= read -r -d '' _p; do
+            # THE SAME FAST-LANE SKIP compute applies (930-i6x4, 1142-85zx).
+            # Without it every plan fragment reads as `added`, because compute
+            # excludes them from the digest so they are absent from the
+            # manifest — and this subcommand would name paths that CANNOT be
+            # the cause, which is the exact defect 970-7fqk exists to remove,
+            # committed inside its own remedy. FOUND IN PRODUCTION: the
+            # hermetic fixture's throwaway repos have no plan/ tree, so it
+            # could not see this. A clean checkout reported 40+ phantom adds.
+            case "$_p" in
+                plan/index.d/*.yaml|plan/loop_status.d/*.md|plan/mo-full-attestations.d/*.md) continue ;;
+                plan/issues/*.md) case "${_p#plan/issues/}" in */*) : ;; *) continue ;; esac ;;
+            esac
+            if [[ -L "$REPO_ROOT/$_p" ]]; then
+                printf '%s\t%s\n' "$(readlink "$REPO_ROOT/$_p" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" "$_p"
+            elif [[ -f "$REPO_ROOT/$_p" ]]; then
+                printf '%s\t%s\n' "$("${GATE_STAMP_SHA256[@]}" < "$REPO_ROOT/$_p" | cut -d' ' -f1)" "$_p"
+            fi
+        done < <(git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null | LC_ALL=C sort -z) \
+            > "$_mv_tmp/now"
+        # Manifest is `<kind>\t<execbit>\t<digest>\t<path>`; reduce to digest+path.
+        cut -f3,4 "$STAMP_MANIFEST" > "$_mv_tmp/then" 2>/dev/null || true
+        LC_ALL=C sort -t"$(printf '\t')" -k2 "$_mv_tmp/now"  -o "$_mv_tmp/now"
+        LC_ALL=C sort -t"$(printf '\t')" -k2 "$_mv_tmp/then" -o "$_mv_tmp/then"
+        awk -F'\t' '
+            NR==FNR { then_d[$2]=$1; next }
+            { now_d[$2]=$1 }
+            END {
+                for (p in now_d)  if (!(p in then_d))            print "added\t"   p
+                                  else if (now_d[p]!=then_d[p])  print "modified\t" p
+                for (p in then_d) if (!(p in now_d))             print "deleted\t"  p
+            }
+        ' "$_mv_tmp/then" "$_mv_tmp/now" | LC_ALL=C sort -k2
+        exit 0
         ;;
     verify)
         if [[ ! -f "$STAMP_FILE" ]]; then

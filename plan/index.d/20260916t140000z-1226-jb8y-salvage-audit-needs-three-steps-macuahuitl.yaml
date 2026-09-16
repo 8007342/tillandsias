@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: answering-whether-a-salvage-ref-holds-unlanded-work-takes-three-steps-and-every-single-step-shortcut-gives-a-confidently-wrong-answer
+    order: 1226-jb8y
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [coordination, salvage, git, instrument, fleet]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      Answering "does this salvage ref hold unlanded work" takes three steps, and every single-step shortcut gives a confidently wrong answer — measured by getting it wrong twice in one pass
+    context: |
+      PASS 45 ESTABLISHED THAT SALVAGE REFS STRAND WORK: macbookair's 690-w94k
+      criterion 3 sat on origin for hours while two hosts reasoned about escape
+      routes, because 872-c9nd's net had pushed it and nobody queried it. The
+      drill now says LIST THE SALVAGE REFS before concluding work is unreachable.
+      PASS 46 TRIED TO MAKE THAT ROUTINE AND GOT THE ANSWER WRONG TWICE, in
+      opposite directions, before getting it right. That is the content of this
+      row: the check is not one command and every shortcut lies.
+      STEP 1 — ANCESTRY IS NOT INTEGRATION. `git merge-base --is-ancestor` listed
+      NINE refs as "not contained". Two of them I had personally relayed by
+      cherry-pick hours earlier, so their content was fully on trunk and their
+      ancestry never would be. Ancestry answers "was this ref merged", which is a
+      different question from "is its work present".
+      STEP 2 — THREE-DOT DIFF OVERCOUNTS. `git diff --name-only trunk...REF`
+      lists what the ref changed SINCE THE MERGE BASE, which includes files trunk
+      ALSO added independently. It reported six macbookair fragments as
+      differing; a direct comparison showed all six BYTE-IDENTICAL, same size,
+      empty diff. I nearly reported unlanded ledger records that were already
+      landed.
+      STEP 2' — TWO-DOT DIFF OVERCOUNTS FAR WORSE, IN THE OTHER DIRECTION.
+      `git diff --name-only trunk REF` compares tips, and a salvage ref branches
+      from an old point, so the count includes ALL OF TRUNK'S PROGRESS SINCE:
+      526, 2009, 2061 files for refs whose genuine outstanding content is 3, 0
+      and 0. A reader taking those numbers would conclude the fleet is drowning
+      in stranded work.
+      STEP 3 — DIRECTION IS A SEPARATE QUESTION AGAIN. Once the real differing
+      set is known, "differs" still does not say WHICH SIDE IS AHEAD. lenovinha's
+      1185-9qx6 ref differs from trunk on build.sh and local-ci.sh — and trunk
+      touched both TWO DAYS AFTER that snapshot, with the row `completed`. The
+      salvage is stale, not outstanding. Without the date check it reads as three
+      stranded files.
+      THE METHOD THAT WORKS, and it is three steps because the question has three
+      parts: (1) three-dot to get the CANDIDATE set, (2) per-file blob comparison
+      between ref and trunk to get the REAL differing set, (3) compare trunk's
+      last-touch date against the salvage tip, plus the row's status, to get
+      DIRECTION. Applied to twelve refs it returns: yolanda's 1186-w3ph alone
+      holds genuinely outstanding work; every other ref is landed, superseded or
+      stale.
+      WHY IT WANTS A SCRIPT AND NOT A PARAGRAPH — 1223-wzc4's lesson, one week
+      old and already proven twice on this host: a corrected recipe that lives in
+      prose gets retyped, and a retyped command is a new command with none of the
+      corrections. This recipe has THREE steps and two of them look like the
+      whole answer. It is exactly the shape that does not survive paraphrase.
+    exit_criteria:
+      - 'a script answers "which salvage refs hold work not on the target branch" and reports per ref: genuinely-differing files, and for each whether the ref or the branch is AHEAD (pre-fix result: FAILS — two single-step shortcuts gave wrong answers in opposite directions in one pass, 526/2009/2061 against a truth of 3/0/0)'
+      - 'ancestry is NOT used as the integration test, and the script says so, since a cherry-picked relay is never an ancestor'
+      - 'a ref whose content is fully landed reports ZERO outstanding, so the output can be trusted as a clear signal rather than read as a standing backlog'
+      - 'NEGATIVE CONTROL: a ref that genuinely holds unlanded work still reports it — yolanda 1186-w3ph is the live positive case and must not be silenced by whatever suppresses the others'
+    unscoreable: |
+      placement-not-chosen: this could be a standalone script, a mode of
+      scripts/fleet-activity.sh (same audience, same pass, same
+      retyping hazard), or a subcommand of the salvage tooling that already
+      exists. The three-step method is measured and its failure modes are
+      reproducible on the live refs; where it lives is not chosen.
+    events:
+      - type: filed
+        ts: "2026-09-16T14:00:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t140000z"
+        host: macuahuitl
+        summary: |-
+          Filed by the coordinator against its own pass, after answering the same
+          question wrongly twice in opposite directions before answering it
+          correctly. The wrong answers are the evidence; a reader who only sees
+          the method will not believe it needs three steps.

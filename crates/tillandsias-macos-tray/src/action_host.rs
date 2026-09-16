@@ -3285,8 +3285,16 @@ mod tests {
         let before = own_zombie_children();
 
         // MUTATION CONTROL FIRST: raw spawn, Child dropped — the old behaviour.
+        //
+        // The pid is CAPTURED before the handle is dropped, so the reap below can
+        // target these children specifically. See that reap's comment for why
+        // that matters.
+        let mut control_pids: Vec<u32> = Vec::with_capacity(N);
         for _ in 0..N {
-            let _ = std::process::Command::new("/usr/bin/true").spawn();
+            if let Ok(child) = std::process::Command::new("/usr/bin/true").spawn() {
+                control_pids.push(child.id());
+                drop(child);
+            }
         }
         let mut leaked = 0;
         for _ in 0..50 {
@@ -3303,12 +3311,21 @@ mod tests {
              from nothing (saw {leaked} of {N})"
         );
 
-        // Reap the control's zombies so they cannot be counted as the helper's.
-        // waitpid(-1) until it drains; each call clears one.
-        for _ in 0..N {
+        // Reap the control's zombies so they cannot be counted as the helper's,
+        // TARGETING THEM BY PID.
+        //
+        // This was `waitpid(-1)`, which reaps ANY child of this process — and in
+        // a parallel test binary that is every other test's children too. It
+        // stole the `security` child of
+        // installation_uuid::tests::keychain_persists_credentials_across_calls,
+        // whose own wait then failed ECHILD "No child processes". The tests pass
+        // individually and the suite fails, which is the worst shape of flake:
+        // it looks like the OTHER test is broken. Measured 2026-09-16, one cycle
+        // after this test landed.
+        for pid in &control_pids {
             unsafe {
                 let mut status: i32 = 0;
-                libc_waitpid(-1, &mut status as *mut i32, 0);
+                libc_waitpid(*pid as i32, &mut status as *mut i32, 0);
             }
         }
 

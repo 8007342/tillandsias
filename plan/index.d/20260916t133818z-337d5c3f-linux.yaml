@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: progress
+      ts: "2026-09-16T13:38:18Z"
+      agent_id: linux-yoga-claude-20260916t133527z
+      host: linux
+      summary: |
+        SECOND PASS, AND IT CORRECTS MY OWN FIRST ONE. 9 of 10 parallel runs now clean, up from 8. Criterion 1 is still NOT met and the third contention is now located precisely.
+
+        MY FIRST PASS RELOCATED A GLOBAL READ AND CALLED IT REMOVED. I took forge_uses_host_mount() out of the two arg builders and put it in build_forge_agent_run_argv's BODY — a function EIGHT TESTS CALL. So forge_credential_quarantine_mounts_present kept reading the process global and kept losing the race, in 2 of 10 runs, exactly as before. MOVING A GLOBAL READ ONE LEVEL UP IS NOT REMOVING IT, and the previous commit message said "removed". The read is now the caller's to resolve: build_forge_agent_run_argv takes host_mount, the production launcher passes forge_uses_host_mount(), and the eight test call sites pass an explicit value.
+
+        MEASURED AFTER THIS PASS: ten parallel runs, NINE fully clean at 544 passed, one failure. That is the same test as before but a DIFFERENT CAUSE, which I confirmed rather than assumed — the test now passes host_mount=false explicitly, so the host-mount global cannot reach it.
+
+        THE THIRD CONTENTION, LOCATED. The failing assertion is "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)". That mount exists only if write_forge_gitconfig returns Some. Its first action is
+          let forge_git_dir = tillandsias_core::cache_root::cache_root().join("forge-gitconfig");
+          std::fs::create_dir_all(&forge_git_dir).ok()?;
+        and cache_root() resolves from XDG_CACHE_HOME, falling back to HOME. THIS SUITE HAS SIXTEEN set_var("HOME") SITES AND FIVE set_var("XDG_CACHE_HOME") SITES. When a concurrent test has HOME or XDG_CACHE_HOME pointed at a tempdir — or at one already dropped — create_dir_all fails, `.ok()?` swallows it into None, the mount is never added, and this test fails an assertion about a mount whose absence has nothing to do with it.
+
+        THE `.ok()?` IS PART OF WHY IT IS INVISIBLE: the failure is converted to None at the point it happens, so the only symptom is a missing mount several frames away. That is the same shape as everything else on this row — a well-formed result standing in for an error.
+
+        THE FIX SHAPE IS THE ca_path PRECEDENT AGAIN, and that precedent was itself about HOME: pass the base in rather than resolving it from the process env. write_forge_gitconfig should take the cache root as a parameter, threaded from its two callers, so a test supplies its own directory and needs no global. I did not do it in this pass because it is a third layer of the same refactor and I would rather land a measured increment than a half-applied one.
+
+        WHAT IS ALSO STILL TRUE: --test-threads=1 and the litmus serial arm remain untouched, deliberately. The serial gate is green at 544 passed, fmt clean, clippy clean. Criterion 3 cannot be approached until the failure set is stable.
+
+        THE CLIPPY ALLOW ON build_forge_agent_run_argv is deliberate and carries the file's own rationale, the same one its sibling builders record: these are distinct named forge-launch inputs, and taking host_mount as an argument is the POINT of this order rather than an accident of it.

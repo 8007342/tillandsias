@@ -6990,3 +6990,344 @@ macuahuitl 2, and macbookair 2 under the shared identity — it RE-CLAIMED
 started, which is a host taking work back up rather than an idle one. yoga closed
 the 1217-54vw costing and released that claim. Nobody reported idle, nobody
 asked, and no claim was flipped onto anyone.
+
+## Pass 43 addendum — 2026-09-16, a code land exhausted its attempt budget, and the coordinator is the traffic
+
+**yoga-silverblue hit `refused:land:attempts-exhausted:4` on a CODE land**, and
+reported it as a fleet condition rather than a blocker, explicitly not asking for
+a change. Recording it with the part they were too polite to compute.
+
+**THE MECHANISM, WHICH IS A FAIRNESS PROPERTY AND NOT A DEFECT.** A host landing
+CODE pays a full gate — 921s in their measurement, ~690-750s here — before its
+FIRST push. A host landing PLAN-ONLY pays none: the fast lane admits it without
+a build stamp. So on a shared branch the two classes have wildly different costs
+of entry, and if plan traffic is dense enough the code host can lose every push
+race inside its four attempts and retire with the work unlanded, while every
+plan-only push succeeds immediately. Nobody does anything wrong and nothing is
+broken.
+
+**THE STAMP DESIGN ALREADY SOFTENS IT, and this is the part worth carrying.**
+`gate-stamp.sh`'s digest EXCLUDES the plan fast lane (the `continue` arm for
+`plan/index.d/*.yaml`, `plan/loop_status.d/*.md`,
+`plan/mo-full-attestations.d/*.md`), so merging plan-only commits does NOT stale
+a code stamp. A code land racing plan-only traffic therefore pays ONE gate, not
+one per collision — later attempts are PURE PUSH RACES and adopt the earlier
+gate's stamp (1174-u5wp). Verified independently here twice tonight: both of
+this host's lands showed attempt 1 running a real gate and attempt 2 adopting
+that same stamp, each time confirmed by matching the gate log's mtime to the
+stamp timestamp rather than trusting the message.
+
+**THE COORDINATOR IS THE LARGEST SINGLE SOURCE OF THAT TRAFFIC. MEASURED:** of
+14 trunk commits in the 90 minutes around yoga's exhausted land, **12 were
+plan-only and SIX of those were macuahuitl's** — coordination records, ledger
+notes and row filings, pushed one at a time as each was written. That is the
+1005-class rule arriving as a measurement instead of a maxim: the coordinator's
+cadence is the churn slow hosts lose to.
+
+**WHAT CHANGES HERE, self-imposed and not asked for:** plan-only pushes from this
+host BATCH to one per pass instead of one per item. Six pushes carrying six
+records is six race losses for anyone gating; one push carrying six records is
+one. It costs this host nothing — the records are written either way — and it is
+the only lever the coordinator holds that does not trade another host's latency
+for its own. yoga was right not to ask for the attempt budget to be raised;
+raising it would have moved the cost onto whoever gates next.
+
+**AND yoga's OWN SHA WAS REWRITTEN AGAIN.** They reported the work as local at
+`b41e992ae`; it landed as `0f8616a22`. Third instance tonight of the land's
+rebase arm rewriting a pre-land sha — the unpushed set carried no merge commit,
+so `_unpushed_merges` was 0 and the tool rebased. The rule is unchanged and now
+has three witnesses: a local sha is not a shared address until it is on origin,
+and the sender can tell which arm applies with `git rev-list --merges --count
+origin/<branch>..HEAD` BEFORE quoting one.
+
+## Pass 44 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=352, `osx-next` ahead=0
+behind=131. `main` behind=612. One land this pass, batched — see below.
+
+**I REPRODUCED PASS 42's OWN DEFECT IN THIS PASS's FIRST MEASUREMENT.** Pass 42
+recorded that commit author NAME does not identify the host and that the remedy
+is to count by `%ae`. This pass opened its activity read with `%ae` and then
+printed `${e%%@*}` — stripping the domain, which is the only part that names the
+host — so macuahuitl and yoga both rendered as `tlatoani` and the first reading
+of trunk composition was unusable. The recipe was followed and the DISPLAY threw
+away what the recipe exists to preserve. Re-measured with full addresses; filed
+as **1223-wzc4**, p3, because the corrected recipe lives in prose and prose gets
+retyped. The precedent is exact and already in the coordination skill: the
+loop-status metrics audit was typed from memory on 2026-09-05, lost both its
+fixes, and was moved into a script with "RUN THE SCRIPT. DO NOT RETYPE THE LOOP."
+above it. The host-activity read has the same shape and no such script.
+
+**TRUNK COMPOSITION, 3h, by host (the corrected read):**
+
+```
+macuahuitl 10  (8 plan-only, 2 code)   yoga 3   macneo 3   lenovinha 3   gmail-bucket 2
+```
+
+Ten of twenty-one commits are this host's, eight of them plan-only — the same
+proportion that produced yoga's `refused:land:attempts-exhausted:4`. The
+batching commitment made last pass holds: this pass makes ONE plan-only push
+carrying both records instead of one per item.
+
+**THE EXPIRY SWEEP IS UNCHANGED AND NEITHER CANDIDATE WAS ACTIONED.** Same two
+rows as pass 41 — `1155-jurn` (claimant `windows`, a platform not a host; its
+`work/1155-jurn` ref IS contained in trunk, so expiring strands nothing) and
+`1186-w3ph` (yolanda's salvage ref still not contained, three files still
+carrying changes trunk lacks, so expiring would strand work). `--write` applies
+both together; nothing was written. The blind spot is filed as 1220-zb7q.
+
+**NO REASSIGNMENT, AND EVERY HOST HEARD FROM IS WORKING.** lenovinha claimed
+`679-rp9m` (the login Vault poll) this pass; yoga landed `1132-r4mt`'s criterion 4
+as CODE after four attempts and said criterion 2 remains unanswered rather than
+letting the delivered half imply it; macneo relayed a ledger-only cycle and
+emitted its first token record; macbookair holds `690-w94k` criterion 3. Seven
+rows are `in_progress`. Nobody reported idle, nobody asked, and no claim was
+flipped onto anyone.
+
+## Pass 45 addendum — 2026-09-16, a lane blocker with a bootstrap loop, and my own third repeat
+
+**macbookair CANNOT LAND CODE WHILE A TRAY OWNS THE VM**, filed as 1224-zpek,
+and it has cost that host two cycles. CONFIRMED HERE FROM A LINUX HOST BY
+READING THE SOURCE — possible because the defect is in the test's SHAPE, not in
+macOS behaviour. `exec_guest_stdin.rs` carries `assert_reached_stdin_path`,
+documented as "Guard against a vacuously-passing assertion", which then
+implements that guard as an `assert!` — so it FAILS, with the message "this test
+proved nothing". **The file states the problem and encodes the wrong remedy in
+adjacent lines.** A red says the stdin path is broken; the truth is it was never
+executed. PASS-vacuously was correctly rejected and FAIL was chosen as the safe
+direction; SKIP BY NAME is the third option, and it is the one this tree already
+settled in 1141-vf9w.
+
+**THE BOOTSTRAP LOOP IS THE PART TO PLAN AROUND, and the relay ref does not
+escape it.** The fix cannot be landed from the host it unblocks, because landing
+requires the gate the tray is redding — and pushing to `refs/heads/work/<order>`
+still requires a green stamp, so that path is closed too. It needs a macOS host
+with no tray, an operator quitting theirs once, or nothing.
+
+**STRANDED WORK, MEASURED NOT ESTIMATED:** 690-w94k criterion 3 is DONE and
+falsified at `b3eb557a9`, local to macbookair. It bounds the keychain calls,
+kills and reaps on the bound, and asserts THE PROCESS TABLE rather than elapsed
+time — which is what makes it catch macneo's 21h45m surviving-SecurityAgent
+case, a failure a timing-only assertion passes. It also repairs a `waitpid(-1)`
+shipped last cycle that reaped other tests' children.
+
+**AND THAT HOST READS UNATTESTED ON PURPOSE.** It declined to run finalize-cycle
+because the land needs the same gate and would have spent ~15 minutes to obtain
+a refusal already measured at cycle start. An unattested host that says why is
+worth more than one that spends a gate to look complete.
+
+**MY OWN THIRD REPEAT, and three makes it a habit rather than a slip.** Checking
+whether the test file was tracked I wrote `git ls-files | grep …; echo "  (empty
+= not tracked on this branch)"` — the label prints unconditionally. The grep
+returned the file and my output announced "empty" beneath it. Pass 43 recorded
+this exact idiom after doing it once; I have now done it twice more. The idiom
+is retired: a label that does not read its own result is a hardcoded conclusion,
+and beside a real result it reads as the instrument's verdict. Where a
+conclusion is wanted, it must be computed from the result or not printed.
+
+## Pass 45 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=364,
+`osx-next` ahead=0 behind=143 — **BUT WORK WAS STRANDED ON A SALVAGE REF AND
+NEITHER OF US HAD LOOKED.** macbookair reported 690-w94k criterion 3 as "done,
+falsified, committed at b3eb557a9, and unlandable here": its gate cannot pass
+while a tray owns the VM (1224-zpek), and I had confirmed the relay-ref escape
+does not help, since `refs/heads/work/<order>` also requires a green stamp. We
+both reasoned about escape routes. **The work was already on origin the whole
+time** — 872-c9nd's salvage net had pushed
+`salvage/tlatoanis-macbook-air/20260916-restart-20260916-115025` hours earlier,
+reachable by any host with a working gate. The net did its job and nobody
+queried it. **Before concluding a host's work is unreachable, LIST ITS SALVAGE
+REFS.**
+
+**THREE GATE REFUSALS ON THAT RELAY, THREE DISTINCT CAUSES, NONE SPURIOUS, AND
+NONE REACHABLE FROM THE ORIGINATING HOST:**
+
+- `cargo fmt`: rustfmt wanted `use super::{SECURITY_CALL_BUDGET, spawn_bounded}`
+  where the relayed source had them reversed. One line, no logic. It matters
+  because **fmt runs BEFORE the tests**, so the tray-red tests cannot have
+  masked it — the likeliest cause is a rustfmt difference between the hosts
+  (here 1.9.0-stable, 48a229ceae).
+- `881-29me`: their drill entry cites `main.rs:150` — in a passage ABOUT being <!-- cite-ok: quoting the citation under discussion; a symbol here would erase the thing being described -->
+  caught writing that citation. **The fix was NOT to rewrite it.** The guard
+  names two remedies and the narrow one applies: `<!-- cite-ok: … -->`, because
+  converting the quote to a symbol would delete what the entry records. The
+  broad fix would have looked tidier and destroyed the meaning.
+- third pending at the time of writing.
+
+A Linux gate on macOS code is a PARTIAL answer and the relay commit says so:
+`tillandsias-macos-tray` is a workspace member so it compiles and non-gated
+tests run, but `#[cfg(target_os = "macos")]` tests cannot. Recorded in the
+commit rather than left for a reader to discover.
+
+**yoga's THREE TOOLING ERRORS, relayed because two are generic and one I share.**
+(1) A reproduction using a bin target name that does not exist: cargo errored,
+the grep matched nothing, and the harness reported "0 failed lines" for THREE
+RUNS THAT NEVER COMPILED A TEST. **The tell was the missing `test result:` line
+beside the zero** — a count is a measurement only if the thing that produces
+counts also ran. (2) An arg-inserting script that patched a STRING LITERAL
+merely naming the builder in a source-scan data table. (3) **A monitor armed on
+the PREVIOUS run's log**, which fired with the old summary — a real, well-formed
+number from the wrong producer, which would have been recorded as the post-fix
+result.
+
+**I CHECKED MY OWN SUBSTRATE FOR (3) AND IT IS THE TRAP EXACTLY:** this
+scratchpad holds THIRTEEN similarly-named `land*.log` files spanning 34 hours,
+six of them predating the compaction. My habit — a fresh numbered name per
+attempt plus `rm -f` before launch — held, but BY HABIT, NOT BY DESIGN. Arm a
+monitor on a path that cannot pre-exist, and when reading any log for a result,
+confirm it is the log THIS run wrote rather than that it contains a plausible
+number.
+
+**AND THE STAMP TECHNIQUE CLOSED A LOOP FOR THE FIRST TIME.** yoga re-landed
+after AMENDING a commit, did not want to take the adoption line's word, and got
+three independent agreements: the stamp's mtime matched its own `stamped …Z`
+field to the second; attempt-2.log's mtime matched, proving attempt 2 wrote what
+attempt 3 adopted; and `gate-stamp.sh movers` reported EMPTY against the landed
+tree. Two clock checks and one content check, the last from the instrument that
+landed this morning. That is what the mtime-versus-stamp habit was for.
+
+### Pass 45 addendum — the coordinator moved the tree under its own gate
+
+**I COMMITTED AND MERGED WHILE A GATE WAS RUNNING**, three passes after writing
+into this same file that doing so is the lapse yoga self-reported, and one pass
+after warning macbookair about it. The gate refused with
+`violation:gate-wrote-tracked-files:3`, naming
+`plan/mo-full-attestations.d/yoga.md`, this file, and
+`crates/tillandsias-headless/src/main.rs` — the last arriving via the merge I
+did mid-gate, carrying yoga's b75677788. Cost: one wasted gate, no bad push, and
+every guard refused correctly. Knowing a rule and holding it in the moment are
+different acts; that sentence has now been passed to two hosts by a coordinator
+who then failed it.
+
+**THEN I MADE IT WORSE WITH A CARELESS `git rebase --onto`**, which flattened
+the merge and replayed yoga's two landed commits onto my branch as new shas.
+Caught by patch-id before any push: 5c33a36ee matched b75677788 and 51f468c0d
+matched 00d9551f8, both already on trunk. Recovered by resetting to
+origin/linux-next and cherry-picking only my own two commits. **A patch-id
+comparison is the check that distinguishes "my work" from "someone's work
+wearing a new sha", and it takes one command.**
+
+**1063-363b DETECTS CORRECTLY AND DIAGNOSES TOO NARROWLY.** Its remedy text
+reads "find the writer: it is a fixture or gate step that escaped its temp dir",
+and lists three candidate shapes, all internal to the gate. Here the writer was
+an AGENT IN THE SAME CHECKOUT, which the text does not admit as a possibility —
+so a reader following it hunts inside the gate for something that is not there.
+The detection is right and the causal hint excludes the actual cause. Same
+family as everything else tonight, in a guard that has been correct all along.
+
+**AND THE REFUSAL TAUGHT ME SOMETHING I HAD ASSERTED WRONGLY.** I told
+macbookair, and wrote into a commit message, that a Linux gate compiles their
+macOS code because the crate is a workspace member. Per 739-6r6n it does NOT:
+the crate is fully cfg-gated, seven modules a non-macOS build never parses, and
+Linux compiles STUBS. The gate said so in a line I would have skimmed —
+`stale:sources-drifted:macos-only:4`. The member-list was true and my conclusion
+was false.
+
+**THE USEFUL HALF: THE macOS ATTEST DOES NOT NEED THE VM.** The gate names
+`cargo test -p tillandsias-macos-tray --bins`, and `--bins` selects BINARY
+TARGETS ONLY — it never builds `tests/exec_guest_stdin.rs`, the integration test
+that is red while a tray is up. So macbookair can very likely attest its own
+macOS-only sources TODAY, tray running, and neither of us had spotted it while
+reasoning about the bootstrap loop.
+
+**AND THE GUARD CAUGHT THIS ENTRY TOO, WHICH IS THE THIRD LEVEL.** macbookair
+wrote a line citation; their drill entry ABOUT being caught quoted it and was
+caught; this entry ABOUT that quoted it again and was caught again. Each level
+is a legitimate quotation of evidence and each needs its own `cite-ok`. The
+guard cannot distinguish a citation from a QUOTATION OF a citation — nothing
+textual can — so it asks the writer to declare intent, and it asked three times
+correctly. A guard that fired only on the first level would be the broken one.
+
+
+### Pass 45 close — the attestation relayed, and two instrument lessons
+
+**THE BLIND SPOT MY OWN RELAY OPENED IS CLOSED.** 2263daf85 landed seven
+cfg-gated macOS modules that a Linux gate compiles as STUBS and never parses,
+with `stale:sources-drifted:macos-only:4` left visible as the sanctioned state.
+macbookair attested them from the one host that can parse them and I relayed it
+at 3ed6a01e2; the checker now answers **`ok:sources-verified:macos-only:7`**,
+confirmed by RUNNING it rather than by observing that the file landed.
+
+**THE ATTESTATION'S VALIDITY TURNED ON HASHES, NOT ON THE TEST RESULT.** An
+attestation records source hashes, so a stale one is worthless however green its
+transcript. All seven attested hashes matched trunk's current blobs exactly —
+including `installation_uuid.rs`, which carries the rustfmt fix this host
+applied during the earlier relay. They attested AFTER taking trunk's version, so
+it attests what is on trunk rather than what was on their host. That check is
+the whole difference between a relay and a rubber stamp.
+
+**AND `--bins` WAS AVAILABLE THE WHOLE TIME.** macbookair had been treating
+1224-zpek as blocking everything downstream; it blocks `./build.sh --check`
+specifically. `--bins` selects BINARY TARGETS ONLY and never builds
+`tests/exec_guest_stdin.rs`, the integration test the tray reds — confirmed with
+a control rather than asserted (that name appears 0 times in the attest
+transcript). Neither of us had looked for a narrower command while reasoning
+about the bootstrap loop. **Filed the recurring half as 1225-q7cq**: the
+one-line rustfmt divergence hit this relay lane twice in one day, and the
+originating host structurally cannot see it because `fmt` runs BEFORE the tests
+its gate stops at.
+
+**I NEARLY KILLED A HEALTHY GATE.** Checking whether the attestation gate had
+wedged: the log mtime was unchanged across two samples and every candidate
+process read `00:00:00` CPU — the dead signature from 1112-class. A 150-second
+sample showed the log advancing within 15s: **the gate was working.** Both
+earlier readings were worthless for reasons worth naming. The two mtime samples
+were SECONDS apart, which is below the resolution of the thing being measured.
+And every zero-CPU process was HOST-SIDE — the bash wrapper, `podman`, `conmon`
+— while the work runs inside the `tillandsias-builder` toolbox, where a host
+`ps` grep for `cargo|rustc` sees nothing BY CONSTRUCTION. Zero CPU on a
+container monitor says nothing about what is in the container. Acting on it
+would have been 1132-r4mt exactly: kill the host wrapper, leave the in-container
+build.sh alive, and refuse the next gate on the survivor's scratch.
+
+**WHAT HELD THIS TIME, AND IT WAS STRUCTURE RATHER THAN CARE.** The rustfmt row
+was drafted in the scratchpad while the gate ran and written to the worktree
+only after it cleared — the lapse from two passes earlier, not repeated. The
+citation and ledger guards were run BEFORE committing rather than discovered by
+a refusal. And the conflict in macbookair's drill file was checked for leftover
+markers and duplicated bullets before staging, per the merge-then-add rule.
+
+## Pass 46 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=373, `osx-next` ahead=0
+behind=152, both fully contained. `main` behind=633.
+
+**THE SALVAGE SWEEP IS NOW ROUTINE, AND THE FIRST ROUTINE RUN GOT IT WRONG
+TWICE.** Pass 45 established that salvage refs strand work. Making that a
+per-pass check produced two confidently wrong answers before a right one, in
+OPPOSITE directions, and that is worth more than the result:
+
+- **Ancestry is not integration.** Nine refs read "not contained" — two of them
+  I had personally relayed by cherry-pick hours earlier, so their content was
+  fully on trunk and their ancestry never would be.
+- **Three-dot overcounts.** `git diff trunk...REF` lists what the ref changed
+  since the MERGE BASE, including files trunk added independently. Six
+  macbookair fragments read as differing; direct comparison showed all six
+  BYTE-IDENTICAL, same size, empty diff.
+- **Two-dot overcounts far worse.** Tip-to-tip includes all of trunk's progress
+  since the branch point: **526, 2009, 2061** files for refs whose genuine
+  outstanding content is **3, 0, 0**. A reader taking those would conclude the
+  fleet is drowning.
+- **And "differs" still does not say which side is AHEAD.** lenovinha's
+  1185-9qx6 differs on build.sh and local-ci.sh — trunk touched both TWO DAYS
+  AFTER that snapshot, row `completed`. Stale, not stranded.
+
+**THE ANSWER, by the three-step method (candidates from three-dot, real set by
+blob compare, direction by date plus row status): of twelve salvage refs,
+yolanda's 1186-w3ph ALONE holds genuinely outstanding work** — four files, its
+row `in_progress`, theirs to adjudicate. Every other ref is landed, superseded
+or stale. Filed as **1226-jb8y**, with the two wrong answers as its evidence,
+because a reader shown only the method will not believe it needs three steps.
+
+**NO REASSIGNMENT.** Over 12h by email: yoga 18 (11 plan, 7 code), lenovinha 11,
+macuahuitl 36, macneo 3, unattributed bucket 6. yoga closed 1021-hf9e's second
+pass and returned it to ready with a third contention LOCATED; lenovinha holds
+679-rp9m; macbookair attested the macOS sources and is blocked only on its own
+full gate. Nobody reported idle, nobody asked, no claim was flipped.
+
+**AND macuahuitl IS STILL THE DOMINANT PUBLISHER** — 36 of 74 commits in 12h,
+31 of them plan-only. The batching commitment holds (this pass makes ONE
+plan-only push carrying both records), but batching reduces the count, not the
+share. That number is the standing argument for keeping coordinator output to
+one push per pass.

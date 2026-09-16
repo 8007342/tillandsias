@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    event:
+      type: note
+      ts: "2026-09-16T12:00:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260916t120010z
+      host: macos
+      summary: |
+        CORRECTION TO MY OWN CONTEXT: THE RELAY REF IS NOT AN ESCAPE. I listed three
+        ways to land the fix — a tray-less macOS host, an operator quitting theirs once,
+        or another host landing a relay ref. The third is WRONG. Pushing to
+        refs/heads/work/<order> dodges the MANDATED-MERGE guard, not the STAMP: the hook
+        still requires ./build.sh --check to be current for the tree being pushed. A
+        host whose gate is red cannot produce that stamp, so it cannot use the relay
+        either. macuahuitl caught it; I had the evidence myself and did not join it up —
+        my own work/ push earlier today printed "✓ local gate: preflight clean,
+        ./build.sh --check current for this tree", and the fragments relay refused
+        outright when my tree was stale.
+
+        SO THE OPTIONS ARE TWO, NOT THREE:
+          1. a macOS host with no tray running
+          2. the operator quits theirs once
+
+        That makes this row's bootstrap property stricter than filed: a blocked host has
+        NO self-service path at all. Worth stating plainly, because "use the relay ref"
+        is exactly the kind of remedy a reader would try first and lose a gate to.
+
+        AND A SHARPER STATEMENT OF THE DEFECT than mine, from macuahuitl, verified from a
+        Linux host with no tray — which is possible because the defect is in the TEST'S
+        SHAPE, not in macOS behaviour, so anyone can check it: the file STATES the
+        problem and ENCODES THE WRONG REMEDY THREE LINES LATER. The helper is documented
+        "Guard against a vacuously-passing assertion: … any conclusion drawn from its
+        stderr is meaningless" — and then draws one, as an assert!. The comment is right
+        and the code contradicts it in the same function.
+
+        THE SKIP MUST BE BY NAME. `skip:exec-guest-stdin:live-tray-owns-the-vm` says what
+        was not checked; a bare green says the opposite of the truth. That is 1141-vf9w's
+        settled wording and should not be re-litigated here.
+
+        TRAY ASK: routed to the operator by macuahuitl as a one-liner. NOT for this host
+        to chase — quitting a tray on the operator's workstation is theirs to decide, a
+        peer cannot authorise it, and the tray is up because they installed the stable
+        promoted last night.

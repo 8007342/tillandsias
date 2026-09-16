@@ -1580,12 +1580,41 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                         | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt "'"$_gs"'" ] && printf "%s\n" "{}"' 2>/dev/null \
                         | head -12)"
                 fi
+                # ORDER 970-7fqk — NAME THE CAUSE ON THE AXIS THE DECISION USES.
+                # The staleness verdict is made on CONTENT (gate-stamp.sh
+                # compute hashes path+kind+mode+bytes). The list above is MTIME.
+                # They answer different questions, and both wrong directions
+                # were observed on 2026-09-02: an identical rewrite named as the
+                # cause, and a genuine digest-mover absent from the list. One
+                # host spent ~25 minutes and three extra gates concluding the
+                # CHECK was mtime-based, which it never was — the message taught
+                # a false mechanism and they designed against it.
+                _movers="$(bash "$REPO_ROOT/scripts/gate-stamp.sh" movers 2>/dev/null)"
+                _movers_rc=$?
+                if [[ "$_movers_rc" -eq 0 && -n "$_movers" ]]; then
+                    _mn="$(printf '%s\n' "$_movers" | wc -l | tr -d ' ')"
+                    _cause="CONTENT DIFFERS FROM THE STAMPED TREE (${_mn} path(s)) — THIS IS THE CAUSE:
+$(printf '%s\n' "$_movers" | head -12 | sed 's/^/  /')"
+                elif [[ "$_movers_rc" -eq 2 ]]; then
+                    # UNAVAILABLE IS NOT CLEAN. A stamp written before this order
+                    # carries no manifest, and saying nothing here would let the
+                    # mtime list below read as the cause again.
+                    _cause="CONTENT MOVERS COULD NOT BE COMPUTED: this stamp predates the
+  per-path manifest (970-7fqk), so the paths below are an MTIME signal only and
+  may name files that are not the cause. Re-running the gate writes a manifest."
+                else
+                    _cause="CONTENT DIFFERS FROM THE STAMPED TREE: no path's content differs,
+  so the digest moved for a reason the manifest cannot show — a mode change, a
+  symlink target, or a path set change. The mtime signal below is a hint only."
+                fi
                 if [[ -n "$_changed" ]]; then
                     _n="$(printf '%s\n' "$_changed" | wc -l | tr -d ' ')"
                     refuse "the tree changed since ./build.sh --check last passed" \
                            "The gate validated a different tree than the one you are pushing." \
                            "" \
-                           "CHANGED SINCE THE GATE RAN (${_n} path(s), newest-first by mtime):" \
+                           "$_cause" \
+                           "" \
+                           "RECENTLY WRITTEN (${_n} path(s) by mtime) — A LIVE-WRITER HINT, NOT THE CAUSE:" \
                            "$(printf '  %s\n' $_changed)" \
                            "" \
                            "IF ONE OF THOSE IS A BACKGROUND JOB STILL WRITING, re-running the" \

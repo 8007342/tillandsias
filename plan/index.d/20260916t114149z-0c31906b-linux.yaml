@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: progress
+      ts: "2026-09-16T11:41:49Z"
+      agent_id: linux-yoga-claude-20260916t113537z
+      host: linux
+      summary: |
+        ONE CONTENTION REMOVED AND MEASURED; THE ROW IS NOT DONE. Criterion 1 is NOT met and I am not claiming it.
+
+        THE PREMISE STILL HOLDS, re-measured today rather than inherited from 2026-09-04. Four default parallel runs at one commit, before any change: three clean and one FAILED. The failing test was forge_agent_run_args_export_debug_when_requested, on `assertion failed: !has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1")` — an assertion about a lane that test never enabled.
+
+        THE MECHANISM, NAMED. build_forge_agent_run_args_with_vault called forge_uses_host_mount() INSIDE the builder, which reads the process-global TILLANDSIAS_FORGE_HOST_MOUNT. Two tests exercise the opt-in lane by SETTING that global through HostMountEnvGuard. Cargo runs this suite concurrently in one process, so any test building args while the guard was alive saw the other test's value. The row predicted "very likely env vars read by run-args builders"; this is that, with the variable, the builder, the victim and the assertion all named.
+
+        THE FIX FOLLOWS ca_path: the shared state is REMOVED, not serialised. host_mount is now a PARAMETER of build_forge_agent_run_args and build_forge_agent_run_args_with_vault; the two production lanes call forge_uses_host_mount() at their own call sites, so the env is read once in production and never inside a builder a test can reach. No #[serial] was added and no mutex was widened.
+
+        MEASURED AFTER: ten default parallel runs. EIGHT fully clean at 544 passed. The export-debug interference is GONE from every run.
+
+        WHAT REMAINS, and it is a DIFFERENT contention the row also named in its original evidence: forge_credential_quarantine_mounts_present failed in 2 of those 10 runs. It is not host-mount and it is not caused by this change — the row's 2026-09-04 measurement lists it too. Its own contended state is not yet identified. A third, write_forge_gitconfig_ssh_lane_missing_ca_is_loud_not_silent, appeared once during an intermediate run and has not recurred; recorded as seen-once rather than as a finding.
+
+        CRITERION 3 IS UNTOUCHED ON PURPOSE. --test-threads=1 stays in the gate and litmus:build-ci-dispatch-shape's serial arm is unchanged, because dropping the pin is only safe once the failure set is stable and it is not. THE SERIAL GATE IS GREEN with this change: 544 passed, 0 failed at --test-threads=1. So this lands as net progress without touching the mitigation.
+
+        TWO REGRESSIONS I INTRODUCED AND FIXED IN THE SAME CYCLE, recorded because both were mine and both were found by measurement rather than review:
+          1. My mechanical pass gave EVERY test call site host_mount=false, including two calls inside forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts — a test whose entire subject IS the host-mount lane. It went from intermittently-failing to always-failing. Both calls now pass true explicitly, which is what the HostMountEnvGuard was standing in for.
+          2. hot_src_tmpfs_is_clone_only_never_over_the_host_mount is a SOURCE-SCAN test anchored on the literal `let host_mount = forge_uses_host_mount();` — the exact line my change deletes. Re-anchored on the builder's own signature, since the property it pins lives in the builder rather than at the call site that resolved the flag. This is the coupling the row did not anticipate: removing a process-global read also moves the ground under every test that reads the SOURCE for that read.
+
+        AND THREE ERRORS IN MY OWN TOOLING, none of which the compiler could catch:
+          - My first reproduction ran `--bin tillandsias-headless`; the bin target is `tillandsias`. Cargo errored, my grep matched nothing, and the harness reported "0 failed lines" for three runs. THREE GREEN-LOOKING RUNS THAT NEVER COMPILED A TEST. The tell was the missing `test result:` line beside the zero. The harness now prints NO RESULT LINE — the suite did not execute, so it cannot report zero-executed as zero-failed again (913-27ex).
+          - My arg-inserting script mangled a single-line call into three copies, and patched a STRING LITERAL that merely mentions the builder's name inside a source-scan data table. The enumeration was sound and the transformation was not.
+          - I armed a monitor on the PREVIOUS run's log file. It fired with the old run's summary — a real, well-formed number from the wrong producer — and had I taken it I would have recorded the pre-fix result as the post-fix one.

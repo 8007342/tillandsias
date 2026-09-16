@@ -2238,6 +2238,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "must-ship-next release advisory fixture passed"
 
+    # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
+    # on the same axis the staleness decision uses, and keeps the mtime list as
+    # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps
+    # in a throwaway repo, never this checkout.
+    _step "Checking the stale-stamp refusal names content movers (970-7fqk)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-names-content-movers.sh" 2>&1; then
+        _error "the stale-stamp refusal regressed — it can again name files that are not the cause and omit the one that is"
+        exit 1
+    fi
+    _info "stale-stamp content-mover fixture passed"
+
     # Sibling advisory, same surface and same strength (order 914-nkc4). The
     # README release-ledger distillation policy was documented in two places
     # with its destination line already present, and NOTHING RAN IT — measured
@@ -2251,6 +2262,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "release-ledger distillation advisory fixture passed"
+
+    # Order 1223-wzc4. The coordination pass re-derives "which host is active"
+    # every time, and the corrected recipe lived in drill prose — where it was
+    # retyped WRONG two passes after being written down, stripping the email
+    # domain that is the only part naming the host. This fixture pins the three
+    # corrections that kept getting lost: count by email, derive the host from
+    # the domain (BOTH conventions, including <Host>.local), and bucket an
+    # address that names no host instead of rendering it as one.
+    _step "Checking the fleet-activity read (1223-wzc4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-fleet-activity.sh" 2>&1; then
+        _error "the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
+        exit 1
+    fi
+    _info "fleet-activity read fixture passed"
+
+    # Order 1226-jb8y. 872-c9nd's salvage net saved macbookair's finished work
+    # when its gate could not pass — and the work sat on origin for hours
+    # because nobody queried the refs. Making that query routine then produced
+    # two confidently WRONG answers in opposite directions before a right one:
+    # ancestry is not integration, three-dot overcounts, two-dot overcounts far
+    # worse, and "differs" is not "outstanding". The fixture's first arm pins
+    # the false negative the script itself shipped with — a ref lookup that
+    # silently finds nothing reads exactly like "nothing is stranded".
+    _step "Checking the salvage audit (1226-jb8y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-salvage-audit.sh" 2>&1; then
+        _error "the salvage audit regressed — stranded work can again read as landed, or a stale snapshot as outstanding"
+        exit 1
+    fi
+    _info "salvage audit fixture passed"
 
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #

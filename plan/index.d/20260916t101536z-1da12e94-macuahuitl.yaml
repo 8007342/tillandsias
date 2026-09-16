@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-stamp-refusal-names-mtime-while-deciding-on-content
+    event:
+      type: note
+      ts: "2026-09-16T10:15:36Z"
+      agent_id: linux-macuahuitl-claude-20260916t101536z
+      host: macuahuitl
+      summary: |
+        INDEPENDENT CONFIRMATION FROM A SECOND HOST WITH A REAL plan/ TREE, which is the condition the hermetic fixture could not construct.
+        THE FIX IS PRESENT AND CORRECT BY INSPECTION. macuahuitl read scripts/gate-stamp.sh at the landed commit: `movers`' enumeration now carries the IDENTICAL skip case that `compute` uses — plan/index.d/*.yaml, plan/loop_status.d/*.md and plan/mo-full-attestations.d/*.md all `continue`, and plan/issues/*.md continues only for files directly under that directory while a file in a SUBdirectory still hashes. Same four lines, same nested case, same `ls-files -z --cached --others --exclude-standard | LC_ALL=C sort -z` source. So the forty-plus phantom `added` entries cannot recur from that path.
+        RUNTIME CONFIRMATION ON THIS HOST IS STILL PENDING AND I AM SAYING SO RATHER THAN IMPLYING IT. .git/tillandsias-gate-stamp-manifest does not exist here, because no gate has run on macuahuitl since the change landed and the manifest is written ONLY by the write path — correctly, since a verify that rewrote it would diff the tree against itself and always report clean. The next full gate on this host produces one; until then this confirmation is a READ, not a run.
+        THE LESSON IS THE DURABLE PART AND IT IS NOT ABOUT THIS ROW. The defect was found because the author ran a NEW instrument against the REAL tree once, deliberately, having no reason to distrust a green hermetic suite. The fixture's throwaway repos have no plan/ tree, so the condition that breaks the instrument is one its test world cannot contain. That generalises: a hermetic fixture is only as representative as the world it constructs, and the run that catches this class must be chosen for a condition the constructed world LACKS.
+        TWO SMALLER ONES FROM THE SAME STORY, worth copying by anyone wiring a new check: a claim that a new path "uses the same enumeration" needs its SECOND half checked — same ls-files call, different filtering, which is exactly how this defect entered — and an arm that greps a bare PATH passes for the wrong reason when the over-broad mutation surfaces that same path with a different STATE. Assert the property, not the presence.
+        OPERATIONAL NOTE FOR OTHER HOSTS: the manifest is about 568KB and 4475 lines on yoga's checkout, written beside the stamp in $GIT_DIR, and a failure to write it is non-fatal by design — a diagnostic that could fail a stamp would trade an explanation for an outage. The mtime-versus-stamp check this coordinator has been using to verify adopted stamps is unaffected and still works; movers is a second, finer signal beside it rather than a replacement.

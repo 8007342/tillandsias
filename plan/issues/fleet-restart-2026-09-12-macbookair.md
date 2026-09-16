@@ -618,3 +618,105 @@ looked"* will eventually be read as the former.
   cannot help (not a lost race); merge trunk and re-gate". Fifth consecutive
   lost race, and this time I went straight to the relay instead of re-running,
   which is what the measurements argued for.
+
+- 2026-09-16 (1032-62rx): took the site inventory, which blocks the closure's
+  ten-site deletion mutation. THE ROW'S COUNT IS RIGHT AND I NEARLY REPORTED IT
+  AS DRIFTED: my first probe searched only `wire_version != WIRE_VERSION` and
+  found 8 across 5 crates. TWO sites use the EQUALITY form `wire_version == WIRE_VERSION` — one in
+  vsock_exec and one in router-sidecar's main — making it ten across six
+  exactly as filed. A
+  faithful search of an incomplete pattern, one step from publishing a false
+  correction to a row that was correct.
+- 2026-09-16: coverage measured at 2 of 10. `WIRE_VERSION + 1` appears in
+  exactly two files tree-wide: vsock_client (this row's own test) and
+  vsock_server (my 1201-t6ms). The TITLE is stale — "untested on both sides" was
+  true when filed, both named sides are now covered, and the real remainder is
+  the other eight sites, which the title hides. A reader trusting the title
+  would either close the row wrongly or re-do the two tests that exist.
+- 2026-09-16: the remaining eight split across THREE platforms (vsock_exec x5
+  and pty_vsock_bridge here; hvsocket needs Windows; router-sidecar needs the
+  Linux container lane) while pickup_role holds one value — the 920-pxg6 task
+  4.5 limitation again, now on a second row.
+- 2026-09-16: salvage fired at cycle start (`ok:salvaged-commits`, not
+  not-needed). The salvaged commits read NOT-on-trunk by SHA and ARE on trunk by
+  FILE — because relaying via cherry-pick onto a fresh branch makes new SHAs.
+  macneo's rule held: the relay moves FRAGMENTS, not commits. Checking by SHA
+  would have reported lost work.
+- 2026-09-16 (690-w94k criterion 3): bounded the three `security` keychain
+  spawns (10s, sized against the 30s status path), sync signatures preserved
+  because those fns have 34 callers. THE TEST ASSERTS THE PROCESS TABLE, not
+  elapsed time: macneo measured a timeout that killed the PARENT while the
+  `security` grandchild survived at PPID 1 holding an undismissable prompt —
+  one per call, a SecurityAgent alive 21h45m, cleared only by a restart. A test
+  checking "returned inside budget" passes on exactly that. Falsified by
+  removing ONLY child.kill() and keeping the timeout, error and reap.
+- 2026-09-16, I FIXED A DEFECT I SHIPPED LAST CYCLE. The criterion-4 zombie test
+  used `waitpid(-1)`, which reaps ANY child — in a parallel test binary,
+  including other tests'. It stole the `security` child of
+  keychain_persists_credentials_across_calls, whose wait failed ECHILD "No child
+  processes". Each test passed ALONE and the suite failed, and the failure
+  pointed at the innocent test. Now reaps by captured pid. I only found it
+  because I ran the FULL suite this time — last cycle I ran my own test before
+  and after and called that the selftest rule satisfied.
+- 2026-09-16: the citation gate caught me writing `main.rs:150` into this drill <!-- cite-ok: the line number IS the evidence — this entry is about being caught writing that exact citation, so rewriting it to a symbol would delete what the entry records -->
+  one hour after my own evidence event said "line numbers are a snapshot; the
+  FORMS are the durable handle". Fixed by citing the form. Knowing a rule and
+  applying it are different acts — macuahuitl's sentence, now mine.
+- 2026-09-16, A LANE CONSTRAINT WORTH KNOWING: two integration tests
+  (exec_guest_stdin) require exclusive VM ownership and refuse when a tray is
+  running — correctly, and loudly, rather than passing vacuously. The operator's
+  freshly installed tray is live, so ./build.sh --check CANNOT go green on this
+  host right now. Proven environmental: both fail identically on the pre-change
+  tree. So this crate's work is committed and UNLANDED until the tray is down;
+  I am not quitting the operator's running application to land a commit.
+- 2026-09-16 (1224-zpek): filed the live-tray gate blocker. exec_guest_stdin's
+  two tests ASSERT on the live-tray refusal while their own message says "this
+  test proved nothing" — a failure claims the stdin path is broken; the truth is
+  it was never exercised. 1141-vf9w's shape, already settled: an honest "I could
+  not look" must not collapse into a content verdict. NOT an oversight about
+  vacuity — the guard's comment shows PASS-vacuously vs FAIL was weighed and
+  FAIL correctly chosen; SKIP-by-name is the third option nobody had.
+- 2026-09-16: this is the THIRD distinct cause for these same two tests. They
+  were blamed on gate concurrency (asserted PROVEN on a solo green that was
+  lucky link order, not a control), then correctly traced to 1043-kvvn's
+  duplicate [[bin]] name. The recorded method error was "never opened the
+  transcript to read WHY the test failed". I read it: the stderr names the
+  live-tray refusal in plain text, one tray process, and both fail identically
+  with my change stashed — environmental, not a regression.
+- 2026-09-16, A BOOTSTRAP PROPERTY: the fix for "a live tray reds the gate"
+  cannot be LANDED from a host whose tray is redding its gate, because landing
+  needs that gate. It wants a host with no tray, an operator quitting theirs
+  once, or another host landing a relay ref.
+- 2026-09-16: hit the anchored-pattern trap AGAIN. check-scorable-obligation
+  matches the FIRST characters (scripts/*.sh*, litmus:*, cargo test*), and my
+  closure opened "With a tray RUNNING, cargo test ..." so it matched nothing.
+  Two days ago the same checker refused a closure opening with a BACKTICK. I
+  recorded that in memory and still wrote the variant.
+- 2026-09-16: used the citation gate's `cite-ok` escape for the first time, and
+  legitimately — the bullet ABOVE quotes the drifted citation AS the evidence,
+  so replacing it with a symbol would erase the finding. That is the case the
+  escape documents, not a way around the rule.
+- 2026-09-16, THE LESSON I PAID FOR TWICE: I concluded criterion 3 was
+  UNLANDABLE and macuahuitl confirmed the relay ref does not escape either — and
+  all the while 872-c9nd's salvage net had ALREADY PUSHED
+  salvage/tlatoanis-macbook-air/20260916-restart-20260916-115025 to origin,
+  reachable by any host with a working gate. It landed from there (2263daf85).
+  Both of us reasoned about escape routes while the work sat on a ref neither
+  queried. BEFORE CONCLUDING WORK IS UNREACHABLE, LIST THE SALVAGE REFS —
+  `git ls-remote --heads origin 'refs/heads/salvage/<host>*'`; this host has 3.
+- 2026-09-16: `cargo test -p tillandsias-macos-tray --bins` runs the crate's 135
+  tests WITH A TRAY UP, because --bins selects binary targets only and never
+  builds tests/exec_guest_stdin.rs. So 1224-zpek blocks ./build.sh --check and
+  does NOT block verifying macOS-only sources. Attested from that transcript:
+  ok:sources-attested:macos-only:7, verdict now ok:sources-verified:macos-only:7.
+  A blocker that stops one thing is not a blocker on everything downstream of
+  it, and I had been treating it as one.
+- 2026-09-16: macuahuitl corrected their own claim that a Linux gate compiles
+  this crate — per 739-6r6n it is FULLY cfg-gated and Linux compiles STUBS, so
+  those seven modules land UNVERIFIED and only a macOS host can attest them.
+  That is why the attestation above is worth a cycle rather than bookkeeping.
+- 2026-09-16: trunk's copy of installation_uuid.rs differed from mine by ONE
+  line — `use super::{SECURITY_CALL_BUDGET, spawn_bounded}` versus my reversed
+  order — a rustfmt difference between hosts, not a logic change. Took trunk's
+  on merge. Worth knowing before the next relay: my fmt and macuahuitl's
+  (1.9.0-stable, 48a229ceae) disagree on import ordering.
