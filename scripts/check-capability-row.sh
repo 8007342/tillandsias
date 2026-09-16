@@ -524,7 +524,16 @@ fixture() {
         } >"$_f"
     }
     _run() {
+        # TILLANDSIAS_HOST_KIND="" is deliberate and load-bearing: the fixture
+        # executes INSIDE a forge, which exports TILLANDSIAS_HOST_KIND=forge
+        # process-wide. `env VAR=` sets empty (not unset), which is what the
+        # check's `[ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]` needs to see on
+        # the arms that test the FALLBACK locus (1159-g96c): inheriting the
+        # ambient declaration would take the DECLARED branch and mis-grade
+        # arm 23. Arms that mean to declare it (arm 24) pass it in "$@", whose
+        # later assignment wins.
         TILLANDSIAS_WORKSTATION=fixturehost \
+        TILLANDSIAS_HOST_KIND= \
         TILLANDSIAS_CAPABILITY_COMMITTED_MATRIX="$_fx_committed" \
         TILLANDSIAS_CAPABILITY_ROW_NOW="${_FX_NOW:-1800000000}" \
             env "$@" bash "$_fx_self" check

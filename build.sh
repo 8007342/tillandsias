@@ -1780,9 +1780,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # lanes. These stabilize the build fingerprint across git activity during
     # --check, preventing unnecessary recompilations of downstream crates.
     # NEVER export in --install or --release — a staged artifact must carry
-    # real provenance (guarded below).
-    export TILLANDSIAS_GIT_SHA_OVERRIDE="non-artifact"
-    export BUILD_COMMIT_SHA_OVERRIDE="non-artifact"
+    # real provenance (guarded below). 920-ijwa: also WITHHOLD them when
+    # --release rides alongside --check — the release guard is (correctly) a
+    # hard refuse on any override value, so an unconditional export made the
+    # perfectly legal `--check --release` combination fatal before it could
+    # build anything.
+    if [[ "$FLAG_RELEASE" != true ]]; then
+        export TILLANDSIAS_GIT_SHA_OVERRIDE="non-artifact"
+        export BUILD_COMMIT_SHA_OVERRIDE="non-artifact"
+    fi
 
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
@@ -2517,6 +2523,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "New-surface parity railguard fixture passed"
+
+    # 920-tqhs. The negative control for the populate_hot_paths fail-loud
+    # change: with /opt/cheatsheets unwritable by a lane user, the entrypoint
+    # lifecycle trace must NAME the copy failure (never the old unconditional
+    # success line) and tellme must still answer from the shipped
+    # /opt/cheatsheets-image bundle. Root-gated — a host without root, runuser,
+    # or the /opt fixtures prints "skip: ..." and exits 0; the skip is the
+    # point, not the gate.
+    _step "Checking populate_hot_paths silent-failure regression (920-tqhs)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-populate-hot-paths-negative-control.sh" 2>&1; then
+        _error "populate_hot_paths silence regressed — an unwritable hot mount could break tellme with a success trace again"
+        exit 1
+    fi
+    _info "Populate hot paths negative control fixture passed"
 
     # Order 859-b2zc. Host identity must resolve WITHOUT a `hostname` binary —
     # no Fedora image this project runs ships one, so five scripts that
