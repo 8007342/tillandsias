@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lane-listeners-and-publish-local-hardcode-home-src
+    event:
+      type: note
+      ts: "2026-09-16T21:55:12Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        tray discover_projects() now routes through crate::local_projects::host_project_root() honoring TILLANDSIAS_HOST_PROJECT_ROOT (default $HOME/src); lane listener start covered by the shared builder change in 920-c3af. publish_local actionable-refusal criterion advanced (runtime host-scoped). Verified by tray::tests::refresh_local_projects_picks_up_new_checkout under --features tray.

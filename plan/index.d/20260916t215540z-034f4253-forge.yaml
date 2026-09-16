@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    field: status
+    value: implemented
+    ts: "2026-09-16T21:55:40Z"
+    host: forge
+
+events:
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    event:
+      type: progress
+      ts: "2026-09-16T21:55:40Z"
+      host: forge
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: cargo test --features listen-vsock child_env (9 arms incl 2 new XDG) ok
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    event:
+      type: note
+      ts: "2026-09-16T21:55:40Z"
+      host: forge
+      summary: |-
+        cycle 2026-09-16 920-cluster: code + tests landed on linux-next; criteria closed or host-runtime advanced
