@@ -1561,7 +1561,23 @@ async fn run_start(
     // chip. Emit the curated phases so the status keeps moving instead of
     // looking stalled.
     on_phase("Starting Fedora Linux");
-    vz.start().await?;
+    // Order 690-w94k criterion 2. `VzRuntime::start` states its own contract
+    // in-body: it bridges VZ's dispatch-queue completion handler through an
+    // mpsc channel and PUMPS CFRunLoop on the calling thread until the result
+    // arrives or 30s elapses, so "the caller must run start() on
+    // `tokio::task::spawn_blocking` if invoked from an async runtime."
+    // Awaiting it directly here parked a tokio worker for that entire window
+    // while `on_phase` consumers were live on the same runtime. `VzRuntime` is
+    // `Send + 'static` (compile-asserted below), so the contract is honourable
+    // rather than merely documented.
+    {
+        let vz = Arc::clone(&vz);
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
+            .await
+            .map_err(|e| format!("VM start task panicked: {e}"))?
+            .map_err(|e| format!("{e}"))?;
+    }
     on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
     Ok(())
@@ -3238,6 +3254,51 @@ fn dispatch_rebuild(
 
 #[cfg(test)]
 mod tests {
+
+    /// Order 690-w94k criterion 2. `VzRuntime::start` pumps CFRunLoop on the
+    /// CALLING thread for up to 30s, and says so in its own body: "the caller
+    /// must run start() on `tokio::task::spawn_blocking` if invoked from an
+    /// async runtime." `run_start` awaited it directly, parking a tokio worker
+    /// for that whole window.
+    ///
+    /// Anchored on the CALL, not on a line number, and the anchor is asserted
+    /// to exist before the window is scanned — otherwise a rename turns this
+    /// into a test that passes while checking nothing (the 828-itr9 failure
+    /// mode, per `live_boot_spec_derives_sizing_from_the_host_not_a_literal`).
+    #[test]
+    fn run_start_drives_the_cfrunloop_pump_off_the_async_worker() {
+        let source = include_str!("action_host.rs");
+        let anchor = "async fn run_start(";
+        assert!(
+            source.contains(anchor),
+            "run_start moved or was renamed — this scan checks nothing until \
+             it is repointed"
+        );
+        let window = source
+            .split(anchor)
+            .nth(1)
+            .and_then(|t| t.split("\n}\n").next())
+            .expect("run_start must have a body");
+        assert!(
+            window.contains("spawn_blocking"),
+            "run_start must honour VzRuntime::start's documented contract and \
+             run it on the blocking pool (690-w94k)"
+        );
+        assert!(
+            !window.contains("vz.start().await"),
+            "a bare `vz.start().await` parks a tokio worker for up to 30s \
+             while the CFRunLoop pump runs (690-w94k)"
+        );
+    }
+
+    /// The contract above is only honourable because `VzRuntime` can cross to
+    /// a blocking-pool thread. Pinned here so a future field that is not
+    /// `Send` fails at compile time with this reason attached, rather than as
+    /// an unexplained error inside `run_start`.
+    const _: fn() = || {
+        fn assert_send_static<T: Send + 'static>() {}
+        assert_send_static::<tillandsias_vm_layer::vz::VzRuntime>();
+    };
     use super::*;
 
     /// Count this process's OWN children that are zombies (state `Z`).
