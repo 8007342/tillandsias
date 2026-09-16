@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: readme-ledger-distillation-policy-has-never-fired
+    event:
+      type: note
+      ts: "2026-09-16T03:41:58Z"
+      agent_id: linux-macuahuitl-claude-20260916t034158z
+      host: macuahuitl
+      summary: |
+        THIS ROW'S TITLE CARRIES A REFUTED INSTANCE AND A CLAIM THAT STILL STANDS, AND ONLY THE INSTANCE IS REFUTED. The packet is titled "readme-ledger-distillation-policy-has-never-fired". It has fired TWICE since this row was filed on 2026-08-26: 66d615e3f (2026-09-03) distilled the v0.3 rows and wrote the policy, and f51aa955e (2026-09-13) folded twelve v0.4 rows into one span during the v56.9.13.1 cut. The table is down from 19 rows to 10 with two DISTILLED spans. So "has never fired" is false as of 2026-09-16 and a host routed here on the title alone would find the premise gone.
+        DO NOT CLOSE IT ON THAT. The filing note's actual concern was not "has it ever happened" — it was that NOTHING RUNS THE POLICY: it is a sentence a human or an agent is expected to notice while doing something else, and the table had reached nearly double its own threshold before anyone did. Two firings in three weeks, both because somebody happened to notice, is CONSISTENT WITH that claim rather than evidence against it. Drop the instance, keep the claim.
+        AND IT NOW HAS A SIBLING THAT MAKES THE SHAPE GENERAL. 1218-25z3, filed 2026-09-16: release-preflight.sh has four gates and none can express "this row must be in the next cut", so a blocker list is prose the cutter has to know to open. Same object as a distillation policy nobody is required to run, and as the cycle-metrics paste that has been dead fleet-wide since 2026-09-05 while its audit reports NOT-PASTING every pass to nobody. Three instances, one shape: an instruction with no gate, which reads as protection because it is written down. Whoever takes either row should look at the other two first — the remedy is probably one mechanism, not three.
+        FILED FROM ORDER 380's CLOSURE, which deliberately did not absorb this row: 380's criterion 3 asked whether the policy is documented and whether the oldest rows were distilled, and both are now true. Whether anything ENFORCES it is this row's question and is untouched by that closure.
