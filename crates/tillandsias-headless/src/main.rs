@@ -14849,6 +14849,13 @@ fn forge_spec_index_volume(project_name: &str) -> String {
     format!("tillandsias-spec-index-{project_name}")
 }
 
+// Same rationale the sibling builder below records: all arguments are distinct,
+// named forge-launch inputs, and bundling them into a struct would add
+// indirection without clarifying the call sites. ORDER 1021-hf9e added
+// `host_mount`, which crosses clippy's threshold — taking the value as an
+// argument is the point of that order, since reading it from the process env
+// inside the builder is exactly the shared state being removed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
@@ -14857,6 +14864,9 @@ pub(crate) fn build_forge_agent_run_args(
     version: &str,
     mode: ForgeAgentMode,
     debug: bool,
+    // ORDER 1021-hf9e: explicit, so a test exercising either lane needs no
+    // process-global write. Production callers pass forge_uses_host_mount().
+    host_mount: bool,
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
@@ -14873,6 +14883,7 @@ pub(crate) fn build_forge_agent_run_args(
         debug,
         None,
         None,
+        host_mount,
     )
 }
 
@@ -14896,6 +14907,22 @@ fn build_forge_agent_run_args_with_vault(
     debug: bool,
     vault_secret: Option<&str>,
     prompt: Option<&str>,
+    // ORDER 1021-hf9e. PASSED IN, never read from the process env here. This
+    // used to call forge_uses_host_mount() inside the builder, so a test that
+    // exercised the opt-in host-mount lane had to SET THE PROCESS-GLOBAL
+    // TILLANDSIAS_FORGE_HOST_MOUNT — and cargo runs this suite's tests
+    // concurrently in ONE process, so an unrelated test building args at the
+    // same moment saw the other test's value.
+    //
+    // MEASURED on yoga 2026-09-16, four default parallel runs at one commit:
+    // three clean and one failing `forge_agent_run_args_export_debug_when_requested`
+    // on `assertion failed: !has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1")`
+    // — an assertion about a lane that test never enabled.
+    //
+    // Same remedy as tillandsias-core's ca_path: REMOVE the shared state rather
+    // than serialise around it. A #[serial] or a wider env_lock() would hide the
+    // race and leave the global readable by anything else in the process.
+    host_mount: bool,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
@@ -14941,7 +14968,6 @@ fn build_forge_agent_run_args_with_vault(
     // Order 437: clone-only by default. The host-checkout bind mount at
     // /home/forge/src/<project> is the OPT-IN legacy shared-mount path; without
     // it the entrypoint's clone_project_from_mirror clones a fresh tree there.
-    let host_mount = forge_uses_host_mount();
     let spec = if host_mount {
         // Order 465 residual: never silent — announce the reduced isolation.
         warn_forge_host_mount_isolation_reduced();
@@ -15360,6 +15386,9 @@ pub(crate) fn build_forge_agent_run_argv(
         version,
         mode,
         debug,
+        // ORDER 1021-hf9e: the process env is read HERE, in production, once —
+        // not inside the builder where a concurrent test's write could reach it.
+        forge_uses_host_mount(),
     ));
     argv
 }
@@ -15543,6 +15572,8 @@ fn run_forge_agent_cli_mode(
         debug,
         provider_vault_secret,
         prompt,
+        // ORDER 1021-hf9e: read the process env HERE, in the production lane.
+        forge_uses_host_mount(),
     );
 
     let rt = podman_runtime()?;
@@ -22959,6 +22990,7 @@ mod tests {
             false,
             None,
             Some("delegated codex"),
+            false,
         );
         for (lane, args) in [("opencode", opencode), ("codex", codex)] {
             assert!(
@@ -23070,6 +23102,7 @@ mod tests {
             false,
             None,
             None,
+            false,
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23109,6 +23142,7 @@ mod tests {
             false,
             None,
             None,
+            false,
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23209,6 +23243,7 @@ mod tests {
             false,
             None,
             None,
+            false,
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -24459,6 +24494,7 @@ esac
                 false,
                 Some("provider-forge-lease"),
                 None,
+                false,
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -24485,6 +24521,7 @@ esac
                 false,
                 Some("must-not-mount"),
                 None,
+                false,
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
@@ -24515,6 +24552,7 @@ esac
             false,
             Some("codex-forge-lease"),
             Some(prompt),
+            false,
         );
         assert!(
             has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
@@ -24539,6 +24577,7 @@ esac
             false,
             Some("codex-forge-lease"),
             None,
+            false,
         );
         assert!(
             has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
@@ -24609,8 +24648,9 @@ esac
             (ForgeAgentMode::Antigravity, "antigravity"),
             (ForgeAgentMode::Maintenance, "terminal"),
         ] {
-            let args =
-                build_forge_agent_run_args(&project, "alpha", None, &certs, "1.2.3", mode, false);
+            let args = build_forge_agent_run_args(
+                &project, "alpha", None, &certs, "1.2.3", mode, false, false,
+            );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
                 has_arg(&args, &identity),
@@ -24670,6 +24710,7 @@ esac
             "1.2.3",
             ForgeAgentMode::Codex,
             true,
+            false,
         );
 
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
@@ -24710,6 +24751,7 @@ esac
                 &PathBuf::from("/tmp/ca"),
                 "1.2.3",
                 mode,
+                false,
                 false,
             );
             assert!(
@@ -25151,7 +25193,8 @@ esac
             ForgeAgentMode::Codex,
             false,
             None,                 // vault_secret
-            Some("do the thing"), // prompt — this is the arg that matters
+            Some("do the thing"), // prompt — this is the arg that matters,
+            false,
         );
         assert!(
             !has_arg(&args, "--tty"),
@@ -25901,6 +25944,10 @@ esac
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            // ORDER 1021-hf9e: host_mount, passed EXPLICITLY. This test is about
+            // the opt-in host-mount lane, and it used to say so by setting a
+            // process-global that every concurrently-running test could read.
+            true,
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
@@ -25977,6 +26024,8 @@ esac
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            // ORDER 1021-hf9e: host_mount — this whole test exercises the opt-in lane.
+            true,
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
@@ -26224,7 +26273,12 @@ esac
     #[test]
     fn hot_src_tmpfs_is_clone_only_never_over_the_host_mount() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let window = source_window(source, "let host_mount = forge_uses_host_mount();");
+        // ORDER 1021-hf9e: the env read moved OUT of the builder and into the
+        // production call sites, so the builder now receives `host_mount` as a
+        // parameter. Anchor on the builder's own signature instead; the
+        // property this test pins — clone-only never binds over the host mount —
+        // lives in the builder, not at the call site that resolved the flag.
+        let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
 
         let call = window
             .find("forge_hot_src_tmpfs(project_name)")
@@ -28165,6 +28219,7 @@ esac
             false,
             None,
             None,
+            false,
         );
 
         let args_str = args.join(" ");

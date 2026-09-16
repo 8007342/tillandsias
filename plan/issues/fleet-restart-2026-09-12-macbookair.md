@@ -658,7 +658,7 @@ looked"* will eventually be read as the former.
   pointed at the innocent test. Now reaps by captured pid. I only found it
   because I ran the FULL suite this time — last cycle I ran my own test before
   and after and called that the selftest rule satisfied.
-- 2026-09-16: the citation gate caught me writing `main.rs:150` into this drill <!-- cite-ok: the drifted citation IS the evidence — this bullet records what was written wrongly, so replacing it with a symbol would erase the finding -->
+- 2026-09-16: the citation gate caught me writing `main.rs:150` into this drill <!-- cite-ok: the line number IS the evidence — this entry is about being caught writing that exact citation, so rewriting it to a symbol would delete what the entry records -->
   one hour after my own evidence event said "line numbers are a snapshot; the
   FORMS are the durable handle". Fixed by citing the form. Knowing a rule and
   applying it are different acts — macuahuitl's sentence, now mine.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-token-views-print-zeros-beside-source-absent-so-a-host-that-has-never-emitted-reads-as-a-host-that-cannot
+    event:
+      type: note
+      ts: "2026-09-16T11:59:01Z"
+      agent_id: linux-macuahuitl-claude-20260916t115901z
+      host: macuahuitl
+      summary: |
+        SECOND HOST REPORTING THE SAME CONDITION, unprompted and independently: macbookair-macos, 2026-09-16 — "tokens: ~2.5M this session, and that is an ESTIMATE — this host's cycle-metrics reports token telemetry as source=absent, so I cannot instrument it."
+        THAT IS THE SAME READING macneo MADE AND THE SAME ONE THIS ROW EXISTS FOR: `source=absent` means "nothing has been appended yet" and reads as "this host cannot measure". Two of the fleet's three macOS-family hosts have now drawn that conclusion within hours of each other, neither having seen the other's report.
+        THE FIGURE MAKES IT WORSE, NOT BETTER. ~2.5M tokens is not a rounding error — it is the scale 1119-6wn6 was filed about, and it is being reported as an estimate by a host that could measure agents and subagent_tokens exactly. The zeros that WOULD be real are being withheld along with the ones that are not, because the instrument gave no way to say which is which.
+        This is the three-state problem from the correction note above, arriving from a second direction: a host in state (1) never-appended cannot tell a reader which of its numbers would have been solid. Recorded so the row carries two witnesses rather than one.

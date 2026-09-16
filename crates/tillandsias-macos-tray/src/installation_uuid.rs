@@ -351,7 +351,7 @@ fn generate_uuid() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{spawn_bounded, SECURITY_CALL_BUDGET};
+    use super::{SECURITY_CALL_BUDGET, spawn_bounded};
     use std::time::{Duration, Instant};
 
     /// Count live processes whose PARENT is us and whose command matches.

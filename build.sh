@@ -2263,6 +2263,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "release-ledger distillation advisory fixture passed"
 
+    # Order 1223-wzc4. The coordination pass re-derives "which host is active"
+    # every time, and the corrected recipe lived in drill prose — where it was
+    # retyped WRONG two passes after being written down, stripping the email
+    # domain that is the only part naming the host. This fixture pins the three
+    # corrections that kept getting lost: count by email, derive the host from
+    # the domain (BOTH conventions, including <Host>.local), and bucket an
+    # address that names no host instead of rendering it as one.
+    _step "Checking the fleet-activity read (1223-wzc4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-fleet-activity.sh" 2>&1; then
+        _error "the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
+        exit 1
+    fi
+    _info "fleet-activity read fixture passed"
+
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
     # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo
