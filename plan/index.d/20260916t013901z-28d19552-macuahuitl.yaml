@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-16T01:39:01Z"
+      agent_id: linux-macuahuitl-claude-20260916t013901z
+      host: macuahuitl
+      summary: |
+        THE TRAP THIS ROW'S GUARD WILL WALK INTO, MEASURED BY yoga-silverblue ON THE ADJACENT CRITERION AND RECORDED HERE BEFORE ANYONE BUILDS ONE. Their first version of 1215-xazj's criterion-4 test PRINTED GREEN under the mutation that collapses the two arms it exists to separate. The cause generalises exactly onto this row: they built the subject string INLINE at the call site and asserted over subject strings THE TEST ITSELF WROTE, so the test could only check FORMATTING and could never see a caller that builds the wrong input. They fixed it by extracting github_login_probe_subject so the decision takes the call site's inputs, pointed the test at that, and the same mutation now reds.
+        WHY IT MATTERS MORE HERE THAN THERE. This row's defect IS a caller choosing the wrong subject — the probe verifies a repository that is not the one the credential will serve. A test that HANDS A CHECKER ITS SUBJECT cannot detect a caller that chooses the wrong subject, by construction. So the obvious guard for this row — assert that the probe verifies the right repository, with the right repository supplied by the test — would be green against the very defect the row describes, and would read as a closure. The guard must take the SAME INPUTS THE REAL CALL SITE TAKES and derive the subject the way production does, or it proves nothing.
+        THIS IS 1178-class (a fixture pinning the symptom as a contract) MEETING THE ROW'S OWN SUBJECT: the scope mismatch is invisible to any instrument that is handed the scope.
