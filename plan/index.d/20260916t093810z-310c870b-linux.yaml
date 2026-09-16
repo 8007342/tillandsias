@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-stamp-refusal-names-mtime-while-deciding-on-content
+    event:
+      type: progress
+      ts: "2026-09-16T09:38:10Z"
+      agent_id: linux-yoga-claude-20260916t093541z
+      host: linux
+      summary: |
+        IMPLEMENTED AND LANDING IN THIS COMMIT. All three exit criteria met, each measured.
+
+        CRITERION 1 — THE REFUSAL NAMES PATHS WHOSE CONTENT DIFFERS, COMPUTED THE WAY THE DIGEST IS COMPUTED. gate-stamp.sh gains a `movers` subcommand printing `<state>\ttab\t<path>` as modified, added or deleted, from the same `ls-files --cached --others --exclude-standard` enumeration compute uses, diffed against a per-path manifest.
+
+        THE MANIFEST IS EMITTED FROM THE DIGEST'S OWN FRAMES, not from a second walk. compute already has every file's digest in hand when it rolls them up; the manifest lines are written inside that same loop, in the same invocation. A separate enumeration could disagree with the digest, which would be this order's own defect — two questions, one answer — reintroduced one layer down.
+
+        CRITERION 2 — THE MTIME LIST SURVIVES, RELABELLED. It is now printed under "RECENTLY WRITTEN (N path(s) by mtime) — A LIVE-WRITER HINT, NOT THE CAUSE", beneath a cause section computed on content. 864-q7dm added that list to point at a background job appending inside the checkout, where "re-run the gate" is actively wrong advice because the tree moves again before the push lands. That case is real and mtime is the right instrument for it; the defect was only ever the conflation.
+
+        CRITERION 3 — THE FIXTURE PLANTS BOTH SHAPES SEPARATELY, and the two arms are opposites so that neither is satisfiable by a guard that always answers the same way:
+          ARM 2  content changed, mtime forced OLD  -> movers NAMES it, and the arm asserts the mtime signal could NOT see it. Measured: mtime said no.
+          ARM 3  bytes rewritten IDENTICALLY, mtime NEW -> movers is SILENT, and the arm asserts the mtime signal DID name it. Measured: mtime said yes.
+        That is both directions of the 2026-09-02 evidence reproduced on demand: the innocent file named, and the guilty one invisible.
+
+        FALSIFIED: making movers answer on mtime again reds exactly those two arms, including "an identical rewrite was reported as a content mover". 12 of 12 green on revert.
+
+        UNAVAILABLE IS NOT CLEAN. A stamp written before this order carries no manifest. movers then exits 2 with unavailable:no-manifest and the refusal says so explicitly, rather than letting an empty mover list read as "content is fine, so it must be one of these mtime paths" — which would rebuild the same false mechanism out of silence. Arm 5 pins it.
+
+        ONLY THE WRITE PATH EMITS. verify calls compute too, and a verify that rewrote the manifest would make the refusal diff the tree against ITSELF and always report clean. The flag is also cleared unconditionally at the top so an INHERITED value cannot turn emission on during a verify; arm 6 exports it deliberately and asserts the manifest is unchanged.
+
+        A DEFECT IN MY FIRST VERSION OF THE HOOK CHANGE, caught before landing and worth recording because of WHERE it was. I called the movers subcommand via $HOOK_ROOT, which the pre-push COMPOSITION wrapper defines and pre-push-local-gate.sh does not. Under that script's `set -u` it would have broken THE REFUSAL PATH — the branch that only executes when somebody is already blocked, so the error would have been invisible until the moment it was needed, and would have converted a confusing refusal into a broken one. Now uses REPO_ROOT, which the script defines at its top, and arm 7 asserts the invocation uses a variable the script defines and that the mtime list is still present and labelled.
+
+        AND A MEASUREMENT ERROR OF MY OWN, same shape as the subject: I read `movers`'s exit code through a pipeline and reported rc=0, because `$?` after a pipe is the LAST command's status — tail's. The real code is 2. That is the trap land-on-platform-branch.sh's own header documents, committed while verifying a fix about answering the wrong question. Re-measured without the pipe.
+
+        BOUND: the fixture runs in both gates, build.sh --check and local-ci.sh. Divergence count unchanged at 18; guard activation 133 of 133 active with no orphan, since gate-stamp.sh was already a bound guard.
