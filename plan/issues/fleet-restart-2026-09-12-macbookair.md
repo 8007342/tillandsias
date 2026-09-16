@@ -622,8 +622,9 @@ looked"* will eventually be read as the former.
 - 2026-09-16 (1032-62rx): took the site inventory, which blocks the closure's
   ten-site deletion mutation. THE ROW'S COUNT IS RIGHT AND I NEARLY REPORTED IT
   AS DRIFTED: my first probe searched only `wire_version != WIRE_VERSION` and
-  found 8 across 5 crates. TWO sites use the EQUALITY form — vsock_exec:1251 and
-  router-sidecar/main.rs:150 — making it ten across six exactly as filed. A
+  found 8 across 5 crates. TWO sites use the EQUALITY form `wire_version == WIRE_VERSION` — one in
+  vsock_exec and one in router-sidecar's main — making it ten across six
+  exactly as filed. A
   faithful search of an incomplete pattern, one step from publishing a false
   correction to a row that was correct.
 - 2026-09-16: coverage measured at 2 of 10. `WIRE_VERSION + 1` appears in
@@ -641,3 +642,30 @@ looked"* will eventually be read as the former.
   FILE — because relaying via cherry-pick onto a fresh branch makes new SHAs.
   macneo's rule held: the relay moves FRAGMENTS, not commits. Checking by SHA
   would have reported lost work.
+- 2026-09-16 (690-w94k criterion 3): bounded the three `security` keychain
+  spawns (10s, sized against the 30s status path), sync signatures preserved
+  because those fns have 34 callers. THE TEST ASSERTS THE PROCESS TABLE, not
+  elapsed time: macneo measured a timeout that killed the PARENT while the
+  `security` grandchild survived at PPID 1 holding an undismissable prompt —
+  one per call, a SecurityAgent alive 21h45m, cleared only by a restart. A test
+  checking "returned inside budget" passes on exactly that. Falsified by
+  removing ONLY child.kill() and keeping the timeout, error and reap.
+- 2026-09-16, I FIXED A DEFECT I SHIPPED LAST CYCLE. The criterion-4 zombie test
+  used `waitpid(-1)`, which reaps ANY child — in a parallel test binary,
+  including other tests'. It stole the `security` child of
+  keychain_persists_credentials_across_calls, whose wait failed ECHILD "No child
+  processes". Each test passed ALONE and the suite failed, and the failure
+  pointed at the innocent test. Now reaps by captured pid. I only found it
+  because I ran the FULL suite this time — last cycle I ran my own test before
+  and after and called that the selftest rule satisfied.
+- 2026-09-16: the citation gate caught me writing `main.rs:150` into this drill
+  one hour after my own evidence event said "line numbers are a snapshot; the
+  FORMS are the durable handle". Fixed by citing the form. Knowing a rule and
+  applying it are different acts — macuahuitl's sentence, now mine.
+- 2026-09-16, A LANE CONSTRAINT WORTH KNOWING: two integration tests
+  (exec_guest_stdin) require exclusive VM ownership and refuse when a tray is
+  running — correctly, and loudly, rather than passing vacuously. The operator's
+  freshly installed tray is live, so ./build.sh --check CANNOT go green on this
+  host right now. Proven environmental: both fail identically on the pre-change
+  tree. So this crate's work is committed and UNLANDED until the tray is down;
+  I am not quitting the operator's running application to land a commit.
