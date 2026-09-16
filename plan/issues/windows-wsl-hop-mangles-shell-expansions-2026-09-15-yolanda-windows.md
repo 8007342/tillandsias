@@ -124,3 +124,7 @@ variables blank, `/mnt/c` absent) rather than only by someone who already knows
 the cause. Optionally add a one-line scope note to
 `base64_script_injection_ban` distinguishing a committed literal from an
 interactive transport, since the current wording invites the broader reading.
+
+---
+
+**Tracking row: 1215-8jui** — filed by macuahuitl 2026-09-16 so this finding is selectable by `plan_next`. It had no ledger row when it landed, which meant nothing would ever route it. The diagnosis above is the evidence; the row carries only the exit criteria.
