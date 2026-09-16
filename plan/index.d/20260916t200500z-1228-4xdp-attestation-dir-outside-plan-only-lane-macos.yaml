@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-only-push-lane-excludes-plan-attestations-so-a-macos-host-cannot-return-the-attestation-that-its-own-relay-invalidated
+    order: 1228-4xdp
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [coordination, git, instrument, fleet, macos]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      The plan-only push lane admits plan/mo-full-attestations.d/ but not plan/attestations/, so a macOS host cannot push back the attestation that a coordinator's own relay invalidated — and the loop cannot self-close while 1224-zpek stands
+    context: |
+      MEASURED 2026-09-16 on tlatoanis-macbook-air. macuahuitl relayed 690-w94k
+      criterion 2 to trunk (d44909353). That legitimately moved
+      action_host.rs from 48632ca51e0d to 9a791b323e87 and the verdict from
+      ok:sources-verified:macos-only:7 to stale:sources-drifted:macos-only:1.
+      That part is the attestation WORKING: it covers bytes, the bytes changed,
+      and per 739-6r6n a Linux gate cannot attest those seven cfg-gated modules
+      because it compiles stubs for them. Only a macOS host can.
+
+      The macOS host re-attested (--bins: 136 passed, 0 failed; the worktree,
+      origin/linux-next and macuahuitl's reported hash all three agree at
+      9a791b323e87) and then COULD NOT PUSH IT. The outgoing diff was exactly
+      ONE file and the pre-push hook answered verbatim:
+        plan-only lane: not applicable — 'plan/attestations/macos-only-sources.macos.json'
+        is outside plan/index.d/, plan/loop_status.d/, plan/issues/,
+        plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/, and differs
+        from origin/linux-next (full gate required)
+      So a SIBLING attestation directory is in the lane and this one is not,
+      and an attestation carries no code by construction — the full gate it is
+      being sent to cannot tell anyone anything about it that the macOS run did
+      not already establish.
+
+      TWO SEPARATE THINGS MUST BE DECIDED, and fixing only the first leaves it
+      broken. (1) Whether plan/attestations/ joins the lane. (2) Whether the
+      lane accepts a MODIFIED file: attestations are rewritten in place, never
+      added, and the lane's fragment-shaped members are append-only by design,
+      so a lane that admits the directory but still requires added-only files
+      would refuse this exact push for the second reason.
+
+      WHY IT DOES NOT SELF-CLOSE. While 1224-zpek keeps a tray live, every
+      macOS land is forced onto a salvage ref for a coordinator to relay — and
+      re-attesting REQUIRES the tray up, because that is the path that produces
+      the transcript. So each relay un-attests the file, and the repair can
+      only travel back by the same relay that caused it. The two ends of the
+      loop are held by different hosts and neither can close it alone. Filed
+      from the macOS end with the hook's own refusal text as evidence; the
+      re-attested commit is stranded at 15f13701d on
+      refs/heads/salvage/tlatoanis-macbook-air/20260916-739-6r6n-reattest-after-relay.
+    exit_criteria:
+      - 'a re-attestation touching only plan/attestations/ pushes on the plan-only lane, demonstrated by the ACTUAL refusal case above (pre-fix result: FAILS — one-file diff, full gate required)'
+      - 'the lane decision covers MODIFIED files explicitly, not only added ones, since an attestation is rewritten in place and never added'
+      - 'a diff that mixes plan/attestations/ with any code path still demands the full gate, so widening the lane does not become a route around it'
+      - 'the fixture separates the two conditions, because admitting the directory while still requiring added-only files passes a naming check and refuses the real push'
+    unscoreable: |
+      needs-a-decision-before-a-fixture: the criteria are verifiable, but which
+      way they resolve is a lane-policy call that belongs to whoever owns
+      scripts/land-on-platform-branch.sh. Filed with the measurement and the
+      verbatim refusal so the decision is made on evidence rather than
+      rediscovered on the next relay.
