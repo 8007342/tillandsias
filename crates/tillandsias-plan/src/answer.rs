@@ -584,6 +584,33 @@ fn envelope_commit(envelope: &Envelope) -> Option<String> {
         .filter(|c| gitref::looks_like_sha(c))
 }
 
+/// ORDER 1232-wire3 — the cited span AS IT READS AT ITS OWN FRAME, with the
+/// frame that produced it.
+///
+/// The read-side twin of [`frame_holds`], exposed because the GRADER needs the
+/// same question asked in its expectation path: `groundtruth::citation_matches`
+/// re-read `span_contains` needles out of the WORKING TREE, so an index behind
+/// the code failed an expectation that is satisfied at the commit the span was
+/// actually extracted from.
+///
+/// `None` when no frame is named, the object is unfetched, the path did not
+/// exist there, or the range does not fit that blob. An unanswerable question
+/// is NEVER an acquittal — the caller must treat `None` as "no rescue", which
+/// is the property that stops this laundering a real miss (801-g9nn).
+pub fn span_at_frame(
+    c: &Citation,
+    envelope: &Envelope,
+    view: &GitView,
+) -> Option<(String, String)> {
+    let frame = c.commit.clone().or_else(|| envelope_commit(envelope))?;
+    let text = view.file_at(&frame, &c.path)?;
+    let lines: Vec<&str> = text.lines().collect();
+    if c.line_start == 0 || c.line_end < c.line_start || c.line_end > lines.len() {
+        return None;
+    }
+    Some((frame, lines[c.line_start - 1..c.line_end].join("\n")))
+}
+
 /// The answer envelope. FIELDS ARE PRIVATE ON PURPOSE — see the module doc.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Envelope {

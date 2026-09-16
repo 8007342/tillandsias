@@ -337,6 +337,10 @@ pub fn grade_envelope(envelope: &Envelope, expect: &Expect, root: &Path) -> Vec<
 /// ledger, no engine. Only the RETURN is richer, which is the 920-pxg6 move
 /// next door: a sibling that carries what the older form had nowhere to put.
 pub fn grade_envelope_audited(envelope: &Envelope, expect: &Expect, root: &Path) -> GradeFindings {
+    // 1232-wire3: one view per graded envelope. GitView::run is fail-soft by
+    // construction — git missing, root not a repository, object unfetched all
+    // yield None — so building it can never turn a gradeable case into an error.
+    let view = crate::gitref::GitView::new(root);
     let mut stale: Vec<String> = Vec::new();
     let mut failures: Vec<String> = Vec::new();
     let mut cache: SpanCache = BTreeMap::new();
@@ -399,12 +403,46 @@ pub fn grade_envelope_audited(envelope: &Envelope, expect: &Expect, root: &Path)
                 }
             });
         if !hit {
-            failures.push(format!(
-                "no citation satisfies {} — cited: [{}]{}",
-                want.render(),
-                summarize(cited),
-                nearest(&why)
-            ));
+            // ORDER 1232-wire3. BEFORE CALLING THIS A FAILURE, ASK THE FRAME.
+            //
+            // `citation_matches` reads the WORKING TREE, so an index published
+            // before the code moved fails an expectation that is satisfied at
+            // the commit the span was actually extracted from. Measured on
+            // macuahuitl-fedora 2026-09-16: spec-inference-tier-mechanism-is-in-code
+            // reported "no citation satisfies {... span_contains=fn
+            // effective_inference_tier ...}" while BOTH needles were present in
+            // the cited span at 5bef283cb, the index's own commit. The same
+            // citation was simultaneously "(also stale)" to the verifier and a
+            // hard miss to this matcher, and that disagreement is the tell that
+            // one of the two was reading the wrong bytes.
+            //
+            // THIS CANNOT MAKE A RED CASE GREEN. It only moves a finding from
+            // `failures` to `stale`, and only when the needles are genuinely
+            // present at a frame that resolves. An expectation wrong at every
+            // commit, and one whose frame cannot be consulted at all, both stay
+            // failures — citation_matches_at_frame collapses those two into Err
+            // deliberately, because an unanswerable question is not an acquittal.
+            let rescued = cited.iter().find_map(|c| {
+                citation_matches_at_frame(c, want, envelope, &view)
+                    .ok()
+                    .map(|frame| (c, frame))
+            });
+            match rescued {
+                Some((c, frame)) => stale.push(format!(
+                    "{}:{}-{}: satisfies {} at {} — but NOT in this checkout; THIS SPAN MOVED, the expectation is sound and the index is behind the code",
+                    c.path(),
+                    c.line_start(),
+                    c.line_end(),
+                    want.render(),
+                    &frame[..frame.len().min(12)],
+                )),
+                None => failures.push(format!(
+                    "no citation satisfies {} — cited: [{}]{}",
+                    want.render(),
+                    summarize(cited),
+                    nearest(&why)
+                )),
+            }
         }
     }
 
@@ -514,6 +552,15 @@ fn citation_matches(
         ));
     }
     let span = lines[c.line_start() - 1..c.line_end()].join("\n");
+    span_needles(c, m, &span)
+}
+
+/// The needle half of [`citation_matches`], against a span the caller supplies.
+///
+/// Split out by 1232-wire3 so the working-tree check and the frame check are
+/// the SAME check over different bytes. Two copies would drift, and the drift
+/// would show up as a frame rescue that accepts something HEAD would refuse.
+fn span_needles(c: &Citation, m: &CitationMatch, span: &str) -> Result<(), String> {
     for needle in &m.span_contains {
         if !span.contains(needle.as_str()) {
             return Err(format!(
@@ -526,6 +573,31 @@ fn citation_matches(
         }
     }
     Ok(())
+}
+
+/// ORDER 1232-wire3 — does this citation satisfy `m` AT ITS OWN FRAME?
+///
+/// `Ok(frame)` means every needle is present in the span as that commit holds
+/// it: the expectation is satisfied and the READER is standing somewhere else.
+/// `Err` means it is not satisfied there either, or the frame could not be
+/// consulted at all — and those two collapse deliberately, because an
+/// unanswerable question is not an acquittal. The caller must therefore treat
+/// every `Err` as a genuine failure, which is what keeps this from laundering.
+///
+/// The path/kind/authority checks are NOT re-run here: they are properties of
+/// the citation record, not of any file, so they cannot be stale. Only the
+/// span read moves.
+fn citation_matches_at_frame(
+    c: &Citation,
+    m: &CitationMatch,
+    envelope: &Envelope,
+    view: &crate::gitref::GitView,
+) -> Result<String, String> {
+    let Some((frame, span)) = answer::span_at_frame(c, envelope, view) else {
+        return Err("no frame to consult".to_string());
+    };
+    span_needles(c, m, &span)?;
+    Ok(frame)
 }
 
 /// ORDER 879-gidx, hoisted by 920-pxg6: the ladder itself now lives in
@@ -1517,6 +1589,136 @@ citations_include:
             head,
             "stamping the reader's HEAD is the 1229-2862 defect: spans read at one \
              commit were being attributed to another"
+        );
+    }
+
+    // ── ORDER 1232-wire3: the EXPECTATION path's frame ───────────────────────
+
+    /// An expectation whose span_contains needle sits in the cited span at the
+    /// index's commit and NOT at the reader's HEAD. macuahuitl-fedora's
+    /// remaining red, reduced to a fixture.
+    #[test]
+    fn an_expectation_satisfied_at_the_frame_grades_stale_not_missing() {
+        let (r, a, b) = repo_where_the_span_moves("gt-expect-moved");
+        r.checkout(&b);
+
+        let expect: Expect = serde_json::from_value(serde_json::json!({
+            "confidence": "retrieved",
+            "verify": false,
+            "citations_include": [{
+                "path": "openspec/specs/x/spec.md",
+                "span_contains": ["egress-default-deny"],
+            }],
+        }))
+        .expect("expect deserializes");
+
+        let found = grade_envelope_audited(&moved_span_envelope(&a), &expect, r.path());
+        assert!(
+            found.failures.is_empty(),
+            "an expectation satisfied at its own frame must not be a failure: {:?}",
+            found.failures
+        );
+        assert_eq!(found.stale.len(), 1, "{found:?}");
+        assert!(
+            found.stale[0].contains("THIS SPAN MOVED"),
+            "{:?}",
+            found.stale
+        );
+    }
+
+    /// NEGATIVE CONTROL: an expectation wrong at EVERY commit stays a hard
+    /// failure. Without this the frame lookup is a way to make red cases green.
+    #[test]
+    fn an_expectation_wrong_at_every_commit_is_still_a_failure() {
+        let (r, a, b) = repo_where_the_span_moves("gt-expect-bogus");
+        r.checkout(&b);
+
+        let expect: Expect = serde_json::from_value(serde_json::json!({
+            "confidence": "retrieved",
+            "verify": false,
+            "citations_include": [{
+                "path": "openspec/specs/x/spec.md",
+                "span_contains": ["a-needle-that-was-never-anywhere"],
+            }],
+        }))
+        .expect("expect deserializes");
+
+        let found = grade_envelope_audited(&moved_span_envelope(&a), &expect, r.path());
+        assert!(
+            found.stale.is_empty(),
+            "must not be rescued: {:?}",
+            found.stale
+        );
+        assert_eq!(found.failures.len(), 1, "{found:?}");
+        assert!(
+            found.failures[0].contains("no citation satisfies"),
+            "{:?}",
+            found.failures
+        );
+    }
+
+    /// NEGATIVE CONTROL: an UNRESOLVABLE frame is not an acquittal. The span
+    /// would satisfy the needle if the commit could be read, but it cannot be,
+    /// and 801-g9nn's rule is that an unaskable question never rescues.
+    #[test]
+    fn an_unresolvable_frame_is_not_an_acquittal() {
+        let (r, _a, b) = repo_where_the_span_moves("gt-expect-unfetched");
+        r.checkout(&b);
+
+        // A well-formed sha that names no object in this repository.
+        let absent = "0123456789abcdef0123456789abcdef01234567";
+        let expect: Expect = serde_json::from_value(serde_json::json!({
+            "confidence": "retrieved",
+            "verify": false,
+            "citations_include": [{
+                "path": "openspec/specs/x/spec.md",
+                "span_contains": ["egress-default-deny"],
+            }],
+        }))
+        .expect("expect deserializes");
+
+        let found = grade_envelope_audited(&moved_span_envelope(absent), &expect, r.path());
+        assert!(
+            found.stale.is_empty(),
+            "an unresolvable frame must not rescue: {:?}",
+            found.stale
+        );
+        assert!(!found.failures.is_empty(), "must stay a failure");
+    }
+
+    /// The exclude path is a SAFETY property and 1232-wire3 must not touch it:
+    /// "no citation may match this" is what stops a return-everything
+    /// regression from satisfying the include list. A frame rescue there would
+    /// let a forbidden citation through on the grounds that it is forbidden
+    /// somewhere else.
+    #[test]
+    fn the_exclude_path_is_unchanged_by_the_frame_rescue() {
+        let (r, a, b) = repo_where_the_span_moves("gt-exclude");
+        r.checkout(&b);
+
+        // Forbid what the citation carries AT ITS FRAME but not at HEAD. The
+        // exclusion reads HEAD, so it must NOT fire — and it must not become
+        // stale either; exclusion has no third outcome.
+        let expect: Expect = serde_json::from_value(serde_json::json!({
+            "confidence": "retrieved",
+            "verify": false,
+            "citations_exclude": [{
+                "path": "openspec/specs/x/spec.md",
+                "span_contains": ["egress-default-deny"],
+            }],
+        }))
+        .expect("expect deserializes");
+
+        let found = grade_envelope_audited(&moved_span_envelope(&a), &expect, r.path());
+        assert!(
+            found.stale.is_empty(),
+            "exclusion has no stale outcome: {:?}",
+            found.stale
+        );
+        assert!(
+            found.failures.is_empty(),
+            "the span does not match at HEAD, so the exclusion must not fire: {:?}",
+            found.failures
         );
     }
 }
