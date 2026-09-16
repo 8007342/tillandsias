@@ -18387,6 +18387,33 @@ mod tests {
     /// mount changed — goes red here.
     #[test]
     fn nix_cache_launch_args_parity_is_two_sided() {
+        // ORDER 1233. THIS TEST READS $HOME TWICE AND COMPARES THE RESULTS.
+        //
+        // Once below, to build `script_args` from the shell script's variable
+        // table, and again inside `build_nix_cache_run_args` (:5503), which
+        // derives the same paths for the Rust side. Two reads of a
+        // process-global that a neighbouring test mutates — so a writer landing
+        // between them makes the two sides disagree about a value neither side
+        // is testing, and the parity assertion fails on a difference it did not
+        // introduce.
+        //
+        // MEASURED on yoga 2026-09-16 BEFORE this line existed: 16 failures in
+        // 30 runs against `nvidia_cdi_available_honors_user_config_dir`, whose
+        // temp HOME (`/tmp/tilland-cdi-<pid>`) appeared in the Rust side of the
+        // diff while the real HOME appeared in the script side. It also reded a
+        // land gate on this host, having passed the attempt 20 minutes earlier.
+        //
+        // `env_lock()` IS THE RIGHT LOCK AND `env_guard()` IS NOT ENOUGH. There
+        // are two distinct mutexes here: ENV_LOCK (:18115, reached by
+        // env_guard, 7 call sites) and the canonical crate-wide lock (:20001,
+        // delegating to runtime_assets::env_lock, whose own comment says "two
+        // independent locks serialise nothing" — order 434 unified them once
+        // already). Every one of the 7 env_guard callers ALSO takes env_lock,
+        // so the canonical lock is the one every HOME writer in this binary
+        // holds, and taking it is what makes a READER safe. Taking env_guard
+        // instead would serialise this against seven writers and leave it
+        // racing the rest.
+        let _env = env_lock();
         let script_path = concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../scripts/nix-cache-service.sh"
