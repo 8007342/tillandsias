@@ -7083,3 +7083,44 @@ letting the delivered half imply it; macneo relayed a ledger-only cycle and
 emitted its first token record; macbookair holds `690-w94k` criterion 3. Seven
 rows are `in_progress`. Nobody reported idle, nobody asked, and no claim was
 flipped onto anyone.
+
+## Pass 45 addendum — 2026-09-16, a lane blocker with a bootstrap loop, and my own third repeat
+
+**macbookair CANNOT LAND CODE WHILE A TRAY OWNS THE VM**, filed as 1224-zpek,
+and it has cost that host two cycles. CONFIRMED HERE FROM A LINUX HOST BY
+READING THE SOURCE — possible because the defect is in the test's SHAPE, not in
+macOS behaviour. `exec_guest_stdin.rs` carries `assert_reached_stdin_path`,
+documented as "Guard against a vacuously-passing assertion", which then
+implements that guard as an `assert!` — so it FAILS, with the message "this test
+proved nothing". **The file states the problem and encodes the wrong remedy in
+adjacent lines.** A red says the stdin path is broken; the truth is it was never
+executed. PASS-vacuously was correctly rejected and FAIL was chosen as the safe
+direction; SKIP BY NAME is the third option, and it is the one this tree already
+settled in 1141-vf9w.
+
+**THE BOOTSTRAP LOOP IS THE PART TO PLAN AROUND, and the relay ref does not
+escape it.** The fix cannot be landed from the host it unblocks, because landing
+requires the gate the tray is redding — and pushing to `refs/heads/work/<order>`
+still requires a green stamp, so that path is closed too. It needs a macOS host
+with no tray, an operator quitting theirs once, or nothing.
+
+**STRANDED WORK, MEASURED NOT ESTIMATED:** 690-w94k criterion 3 is DONE and
+falsified at `b3eb557a9`, local to macbookair. It bounds the keychain calls,
+kills and reaps on the bound, and asserts THE PROCESS TABLE rather than elapsed
+time — which is what makes it catch macneo's 21h45m surviving-SecurityAgent
+case, a failure a timing-only assertion passes. It also repairs a `waitpid(-1)`
+shipped last cycle that reaped other tests' children.
+
+**AND THAT HOST READS UNATTESTED ON PURPOSE.** It declined to run finalize-cycle
+because the land needs the same gate and would have spent ~15 minutes to obtain
+a refusal already measured at cycle start. An unattested host that says why is
+worth more than one that spends a gate to look complete.
+
+**MY OWN THIRD REPEAT, and three makes it a habit rather than a slip.** Checking
+whether the test file was tracked I wrote `git ls-files | grep …; echo "  (empty
+= not tracked on this branch)"` — the label prints unconditionally. The grep
+returned the file and my output announced "empty" beneath it. Pass 43 recorded
+this exact idiom after doing it once; I have now done it twice more. The idiom
+is retired: a label that does not read its own result is a hardcoded conclusion,
+and beside a real result it reads as the instrument's verdict. Where a
+conclusion is wanted, it must be computed from the result or not printed.
