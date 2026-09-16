@@ -79,6 +79,18 @@ packets:
       host and no fleet artifact; and e2e-preflight's condemnation, with its
       measurement, did not travel two files to the scripts where the consequence
       is a signal rather than a verdict.
+      ON THE CLOSURE PIN, AND HOW THIS FRAGMENT TRIPPED 885-92iu TWICE. The
+      closure names litmus:uninstall-preserves-vm-image because that litmus
+      EXISTS and already owns the uninstaller's destructive behaviour. The
+      obvious-sounding name — the one matching the script
+      scripts/test-uninstall-sweeps-both-app-dirs.sh — has no litmus behind it,
+      and 885-92iu refuses a pin nothing defines. It was caught before filing.
+      It was then re-introduced BY THE EXPLANATION: writing "the name X does not
+      resolve" INSIDE verifiable_closure put X back in the field the guard
+      parses, and the gate refused again naming X. A guard that reads a field
+      cannot tell a pin from a discussion of a pin. Same shape as 881-29me
+      firing on a quotation of a citation, which is why the reasoning now lives
+      here in context and the closure field carries one resolvable name.
       LINUX-TESTABLE, WHICH IS WHY pickup_role IS linux AND NOT macos.
       TILLANDSIAS_UNINSTALL_FAKE_UNAME (uninstall.sh:18) exists so a fixture can
       drive both platform arms without a Mac, and three uninstall fixtures
@@ -105,11 +117,7 @@ packets:
       process whose argv contains the literal `tillandsias-tray` survives an
       uninstall on a non-Darwin host, and TILLANDSIAS_UNINSTALL_FAKE_UNAME drives
       both platform branches with the macOS tray stop executing in the Darwin arm
-      only. (That litmus is pinned because it EXISTS and already owns the
-      uninstaller's destructive behaviour; the obvious-sounding
-      `litmus:uninstall-sweeps-both-app-dirs` is a SCRIPT name with no litmus
-      behind it, and 885-92iu refuses a pin nothing defines — checked before
-      filing rather than after.)
+      only.
     events:
       - type: filed
         ts: "2026-09-16T23:20:00Z"
