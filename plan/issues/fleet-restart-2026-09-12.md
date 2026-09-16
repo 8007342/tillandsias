@@ -7287,3 +7287,47 @@ only after it cleared — the lapse from two passes earlier, not repeated. The
 citation and ledger guards were run BEFORE committing rather than discovered by
 a refusal. And the conflict in macbookair's drill file was checked for leftover
 markers and duplicated bullets before staging, per the merge-then-add rule.
+
+## Pass 46 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=373, `osx-next` ahead=0
+behind=152, both fully contained. `main` behind=633.
+
+**THE SALVAGE SWEEP IS NOW ROUTINE, AND THE FIRST ROUTINE RUN GOT IT WRONG
+TWICE.** Pass 45 established that salvage refs strand work. Making that a
+per-pass check produced two confidently wrong answers before a right one, in
+OPPOSITE directions, and that is worth more than the result:
+
+- **Ancestry is not integration.** Nine refs read "not contained" — two of them
+  I had personally relayed by cherry-pick hours earlier, so their content was
+  fully on trunk and their ancestry never would be.
+- **Three-dot overcounts.** `git diff trunk...REF` lists what the ref changed
+  since the MERGE BASE, including files trunk added independently. Six
+  macbookair fragments read as differing; direct comparison showed all six
+  BYTE-IDENTICAL, same size, empty diff.
+- **Two-dot overcounts far worse.** Tip-to-tip includes all of trunk's progress
+  since the branch point: **526, 2009, 2061** files for refs whose genuine
+  outstanding content is **3, 0, 0**. A reader taking those would conclude the
+  fleet is drowning.
+- **And "differs" still does not say which side is AHEAD.** lenovinha's
+  1185-9qx6 differs on build.sh and local-ci.sh — trunk touched both TWO DAYS
+  AFTER that snapshot, row `completed`. Stale, not stranded.
+
+**THE ANSWER, by the three-step method (candidates from three-dot, real set by
+blob compare, direction by date plus row status): of twelve salvage refs,
+yolanda's 1186-w3ph ALONE holds genuinely outstanding work** — four files, its
+row `in_progress`, theirs to adjudicate. Every other ref is landed, superseded
+or stale. Filed as **1226-jb8y**, with the two wrong answers as its evidence,
+because a reader shown only the method will not believe it needs three steps.
+
+**NO REASSIGNMENT.** Over 12h by email: yoga 18 (11 plan, 7 code), lenovinha 11,
+macuahuitl 36, macneo 3, unattributed bucket 6. yoga closed 1021-hf9e's second
+pass and returned it to ready with a third contention LOCATED; lenovinha holds
+679-rp9m; macbookair attested the macOS sources and is blocked only on its own
+full gate. Nobody reported idle, nobody asked, no claim was flipped.
+
+**AND macuahuitl IS STILL THE DOMINANT PUBLISHER** — 36 of 74 commits in 12h,
+31 of them plan-only. The batching commitment holds (this pass makes ONE
+plan-only push carrying both records), but batching reduces the count, not the
+share. That number is the standing argument for keeping coordinator output to
+one push per pass.
