@@ -2277,6 +2277,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "fleet-activity read fixture passed"
 
+    # Order 1226-jb8y. 872-c9nd's salvage net saved macbookair's finished work
+    # when its gate could not pass — and the work sat on origin for hours
+    # because nobody queried the refs. Making that query routine then produced
+    # two confidently WRONG answers in opposite directions before a right one:
+    # ancestry is not integration, three-dot overcounts, two-dot overcounts far
+    # worse, and "differs" is not "outstanding". The fixture's first arm pins
+    # the false negative the script itself shipped with — a ref lookup that
+    # silently finds nothing reads exactly like "nothing is stranded".
+    _step "Checking the salvage audit (1226-jb8y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-salvage-audit.sh" 2>&1; then
+        _error "the salvage audit regressed — stranded work can again read as landed, or a stale snapshot as outstanding"
+        exit 1
+    fi
+    _info "salvage audit fixture passed"
+
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
     # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo

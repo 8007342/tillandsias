@@ -82,6 +82,31 @@ it, and when the cross-branch check reports `claimed-elsewhere:<order>:<branch>`
 relay the fragment or ask the host to push it — the check remains the
 coordinator's control, because a host can still claim without the helper.
 
+## Is Any Host's Work Stranded — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
+
+```bash
+scripts/salvage-audit.sh                    # or --branch <ref> --pattern refs/heads/work/*
+```
+
+Order 1226-jb8y. Reports each salvage/work ref that holds content not on the
+branch, and for every differing file WHICH SIDE IS AHEAD. Only
+`ref-may-be-AHEAD` and `ABSENT` lines are relay candidates; a
+`<branch>-is-AHEAD` line means the branch moved past a stale snapshot.
+
+**BEFORE CONCLUDING A HOST'S WORK IS UNREACHABLE, RUN THIS.** On 2026-09-16
+macbookair's finished work sat on origin for hours — 872-c9nd's net had pushed
+it — while two hosts reasoned about escape routes and neither queried the refs.
+
+**It is a script because the question has three parts and every one-command
+shortcut answers a different one.** Ancestry is not integration: a ref relayed
+by cherry-pick is never an ancestor and is fully landed. `git diff A...B`
+overcounts by listing what B changed since the merge base, including files A
+added independently — six fragments read as differing and all six were
+byte-identical. `git diff A B` overcounts far worse by counting the branch's own
+progress: 526, 2009 and 2061 files against a truth of 3, 0 and 0. And "differs"
+is not "outstanding" — a file the branch touched after the snapshot is the
+branch moving on.
+
 ## Which Hosts Are Active — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
 
 ```bash
