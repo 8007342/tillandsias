@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full
+    event:
+      type: note
+      ts: "2026-09-16T23:40:09Z"
+      agent_id: linux-macuahuitl-claude-20260916t234008z
+      host: macuahuitl
+      summary: |
+        RAN THE PRODUCER, which is what criterion 3 asks for, and the claim is REFUTED
+        IN THIS REGIME. scripts/build-guest-binaries.sh --verify on macuahuitl at
+        2026-09-16T23:39Z: rc=1, with one ERROR line. It prints an error and exits
+        NON-ZERO. The source read that preceded this was undecided; the run is not.
+        Regime: macuahuitl, tree 5d2e8d1f4, staged guest binaries present. Another
+        regime may differ and this does not close the row for hosts that have not run it.
+
+        AND THE RUN FOUND A DIFFERENT, REAL RELEASE BLOCKER instead of the claimed one.
+        The ERROR was a VERSION mismatch: the staged binary reported
+        Tillandsias v56.9.16.1 against a VERSION file of 56.9.13.1. That reds
+        litmus:guest-binary-embed-integrity, whose STEP 1/2 runs exactly this command,
+        phase pre-build, spec ci-release. It would have been a FOURTH pre-build litmus
+        red, appearing only once the three we spent the night on were cleared.
+
+        THE MECHANISM IS A TRAP ANY HOST CAN FALL INTO AND IT IS NOT A CODE DEFECT.
+        The same step passed [OK] in the 10:20Z ci-full on this host and failed at
+        23:39Z on a tree whose code did not change: ./build.sh --ci-full --install
+        bumped VERSION to 56.9.16.1 and staged guest binaries under it, then the gate
+        failed before install; later rebases onto origin restored VERSION to 56.9.13.1
+        from the remote, while target-guest/ is gitignored and kept the bumped binaries.
+        So a FAILED release-gate run leaves the host in a state where the NEXT gate reds
+        for a reason unrelated to the code, and the failure surfaces at the worst moment.
+        The merge-to-main-and-release runbook already warns to clear target-guest/ when
+        it was staged under a bumped VERSION; what it does not say is that an
+        interrupted ci-full plus an ordinary rebase produces that state by itself.
+
+        REMEDY APPLIED HERE: moved target-guest/ aside rather than deleting it
+        (preserved at $HOME/target-guest.bumped-56.9.16.1.20260916T233950Z). Re-ran the
+        verifier: rc=0, verify:skip-stale-staging, which is order 447's documented
+        absent-staging skip. The asymmetry is worth noting for whoever takes this row:
+        staging BEHIND VERSION skips cleanly and exits 0, staging AHEAD of VERSION is a
+        hard error and exits 1, and both are host staging state rather than a code
+        regression.
