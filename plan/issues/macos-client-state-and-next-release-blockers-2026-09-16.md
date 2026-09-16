@@ -66,7 +66,7 @@ Ordered by what they cost a user who hits them.
 |---|---|---|
 | **1211-34v6** | fixed on trunk, NOT in v56.9.13.1 | the shipped refusal advertises a remedy that cannot work. Until this ships, every operator who reads it spends time on a dead end. Cheapest item here and the highest ratio. |
 | **1215-xazj** | UNFIXED everywhere | the tray's `--github-login` cannot succeed on any platform. This is the defect itself. Its principled fix is blocked on 1217-54vw; an interim that merely reaches the probe would still be strictly better than the current state. |
-| **yoga's criterion 4** (9ac4e0237) | on trunk | the probe names WHICH repository it verified, on both the success and refusal paths, printed BEFORE the probe runs so a hang still says what was about to be checked. Also splits an absent origin from a non-GitHub origin, which previously produced one message about absence. Without it the next failure is as undiagnosable as this one was. |
+| **yoga's criterion 4** (`37d16f864`) | landed on trunk 2026-09-16 | the probe names WHICH repository it verified, on both the success and refusal paths, printed BEFORE the probe runs so a hang still says what was about to be checked. Also splits an absent origin from a non-GitHub origin, which previously produced one message about absence. Without it the next failure is as undiagnosable as this one was. |
 | **1171-ccf2** | implemented on trunk, NOT in the tag | the Windows zip does not carry `tillandsias-headless.exe`. Windows-only; does not affect macOS. |
 | **890-y72v** | on trunk | DeliverCredentialsReply carries an accept/reject discriminator — a **WIRE v4 BUMP**. Host and guest must move together, so this must not be split across releases. |
 | **1201-t6ms** | on trunk | the server-side wire-version refusal test, which the two wire bumps rest on. Ships with 890-y72v or neither. |
@@ -94,3 +94,21 @@ is the one that makes the other five survive.
 
 trace: 759-vceg, 1211-34v6, 1215-xazj, 1217-54vw, 1218-25z3, 803-49re
 host: macuahuitl (coordinator), reproducing host tlatoanis-macbook-air
+
+## 7. A correction to this document, left visible rather than tidied away
+
+Section 4's row for yoga's criterion 4 first cited **`9ac4e0237`**. **That commit
+does not exist in this repository.** The coordinator took it from yoga's
+in-flight message — they wrote "landing as 9ac4e0237" while it was still in its
+gate — and wrote it into the list as though it were a fact about origin. The
+landed implementation is **`37d16f864`**, with the claim release at `60294e3de`
+and the cycle record at `9f2394147`; all three are ancestors of `origin/linux-next`
+and were verified with `git merge-base --is-ancestor` before this correction.
+
+This is the shape the fleet already has a rule for — hand peers a CONDITION, not
+a local SHA — arriving in the one document whose whole purpose is to be acted on
+by someone who was not here. A dead reference in a blocker list is worse than no
+reference: it reads as precision and costs the next reader the time to discover
+it resolves to nothing. Corrected rather than silently replaced, because the
+error is instructive about how this list should be read: **verify every sha in
+section 4 against origin before acting on it.**
