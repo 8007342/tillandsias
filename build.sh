@@ -2238,6 +2238,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "must-ship-next release advisory fixture passed"
 
+    # Sibling advisory, same surface and same strength (order 914-nkc4). The
+    # README release-ledger distillation policy was documented in two places
+    # with its destination line already present, and NOTHING RAN IT — measured
+    # at 19 rows against its own ~10 threshold, with no row ever distilled. The
+    # fixture's teeth are HISTORICAL REFS: the live table sits AT threshold, so
+    # a run against HEAD can only print ok:, and a check that only ever prints
+    # ok: on a healthy tree cannot be told from a broken one.
+    _step "Checking the release-ledger distillation advisory (914-nkc4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-distillation-advisory.sh" 2>&1; then
+        _error "the ledger-distillation advisory regressed — the release ledger can again outgrow its own policy with nothing reporting it"
+        exit 1
+    fi
+    _info "release-ledger distillation advisory fixture passed"
+
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
     # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo
