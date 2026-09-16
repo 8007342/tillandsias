@@ -96,8 +96,8 @@
 # ── VERDICT GRAMMAR (closed) ────────────────────────────────────────────────
 #   ^(ok:must-ship:0 outstanding of [0-9]+ marked
 #    |advisory:must-ship:[0-9]+ outstanding of [0-9]+ marked
-#    |skipped:must-ship:(no-plan-binary|no-cut-ref|no-jq)
-#    |fail:must-ship:unreadable-ledger)$
+#    |skipped:must-ship:(no-plan-binary|stale-plan-binary|no-cut-ref|no-jq)
+#    |fail:must-ship:(unreadable-ledger|unknown-argument|missing-value))$
 #
 # `skipped:` is its own word: a pass that never ran must never report `ok`
 # (785-sqe6, 787-f7dh). Every verdict names its denominator.
@@ -109,11 +109,50 @@ cd "$ROOT" || exit 2
 
 MARKER="next"
 CUT_REF="HEAD"
+# REFUSE AN UNKNOWN ARGUMENT RATHER THAN DISCARDING IT (found by macuahuitl
+# hitting it, not by reading the code). This loop used to end `*) shift ;;`, so
+# `check-must-ship-rows.sh v56.9.13.1` and `--against v56.9.13.1` both DROPPED
+# the ref and reported `ok:must-ship:0 outstanding of 2 marked` — a confident
+# clean verdict about HEAD, a tree nobody asked about. The only tell was the ref
+# name inside the per-row detail, which a reader scanning for the verdict does
+# not read.
+#
+# THAT IS THIS SCRIPT'S OWN SUBJECT TURNED ON ITSELF: a well-formed answer to a
+# question that was never asked. It matters more here than in most scripts,
+# because the caller is a release cutter typing a flag from memory at the moment
+# they have the least context — exactly the reader this row exists to protect.
 while [ $# -gt 0 ]; do
     case "$1" in
-        --cut-ref) CUT_REF="${2:-HEAD}"; shift 2 ;;
-        --marker) MARKER="${2:-next}"; shift 2 ;;
-        *) shift ;;
+        # `shift 2` with only one argument left FAILS and leaves $# unchanged,
+        # which spins this loop FOREVER under `set -uo pipefail` (no -e). A
+        # release-path script that HANGS is worse than one that answers wrongly:
+        # the cutter gets no verdict and no error, only a stopped terminal.
+        # Found by the fixture arm below passing `--marker` with no value — the
+        # arm was written for a different defect and caught this one.
+        --cut-ref)
+            [ $# -ge 2 ] || { echo "fail:must-ship:missing-value"
+                echo "  --cut-ref needs a ref; nothing was examined" >&2; exit 0; }
+            CUT_REF="$2"; shift 2 ;;
+        --marker)
+            [ $# -ge 2 ] || { echo "fail:must-ship:missing-value"
+                echo "  --marker needs a value; nothing was examined" >&2; exit 0; }
+            MARKER="$2"; shift 2 ;;
+        -h|--help)
+            echo "usage: check-must-ship-rows.sh [--cut-ref <ref>] [--marker <value>]" >&2
+            exit 0 ;;
+        *)
+            # `fail:` and exit 0, matching this file's other refusal
+            # (unreadable-ledger): the caller made an error, and NO verdict about
+            # any tree is printed, because a verdict here would be about the
+            # wrong one. Exit 0 keeps the advisory unable to block a cut even
+            # when invoked wrongly.
+            echo "fail:must-ship:unknown-argument"
+            echo "  unrecognised argument: $1" >&2
+            echo "  Nothing was examined, and NO verdict was printed: the run you asked for" >&2
+            echo "  is not the run this would have made. It would have answered about HEAD." >&2
+            echo "  The ref goes behind --cut-ref:" >&2
+            echo "      scripts/check-must-ship-rows.sh --cut-ref $1" >&2
+            exit 0 ;;
     esac
 done
 
@@ -149,7 +188,10 @@ if [ "${_probe_saw:-ABSENT}" != "next" ]; then
     echo "skipped:must-ship:stale-plan-binary"
     echo "  $PLAN does not project must_ship (probe read '${_probe_saw:-ABSENT}')." >&2
     echo "  A zero from this binary would mean 'cannot see marks', not 'no marks'." >&2
-    echo "  Rebuild: cargo build --release -p tillandsias-plan" >&2
+    echo "  Remedy, BOTH halves — the build alone is often a no-op on a current" >&2
+    echo "  checkout (0.08s, already built) and what is actually missing is the STAMP:" >&2
+    echo "      cargo build --release -p tillandsias-plan && scripts/check-plan-binary-current.sh" >&2
+    echo "  Running only the first half shows nothing change and reads as a broken remedy." >&2
     exit 0
 fi
 

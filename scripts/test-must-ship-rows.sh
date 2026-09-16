@@ -131,6 +131,25 @@ else
     echo "  skip: tag v56.9.13.1 not present in this clone — real-history arm not run"
 fi
 
+echo "ARM 11: an UNKNOWN ARGUMENT is refused, not silently discarded"
+# FOUND BY A PEER HITTING IT, not by review. The arg loop used to end
+# `*) shift ;;`, so a positional ref or a mistyped flag was dropped and the run
+# proceeded against HEAD — printing a confident clean verdict about a tree
+# nobody asked about. The caller here is a release cutter typing a flag from
+# memory; a wrong answer that looks right is the one failure this instrument
+# must not have, since it is the instrument's own subject.
+for _bad in "v56.9.13.1" "--against v56.9.13.1" "--marker"; do
+    # shellcheck disable=SC2086
+    _out="$(bash "$GUARD" $_bad 2>/dev/null)"; _rc=$?
+    if printf '%s' "$_out" | /usr/bin/grep -qE '^(ok|advisory):must-ship:'; then
+        bad "invocation [$_bad] printed a VERDICT about a tree nobody asked for: $_out"
+    elif [ "$_rc" -ne 0 ]; then
+        bad "invocation [$_bad] exited $_rc — the advisory must never be able to block a cut"
+    else
+        ok "invocation [$_bad] refused without printing a verdict, rc=0"
+    fi
+done
+
 echo "ARM 9: the guard is BOUND — the release path invokes it"
 if /usr/bin/grep -q 'check-must-ship-rows.sh' scripts/release-preflight.sh; then
     ok "scripts/release-preflight.sh invokes the advisory"

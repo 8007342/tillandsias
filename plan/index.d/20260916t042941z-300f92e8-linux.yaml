@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    event:
+      type: progress
+      ts: "2026-09-16T04:29:41Z"
+      agent_id: linux-yoga-claude-20260916t033521z
+      host: linux
+      summary: |
+        A DEFECT IN THE INSTRUMENT THIS ROW DELIVERED, found by macuahuitl HITTING it rather than reading it, and it was this row's own failure shape sitting inside its own remedy.
+
+        THE DEFECT. The argument loop ended with a silent catch-all, so an unrecognised argument was DISCARDED and the run proceeded against HEAD. Both `check-must-ship-rows.sh v56.9.13.1` (a positional ref) and `--against v56.9.13.1` (a mistyped flag) printed ok:must-ship:0 outstanding of 2 marked — a confident clean verdict about a tree nobody asked about. The only tell was the ref name inside the per-row detail, which a reader scanning for the verdict does not read.
+
+        WHY IT MATTERS MORE HERE THAN IN MOST SCRIPTS: the caller is a release cutter typing a flag from memory at the moment they have the least context about what the fleet found that week. That reader is precisely who this row exists to protect, and the instrument would have told them a clean answer about the wrong tree.
+
+        FIXED: an unknown argument now prints fail:must-ship:unknown-argument, examines nothing, prints NO verdict about any tree, names the correct invocation with the argument the caller supplied, and still exits 0 so the advisory can never block a cut even when invoked wrongly. That matches the file's existing unreadable-ledger refusal rather than inventing a second convention.
+
+        AND THE FIXTURE ARM FOR THAT DEFECT FOUND A SECOND, WORSE ONE. Passing `--marker` with no value made `shift 2` fail with the argument count unchanged, so the loop SPUN FOREVER under set -uo pipefail with no -e. A release-path script that HANGS is worse than one that answers wrongly: the cutter gets no verdict and no error, only a stopped terminal. Both flags now require their value and answer fail:must-ship:missing-value. The arm was written for the first defect and caught the second, which is the argument for arms that drive the real subject rather than assert a known-good case.
+
+        FALSIFIED: restoring the silent catch-all reds two of the three invocations in arm 11 with the exact complaint — a VERDICT about a tree nobody asked for. Reverting greens it, 13 of 13.
+
+        A MISTAKE OF MY OWN WHILE FIXING IT, recorded because it is the one my notes already warn about. To stop the spinning loop I ran pkill -f matching the script name, and KILLED MY OWN TOOL SHELL, because the shell's command line contained that name — the sibling match. The loop survived, still burning CPU, and I found it with pgrep and killed it by PID. Never match a process by a pattern that your own invocation also contains.
+
+        ONE CORRECTION TO THE STALE-BINARY REMEDY, from macuahuitl meeting it: the printed remedy named only the cargo build, and on a current checkout that build is a NO-OP while the thing actually missing is the STAMP that check-plan-binary-current.sh writes. Someone running only the first half sees nothing change and concludes the remedy is broken. The message now names both halves and says why the build alone appears to do nothing.
+
+        THE ROW STAYS COMPLETED: its deliverable is met and shipped. This is a repair to that deliverable, recorded here rather than as a new row, because filing a fresh row for a defect in my own hours-old work would inflate arrivals against 831-ezea's arithmetic for no routing benefit — nobody else would ever claim it.
