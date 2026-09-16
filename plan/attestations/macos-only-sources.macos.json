@@ -1,15 +1,15 @@
 {
   "scope": "macos-only",
   "host": "macos",
-  "attested_at": "2026-09-04T06:43:48Z",
-  "commit": "c009149f61353370bc99cd517e591168cf6f030f",
+  "attested_at": "2026-09-16T12:46:32Z",
+  "commit": "9e92b3bdd8a3cd8d20efcff9447874709ae1bcf7",
   "command": "cargo test -p tillandsias-macos-tray --bins",
-  "result": "test result: ok. 115 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.62s",
+  "result": "test result: ok. 135 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.36s",
   "sources": {
-    "crates/tillandsias-macos-tray/src/action_host.rs": "a9d3b2ee0fa2a42b240dd1f0f99872491ec275d6",
-    "crates/tillandsias-macos-tray/src/diagnose.rs": "619e137fafe540b7684f1b4d644fe2f0f1353ec0",
-    "crates/tillandsias-macos-tray/src/guest_binary.rs": "71e4f81b002cfac6e619cdb53135cf4819bb1154",
-    "crates/tillandsias-macos-tray/src/installation_uuid.rs": "7d22c0f992eafaf5b14fa71aea60d06859ce14c3",
+    "crates/tillandsias-macos-tray/src/action_host.rs": "48632ca51e0dcb2b344b924cbe0f761d97253d20",
+    "crates/tillandsias-macos-tray/src/diagnose.rs": "ebf458e50519135883ab9624525773e4ac7f8037",
+    "crates/tillandsias-macos-tray/src/guest_binary.rs": "b0a9ce8e581d13f8a7ceba76fa1dd741061d830a",
+    "crates/tillandsias-macos-tray/src/installation_uuid.rs": "02cdcee40fce0d89876474a9c55e82d96bb38c09",
     "crates/tillandsias-macos-tray/src/main_thread.rs": "194147af892e8a5e7da925cf74dacd2b07eb2032",
     "crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs": "b963c3ebb0950a2fc33a764eb76b3e040ac4ba69",
     "crates/tillandsias-macos-tray/src/status_item.rs": "6ca72ef8ffbf636ce31a24aa678c284ed6981c54"
