@@ -52,6 +52,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "server-name-present"
 
+  - step: "OpenCode lane builder wires the per-lane MCP socket route (order-505/920-c3af)"
+    command: "cargo test -p tillandsias-headless opencode_lane_builder_mounts_only_per_lane_mcp_dir && echo 'opencode-lane-mcp-wiring-present'"
+    timeout_ms: 120000
+    expected_behavior: "opencode-lane-mcp-wiring-present"
+
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"

@@ -3489,11 +3489,26 @@ seed_claude_project_trust() {
 #
 # Idempotent: re-running on an already-populated tmpfs is harmless.
 # Silent failure: 2>/dev/null || true means a missing source or mount point
-# doesn't abort the entrypoint.
+# doesn't abort the entrypoint. 920-tqhs: the copy must VERIFY its result —
+# an empty/unwritable hot mount failed wholesale while the unconditional
+# success line below printed the opposite (observed in-lane 2026-08-28;
+# prime suspect --userns=keep-id leaving a root-owned tmpfs unwritable by the
+# lane user, with 2>/dev/null discarding exactly the EPERM/EACCES evidence
+# that would have named it). Fail LOUDLY, degrade, and never claim success
+# without INDEX.md present.
 populate_hot_paths() {
     if [ -d /opt/cheatsheets-image ] && [ -d /opt/cheatsheets ]; then
-        cp -a /opt/cheatsheets-image/. /opt/cheatsheets/ 2>/dev/null || true
-        trace_lifecycle "hot-paths" "cheatsheets copied to tmpfs (/opt/cheatsheets)"
+        if cp -a /opt/cheatsheets-image/. /opt/cheatsheets/ 2>/tmp/tillandsias-hot-paths-cp.err; then
+            if [ -f /opt/cheatsheets/INDEX.md ]; then
+                trace_lifecycle "hot-paths" "cheatsheets copied to tmpfs (/opt/cheatsheets)"
+            else
+                trace_lifecycle "hot-paths" "FAILED: cp reported success but /opt/cheatsheets/INDEX.md is absent (source=/opt/cheatsheets-image, dest=/opt/cheatsheets, cp=$?)"
+            fi
+        else
+            local _cp_status=$?
+            trace_lifecycle "hot-paths" "FAILED: cp /opt/cheatsheets-image/. -> /opt/cheatsheets/ (cp=${_cp_status}): $(tail -n 1 /tmp/tillandsias-hot-paths-cp.err 2>/dev/null || true)"
+            unset _cp_status
+        fi
     else
         trace_lifecycle "hot-paths" "skipped: /opt/cheatsheets-image or /opt/cheatsheets not found"
         return 0

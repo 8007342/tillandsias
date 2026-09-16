@@ -2078,11 +2078,13 @@ fn image_exists(image_tag: &str) -> bool {
 }
 
 fn discover_projects() -> Vec<ProjectEntry> {
-    let home = match std::env::var("HOME") {
-        Ok(home) => PathBuf::from(home),
-        Err(_) => return Vec::new(),
-    };
-    discover_projects_in(&home.join("src"))
+    // 920-mvgp: the tray scan hardcoded $HOME/src, so a forge/enclave host that
+    // remounts the project root elsewhere (TILLANDSIAS_HOST_PROJECT_ROOT) never
+    // listed its projects. Route through the canonical resolver, which honors
+    // the env var and defaults to $HOME/src when unset — identical behavior on
+    // a plain workstation, correct roots everywhere else.
+    let root = crate::local_projects::host_project_root();
+    discover_projects_in(&root)
 }
 
 /// Scan a project-root directory (e.g. `~/src`) and return one

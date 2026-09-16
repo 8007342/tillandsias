@@ -7413,6 +7413,41 @@ fn build_opencode_forge_args(
              back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
         );
     }
+    // ORDER 505 (mirrored from build_forge_agent_run_args_with_vault for the
+    // OpenCode lane — 920-c3af): mount only the per-lane MCP tool socket
+    // directory ($XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>) so the
+    // in-forge socat bridge (config-overlay/mcp/host-browser.sh) reaches this
+    // lane's dedicated listener. Read-only — connect() needs no filesystem
+    // write. Attribution is derived directly from which listener accepted the
+    // connection, kernel/filesystem-enforced; /proc/<pid>/environ is untrusted.
+    // The OpenCode builder previously skipped this block entirely, so every
+    // OpenCode lane launched with no route to the host control socket.
+    let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let mcp_dir = mcp_socket_host_dir(project_name, raw_instance.as_deref());
+    if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        // START THE LANE LISTENER TOO — not just the mount (mirrors the legacy
+        // tray path and the live vault builder). A mounted, env-var'd, EMPTY
+        // socket dir still leaves the in-forge host-browser bridge dead on
+        // connect; cfg-gated with the module: the listener implementation lives
+        // in tray/mod.rs, so a no-tray build cannot bind one — same
+        // pre-existing limitation as the vault builder's block.
+        #[cfg(feature = "tray")]
+        {
+            let _ = tray::start_mcp_socket_server_for_lane(
+                project_name,
+                raw_instance.as_deref().unwrap_or("default"),
+            );
+        }
+        args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target=/run/host/tillandsias-mcp,readonly=true",
+                mcp_dir.display()
+            ),
+            "--env".into(),
+            "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
+        ]);
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -28312,6 +28347,49 @@ esac
         assert!(
             !args_str.contains("control.sock"),
             "forge spec must NEVER mount control.sock; args: {args_str}"
+        );
+    }
+
+    /// 920-c3af: an OpenCode lane's argv comes from `build_opencode_forge_args`,
+    /// NOT from `build_forge_agent_run_args_with_vault`. The order-505 coverage
+    /// above only exercised the vault builder, so the OpenCode lane could (and
+    /// did) silently launch without the control-socket route and every
+    /// host-browser/publish_local tool stayed invisible in the lane.
+    ///
+    /// @trace plan/issues/sibling-container-diagnosis
+    #[test]
+    fn opencode_lane_builder_mounts_only_per_lane_mcp_dir() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            Some(&PathBuf::from("/tmp/project")),
+            None,
+            "alpha",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        let args_str = args.join(" ");
+
+        // Mounts /run/host/tillandsias-mcp (read-only) and sets the socket env.
+        assert!(
+            args_str.contains("/run/host/tillandsias-mcp")
+                && args_str
+                    .contains("TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock"),
+            "OpenCode lane argv must bind-mount the per-lane MCP socket dir and set \
+             TILLANDSIAS_CONTROL_SOCKET; args: {args_str}"
+        );
+
+        // Must NOT mount control.sock
+        assert!(
+            !args_str.contains("control.sock"),
+            "OpenCode lane argv must NEVER mount control.sock; args: {args_str}"
         );
     }
 

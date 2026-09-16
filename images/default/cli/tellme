@@ -12,14 +12,25 @@ set -euo pipefail
 
 # Find cheatsheets directory
 cheatsheets_dir="${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
-if [ ! -d "$cheatsheets_dir" ]; then
+serving_note=""
+if [ ! -d "$cheatsheets_dir" ] || [ ! -f "$cheatsheets_dir/INDEX.md" ]; then
+    # 920-tqhs: the resolved dir is missing or hollow (an empty hot mount broke
+    # tellme in-lane on 2026-08-28 while the lifecycle trace claimed the copy
+    # succeeded). Fall back to the repo / image bundle and say which copy is
+    # serving, so a degraded lane is diagnosable instead of a silent CLI break.
     SCRIPT_DIR="$(cd "$(dirname "${B_SOURCE[0]:-$0}")" && pwd)"
-    if [ -d "$SCRIPT_DIR/../cheatsheets" ]; then
+    if [ -n "${B_SOURCE[0]:-}" ] && [ -d "$SCRIPT_DIR/../cheatsheets" ] && [ -f "$SCRIPT_DIR/../cheatsheets/INDEX.md" ]; then
         cheatsheets_dir="$SCRIPT_DIR/../cheatsheets"
-    elif [ -d "$SCRIPT_DIR/../../cheatsheets" ]; then
+        serving_note="serving repo-local cheatsheets ($SCRIPT_DIR/../cheatsheets): requested dir ${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets} lacks INDEX.md"
+    elif [ -d "$SCRIPT_DIR/../../cheatsheets" ] && [ -f "$SCRIPT_DIR/../../cheatsheets/INDEX.md" ]; then
         cheatsheets_dir="$SCRIPT_DIR/../../cheatsheets"
+        serving_note="serving repo-local cheatsheets ($SCRIPT_DIR/../../cheatsheets): requested dir ${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets} lacks INDEX.md"
+    elif [ -d /opt/cheatsheets-image ] && [ -f /opt/cheatsheets-image/INDEX.md ]; then
+        cheatsheets_dir="/opt/cheatsheets-image"
+        serving_note="serving the shipped image bundle (/opt/cheatsheets-image): requested dir ${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets} lacks INDEX.md"
     fi
 fi
+[ -n "$serving_note" ] && printf 'tellme: %s\n' "$serving_note" >&2
 
 INDEX_PATH="$cheatsheets_dir/INDEX.md"
 

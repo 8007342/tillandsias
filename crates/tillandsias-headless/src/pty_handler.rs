@@ -662,19 +662,19 @@ fn home_from_passwd(passwd: &str, uid: u32) -> Option<String> {
     (uid == 0).then(|| "/root".to_string())
 }
 
-fn default_child_home() -> Option<String> {
+fn default_child_home() -> Option<(u32, String)> {
     // libc, not nix::unistd::geteuid: that needs nix's "user" feature, which
     // this crate does not enable. geteuid() cannot fail and touches no memory.
     let uid = unsafe { libc::geteuid() };
     let passwd = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
-    home_from_passwd(&passwd, uid)
+    home_from_passwd(&passwd, uid).map(|home| (uid, home))
 }
 
 fn child_env(provided: &[(String, String)]) -> Vec<(String, String)> {
     child_env_with_home(provided, default_child_home())
 }
 
-/// The seeding logic, with the host lookup INJECTED so it can be tested off the
+/// The seeds, with the host lookup INJECTED so it can be tested off the
 /// guest.
 ///
 /// ORDER 1072-qk43, and this split is the third attempt at giving the arm teeth.
@@ -683,9 +683,16 @@ fn child_env(provided: &[(String, String)]) -> Vec<(String, String)> {
 /// Services — so the test's body simply never ran there and SURVIVED deleting
 /// the seed twice: once through a "no home found" branch, once through an
 /// `is_some()` guard. Injecting the home is what makes the mutation observable.
+///
+/// 922-hm3n: XDG_RUNTIME_DIR rides with HOME because the systemd units on all
+/// three provisioning paths pin BOTH (`Environment=HOME=/root` AND
+/// `XDG_RUNTIME_DIR=/run/user/0`, order 259/274) and leaving one of the pair
+/// absent hands the guest a half-minimal environment a Go/Rust/Node CLI reads
+/// at startup. `/run/user/<uid>` is the conventional value and equals the
+/// systemd pin for root.
 fn child_env_with_home(
     provided: &[(String, String)],
-    home: Option<String>,
+    home: Option<(u32, String)>,
 ) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::with_capacity(provided.len() + 4);
     if !provided.iter().any(|(k, _)| k == "PATH") {
@@ -694,9 +701,17 @@ fn child_env_with_home(
     // Seed HOME when the caller did not. Caller-provided HOME still wins,
     // exactly like PATH.
     if !provided.iter().any(|(k, _)| k == "HOME")
-        && let Some(home) = home
+        && let Some((_, home)) = home.as_ref()
     {
-        out.push(("HOME".to_string(), home));
+        out.push(("HOME".to_string(), home.clone()));
+    }
+    // Seed XDG_RUNTIME_DIR from the SAME uid the home came from, so the pair
+    // cannot disagree (a resource-lock namespace split, per the systemd-unit
+    // comments at order 259/274). Caller-provided value wins, like PATH/HOME.
+    if !provided.iter().any(|(k, _)| k == "XDG_RUNTIME_DIR")
+        && let Some((uid, _)) = home
+    {
+        out.push(("XDG_RUNTIME_DIR".to_string(), format!("/run/user/{uid}")));
     }
     out.extend(provided.iter().cloned());
 
@@ -1846,7 +1861,7 @@ mod tests {
     fn child_env_seeds_the_injected_home_exactly_once() {
         let out = child_env_with_home(
             &[("TERM".to_string(), "dumb".to_string())],
-            Some("/root".to_string()),
+            Some((0, "/root".to_string())),
         );
         let homes: Vec<&str> = out
             .iter()
@@ -1860,14 +1875,58 @@ mod tests {
         );
     }
 
+    /// 922-hm3n. XDG_RUNTIME_DIR must ride with HOME, aligned with the systemd
+    /// units' `Environment=XDG_RUNTIME_DIR=/run/user/0` pins (order 259/274):
+    /// a Go/Rust/Node CLI reads the pair independently, and an XDG gap hands it
+    /// the same startup death as the HOME gap 1072-qk43 measured.
+    #[test]
+    fn child_env_seeds_xdg_runtime_dir_from_the_same_uid() {
+        let out = child_env_with_home(&[], Some((0, "/root".to_string())));
+        let xdgs: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "XDG_RUNTIME_DIR")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(
+            xdgs,
+            vec!["/run/user/0"],
+            "XDG_RUNTIME_DIR must be seeded exactly once, from the uid the home \
+             came from — the systemd units pin /run/user/0 for root"
+        );
+    }
+
+    /// A caller-provided XDG_RUNTIME_DIR must WIN, exactly like PATH and HOME.
+    #[test]
+    fn child_env_does_not_override_a_provided_xdg_runtime_dir() {
+        let out = child_env_with_home(
+            &[("XDG_RUNTIME_DIR".to_string(), "/run/user/1000".to_string())],
+            Some((0, "/root".to_string())),
+        );
+        let xdgs: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "XDG_RUNTIME_DIR")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(
+            xdgs,
+            vec!["/run/user/1000"],
+            "a caller's XDG_RUNTIME_DIR must be the only one — a duplicate lets \
+             the seeded value win or lose depending on env iteration order"
+        );
+    }
+
     /// And with NO home resolvable, nothing is invented — the child gets no
-    /// HOME rather than a guessed one.
+    /// HOME (and no XDG_RUNTIME_DIR) rather than a guessed one.
     #[test]
     fn child_env_invents_no_home_when_none_resolves() {
         let out = child_env_with_home(&[("TERM".to_string(), "dumb".to_string())], None);
         assert!(
             !out.iter().any(|(k, _)| k == "HOME"),
             "a guessed HOME is quieter and worse than an absent one"
+        );
+        assert!(
+            !out.iter().any(|(k, _)| k == "XDG_RUNTIME_DIR"),
+            "a guessed XDG_RUNTIME_DIR would disagree with the absent HOME"
         );
     }
 
@@ -1877,7 +1936,7 @@ mod tests {
     fn child_env_does_not_override_a_provided_home() {
         let out = child_env_with_home(
             &[("HOME".to_string(), "/home/forge".to_string())],
-            Some("/root".to_string()),
+            Some((0, "/root".to_string())),
         );
         let homes: Vec<&str> = out
             .iter()
@@ -1947,19 +2006,30 @@ mod tests {
     }
 
     /// The paired arm, and the reason the fix is not merely "drop the count".
-    /// With a home resolvable the empty-input case must yield FOUR — the count
-    /// is the only assertion that would catch a second HOME being appended, and
-    /// deleting it to make the host-dependence go away would delete that too.
+    /// With a home resolvable the empty-input case must yield FIVE — the count
+    /// is the only assertion that would catch a second HOME (or a second
+    /// XDG_RUNTIME_DIR) being appended, and deleting it to make the
+    /// host-dependence go away would delete that too.
     #[test]
     fn child_env_empty_input_with_a_home_seeds_exactly_one() {
-        let out = child_env_with_home(&[], Some("/root".to_string()));
+        let out = child_env_with_home(&[], Some((0, "/root".to_string())));
         let homes: Vec<&str> = out
             .iter()
             .filter(|(k, _)| k == "HOME")
             .map(|(_, v)| v.as_str())
             .collect();
         assert_eq!(homes, vec!["/root"]);
-        assert_eq!(out.len(), 4, "PATH + HOME + no_proxy + NO_PROXY");
+        let xdgs: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "XDG_RUNTIME_DIR")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(xdgs, vec!["/run/user/0"]);
+        assert_eq!(
+            out.len(),
+            5,
+            "PATH + HOME + XDG_RUNTIME_DIR + no_proxy + NO_PROXY"
+        );
     }
 
     /// End-to-end smoke: open a PTY for `echo hi`, observe the `hi\r\n`
