@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: progress
+      ts: "2026-09-16T01:38:05Z"
+      agent_id: linux-yoga-claude-20260916t013530z
+      host: linux
+      summary: |
+        CRITERION 4 IMPLEMENTED AND LANDING IN THIS COMMIT. The probe now states WHAT IT EXAMINED, on both paths, in the channel an operator actually reads.
+
+          - Success: it prints, BEFORE running the probe, which repository it is checking and which directory that was resolved from. Before and not after, deliberately: if the probe hangs or the container cannot start, the operator still learns the subject. A subject printed only on success is absent from every run where it would have helped.
+          - Refusal: the message now carries a WHAT WAS CHECKED line naming the resolved directory and what was found there.
+
+        AND IT SPLITS TWO FACTS THE ARM CONFLATED. An absent origin and a non-GitHub origin both produced the identical "no GitHub upstream is configured", so an operator with a GitLab origin read a message about absence. They are different diagnoses — one means you are in the wrong directory, the other means you are in a checkout but not of a GitHub repository — and they now read differently.
+
+        The CWD is resolved once via current_dir() rather than Path::new("."). Identical to git and to the .git/config fallback, but an absolute path is reportable, and "." tells an operator nothing about which directory the login process was actually in — which is the exact fact that took three hosts a day to establish.
+
+        PINNED by tests::github_login_refusal_states_the_subject_it_examined, alongside the existing remedy pin from 1211-34v6. Both green, 2 passed, and the whole github_login group is 7 passed.
+
+        A DEFECT IN MY FIRST VERSION OF THAT TEST, FOUND BY MUTATION AND FIXED, because it printed green: I built the subject string INLINE at the call site and asserted over subjects the TEST ITSELF wrote. Collapsing the two arms back together — the exact conflation this criterion exists to remove — left the test GREEN, because a test that supplies its own input to a formatter can only check formatting; it cannot see a CALLER that builds the wrong input. I extracted github_login_probe_subject so the DECISION takes the inputs the call site gives it, and pointed the test at that. The same mutation now reds it. Green, mutate, red, revert, green — each step measured, and the extraction exists for that reason rather than for tidiness.
+
+        WHAT I AM NOT DOING, and it is now backed by the coordinator's ruling: choosing the remedy shape. macuahuitl ruled shape (a), provision a checkout in the guest, OUT — a written .git/config suffices so the shape is cheap, and cheap is the trap: it creates a SECOND source of truth for which repository, able to drift with nothing reconciling it, inside a guest the tray reprovisions on its own. That promotes yolanda's silently-degrading state from an accident to a designed-in dependency.
+
+        AND THE RULING FOUND SOMETHING LARGER, which I am recording here because it changes what this row can mean. read_host_project_origin_url is parameterized and has five call sites; four pass a real project path and only the 759-vceg probe passes Path::new("."). But ProviderLoginConfig carries no project at all — the login is project-agnostic by construction — and the credential lands at secret/github/token, ONE GLOBAL PATH. So the guard verifies push permission against ONE repository and then seeds a credential used for ALL of them. Even on the CLI lane where it works, what it proves is that the token can push to whatever repo the shell happened to be standing in, not that it can push where it will be used. THE CWD DEPENDENCY IS A SYMPTOM; the defect underneath is a one-shot single-repo check guarding a global credential, and no choice of where to read the repository from fixes a scope mismatch. That is why shapes (b) and (c) are both unrulable today: (b) has no configuration to read without inventing a project identity for a flow that has none, and (c) relocates the question without answering it. macuahuitl is filing the scope mismatch as its own row.
+
+        CRITERION 4 IS UNAFFECTED BY ALL OF IT, which is why it was worth building first: whichever resolution lands, per-project credentials or a check at use, the operator still needs to see the subject the probe used. If anything the ruling makes it more valuable, because a check whose scope is wrong is exactly the kind that must not be silent about what it checked.

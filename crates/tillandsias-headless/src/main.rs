@@ -3714,9 +3714,53 @@ pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResoluti
 /// CLI lane from inside a checkout) and says plainly that the tray lane cannot
 /// satisfy it, because the tray runs in the guest at /root with no checkout —
 /// which is 759-vceg's CWD dependency, filed separately by yolanda.
-fn github_login_no_upstream_refusal() -> String {
-    "no GitHub upstream is configured for this checkout, so push permission \
+/// ORDER 1215-xazj, criterion 4. Build the one-line statement of WHAT THE
+/// PROBE EXAMINED, from the directory it resolved and whatever origin it found
+/// there.
+///
+/// EXTRACTED SO IT CAN BE FALSIFIED. It first lived inline at the call site,
+/// and a mutation collapsing its two arms back together — the very conflation
+/// this row exists to remove — left the unit tests GREEN, because those tests
+/// hand the refusal builder a subject string of their own making and therefore
+/// cannot see a CALLER that builds the wrong one. A test that supplies its
+/// subject's input can only check formatting; one that supplies the DECISION's
+/// input can check the decision.
+///
+/// The two cases are different diagnoses and an operator needs them apart: no
+/// origin at all means "you are in the wrong directory"; a non-GitHub origin
+/// means "you are in a checkout, but not of a GitHub repository".
+fn github_login_probe_subject(cwd_display: &str, origin: Option<&str>) -> String {
+    match origin {
+        Some(url) => format!(
+            "WHAT WAS CHECKED: {cwd_display} has origin {url}, which is not a GitHub \
+             repository, so there is no GitHub repo to verify push permission against."
+        ),
+        None => format!(
+            "WHAT WAS CHECKED: {cwd_display} — no git origin was found there. That \
+             directory is this login process's working directory, and it is the ONLY \
+             thing consulted."
+        ),
+    }
+}
+
+/// ORDER 1215-xazj, criterion 4. `subject` states WHAT THE PROBE LOOKED AT:
+/// the directory it resolved from, and whether that directory had no origin at
+/// all or an origin that is not a GitHub repository. Those are DIFFERENT
+/// FACTS and this arm conflated them — both produced the identical
+/// "no GitHub upstream is configured", so an operator with, say, a GitLab
+/// origin read a message about absence.
+///
+/// WHY IT IS WORTH A PARAMETER. The whole cost of 1215-xazj was three hosts
+/// inferring this probe's subject from the process CWD: a session of guest
+/// forensics, two hosts' worth of discarded eliminations, and finally the
+/// operator running two arms by hand to discover that cwd was the only
+/// variable. The probe knew which directory it consulted and never said.
+fn github_login_no_upstream_refusal(subject: &str) -> String {
+    format!(
+        "no GitHub upstream is configured for this checkout, so push permission \
                  cannot be verified against a repository.\n\
+                 \n\
+                 {subject}\n\
                  \n\
                  Nothing was written to Vault. Seeding on authentication alone is the \
                  state order 759-vceg exists to prevent: the token looks accepted here \
@@ -3736,7 +3780,7 @@ fn github_login_no_upstream_refusal() -> String {
                  variable is real and the cloud lanes read it, but the resolver this \
                  check uses never consults the environment — earlier text advertised it \
                  and sent operators in a circle (order 1211-34v6, order 759-vceg)."
-        .to_string()
+    )
 }
 
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
@@ -10172,11 +10216,28 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     // than skipping quietly. A silent skip is indistinguishable from a
     // passed check by anyone reading the output, which is the same
     // ambiguity this packet exists to remove.
-    match read_host_project_origin_url(Path::new("."))
+    // ORDER 1215-xazj, criterion 4. Resolve ONCE into named values so the
+    // output can state the probe's subject. `current_dir()` rather than
+    // `Path::new(".")`: identical to git and to the .git/config fallback, but
+    // an absolute path is reportable and "." tells an operator nothing about
+    // WHICH directory the login process was actually in — which is the exact
+    // fact that took three hosts a day to establish.
+    let probe_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let probe_origin = read_host_project_origin_url(&probe_cwd);
+    let probe_cwd_display = probe_cwd.display().to_string();
+    match probe_origin
         .as_deref()
         .and_then(github_owner_repo_from_origin)
     {
         Some(owner_repo) => {
+            // Stated BEFORE the probe runs, not after: if the probe hangs or
+            // the container cannot start, the operator still learns what it
+            // was about to check. A subject printed only on success is absent
+            // from every run where it would have helped.
+            println!(
+                "checking push permission on {owner_repo} \
+                 (resolved from {probe_cwd_display})"
+            );
             let mut probe = podman_command();
             probe.args(github_push_authorization_probe_args(
                 &container,
@@ -10223,7 +10284,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         // checkout with an upstream is a smaller ask than a second probe path
         // whose own failure modes nobody has measured.
         None => {
-            return Err(github_login_no_upstream_refusal());
+            return Err(github_login_no_upstream_refusal(
+                &github_login_probe_subject(&probe_cwd_display, probe_origin.as_deref()),
+            ));
         }
     }
 
@@ -25608,7 +25671,9 @@ esac
     /// not about the string's presence.
     #[test]
     fn github_login_refusal_names_a_remedy_that_works() {
-        let msg = github_login_no_upstream_refusal();
+        let msg = github_login_no_upstream_refusal(
+            "WHAT WAS CHECKED: /probe/dir — no git origin was found there.",
+        );
         assert!(
             msg.contains("from the CLI") && msg.contains("checkout"),
             "the refusal must name the CLI-from-a-checkout lane: {msg}"
@@ -25624,6 +25689,64 @@ esac
         assert!(
             !msg.contains("or set TILLANDSIAS_PROJECT_REMOTE_URL"),
             "the inert remedy must not return: {msg}"
+        );
+    }
+
+    /// ORDER 1215-xazj, criterion 4: the refusal STATES ITS SUBJECT.
+    ///
+    /// REGIME: pure string assertion over the refusal builder. No host state,
+    /// no filesystem, no wall clock, and deliberately no absolute timestamp —
+    /// the text is a function of its argument only.
+    ///
+    /// WHY THIS IS A SEPARATE TEST from the remedy pin above: that one asserts
+    /// the refusal names a way FORWARD. This one asserts it names what it
+    /// LOOKED AT. A refusal can do the first perfectly and still leave an
+    /// operator unable to tell which directory was consulted, which is exactly
+    /// what happened — three hosts spent a day establishing that the process
+    /// CWD was the only variable, a fact the probe held the whole time.
+    #[test]
+    fn github_login_refusal_states_the_subject_it_examined() {
+        let absent = github_login_no_upstream_refusal(
+            "WHAT WAS CHECKED: /var/home/x/src/p — no git origin was found there.",
+        );
+        assert!(
+            absent.contains("/var/home/x/src/p"),
+            "the refusal must name the directory it resolved from: {absent}"
+        );
+        assert!(
+            absent.contains("no git origin was found"),
+            "the refusal must say what it found there: {absent}"
+        );
+
+        // THE DECISION, not the formatting. These call the SUBJECT BUILDER with
+        // the inputs the call site gives it, so a caller that collapses the two
+        // cases is visible here. Asserting over subjects the test itself wrote
+        // could only check interpolation — measured: a mutation collapsing the
+        // two arms left that version of this test green.
+        let no_origin = github_login_probe_subject("/var/home/x/src/p", None);
+        let foreign_origin =
+            github_login_probe_subject("/var/home/x/src/p", Some("https://gitlab.example/x.git"));
+        assert!(
+            no_origin.contains("no git origin was found"),
+            "an absent origin must say so: {no_origin}"
+        );
+        assert!(
+            foreign_origin.contains("gitlab.example") && foreign_origin.contains("not a GitHub"),
+            "a non-GitHub origin must be quoted back and named as such: {foreign_origin}"
+        );
+        assert!(
+            !foreign_origin.contains("no git origin was found"),
+            "a checkout WITH an origin must never be reported as absence: {foreign_origin}"
+        );
+        assert_ne!(
+            no_origin, foreign_origin,
+            "an absent origin and a non-GitHub origin are different diagnoses and must not \
+             produce the identical subject line"
+        );
+        // And both must survive into the refusal an operator actually reads.
+        assert!(
+            github_login_no_upstream_refusal(&foreign_origin).contains("gitlab.example"),
+            "the subject must reach the refusal text, not stop at the builder"
         );
     }
 

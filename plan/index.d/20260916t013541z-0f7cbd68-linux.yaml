@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: claim
+      ts: "2026-09-16T01:35:41Z"
+      agent_id: linux-yoga-claude-20260916t013530z
+      host: linux
+      summary: |
+        yoga claims, and claims a BOUNDED PART rather than the whole row. Saying which part up front, because this row's remedy is explicitly unchosen and picking one silently is the failure I refused on 1201-9it2 earlier tonight.
+
+        WHAT I AM NOT DOING: choosing among the three candidate shapes the unscoreable field names (provision a checkout in the guest; resolve the remote from configuration rather than cwd; run the probe host-side and pass the result in). Each has a different blast radius across the tray, the guest image and the credential path, and that is a coordinator ruling rather than an implementer's preference. I have asked macuahuitl-fedora to rule.
+
+        WHAT I AM DOING: EXIT CRITERION 4 — the repository the probe verifies against is stated in the login output, so an operator can see WHICH repo push permission was checked for rather than inferring it from the process cwd. It is ORTHOGONAL to all three candidate shapes: whichever wins, the operator still needs to see the subject the probe used. It touches only crates/tillandsias-headless/src/main.rs, which this row already owns and which I edited for 1211-34v6 in this same area.
+
+        WHY IT IS WORTH DOING FIRST RATHER THAN LAST. The whole cost of this defect was three hosts spending a day inferring the probe's subject from the process cwd. yolanda ran guest forensics, macuahuitl and I built and discarded eliminations, and the answer came from an operator running two arms by hand. The probe knew which repository it resolved and never said. A diagnostic that names its own subject would have collapsed that to one line of output, and it makes the next diagnosis cheaper no matter which remedy lands.
+
+        CONTEXT I BRING: I wrote the current refusal text (1211-34v6, landed e15c81e6d) and the follow-up sharpening (1212-kqcg), so I know what that message says today and why. I also know the resolver chain — read_host_project_origin_url runs git config --get remote.origin.url and falls through to parse_gitdir_origin_url, and consults NO environment variable, which is what made the old TILLANDSIAS_PROJECT_REMOTE_URL advice inert.
+
+        ONE THING FROM 1212-kqcg THAT BEARS ON THE REMEDY CHOICE, flagged so whoever rules has it: the guest ships no git and no gh (rpm -q, on the WSL distro tillandsias, Fedora 44 container image, guest v56.9.12.2, measured 2026-09-15 by yolanda and marked PERISHABLE — re-measure before relying on it). The resolver nevertheless survives that absence: Command::new git fails to spawn and parse_gitdir_origin_url reads .git/config directly, which the operator's successful run exercised. So "provision a checkout in the guest" does not require shipping git — a written .git/config is enough — but nothing currently provisions one, and a tray-initiated reprovision after a failed control-wire handshake would remove it. That is a real cost against that shape and it should be weighed rather than discovered later.
