@@ -6876,3 +6876,58 @@ only a stopped terminal, and nothing to read afterwards. Verified fixed from the
 landed tree here, BOUNDED with `timeout 15` rather than run bare, because
 verifying a hang fix by invoking it unbounded reproduces the hang in the
 verifier: `fail:must-ship:missing-value`, terminated on its own, rc=0 not 124.
+
+## Pass 42 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=326, `osx-next` ahead=0
+behind=105, both fully contained. `main` behind=586. No land needed.
+
+**COMMIT AUTHORSHIP DOES NOT IDENTIFY THE HOST, AND I MISREAD IT IN THIS PASS
+BEFORE CATCHING IT.** Counting trunk activity by `%an` this pass returned
+`8 Tlatoāni / 6 Tlatoani` and my first reading was "my own name split across two
+spellings". IT IS TWO DIFFERENT HOSTS: `Tlatoāni` (macron) is
+`tlatoani@yoga.ayahuitlcalpan.com` and `Tlatoani` (no macron) is
+`tlatoani@macuahuitl.ayahuitlcalpan.com`. I had the attribution backwards — the
+8 were yoga's, the 6 mine — and caught it only by resolving shas yoga had named
+in a message against `%ae`.
+
+MEASURED over the last 7 days, ELEVEN distinct (name, email) pairs, with the
+name collapsing across hosts:
+
+- `Tlatoani` maps to FOUR emails — `bulloncito@gmail.com`,
+  `bulloncito+lenovinha@gmail.com`, `tlatoani@macuahuitl.ayahuitlcalpan.com`,
+  and `tlatoani@Tlatoanis-MacBook-Neo.local`.
+- `Tlatoāni` maps to TWO — `bulloncito@hotmail.com`,
+  `tlatoani@yoga.ayahuitlcalpan.com`.
+- Plus `8007342`, `Dany Boy`, `lapto`, `esmeraldinha`, `lenovinha`.
+
+THE COST IS NOT COSMETIC. Last 24h, the two views disagree about who exists:
+
+```
+by EMAIL   macuahuitl 99 | bulloncito@gmail 59 | yoga 51 | lenovinha 36 | macneo 9
+by NAME    Tlatoani  159 | Tlatoāni        51 | lenovinha 36 | lapto      8
+```
+
+The name view MERGES macuahuitl and an unattributed bucket into one row of 159,
+and LOSES macneo ENTIRELY — its 9 commits fold into that same 159. So a host
+that is working reads as silent. This pass exists partly to find idle hosts and
+reassign them; an instrument that reports an active host as absent is the exact
+opposite of what the pass needs, and 1005-class already forbids inferring
+idleness from timestamps for the same reason.
+
+REMEDY, AND IT IS FREE: count by `%ae`, and prefer the
+`<user>@<host>.ayahuitlcalpan.com` form, which is the only shape that names a
+host. `bulloncito@gmail.com` at 59 commits is an UNATTRIBUTED BUCKET and must
+never be read as a host — the same rule `loop-status-metrics-audit.sh` already
+enforces for platform-label stems (order 1012-hu7d, "never read a bucket as a
+host"). The git-author view has the identical failure mode and no such guard.
+
+NOT ACTED ON BEYOND RECORDING: per-host git identity is host configuration, and
+agents never change deployments. Routed to the operator as a plain ask rather
+than repaired here.
+
+**NO REASSIGNMENT.** Four hosts are identifiable-active in the last 24h by email
+— macuahuitl, yoga, lenovinha, macneo — and all four hold self-determined work:
+yoga closed the 1217-54vw costing and released the claim, lenovinha closed
+1219-dcma, macneo and macbookair are on hourly cadence. None reported idle and
+none asked. No claim was flipped onto anyone.
