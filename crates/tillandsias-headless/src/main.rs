@@ -7420,9 +7420,14 @@ fn build_opencode_forge_args(
     // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
     // pre-injected config and skips redundant writes.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) =
-        write_forge_gitconfig(project_name, mirror_id, host_checkout, resolved_remote_url)
-    {
+    if let Some(gitconfig_path) = write_forge_gitconfig(
+        project_name,
+        mirror_id,
+        host_checkout,
+        resolved_remote_url,
+        // ORDER 1021-hf9e: production resolves the root; tests pass their own.
+        &tillandsias_core::cache_root::cache_root(),
+    ) {
         args.extend([
             "--mount".into(),
             format!(
@@ -10941,9 +10946,26 @@ pub(crate) fn write_forge_gitconfig(
     mirror_id: Option<&str>,
     host_checkout: Option<&Path>,
     resolved_remote_url: Option<&str>,
+    // ORDER 1021-hf9e. PASSED IN, so a test needs no process-global write to
+    // redirect where this lands. It used to call cache_root() here, which reads
+    // XDG_CACHE_HOME falling back to HOME — and the tests that wanted to
+    // redirect it did so by SETTING HOME, under env_lock().
+    //
+    // THE VICTIM NEVER TOOK THAT LOCK. forge_credential_quarantine_mounts_present
+    // reaches this function through two builders and holds only the podman seam
+    // lock, so it raced the HOME writers: a lock protects only the participants
+    // who take it. When HOME pointed at another test's tempdir — or one already
+    // dropped — create_dir_all below failed, `.ok()?` turned that into None AT
+    // THE POINT IT HAPPENED, the gitconfig mount silently vanished, and an
+    // assertion several frames away failed in a test that did nothing wrong.
+    //
+    // Same remedy as tillandsias-core's ca_path, which was itself about HOME:
+    // remove the shared state at its SOURCE rather than serialise the readers.
+    // tillandsias_core::cache_root::cache_root_from is the injectable form that
+    // precedent already established.
+    cache_root: &Path,
 ) -> Option<PathBuf> {
-    // Order 815-gdjk: XDG-first via the shared resolver.
-    let forge_git_dir = tillandsias_core::cache_root::cache_root().join("forge-gitconfig");
+    let forge_git_dir = cache_root.join("forge-gitconfig");
     std::fs::create_dir_all(&forge_git_dir).ok()?;
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
@@ -15228,9 +15250,14 @@ fn build_forge_agent_run_args_with_vault(
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
     // outside the project workspace, and bind-mounted read-only.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) =
-        write_forge_gitconfig(project_name, mirror_id, host_checkout, resolved_remote_url)
-    {
+    if let Some(gitconfig_path) = write_forge_gitconfig(
+        project_name,
+        mirror_id,
+        host_checkout,
+        resolved_remote_url,
+        // ORDER 1021-hf9e: production resolves the root; tests pass their own.
+        &tillandsias_core::cache_root::cache_root(),
+    ) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
             "/home/forge/.gitconfig",
@@ -25349,8 +25376,14 @@ esac
         std::fs::create_dir_all(cache.parent().unwrap()).expect("mkdir cache dir");
         std::fs::write(&cache, "ssh-ed25519 AAAATESTCAKEY host-ca\n").expect("write cache");
 
-        let path = write_forge_gitconfig("laneproj", Some("abc123mid"), Some(&proj), None)
-            .expect("config written");
+        let path = write_forge_gitconfig(
+            "laneproj",
+            Some("abc123mid"),
+            Some(&proj),
+            None,
+            temp.path(),
+        )
+        .expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
 
         assert!(
@@ -25431,8 +25464,8 @@ esac
             .current_dir(&proj)
             .status();
 
-        let path =
-            write_forge_gitconfig("noca", Some("abc123mid"), Some(&proj), None).expect("config");
+        let path = write_forge_gitconfig("noca", Some("abc123mid"), Some(&proj), None, temp.path())
+            .expect("config");
         let text = std::fs::read_to_string(&path).expect("read");
         assert!(
             text.contains("SSH push lane ENABLED but NOT wired"),
@@ -25534,8 +25567,8 @@ esac
             return; // no git binary on this host; the resolver test covers the rest
         }
 
-        let path =
-            write_forge_gitconfig("local-only", None, Some(&proj), None).expect("config written");
+        let path = write_forge_gitconfig("local-only", None, Some(&proj), None, temp.path())
+            .expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
         assert!(
             !text.contains("[url "),
@@ -25597,12 +25630,22 @@ esac
             String::from_utf8_lossy(&status.stderr)
         );
 
-        // Store original HOME so we can restore it.
-        let orig_home = std::env::var("HOME").ok();
-        // SAFETY: single-threaded test, no concurrent env reads.
-        unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
+        // ORDER 1021-hf9e: THIS TEST NO LONGER TOUCHES HOME. It used to set the
+        // process-global purely to redirect where write_forge_gitconfig writes;
+        // that destination is now a parameter, so the redirect needs no global.
+        //
+        // The comment that stood here said "SAFETY: single-threaded test, no
+        // concurrent env reads". That was FALSE and is part of why this lasted:
+        // cargo runs this suite's tests CONCURRENTLY IN ONE PROCESS, so the
+        // write was visible to every other test in flight.
 
-        let result = write_forge_gitconfig("test-project", None, Some(&project_path), None);
+        let result = write_forge_gitconfig(
+            "test-project",
+            None,
+            Some(&project_path),
+            None,
+            &tillandsias_core::cache_root::cache_root_from(None, Some(tmp.path().to_path_buf())),
+        );
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let config_path = result.unwrap();
 
@@ -25647,13 +25690,6 @@ esac
             config_path.ends_with("test-project.config"),
             "config filename should end with project name"
         );
-
-        // Restore original HOME.
-        // SAFETY: single-threaded test, no concurrent env reads.
-        match orig_home {
-            Some(h) => unsafe { std::env::set_var("HOME", h) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
     }
 
     #[test]
@@ -25685,11 +25721,22 @@ esac
             .expect("git remote add");
         assert!(status.status.success(), "git remote add failed");
 
-        let orig_home = std::env::var("HOME").ok();
-        // SAFETY: single-threaded test, no concurrent env reads.
-        unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
+        // ORDER 1021-hf9e: THIS TEST NO LONGER TOUCHES HOME. It used to set the
+        // process-global purely to redirect where write_forge_gitconfig writes;
+        // that destination is now a parameter, so the redirect needs no global.
+        //
+        // The comment that stood here said "SAFETY: single-threaded test, no
+        // concurrent env reads". That was FALSE and is part of why this lasted:
+        // cargo runs this suite's tests CONCURRENTLY IN ONE PROCESS, so the
+        // write was visible to every other test in flight.
 
-        let result = write_forge_gitconfig("ssh-test", None, Some(&project_path), None);
+        let result = write_forge_gitconfig(
+            "ssh-test",
+            None,
+            Some(&project_path),
+            None,
+            &tillandsias_core::cache_root::cache_root_from(None, Some(tmp.path().to_path_buf())),
+        );
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let contents =
             std::fs::read_to_string(result.as_ref().unwrap()).expect("read forge gitconfig");
@@ -25706,10 +25753,6 @@ esac
         );
 
         // SAFETY: single-threaded test, no concurrent env reads.
-        match orig_home {
-            Some(h) => unsafe { std::env::set_var("HOME", h) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
     }
 
     // Pins the git-less-host fallback for the mirror insteadOf injection
@@ -26688,7 +26731,7 @@ esac
         std::env::set_current_dir(temp.path()).expect("enter temp cwd");
         // The cloud lane resolved this; it is what the forge must be told.
         let resolved = "https://github.com/example/REAL-CLOUD-REPO.git";
-        let written = write_forge_gitconfig("strayproj", None, None, Some(resolved));
+        let written = write_forge_gitconfig("strayproj", None, None, Some(resolved), temp.path());
         std::env::set_current_dir(&original).expect("restore cwd");
 
         let path = written.expect("config written");
@@ -26712,8 +26755,13 @@ esac
         // nothing.
         let original = std::env::current_dir().expect("cwd");
         std::env::set_current_dir(temp.path()).expect("enter temp cwd");
-        let prefix_shaped =
-            write_forge_gitconfig("strayproj", None, Some(Path::new("strayproj")), None);
+        let prefix_shaped = write_forge_gitconfig(
+            "strayproj",
+            None,
+            Some(Path::new("strayproj")),
+            None,
+            temp.path(),
+        );
         std::env::set_current_dir(&original).expect("restore cwd");
         let control_text =
             std::fs::read_to_string(prefix_shaped.expect("control config")).expect("read control");
@@ -26731,7 +26779,10 @@ esac
     /// decoy planted here has to be ignored without any CWD gymnastics.
     #[test]
     fn cloud_mode_gitconfig_with_no_resolved_origin_states_the_cloud_reason() {
-        let path = write_forge_gitconfig("nocloudorigin", None, None, None)
+        // ORDER 1021-hf9e: its own root, so this test writes nowhere another
+        // test can redirect and needs no process-global of its own.
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = write_forge_gitconfig("nocloudorigin", None, None, None, temp.path())
             .expect("config written even with no redirect");
         let text = std::fs::read_to_string(&path).expect("read config");
         assert!(
