@@ -2277,6 +2277,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "fleet-activity read fixture passed"
 
+    # Order 1226-jb8y. 872-c9nd's salvage net saved macbookair's finished work
+    # when its gate could not pass — and the work sat on origin for hours
+    # because nobody queried the refs. Making that query routine then produced
+    # two confidently WRONG answers in opposite directions before a right one:
+    # ancestry is not integration, three-dot overcounts, two-dot overcounts far
+    # worse, and "differs" is not "outstanding". The fixture's first arm pins
+    # the false negative the script itself shipped with — a ref lookup that
+    # silently finds nothing reads exactly like "nothing is stranded".
+    _step "Checking the salvage audit (1226-jb8y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-salvage-audit.sh" 2>&1; then
+        _error "the salvage audit regressed — stranded work can again read as landed, or a stale snapshot as outstanding"
+        exit 1
+    fi
+    _info "salvage audit fixture passed"
+
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
     # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo
@@ -2798,8 +2813,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # buys determinism at negative cost on this host, and the interference is
     # filed separately — serial execution is a mitigation, not a cure, and the
     # shared state is still there for anyone who runs the suite by hand.
+    # ORDER 1021-hf9e CLOSES THE ABOVE. The shared process-global state those
+    # suites carried is REMOVED, not serialised: host_mount and the gitconfig
+    # cache root are parameters now, and the tests that used to redirect them by
+    # writing HOME no longer touch it. MEASURED on yoga 2026-09-16 at one commit:
+    #   headless bin suite, TEN consecutive default parallel runs -> 544 passed,
+    #     identical (empty) failure set every time
+    #   cargo test --workspace, FIVE consecutive default parallel runs -> 74
+    #     result lines, zero failures, identical sets
+    # So the set is a function of the tree again and the pin is no longer load-
+    # bearing for determinism.
+    #
+    # THE SPEED ARGUMENT ABOVE INVERTS TOO, and for the same reason: serial was
+    # faster only because the contention cost more than the threads won. With
+    # the contention gone the bin suite runs 1.9s parallel against 4.7s serial.
+    #
+    # WHAT THIS EVIDENCE DOES NOT COVER: it is one host. A platform whose tests
+    # carry their own process-global state would still contend, and the failure
+    # would land on the ratchet as new-red. If that happens, restoring
+    # `-- --test-threads=1` here is a one-line mitigation and the real defect is
+    # the shared state on that host, not this line.
     _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
-        -- --test-threads=1 2>&1 |
+        2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"

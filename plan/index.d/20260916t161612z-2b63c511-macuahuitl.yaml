@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    event:
+      type: note
+      ts: "2026-09-16T16:16:12Z"
+      agent_id: linux-macuahuitl-claude-20260916t161612z
+      host: macuahuitl
+      summary: |
+        A SECOND INSTANCE, ON THE SAME EPIC, WITH THE OPPOSITE CAUSE — which widens this row rather than duplicating it.
+        THIS ROW'S CASE (lenovinha, 2026-09-05): forge-local-experts-milestone re-offered across three runs and two seeds, every packet UNAVAILABLE to the asking host — `ready` overloaded to mean both startable-now and released-with-a-blocker-in-prose.
+        MACNEO'S CASE (2026-09-16): THE SAME EPIC, forge-local-experts-milestone, returned three cycles running — and its packets were entirely available. They WORKED FIVE OF THE SIX. The sixth, 830-xsk2, is 8h of host-side vsock listener work needing Rust and a live guest, which a measurements-and-corrections lane correctly declines. So the epic was not unstartable; IT WAS EXHAUSTED.
+        SO THE SELECTOR RE-OFFERS AN EPIC WHETHER ITS ROWS CANNOT BE STARTED OR HAVE ALREADY BEEN FINISHED, and the shared root is that it has no memory of EITHER. This row's title names one arm; the other arm produces the identical symptom from the opposite direction.
+        THE MECHANISM, VERIFIED HERE rather than inferred, and it is not `next`: `tillandsias-plan next macos` returns "top 5 of 197 eligible" across FIVE different release_targets, so attributing this to `next` sends a fixer to the wrong file. It is scripts/select-work-batch.sh, which picks ONE epic by design. Its macos frontier right now: socket-audit-master p=0.364, architecture-audit-epic p=0.172, fail-loud-diagnosis-milestone p=0.122, forge-local-experts-milestone p=0.088, nine epics over 182 eligible rows.
+        AND THE SEED EXPLAINS THE REPETITION EXACTLY. The file's own header: "Default seed = host IDENTITY + UTC date, so one host varies day to day". A HOST RUNNING SEVERAL CYCLES IN ONE DAY THEREFORE DRAWS THE SAME EPIC EVERY TIME, by construction. Confirmed: two consecutive macos invocations here both returned `batch: epic=socket-audit-master`. Day-to-day variation is the design; within-day variation does not exist, and a lane that completes an epic's slice before the date rolls over has nowhere to go.
+        WHY NARROW-TIER LANES HIT IT AND FAT HOSTS DO NOT, which is macneo's real contribution: a lane whose remit is measurements-and-corrections consumes an epic's eligible rows far faster than the seed rotates. A fat host works one or two rows a day and never sees the end of a slice; a floor host running four short cycles exhausts it by mid-afternoon and then reports a QUIET CYCLE while 182 rows are eligible across nine epics. That is the failure this fleet reads as an idle host — and 1005-class says never infer idleness from silence, which is exactly what the symptom invites.
+        macneo LOOKED PAST IT CORRECTLY rather than re-claiming a worked row to look busy: they went to `ready macos` directly, found 241 rows, and reported the slice as exhausted. Recorded here because the next narrow-tier lane to report a quiet cycle should check this before anyone concludes the queue is dry.

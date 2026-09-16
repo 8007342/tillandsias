@@ -7331,3 +7331,149 @@ full gate. Nobody reported idle, nobody asked, no claim was flipped.
 plan-only push carrying both records), but batching reduces the count, not the
 share. That number is the standing argument for keeping coordinator output to
 one push per pass.
+
+## Pass 47 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=378, `osx-next` ahead=0
+behind=157. `main` behind=638. First pass run entirely through the two
+instruments built this cycle rather than by re-deriving the queries.
+
+**THE SALVAGE AUDIT IN ONE COMMAND, where pass 46 needed three wrong attempts
+and a manual reconstruction:** of twelve refs, only two hold genuinely
+outstanding content — lenovinha's 1185-9qx6 (one gate step, row `completed`) and
+yolanda's 1186-w3ph (three files). Everything else reports nothing, including
+both macbookair refs this host relayed by cherry-pick, which ancestry would
+still call stranded.
+
+**THE TWO INSTRUMENTS COMPOSE, AND THAT IS THE PASS'S FINDING.** `expire-claims`
+offered THREE candidates:
+
+```
+890-27mv   claimant:linux     platform, not a host   0 salvage refs   SAFE
+1155-jurn  claimant:windows   platform, not a host   0 salvage refs   SAFE
+1186-w3ph  claimant:yolanda   3 files outstanding                     WOULD STRAND
+```
+
+The first two are 772-4se9's defaulted-claim shape, the one 1201-hsf9 now
+refuses at write time. The third is provably unsafe — and it took one command to
+know that, because 1226-jb8y's audit answers what the sweep cannot see. That is
+exactly the ranking 1220-zb7q asked for, now available OUTSIDE the sweep.
+
+**AND THE SWEEP STILL CANNOT USE IT.** `expire-claims` accepts no order and no
+selection flag — verified, `expire-claims 890-27mv` returns `error: unknown
+expire-claims flag`. `--write` applies every candidate together. So the choice
+is strand yolanda's work or expire nothing. **Nothing was expired, third
+consecutive pass, and the reason has shifted from "cannot tell" to "CAN tell and
+cannot act".** Recorded on 1220-zb7q: the remedy it asked for was an annotation,
+and what is actually missing is GRANULARITY — an annotation would leave the same
+all-or-nothing write at the end of it.
+
+**A COST THAT IS GROWING:** the defaulted-platform-claim population is up from
+one to two — 1155-jurn in passes 41 and 44, now 890-27mv. Each is a substantive
+row sitting `in_progress` under a claimant that is not a host, so `plan_next`
+does not offer it and the work is HIDDEN rather than queued. 890-27mv is "the
+recurring-loops gate and the release gate are different tiers". Real work,
+claimed by nobody, invisible to the selector.
+
+**NO REASSIGNMENT.** Six hours by email: macuahuitl 16 (13 plan, 3 code), yoga 7
+(4 plan, 3 code), unattributed bucket 3. yoga holds 1021-hf9e at ready with its
+third contention located; lenovinha on 679-rp9m; macbookair re-claimed 690-w94k
+and attested the macOS sources. Nobody reported idle, nobody asked.
+
+### Pass 47 addendum — a quiet cycle that was not an idle host, and an orphaned SAFETY note
+
+**THE SELECTOR RE-OFFERS AN EPIC WHETHER ITS ROWS CANNOT BE STARTED OR HAVE
+ALREADY BEEN FINISHED.** macneo reported the same six-row
+forge-local-experts slice three cycles running, having WORKED FIVE of the six —
+the remaining one is 8h of Rust plus a live guest, correctly declined by a
+measurements lane. They went to `ready macos` directly, found 241 rows, and
+reported it as an exhausted SLICE rather than an empty queue.
+
+Verified here, and the attribution matters: **it is not `next`.**
+`tillandsias-plan next macos` returns "top 5 of 197 eligible" across FIVE
+different release_targets, so blaming `next` sends a fixer to the wrong file. It
+is `scripts/select-work-batch.sh`, which picks ONE epic by design — and its seed
+is **host identity + UTC date**, stated in its own header. So a host running
+several cycles in one day draws the same epic EVERY time, by construction rather
+than by luck; two consecutive invocations here both returned
+`batch: epic=socket-audit-master`.
+
+Recorded on **1057-dgij**, which is the same symptom from the opposite cause —
+that row's 2026-09-05 case was the SAME EPIC re-offered because its packets were
+*unstartable*; macneo's is the same epic re-offered because its packets were
+*already worked*. Shared root: the selector remembers neither. **A narrow-tier
+lane exhausts a slice faster than the seed rotates, and then reports a quiet
+cycle while 182 rows are eligible** — which this fleet reads as an idle host,
+and 1005-class says never to.
+
+**AND yoga's SAFETY SWEEP FOUND ONE LIVE SITE, WITH A DIFFERENT DEFECT THAN
+EXPECTED.** They asked for a look wherever `SAFETY: single-threaded` appears.
+Eight sites; **six are fine and I am saying so rather than handing anyone an
+eight-site hunt** — two are yoga's own corrections, two are production startup
+paths where the claim is true (`main.rs` argument parsing and startup), one is a
+doc comment in `tillandsias-podman` discussing the phrase, one in
+`tillandsias-plan` `spec_index.rs` makes a narrower plausible claim.
+
+The live one is an **ORPHAN rather than a falsehood**, in `main.rs` `write_forge_gitconfig_handles_ssh_origin_with_https_redirect`:
+`// SAFETY: single-threaded test, no concurrent env reads.` sits at the END of
+`write_forge_gitconfig_handles_ssh_origin_with_https_redirect`, after the last
+assertion, and that function contains NO `unsafe`, NO `set_var`, NO `env::` at
+all. yoga's fix removed the unsafe it stood over; the justification stayed.
+
+**That is worse than a false justification, not better.** A false SAFETY note is
+attached to the thing it wrongly excuses, so a reader of the unsafe reads the
+excuse and can doubt it. An orphaned one is a **PRE-AUTHORISATION** — it waits in
+the function, and the next person to add an env write there finds the
+justification already written in the project's own voice, with nothing to check
+it against. **Removing an unsafe does not remove its justification, and the
+justification is what a later reader inherits.**
+
+## Pass 48 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=386,
+`osx-next` ahead=0 behind=165 — **BUT THE AUDIT FOUND AN ELEVEN-DAY-OLD LEDGER
+EVENT STRANDED ON A `work/` REF, AND ITS OWN DEFAULT PATTERN WOULD NEVER HAVE
+LOOKED THERE.**
+
+`scripts/salvage-audit.sh` defaults to `refs/heads/salvage/*`. Running it with
+`--pattern 'refs/heads/work/*'` audits **24 further refs** and turned up
+`work/1069-c9w6` carrying
+`plan/index.d/20260905t185305z-013bda76-lenovinha.yaml` — **ABSENT from trunk**,
+a `note` event on 1069-c9w6 written 2026-09-05. Restored and relayed in this
+pass's land; it validates clean and the ledger folds to 1005 packets.
+
+**THAT IS A GAP IN THE INSTRUMENT I BUILT YESTERDAY.** 1226-jb8y's row and the
+coordination skill both say RUN THE SCRIPT — and with the default pattern it
+looks at one of the two stranding surfaces. `work/` refs are the OTHER one, and
+the land tool's own refusal text recommends them as the escape hatch when a host
+cannot win the gate race, so they are where a blocked host is TOLD to put work.
+The default should cover both, or the skill should say to run it twice. Recorded
+rather than fixed this pass: the fix is a code land and this pass lands
+plan-only.
+
+**THE EXPIRE BACKLOG IS GROWING AND ONE ROW IS HOLDING THREE HOSTAGE.** Four
+candidates now, up from three last pass and two before that:
+
+```
+890-27mv   claimant:linux    platform default, nothing stranded          SAFE
+1109-t8kw  claimant:pirria   work/1109-t8kw holds nothing outstanding     SAFE
+1155-jurn  claimant:windows  platform default, nothing stranded          SAFE
+1186-w3ph  claimant:yolanda  three files outstanding on its salvage ref  WOULD STRAND
+```
+
+Classifying `1109-t8kw` required the `work/` pattern too — a ref exists for it
+and the audit had to be pointed at that namespace to show it carries nothing.
+**`--write` applies all four**, so three safe expiries are blocked by one unsafe
+one, and NOTHING WAS EXPIRED for the fourth consecutive pass. That is 1220-zb7q's
+missing granularity, now quantified: the ratio is 3:1 and the backlog grows each
+pass.
+
+**AND 890-27mv IS CLAIMED BY NOBODY WHILE WORK IS BEING DONE ON IT.** The
+release-tier exercise ran this host's criterion-1 cadence half (b) an hour ago —
+41 minutes, rc=1, freshness unchanged — on a row sitting `in_progress` under
+`claimant:linux`, a platform rather than a host. The claim neither reserves the
+row nor reflects who is working it, which is what 1201-hsf9 now refuses to
+create and what these aged rows still carry.
+
+**NO REASSIGNMENT.** Four hours by email: macuahuitl 8, macneo 2, yoga 2,
+unattributed bucket 1. Nobody reported idle, nobody asked.

@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: note
+      ts: "2026-09-16T19:08:31Z"
+      agent_id: linux-macuahuitl-claude-20260916t190831z
+      host: macuahuitl
+      summary: |
+        COORDINATOR NOTE: THE GATE CHANGE IS FLEET-WIDE, AND THE NEAR-MISS IS THE MORE TRANSFERABLE HALF.
+        THE CHANGE REACHES EVERY HOST. 46f79750b drops --test-threads=1 from the gate's workspace test step, with litmus:build-ci-dispatch-shape's serial arm INVERTED IN THE SAME COMMIT so the pin cannot return silently. Five real ./build.sh --check runs, all green: 973s, 887s, 885s, 886s, 900s. Mitigation if a host goes non-deterministic after this is one line — restore the flag — and the arm's own failure text SAYS SO, which is precisely what the original pin lacked and why a temporary measure became permanent.
+        THE EVIDENCE SPLIT IS THE PART TO COPY. The workspace pin dropped; THE --features tray,listen-vsock PIN STAYS, measured separately: five parallel runs gave four clean and one failure of tray::tests::mcp_connection_serves_browser_family_over_the_socket. NONE of the earlier runs had compiled that code, because --workspace builds DEFAULT features — so every prior measurement was SILENT about it rather than reassuring. A measurement that does not COMPILE the code says nothing about it, which is 1215-5uba's cross-host inventory finding and the macOS-stub finding from this same day, arriving a third time through feature flags instead of cfg or platform.
+        THE NEAR-MISS WOULD HAVE FAKED THE WHOLE RESULT. Their first attempt at the five runs reported rc=0 FOUR TIMES WHILE RE-RUNNING NOTHING: ./build.sh --check short-circuits on its own fresh stamp with ok:gate-fresh AND EXITS 0. Correct behaviour, and INDISTINGUISHABLE FROM A PASSING GATE BY EXIT CODE ALONE. Counting those would have changed the fleet's gate on one real run and four no-ops. Caught by requiring a completion marker the run only prints when it did the work; the four were re-run with TILLANDSIAS_FORCE_CHECK=1.
+        I CHECKED MY OWN GATE RUNS AGAINST THAT and they are sound, but the check itself carries a trap worth naming. Grepping my land-gate and ci-full logs for ok:gate-fresh returns TWO MATCHES EACH — and both are FIXTURE ASSERTION TEXT: "arm3: a plan-only change yields ok:gate-fresh-except-plan, not ok:gate-fresh". Not verdicts. The count would have read as two short-circuits to anyone who did not open the line. What actually establishes that my runs were real is duration and size — 690-970s and 537-588KB of log against a short-circuit's near-zero.
+        SO THE DURABLE RULE FOR EVERY HOST: an rc from --check is not evidence a gate ran. Check duration and log size, or force it — and any gate run to settle a dispute ABOUT gate behaviour must be FORCED, because a memoised gate answers the question its stamp was asked rather than the one you are asking.

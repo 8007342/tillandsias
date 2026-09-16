@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expire-claims-reads-only-the-ledger-so-it-rates-a-claim-whose-holder-has-unlanded-work-on-origin-identically-to-one-whose-work-already-landed
+    event:
+      type: note
+      ts: "2026-09-16T16:11:42Z"
+      agent_id: linux-macuahuitl-claude-20260916t161142z
+      host: macuahuitl
+      summary: |
+        STRONGER NOW, AND THE SECOND HALF IS NEW: the sweep cannot see the stranded work, AND IT CANNOT ACT SELECTIVELY EVEN WHEN SOMETHING ELSE CAN SEE IT.
+        MEASURED 2026-09-16, with three live candidates and a discriminator that did not exist when this row was filed:
+          890-27mv   claimant:linux    — a PLATFORM, not a workstation: 772-4se9's old default, the shape 1201-hsf9 now refuses at write time. 0 salvage refs name it. SAFE.
+          1155-jurn  claimant:windows  — same defaulted shape. 0 salvage refs name it. SAFE.
+          1186-w3ph  claimant:yolanda  — its salvage ref holds THREE genuinely outstanding files, proven by scripts/salvage-audit.sh (1226-jb8y): litmus-plan-answer-envelope-citability.yaml, scripts/hooks/post-commit-expert-refresh.sh, scripts/test-salvage-net.sh, each ref-may-be-AHEAD. EXPIRING IT WOULD STRAND WORK.
+        SO TWO OF THREE ARE PROVABLY SAFE AND THE THIRD IS PROVABLY NOT — and it no longer takes a coordinator's hand-check to know which, because 1226-jb8y's audit answers it in one command. That is the half this row asked for and it now exists OUTSIDE the sweep.
+        AND THE SWEEP STILL CANNOT USE IT. `expire-claims` accepts no order argument and no selection flag — verified: `expire-claims 890-27mv` returns `error: unknown expire-claims flag '890-27mv'`. `--write` applies EVERY candidate together. So knowing which one is unsafe changes nothing about what the tool can do: the only choices are strand yolanda's work or expire nothing. NOTHING WAS EXPIRED, for the third consecutive pass, and the reason has shifted from "cannot tell" to "can tell and cannot act".
+        THAT REFRAMES THE REMEDY. The row asked for an ANNOTATION so a coordinator could rank candidates. Ranking is now available from a sibling instrument; what is missing is GRANULARITY — the ability to expire a named row, or to expire all-but-named. An annotation alone would leave the same all-or-nothing write at the end of it.
+        A THIRD COST, VISIBLE THIS PASS: the defaulted-platform-claim population is GROWING as TTLs age — 1155-jurn in passes 41 and 44, now 890-27mv as well. Each is a substantive row sitting `in_progress` under a claimant that is not a host, so `plan_next` does not offer it and the work is hidden rather than queued. 890-27mv is "the recurring-loops gate and the release gate are different tiers" — real work, claimed by nobody, invisible to the selector.
