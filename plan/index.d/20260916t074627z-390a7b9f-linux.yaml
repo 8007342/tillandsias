@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-16T07:46:27Z"
+      agent_id: linux-yoga-claude-20260916t073528z
+      host: linux
+      summary: |
+        CRITERION 4 IS ANSWERED, criterion 2 IS NOT, and I could not reproduce the arm-4 refusal today. Taking those in order, and saying which is which rather than letting the delivered half imply the other.
+
+        CRITERION 4 — ARMS 4 AND 5 ARE NOT INDEPENDENT, and the relationship is decidable from the source without waiting for a reproduction. ARM 5 HAS NO INVOCATION OF ITS OWN. It audits the worktree after every preceding arm, so it is a POST-CONDITION OVER THEIR SIDE EFFECTS rather than a separate assertion. An arm-4 path that leaks produces an arm-5 failure; arm 5 can also fail with arm 4 green. So: one can cause the other, in one direction.
+
+        AND IN THE GATE ARM 5 AUDITS SOMEBODY ELSE'S RUN. build.sh invokes scripts/archive-plan-packets.sh --check ITSELF, with a tolerant `|| true`, EARLIER in the same gate than it invokes this fixture. Standalone there is no such run. So in situ arm 5 inspected a worktree a different archiver invocation had already touched, while its message said "the refusal path left scratch state in the worktree" — naming a subject it never observed. That is an accusation rather than a measurement, and it is a concrete in-gate versus standalone difference for this fixture. It is the likeliest explanation of macuahuitl's arm-5 observation, which the row recorded as "probably unrelated" to arm 4; it is better described as UNRELATED IN CAUSE but REACHED THROUGH THE SAME FIXTURE RUN.
+
+        FIXED: arm 5 now snapshots the scratch paths BEFORE any arm runs the archiver and compares. Clean afterwards passes silently. State that PRE-EXISTED and is unchanged passes with a NOTE that names the likely owner — build.sh's own earlier archiver run — because a leak is still a leak and somebody owns it, but this fixture did not cause it. State INTRODUCED DURING THE RUN still FAILS, with the before and after both printed.
+
+        ALL THREE STATES PROVEN, not two: clean passes; pre-existing passes with the NOTE; introduced fails at 4/5 naming what changed.
+
+        A CONTROL OF MINE THAT PASSED FOR THE WRONG REASON, recorded because I nearly reported it as proof. My first pre-existing-dirt control planted scripts/archive-plan-packets-check.rb. It passed — but through the CLEAN branch, not the NOTE branch, because the archiver's own cleanup trap removes that path during arm 4 REGARDLESS OF WHO CREATED IT. So the control proved the fixture does not fail on pre-existing dirt and proved nothing about the branch I had written. The trap's rm list does not include `toolbox`, so I re-ran the control there and the NOTE branch fired. A green from a control is evidence only about the path the control actually took.
+
+        CRITERION 2 IS NOT ANSWERED AND I WILL NOT DRESS THIS UP. The arm-4 rc=3 mechanism is still unnamed. I attempted the reproduction on this host, which is one of the two that saw it, in both execution contexts:
+          from the host (the archiver re-execs into the tillandsias-builder toolbox)   rc=0
+          from inside the toolbox (ruby is native there)                               rc=0
+        Two hypotheses died on measurement. First: the toolbox re-exec being unavailable in situ — refuted, because inside the toolbox ruby is native and the run still passes. Second: the ruby usability probe timing out under gate load — refuted by reading its refusal, which prints could-not-run:no-usable-ruby, a string arm 4 SKIPS on; yoga's failure had no such string, so the probe was never the path taken.
+        WHAT REMAINS FOR CRITERION 2, narrowed: the untaken exit-3 sites that do NOT print "no usable ruby" are the stale-plan-binary and no-plan-binary refusals around ensure_fresh_plan_binary, and the two ruby-worker-failed sites. Each now carries a STABLE TOKEN (added under this row), so the next in-gate refusal names itself. I could not force one today.
+
+        ALSO CORRECTED, A BELIEF OF MY OWN: I had it recorded that this host keeps cargo in the toolbox and not on the host. `command -v cargo` on the host resolves. The archiver re-execs because RUBY is absent on the host, not cargo. I was about to build a hypothesis on the stale note.
+
+        CRITERION 5 HOLDS: arms 1-3 still refuse a genuinely absent ruby, and the full run is 5/5 with the arm-5 change in place. Nothing here makes the could-not-run channel lenient, and criterion 2's warning against a merely-tolerant fixture is why arm 5 still FAILS on state the run itself introduces.
