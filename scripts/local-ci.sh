@@ -1588,6 +1588,20 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "must-ship-rows" "skipped"
     fi
 
+    # Order 970-7fqk, sibling of the above.
+    if [[ -f "scripts/test-gate-stamp-names-content-movers.sh" ]]; then
+        if bash scripts/test-gate-stamp-names-content-movers.sh 2>&1 | tee /tmp/gate-stamp-movers.log; then
+            log_pass "Stale-stamp refusal names content movers, not mtime movers"
+            archive_check_log "gate-stamp-movers" "pass" /tmp/gate-stamp-movers.log
+        else
+            log_fail_tracked "gate-stamp-movers" "Stale-stamp content-mover regression (see /tmp/gate-stamp-movers.log)"
+            archive_check_log "gate-stamp-movers" "fail" /tmp/gate-stamp-movers.log
+        fi
+    else
+        log_fail_missing_guard "gate-stamp-movers" "scripts/test-gate-stamp-names-content-movers.sh"
+        archive_check_log "gate-stamp-movers" "skipped"
+    fi
+
     # Order 1004-inkc. `--expect none` disables the absent detection, which is
     # that order's entire subject: a production caller passing it restores a
     # health check that cannot fail on a DELETED service. The escape hatch was
