@@ -6588,3 +6588,131 @@ are a double-claim, which the flip prevents. WHOEVER READS THAT ROW MUST READ
 ITS EVENTS AND NOT ITS TITLE: the title still carries the disproved explanation
 because a base fragment is immutable, and a reader starting from it would
 re-derive a disproof that already exists.
+
+## Pass 39 — 2026-09-16, macuahuitl (coordinator)
+
+**A HOST THAT CAN SPEAK BUT CANNOT LAND IS NOT A WEDGE, AND THE ARITHMETIC IS THE
+REPORT.** macneo-macos refused its own land after two attempts rather than
+spending a third gate, and sent numbers instead of a feeling: origin/linux-next
+ran 19 commits in the hour at ~3 min mean against a ~17 min macOS gate. I
+reproduced the same order on the trunk side minutes later — 21 commits, ~2.9 min
+mean — three of them mine, which is worth naming because the coordinator's own
+cadence is part of the interval a slow host cannot land against. The race is
+unwinnable BY ARITHMETIC, not by luck. macneo's plan-only relays all succeeded,
+so the host can speak and cannot land; that asymmetry is 1142-85zx's clock seen
+from the side that pays it.
+
+**THE BINDING CONSTRAINT IS GATE DURATION AGAINST TRUNK VELOCITY, NOT DIFF SIZE.**
+macneo's sharpest point, and the one a reader of 1142-85zx will most easily miss:
+shortening the gate for plan-only diffs helps that host land NOTHING, because the
+diff it cannot land is the one carrying trunk's own mandated merge.
+
+**I POINTED A CORRECTED REMEDY AT THE WRONG REF, AND A PEER CAUGHT IT IN UNDER AN
+HOUR.** Earlier tonight I rewrote land-on-platform-branch.sh's push-failed block
+after macbookair showed the old "retrying cannot help" sentence was absolute
+where it should have been specific. My replacement told the reader to measure
+`origin/$BRANCH` — the branch being pushed. For a mandated-merge refusal that is
+the wrong ref: the refusal names the ref the branch must CONTAIN. macneo followed
+the text literally, measured osx-next, found it quiet at 0 commits for the hour,
+and the text therefore said "quiet, spend the gate" about the one ref that was
+not racing them. THE SHAPE: a correction that fixes the sentence and leaves the
+subject wrong reads more confidently than the error it replaced, because it now
+names a specific command. Fixed to say MEASURE THE REF NAMED IN THE REFUSAL, with
+macneo's numbers and a stop rule.
+
+**SIX DIAGNOSES LANDED AS PROSE WITH NO LEDGER ROW, SO NOTHING WOULD EVER ROUTE
+THEM.** yolanda-windows' Windows login batch landed eight files; the two ledger
+fragments both belonged to one unrelated packet, and the six issue documents had
+no packet at all. Four were actionable and are now filed (1215-xazj, 1215-cxgb,
+1215-8jui, 1215-5uba); the other two are correctly not work items — one is
+WITHDRAWN by its own author and one is a pattern synthesis. MEASURED while
+filing, and stated with its caveat rather than as a defect: 436 of 609
+plan/issues documents carry no ledger row. Most are legitimately not work items —
+drill logs, smoke reports, audit records — so that number is NOT 436 dropped
+rows, and reading it that way would be the two-way-compare-over-a-three-way-world
+error. What it does mean is that an actionable finding filed as prose is routable
+only if someone happens to notice it.
+
+**ONE OF THE FOUR HAS A CLOCK AND IS ADDRESSED TO THE OPERATOR, NOT TO A HOST.**
+1215-cxgb: yolanda-windows' working GitHub login depends on a hand-written
+`.git/config` nothing provisions, inside a guest the tray reprovisions on its own
+(observed 2026-09-12). Its three options all cost the operator's own workstation
+something, so `pickup_role: operator` — routing it to a working host would hand a
+peer a decision about somebody else's machine, which a peer cannot make. yolanda
+filed it unclaimed for the same reason and said so.
+
+**AND ONE IS LATENT FLEET-WIDE WHILE LOOKING HOST-SPECIFIC.** 1215-xazj: the
+759-vceg push probe resolves its repository from the process CWD, and the tray
+always runs the login in the guest where no checkout exists. Any host that has
+not re-authenticated since the ~/src removal is running on a credential seeded
+while a checkout still existed — it works, and keeps working, until the next
+login. Established by controlled experiment with the operator running both arms,
+one variable. The guard is correct and is vindicated twice in that record: it
+refused three times when it could not verify, and the once it did verify, the
+credential it approved genuinely pushed.
+
+**I OFFERED TO ABSORB A LIMITATION THE HOST DID NOT HAVE, AND IT DECLINED THE
+OFFER CORRECTLY.** I asked macneo whether they wanted me to file the relay-ref
+row here, reasoning that adding a row to "a host that cannot land" was
+unkind. What I had measured was a host that cannot land CODE; filing is a
+plan-only write, and they had just done three of them in the same cycle. They
+filed it themselves as 1216-ewaz (verified on trunk, 4d50d48e3) and said why:
+"declining a ledger row on that basis would have been me accepting a limitation
+I do not have." THE SHAPE, and it is a coordinator-specific one: a courtesy
+extended from a measurement read one notch too wide moves work off the host that
+has the evidence and onto the host with the merge button, for no reason. The
+generous reading and the accurate one were not the same reading.
+
+**1216-ewaz IS THE ESCAPE-HATCH HALF OF 1142-85zx.** The refs/heads/work/ relay
+is the only route that does not require winning the gate-versus-trunk race, and
+it is documented ONLY INSIDE THE REFUSAL YOU GET AFTER LOSING THAT RACE. A path
+you can learn about only by first failing is not a documented path. macneo's
+first exit criterion is the one I would have missed: the surface must name WHO
+MERGES THE REF AFTERWARDS, because a gated tree sitting on a ref nobody watches
+is a slower version of the same starvation. Negative control: a host that has
+never seen a land refusal must find the path from the pre-land surface alone.
+
+## Promotion — v56.9.13.1 to stable, 2026-09-16, on the operator's instruction
+
+**PROMOTE-EXISTING, NOT A CUT, AND THE DISTINCTION SAVED THE BLESSING.** The
+operator installed from tillandsias.org on macbookair over dinner, got
+v56.9.12.2 (2026-09-12), and asked how far we were from a release carrying the
+git-mirror fixes. The answer was already on the shelf: v56.9.13.1 had been cut
+2026-09-14, was GREEN on ./build.sh --ci-full at 7a089997d (33/33 checks,
+358/358 pre-build litmus), and had been smoked PASS on ALL THREE PLATFORMS —
+esmeraldinha (Windows), pirria (Linux), macbookair (macOS, the same machine the
+operator was holding). 952-mrsl's rule applies exactly: a fresh cut would have
+discarded the artifacts that blessing verified. Flipped instead:
+`gh release edit v56.9.13.1 --prerelease=false --latest`.
+
+**NO MAIN MERGE WAS NEEDED AND THE SKILL'S LITERAL TEXT WOULD HAVE BEEN WRONG
+HERE.** merge-to-main-and-release's PROMOTE-EXISTING path says to merge
+linux-next into main first. That step assumes you are promoting shortly after a
+cut, when trunk and main are close. MEASURED: origin/main was 6b8342f3f, which
+IS v56.9.13.1 exactly, and trunk was 540 commits ahead. Merging trunk into main
+would have put 540 unreleased commits on main under a tag that does not contain
+them — a de-facto release with no tag and no gate. The promotion is a flag flip
+on an existing tag and needs no branch movement at all. Verified the tag was
+already an ancestor of main before flipping, rather than assuming it.
+
+**VERIFIED THROUGH THE PATH THE OPERATOR ACTUALLY USED, NOT THE ONE I CHANGED.**
+`gh release list` showing Latest is the API's answer, not the installer's. The
+website shims default to `${TILLANDSIAS_RELEASE_BASE:-.../releases/latest/download}`,
+so the check that matters is whether that redirect moved: it now 302s to
+tag/v56.9.13.1, and Tillandsias.dmg and install-macos.sh both return 200 through
+it. No website deploy was required — the shims resolve the channel at run time,
+which is the property they were built for.
+
+**WHAT THE PROMOTION DOES NOT FIX, STATED BEFORE IT WAS ASKED.** Two defects
+ship with this stable and both were named to the operator before the flip:
+1171-ccf2, the Windows zip not carrying tillandsias-headless.exe — `implemented`
+on trunk, NOT in this tag, so Windows hosts still hit it; and 1215-xazj, p1 and
+unfixed in stable, in the daily AND on trunk, so the tray's --github-login is
+broken at a newer version number rather than repaired by it. A promotion that
+raises the version while leaving a p1 in place is exactly the kind of thing a
+release note must say out loud.
+
+**STILL UNRELEASED ON TRUNK:** 890-y72v (DeliverCredentialsReply carries an
+accept/reject discriminator — a WIRE v4 bump, so host and guest must move
+together), 1201-t6ms and 1211-34v6, plus the 1171-ccf2 fix. Those want the next
+cut and their own blessing round, not a rushed promotion.
