@@ -41,14 +41,52 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "skip:smoke-lock-held"
 
-  - step: "the probe emits exactly one well-formed verdict line"
-    # 60s, sized for the SLOWEST host: unlike the early-exit skip branches
-    # above, the real-verdict path runs the full podman checks, and MSYS
-    # process-spawn pricing under the harness blew the old 5s budget while
-    # the probe passed standalone in <1s (measured 2026-08-16, windows).
-    # Same treatment as 770-f6u4 in this suite; see plan/issues/
+  # ORDER 740-88hz. SPLIT: the grammar is asserted where it is free, and the
+  # live substrate keeps its own step with its budget named for what it buys.
+  #
+  # This step used to assert the grammar by running the REAL-verdict path,
+  # which calls `podman info` (twice) and `podman ps` — measured with a
+  # tripwire on yoga 2026-09-15: three podman invocations on that path, zero on
+  # the branch below. So an assertion about LINE SHAPE was paying for a
+  # container runtime, and when MSYS process-spawn pricing blew the original 5s
+  # budget the answer was to raise it to 60s (2026-08-16, windows). That
+  # stopped the red and left the cost in place: the budget was sized for the
+  # environment the grammar had accidentally acquired.
+  #
+  # Raising a budget so a grammar assertion can afford podman is 1187-iij8's
+  # shape one level down — there the fix was to COUNT a kill apart from a
+  # failed assertion, here it is to remove a cause rather than label it.
+  - step: "the probe emits exactly one well-formed verdict line (deterministic, no podman)"
+    # The same XDG seam step 2 above already uses, and for the same reason: it
+    # reaches a documented verdict before any podman call, so this budget is
+    # the grammar's own price. 0.004s on yoga against 0.183s for the live path.
+    # COUNTS TOTAL LINES AS WELL AS MATCHING ONES. The original assertion was
+    # `grep -c <grammar>` alone, which counts only lines that MATCH — so a
+    # stray warning, debug line or error text alongside a good verdict left the
+    # count at 1 and the step green. Measured on yoga 2026-09-15: with every
+    # emitter patched to print a second, non-matching line, this step passed.
+    # The probe's own contract is "Emits exactly one line on stdout", and only
+    # a total-line count can check that half of it.
+    command: "out=$(XDG_RUNTIME_DIR=/nonexistent-litmus-e2e-grammar bash scripts/e2e-preflight.sh eligibility); total=$(printf '%s\\n' \"$out\" | grep -c .); good=$(printf '%s\\n' \"$out\" | grep -cE '^(eligible|skip:[a-z0-9-]+)$'); if [ \"$total\" = \"1\" ] && [ \"$good\" = \"1\" ]; then echo \"ok: well-formed verdict (1 line)\"; else echo \"FAIL: total=$total well-formed=$good\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: well-formed verdict"
+
+  - step: "the LIVE-substrate path also emits exactly one well-formed verdict line"
+    # SEPARATE, and deliberately still here: the deterministic step above cannot
+    # see a regression in the real-verdict path, which is the path every caller
+    # actually takes. Dropping it would trade an intermittent red for a blind
+    # spot — the fail-open trade this project keeps refusing.
+    #
+    # 60s is PODMAN'S price, not the grammar's, and it is written here so the
+    # next reader knows which of the two this budget is sized for. The original
+    # comment's evidence stands: MSYS process-spawn pricing under the harness
+    # blew 5s while the probe passed standalone in <1s (2026-08-16, windows),
+    # same treatment as 770-f6u4; see plan/issues/
     # windows-red-meta-orchestration-litmus-2026-08-16.md.
-    command: "n=$(bash scripts/e2e-preflight.sh eligibility | grep -cE '^(eligible|skip:[a-z0-9-]+)$'); [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
+    # Same total-vs-matching fix as the step above: the live path is where a
+    # stray line is MOST likely (podman warnings land on stdout in some
+    # configurations), and it was exactly as blind.
+    command: "out=$(bash scripts/e2e-preflight.sh eligibility); total=$(printf '%s\\n' \"$out\" | grep -c .); good=$(printf '%s\\n' \"$out\" | grep -cE '^(eligible|skip:[a-z0-9-]+)$'); if [ \"$total\" = \"1\" ] && [ \"$good\" = \"1\" ]; then echo \"ok: well-formed verdict (1 line)\"; else echo \"FAIL: total=$total well-formed=$good\"; exit 1; fi"
     timeout_ms: 60000
     expected_behavior: "ok: well-formed verdict"
 
@@ -58,9 +96,62 @@ critical_path:
     expected_behavior: "ok: skill-consults-probe"
 
   - step: "a live tillandsias forge / shared stack yields skip:live-runtime-present (order 442)"
-    command: "tmp=$(mktemp -d); fake=\"$tmp/bin\"; mkdir -p \"$fake\"; printf '#!/usr/bin/env bash\nif [ \"$1\" = ps ]; then printf \"%%s\\\\n\" \"tillandsias-tillandsias-forge\"; fi\nexit 0\n' >\"$fake/podman\"; chmod +x \"$fake/podman\"; PATH=\"$fake:$PATH\" XDG_RUNTIME_DIR=\"$tmp\" TILLANDSIAS_DESTRUCTIVE_RESET_OK= bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\""
+    # ORDER 1207-n96g. THIS STEP ASSERTED A RETIRED ORACLE ON DARWIN.
+    #
+    # It stubbed podman and required skip:live-runtime-present — but 723-fndi
+    # removed podman from the Darwin path DELIBERATELY, because asking it there
+    # produced a verdict carrying no information: it printed
+    # skip:live-runtime-present both with nothing running AND with a live VM
+    # (measured 2026-08-17). A constant is not a probe. So the more thoroughly
+    # this step stubbed podman, the more certainly it failed on macOS —
+    # measured here before the fix: got "eligible", wanted
+    # "skip:live-runtime-present".
+    #
+    # THE DARWIN BRANCH DRIVES THE REAL PATH, not a skip marker. vz_guest_is_live
+    # documents TILLANDSIAS_VZ_IMAGE_OVERRIDE as existing "so the fixture can
+    # point this at a file it controls"; holding that file open makes lsof
+    # succeed and produces a GENUINE skip:live-runtime-present through the
+    # function every caller uses. The construction is lifted from
+    # `scripts/e2e-preflight.sh fixture`, which already asserts this case 4/4 on
+    # Darwin — it is the reference implementation, not something invented here.
+    #
+    # Declaring Darwin out of scope was the other available fix and is worse:
+    # the held-image case is the ONLY coverage the VZ liveness branch has, and
+    # the branch that keeps an e2e from wiping a live stack is exactly the one
+    # that must not go unasserted on the platform that owns it.
+    #
+    # The hold is 3s and killed as soon as the verdict is captured, so this
+    # stays inside the 5s budget: measured 1s end to end.
+    command: "tmp=$(mktemp -d); if [ \"$(uname -s)\" = Darwin ]; then img=\"$tmp/rootfs.img\"; echo x > \"$img\"; ( exec 9< \"$img\"; sleep 3 ) & holder=$!; sleep 1; out=$(TILLANDSIAS_VZ_IMAGE_OVERRIDE=\"$img\" XDG_RUNTIME_DIR=\"$tmp\" TILLANDSIAS_DESTRUCTIVE_RESET_OK= bash scripts/e2e-preflight.sh eligibility); kill \"$holder\" 2>/dev/null; wait \"$holder\" 2>/dev/null; else fake=\"$tmp/bin\"; mkdir -p \"$fake\"; printf '#!/usr/bin/env bash\\nif [ \"$1\" = ps ]; then printf \"%s\\\\n\" \"tillandsias-tillandsias-forge\"; fi\\nexit 0\\n' >\"$fake/podman\"; chmod +x \"$fake/podman\"; out=$(PATH=\"$fake:$PATH\" XDG_RUNTIME_DIR=\"$tmp\" TILLANDSIAS_DESTRUCTIVE_RESET_OK= bash scripts/e2e-preflight.sh eligibility); fi; rm -rf \"$tmp\"; printf '%s\\n' \"$out\""
     timeout_ms: 5000
     expected_behavior: "skip:live-runtime-present"
+
+  - step: "ORDER 1202-jpzy: one `podman info` per invocation on the path that reaches the live checks"
+    # TRIPWIRE, NOT A STRIPPED PATH. The stub shadows ONLY podman and then execs
+    # nothing — it records the subcommand and answers, so the probe walks its
+    # real branches. A stripped PATH would change which branch runs and measure
+    # a different program.
+    #
+    # WHY THIS ARM EXISTS: e2e_eligibility_verdict ran `podman info` as its
+    # skip:podman-not-functional gate and then called live_runtime_is_present,
+    # whose own 723-fndi reachability check ran `podman info` again — two
+    # identical probes per invocation. On the pirria floor (740-88hz) `info` is
+    # 789/744/807ms warm against a whole-step 1557/1618ms, so the duplicate was
+    # ~48% of the step. Pre-fix result: FAILS — two, measured on yoga and
+    # pirria 2026-09-15.
+    command: "t=$(mktemp -d); mkdir -p \"$t/bin\"; printf '#!/usr/bin/env bash\necho \"$1\" >> \"%s/calls\"\nif [ \"$1\" = ps ]; then printf \"%%s\\\\n\" \"tillandsias-tillandsias-forge\"; fi\nexit 0\n' \"$t\" > \"$t/bin/podman\"; chmod +x \"$t/bin/podman\"; out=$(PATH=\"$t/bin:$PATH\" XDG_RUNTIME_DIR=\"$t\" TILLANDSIAS_DESTRUCTIVE_RESET_OK= bash scripts/e2e-preflight.sh eligibility); n=$(grep -c '^info$' \"$t/calls\" 2>/dev/null || echo 0); rm -rf \"$t\"; if [ \"$n\" = \"1\" ]; then echo \"ok: one-reachability-probe (verdict=$out)\"; else echo \"FAIL: podman info ran $n time(s) in one invocation, expected 1 (verdict=$out)\"; exit 1; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: one-reachability-probe"
+
+  - step: "NEGATIVE CONTROL (1202-jpzy): a podman whose `info` FAILS still yields skip:podman-not-functional"
+    # THE TRAP THE PACKET NAMED. skip:podman-not-functional exists BECAUSE info
+    # can fail, so it is exactly the verdict a careless de-duplication breaks —
+    # a memo that let either site trust an absent or stale answer would turn a
+    # reachability gate into an assumption (the 723-fndi shape). A green run
+    # never covers this verdict, because a green host's podman works.
+    command: "t=$(mktemp -d); mkdir -p \"$t/bin\"; printf '#!/usr/bin/env bash\necho \"$1\" >> \"%s/calls\"\n[ \"$1\" = info ] && exit 1\nexit 0\n' \"$t\" > \"$t/bin/podman\"; chmod +x \"$t/bin/podman\"; out=$(PATH=\"$t/bin:$PATH\" XDG_RUNTIME_DIR=\"$t\" bash scripts/e2e-preflight.sh eligibility); n=$(grep -c '^info$' \"$t/calls\" 2>/dev/null || echo 0); rm -rf \"$t\"; if [ \"$out\" = 'skip:podman-not-functional' ] && [ \"$n\" = \"1\" ]; then echo 'ok: unreachable-podman-still-refuses'; else echo \"FAIL: verdict=$out info-calls=$n\"; exit 1; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: unreachable-podman-still-refuses"
 
   - step: "the live-runtime guard is wired into all three host branches (order 442)"
     command: "mf_stage prod 0 OUT -- grep -c 'live_runtime_is_present' scripts/e2e-preflight.sh && mf_holds_ere OUT '^[3-9]|1[0-9]' && echo 'ok: live-runtime-guard-wired' || { echo 'FAIL: live_runtime_is_present not called in all branches'; exit 1; }"

@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Generalised from lenovinha's self-finding on 1125-92xa, then measured corpus-wide.
+packets:
+  - packet_id: a-closure-that-cites-a-fixture-no-gate-executes-is-true-about-a-hand-run-and-false-as-protection-and-nothing-detects-the-difference
+    order: 1205-aipn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [ledger, fixtures, closure-evidence, guard-gap, fail-loud]
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-declared-closures.sh
+      - scripts/gate-steps.d
+    title: |
+      A row can close on a fixture that no gate step or litmus binds, so its evidence is a hand-run and its protection is zero
+    context: |
+      FOUND BY lenovinha AGAINST THEIR OWN CLOSED ROW, then measured corpus-wide
+      here. They had added arms 1b and 1c to scripts/test-metrics-log-path-agreement.sh
+      for 1125-92xa and closed that row citing "fixture 17/17". The fixture is an
+      ORPHAN: no gate step, no litmus binding, no build.sh or local-ci.sh call.
+      Their own words, which are the finding: the closure is TRUE AS A STATEMENT
+      ABOUT A HAND-RUN AND FALSE AS PROTECTION. The Rust-vs-shell path agreement
+      they landed is guarded by nothing, and a regression in it would be caught
+      by nothing.
+      MEASURED CORPUS-WIDE 2026-09-15 on macuahuitl, counted rather than sampled:
+      302 fixtures under scripts/test-*.sh, 276 referenced by a gate step, a
+      litmus spec, build.sh or local-ci.sh, and 26 ORPHANS — 8.6%.
+      AND THE RATE AMONG TODAY'S WORK IS THE ALARMING PART. Two fixtures written
+      for closures that landed TODAY are orphans, both on a second host:
+      scripts/test-litmus-budget-tally.sh (1187-iij8 arm (a)) and
+      scripts/test-forge-clone-wait-is-bounded.sh (777-k88g). Each is referenced
+      ONLY from plan/ prose and fragments. Verified by listing every reference
+      outside plan/ and finding none, not by a sample.
+      WHY NOTHING CATCHES IT. check-declared-closures-added and
+      check-closure-evidence enforce that a closure DECLARES evidence and that
+      the declaration RESOLVES — a file that exists, a name that parses. Neither
+      asks whether anything EXECUTES it. So a closure citing `fixture 7/7` is
+      accepted on the same footing whether that fixture runs on every gate or
+      has never run outside its author's shell.
+      AN ORPHAN IS INVISIBLE TO THE OBVIOUS SEARCH, which is why this persisted.
+      lenovinha's observation: a grep for "what enforces this rule?" cannot find
+      an orphan precisely BECAUSE nothing invokes it. The coordinator made
+      exactly that mistake an hour earlier on 1204-3s2s, asserting no guard
+      existed after grepping the enforcement surface, while an adjacent fixture
+      sat unbound and therefore unfindable that way.
+      NOT EVERY ORPHAN IS A DEFECT, and the row must not become a ratchet that
+      binds them all. Some are deliberately advisory (a hermetic fixture cannot
+      represent a privilege boundary, so its detector is staged not gated), some
+      are too expensive for every gate, and 1109-t8kw's class warns that binding
+      a fixture changes WHICH HOSTS run it. One orphan here is already triaged
+      FIX_FIRST by the orphan-disposition sweep with a named hazard: wiring it
+      before the fix converts a latent library bug into an intermittent,
+      misattributed gate failure. THE DISCRIMINATOR IS NOT ORPHANHOOD — IT IS AN
+      ORPHAN CITED AS A ROW'S CLOSURE EVIDENCE, where the row's protection is
+      claimed and absent.
+    exit_criteria:
+      - 'a closure whose declared evidence names a fixture that no gate step, litmus binding, build.sh or local-ci.sh invokes is REFUSED or flagged at close time (pre-fix result: FAILS — 1125-92xa, 1187-iij8 and 777-k88g all closed this way, two of them today)'
+      - 'NEGATIVE CONTROL: a deliberately advisory or expensive orphan NOT cited as closure evidence is untouched, so the check does not become a bind-everything ratchet'
+      - 'NEGATIVE CONTROL: a closure citing a BOUND fixture still passes unchanged, verified against a row that closed correctly'
+      - 'the three known instances are dispositioned individually — bound, re-closed with honest evidence, or recorded as deliberately unguarded with the reason'
+    unscoreable: |
+      unpinnable-until-the-disposition-rule-is-agreed: whether the remedy is to
+      refuse such a closure, to flag it, or to require the closure text to SAY
+      "hand-run, unguarded" is a policy choice about how much friction a close
+      should carry. The measurement is complete — 26 of 302, three named
+      instances — and the policy is not made.
+    events:
+      - type: filed
+        ts: "2026-09-15T18:19:27Z"
+        agent_id: "linux-macuahuitl-claude-20260915t181927z"
+        host: macuahuitl
+        summary: |-
+          lenovinha found it against their own closed row and reported it rather
+          than quietly binding the orphan to make their arms run. Generalised
+          and counted here: 26 of 302 fixtures are orphans, and two closures
+          that landed today cite orphaned fixtures on a second host.

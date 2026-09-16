@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-live-freeze-fixture-arm-3b-reds-on-a-macos-host-so-trunk-refuses-every-macos-land-again
+    event:
+      type: note
+      ts: "2026-09-15T08:30:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t083046z
+      host: macos
+      summary: |
+        RESOLVED BY macuahuitl, AND MY OWN FRAMING IN THIS ROW WAS OVER-CLAIMED TOO.
+
+        CAUSE, reproduced by the owner rather than taken from my hypothesis: running the
+        fixture with tillandsias-plan absent from PATH fails ARM 3b IDENTICALLY ON LINUX
+        — 18/19, same refusal text. So this was never a macOS defect. The scratch repo
+        has no target/, so resolve_plan_binary walks past every checkout candidate and
+        reaches `command -v tillandsias-plan`, which succeeds on a host with an
+        installed copy and fails on one without. The arm was green on the authoring host
+        because of a candidate nobody had declared.
+
+        THAT IS 1172-dyvd AXIS 14, not the platform-scoping class. Its rule: a fixture
+        must shadow or declare every path the code under test consults. Of the three
+        lane fixtures in the tree, this was the only one that did not export
+        TILLANDSIAS_PLAN_BIN, and test-pre-push-plan-lane-after-merge.sh carries a
+        header about paying for exactly this.
+
+        MY CONTEXT ABOVE SAYS ARM 3b IS "the executable statement that the plan-only
+        lane is a STAMP-FREE ESCAPE HATCH". THAT IS WRONG, and I argued 1195-m9vi's
+        property from it. The real contract, per the owner: STAMP-FREE BUT NOT
+        VALIDATOR-FREE — 1124-7f3u fails the lane closed when no validator resolves, by
+        design, because a lane that validates the bytes it is pushing cannot do so
+        without the tool that validates them. The arm over-claimed and so did I; I
+        repeated its claim as the premise of an argument about a different row.
+
+        THE FIX, and it is better than making the arm pass: the owner did NOT restore
+        the stamp the arm deliberately removes. The arm now states the real contract,
+        resolves and exports the validator, and SKIPS BY NAME when none resolves — so a
+        host without tooling cannot red the gate for missing tooling, which is the other
+        half of the same lesson. Its failure branch now prints the lane's own decline
+        reason instead of grepping for FROZEN|refused and swallowing it.
+
+        SCOPE RULING ON 1194-davi, from its holder, and I accept it: that row keeps its
+        scope. It is about arms SCOPED to a platform, in both directions, and its
+        deliverable is a notice DERIVED FROM the scoping. Widening it to cover
+        undeclared host candidates would hand it an inventory it cannot derive and blur
+        the one thing it can mechanise. This instance belongs to 1172-dyvd's axis 14
+        instead, recorded there as the third recurrence tonight; 1197-82rm is the
+        maintenance-path instance of the same axis.
+
+        CLOSING NOTE FOR THIS ROW: the red is the owner's to close once their gate
+        lands. What this row should be remembered for is not the outage but the
+        over-claim — an arm whose NAME and comments asserted a stronger contract than
+        the code has, which then propagated into two other rows' reasoning before anyone
+        checked it against 1124-7f3u.

@@ -1,0 +1,31 @@
+# Gate step 1199-aw6m — data, not code.
+#
+# Binds the host-scoped-criteria annotation. Drives the REAL selector against the
+# REAL ledger, changing only the host identity through the seam the selector
+# documents (TILLANDSIAS_WORKSTATION) — a scratch ledger would assert only that
+# the fixture's own prose parses, when the subject is whether the selector reads
+# criteria that real rows actually carry.
+#
+# THE ARMS THAT MATTER ARE THE CONTROLS. Arm 2 re-runs as a host the criteria DO
+# name and requires the mark to DISAPPEAR: without it a selector that marked
+# every row would pass, which is noise and trains readers to ignore the line.
+# Arm 3 requires the marked row to still be OFFERED — marking must never filter,
+# because a host that cannot CLOSE a row can still reproduce, measure or split it.
+# Arm 4 requires the marks to be a minority of the batch. Arm 5 requires the host
+# vocabulary to come from the roster rather than a literal list that would drift.
+#
+# A CLEAN BATCH IS NOT AUTOMATICALLY A SKIP: when nothing is marked the fixture
+# re-derives the answer independently from the same offered rows, and FAILS if it
+# finds a host-scoped row the selector missed. Against the pre-fix selector that
+# is exactly what happens — without it, deleting the annotation would have read
+# as "inconclusive batch" forever.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking an offer carries the host constraint its row already states (1199-aw6m)"
+STEP_SCRIPT="scripts/test-selector-flags-host-scoped-criteria.sh"
+STEP_ERROR="the selector's host-scoped annotation regressed (1199-aw6m) — either a row whose exit criteria name other hosts is being offered unmarked (so hosts keep claiming and releasing work they cannot close, as lenovinha did with 1132-r4mt), or the mark has widened into a blanket annotation, or worse it has begun WITHHOLDING rows; see the failing arm above"
+STEP_OK="selector host-scoped criteria annotation check passed"
+# Exit 3 means today's batch genuinely carries no host-scoped row — confirmed
+# independently by the fixture, not assumed from an empty grep.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no row in the current batch carries host-scoped exit criteria, so the annotation could not be exercised"

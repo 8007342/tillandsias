@@ -46,6 +46,43 @@ smoke_lock_is_held() {
   [ -d "$lock_dir" ]
 }
 
+# ORDER 1202-jpzy — ONE REACHABILITY PROBE PER INVOCATION.
+#
+# `podman info` was run twice per `eligibility` invocation: once by
+# e2e_eligibility_verdict as its skip:podman-not-functional gate, and again as
+# live_runtime_is_present's own 723-fndi reachability-before-inference check.
+# Both were correct in isolation — the predicate cannot assume its caller
+# probed, because the macOS and Windows branches reach it too, and the caller
+# cannot skip its own gate because it needs the verdict. The cost is not
+# theoretical: measured on the pirria floor for 740-88hz, `podman info` is
+# 789/744/807ms warm against a whole-step 1557/1618ms, so the duplicate call is
+# ~48% of the step, paid for an answer already in hand.
+#
+# MEMOISED, NOT REMOVED, and that distinction is the trap this packet names.
+# `skip:podman-not-functional` exists BECAUSE info can fail, so a fix that let
+# either site TRUST an absent or stale answer would turn a reachability gate
+# into an assumption — the exact shape 723-fndi was filed about. This helper
+# still probes for real on first use and caches only the answer it actually
+# got, so both sites keep asking the same question and only the second one is
+# free. The predicate stays independently callable: an isolated caller of
+# live_runtime_is_present probes on its own first use.
+#
+# The memo is reset at the top of e2e_eligibility_verdict, so "the life of one
+# invocation" holds even when this file is SOURCED and the verdict is taken
+# more than once in a single process, rather than only in the script-per-run
+# case where the process boundary would have hidden a stale cache.
+_PODMAN_REACHABLE=""
+podman_is_reachable() {
+  if [ -z "$_PODMAN_REACHABLE" ]; then
+    if podman info >/dev/null 2>&1; then
+      _PODMAN_REACHABLE=0
+    else
+      _PODMAN_REACHABLE=1
+    fi
+  fi
+  return "$_PODMAN_REACHABLE"
+}
+
 # Detect a live Tillandsias runtime (forge + shared stack) that THIS smoke run
 # did not itself launch. A destructive e2e gate's first step is
 # `podman system reset --force`, which would wipe a live operator/agent forge
@@ -73,7 +110,8 @@ live_runtime_is_present() {
   # An UNREACHABLE runtime is ABSENT, not present: there is nothing to leak. The
   # leak-not-destroy convention still applies once the runtime ANSWERS — that is
   # the case it was written for, and the `|| return 0` below preserves it.
-  if ! podman info >/dev/null 2>&1; then
+  # 1202-jpzy: same question, asked through the per-invocation memo.
+  if ! podman_is_reachable; then
     return 1
   fi
   # an errored listing counts as PRESENT (leak-not-destroy, 443-review convention)
@@ -116,6 +154,10 @@ vz_guest_is_live() {
 }
 
 e2e_eligibility_verdict() {
+  # 1202-jpzy: one invocation, one reachability probe. Clearing here rather
+  # than relying on the process boundary is what makes that true when this
+  # file is SOURCED and the verdict is taken more than once in one process.
+  _PODMAN_REACHABLE=""
   # Windows (Git Bash / MSYS): the local-build e2e substrate is the WSL2
   # distro — podman lives INSIDE it, so probing for a host podman binary is
   # meaningless here (it made every Windows host emit skip:no-podman-binary
@@ -204,7 +246,8 @@ e2e_eligibility_verdict() {
     echo "skip:smoke-lock-held"
     return 0
   fi
-  if ! podman info >/dev/null 2>&1; then
+  # 1202-jpzy: first use fills the memo; live_runtime_is_present below reuses it.
+  if ! podman_is_reachable; then
     echo "skip:podman-not-functional"
     return 0
   fi

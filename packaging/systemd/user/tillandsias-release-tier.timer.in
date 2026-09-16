@@ -1,0 +1,29 @@
+# @trace order:890-27mv — rendered by scripts/install-release-tier-timer.sh
+# Carries placeholder tokens the installer substitutes; do not copy this .in
+# file into systemd directly. The literal placeholder spelling is deliberately
+# NOT written out here: the installer refuses any rendered unit still matching
+# the placeholder shape, and a comment demonstrating that shape is matched by
+# the very check it describes (890-27mv — it refused its own templates).
+[Unit]
+Description=Tillandsias release-tier cadence (@INTERVAL@ after completion)
+
+[Timer]
+# Completion-spaced, like the cycle timer (856-s56y criterion 4): a tier run
+# still going when the clock says "due" cannot stack a second one on top of
+# it. The full tier is the most expensive thing this host runs, so stacking
+# would be worse here than for the cycle.
+OnUnitInactiveSec=@INTERVAL@
+# Re-arm after reboot without a human. Deliberately LATER than the cycle
+# timer's boot delay: a host that just booted should take its cheap cycle
+# first, not spend its first half hour in the full tier.
+OnBootSec=@BOOTDELAY@
+# The point of the whole row: the tier the release depends on must be answered
+# on a cadence that is NOT "when someone tries to ship". Persistent makes a
+# host that was asleep at the due moment run it once on wake rather than
+# silently skip to the next window — otherwise a laptop answers the question
+# strictly less often than a server and nothing says so.
+Persistent=true
+Unit=tillandsias-release-tier.service
+
+[Install]
+WantedBy=timers.target

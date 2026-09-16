@@ -7000,6 +7000,80 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 eprintln!("error: resolved packet has no packet_id");
                 std::process::exit(1);
             };
+
+            // ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION.
+            //
+            // `status: in_progress` is the one write whose whole purpose is to
+            // tell a coordinator WHOM TO ASK. Defaulted, it records the compiled
+            // platform (772-4se9, deliberate and unit-tested), so every host on
+            // one platform claims under the same name and the sweep that has to
+            // name one cannot. MEASURED 2026-09-15: this coordinator asked the
+            // wrong host to release a live claim, and after the channel fix
+            // (1198-7q95) the same wrong message was still constructible,
+            // because 1155-jurn reads `claimant:windows` and esme and yolanda
+            // are both windows.
+            //
+            // ROUTE (a) OF THE THREE THE ROW RECORDS, chosen because it is the
+            // only one that keeps 772-4se9's guarantee AND its test
+            // byte-identical: the default is untouched everywhere else, and the
+            // claim is refused rather than mis-attributed. It makes a discipline
+            // that was already written down mechanical — the worker skill's
+            // canonical claim has passed `--host "$(hostname -s)"` all along,
+            // and the claims that landed as `linux` were the ones that did not
+            // follow it.
+            //
+            // NARROW BY CONSTRUCTION. It fires only when the host would be the
+            // COMPILED PLATFORM: an explicit `--host` always wins (even
+            // `--host linux`), and TILLANDSIAS_HOST_KIND=forge still answers, so
+            // the forge lane is untouched. Only the platform fallback — the one
+            // string that cannot identify a machine — is refused.
+            //
+            // PLACED HERE, BEFORE THE LIST/SCALAR SPLIT, AND THAT IS LOAD-BEARING.
+            // set-field resolves the writer host in TWO places, once per branch
+            // (1184-tj2q added the list arm). The first draft of this guard went
+            // into the first `flagged("--host")` the file offered, which is the
+            // LIST arm — and `status` is a scalar, so the guard was never reached
+            // and a claim with no host still wrote `host: linux`. The fixture's
+            // arm 1 caught it. A guard that must hold for a field belongs above
+            // every branch that field can take.
+            //
+            // AN EXPLICIT --host ALWAYS WINS, INCLUDING `--host <platform>`.
+            // The defect is a SILENT DEFAULT producing a claim nobody can
+            // attribute; an explicit platform is a deliberate, traceable choice
+            // by someone who can be asked why. Refusing that too would leave no
+            // override at all, and a guard with no escape hatch is an argument
+            // for reaching past it — the same reasoning that makes a narrow
+            // override better than `--no-verify`. So the condition tests
+            // ABSENCE of the flag, not the value of the resolved host.
+            {
+                let host_flag_given = args.iter().any(|a| a == "--host");
+                let claim_host = resolve_writer_host();
+                if field == "status"
+                    && value == "in_progress"
+                    && !host_flag_given
+                    && claim_host == std::env::consts::OS
+                {
+                    eprintln!(
+                        "refused:set-field:claim-without-a-host — a claim on '{pid}' would record \
+                         its holder as '{claim_host}', the compiled platform, which every host on \
+                         this platform shares (1201-hsf9).\n\
+                         \n\
+                         WHY THIS IS REFUSED RATHER THAN DEFAULTED. A claim's whole purpose is to \
+                         tell a coordinator whom to ask to let go. Two hosts claiming as \
+                         '{claim_host}' are indistinguishable exactly when a sweep needs to name \
+                         one, and the coordinator then asks the wrong host — measured twice on \
+                         2026-09-15.\n\
+                         \n\
+                         REMEDY, which the worker skill already prescribes:\n\
+                           set-field {pid} status in_progress --host \"$(hostname -s)\" --reason ...\n\
+                         \n\
+                         An explicit --host always wins, including --host {claim_host} if you \
+                         genuinely mean the platform. Every other field and every other status \
+                         value is unaffected; the 772-4se9 platform default is unchanged."
+                    );
+                    std::process::exit(2);
+                }
+            }
             // ORDER 1184-tj2q — A LIST IS NOT AN UNSET SCALAR, AND TREATING IT
             // AS ONE MAKES THE ROW VANISH.
             //
@@ -7142,6 +7216,84 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                         "       retired words (claimed, stalled, provisional, failed-retryable, parked, tested) are invalid to write — see methodology/distributed-work.yaml status_transition_protocol"
                     );
                     std::process::exit(1);
+                }
+                // ORDER 1211-q9bm — REFUSE A TERMINAL FLIP THAT WOULD STRAND THE
+                // LONG-RUNNING VIEW, at the flip rather than at someone else's gate.
+                //
+                // plan/long-running.md is a filtered view of ACTIVE multi_cycle
+                // packets, so a terminal packet must leave it.
+                // check-long-running-view.sh enforces that correctly — but it runs
+                // inside the gate (build.sh), so the refusal fires for WHOEVER LANDS
+                // NEXT. Measured 2026-09-15: completing 330 left its row behind, and
+                // the fleet-wide land block was paid for by yoga, who had to prove
+                // the refusal was not theirs, find the owner, and decide whether
+                // editing another host's lane was acceptable. The author never saw it.
+                //
+                // The checker's own message already names the right moment — "remove
+                // each stale one, in the same commit as the change that moved it" —
+                // which is a COMPLETION-TIME instruction delivered at LAND TIME to a
+                // different person. Everything needed to say it earlier is here: the
+                // packet, the new status, multi_cycle, and the view's contents.
+                //
+                // NOT A REPLACEMENT FOR THE LAND-TIME CHECK. That stays: a flip made
+                // by anything that bypasses set-field would strand the view again,
+                // and this guard cannot see those. Same reasoning as 940-f77j — the
+                // early refusal is a courtesy to the author, the gate is the backstop.
+                //
+                // Same shape as the fragment-status-loss precedent recorded at
+                // evidence_event_shape() above, where a checker refused AFTER the
+                // write and AFTER a commit and cost this host two cycles in an hour.
+                if tillandsias_plan::is_terminal_status(&value)
+                    && packet
+                        .get("multi_cycle")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                {
+                    let view_path = std::env::var("TILLANDSIAS_LONG_RUNNING_VIEW")
+                        .unwrap_or_else(|_| "plan/long-running.md".to_string());
+                    if let Ok(view) = std::fs::read_to_string(&view_path) {
+                        // The view keys rows by ORDER, in the same `| <order> |`
+                        // shape the checker parses (its view_orders() sed).
+                        let order = packet
+                            .get("order")
+                            .map(|o| match o {
+                                serde_yaml::Value::Number(n) => n.to_string(),
+                                serde_yaml::Value::String(s) => s.clone(),
+                                _ => String::new(),
+                            })
+                            .unwrap_or_default();
+                        // Mirror the checker's parser rather than inventing a second
+                        // one: its view_orders() is
+                        //   sed -n 's/^| *\([0-9][0-9a-z-]*\) *|.*/\1/p'
+                        // i.e. a leading pipe, the order token as the FIRST CELL,
+                        // then a pipe. Comparing the trimmed first cell says exactly
+                        // that without a regex, and keeps the two in step — a looser
+                        // match here would refuse a row the gate does not see.
+                        let listed = !order.is_empty()
+                            && view.lines().any(|l| {
+                                let t = l.trim_start();
+                                t.starts_with('|')
+                                    && t[1..]
+                                        .split('|')
+                                        .next()
+                                        .is_some_and(|cell| cell.trim() == order)
+                            });
+                        if listed {
+                            eprintln!(
+                                "error: '{order}' is multi_cycle and still listed in {view_path}, which is a filtered view of ACTIVE multi_cycle packets."
+                            );
+                            eprintln!(
+                                "       Remove its row in the SAME COMMIT as this status change (the wording check-long-running-view.sh uses)."
+                            );
+                            eprintln!(
+                                "       Refused here rather than at land time, where the cost falls on whoever lands next rather than on you (1211-q9bm)."
+                            );
+                            eprintln!(
+                                "       The prose columns are editorial and cannot be generated, so the row is yours to delete — not this tool's."
+                            );
+                            std::process::exit(1);
+                        }
+                    }
                 }
                 let cur_rank = tillandsias_plan::closure_rank(&current);
                 let new_rank = tillandsias_plan::closure_rank(&value);
@@ -8131,6 +8283,35 @@ fn expire_claim_candidates<'a>(
             }
         }
 
+        // ORDER 1198-7q95 — THE STATUS CHANNEL FIRST, HERE TOO.
+        //
+        // 1065-4t7t corrected the sibling `live_claims` for exactly this and
+        // left THIS function on the event channel, so the two halves of one
+        // instrument disagreed about who holds a claim. The event scan above
+        // finds the newest event whose summary READS like a claim, which is
+        // prose; the status entry that actually set `in_progress` is a fact,
+        // and the fold already records which entry won.
+        //
+        // MEASURED on the live ledger 2026-09-15: 888-miiy carried a status
+        // write of 2026-09-15T07:36:36Z (yoga's claim, 35 minutes old) and an
+        // unrelated `progress` event from 2026-09-01 by another host. This
+        // function reported "2026-09-01T23:04:53Z claimant:lenovinha", the
+        // coordinator acted on it and asked the wrong host to release work it
+        // had never held, and `--write` would have returned a live claim to
+        // ready — 1140-d6ni's duplication produced by the instrument built to
+        // prevent it.
+        //
+        // The event path stays as the fallback for a status that came from the
+        // base index, which carries no claimant; prose is the thing that
+        // failed, so it is not the primary.
+        let lease = ledger
+            .status_lease_of(pid)
+            .filter(|(h, t)| !h.is_empty() && !t.is_empty());
+        if let Some((h, t)) = lease {
+            claim_host = Some(h);
+            claim_ts = Some(t);
+        }
+
         let mut last_ts: Option<String> = None;
         if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
             for ev in seq {
@@ -8155,6 +8336,25 @@ fn expire_claim_candidates<'a>(
                 }
             }
         }
+
+        // ORDER 1198-7q95 — SETTING A CLAIM *IS* ACTIVITY, so the claim's own
+        // timestamp is a floor under the row's last activity, exactly as
+        // `live_claims` treats it ("a row whose only record is the claim
+        // itself takes the claim ts as its last activity").
+        //
+        // Without this floor the lease fix above would be half a fix: the
+        // event loop keeps only the CLAIMANT's own events, and a claimant
+        // recorded as a platform (`linux`, the deliberate default of
+        // 772-4se9) matches no event written by a workstation, so a freshly
+        // claimed row would fall through with last_ts = None and be reported
+        // as unknown-age rather than young. A claim made a minute ago is not
+        // a row of unknown age.
+        if let Some(ct) = claim_ts
+            && last_ts.as_deref().is_none_or(|cur| ct > cur)
+        {
+            last_ts = Some(ct.to_string());
+        }
+
         // ORDER 864-k8dp — A REAP HOLD THE REAPER CAN ACTUALLY SEE.
         //
         // The reaper decides on ONE fact: time since the last event. It cannot

@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from macbookair's measurement across nine land logs, with this
+# coordinator's own logs as the contrasting regime.
+packets:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    order: 1203-dzxn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [land-tool, gate, multi-host, platform-branches, fail-loud]
+    estimated_hours: 4
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      A platform host's land exits at attempt 1, so 1174-u5wp's stamp adoption never runs and each lost race costs a whole gate
+    context: |
+      MEASURED BY macbookair ACROSS ALL NINE OF THEIR LAND LOGS, with a control:
+      max_attempt = 1 on EVERY one of the nine, and `land-adopts-valid-stamp`
+      appears in 0 of 9, while a control search confirms `attempt 1` appears in
+      9 of 9. So the retry loop does not run on their refusals at all.
+      TWO CAUSES THAT COMPOUND, and fixing either alone is insufficient.
+      (1) CLASSIFICATION EXITS THE LOOP. A mandated-merge refusal is classified
+      "not a lost race, so retrying cannot help" and the script EXITS at attempt
+      1. macuahuitl's refusal was classified a lost race, looped to attempt 2,
+      and adopted the stamp — `ok:land-adopts-valid-stamp` — reaching the push
+      in seconds. So the classification is not a message: IT DECIDES WHETHER
+      THE LOOP CONTAINING THE ADOPTION EVER RUNS.
+      (2) THE MANDATED MERGE STALES THE STAMP ANYWAY. The merge of trunk is
+      mandated before every push of a NON-linux-next branch. macuahuitl is ON
+      linux-next, never merges, and its tree is therefore byte-identical across
+      attempts, which is exactly the condition 1174-u5wp's adoption requires.
+      Every platform host must merge, which changes tracked bytes and
+      legitimately invalidates the stamp. macbookair's manual re-runs confirm
+      it: each re-gated, ~900-1100s apiece.
+      THE COST, in their numbers: 3 of 9 lands refused on push-failed, each
+      costing a full gate, against a median land of 915s. On macuahuitl a lost
+      race costs ONE gate total however many attempts it takes.
+      TWO CANDIDATE FIXES ARE RECORDED HERE WITH THEIR DISPROOFS, so the next
+      reader does not rediscover them expensively. macbookair proposed both and
+      declined to choose, correctly.
+      (a) GATE ONCE, THEN MERGE-AND-PUSH IN THE LOOP. This makes the gate
+      attest a tree that no longer exists at push time — the pushed bytes would
+      be ungated, which is the single thing the stamp exists to prevent, and it
+      is worst on a platform host because the post-gate merge is the one
+      carrying everyone else's changes.
+      (b) SCOPE THE STAMP SO A PURE TRUNK MERGE DOES NOT INVALIDATE IT. This is
+      the union-is-green assumption and it is FALSE HERE WITH EVIDENCE: on
+      2026-08-15 both sibling branches were green on their own --check gates,
+      the coordinator merged them, and THE UNION FAILED NINE LITMUS STEPS. A
+      stamp surviving a trunk merge asserts precisely what that incident
+      disproved, and would be most wrong when trunk moved most.
+      WHAT LOOKS TRUE INSTEAD, and wants ratifying rather than implementing:
+      THE RELAY LANE IS THE DESIGNED ANSWER, NOT AN ESCAPE HATCH. macbookair's
+      own corroborating detail is the proof — their work/<order> push reported
+      `ok:linux-next-merged:0`, because a work/ ref matches no platform pattern,
+      so no mandated merge, so the tree stays stable and the gate attests
+      exactly the bytes that land. That is the one shape in which a platform
+      host gets what a trunk host gets for free.
+      SO THE DEFECT MAY BE ORDERING AND DOCUMENTATION RATHER THAN CODE: the
+      refusal text (corrected earlier the same day) still frames re-running as
+      the primary path and the relay as the fallback, which is backwards for
+      every non-linux-next host, since for them the loop never runs and the
+      merge would stale the stamp if it did.
+    exit_criteria:
+      - 'a platform host that loses a race is told the relay lane FIRST, before any suggestion to re-run, and the message says why re-running re-gates on a branch that must merge (pre-fix result: FAILS — current text names re-running first)'
+      - 'either the retry loop is reached on a mandated-merge refusal, or the refusal states explicitly that no retry will occur, so a reader is never told to retry by a tool that will not'
+      - 'NEGATIVE CONTROL: neither candidate (a) nor (b) is adopted without a separate decision recorded against its disproof above — a fix that makes the gate attest bytes it did not see, or that assumes a merge of two green trees is green, is refused'
+      - 'macbookair re-measures max_attempt across a fresh set of lands and the distribution has changed, or the row records that it has not'
+    unscoreable: |
+      unpinnable-until-the-lane-question-is-ratified: the deliverable depends on
+      whether the fleet treats the relay lane as the first-class path for
+      platform code lands (documentation and message ordering) or changes the
+      land tool's control flow (code, with both known candidates disproved
+      above). The measurement is complete and the design choice is not made, so
+      this row is a decision before it is a change.
+    events:
+      - type: filed
+        ts: "2026-09-15T17:47:36Z"
+        agent_id: "linux-macuahuitl-claude-20260915t174736z"
+        host: macuahuitl
+        summary: |-
+          macbookair measured max_attempt=1 across nine land logs with a
+          control, and found the adoption loop is never reached rather than
+          failing to fire. Filed with both candidate fixes and their disproofs
+          recorded, because one of them is the union-is-green assumption this
+          fleet already measured as false.

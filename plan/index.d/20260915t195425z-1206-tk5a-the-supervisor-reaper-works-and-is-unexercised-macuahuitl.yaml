@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Rewritten before landing, twice, as the evidence for it was retracted twice.
+packets:
+  - packet_id: the-supervisor-lost-reaper-works-and-has-never-been-exercised-so-its-empty-log-is-correct-and-carries-no-information-either-way
+    order: 1206-tk5a
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [metrics, instrument, fail-loud, timing, multi-host]
+    estimated_hours: 2
+    owned_files:
+      - scripts/timing-log.sh
+    title: |
+      The -supervisor-lost reaper is demonstrated to work and has never fired on either host, so nothing distinguishes unexercised from broken
+    context: |
+      THIS ROW WAS DRAFTED AS A DEFECT AND IS FILED AS SOMETHING MUCH SMALLER,
+      after its evidence was retracted twice. The drafting history is kept
+      because it is the finding's best argument.
+      DRAFT 1 claimed the reaper had failed to catch a real event: pirria's log
+      carried zero `-supervisor-lost` records including for the 2026-09-04
+      forge-lane supervisor kill. pirria retracted it themselves with a
+      denominator — THEIR LOG BEGINS 2026-09-05. The instrument did not exist
+      when that kill happened and could not have caught it.
+      DRAFT 2 leaned on macuahuitl as the strong leg: 111,167 records, 694
+      distinct step names, 2026-08-26 to 2026-09-15, zero matches, with
+      `smoke-forge-lane` present so the reapable step has genuinely run. That
+      is a rich denominator and it still does not support the claim, because
+      NOTHING ESTABLISHES THAT A STAMPED STEP EVER LOST ITS SUPERVISOR IN THAT
+      WINDOW. A null over a large denominator is a better null, not a positive.
+      THE REAPER WORKS, AND pirria DEMONSTRATED IT RATHER THAN ARGUING IT.
+      Forced the condition hermetically (TILLANDSIAS_TIMING_LOG and
+      TILLANDSIAS_TIMING_STAMP_DIR both honoured, production log verified
+      untouched afterwards): timing_begin smoke-forge-lane, kill -9 the writer,
+      timing_reap in a fresh shell produced
+      {"step":"smoke-forge-lane-supervisor-lost","phase":"smoke",
+      "duration_ms":8153,"exit":1} and consumed the stamp. Every property
+      1026-ps4n designed is present — a distinct step name that can never
+      average into real timings, exit=1 for a failed MEASUREMENT rather than
+      failed work, and a duration that is an explicit lower bound.
+      THE NEGATIVE CONTROL IS WHAT MAKES THAT MEAN ANYTHING: same stamp, writer
+      left ALIVE, reap leaves the count unchanged and the stamp unconsumed. So
+      it discriminates rather than merely emitting.
+      AND THE KILL-SHAPE OBJECTION IS ANSWERED STRUCTURALLY, WHICH IS STRONGER
+      THAN THE EXPERIMENT. This coordinator required proof that a deliberate
+      SIGKILL orphans a stamp the same way a harness reap does, since otherwise
+      a green forced test licenses nothing. Verified in the source at
+      scripts/timing-log.sh:196: the ONLY liveness test is
+      `kill -0 "$_pid" && continue` — no signal, no exit status, no parentage,
+      no cgroup. Any death that removes the pid orphans the stamp identically,
+      BY CONSTRUCTION.
+      SO THE CLAIM IS: the reaper works, has never been exercised on either
+      host in its logged window, and the empty log is therefore CORRECT.
+      WHY IT IS STILL A ROW, AND IT IS THE ONLY PART THAT SURVIVED BOTH
+      RETRACTIONS: an unexercised guard must not be read as a passing one, and
+      NOTHING IN THE LOG DISTINGUISHES THE TWO. Absence of a step name means
+      "did not happen" for every other step in that file, so a reader asking
+      whether this host loses supervisors gets a confident negative from an
+      instrument that had never, until 2026-09-15, been shown able to produce a
+      positive at all.
+      A RESIDUAL HOLE, NAMED AND DELIBERATELY NOT FILED AS ITS OWN ROW. The
+      stamp records a bare pid, and `kill -0` on a REUSED pid succeeds — so a
+      stamp whose writer died and whose pid was later recycled reads as live,
+      is skipped forever, and leaves the stamp behind silently. The mechanism is
+      real in the source read above. It is UNOBSERVED: no such stamp has been
+      found. pirria declined to file it on the ground that this row had already
+      spent two retractions on exactly the hypothesis-versus-observation
+      distinction, and a third would have the row teaching the opposite of its
+      own lesson. Recorded here instead, with the cheap hardening they named
+      (record /proc/<pid>/stat field 22 beside the pid and require both to
+      match) and with the condition that would promote it to a row: a stamp
+      found in pending/ whose pid belongs to an unrelated live process.
+      ONE METHOD NOTE WORTH MORE THAN THE ROW. pirria ran the forced test
+      against a scratch log rather than the production one, unprompted. Writing
+      a synthetic `supervisor-lost` row into the real log would have been
+      INDISTINGUISHABLE FROM A REAL EVENT to every later reader — this row's own
+      defect, committed by its own investigation. That is 1204-3s2s's shape
+      arriving inside the investigation of a different row.
+    exit_criteria:
+      - 'the reaper is demonstrated to fire on a SECOND host, hermetically, with the same positive-and-negative-control pair (pre-fix result on macuahuitl: NOT DEMONSTRATED — the instrument has never produced a positive here)'
+      - 'NEGATIVE CONTROL: a normally-completed step produces its ordinary record and NOT a supervisor-lost one, so the demonstration does not prove the reaper fires indiscriminately'
+      - 'a reader can distinguish "unexercised" from "working" without running the experiment — a recorded meaningful-since date, a heartbeat, or a self-test, so an empty log stops being ambiguous'
+      - 'the forced test is hermetic by construction on every host that runs it: the production timing log is byte-identical afterwards, verified and not assumed'
+    unscoreable: |
+      unpinnable-until-the-distinguishability-mechanism-is-chosen: whether an
+      empty reap log becomes readable via a recorded since-date, a periodic
+      self-test, or a counter of stamps successfully reaped is a design choice,
+      and the cheapest is not obviously the most honest. The instrument's
+      correctness is now demonstrated and is NOT what this row is about.
+    events:
+      - type: filed
+        ts: "2026-09-15T19:54:25Z"
+        agent_id: "linux-macuahuitl-claude-20260915t195425z"
+        host: macuahuitl
+        summary: |-
+          Filed at p3 after two retractions took it from "the reaper missed a
+          real event" to "the reaper works and has never been exercised". pirria
+          retracted their own half with a denominator, then forced the condition
+          and demonstrated the instrument firing with a discriminating negative
+          control. What survives is narrow and real: an unexercised guard must
+          not be read as a passing one, and nothing in the log says which it is.

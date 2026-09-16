@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha, whose completion produced the refusal someone else paid for.
+packets:
+  - packet_id: the-long-running-view-is-checked-at-land-time-so-a-stale-row-is-paid-for-by-whoever-lands-next-rather-than-by-whoever-created-it
+    order: 1211-q9bm
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, gate, fail-loud, coordination, tooling]
+    estimated_hours: 2
+    parent_order: 251
+    unscoreable: "unpinnable-until-the-refusal-moves: the deliverable is the timing. Future litmus scripts/test-long-running-view-refuses-at-completion.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: flipping a multi_cycle packet to a terminal status without removing its plan/long-running.md row is REFUSED by set-field at completion time, naming the row to delete (pre-fix result: FAILS — the flip succeeds silently and check-long-running-view.sh refuses later, at build.sh:3954, for whoever lands next); NEGATIVE CONTROL: a terminal flip on a packet that is NOT multi_cycle, or whose row is already absent, is not refused — the check must not become a tax on every closure."
+    owned_files:
+      - scripts/check-long-running-view.sh
+    title: |
+      check-long-running-view.sh runs in the land gate, so a stale row costs the NEXT HOST TO LAND a full gate — the author of the staleness is never the one who is told about it.
+    context: |
+      MEASURED 2026-09-15, and the author is the filer. I completed order 330 on
+      the operator's ratification. 330 is multi_cycle with NO verification gate,
+      so self-completion was legitimate and the closure stands. What I did not do
+      was remove its row from plan/long-running.md, which the view declares to be
+      a filtered view of ACTIVE multi_cycle packets — so a terminal packet must
+      leave it.
+        violation:long-running-view:missing=0:stale=1
+          stale: 330
+      THE COST LANDED ON SOMEONE ELSE. The check runs at build.sh:3954, inside the
+      gate, so the refusal fires for whoever lands NEXT — tonight yoga, who had to
+      verify the refusal was not theirs (they moved their own fragment out of the
+      tree and re-counted references to prove it), locate the owner, and decide
+      whether to edit another host's lane. The person with the least context pays,
+      and the person who could have fixed it in the same keystroke never sees it.
+      THE CHECKER ITSELF NAMES THE RIGHT MOMENT and cannot enforce it: its message
+      says the removal belongs "in the same commit as the change that moved it".
+      That is a completion-time instruction delivered at land time, to a different
+      person. Everything needed to refuse earlier is present at the flip —
+      set-field knows the packet, knows the new status is terminal, and can read
+      whether multi_cycle is true and whether a row exists.
+      WHY NOT JUST GENERATE THE VIEW: the checker explains that too, and it is
+      right — "the prose columns are editorial and cannot be generated — that is
+      why this checks membership, not rendering". The fix is not to auto-write the
+      file; it is to refuse the FLIP that would strand it, naming the row.
+      CLASS. This is the shape the fleet has been finding all day from other
+      angles: a correct guard whose verdict reaches the wrong reader. 1196-5hva
+      was a classifier whose bucket names prescribe an action to someone who
+      cannot act; 1204-3s2s was a refusal that emitted nothing so the arms driving
+      it read zeros. Here the guard is correct, its message is correct, and its
+      TIMING sends it to a host that did not cause the condition and may not know
+      the lane.
+    exit_criteria:
+      - 'flipping a multi_cycle packet to a terminal status while its plan/long-running.md row is still present is REFUSED at completion time, naming the row to remove (pre-fix result: FAILS — the flip succeeds and the refusal surfaces later in someone else''s gate)'
+      - 'the refusal text is the checker''s own instruction, so the two cannot drift: the removal belongs in the same commit as the change that moved it'
+      - 'NEGATIVE CONTROL: a terminal flip on a non-multi_cycle packet, or one whose row is already gone, is not refused — this must not become a tax on every closure'
+      - 'NEGATIVE CONTROL: the land-time check REMAINS. Moving the refusal earlier must not remove the backstop, or a flip made by a tool that bypasses set-field would strand the view silently again'
+    events:
+      - type: filed
+        ts: "2026-09-15T21:16:51Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed by the host whose completion caused the refusal, after yoga paid
+          for it at land time and said so rather than quietly cleaning up. The
+          closure of 330 was legitimate; the missing row removal was mine, and
+          the timing is what made it someone else's problem.

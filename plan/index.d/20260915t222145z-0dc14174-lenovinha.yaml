@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-long-running-view-is-checked-at-land-time-so-a-stale-row-is-paid-for-by-whoever-lands-next-rather-than-by-whoever-created-it
+    field: status
+    value: in_progress
+    ts: "2026-09-15T22:21:45Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-long-running-view-is-checked-at-land-time-so-a-stale-row-is-paid-for-by-whoever-lands-next-rather-than-by-whoever-created-it
+    event:
+      type: note
+      ts: "2026-09-15T22:21:45Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-15T22:21Z by linux-lenovinha-claude-20260914t185710z; filed this row after my own 330 closure blocked the fleet's land gate

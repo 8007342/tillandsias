@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha, against an arm lenovinha wrote the same night.
+packets:
+  - packet_id: the-agreement-fixtures-end-to-end-writer-arm-appends-to-the-hosts-real-metrics-and-asserts-on-counts-of-a-concurrently-written-file-so-binding-it-would-be-intermittent
+    order: 1209-hkcq
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [testing, fixtures, observability, metrics, fail-loud]
+    estimated_hours: 2
+    parent_order: 1125-92xa
+    verifiable_closure: bash scripts/test-metrics-log-path-agreement.sh — run it twice and assert .cache/metrics/forge-expert-usage.jsonl is unchanged both times
+    owned_files:
+      - scripts/test-metrics-log-path-agreement.sh
+    title: |
+      test-metrics-log-path-agreement.sh's arm 1c drives the real CLI writer, so every run appends three records to THIS HOST's forge-expert-usage.jsonl and asserts on a count of a file other processes also write — the precise reason the orphan sweep's FIX_FIRST label is still correct.
+    context: |
+      MEASURED on lenovinha 2026-09-15, five consecutive runs, each 17/17 and
+      each mutating host state:
+        .cache/metrics/forge-expert-usage.jsonl   4803 -> 4806   (+3 per run)
+        .cache/metrics/tillandsias-timing.jsonl   54849 -> 54850 (+1 per run)
+      The tracked tree is untouched, which is why this passes every
+      dirty-worktree check and looks hermetic from the outside.
+      ARM 1C IS MINE. I added it to 1125-92xa earlier the same night, correctly,
+      because arm 1b compares RESOLVERS and would pass a writer that resolves
+      properly and then appends somewhere else. So 1c drives log_cli_usage end to
+      end — and the writer anchors on the EXECUTABLE's checkout (1125-92xa's own
+      design, chosen so a binary run from an arbitrary cwd does not litter), which
+      means the executable under test is THIS repo's binary and its records land
+      in THIS repo's .cache/metrics. The arm then asserts _canon_after >
+      _canon_before against that same live file.
+      TWO DEFECTS, and the second is why it cannot be bound:
+        1. POLLUTION. A fixture that asserts about a log should not be a writer
+           to it. Three usage records per run enter the host's real series and
+           are indistinguishable from genuine CLI usage in any later reading.
+        2. RACE. The assertion is a count comparison on a file other processes
+           write concurrently. Inside a gate, any other step invoking
+           tillandsias-plan moves the baseline between the two reads. It can pass
+           for the wrong reason, or fail for a reason having nothing to do with
+           the writer — "intermittent, misattributed gate failure" verbatim, which
+           is what the orphan-disposition sweep said about this file when it
+           classified it FIX_FIRST and declined to wire it.
+      SO THE FIX_FIRST LABEL IS CORRECT AND NOW HAS A NAMED CAUSE. The sweep's own
+      recorded reason is TRUNCATED MID-SENTENCE in the ledger ("...and a 13GB
+      floor host is unaffecte"), so a later claimer cannot evaluate the blocker
+      from the record — which is its own small finding about how that disposition
+      was stored.
+      WHY THIS MATTERS BEYOND HYGIENE: this fixture is the natural home for the
+      metrics path-agreement contract, and while it stays unbindable, every arm
+      in it — including 1125-92xa's verification — is documentation rather than a
+      guard. 1204-3s2s had to be given its own bindable fixture for exactly this
+      reason.
+      NOT FIXED BY 1204-3s2s's GUARD: that watches /tmp/tillandsias-timing.jsonl,
+      the non-checkout fallback. This arm writes to the CANONICAL path, which the
+      guard deliberately does not treat as an offence — a step legitimately
+      writing its own host's metrics is not the split 1204-3s2s prevents.
+    exit_criteria:
+      - 'running the fixture twice leaves .cache/metrics/forge-expert-usage.jsonl byte-identical (pre-fix result: FAILS — +3 records per run, measured five times)'
+      - 'arm 1c still drives the REAL writer end to end rather than comparing resolvers — it must keep failing against a binary that resolves correctly and appends elsewhere, which is why the arm exists'
+      - 'the arm asserts against a log it alone controls, so no concurrent writer can move its baseline'
+      - 'NEGATIVE CONTROL: with the writer reverted to a hardcoded /tmp path, arm 1c still FAILS — the hermetic rework must not turn it into a resolver comparison'
+    events:
+      - type: filed
+        ts: "2026-09-15T20:25:33Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed and claimed by the author of the arm. Found while testing whether
+          the orphan sweep's FIX_FIRST blocker on this fixture was stale: it is
+          not, and the reason is an arm I added the same night.

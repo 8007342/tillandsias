@@ -584,6 +584,57 @@ printf '%s\n' "ok:gh-keyring-push-verified-hook-refused" | grep -qE "$grammar" \
     && ok "the new verdict matches the pinned grammar (no second colon)" \
     || bad "the new verdict breaks litmus:credential-channel-check-shape"
 
+# ── 10. ORDER 778-hb3x: an error verdict SAYS WHICH ERROR. ──────────────────
+# The mirror's probe cannot answer without a ref, and it publishes `error` for
+# that. It also publishes `error` for a transport failure. Before 778-hb3x both
+# arrived here as the same bare token and this guard told the operator
+# "(network/transport failure?)" either way — so an unseeded mirror and a dead
+# network produced identical text, and the remedy for one is futile for the
+# other. That is the conflation the row is about, and it lived on BOTH sides.
+#
+# forge_upstream_auth_verdict takes its ls-remote source as $1 — a seam the
+# guard already documents for fixtures — so these arms build scratch BARE repos
+# carrying the published refs and read the message. Hermetic: no mirror, no
+# network, no credential, and no absolute timestamp (the epoch is computed).
+_auth_src_with() {   # $1 = the ref path under refs/tillandsias/upstream-auth/
+    local d; d="$(mktemp -d)"
+    git init -q --bare "$d"
+    local blob; blob="$(printf '' | git -C "$d" hash-object -w --stdin)"
+    git -C "$d" update-ref "refs/tillandsias/upstream-auth/$1" "$blob"
+    printf '%s' "$d"
+}
+# The guard ends in a standalone block that runs and exits, so it cannot be
+# sourced. Extract the two functions with awk — the idiom
+# litmus-forge-clone-reachability-probe-shape uses on probe_mirror_reachable —
+# and prove the extraction is non-empty BEFORE any arm reads a verdict from it:
+# an empty eval would make every message assertion below fail for the wrong
+# reason, or worse, pass on an empty string.
+_ccc_fns="$(awk '/^_ccc_timeout\(\) \{/,/^\}/' "$GUARD"; awk '/^forge_upstream_auth_verdict\(\) \{/,/^\}/' "$GUARD")"
+case "$_ccc_fns" in
+    *forge_upstream_auth_verdict*_ccc_timeout*|*_ccc_timeout*forge_upstream_auth_verdict*) : ;;
+    *) bad "778-hb3x PREMISE: could not extract the verdict functions from the guard; the arms below would be vacuous" ;;
+esac
+eval "$_ccc_fns"
+
+_now="$(date +%s)"
+for case_spec in     "error/no-local-heads/$_now|NO LOCAL HEADS|no-local-heads names the unseeded mirror"     "error/transport/$_now|network or transport failure|transport still reads as a transport failure"     "error/$_now|network/transport failure?|a reasonless error keeps the legacy wording"
+do
+    ref="${case_spec%%|*}"; rest="${case_spec#*|}"; want="${rest%%|*}"; label="${rest#*|}"
+    src="$(_auth_src_with "$ref")"
+    msg="$( ( set +e; forge_upstream_auth_verdict "$src" ) 2>&1 )"
+    case "$msg" in
+        *"$want"*) ok "778-hb3x: $label" ;;
+        *) bad "778-hb3x: $label — wanted '$want', got: $(printf '%s' "$msg" | tr '\n' ' ' | cut -c1-160)" ;;
+    esac
+    # The VERDICT TOKEN must not move: consumers branch on it, and 778-hb3x
+    # changes what the operator reads, never what a caller tests.
+    case "$msg" in
+        *blocked:upstream-auth-error*) : ;;
+        *) bad "778-hb3x: the verdict token changed for $ref — consumers branch on it" ;;
+    esac
+    rm -rf "$src"
+done
+
 if [ "$fail" -eq 0 ]; then
     echo "ok:credential-channel-fixture:all"
     exit 0

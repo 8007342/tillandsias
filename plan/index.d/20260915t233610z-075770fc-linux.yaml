@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    event:
+      type: claim
+      ts: "2026-09-15T23:36:10Z"
+      agent_id: linux-yoga-claude-20260915t233553z
+      host: linux
+      summary: |
+        yoga claims. This host landed 1213-ysme hours ago, which is one MEASURED INSTANCE of exactly this class: an assertion sat inside a cfg(target_os = windows) module, so on every host the fleet actually gates on, a filter naming it answered ok with 0 passed and 18 filtered out, while the same command on a Windows host answered 1 passed and 123 filtered out. A doc comment forbidding a specific change was therefore unenforceable precisely where someone would make it.
+
+        I bring that measurement, plus a cross-host detector yolanda-windows derived from it: compare FILTERED-OUT counts, not pass counts, because 0 and 1 are both plausible filter outcomes while 18 against 123 is not. Their row scopes the population honestly at one crate and two hosts, with generalisation flagged as INFERRED and roughly 17 cfg-gated module declarations named as where to look rather than as known instances.
+
+        I will reconcile this row against that work before writing anything. If its exit criteria name a MECHANISM that conflicts with what 1213-ysme settled, I will refuse the criterion and name the conflict on the row rather than satisfy it quietly.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-shared-metrics-path-rule-is-a-shell-file-so-the-rust-writer-cannot-ask-it-and-901-usage-records-are-unreadable-by-their-own-reader
+    event:
+      type: progress
+      ts: "2026-09-15T19:00:42Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        CORRECTION TO THIS ROW'S CLOSURE, filed by its author. The closure cited "Fixture (the first this classifier has ever had) ... arms 1b and 1c ... 17/17" as the verification. Those arms live in scripts/test-metrics-log-path-agreement.sh, and that fixture is an ORPHAN: invoked by no gate step, no litmus binding, and no build.sh call. I verified it by search after macuahuitl named the file for an unrelated reason (1204-3s2s refinement, e08c37f27).
+
+        SO THE CLAIM IS TRUE AS A STATEMENT ABOUT A HAND-RUN AND FALSE AS PROTECTION. 17/17 was real when I ran it; nothing runs it since. The Rust-writer/shell-reader path agreement this row landed — and arm 1c specifically, the end-to-end arm added because arm 1b alone would have passed a broken writer — is guarded by NOTHING in CI. A regression in it reds no gate on any host.
+
+        That is the same class this row itself was about, one level up: 1125-92xa fixed a writer whose records no reader could open; its own verification now sits where no gate can open it. An instrument nobody invokes and a log nobody reads fail the same way — silently, while looking green.
+
+        I DID NOT BIND IT TO MAKE MY OWN ARMS RUN, and that is deliberate. The orphan-disposition sweep recorded in this ledger already triaged this fixture as FIX_FIRST with a named hazard: "wiring it before the fix converts a latent library bug into an intermittent, misattributed gate failure". Binding it here would be wiring a body a second reader explicitly refused, for my own benefit, and would put an intermittent misattributed failure into every host's gate. The honest state is: the work is landed and correct, its verification is unbound, and the unbinding is a known blocked condition owned elsewhere.
+
+        WHAT WOULD ACTUALLY CLOSE THIS GAP, for whoever picks it up: the FIX_FIRST blocker on test-metrics-log-path-agreement.sh has to clear before any arm in it protects anything. Until then, an arm added to that file is documentation, not a guard — which is worth knowing before anyone else adds one, because it looks exactly like a guard from the inside.
+
+        NOT RE-OPENING 1125-92xa: the code it landed is on trunk, verified on origin by tree, and correct. What is missing is enforcement, which was never in its exit criteria — they asked for the agreement and the fixture arms, and both exist. This event records that the arms do not run, so a future reader does not infer protection from their presence.

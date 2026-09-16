@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-15gib-floor-is-a-repeated-observation-not-a-single-one-but-it-still-does-not-widen-the-range-section-4a-asks-for
+    event:
+      type: note
+      ts: "2026-09-15T19:48:22Z"
+      agent_id: linux-pirria-opus5-20260915t162552z
+      host: pirria
+      summary: |
+        FORCED CONDITION RUN ON PIRRIA: THE REAPER FIRES. The instrument is UNEXERCISED, not broken, and the row should say so.
+
+        WHY THIS WAS RUN. Two hosts showed zero `-supervisor-lost` records with rich denominators (pirria 5,128 records / 319 step names; macuahuitl 111,167 / 694), and neither could distinguish "the instrument never fires" from "no stamped step ever lost its supervisor in the window". An empty log means the same thing in both cases and means ABSENCE for every other step name in the same file, so it would be read as a passing guard. The only way to separate them is to force the condition — the mutation-control move, applied to the instrument itself.
+
+        METHOD, hermetic, no real data touched. `TILLANDSIAS_TIMING_LOG` and `TILLANDSIAS_TIMING_STAMP_DIR` are both honoured (cycle-metrics.sh:304, timing-log.sh timing_stamp_dir), so the whole test ran against a scratch log and a scratch stamp dir. Verified after: `.cache/metrics/tillandsias-timing.jsonl` still 5,128 lines, `.cache/metrics/pending/` empty. Nothing synthetic entered the real record — a fabricated supervisor-lost row in the production log would be indistinguishable from a real event to every later reader, which is the defect this row is about, committed by its own investigation.
+
+        POSITIVE ARM — a stamped step whose supervisor dies:
+          timing_begin smoke-forge-lane smoke   (stamp: `smoke-forge-lane smoke 1789501671660 855640`)
+          kill -9 855640, confirmed dead by kill -0
+          timing_reap in a fresh shell
+          RESULT: {"ts":"2026-09-15T19:47:59Z","host":"pirria","step":"smoke-forge-lane-supervisor-lost","phase":"smoke","duration_ms":8153,"exit":1}
+          The stamp was consumed. The record carries the DISTINCT step name (so it can never average into real smoke-forge-lane timings), exit=1 for a failed MEASUREMENT rather than failed work, and a duration that is a lower bound because the end was never observed. Every property 1026-ps4n designed is present.
+
+        NEGATIVE CONTROL — a stamped step whose supervisor is ALIVE:
+          same stamp, writer left running, timing_reap
+          RESULT: supervisor-lost count before=1 after=1, stamp NOT consumed, still present.
+          So the reaper discriminates. Without this arm the positive proves only that it emits something, not that it emits for the right reason.
+
+        ON THE KILL-SHAPE CONCERN, and it is answered structurally rather than by experiment, which is stronger. The worry was that a deliberate SIGKILL might not orphan a stamp the way a harness reap does, so a green forced test would not license the conclusion. Reading timing_reap: its ONLY liveness test is `kill -0 "$_pid"` on the pid recorded in the stamp. It does not inspect signal, exit status, parentage, or cgroup. Any death that removes the pid orphans the stamp identically, so SIGKILL and a harness reap are indistinguishable TO THIS CODE by construction. The forced test therefore does license the conclusion.
+
+        ONE RESIDUAL HOLE, named because it is the only way the fired-correctly result could still mislead: PID REUSE. The stamp records a bare pid, and `kill -0` on a REUSED pid succeeds, so a stamp whose writer died and whose pid was later recycled reads as LIVE and is skipped forever — silently, and with the stamp left behind. On a long-lived host with a wrapping pid space that is not exotic. Cheap hardening if anyone wants it: record the writer's start time alongside the pid (`/proc/<pid>/stat` field 22) and require BOTH to match before treating it as live; a reused pid has a later start time. NOT filed as a defect and NOT fixed here — it is a hypothesis about a hole, not an observed failure, and this row has just spent two retractions on the difference.
+
+        WHAT THIS DOES TO THE ROW. The claim becomes: the reaper WORKS and has simply never been exercised on either host in its logged window, so the empty log is correct and is NOT evidence of failure. That is cheaper than "broken" and still worth recording, for the reason the row already gives — an unexercised guard must not be read as a passing one, and nothing in the log distinguishes the two. It also retires the pirria half of the original evidence: this host's log begins 2026-09-05 and the 2026-09-04 forge-lane kill predates it, so the missing record for that event was always explained by the instrument not existing yet.
+
+        REGIME: pirria, CachyOS kernel 7.2.4-3, 4 cores, 15 GiB total / ~12 GiB available, load 0.20, NVMe non-rotational 18% used. Concurrent: tillandsias-builder and tillandsias-dev-inference only; no gate, build or litmus run in flight. Both arms completed in seconds.

@@ -432,3 +432,189 @@ looked"* will eventually be read as the former.
   same trunk, same hour, opposite outcomes, because macbookair held a green
   stamp from a land PREDATING b3a93780b and macneo did not. That is why my
   "plan-only pushes work" generalisation was false one host over.
+
+- 2026-09-15 (cycle, 1084-x8ya step b): LANDED 5ba5e30ea. The behaviour was
+  already right — headless_service_line splits `inactive` on the timestamp, and
+  anything else falls to "NOT a failure by itself" — but NOTHING PINNED IT.
+  Measured with a control so the zero was real: `activating` 0 occurrences
+  against `headless_service_state` 13. Five arms, including a POSITIVE CONTROL
+  requiring a genuinely failed unit to still say FAILED; without it a mutation
+  making everything read benign would pass while destroying the report.
+  Falsified red by collapsing the mid-boot arm into the failed wording.
+- 2026-09-15: took 1084-x8ya despite the skip list, because the reason for the
+  skip ("owned elsewhere, macneo") had lapsed — macneo released it explicitly
+  and I verified status ready + no cross-branch claim BEFORE claiming, rather
+  than acting on the message. A skip list entry states a reason; when the reason
+  is gone, check the reason rather than obeying or ignoring the entry.
+- 2026-09-15: step (a) of that row advertised work already landed end to end —
+  the third stale next_action in two days (mine on 1183-j9dk, macneo's fix of
+  it, now this). Reading the row is not reading the tree.
+- 2026-09-15, macneo's lesson and the sharpest of the week: A CONTROL ON THE
+  WRONG QUESTION STILL ONLY VALIDATES THE WRONG QUESTION. They grepped the tray
+  for HandshakeFailure/downcast_ref, got zero, ran a positive control proving
+  the probe worked, and reported "the classification never reaches the poll
+  line" about their own complete commit. The tray prints {e}; Display does the
+  work. A flawless probe answering a different question. Discriminator: trace
+  the VALUE, not the NAME — one cargo test printing the rendered error settles
+  what three greps could not.
+- 2026-09-15: the peer_frame trap, measured in (a)'s own fixture. A plaintext
+  refusal of REALISTIC LENGTH reaches the AEAD check, so snow reports Decrypt
+  and the classification alone cannot be told from a real PSK mismatch — only a
+  very short blob reads as Input. peer_frame is the discriminator, not the
+  class. Anyone taking (c) on the class alone chases a PSK question that is
+  actually the guest's order-137 Unauthorized notice.
+- 2026-09-15 (1197-y6g6): TRUNK RED AGAIN, second in two cycles.
+  test-pre-push-honours-a-live-freeze.sh ARM 3b fails on macOS — a plan-only
+  push with NO stamp is refused instead of admitted. 18/19, freeze logic fine.
+  Reproduced on a pristine worktree of origin/linux-next. Blocks this cycle's
+  attestation; the WORK landed before the finalize (5ba5e30ea).
+  Different shape from 1193-yw6u: that was a macOS-SCOPED prover row, this is a
+  generic script whose assumption fails on a clean macOS checkout, so
+  1194-davi's platform-scoped inventory would not catch it.
+  The arm is the executable statement that the plan-only lane is a STAMP-FREE
+  ESCAPE HATCH — the property 1195-m9vi turns on.
+- 2026-09-15, MY OWN ERROR worth recording: I wrote that fragment with an
+  UNQUOTED heredoc, so the shell evaluated the backticks and $() inside the
+  YAML and corrupted it — strict-fragments caught it immediately
+  ("1 fragment(s) could not be read"). Removed and rewrote with <<'YML' plus a
+  sed for the order token. Earlier fragments survived only because they happened
+  to contain no backticks. Use a QUOTED heredoc for ledger YAML, always.
+- 2026-09-15 (1197-y6g6 resolved): NOT A macOS DEFECT. The owner reproduced it
+  on LINUX by removing tillandsias-plan from PATH — 18/19, identical refusal.
+  The scratch has no target/, so resolve_plan_binary falls through to
+  `command -v`, which succeeds only on a host with an installed copy. That is
+  1172-dyvd axis 14 (a fixture must shadow or declare every path the code under
+  test consults), not the platform-scoping class — 1194-davi correctly keeps its
+  scope, because widening it would hand it an inventory it cannot derive.
+- 2026-09-15, I PROPAGATED AN OVER-CLAIM. ARM 3b's name asserted the plan-only
+  lane is a "stamp-free escape hatch". The real contract is STAMP-FREE BUT NOT
+  VALIDATOR-FREE (1124-7f3u fails it closed without one, by design). I repeated
+  the arm's claim as the PREMISE of an argument about 1195-m9vi before checking
+  it against the code. A test's NAME is an assertion like any other and deserves
+  the same scepticism as its body — this one was wrong and travelled two rows.
+- 2026-09-15: that also explains macneo's refusal 3
+  (refused:fragments-to-trunk:no-validator) — not a defect, the lane failing
+  CLOSED in a checkout with nothing built. An escape hatch with an undocumented
+  precondition is indistinguishable from a broken one from inside the host that
+  needs it; both render as "I cannot write to the ledger". The arm's name was
+  exactly where that precondition could have been learned, and it said the
+  opposite.
+
+- 2026-09-15 (1201-t6ms): LANDED c04b5c002 after the first land refused on the
+  mandated-merge guard — trunk moved during a multi-minute gate, so osx-next no
+  longer contained origin/linux-next. The guard was right. I declined the
+  offered work/<order> relay-ref escape: that exists for a host that CANNOT
+  satisfy the merge policy, and mine can. Worth noting as a lane property: the
+  longer the gate runs, the likelier trunk moves beneath it, so a slow gate
+  makes its own push refusal more probable.
+- 2026-09-15 (920-pxg6 task 4.5, darwin half): a passing test can ride a CACHED
+  build and answer a different question than the one asked. mlua is `vendored`,
+  so portability is about compiling Lua's C source HERE — my first measurement
+  used a cached mlua and would have been reported as portability evidence.
+  Destroyed the cache and re-measured: 32 C objects, liblua5.4.a at ARM64,
+  7/7 runtime tests including both sandbox arms.
+- 2026-09-15, AND THE CLEAN NEEDED ITS OWN CONTROL: I printed "cleaned" from my
+  own echo after a `cargo clean -p mlua-sys 2>/dev/null` whose failure would
+  have been invisible. The 11s rebuild that never mentioned mlua was the tell.
+  A second clean reported "Removed 60 files, 7.6MiB" — THAT is the evidence the
+  clean applied. Never suppress the stderr of a command whose silence you are
+  about to treat as success.
+- 2026-09-15: pushed the 920-pxg6 claim flip ALONE and FIRST, plan-only, before
+  starting work — the rule taken from macuahuitl's status ask. Batching a claim
+  into the same commit as code hands it to a gate, and for the whole duration of
+  a build trunk cannot distinguish the claim from an idle host.
+- 2026-09-15: searching trunk for "920-pxg6" found ZERO while the claim fragment
+  WAS there — set-field fragments reference a packet by its packet_id SLUG, not
+  its order token. Caught by a positive control on a fragment I knew had landed.
+  Another probe asking the wrong question and answering it faithfully.
+- 2026-09-15 [CAUSE CORRECTED BELOW]: I LEFT FINISHED WORK READING `ready`. My
+  lane's instruction says "RELEASE THE CLAIM AT CYCLE END, unconditionally" and
+  I applied it literally,
+  flipping in_progress -> ready on 1201-t6ms after its fix had landed. RELEASING
+  A CLAIM AND CLOSING A ROW ARE DIFFERENT OPERATIONS: the instruction exists so a
+  claim is never stranded across cycles, not so a completed row advertises itself
+  as available. Effect: landed work sat in the ledger as unfinished and
+  plan_next kept offering it. 1155-jurn mirrored — esme's finished work read
+  in_progress, mine read ready. Closed as completed with the closure evidence
+  RE-RUN on the trunk-merged tree rather than cited from the landing cycle.
+- 2026-09-15: `set-field status completed` REFUSES without --evidence (650-dq6u,
+  a commit SHA plus a named check result). A good refusal — it makes a closure
+  cite something, and it is why macuahuitl declined to close my row from their
+  host: they had no run to cite, and a closure written by someone who did not
+  run the tests is what that gate exists to refuse.
+- 2026-09-15, CORRECTING THE ENTRY ABOVE — the cause was not my literal
+  reading. macuahuitl read the shared text instead of accepting my account, and
+  the rule was never wrong: skills/advance-work-from-plan/SKILL.md §4's body
+  says "Completed work moves to its terminal status (§7.2). Work you did NOT
+  finish goes back to `ready`". Its HEADING says "Release on exit,
+  unconditionally". The bolded imperative beat the qualifier one line below it.
+  I verified that in the file rather than taking it on report.
+  THIRD REINFORCEMENT I then found: the step's only CODE BLOCK shows the `ready`
+  form. Three surfaces — heading, prose, example — and the two you skim are the
+  wrong ones for finished work. Being careful does not help when the careless
+  reading is the one the layout teaches.
+  THE SHAPE, macuahuitl's words and the durable half: this is the MIRROR of
+  641-e2qa, which left 21 packets in_progress and hidden from ready and
+  burndown. "A rule written from one failure mode reads as absolute about the
+  other." Fixed in the shared skill so every host gets it, not in my lane.
+  AND NOTE WHAT THIS ENTRY IS: my file carried the wrong cause after the right
+  one existed in someone else's — a record true when written and stale by the
+  time it mattered, which is the thing this drill keeps re-learning.
+
+- 2026-09-15 (690-w94k criterion 4): the tray leaked a ZOMBIE PER NOTIFICATION —
+  three .spawn() sites dropped the Child, which on Unix does not detach it. The
+  comment at the first site was the defect's best disguise: "Detached — let it
+  complete in the background. macOS notifications fire near-instantly so we
+  don't need to await the child." The second clause is TRUE and is what makes
+  the first sound reasoned; a reviewer checking whether the author had thought
+  about it would find evidence that they had.
+- 2026-09-15: so the test COUNTS ZOMBIES (/bin/ps filtered to our own pid; no
+  /proc on darwin) rather than grepping for .wait(). A source-level test would
+  have passed on the broken code the moment that comment was written. It carries
+  a built-in control that first spawns raw children and REQUIRES zombies to
+  appear, so it cannot pass vacuously if the platform ever auto-reaps.
+  Falsified at 8 of 8.
+- 2026-09-15, A LANE PROPERTY I HAD BEEN MISREADING AS BAD LUCK: two consecutive
+  code lands refused on the mandated-merge guard. MEASURED: trunk took 18
+  commits in 3h and 9 in the last hour — one every ~6.7 min — against a gate
+  that runs longer than that here. A macOS code land cannot reliably win that
+  race by re-landing; it is arithmetic. That is the documented "policy your host
+  cannot satisfy" case, so work/690-w94k is the compliant path, not a way round
+  the guard. I declined the same hatch twice earlier today when the host COULD
+  satisfy it — the numbers changed the answer, not the inconvenience.
+- 2026-09-15: the refusal says "not a lost race, so retrying cannot help". True
+  of retrying the PUSH, false of what the tool already does — re-running it
+  merges trunk at attempt start. Taken at face value it sends you to hand-merge,
+  twice, before you think to measure. Reported to macuahuitl as wording rather
+  than filed as a defect: nothing incorrect landed and the guard is right.
+
+- 2026-09-15 (1207-n96g): the eligibility litmus arm asserted an oracle 723-fndi
+  RETIRED. podman was removed from the Darwin path deliberately because its
+  verdict printed skip:live-runtime-present with nothing running AND with a live
+  VM — a constant is not a probe. So the more thoroughly the arm stubbed podman,
+  the more certainly it failed. Scope measured: exactly ONE step, the
+  neighbouring wiring step passing at count=3.
+- 2026-09-15: THE REMEDY ALREADY EXISTED — scripts/e2e-preflight.sh's `fixture`
+  subcommand is green 4/4 on Darwin and already holds an override image open to
+  get a genuine verdict. The gap was that the litmus did not USE it. Third
+  instance this week of a remedy with nothing pointing at it (the others: a
+  next_action advertising landed work, and a symbol search asking whether a
+  consumer NAMES a type when it only prints its Display).
+- 2026-09-15, A NEAR-MISS ON MY OWN FALSIFICATION worth keeping: my first
+  mutation set holder=$$, so the step killed its own shell and reded by TIMEOUT.
+  It WAS red, and I could have banked it. But a mutation that reds a step for an
+  unrelated reason proves only that a step CAN fail — almost any step in the
+  suite would red the same way. Re-ran surgically (removing ONLY `exec 9<`,
+  keeping the process, sleep, kill and wait): output=eligible against
+  expected=skip:live-runtime-present. THE MUTATION MUST BREAK THE PROPERTY, NOT
+  THE STEP.
+- 2026-09-15: instrumented the land and found THIS ARM DOES NOT EXECUTE IN
+  ./build.sh --check. "The gate does not run litmus" would be FALSE and I nearly
+  wrote it — the log mentions litmus 122 times, but they are the META tier (YAML
+  parse gate, bindings reconciliation, coverage query, kill-time adjudicator),
+  not any spec's tests. So the gate validates that an arm PARSES and BINDS, and
+  never evaluates its assertion. Yoga's cross-tier finding, on my own change.
+- 2026-09-15: macuahuitl's refusal-wording fix is live — "retrying THIS PUSH
+  cannot help (not a lost race); merge trunk and re-gate". Fifth consecutive
+  lost race, and this time I went straight to the relay instead of re-running,
+  which is what the measurements argued for.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    field: status
+    value: ready
+    ts: "2026-09-15T23:42:46Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    event:
+      type: note
+      ts: "2026-09-15T23:42:46Z"
+      host: macuahuitl
+      summary: |-
+        criterion 2 discharged to the depth a Linux read allows; released for the macOS half and the narrower signature claim rather than held

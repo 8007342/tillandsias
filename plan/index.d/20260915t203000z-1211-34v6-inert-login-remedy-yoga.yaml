@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Split from yolanda's root cause on macuahuitl's ruling: the CWD dependency is
+# a design decision, this is a one-line text fix, and folding them would make
+# the cheap fix wait behind the expensive one while operators keep reading
+# advice that does nothing.
+packets:
+  - packet_id: the-github-login-refusal-advertises-an-environment-variable-its-own-resolver-never-reads-so-a-stuck-operator-following-the-message-gets-the-same-refusal-and-learns-nothing
+    order: 1211-34v6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [fail-loud, docs, credentials, tooling]
+    estimated_hours: 1
+    unscoreable: "not-scoreable-by-a-litmus-but-PINNED: the deliverable is the text of one refusal, and it is pinned by a Rust unit test landed in the same commit — crates/tillandsias-headless/src/main.rs, tests::github_login_refusal_names_a_remedy_that_works, which asserts the working remedy is named, that the tray lane's inability to satisfy it is STATED, and that TILLANDSIAS_PROJECT_REMOTE_URL is never offered as a fix. It runs in the standard cargo test phase of the gate, so this row IS scored — just not by a litmus, and I am not minting a litmus name to satisfy a vocabulary. A litmus here would shell out to grep a source string, which is strictly weaker than the unit test that already holds the constant. FALSIFIED: restoring the old 'or set TILLANDSIAS_PROJECT_REMOTE_URL' wording reds the test."
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The GitHub-login push-authorization refusal ends "or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again", and the resolver it guards never reads the environment — so the one remedy an operator can act on immediately returns them to the identical refusal
+    context: |
+      FOUND while helping yolanda-windows diagnose a login that succeeded and
+      then failed to list remote projects (2026-09-15). Their root cause is a
+      DIFFERENT defect — the push-authorization probe of order 759-vceg resolves
+      the repository from the process CWD, and the tray's login runs inside the
+      guest at /root where no checkout exists, so the refusal fires on every
+      attempt regardless of the token. That is filed separately by yolanda and
+      is the expensive half: where a login should resolve its repository from,
+      when the lane it runs in has no checkout by construction, is a design
+      decision. THIS ROW IS THE CHEAP HALF AND MUST NOT WAIT BEHIND IT.
+
+      MEASURED, and macuahuitl verified it independently before ruling on the
+      split: read_host_project_origin_url runs `git config --get
+      remote.origin.url` and falls back to parse_gitdir_origin_url, which reads
+      .git and gitdir-pointer files. sanitize_forge_origin_url has zero
+      env::var references. Nothing in that chain consults the environment.
+
+      TILLANDSIAS_PROJECT_REMOTE_URL IS REAL, which is exactly what made the
+      wrong advice plausible: it is pushed as a container arg, set by the
+      cloud-project resolver, and read by the cloud lanes and a post-receive
+      hook. It simply is not read by the resolver this check uses.
+
+      WHY IT IS WORTH A ROW RATHER THAN A QUIET EDIT: this is prose asserting
+      what the code does not do, sitting in an error message's REMEDY. That is
+      the worst location for the class, because it is read only by someone who
+      is already stuck, and it costs them a cycle of trying the thing that
+      cannot work before they doubt the message. yolanda lost time to it.
+    events:
+      - type: progress
+        ts: "2026-09-15T20:30:00Z"
+        agent_id: "linux-yoga-claude-20260915t203000z"
+        host: yoga
+        summary: |
+          FIX WRITTEN AND LANDING IN THIS COMMIT; the row is flipped to
+          completed in a follow-up carrying the landed SHA as evidence
+          (650-dq6u), because a closure needs a SHA that does not exist until
+          this lands. The replacement was constrained by macuahuitl's second
+          condition: replacing an inert remedy with SILENCE would be worse than
+          leaving it, because the operator would then have a refusal with no way
+          forward at all.
+
+          So the text now carries the remedy that was MEASURED to work rather
+          than the one that sounded right. From a host-side checkout, `git
+          config --get remote.origin.url` returns the repository; from a
+          directory without one it returns nothing. The CLI lane run inside a
+          checkout therefore resolves and reaches the probe.
+
+          And it says plainly that THE TRAY LANE CANNOT SATISFY IT, because
+          without that sentence an operator reads "run it from a checkout",
+          looks at their tray, and retries the one lane that structurally
+          cannot work. That sentence is what makes the row honest rather than
+          merely shorter.
+
+          The env var is still MENTIONED, marked inert, with the reason. Deleting
+          the name would leave the next reader to rediscover why it does not
+          work — the variable is real and reading about it elsewhere would make
+          it look like an oversight rather than a decided non-remedy.
+
+          PINNED: the refusal is lifted into github_login_no_upstream_refusal()
+          so it can be tested without running a login, and
+          tests::github_login_refusal_names_a_remedy_that_works asserts the
+          working remedy is named, the tray's inability is stated, and the env
+          var is never offered. FALSIFIED: restoring the old wording reds it.
+
+          A REPAIR I MADE TO MY OWN EDIT, recorded because the failure mode is
+          silent: my first insertion truncated the neighbouring test's #[test]
+          attribute to "#[te". That broke the build loudly this time, but the
+          same slip landing differently would have left a test present, passing,
+          and NOT REGISTERED — a test that cannot fail. After repairing it I ran
+          the three parse_gitdir_origin_url tests explicitly to confirm they
+          still execute, rather than trusting that the file compiles.

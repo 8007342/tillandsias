@@ -3690,8 +3690,54 @@ if [[ "$FLAG_CHECK" == true ]]; then
         # notably exit 1, the genuine content failure — still takes the
         # refusal branch below. A step that nominates nothing behaves exactly
         # as it did before.
+        # ORDER 1204-3s2s — A STEP MUST NOT WRITE INTO THE SHARED METRICS PATH.
+        #
+        # A fixture that runs the litmus runner from a scratch dir is not in a
+        # git checkout, so metrics_default_log correctly falls back to /tmp —
+        # and the fallback uses the SAME BASENAME as production, so the records
+        # land in /tmp/tillandsias-timing.jsonl carrying the real host name.
+        # cycle-metrics.sh then sees two timing logs and refuses (1096-p3tn,
+        # correctly: a runs= from either half is a partition presenting as a
+        # total), the refusal emits nothing, every arm driving it observes
+        # zeros, pre-build fails, ci-full never reaches post-build, and
+        # check-release-tier-freshness.sh answers never:release-tier forever.
+        # One missing env export makes the whole release tier unmeasurable on
+        # the host that runs it.
+        #
+        # WHY THIS IS BEHAVIOURAL AND NOT A GREP. 1096-p3tn fixed this BY HAND
+        # in eleven fixtures and wrote the convention in their comments; six of
+        # sixteen did not have it and nothing enforced it, so the next fixture
+        # reintroduced it the same day without any way to know. A static scan
+        # for the export would be the ritual line the row's own negative control
+        # forbids: a fixture that produces NO timing output should not have to
+        # declare one. Observing the path is the check that distinguishes them,
+        # and it costs nothing here because the steps already run.
+        #
+        # It also catches writers a name-based scan cannot see — a step that
+        # reaches the runner indirectly, or code nobody has written yet.
+        _metrics_shared_before=""
+        if [ -f /tmp/tillandsias-timing.jsonl ]; then
+            _metrics_shared_before="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+        fi
+
         _step_rc=0
         _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1 || _step_rc=$?
+
+        if [ -f /tmp/tillandsias-timing.jsonl ]; then
+            _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+            if [ "${_metrics_shared_after:-0}" -gt "${_metrics_shared_before:-0}" ]; then
+                _error "gate step ${STEP_SCRIPT##*/} wrote $(( _metrics_shared_after - ${_metrics_shared_before:-0} )) record(s) into /tmp/tillandsias-timing.jsonl (1204-3s2s)"
+                _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
+                _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
+                _error "  refuse to publish any number, every arm driving it reads zero, and"
+                _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
+                _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
+                _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
+                _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
+                exit 1
+            fi
+        fi
+
         if [ "$_step_rc" -ne 0 ] \
            && [ -n "$STEP_SKIP_EXIT" ] \
            && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then

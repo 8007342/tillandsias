@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    event:
+      type: completed
+      ts: "2026-09-15T15:49:07Z"
+      agent_id: linux-macuahuitl-claude-20260915t153933z
+      host: macuahuitl
+      summary: |
+        ROUTE (a) CHOSEN AND RECORDED WITH ITS REASON, which the row's fourth criterion asks for explicitly. set-field now REFUSES a `status in_progress` write whose host would fall back to the compiled platform; the 772-4se9 default is untouched everywhere else.
+        WHY (a) AND NOT (b). Route (b) — default to the short hostname, keeping the platform as fallback — is the more convenient route and it is ruled out by this row's own second criterion. That criterion requires 772-4se9's unit test to pass UNCHANGED, and the test pins writer_host_from(None) == std::env::consts::OS by equality. Changing the default breaks it by construction, so (b) cannot be taken without reopening a decision that was made deliberately and is guarded on every host that gates a push. Route (c) — derive the workstation from the agent_id — stays refuted for the reason filed: the status entry carries no agent_id and a reader would have to correlate by timestamp.
+        (a) IS ALSO THE ROUTE THAT COSTS THE FLEET NOTHING TO ADOPT, which was not obvious until it was checked. The worker skill's canonical claim recipe has passed `--host "$(hostname -s)"` all along; the claims that landed as `linux` were the ones that did not follow it. So the refusal makes a documented discipline mechanical rather than imposing a new one, and no compliant caller changes.
+        AN EXPLICIT --host ALWAYS WINS, INCLUDING --host <platform>, and that is a deliberate trade rather than an oversight. It does leave an unattributable claim constructible — but deliberately, traceably, by someone who can be asked why. The alternative is a guard with no override, which is an argument for reaching past it; that is the same reasoning that makes a narrow purpose-built override better than --no-verify.
+        A DEFECT IN THE FIRST IMPLEMENTATION, CAUGHT BY THIS ROW'S OWN FIXTURE. set-field resolves the writer host in TWO places, one per branch of a list/scalar split that 1184-tj2q introduced. The guard went into the first `flagged("--host")` the file offered, which is the LIST arm — and `status` is a scalar, so it was never reached: a claim with no host still wrote `host: linux` while every unit test passed. Arm 1 failed and said so. The guard now sits ABOVE the split, and the litmus pins that position by line order rather than by its presence, because presence is what was already true when it did not work.
+        VERIFIED: fixture 6/6; the four sibling claim fixtures unchanged (expire-claims-reads-the-status-write 5/5, claims-fleet-visible 27/27, set-field prose guard 11/11, reclaim-stranded-claims 6/6); nine litmus validators green; gate step 375 with no prefix collision (test-gate-step-append-no-conflict 9/9). The methodology-accountability spec reports 24 PASS / 2 FAIL and BOTH REDS ARE PRE-EXISTING AND UNREACHABLE FROM THIS CHANGE: they are litmus:cycle-metrics-answer-rate-shape and litmus:cycle-flow-telemetry-shape, both exercising scripts/cycle-metrics.sh, which invokes no set-field and shares no file with this work. Recorded rather than waved past — that instrument was independently found this morning to have zero inputs fleet-wide (23 of 23 loop-status stems NOT-PASTING), so it is now failing its own shape test AND unused, which is two signals about one instrument.

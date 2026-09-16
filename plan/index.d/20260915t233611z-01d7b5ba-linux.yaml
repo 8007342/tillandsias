@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: claim
+      ts: "2026-09-15T23:36:11Z"
+      agent_id: linux-yoga-claude-20260915t233553z
+      host: linux
+      summary: |
+        yoga claims, as one story with 1194-davi. The two rows are the same defect on different axes: 1194-davi is a gate arm invisible across PLATFORMS, this one is a pin invisible across TIERS. Both let a change land green through an instrument structurally incapable of testing it.
+
+        I already hold the measurement behind this row, taken on this host: build.sh --check does not execute the quick litmus tier, so a WIRE_VERSION bump landed green and sat red for days where the release actually gates. The tier is barely sampled fleet-wide.
+
+        The row's own next action says to build the NOTICE and not a new gate, and I intend to honour that. A new gate here would make --check and --ci-full diverge, which 1087-h2z9 refuses unless declared in scripts/gate-divergence-declared.txt with the reason that actually applies.

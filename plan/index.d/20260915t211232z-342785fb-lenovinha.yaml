@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: git-mirror-observability-and-managed-alternatives
+    event:
+      type: completed
+      ts: "2026-09-15T21:12:32Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        OPERATOR RATIFICATION — The Tlatoāni, 2026-09-15, given directly in session to lenovinha.
+
+        DECISION 1 IS RATIFIED: KEEP the bespoke synchronous pre-receive relay. The operator's words: "our git-mirror is a strong approach". This is the ratification the row has been waiting on since yoga's 2026-08-16 event, which recorded the recommendation as KEEP and correctly left the packet `ready` because the adopt/keep call was never an agent's to make.
+
+        WHAT THEY RATIFIED, restated so the record does not depend on a cheatsheet read: the requirement is two properties at once — server-held upstream credentials (no container sees the GitHub token) and synchronous durability (a push succeeds only if GitHub already accepted it). Every shipping tool has one or the other. Gitea/Forgejo/GitLab push mirrors hold the credential server-side and are ASYNCHRONOUS, which is the false-success class that strands an agent's work; gitolite redirect, goblet and git-cache-http-server are synchronous and FORWARD THE CLIENT'S CREDENTIALS, destroying the isolation. GitHub's repository cache is GHES-only and read-only; Artifactory and Nexus do not speak git. So the wheel does not exist and we own the relay.
+
+        ALL THREE EXIT CRITERIA ARE NOW MET, and the third has been met since 2026-08-16:
+          1. matrix complete, no empty cells across the declared axes — the rejection table in cheatsheets/concurrent-git/git-mirror-managed-alternatives.md
+          2. one named recommendation with a migration-ladder sketch — KEEP, plus the four-step adoption ladder and the note that reverse migration is cheap (a bare repo plus a pre-receive hook; roll back by pointing the daemon at it). RATIFIED here, which is what criterion 2 was missing.
+          3. mirror observability requirements enumerated as litmus-pinnable statements — six of them, with transport (control wire, order 323) and the no-fabricated-healthy-value anti-requirement.
+
+        CLOSING ON ENUMERATION, NOT ON IMPLEMENTATION, and stating the difference plainly so nobody reads this closure as "observability is done". Criterion 3 asked for the requirements to be ENUMERATED as testable statements. It does not ask for them to be implemented, and they are not: nobody can currently answer "is the relay keeping up?" without reading logs. The implementation is filed separately as 1210-fn4c so the open work stays visible as open work rather than living inside a closed row.
+
+        ALSO REQUESTED BY THE OPERATOR IN THE SAME BREATH, routed rather than absorbed: that the git-mirror architecture and how it works with the enclave be documented on the tillandsias.org website. That is macuahuitl's — they hold the website checkout — and it has been relayed to them with the ratification. Not folded into this packet, because a website deliverable in a row whose owned files are cheatsheets would be invisible to anyone reading either.
+
+        TWO THINGS FROM THE ARTIFACT WORTH KEEPING BESIDE THE DECISION. Our implementation is STRONGER than GitLab's published bidirectional-mirroring sample, which relays one ref at a time and warns "it is possible for some refs to succeed, and others to fail"; ours relays the whole transaction with `git push --atomic`. And the recorded corollary: the mirror's reliability failures have never been architectural — they concentrate in the credential lifecycle and the serving layer. That held again tonight, twice, on this very host: a desktop autologin was starting the session without unlocking the keyring, so the credential was absent by construction rather than by any fault of the relay.

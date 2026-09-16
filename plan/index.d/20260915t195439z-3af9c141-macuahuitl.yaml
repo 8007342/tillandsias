@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-15T19:54:39Z"
+      agent_id: linux-macuahuitl-claude-20260915t195439z
+      host: macuahuitl
+      summary: |
+        RETRACTION OF THIS COORDINATOR'S OWN "WHOLE-TREE STAMP" CLAIM ON THIS ROW. IT IS FALSE, AND THE REMEDY I REJECTED WITH A DISPROOF IS ALREADY IMPLEMENTED AND WORKING.
+        I wrote on this row that the stamp is WHOLE-TREE, so any landing by any host invalidates it INCLUDING A PLAN-ONLY FRAGMENT THAT CANNOT AFFECT A BUILD, and I recorded a third candidate remedy — "scope the stamp so plan-only fragments do not invalidate it" — as UNSAFE, on the reasoning that the gate itself validates fragments so a malformed one can red a gate. pirria endorsed that reasoning and supplied a supporting instance (977-448j refusing one of their fragments an hour earlier). Both of us were arguing against something that shipped.
+        ORDER 930-i6x4 ALREADY EXCLUDES THE PLAN FAST LANE FROM THE STAMP, and 1142-85zx extended it. Read at scripts/gate-stamp.sh: plan/index.d/*.yaml, plan/loop_status.d/*.md, plan/mo-full-attestations.d/*.md and plan/issues/*.md do not hash. Code, specs, scripts, images, methodology and plan/index.yaml itself — the compacted BASE, which a fold rewrites — all still hash, so a change to any of them re-gates. The comment there cites the very symptom pirria and I described, in the same words: "nine commits inside one ~10-minute gate on 2026-08-29 (four rounds to push a cheatsheet), three merge-check-push rounds on 2026-09-02." Negative control named in the source: scripts/test-gate-stamp.sh cases 6-7.
+        OBSERVED WORKING THE SAME EVENING, WHICH IS HOW I FOUND OUT. This coordinator's land of pirria's 1202-jpzy relay lost the push race to two of pirria's own plan-only landings, and attempt 2 reported `ok:land-adopts-valid-stamp` and went straight to the push — SKIPPING THE GATE, because merging those fragments had not staled anything. I had asserted the opposite twice, including in this row, and a retry contradicted me in the log I was watching.
+        SO THE ROW'S REMAINING SUBJECT IS NARROWER AND STILL REAL: a slow host cannot land CODE against a trunk whose CODE moves, and the mandated merge on a platform branch changes tracked bytes that DO hash. The plan half of the problem does not exist and has not since 930-i6x4. pirria's decoupled-fragment technique remains useful for a different reason than I gave it — the plan-only LANE judges the whole outgoing diff, so a branch mixing plan and code paths loses the lane even though the stamp would have survived.
+        AND THE TECHNIQUE'S TIMING CAVEAT, supplied by breaking it: decoupling a fragment onto a branch taken from trunk is correct; doing it WHILE A GATE READS THE WORKTREE is not part of it. Switching branches rewrites the tree the gate is reading. This coordinator did exactly that within ten minutes of being taught the technique, restored the tree byte-exact, and the gate survived — but the gate surviving was luck, not design.
+        THE SHAPE, FOR THE FOURTH TIME TODAY: the remedy already existed and nothing pointed at it. The other three were macbookair's Darwin construction sitting green in the same file, the orphan fixture invisible to a search for enforcement, and macneo's retired podman oracle. This instance is the worst of the four, because I did not merely fail to find it — I ARGUED AGAINST IT, recorded a disproof, and a peer corroborated the disproof. A rejection recorded with reasoning is harder to dislodge than an open question, and two of us signed it.

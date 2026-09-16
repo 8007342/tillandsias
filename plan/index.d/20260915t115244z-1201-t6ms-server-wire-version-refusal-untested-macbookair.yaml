@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-server-side-wire-version-refusal-has-no-test-while-two-version-bumps-now-rest-on-it
+    order: 1201-t6ms
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [control-wire, vsock, fail-loud, test-coverage]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/vsock_server.rs
+    verifiable_closure: |
+      cargo test -p tillandsias-headless --lib passes a new test that drives
+      serve_ready_stream with a Hello carrying WIRE_VERSION + 1 and asserts the
+      server CLOSES without sending a HelloAck — with a MUTATION ARM proving the
+      assertion reds when the refusal branch is removed, and a POSITIVE CONTROL
+      proving a MATCHING version still gets its HelloAck. Without that control
+      the test passes against a server that is simply broken.
+    title: |
+      the SERVER-side wire-version refusal in vsock_server.rs has no test, and both the v3 and the new v4 bump rest on it — the client half was covered by 1032-62rx, this half was not
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-15, and it CORRECTS a claim of
+      mine that was already stale when yoga recorded it.
+
+      MY EARLIER p2 ON 54a9471a1 said NEITHER wire-version refusal has a test.
+      That is now half wrong: the CLIENT side IS tested. 1032-62rx added
+      handshake_refuses_a_server_advertising_a_different_wire_version in
+      host-shell/src/vsock_client.rs, which drives a server advertising
+      WIRE_VERSION + 1 and asserts InvalidData, and its own doc says deleting the
+      arm turns it red. yoga carried my stale phrasing into 890-y72v's dependency
+      note in good faith; this row is the corrected version.
+
+      WHAT IS ACTUALLY UNTESTED is the SERVER side, and it is the load-bearing
+      half. vsock_server.rs's handler refuses a mismatched client at
+      `if first.wire_version != WIRE_VERSION` by logging a warn and RETURNING —
+      closing the connection with no reply at all. Nothing drives that path.
+      Searched for a test constructing a mismatched version at the server: the
+      only WIRE_VERSION + 1 in the tree is the client-side test above.
+
+      WHY THE ASYMMETRY MATTERS RATHER THAN BEING A DETAIL. 1032-62rx's own doc
+      records that against a CURRENT server the client arm is UNREACHABLE,
+      because the server validates the client's Hello and returns BEFORE sending
+      any HelloAck. So the tested arm serves only a peer old enough to answer
+      without validating, and the arm that actually gates a live mismatched peer
+      today is the untested one.
+
+      WHAT RESTS ON IT: WIRE_VERSION 3 (997-e4v2) and now 4 (890-y72v). The
+      coordinator's wire-version ruling is explicit that a breaking payload
+      change is safe BECAUSE the handshake refuses a mismatched peer. Two
+      transitions now stand on a branch nothing exercises, and what IS pinned is
+      the CONSTANT — a number standing proxy for a refusal, which is 890-y72v's
+      own defect shape one level up.
+
+      NOT A CRITICISM OF 890-y72v's LANDING. Holding that change would not have
+      tested this branch; it would only have left a live success=true-with-an-
+      unusable-share defect in place. Landing it and recording the dependency
+      was the right trade. This row is the other half of that trade being paid.
+    deliverable: |
+      The server-side refusal is exercised by a test that fails if the branch is
+      removed, so a future wire-version bump rests on a proven refusal rather
+      than on a pinned constant.
+    next_action: >
+      The harness already exists — model on
+      pipelined_hello_and_subscribe_both_survive_the_handoff in
+      vsock_server.rs's test module: VmStateHandle::new(), tokio::io::duplex, a
+      watch channel, and handle_connection_with_mode spawned with
+      SecureControlWireMode::Off so the test drives the plaintext path
+      deliberately (972-umik: the shipped default is On and a test wanting the
+      insecure path must say so). Send a Hello with wire_version WIRE_VERSION+1
+      and assert the stream closes with NO HelloAck — read must reach EOF rather
+      than a frame. THEN prove the arm has teeth by deleting the `if
+      first.wire_version != WIRE_VERSION` branch and watching it red, and add the
+      matching-version control so a wholly broken server cannot pass.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-15 after committing to yoga that this
+      would be its next slice, and after re-measuring its own earlier p2 rather
+      than trusting it — which is how the client/server asymmetry surfaced.
+      Cited by symbol, not by line.

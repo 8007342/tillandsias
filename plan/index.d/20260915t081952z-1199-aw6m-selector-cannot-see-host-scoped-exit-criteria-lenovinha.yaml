@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha after claiming and releasing 1132-r4mt in three minutes.
+packets:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    order: 1199-aw6m
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [tooling, selection, plan, fail-loud]
+    estimated_hours: 2
+    parent_order: 1132-r4mt
+    unscoreable: "unpinnable-until-the-check-exists: the deliverable is the warning. Future litmus scripts/test-selector-flags-host-scoped-criteria.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: select-work-batch.sh (or plan_next) marks a row whose exit_criteria name a host this one is not, so the offer carries the constraint with it (pre-fix result: FAILS — 1132-r4mt was offered to lenovinha as the p1 top pick on 2026-09-15T08:16Z and its criterion 3 excludes this host by name); NEGATIVE CONTROL: a row naming no host is offered unmarked, and the mark is ADVISORY — it must never withhold a row, because a host CAN legitimately do preparatory work on a row it cannot close."
+    owned_files:
+      - scripts/select-work-batch.sh
+    title: |
+      select-work-batch.sh reads pickup_role and cannot read exit_criteria, so a row that is host-scoped in prose is offered to hosts that can never satisfy it — pickup_role: any is true of the SUBJECT and false of the EVIDENCE.
+    context: |
+      MEASURED on lenovinha 2026-09-15T08:16Z, cost about three minutes plus two
+      pushes. The selector's p1 top pick was 1132-r4mt (the archiver ruby fixture
+      that refuses inside the gate and passes standalone), pickup_role: any. I
+      claimed it, pushed the claim, then read the exit criteria:
+        criterion 3: "the same verdict in the gate and standalone, demonstrated on
+        a host that has actually reproduced the refusal (yoga or macuahuitl), not
+        on a host that has never seen it"
+      lenovinha has never seen it, checked rather than assumed: standalone 5/5,
+      and 5/5 in three full ./build.sh --check runs the same night. Zero lenovinha
+      mentions anywhere on the row. So no amount of work on this host could close
+      it, and the only thing I COULD have produced is what the row explicitly
+      refuses — a change that makes the fixture tolerant while the archiver's
+      in-gate behaviour stays unexplained.
+      THE ROW IS CORRECT AND SO IS ITS pickup_role. `any` describes who can work
+      the subject; the criteria describe who can produce the EVIDENCE, and only
+      the first is a field. This is not an argument for host-scoping more rows —
+      it is an argument for the offer carrying what the row already says.
+      SAME SHAPE AS 1194-davi ONE LEVEL UP: a constraint that lives in prose the
+      instrument does not read. There, a platform-scoped gate arm was invisible to
+      the author whose change broke it; here, a host-scoped criterion is invisible
+      to the selector that offers the row. Both cost real cycles, neither is a
+      wrong value in a field, and both are fixed by making the instrument read
+      what is already written down rather than by writing more down.
+      WHY ADVISORY AND NOT A FILTER, stated because the tempting fix is worse than
+      the defect: a host that cannot CLOSE a row can still legitimately advance it
+      — reproduce, measure, instrument, split. Withholding the row would convert a
+      three-minute release into invisible work nobody does. The mark belongs on
+      the offer, not on the eligibility.
+    exit_criteria:
+      - 'a row whose exit_criteria name a host other than this one is MARKED in the selector output, naming the host(s) the criteria require (pre-fix result: FAILS — 1132-r4mt printed as an unmarked p1 top pick on a host its criterion 3 excludes)'
+      - 'the mark is derived from the row text, not from a hand-maintained list of host-scoped rows, which would drift the way every second list does'
+      - 'NEGATIVE CONTROL: a row naming no host prints unmarked, exactly as today'
+      - 'NEGATIVE CONTROL: the mark is ADVISORY — the row is still offered and still claimable, because preparatory work by a host that cannot close it is legitimate and wanted'
+    events:
+      - type: filed
+        ts: "2026-09-15T08:19:52Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed from a claim-and-release I did in three minutes: the selector
+          offered a p1 whose criterion 3 excludes this host by name. Cheap this
+          time because I read the criteria before working; the same offer to a
+          host that reads them after would cost a cycle.

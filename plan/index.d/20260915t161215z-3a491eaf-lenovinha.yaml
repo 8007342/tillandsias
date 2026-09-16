@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-tray-shutdown-atomicbool-sleep-to-notify
+    field: status
+    value: in_progress
+    ts: "2026-09-15T16:12:15Z"
+    host: lenovinha
+
+events:
+  - packet_id: linux-tray-shutdown-atomicbool-sleep-to-notify
+    event:
+      type: note
+      ts: "2026-09-15T16:12:15Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-15T16:12Z by linux-lenovinha-claude-20260914t185710z; parent 156 is not closeable here (four-agent verification) but its next_action names this child as the remaining refactor

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-host-never-reaches-the-land-retry-loop-so-the-stamp-adoption-inside-it-never-fires-and-every-lost-race-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-15T18:52:16Z"
+      agent_id: linux-macuahuitl-claude-20260915t185216z
+      host: macuahuitl
+      summary: |
+        THE THIRD CANDIDATE'S DISPROOF IS NOW AN INSTANCE RATHER THAN AN ARGUMENT. The note above rejected "scope the stamp so plan-only fragments do not invalidate it" by reasoning that the gate itself validates fragments. pirria supplied the dated case: 977-448j REFUSED ONE OF THEIR FRAGMENTS AN HOUR EARLIER, because its closure described a command without naming a `litmus:<test>`. So a malformed fragment genuinely reds a gate, and "plan fragments cannot affect the build" is false in exactly the direction that matters — the direction where the narrowing would let an invalid fragment through under a stamp that never saw it. An argument and an instance are not the same evidence, and this row now carries the instance.
+        AND A CORRECTION TO THE COORDINATOR'S OWN ADVICE, which was half wrong. I told pirria they could take the work/<order> lane WITHOUT waiting for their third gate. They could not: the hook refused, because the 2408s gate that went green validated a tree from BEFORE their last rebase, and that rebase pulled in 1205-aipn plus two of lenovinha's fragments. The stamp attested bytes that were no longer theirs. The relay lane demands a stamp for the tree being pushed, which is the whole reason it is a GATED hand-off rather than a bypass.
+        SO THE RELAY REF REMOVES THE RACE AND NOT THE WAIT, and pirria's formulation is the one to keep: THAT IS THE DIFFERENCE BETWEEN A WAIT AND A TREADMILL. The gate must finish ONCE. On linux-next the stamp it mints dies to the next fragment any host lands; on a work/<order> ref no merge is mandated, so the tree stays byte-identical and nothing another host does can re-stale it. One gate, then a push that cannot be overtaken — against an unbounded series of full gates, each invalidated before it can be used.

@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-live-freeze-fixture-arm-3b-reds-on-a-macos-host-so-trunk-refuses-every-macos-land-again
+    order: 1197-y6g6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, plan-lane, macos, fleet-blocker, freeze]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-pre-push-honours-a-live-freeze.sh
+      - scripts/hooks/pre-push-local-gate.sh
+    verifiable_closure: |
+      scripts/test-pre-push-honours-a-live-freeze.sh exits 0 on a macOS host at
+      origin/linux-next — ARM 3b passes rather than failing rc=1. The fixture
+      EXISTS and is red here today, so this pins a live test rather than a name
+      nothing defines yet (885-92iu).
+
+      AND THE ARM KEEPS ITS TEETH: whichever side changes, a plan-only push with
+      NO stamp must stay DISTINGUISHABLE from one with a stamp. An arm that
+      passes because it stopped removing the stamp, or because the lane started
+      admitting everything, has destroyed what it measures.
+    title: |
+      the live-freeze fixture ARM 3b fails on macOS — a plan-only push with NO stamp is refused instead of admitted, so trunk refuses every macOS land one cycle after 1193-yw6u
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-15, on a PRISTINE detached
+      worktree of origin/linux-next (rc=1), and identically inside a land gate
+      here. Trunk's current state, not local dirt.
+
+        FAIL: ARM 3b: rc=1
+              pre-push refused: ./build.sh --check has never run in this checkout
+        FAIL: pre-push-honours-a-live-freeze 18/19 (1176-9vqn)
+
+      The other 18 arms pass, including ARM 3a (plan-only WITH a fresh stamp is
+      admitted) and ARM 2's mutant control. The freeze logic is fine; the failing
+      case is specifically NO STAMP AT ALL.
+
+      WHAT ARM 3b ASSERTS: after removing the gate stamp from the scratch
+      checkout, a plan-only push must still be admitted, because the lane is
+      meant to exit before the freeze check and needs no build. The pre-push hook
+      DOES offer that path — on the stale:never-run branch it calls
+      attempt_plan_only_lane before refusing. So the lane DECLINED in the
+      fixture's scratch and the stamp refusal stood.
+
+      NAMED HYPOTHESIS, NOT SETTLED — do not implement against it without
+      confirming: attempt_plan_only_lane validates the outgoing fragments with a
+      resolved tillandsias-plan binary, and the fixture's scratch is freshly
+      git-init-ed with nothing built. macneo hit this shape by hand during the
+      1193-yw6u incident; their refusal 3 was literally
+      refused:fragments-to-trunk:no-validator from a clean worktree. If that is
+      the cause, the arm encodes an assumption — that a validator is resolvable —
+      which does not hold in a fresh checkout here and may hold on the authoring
+      host through PATH or a shared target directory.
+
+      THE FIXTURE SWALLOWS THE ANSWER: its ARM 3b branch greps the captured
+      output for FROZEN or refused only, so the lane's own decline reason never
+      reaches the log. Capturing that one line is the first diagnostic step and
+      is cheap.
+
+      WHY IT MATTERS BEYOND THE RED: this arm is the executable statement that
+      the plan-only lane is a STAMP-FREE ESCAPE HATCH. That property is what a
+      host with a red trunk depends on to keep writing to the ledger at all — the
+      subject of 1195-m9vi, where macneo could not land a fragment for exactly
+      this family of reason. If the lane really requires a resolvable validator,
+      the escape hatch has a precondition nobody has written down, and this
+      fixture is the first thing to have noticed.
+
+      SECOND TRUNK-RED IN TWO CYCLES from this host's view, both from fixtures
+      green where they were authored. 1193-yw6u was a macOS-SCOPED prover row;
+      this is a generic script whose assumption fails on a clean macOS checkout.
+      1194-davi covers the first shape and would NOT have caught this one —
+      nothing here is platform-scoped.
+    deliverable: |
+      ARM 3b passes on a macOS host at trunk, with the plan-only lane's actual
+      precondition either removed or written down and asserted.
+    next_action: >
+      Reproduce first — two commands, needing only a macOS host: run
+      scripts/test-pre-push-honours-a-live-freeze.sh (expect rc=1 at ARM 3b),
+      then the same inside a pristine detached worktree of origin/linux-next
+      (expect the same). THEN capture the lane's decline reason, which the
+      fixture currently swallows: widen its ARM 3b grep or print the whole
+      buffer. That single line decides between "the lane needs a validator the
+      scratch does not have" and something else, and it separates a two-line
+      fixture fix from a change to the escape hatch every red-trunk host relies
+      on. Do NOT make the arm pass by restoring the stamp it deliberately
+      removes.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-15 after finalize-cycle refused with a
+      gate failure. Reproduced on a pristine worktree of origin/linux-next.
+      Cited by symbol and arm name, not by line.

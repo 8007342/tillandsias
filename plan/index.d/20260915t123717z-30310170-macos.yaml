@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: evidence
+      ts: "2026-09-15T12:37:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t123716z
+      host: macos
+      summary: |
+        TASK 4.5, DARWIN HALF: ANSWERED BY EXECUTION, not by reading the 2026-08-28
+        report. The residual note suggested that report's "[lua-expert] runtime
+        initialized" line might suffice and recommended a fleet decision on whether to
+        re-run. Re-running is cheaper than adjudicating, and three claims in this
+        session have already gone stale between filing and reading, so it was measured
+        fresh.
+
+        HOST: tlatoanis-macbook-air, darwin arm64, Apple clang 21.0.0
+        (clang-2100.3.34.2), rustc 1.96.1.
+
+        WHY A PASSING TEST WAS NOT ENOUGH, and this is the substance of the slice. The
+        dependency is `mlua = { version = "0.10", features = ["vendored", "lua54",
+        "send", "serialize"] }`. VENDORED means Lua is compiled FROM C SOURCE, so the
+        portability question is whether that C toolchain path works here — and a test
+        run against a CACHED mlua answers a different question entirely. The first
+        measurement did exactly that and would have been reported as portability
+        evidence.
+
+        So the cache was destroyed and the claim re-measured. `cargo clean -p mlua-sys`
+        removed 60 files / 7.6 MiB — which is also how the clean was CONFIRMED to have
+        applied, rather than trusting my own `echo cleaned` from a command whose stderr
+        had been suppressed.
+
+        FROM A VERIFIED-CLEAN STATE, rc=0 in 5s:
+          Compiling mlua-sys v0.6.8
+          Compiling mlua v0.10.5
+        ARTIFACTS PRODUCED, which is what makes this portability rather than
+        compatibility:
+          32 C object files under mlua-sys-*/out/lua-build/lib/ (lopcodes.o, lzio.o,
+          ltablib.o, lmem.o, ...)
+          liblua5.4.a — `lipo -archs` reports ARM64, a native archive on this host
+
+        RUNTIME, against that fresh build: cargo test -p tillandsias-plan --lib
+        lua_runtime -> 7 passed, 0 failed, 303 filtered out. The three that matter
+        beyond "it loads":
+          lua_runtime_loads_init_script     ... ok
+          lua_runtime_blocks_os_execute     ... ok
+          lua_runtime_blocks_debug_library  ... ok
+        So the SANDBOX holds on darwin, not merely the interpreter. A Lua that
+        initialises but whose os.execute is reachable would satisfy the 2026-08-28 log
+        line and fail the thing the runtime is for.
+
+        WHAT THIS DOES NOT CLOSE. The msys/windows half of task 4.5 is untouched and is
+        not mine to claim. This row's own note already records that pickup_role is
+        SINGLE-VALUED and cannot express "needs evidence from two lanes" — it holds
+        `macos`, and a windows host finishing its half first should flip it rather than
+        read `macos` as the whole truth. 902-5bf9's blocking criterion is half
+        discharged, not discharged.

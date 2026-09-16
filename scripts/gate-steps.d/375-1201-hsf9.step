@@ -1,0 +1,35 @@
+# Gate step 1201-hsf9 — data, not code.
+#
+# Binds the claim-names-a-workstation refusal. A claim written without an
+# explicit --host recorded its holder as the COMPILED PLATFORM, so every host on
+# one platform claimed under the same name — and the sweep that exists to name
+# ONE of them could not. Measured twice on 2026-09-15: the coordinator asked the
+# wrong host to release a live claim, and after the expiry sweep's channel was
+# fixed (1198-7q95) the same wrong message was still constructible, because
+# 1155-jurn reads `claimant:windows` and esme and yolanda are both windows.
+#
+# THE ARMS THAT MATTER ARE THE CONTROLS, and there are four of them against two
+# positives. Arm 2 requires the refusal to have written NO FRAGMENT — a refusal
+# that still lands the bad claim while printing an objection is worse than none,
+# because the caller believes it did not land. Arm 4 requires an EXPLICIT
+# `--host <platform>` to be ACCEPTED: the defect is a silent default, not the
+# string, and a guard that overrides a deliberate traceable choice leaves no
+# escape hatch and becomes an argument for reaching past it. Arm 5 requires
+# `completed`, `ready` and a non-status field to keep defaulting their host
+# exactly as 772-4se9 specifies — that default is a correct fact about which
+# PLATFORM wrote the row, and only the claim needs a machine. Arm 6 EXECUTES
+# 772-4se9's own unit test rather than grepping for it, because the row requires
+# that guarantee to hold unchanged and a structural check cannot tell a live
+# assertion from a deleted one.
+#
+# WHY A GATE STEP AND NOT ONLY A UNIT TEST: the guard sits above set-field's
+# list/scalar branch split, and the first draft of it went into the LIST arm —
+# the first `flagged("--host")` the file offers — where `status`, a scalar,
+# never reaches it. A claim with no host still wrote `host: linux` and every
+# unit test passed. Arm 1 is what caught that, by driving the real binary.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a claim names a workstation, not the compiled platform (1201-hsf9)"
+STEP_SCRIPT="scripts/test-a-claim-names-a-workstation.sh"
+STEP_ERROR="the claim-names-a-workstation refusal regressed (1201-hsf9) — either a claim with no --host is being written again as the compiled platform (so two hosts on one platform are indistinguishable exactly when a sweep must name one, and the coordinator asks the wrong host), or the refusal has widened and is now catching an explicit --host or a non-claim write, or it prints an objection while still writing the fragment; see the failing arm above"
+STEP_OK="claim-names-a-workstation refusal check passed"

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-15T08:19:05Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        RELEASED WITHOUT WORKING IT, on the row's own criterion 3: "demonstrated on a host that has actually reproduced the refusal (yoga or macuahuitl), not on a host that has never seen it."
+
+        lenovinha has never seen it, and I checked rather than assumed:
+          standalone now                     PASS 5/5
+          in-gate, three full ./build.sh --check runs tonight (1189-2ra5, 1193-yw6u, 1196-5hva)
+                                             PASS: archiver could-not-run on absent ruby 5/5, every time
+          lenovinha mentions anywhere on this row   0
+
+        So this host cannot satisfy criterion 3 by any amount of work, and criterion 2 — NAME the mechanism that makes archive-plan-packets.sh return could-not-run in situ while returning 0 standalone — needs the failing environment to instrument. What I could produce here is the thing the row explicitly refuses: a change that makes the fixture tolerant, satisfying nobody, while the archiver's in-gate behaviour stays unexplained.
+
+        The selector offered it because pickup_role is `any`, which is true of the SUBJECT but not of the EVIDENCE. Worth noting for whoever tunes selection: a row whose exit criteria name specific hosts is effectively host-scoped no matter what pickup_role says, and the selector cannot see that. Same shape as 1194-davi one level up — a constraint that lives in prose the instrument does not read.
+
+        Held 3 minutes, no files touched. Returned to ready for yoga or macuahuitl, who between them have reproduced it four times.

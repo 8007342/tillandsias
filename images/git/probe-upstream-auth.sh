@@ -196,13 +196,27 @@ esac
 # is irrelevant under --dry-run.
 PROBE_REF="$(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/heads 2>/dev/null | head -n 1)"
 if [ -z "$PROBE_REF" ]; then
+    # ORDER 778-hb3x. The STATE stays `error` — the probe genuinely cannot
+    # answer without a ref, and dressing that as a friendlier verdict would be
+    # the fail-open trade this project refuses. What changes is that the
+    # namespace now says WHICH error, because a bare `error` here and a bare
+    # `error` on the transport arm below are indistinguishable to every
+    # consumer, and 778-hb3x's complaint is exactly that conflation: an
+    # unseeded mirror and a network failure looked the same from outside.
+    #
+    # The reason segment is 809-w2xy's mechanism, already used by `finish
+    # denied`, and backward compatible by construction — the consumer parses
+    # state as the prefix and epoch as the suffix, so a middle segment is
+    # invisible to a reader that does not want it.
     log_msg "mirror has no local heads to probe with (still seeding?); cannot determine authorization"
-    finish error
+    finish error no-local-heads
 fi
 PROBE_SHA="$(git -C "$MIRROR" rev-parse "$PROBE_REF" 2>/dev/null)"
 if [ -z "$PROBE_SHA" ]; then
+    # 778-hb3x: distinct from no-local-heads — a head EXISTS and does not
+    # resolve, which is a damaged mirror rather than an unseeded one.
     log_msg "cannot resolve $PROBE_REF; cannot determine authorization"
-    finish error
+    finish error unresolvable-head
 fi
 
 if [ -n "${PUSH_PROBE:-}" ]; then
@@ -278,7 +292,11 @@ case "$OUT" in
         finish authorized
         ;;
     *)
+        # 778-hb3x: the arm this one had to be distinguished FROM. Reaching
+        # here means the advertisement was attempted and the output matched no
+        # known authorization token — a transport or network failure, not an
+        # unseeded mirror.
         log_msg "probe could not determine authorization (network/transport failure?): $OUT_REDACTED"
-        finish error
+        finish error transport
         ;;
 esac

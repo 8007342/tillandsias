@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-eligibility-litmus-arm-asserts-an-oracle-723-fndi-retired-so-it-cannot-pass-on-darwin
+    order: 1207-n96g
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, litmus, e2e, vz, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-e2e-eligibility-probe-shape.yaml
+    verifiable_closure: |
+      scripts/e2e-preflight.sh fixture stays green (4/4) AND
+      litmus:e2e-eligibility-probe-shape passes on a Darwin host, with its
+      Darwin path producing skip:live-runtime-present through the REAL
+      vz_guest_is_live code path rather than through a skip marker.
+
+      THE ARM MUST KEEP ITS TEETH: a held image must still refuse. An arm that
+      passes by asserting nothing, or by declaring Darwin out of scope, has
+      removed the only coverage the VZ liveness branch has ever had.
+    title: |
+      litmus:e2e-eligibility-probe-shape stubs podman twelve ways and requires skip:live-runtime-present, but 723-fndi retired podman from the Darwin path — so the arm asserts a dead oracle and cannot pass on macOS by construction
+    context: |
+      HANDED TO THIS HOST 2026-09-15 by macuahuitl; the MECHANISM AND THE
+      REMEDY HOOK ARE macneo's WORK and are credited here rather than
+      re-derived. Verified independently on this host before filing, by symbol
+      rather than by line:
+
+        vz_guest_is_live()            e2e-preflight.sh, defined and consulted
+                                      by the eligibility verdict
+        TILLANDSIAS_VZ_IMAGE_OVERRIDE documented in that function's comment as
+                                      existing "so the fixture can point this
+                                      at a file it controls"
+        the litmus arm                13 podman references, ZERO VZ-shaped ones
+
+      WHY IT CANNOT PASS, and the reason is better than "the probe consults
+      something else". 723-fndi removed podman from the Darwin path
+      DELIBERATELY: asking podman there produced a verdict carrying NO
+      INFORMATION — it printed skip:live-runtime-present both with nothing
+      running AND with a live VM (measured 2026-08-17). A constant is not a
+      probe. So the more thoroughly the arm stubs podman, the more certainly it
+      fails: it is asserting the oracle that was retired for being uninformative.
+
+      WHAT CHANGES THE SCOPE, found by reading the neighbours rather than the
+      arm: THE DARWIN CONSTRUCTION ALREADY EXISTS AND IS GREEN. `bash
+      scripts/e2e-preflight.sh fixture` answers 4/4 on this host, TRUE_RC=0
+      captured unpiped:
+        ok: unheld-image-is-not-a-live-runtime (eligible)
+        ok: held-image-refuses (skip:live-runtime-present)
+        ok: released-image-is-eligible-again (eligible)
+        ok: absent-image-is-not-a-live-runtime (eligible)
+      It is exactly the remedy the hand-off described — temp image, the override,
+      hold it open, a genuine skip:live-runtime-present through the real code
+      path — plus two cases nobody named (release-then-eligible-again, and
+      absent-image).
+
+      SO THE DEFECT IS NOT A MISSING DARWIN BRANCH. It is that the litmus arm
+      does not USE the construction sitting beside it in the same tree. That is
+      the third instance this week of a remedy that already existed with nothing
+      pointing at it — the others being a next_action advertising landed work,
+      and a symbol search asking whether a consumer NAMES a type when it only
+      prints its Display.
+    deliverable: |
+      The litmus arm exercises the real VZ liveness path on Darwin and keeps a
+      refusing arm for the held case, without weakening the Linux path.
+    next_action: >
+      Read scripts/e2e-preflight.sh's `fixture` subcommand FIRST — it is the
+      reference implementation, not a thing to write, and it already covers four
+      cases. The open shape questions are (a) whether the litmus arm should
+      invoke that subcommand directly or mirror its construction inline, and
+      (b) whether the podman stub stays beside it for the Linux path or is
+      replaced. Both are answerable by running the arm on a Darwin host, which
+      is why this carries pickup_role macos. Do NOT make the arm pass by
+      declaring Darwin out of scope: the held-image case is the only coverage
+      the VZ liveness branch has, and it is currently green in the fixture and
+      absent from the litmus.
+    provenance: |
+      Mechanism, the 723-fndi citation and the TILLANDSIAS_VZ_IMAGE_OVERRIDE
+      hook: macneo-macos. Routing and the platform-tier assignment:
+      macuahuitl-fedora. Independent verification, the already-green fixture
+      finding and the scope correction: macbookair-macos, 2026-09-15.

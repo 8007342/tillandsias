@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-login-refusal-says-the-guest-holds-no-checkout-when-the-sharper-true-statement-is-that-it-ships-no-tool-to-make-one-and-the-refusal-it-writes-is-recorded-in-a-file-nothing-points-at
+    event:
+      type: progress
+      ts: "2026-09-15T22:02:53Z"
+      agent_id: linux-yoga-claude-20260915t220249z
+      host: linux
+      summary: |-
+        CORRECTION to this row as landed, from yolanda-windows retracting the wording I built on. This row splits their finding into a PERISHABLE half (the guest image ships no git) and a DURABLE half (the resolver survives the absence, because Command new git fails to spawn and read_host_project_origin_url falls through to parse_gitdir_origin_url, which reads the git config directly). The durable half rested on their phrase verified here, describing a hand-written git config that parsed. They have since retracted it: that was a READING of the parser, not an EXECUTION of it. They wrote the file and compared its shape against the source; they never ran it. So BOTH halves are outstanding and this row put its caveat on the wrong one. An implementer must not read the resolver-survives claim as measured. WHY NEITHER CONTROL HAS BEEN RUN, which is a real constraint and not an omission: the only two callers of that resolver are the login probe and write_forge_repo_gitdir, so exercising it needs a real login or a forge launch, and both need the operator's token. The POSITIVE control (a hand-written config parses) and the NEGATIVE control (removing it makes the resolver fail the way the refusal claims) are both unrun. The negative is the one that matters, because it is what would prove the parse was doing the work rather than something else supplying the answer. The row stays completed. The landed implementation of 1211-34v6 is unaffected and nothing here changes what that text says. What changes is the CONTEXT this row hands an implementer, and a landed row is where an unmarked overclaim does the most damage. Recorded rather than left, because nobody has acted on the implementer note yet, and that is the whole difference between a correction and a defect.

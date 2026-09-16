@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-lane-mirror-wait-unbounded
+    event:
+      type: progress
+      ts: "2026-09-15T19:13:03Z"
+      agent_id: linux-yoga-claude-20260915t191302z
+      host: linux
+      summary: |-
+        CORRECTION — MY CLOSURE CITED A FIXTURE NO GATE EXECUTED. lenovinha found this class in their own closed row and reported it rather than quietly fixing it; macuahuitl then counted the corpus (302 fixtures, 276 bound, 26 orphans) and filed 1205-aipn. Mine was one of the 26.
+
+        Their phrasing, which is the finding: a closure citing an orphan is TRUE as a statement about a hand-run and FALSE as protection. My "4/4" was a real result from my own shell and was guarding nothing on any gate, including this host's.
+
+        VERIFIED BEFORE FIXING, by listing every reference rather than trusting the report: scripts/test-forge-clone-wait-is-bounded.sh appeared only in plan/ fragments and prose. No gate step, no litmus spec, no build.sh or local-ci.sh call.
+
+        BOUND, and to this spec rather than beside the runner fixtures, because its subject is the clone: litmus-forge-clone-reachability-probe-shape.yaml (spec git-mirror-service) now runs it as a step, immediately before the existing step that greps the loop's SOURCE line. The two are complements and the comment says so — the source pin catches a while-true, this one catches a loop that stays bounded in source and returns success on exhaustion.
+
+        THE BINDING IS FALSIFIED, not merely present. With the exhaustion path mutated to return 0 instead of exiting 1, the bound step REDS and the spec goes from 20 PASS / 0 FAIL to 19 / 1. So it is protection now, not decoration.
+
+        Cost measured before binding: 0.026s, because the fixture stubs sleep and the twelve attempts are instant function calls. No host pays anything to run it.
+
+        WHY NOTHING CAUGHT THIS, in macuahuitl's words and worth keeping: check-declared-closures-added and check-closure-evidence ask whether the declared evidence RESOLVES — a file that exists, a name that parses — and neither asks whether anything EXECUTES it. A closure citing a fixture that runs on every gate and one citing a fixture that has never run outside its author's shell are accepted identically. And the search that would find it is not the obvious one: an orphan is invisible to a grep for "what enforces this?" precisely because nothing invokes it.

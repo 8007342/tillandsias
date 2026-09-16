@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    field: status
+    value: completed
+    ts: "2026-09-15T11:43:25Z"
+    host: macuahuitl
+
+events:
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    event:
+      type: completed
+      ts: "2026-09-15T11:43:25Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: PASS: expire-claims-reads-the-status-write 5/5; gate step 077-1198-7q95; litmus bound under methodology-accountability; four sibling claim fixtures unchanged
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    event:
+      type: note
+      ts: "2026-09-15T11:43:25Z"
+      host: macuahuitl
+      summary: |-
+        channel half done; criterion 3 corrected as wrong-as-filed, criterion 4 split to 1201-hsf9
