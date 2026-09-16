@@ -10,6 +10,7 @@ packets:
     pickup_role: any
     capability_tags: [ci, fail-loud, instrument, toolbox, gate]
     estimated_hours: 3
+    unscoreable: unpinnable-until-the-guard-exists — the deliverable includes the fixture that would score it, scripts/test-competing-gate-no-dispatch-cause.sh, written in the same commit as the change it tests (1136-n8sh)
     owned_files:
       - scripts/check-no-competing-gate.sh
       - build.sh
