@@ -586,11 +586,29 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             # retrying is futile, and name the step the tool already performs.
             echo "refused:land:push-failed — retrying THIS PUSH cannot help (not a lost race); merge trunk and re-gate:" >&2
             sed -n '1,6p' "$_plog" >&2
+            # MEASURE THE REF THE REFUSAL NAMES, NOT THE BRANCH BEING PUSHED
+            # (macneo-macos, 2026-09-16). This block used to print
+            # `origin/$BRANCH` as the thing to measure. For a mandated-merge
+            # refusal that is the WRONG REF: the refusal reads "osx-next does
+            # not contain origin/linux-next", so the ref that moved is trunk,
+            # not the branch being pushed. macneo measured both — osx-next had
+            # 0 commits that hour while origin/linux-next had 19, about 3
+            # minutes apart, against a ~17 minute macOS gate. Following the old
+            # text literally answered "quiet, spend the gate" about the one ref
+            # that was not racing them. The advice was sound and pointed at the
+            # wrong subject, which is worse than no advice.
             echo "  Re-running this script does that for you: each attempt merges origin/$BRANCH" >&2
             echo "  first, then re-gates. That is worth one more gate ONLY if your gate is" >&2
-            echo "  shorter than trunk's inter-commit interval — on 2026-09-15 that interval" >&2
-            echo "  was 5.5 minutes and a macOS gate lost the race twice. Measure before" >&2
-            echo "  spending a third: git log --since=1.hours --oneline origin/$BRANCH | wc -l" >&2
+            echo "  shorter than the inter-commit interval of THE REF NAMED IN THE REFUSAL" >&2
+            echo "  ABOVE — which is often NOT origin/$BRANCH. A mandated-merge refusal names" >&2
+            echo "  the ref your branch must CONTAIN (origin/linux-next), and that is the ref" >&2
+            echo "  that moved under you. MEASURED on macneo 2026-09-16: osx-next was quiet" >&2
+            echo "  for the hour (0 commits) while origin/linux-next ran 19 commits ~3 min" >&2
+            echo "  apart, against a ~17 min gate — so the race was unwinnable by arithmetic," >&2
+            echo "  and measuring the branch being pushed said 'quiet, spend the gate'." >&2
+            echo "      git log --since=1.hours --oneline <the-ref-named-above> | wc -l" >&2
+            echo "  If that count times your gate length exceeds one interval, stop at two" >&2
+            echo "  attempts and take the relay ref below; more gates lose more slowly." >&2
             # ORDER 1064-r8fv. NAME THE LANE, DO NOT TAKE IT. A refusal that
             # says only "retrying cannot help" reads as a dead end; four
             # consecutive refusals on yolanda ended in a hand-rolled loop
