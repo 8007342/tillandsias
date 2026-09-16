@@ -2195,6 +2195,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "cross-platform unrunnable-arm advisory fixture passed"
 
+    # ORDER 1218-25z3. The advisory runs from the RELEASE path
+    # (release-preflight.sh), not from this gate; its fixture belongs in both
+    # gates, where fixtures run. Hermetic apart from two real-history arms that
+    # read this repo's own log, and those skip rather than fail when a tag is
+    # absent from a shallow clone.
+    _step "Checking the must-ship-next release advisory (1218-25z3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-must-ship-rows.sh" 2>&1; then
+        _error "the must-ship advisory regressed — a row required in the next cut can again be missed with nothing reporting it"
+        exit 1
+    fi
+    _info "must-ship-next release advisory fixture passed"
+
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
     # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo

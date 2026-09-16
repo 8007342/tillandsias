@@ -302,5 +302,19 @@ else
     fi
 fi
 
+# ORDER 1218-25z3. Report the rows marked REQUIRED IN THE NEXT CUT whose fix is
+# not in the tree being cut. ON STDERR ONLY: this file's contract is ONE line on
+# stdout and nothing else, and an advisory that broke that grammar would be a
+# worse defect than the one it closes.
+#
+# ADVISORY, NOT A GATE, and that is a recorded decision with its reason on the
+# row — it does not affect the verdict below and cannot refuse a cut. The gap it
+# closes is that NOBODY WAS TOLD (1211-34v6 missed a cut with nothing reporting
+# it); it was never that someone overrode a warning. `|| true` is belt and
+# braces over a script that already exits 0 on every verdict.
+if [[ -x "$REPO_ROOT/scripts/check-must-ship-rows.sh" ]]; then
+    bash "$REPO_ROOT/scripts/check-must-ship-rows.sh" --cut-ref HEAD >&2 || true
+fi
+
 echo "ok:release-preflight"
 exit 0

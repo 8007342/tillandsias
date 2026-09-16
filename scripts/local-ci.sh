@@ -1573,6 +1573,21 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "unrunnable-platform-arms" "skipped"
     fi
 
+    # Order 1218-25z3, sibling of the above: advisory invoked from the release
+    # path, fixture run here.
+    if [[ -f "scripts/test-must-ship-rows.sh" ]]; then
+        if bash scripts/test-must-ship-rows.sh 2>&1 | tee /tmp/must-ship-rows.log; then
+            log_pass "Must-ship-next release advisory names rows absent from the cut"
+            archive_check_log "must-ship-rows" "pass" /tmp/must-ship-rows.log
+        else
+            log_fail_tracked "must-ship-rows" "Must-ship advisory regression (see /tmp/must-ship-rows.log)"
+            archive_check_log "must-ship-rows" "fail" /tmp/must-ship-rows.log
+        fi
+    else
+        log_fail_missing_guard "must-ship-rows" "scripts/test-must-ship-rows.sh"
+        archive_check_log "must-ship-rows" "skipped"
+    fi
+
     # Order 1004-inkc. `--expect none` disables the absent detection, which is
     # that order's entire subject: a production caller passing it restores a
     # health check that cannot fail on a DELETED service. The escape hatch was
