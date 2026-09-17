@@ -513,29 +513,7 @@ fn citation_matches(
     root: &Path,
     cache: &mut SpanCache,
 ) -> Result<(), String> {
-    if let Some(p) = &m.path
-        && c.path() != p
-    {
-        return Err(format!("path {} != {p}", c.path()));
-    }
-    if let Some(k) = m.kind
-        && c.kind() != k
-    {
-        return Err(format!("kind {:?} != {k:?}", c.kind()));
-    }
-    for (key, want) in &m.authority {
-        match c.authority().get(key) {
-            Some(got) if got == want => {}
-            Some(got) => {
-                return Err(format!(
-                    "authority.{key} = {:?}, expected {:?}",
-                    truncate(got, 48),
-                    truncate(want, 48)
-                ));
-            }
-            None => return Err(format!("citation carries no authority.{key}")),
-        }
-    }
+    citation_matches_record(c, m)?;
     if m.span_contains.is_empty() {
         return Ok(());
     }
@@ -584,20 +562,71 @@ fn span_needles(c: &Citation, m: &CitationMatch, span: &str) -> Result<(), Strin
 /// unanswerable question is not an acquittal. The caller must therefore treat
 /// every `Err` as a genuine failure, which is what keeps this from laundering.
 ///
-/// The path/kind/authority checks are NOT re-run here: they are properties of
-/// the citation record, not of any file, so they cannot be stale. Only the
-/// span read moves.
+/// ORDER 1234. THE RECORD CHECKS RUN HERE TOO, AND LEAVING THEM OUT WAS A
+/// FALSE GREEN — the defect this function was written to prevent, inside it.
+///
+/// The first version skipped path/kind/authority "because they are properties
+/// of the citation record, not of any file, so they cannot be stale". That is
+/// TRUE AND IRRELEVANT. Staleness was never the question: the question is
+/// whether the rescue predicate is as STRONG as the check it rescues from. It
+/// was not, so any citation whose needles happened to match at the frame was
+/// promoted to `stale` no matter what its authority asserted — and 394d's
+/// seeded-wrong-status control went GREEN at rc=0, with a `completed` packet
+/// graded as `ready`.
+///
+/// Measured on macuahuitl-fedora 2026-09-16, and the tell is in the finding
+/// itself: it claimed the citation "satisfies {... status=ready ...} at
+/// 5c13d81e7542" where 5c13d81e7 WAS THAT HOST'S HEAD. Frame and working tree
+/// the same commit, and the two reads still disagreed — which cannot be a
+/// staleness difference, only a difference in WHAT WAS CHECKED.
+///
+/// So this is the span_needles split applied to the other half: ONE predicate
+/// over two inputs, never two predicates over one fact.
 fn citation_matches_at_frame(
     c: &Citation,
     m: &CitationMatch,
     envelope: &Envelope,
     view: &crate::gitref::GitView,
 ) -> Result<String, String> {
+    citation_matches_record(c, m)?;
     let Some((frame, span)) = answer::span_at_frame(c, envelope, view) else {
         return Err("no frame to consult".to_string());
     };
     span_needles(c, m, &span)?;
     Ok(frame)
+}
+
+/// The FILE-INDEPENDENT half of [`citation_matches`]: path, kind, and every
+/// asserted authority key, all read off the citation record.
+///
+/// Shared by the working-tree and frame paths (1234) for the same reason
+/// [`span_needles`] is: a rescue predicate weaker than the check it rescues
+/// from is a way to make a red case green.
+fn citation_matches_record(c: &Citation, m: &CitationMatch) -> Result<(), String> {
+    if let Some(p) = &m.path
+        && c.path() != p
+    {
+        return Err(format!("path {} != {p}", c.path()));
+    }
+    if let Some(k) = m.kind
+        && c.kind() != k
+    {
+        return Err(format!("kind {:?} != {k:?}", c.kind()));
+    }
+    for (key, want) in &m.authority {
+        match c.authority().get(key) {
+            Some(got) if got == want => {}
+            Some(got) => {
+                return Err(format!(
+                    "authority.{key} = {:?}, expected {:?}",
+                    truncate(got, 48),
+                    truncate(want, 48)
+                ));
+            }
+            None => return Err(format!("citation carries no authority.{key}")),
+        }
+    }
+    Ok(())
 }
 
 /// ORDER 879-gidx, hoisted by 920-pxg6: the ladder itself now lives in
@@ -1718,6 +1747,65 @@ citations_include:
         assert!(
             found.failures.is_empty(),
             "the span does not match at HEAD, so the exclusion must not fire: {:?}",
+            found.failures
+        );
+    }
+
+    /// ORDER 1234 — THE ARM THAT WAS MISSING, and the one 394d's seeded-wrong-
+    /// status control was carrying alone.
+    ///
+    /// A citation whose NEEDLES pass at the frame but whose AUTHORITY is false
+    /// everywhere must stay a FAILURE. The two arms written with wire 3 could
+    /// not see this: one is wrong on the needles (which the frame path did
+    /// check) and the other has no frame at all. Neither exercises a citation
+    /// that is needle-right and authority-wrong, which is the only axis on
+    /// which a weaker rescue predicate can launder a red case.
+    #[test]
+    fn an_expectation_whose_authority_is_false_is_never_rescued_by_its_needles() {
+        let (r, a, b) = repo_where_the_span_moves("gt-authority");
+        r.checkout(&b);
+
+        // The needle IS present in the span at commit `a` — so the frame path
+        // would rescue on needles alone — while the authority assertion is
+        // false in the citation record, and a record is not stale-able.
+        // `authority` is #[serde(flatten)], so the key sits at the top level.
+        let expect: Expect = serde_json::from_value(serde_json::json!({
+            "confidence": "retrieved",
+            "verify": false,
+            "citations_include": [{
+                "path": "openspec/specs/x/spec.md",
+                "span_contains": ["egress-default-deny"],
+                "status": "ready",
+            }],
+        }))
+        .expect("expect deserializes");
+
+        // The citation CARRIES status=completed — macuahuitl's case exactly: a
+        // `completed` packet asserted as `ready`. The value is wrong in the
+        // record, so it is wrong at every commit; only the needle travels.
+        let env: Envelope = serde_json::from_value(serde_json::json!({
+            "answer": "The egress-default-deny section says to deny by default.",
+            "citations": [{
+                "path": "openspec/specs/x/spec.md",
+                "line_start": 2, "line_end": 2,
+                "kind": "spec",
+                "authority": { "key": "egress-default-deny", "status": "completed" },
+            }],
+            "freshness": { "source_commit": a, "indexed_at": "2026-09-14T00:00:00Z" },
+            "confidence": "retrieved",
+        }))
+        .expect("envelope deserializes");
+
+        let found = grade_envelope_audited(&env, &expect, r.path());
+        assert!(
+            found.stale.is_empty(),
+            "a false authority assertion must NOT be rescued by a matching needle: {:?}",
+            found.stale
+        );
+        assert_eq!(found.failures.len(), 1, "{found:?}");
+        assert!(
+            found.failures[0].contains("no citation satisfies"),
+            "{:?}",
             found.failures
         );
     }
