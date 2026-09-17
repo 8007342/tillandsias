@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    event:
+      type: progress
+      ts: "2026-09-17T16:01:09Z"
+      agent_id: linux-macuahuitl-claude-20260917t160109z
+      host: macuahuitl
+      summary: |
+        MEASURED ON macuahuitl 2026-09-17, after the operator raised stale build dates
+        as their last message of 2026-09-16. This row is the filed home for that
+        complaint, and the numbers below are the evidence it was missing.
+
+        THE DATE DERIVATION IS NOT BROKEN. That was my first two guesses and both were
+        wrong; stating them so nobody re-runs them:
+          - tracked VERSION reads 56.9.13.1, last moved 2026-09-13 — four days, on a
+            host that builds many times a day
+          - a bump today, driven in a scratch layout so the real file is untouched,
+            produces 56.9.17.1 — today's date, correctly
+          - this host's installed launcher reports v56.9.17.1
+        So the CalVer derivation and the installed artifact are both right. What is
+        stale is the TRACKED file, and therefore every reader of it.
+
+        THE MECHANISM IS THIS ROW'S SUBJECT, EXACTLY AS FILED. _bump_build_version in
+        build.sh dirties a tracked file. The pre-push VERSION guard refuses a commit
+        that moves VERSION on any branch but main. So on every platform branch — which
+        is every branch the fleet works on — the build prints an instruction to REVERT
+        its own bump, offering `git checkout --` on VERSION and the Cargo files, or
+        TILLANDSIAS_SKIP_VERSION_BUMP next time. The counter is therefore computed and
+        discarded on every build, and tracked VERSION can only move at a release. That
+        is why every host's tree carries the last cut's date rather than today's, and
+        why a peer reading the tree, a fresh clone, or anything that labels from the
+        file inherits a four-day-old date.
+
+        WHAT THIS CHANGES ABOUT THE ROW: nothing in its analysis, which was right when
+        filed. What it adds is that the cost is no longer hypothetical or internal — it
+        reached the operator, who experiences it as every terminal reporting a version
+        days old, and it is now the stated reason they are angry. The first exit
+        criterion is the decision they and a peer were trying to reach independently:
+        whether the local build counter should touch tracked files at all.
+
+        ONE CONSTRAINT WORTH RESTATING BECAUSE IT IS THE TEMPTING WRONG TURN, and this
+        row already says it in its notes: do NOT fix this by relaxing the VERSION guard.
+        The guard exists because main's VERSION is the release identity and a platform
+        branch must not move it. The defect is that a routine local build writes to a
+        file under that guard's protection.
+
+        AND ONE THING THE CRITERIA DO NOT YET SAY, offered as an observation rather than
+        an amendment, since the operator's requirement arrived after this row was filed:
+        moving the counter to an untracked stamp satisfies criterion 1 and does NOT by
+        itself satisfy what the operator asked for. If tracked VERSION moves only at
+        release and the binary's label is read from it, then between releases every
+        build still labels itself with the last cut's date. Meeting "every build carries
+        its own date" additionally requires that the label be COMPOSED at build time
+        from the current date plus the untracked counter, rather than read from the
+        tracked file. Whoever takes this row should confirm that reading with the
+        operator before building, because criterion 1 as written is satisfiable in a way
+        that leaves the complaint intact.

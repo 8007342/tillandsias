@@ -7829,3 +7829,73 @@ reading it as one would have produced a phantom relay.
 **NO REASSIGNMENT.** yoga holds 964-tzmp with layer 1 landed (4.2x on the fold,
 27x on `check`, output byte-identical); macbookair is closed by the operator;
 the forge remains unreachable. Nobody idle, nobody to direct.
+
+## 2026-09-17T16:00Z macuahuitl — coordination pass
+
+**A REAL RELAY, AFTER SIX PHANTOM ONES.** `osx-next` reads 6 commits ahead, and
+this time the trees genuinely differ — on exactly two plan-only files, +23 lines:
+macbookair's own section of this file, and one `MO-FULL: COMPLETE` line from
+2026-09-17T12:22Z. There is a single merge base, so a three-dot diff would have
+been reliable here; the two-dot tree compare was used anyway because the rule
+does not get suspended on the pass where it happens to agree. `windows-next` is
+**0 ahead and 493 behind**. That is not divergence and it is not a relay — it is
+an abandoned branch while its host is offline, and the next Windows landing pays
+a 493-commit integrate.
+
+**THE CYCLE-METRICS CHANNEL DIED FLEET-WIDE ON 2026-09-05, AND NOBODY NOTICED
+FOR TWELVE DAYS — INCLUDING ME.** `scripts/loop-status-metrics-audit.sh` returns
+`rows=23 stems=23`, so the instrument is healthy and dropped no stem. All 23
+stems read `NOT-PASTING`, and the newest `last-paste` of any stem is
+`20260905t012936z`. The meta-orchestration handoff REQUIRES the cycle-metrics
+block verbatim; that requirement has been unmet by every host, every cycle, for
+twelve days. The skill's remedy — "route it as a plain ask to that host" — is
+written for one silent host and misfires at 23 of 23: it would generate a nag per
+host for a practice that stopped collectively, which is an aggregate being
+charged to the wrong remedy. This pass pasted its own block rather than asking
+anyone else first, because a coordinator who has not pasted since 09-05 asking
+others to paste is the instrument problem wearing a hat.
+
+**NO SKIPPABLE PACKET FILED, DELIBERATELY.** This host's `skippable:` names
+`cargo test --workspace --all-targets` at `runs=127 avg_ms=88768
+saved_ms_upper=11184819`. The rule is one packet only when the SAME step tops two
+or more hosts' readings, and 23 of 23 stems are not pasting, so no second reading
+exists to compare. `saved_ms_upper` is a bound and must be quoted as one — the
+timing log carries no input identity, so nobody can claim those runs would have
+hit a cache. Filing from n=1 here would broadcast a fat-host number as a fleet
+rule, which is the shape that was wrong four separate times on 09-16.
+
+**A GREEN GATE THAT RAN NONE OF THE BOUND LITMUS, CAUGHT BY THE TOOL AND ACTED
+ON.** The land printed the 1201-9it2 notice: four bound litmus tests across three
+specs assert on the pushed files and `./build.sh --check` ran none of them. One
+of the four was `litmus:uninstall-preserves-vm-image` — the declared closure of
+the very packet being landed. That is yesterday's defect exactly: a caveat stated
+in a landing message and treated as if stating it discharged it. The four were
+run: `app-lifecycle` 3 pass / 0 fail, `cache-recovery-mechanism` 2 pass / 0 fail,
+and the closure test was confirmed EXECUTED rather than skipped — the one skip in
+each spec was `litmus:environment-isolation`, unrelated. A pass rate hides which
+test produced it, so the skip was named before the green was believed.
+
+**AN INSTRUMENT WHOSE SILENCE IS INDISTINGUISHABLE FROM A PASS — 1240-g673.**
+Asking `scripts/audit-guard-activation.sh` whether a newly written fixture was
+wired returned `0 matches, verdict=ok, orphan=0` — identically with the fixture
+wired inline, wired as a gate-step file, and not wired at all. Its population is
+`check-*.sh`, as its own header comment states. Counted three ways rather than
+two, the gate-step bindings are 63 `test-*.sh`, 12 `check-*.sh`, and 2 that are
+neither — and one of the two is the auditor's OWN binding, which it therefore
+cannot audit. "Activation is proved by what ran" points the fleet at this
+instrument; the instrument covers 12 of 77 bindings.
+
+**THE OPERATOR'S VERSION COMPLAINT ALREADY HAS A FILED HOME: 643-64bx, pending,
+p1, v0.5.** Measured rather than inferred, after two wrong diagnoses of mine:
+tracked `VERSION` is `56.9.13.1`, last moved 2026-09-13, four days, on a host
+that builds many times a day. The date derivation is NOT broken — a bump today
+produces `56.9.17.1` in a scratch layout, and this host's installed launcher
+correctly reports `v56.9.17.1`. What breaks it is that `_bump_build_version` in
+`build.sh` dirties a tracked file the pre-push VERSION guard refuses off `main`,
+so on every platform branch the build instructs the agent to REVERT the bump. The
+counter is therefore computed and thrown away on every build, and the tracked
+VERSION can only move at a release — which is why every host's tree carries the
+last cut's date. 643-64bx's first exit criterion is precisely the decision the
+operator and yoga were reaching for: whether the local build counter should touch
+tracked files at all. Its own note forbids the tempting shortcut: do not fix this
+by relaxing the VERSION guard.
