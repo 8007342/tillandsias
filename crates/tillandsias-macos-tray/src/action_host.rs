@@ -1576,7 +1576,7 @@ async fn run_start(
         tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
             .await
             .map_err(|e| format!("VM start task panicked: {e}"))?
-            .map_err(|e| format!("{e}"))?;
+            .map_err(|e| e.to_string())?;
     }
     on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
