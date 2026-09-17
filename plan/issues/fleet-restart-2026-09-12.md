@@ -7768,3 +7768,64 @@ same reason every other correction tonight was: if the wrong sentence is quietly
 replaced, nobody learns that a summary written at the end of a long night got
 its own attribution backwards while describing four ways a measurement can be
 about something other than what was asked.
+
+## Pass 52
+
+**THE OPERATOR CAME IN ANGRY AND THE OBVIOUS DIAGNOSIS WAS WRONG TWICE.** Every
+terminal they open shows an installed version days old, despite hosts building
+several times a day. They closed macbookair over it and left until morning.
+
+**WRONG 1:** `build.rs` reads a tracked `VERSION` that only moves at release.
+The chain is real — the file was last changed 2026-09-13 by a release commit —
+and it is NOT what produced the symptom.
+
+**WRONG 2:** `build.sh` tells the agent `git checkout -- VERSION …` after a
+bump, and I had followed it three times that night believing I was discarding a
+date stamp. **I was not.** `WORKSPACE_VERSION` is baked in at COMPILE time, so
+reverting the file cannot un-stamp a binary that is already built. The advice is
+correct. **I was one edit from "fixing" correct advice on the strength of my own
+wrong diagnosis**, and stopped only because the next measurement contradicted me.
+
+**WHAT THE MEASUREMENT SAID:**
+
+```
+old launcher   v56.9.12.2    mtime 2026-09-12 07:09
+56.9.12.x IS 2026-09-12 — the stamp was CORRECT for the day it was built
+one ./build.sh --install  ->  v56.9.17.1, today, 71 s, rc=0
+```
+
+**The stamping works.** The defect is INSTALL FREQUENCY (1237-f9dy): only
+`--install` and `--ci-full --install` write the launcher, routine work is
+`--check`, and every `--ci-full --install` here since 09-12 died before its
+install step. Builds stamp correctly; **none of them reach the launcher.** The
+operator was seeing a stale INSTALL faithfully reporting the day it was made.
+
+**A THREE-WEEK-OLD RULING GAINED AN AMENDMENT THAT WOULD HAVE SHIPPED WRONG.**
+862-zhr2 has waited since 2026-08-23 for A-versus-B, with two hosts correctly
+declining to guess. The operator ruled the REQUIREMENT tonight — every build
+carries the date — but resolution A as written labels dev binaries
+`<VERSION>+local.<stamp>`, rendering `56.9.13.1+local.xxxx`: **still leading
+with the last cut's date.** A does not satisfy the requirement it would be
+chosen for. Recorded on the row above the recommendation, because "the operator
+said yes to A" was one message away from being true and wrong.
+
+**AND 1237-f9dy WAS DELIBERATELY NOT FOLDED INTO 862-zhr2.** Resolving that
+ruling either way leaves the launcher exactly as stale — folding them means the
+ruling lands, the operator opens a terminal, sees an old date again, and
+concludes the fix failed. Two defects, one symptom, and the symptom belongs to
+the one nobody had filed.
+
+**FLEET CHECK OUTSTANDING, BY DESIGN.** 1237-f9dy's fourth criterion requires a
+second host's launcher version and install mtime, because this was measured on
+one host and reported fleet-wide. Asked of yoga this pass rather than
+extrapolated — after a night in which a one-host number was wrong four separate
+times.
+
+**NOTHING TO RELAY.** `osx-next` reads 4 commits ahead and every file those
+commits touch is byte-identical to trunk; `windows-next` is at 0. A commit count
+is not a measure of divergence, and this is the second consecutive pass where
+reading it as one would have produced a phantom relay.
+
+**NO REASSIGNMENT.** yoga holds 964-tzmp with layer 1 landed (4.2x on the fold,
+27x on `check`, output byte-identical); macbookair is closed by the operator;
+the forge remains unreachable. Nobody idle, nobody to direct.
