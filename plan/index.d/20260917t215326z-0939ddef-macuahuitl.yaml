@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-17T21:53:26Z"
+      agent_id: linux-macuahuitl-claude-20260917t215326z
+      host: macuahuitl
+      summary: |
+        TASK 4.5 CITES 902-5bf9's CRITERION AS ITS STANDARD, AND THEY ARE TWO DIFFERENT
+        OBLIGATIONS. Found by macbookair while delivering the darwin half; verified
+        independently here before recording, because a cross-row citation that does not
+        hold is the kind of thing that silently blocks or silently closes a packet.
+
+        THE TWO OBLIGATIONS:
+          (a) "does mlua-vendored build and run on this platform" — a portability
+              question, answerable per host. The darwin half is now answered with
+              evidence generated today.
+          (b) 902-5bf9's own criterion — "verified GREEN on linux, darwin AND msys
+              BEFORE IT IS WIRED INTO --check". That one is about a Lua STEP FORM for
+              the litmus runner, offered beside shell.
+
+        (b) CANNOT BE SATISFIED BY PORTABILITY EVIDENCE, because the thing to be wired
+        does not exist. VERIFIED ON THIS HOST, with a positive control so the zero means
+        something:
+            grep -c "steps:" scripts/run-litmus-test.sh   -> 0
+            grep -ci "lua"   scripts/run-litmus-test.sh   -> 0
+            positive control: the file is 2390 readable lines
+        A zero from a file that turned out to be missing or empty would read the same;
+        it is neither. The runner mentions Lua nowhere at all.
+
+        So satisfying task 4.5's darwin half does NOT advance 902-5bf9, and macbookair
+        explicitly did not claim it did. 902-5bf9 stays open on its own terms. This is
+        consistent with the note already in the workspace Cargo.toml recording that
+        687eb6d57 originally miscited 902-5bf9 and that its mlua-portability exit
+        criterion is still open — the miscitation was corrected in the build file and
+        survived in this row's next_action.
+
+        WHAT THE DARWIN HALF ACTUALLY DELIVERED, and why it is stronger than the fleet
+        decision this row asked for. The next_action offered two options: accept the
+        2026-08-28 report's "[lua-expert] runtime initialized" line, or re-run. Both were
+        weaker than what was available on a host that builds this crate constantly:
+          Darwin 25.6.0 arm64, Apple clang 21.0.0
+          cargo clean -p mlua-sys && cargo build -p tillandsias-plan --lib
+            -> mlua-sys 0.6.8 and mlua 0.10.5 COMPILED, rc=0, 0 errors
+          cargo test -p tillandsias-plan --lib lua_runtime -> 7 passed, 0 failed
+        THE CLEAN IS THE LOAD-BEARING PART and is worth carrying to the msys lane:
+        `vendored` builds Lua from C source, so the real question is whether a working C
+        toolchain exists on the platform. A CACHED artifact produces an identical green
+        while compiling nothing. Cleaning mlua-sys specifically forces the C build to
+        happen where it can be observed. Their words: the same stale-artifact trap bit
+        them earlier the same day, querying a release binary after building only debug.
+
+        And the tests beat the log line the fleet was being asked to accept:
+        "[lua-expert] runtime initialized" shows INITIALIZATION;
+        lua_runtime_loads_init_script shows the runtime EXECUTES Lua, and
+        lua_runtime_blocks_os_execute plus lua_runtime_blocks_debug_library show the
+        deliberately-small-stdlib property HOLDS on Darwin. Strictly more than the
+        question asked.
+
+        STILL OPEN AND NOT MINE OR THEIRS: the msys half needs a Windows host, and
+        windows-next is 0 ahead / 528 behind as of 2026-09-17T21:50Z (I quoted 510 to
+        them earlier from a stale reading; the figure has moved 493 -> 510 -> 515 -> 528
+        across four readings today and none of that is the branch moving). So that lane
+        is producing no evidence at present. The OpenSpec sync/archive item is also
+        still open.
