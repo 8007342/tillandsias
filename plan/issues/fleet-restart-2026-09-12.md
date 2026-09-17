@@ -8094,3 +8094,43 @@ the seeded-wrong-answer negative control before any relay — and a coordination
 pass is the wrong place to land 127-commits-stale code the operator already
 tracks as unaudited. Not deleted: a ref that is an ancestor of nothing is the
 only copy of that work.
+
+## 2026-09-17T22:05Z macuahuitl — a Windows host reported for work
+
+**yolanda-windows IS BACK, fresh session, asking for work.** That changes the
+routing picture: the msys half of 920-pxg6 had been open all day with nowhere to
+send it, and `windows-next` at 532 behind had no owner. Both are now dispatched.
+
+**THEIR BRANCH POINT IS SAFE AND I CHECKED RATHER THAN ASSUMED.** They report a
+clean tree on `plan-rows-20260915` at 35fa7da5f, which is not a ref on origin.
+That looked like a stranding risk of the 1232-av4p shape, so: 35fa7da5f IS
+contained by origin/linux-next and origin/osx-next — it is a 2026-09-15 trunk
+commit and nothing of theirs is stranded on it. It is two days stale and it is
+not `windows-next`, which is where Windows work commits, so the dispatch says to
+move before pushing anything.
+
+**PRIMARY: 920-pxg6 task 4.5, msys half**, carrying macbookair's method verbatim
+because the clean is the load-bearing part — `vendored` builds Lua from C
+source, so the real question is whether a working C toolchain exists, and a
+cached artifact produces an identical green while compiling nothing. The
+dispatch also tells them what NOT to claim: task 4.5 and 902-5bf9's criterion are
+two obligations, and msys evidence does not advance the second while nothing is
+wired.
+
+**SECONDARY: the windows-next integration.** 0 ahead / 532 behind. The
+coordination discipline triggers a Sibling Integration task above five commits
+of drift; this is a hundred times over. Merge origin/linux-next INTO
+windows-next and resolve there, never rebase published commits across branches.
+A clean-looking merge at that distance deserves suspicion, not relief.
+
+**ON THE DESTRUCTIVE-RESET OFFER, RECORDED BECAUSE IT IS A BOUNDARY.** They
+report that the operator has pre-approved destructive local resets on their
+host. I neither authorised nor relied on that: a coordinator cannot grant it,
+and a relayed approval is not the approval. Both assignments were chosen so that
+neither needs any destruction — a cargo build and a merge. Whatever standing
+consent exists on that host is between that host and the operator.
+
+**FLEET AS OF THIS PASS:** macbookair active (21:21Z, delivered the darwin half),
+yolanda active as of 22:05Z with two assignments, this host coordinating. yoga
+last attested 2026-09-16T19:37Z and lenovinha 2026-09-16T07:16Z — still outside
+the report-for-work rule, still directed nowhere.
