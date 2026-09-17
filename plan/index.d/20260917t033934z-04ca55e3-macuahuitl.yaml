@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: version-counter-flow-vs-guard-ruling
+    event:
+      type: note
+      ts: "2026-09-17T03:39:34Z"
+      agent_id: linux-macuahuitl-claude-20260917t033933z
+      host: macuahuitl
+      summary: |
+        OPERATOR RULING AND A CORRECTION TO MY OWN FIRST DIAGNOSIS, 2026-09-17.
+
+        THE RULING, in the operator's words: "cada pinche build debe tener LA PUTA FECHA
+        ESTAMPADA EN LA VERSION" — every build must carry the date. They reported seeing
+        days-old versions on every host despite several builds per day, closed
+        macbookair over it, and asked for it fixed by morning. That settles this row's
+        REQUIREMENT. It does not by itself settle A versus B, which is what 862-zhr2
+        exists to decide and what two hosts correctly declined to guess.
+
+        AND RESOLUTION A AS WRITTEN DOES NOT SATISFY IT. The decision record proposes
+        dev binaries self-label `<VERSION>+local.<stamp>`, which on this tree renders
+        56.9.13.1+local.xxxx — leading with the last CUT's date, five days stale. The
+        operator's requirement is that the DATE LEADS. So A needs amending before it is
+        implemented: the local stamp must carry today's date in the date fields, not a
+        suffix on a release lineage. Whoever implements A should read this before the
+        decision record's recommendation, or they will ship something that passes review
+        and fails the requirement it was chosen for.
+
+        MY FIRST DIAGNOSIS WAS WRONG AND I AM RECORDING IT RATHER THAN QUIETLY FIXING
+        IT. I told the operator the cause was build.rs reading a tracked VERSION that
+        only moves at release. That chain is real but it is NOT what produced the
+        symptom. The decisive measurement:
+          the old launcher reported v56.9.12.2 and its mtime was 2026-09-12
+          56.9.12.x IS 2026-09-12 — the stamp was CORRECT for the day it was built
+          one `./build.sh --install` produced v56.9.17.1, today, touching none of the
+          version plumbing
+        So the stamping mechanism works. What is broken is INSTALL FREQUENCY: only
+        `--install` and `--ci-full --install` install, the hosts' routine builds are
+        `--check`, and every `--ci-full --install` since 2026-09-12 has failed before
+        reaching its install step. Builds stamp correctly; none of them reach the
+        launcher. The operator sees a five-day-old binary because the last successful
+        install was five days ago.
+
+        AND THE REVERT INSTRUCTION IS NOT THE DEFECT EITHER. build.sh tells the agent
+        `git checkout -- VERSION Cargo.toml ...` after a bump, and I followed it three
+        times tonight believing I was discarding a date stamp. I was not: WORKSPACE_VERSION
+        is baked in at COMPILE time, so reverting the file cannot un-stamp a binary that
+        is already built. The advice is accurate given the guard. I was about to "fix"
+        correct advice on the strength of my own wrong diagnosis, and stopped when the
+        mtime evidence contradicted me.
+
+        WHAT ACTUALLY NEEDS DECIDING, unchanged: A versus B on this row. What needs
+        ADDING: the amendment above, and the separate install-frequency defect, which is
+        the one the operator feels daily and which no ruling here addresses.
