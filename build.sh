@@ -1953,6 +1953,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # ORDER 1234-zade. `@trace order:<id>` had no resolver: validate-traces.sh
+    # detects ghost traces for `spec:` and never looks at `order:`, though the
+    # documented annotation carries both. Order UNIQUENESS was gated among filed
+    # packets and order EXISTENCE was not, so ten fabricated citations landed in
+    # one night and every gate passed them.
+    #
+    # BELONGS IN THE FAST LANE, unlike its closure-guard sibling: this reads the
+    # ledger FILES directly rather than resolving a built tillandsias-plan, so it
+    # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
+    # tree. It refuses with `blocked:` if the ledger read yields nothing, which
+    # is the difference between a clean tree and a broken instrument.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
+        _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
+        exit 1
+    fi
+
     # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
     # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
     # by measurement here. It resolves a built `tillandsias-plan` and, when the
