@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: progress
+      ts: "2026-09-17T08:25:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t082535z
+      host: macos
+      summary: |-
+        CRITERION 2 DELIVERED, criteria 3 remains. Status returns to ready; this is one cycle's vertical slice, not the packet. Landed at 2c194550c (ok:land:7ab5e5975:attempt-1), verified by merge-base against origin/osx-next rather than exit status.
+
+        THE PRE-FIX RESULT, measured and quoted because the criterion is stated as a degradation requirement:
+          answer "give me a few forgotten bugs nobody is fixing" -> confidence: unsupported, 0 citations, "not a recognised ready/burndown query"
+        Criterion 2 forbids precisely that: with no inference endpoint the surface must DEGRADE TO THE DETERMINISTIC LIST rather than refuse. It refused.
+          after -> confidence: exact, 10 citations, headline states no inference endpoint was consulted
+        This host reports expert-absent at cycle preflight, so the degradation path was exercised FOR REAL rather than mocked. That is why the packet was taken here.
+
+        WHAT THE WORK ACTUALLY WAS: making criterion 1's projection REACHABLE. It was delivered inside main.rs's CLI arm; answer_question lives in the LIBRARY, so "story-shaped questions route through it" was not implementable until the projection moved. Now crates/tillandsias-plan/src/forgotten.rs, called by both the CLI arm and the answer surface.
+
+        EXTRACTED, NOT REIMPLEMENTED — and that IS criterion 4 rather than a separate task. A second copy of the logic would satisfy a same-set control on the day it was written and drift silently afterwards. One definition, two callers, so the two surfaces cannot disagree.
+
+        SCOPE HELD DOWN DELIBERATELY: the forgotten arm used query_packets with Some("ready") and None/empty/unlimited for every other parameter, so only the status filter was needed, and it is character-identical to that helper's own status arm. Moving all 107 lines would have dragged in role and claimability semantics carrying three orders' worth of rulings this projection never consults. str_field/str_list were already pub in the lib; role_satisfies is not needed.
+
+        EQUIVALENCE PROVEN BY BYTES: CLI output at a fixed --now-epoch is byte-identical to the pre-refactor baseline across all 417 rows, plus a control confirming the comparison has teeth (dropping one line makes cmp fail).
+
+        THE CLASSIFIER WAS WRONG FIRST AND THE TEST CAUGHT IT. Fixed phrases "nobody is fixing" / "nobody is working on" both missed "which packets IS NOBODY working on", where the auxiliary moves ahead of the subject. Replaced with co-occurrence (nobody + a work verb), which is word-order-free and still narrow. Unstaged falsification: 2 passed/1 failed before, 3 passed/0 failed after. The "forgotten" arm matches as a TOKEN per 757-yi8c, and routing is gated on reference.is_none() so "is 718-jqt5 forgotten?" still answers about that packet.
+
+        Verified: 328 + 44 tests passed, 0 failed; clippy --all-targets -D warnings 0 (run NATIVELY pre-land); fmt 0; zigbuild musl --tests 0; release plan binary rebuilt and check-plan-binary-current.sh ok.
+
+        FOR WHOEVER TAKES CRITERION 3: it asks that running this yield real packets filed as fragments, with the closing event quoting at least three genuinely un-surfaced by minimax. The surface now exists and is cited, so that is a reading-and-filing task rather than a coding one. Note the projection currently reports 506 ready packets and the top rows are eventless, order-ranked — expect the oldest order tokens, not the loudest packets.

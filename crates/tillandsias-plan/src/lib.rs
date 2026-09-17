@@ -37,6 +37,7 @@ pub mod experts_probe;
 /// concurrent hosts never produce a merge a human must adjudicate. Implements
 /// `methodology/distributed-work.yaml` → `crdt_principles.append_only_history`,
 /// which required exactly this and which the monolithic index file never was.
+pub mod forgotten;
 pub mod fragments;
 /// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
 /// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
