@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-highest-residual-epics-head-is-real-claimable-work-that-the-selector-structurally-cannot-offer-because-it-carries-no-release-target-of-its-own
+    order: 1239-cges
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [plan, triage, coordination]
+    estimated_hours: 2
+    owned_files:
+      - scripts/select-work-batch.sh
+    title: |
+      socket-audit-master is a ready, non-milestone packet heading the fleet's top-residual epic — and no selector can hand it to anyone, because epic membership is what the selector ranks and a head belongs to no epic
+    context: |
+      FOUND BY 718-jqt5's `forgotten` PROJECTION, at rank 1, which is the
+      packet's own criterion 3 working: a row that minimax cannot reach.
+
+      MEASURED 2026-09-17 on tlatoanis-macbook-air.
+
+      EVERY EPIC HEAD IS UNREACHABLE BY THE EPIC TIER, and for 13 of 14 that is
+      CORRECT AND DELIBERATE — they are `kind: milestone`, which
+      `query_packets` excludes from claimability by design
+      (ambitious_milestone_reduction.milestone_packet_semantics; a milestone
+      holds criteria and is never claimed for implementation). Enumerated every
+      value used as a `release_target`:
+        13 heads  kind: milestone          correctly unclaimable
+         1 head   kind: audit+refactor     socket-audit-master (order 151)
+      socket-audit-master is the ONLY epic head that is real claimable work by
+      its own kind, and it is `status: ready` with no `release_target` of its
+      own. So the exclusion that is right for the other thirteen is wrong for
+      exactly this one.
+
+      IT IS NOT AN OBSCURE ROW. 31 packets name socket-audit-master as their
+      release_target, and it is the HIGHEST-RESIDUAL epic on the frontier
+      (16.813, p=0.362) — measured across 20 seeds, the selector chose that
+      epic 11 times of 20, more than any other. So the fleet's most-selected
+      epic has a head that is genuine work nobody can be handed.
+
+      WHY NO AMOUNT OF SEEDING FINDS IT. The selector ranks EPICS and then
+      offers their CHILDREN. Membership is `release_target`. A head defines an
+      epic rather than belonging to one, so it has no membership to rank and
+      falls outside the mechanism entirely — not unlucky, structurally absent.
+      Measured: 20 seeds x budget 6 offered 14 distinct packets and not one of
+      them was this row.
+
+      BEFORE FILING I CHECKED WHETHER THE ABSENCE WAS CHOSEN, because "X is
+      missing" is usually "X was decided". For the 13 milestone heads it plainly
+      was. For this one the evidence points the other way: its `kind` is
+      `audit+refactor`, its `deliverable` names a real issue file
+      (plan/issues/socket-audit-master-2026-06-30.md), and it carries
+      `depends_on` edges — none of which a criteria-holder needs. It reads as
+      work that was given an epic's NAME, not as a container.
+
+      THE FIX IS A DECISION, NOT AN OBVIOUS EDIT, and the wrong one is
+      available: making the selector offer heads would hand out all 13
+      milestones and reintroduce exactly what 647-6c3g's notes forbid
+      ("never claim this for implementation"), which yolanda already hit twice
+      when the urgent slot offered architecture-audit-epic itself. So the
+      candidates are (a) give this packet a release_target so it is a child of
+      something, (b) split the audit work out of the head and leave the head as
+      a pure container, or (c) teach the selector that a non-milestone head is
+      claimable — narrowest in wording, widest in blast radius.
+    exit_criteria:
+      - 'a ready non-milestone epic head is reachable by some selector path, demonstrated on socket-audit-master (pre-fix result: FAILS — 20 seeds x budget 6 offered 14 distinct packets, none of them this row)'
+      - 'milestone heads remain unclaimable, so the fix does not reintroduce the yolanda case where the urgent slot offered an epic head itself'
+      - 'the check is enumerative over every value used as a release_target, since this was found by enumerating all 14 heads rather than by noticing one'
+    unscoreable: |
+      needs-a-decision-before-a-fixture: the criteria are verifiable but the
+      three candidate fixes differ in blast radius, and the widest one
+      reintroduces a defect the fleet has already paid for twice. Filed with the
+      enumeration, the frontier measurement, and the 20-seed reachability
+      control so the decision rests on data.

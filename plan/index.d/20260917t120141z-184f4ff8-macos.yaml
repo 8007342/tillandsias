@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: story-shaped-eager-work-packets
+    field: status
+    value: ready
+    ts: "2026-09-17T12:01:41Z"
+    host: macos
+
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: note
+      ts: "2026-09-17T12:01:41Z"
+      host: macos
+      summary: |-
+        cycle end; criterion 3 delivered with a 20-seed reachability control, 1239-cges filed from class 1. Criteria 1,2,3 done; the packet's remaining surface is whether an inference layer should phrase/cluster the result.
