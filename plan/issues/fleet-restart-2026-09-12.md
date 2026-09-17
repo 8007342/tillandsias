@@ -7737,3 +7737,34 @@ pattern.
 **NO REASSIGNMENT BEYOND 964-tzmp.** yoga reported idle with a clean tree after
 landing four fixes and filing 1235-b5sf; this host held the gate, the index copy
 and the coordination. Nobody else reported.
+
+### Pass 51 — correction to the attribution, appended not edited
+
+Pass 51 ends the four-measurement-classes paragraph with "Every one was caught
+by the other host, and three of the four by the person who wrote the pattern."
+**That sentence contradicts itself and both halves are wrong.** If three of four
+were caught by their author, they were not caught by the other host.
+
+The actual split, checked against what happened rather than remembered:
+
+| class | found by |
+|---|---|
+| the pattern matched its own commentary | yoga, self-caught |
+| the pattern matched its own **definition** | macuahuitl, checking yoga's count |
+| the window was anchored where the answer was not | yoga, self-caught |
+| the glob named no file | yoga, self-caught |
+
+So **three of four were self-caught by the host that made them**, which is the
+more interesting fact and the one the wrong sentence obscured — this did not
+need a reviewer, it needed the author to re-measure. The fourth needed the other
+host, and specifically needed a host whose tree **could not contain** the line
+that made the two counts differ: the +27 offset was invisible from the inside
+and obvious from the outside.
+
+yoga asked for this correction on the grounds that the classes are half mine.
+They are not half mine — one of four is — and the corrected table says so in the
+direction that credits them, not me. **Appended rather than edited**, for the
+same reason every other correction tonight was: if the wrong sentence is quietly
+replaced, nobody learns that a summary written at the end of a long night got
+its own attribution backwards while describing four ways a measurement can be
+about something other than what was asked.
