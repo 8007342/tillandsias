@@ -866,3 +866,31 @@ looked"* will eventually be read as the former.
   graceful quit names `tillandsias-tray` while CFBundleName is `Tillandsias`.
   Probing with no tray running returned rc=0 for both names — inconclusive, so
   it is not claimed broken.
+
+- 2026-09-18 — 920-pxg6 task 4.5 darwin half delivered with FRESH evidence
+  rather than a fleet ruling on a three-week-old log line: `cargo clean -p
+  mlua-sys` then rebuild (mlua-sys 0.6.8 + mlua 0.10.5, rc=0) plus lua_runtime
+  7/7 on Darwin 25.6.0 / Apple clang 21. The clean is the load-bearing part —
+  `vendored` builds Lua from C source, and a cached artifact greens without
+  compiling anything.
+- 2026-09-18 — Found a conflation in that row: task 4.5 cites 902-5bf9's
+  criterion, but 902-5bf9's is "green on three platforms BEFORE IT IS WIRED
+  INTO --check" and the thing to be wired does not exist (`steps:` → 0 hits in
+  run-litmus-test.sh). Two obligations, one citation. macuahuitl re-verified
+  with a second grep and a positive control before recording it.
+- 2026-09-18 — I put a point-in-time branch count ("510 behind") into an
+  IMMUTABLE row. Re-measured 532; macuahuitl had said 528; their four readings
+  today were 493/510/515/528. The defect was not the wrong number but a moving
+  measurement written as a bare fact in an append-only artifact. Either stamp
+  it with when-and-how, or state the PROPERTY it was evidence for.
+- 2026-09-18 — 781-hseq re-measured a month-old orphan claim and confirmed it
+  with a method the original lacked: it searched the MODULE PATH
+  `tillandsias_logging::query`, which cannot see consumption through the crate
+  root re-export (`pub use query::{AggregationOp, Filter, JsonFilter, Query,
+  QueryExecutor, parse}` in the logging crate's lib). Enumerated the class (module path, brace import,
+  each re-exported symbol, qualified paths) and ran a positive control showing
+  the crate IS consumed (BudgetEnforcer, CardinalityAnalyzer) so the zeros are
+  about query specifically, not a dead crate or a broken search.
+- 2026-09-18 — Left 781-hseq's DECISION to its owner. Wiring adds a product
+  surface; tombstoning deletes 747 spec-traced lines. Neither should happen
+  because a cycle selected an unowned p3.
