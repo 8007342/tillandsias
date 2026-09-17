@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-macos-graceful-quit-stage-addresses-the-tray-by-its-executable-name-while-applescript-resolves-bundle-names-so-the-polite-stop-may-never-fire-and-a-probe-with-no-tray-running-cannot-tell
+    order: 1244-9dx3
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: macos
+    capability_tags: [macos, uninstall, applescript, tray, darwin-only]
+    estimated_hours: 1
+    owned_files:
+      - scripts/install-macos.sh
+    title: |
+      `osascript -e 'tell application "tillandsias-tray" to quit'` addresses the tray by its EXECUTABLE name while CFBundleName is `Tillandsias`, so the graceful stage may never resolve — and a probe with no tray running returns rc=0 for both names, so it cannot be settled from a cold host
+    context: |
+      RAISED BY macbookair 2026-09-17 while closing 1231-cbie's Darwin half, and
+      filed HERE rather than by them because they were right not to assert it and
+      a stated limitation with no owner is the shape that never gets answered.
+      THE MISMATCH IS MEASURED. Their Darwin measurements, now in the tree:
+        CFBundleExecutable = tillandsias-tray
+        CFBundleName       = Tillandsias
+      They DIFFER. scripts/install-macos.sh's graceful stage says
+      `tell application "tillandsias-tray" to quit`. AppleScript's `tell
+      application` resolves by bundle name or path, so addressing it by the
+      executable name may resolve to nothing.
+      WHY IT IS NOT FILED AS BROKEN, and this is the part worth preserving.
+      macbookair probed it with no tray running and got rc=0 for BOTH names.
+      That is uninterpretable: osascript returning 0 against a name that resolves
+      to nothing, and against one that does, are indistinguishable when there is
+      nothing to quit. They declined to file a defect on an rc they could not
+      read, which is correct — a green from a probe that cannot fail is not
+      evidence, and asserting breakage here would have been exactly the
+      confidently-wrong move this fleet keeps paying for.
+      WHAT THE CONSEQUENCE WOULD BE IF IT IS BROKEN, stated so the priority is
+      legible. The graceful stage is the FIRST of three; TERM and KILL follow and
+      both now use a matcher measured to work. So a non-resolving polite quit
+      does not leave a tray running — it means every macOS install/uninstall
+      skips straight to signals, losing the app's own clean shutdown path. That
+      is a p3 quality issue, not a p1 breakage, which is why this row is p3 while
+      1231-cbie was p1.
+      IT NEEDS A LIVE TRAY AND THAT IS THE WHOLE DIFFICULTY. macbookair
+      explicitly would not start the operator's tray to find out, which is the
+      right call on someone else's workstation — a peer's curiosity does not
+      justify touching an operator's running state.
+    exit_criteria:
+      - 'with a tray ACTUALLY RUNNING on a Darwin host, `osascript -e ''tell application "tillandsias-tray" to quit''` is observed either to stop it or not, and the result is recorded with the observation method (pre-fix result: UNKNOWN — a cold-host probe returns rc=0 for a resolving and a non-resolving name alike, so today the question cannot be answered at all)'
+      - 'if it does not resolve, the call is changed to whatever DOES address the app on Darwin, and the fixture arm that covers it asserts the PROPERTY (a graceful stage precedes the signals) rather than pinning the spelling — the mistake both 1231-cbie fixtures had to be repaired for'
+      - 'if it DOES resolve, the row closes with the measurement recorded, because "we checked and the name works" is the answer that stops this being re-derived every time someone notices the two names differ'
+    unscoreable: |
+      requires-a-live-tray-on-darwin: the discriminating observation needs a
+      running tray on a macOS host, and the only macOS hosts in the fleet are
+      workstations. Whoever takes this must have their own tray running, or the
+      operator's per-run say-so. Nobody should start the operator's tray to
+      settle a p3.
+    verifiable_closure: |
+      litmus:uninstall-preserves-vm-image — extended with an arm recording
+      whether the graceful quit stage resolves on Darwin, or an explicit note
+      that the stage is best-effort and the signal stages are the guarantee.
+    events:
+      - type: filed
+        ts: "2026-09-17T21:22:48Z"
+        agent_id: "linux-macuahuitl-claude-20260917t212248z"
+        host: macuahuitl
+        summary: |-
+          macbookair named this as unmeasured while closing 1231-cbie and
+          deliberately did not file it, because their only probe returned an
+          rc they could not interpret. Filing it as a QUESTION with the
+          discriminating observation named, rather than as a defect: a
+          limitation stated in a handoff and a limitation with an owner produce
+          the same sentence and different outcomes, and this fleet has already
+          paid for that difference once this week. Not claimed here — this host
+          is Linux and cannot answer it.
