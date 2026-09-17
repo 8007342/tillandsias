@@ -15,14 +15,14 @@ pass=0; fail=0
 check() { if [ "$1" = ok ]; then pass=$((pass+1)); echo "ok   $2"; else fail=$((fail+1)); echo "FAIL $2"; fi; }
 
 printf '{"step":"build-check","duration_ms":64000,"phase":"check"}\n{"step":"build-check-memoized","duration_ms":400,"phase":"check"}\n{"step":"build-check","duration_ms":66000,"phase":"check"}\n' > "$W/mixed.jsonl"
-line="$(TILLANDSIAS_TIMING_LOG="$W/mixed.jsonl" bash "$ROOT/scripts/cycle-metrics.sh" --no-repo-scan 2>/dev/null | grep '^timing:')"
+line="$(TILLANDSIAS_TIMING_LOG="$W/mixed.jsonl" bash "$ROOT/scripts/cycle-metrics.sh" --no-repo-scan --no-experts 2>/dev/null | grep '^timing:')"
 case "$line" in
     *"build_check_ms_avg=65000 build_check_mix=mixed:forced=2,memoised=1 "*) check ok "mixed log: labelled, mean excludes the memoised run ($(printf '%s' "$line" | grep -oE 'build_check_[a-z_]+=[^ ]+' | tr '\n' ' '))" ;;
     *) check FAIL "mixed log: expected label mixed:forced=2,memoised=1 and mean 65000; got: ${line:-<no timing line>}" ;;
 esac
 
 printf '{"step":"build-check","duration_ms":64000,"phase":"check"}\n{"step":"build-check","duration_ms":66000,"phase":"check"}\n' > "$W/forced.jsonl"
-line="$(TILLANDSIAS_TIMING_LOG="$W/forced.jsonl" bash "$ROOT/scripts/cycle-metrics.sh" --no-repo-scan 2>/dev/null | grep '^timing:')"
+line="$(TILLANDSIAS_TIMING_LOG="$W/forced.jsonl" bash "$ROOT/scripts/cycle-metrics.sh" --no-repo-scan --no-experts 2>/dev/null | grep '^timing:')"
 case "$line" in
     *"build_check_mix="*) check FAIL "forced-only log must carry no label; got: $line" ;;
     *"build_check_ms_avg=65000 "*) check ok "forced-only log: no label, mean 65000" ;;
