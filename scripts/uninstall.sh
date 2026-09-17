@@ -252,10 +252,37 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # have uninstalled from. Verified live on tlatoanis-macbook-air 2026-08-30:
 # pid alive 12m after a "complete" uninstall with its bundle deleted.
 # Same two-stage stop as the installer, and the same tolerance of absence.
-if pgrep -f tillandsias-tray >/dev/null 2>&1; then
-    pkill -TERM -f tillandsias-tray 2>/dev/null || true
-    sleep 1
-    pkill -KILL -f tillandsias-tray 2>/dev/null || true
+#
+# ── ORDER 1231-cbie: THE GUARD THIS HEADING ALREADY CLAIMED ──────────────────
+#
+# This block sat at COLUMN 0 under a "macOS desktop cleanup" heading, four lines
+# after an unconditional LINUX cleanup block — so the heading read as scope and
+# was not one. It ran on EVERY platform, and uninstall.sh is a SHIPPED RELEASE
+# ARTIFACT (release.yml installs it and asserts it is present), so the reach was
+# every machine that installs a release and later uninstalls.
+#
+# WHY THAT MATTERED ON LINUX SPECIFICALLY: there is no `tillandsias-tray`
+# process here. The launcher is `tillandsias`. So every match `-f` could produce
+# on a Linux host was a FALSE one — an editor, a grep, a CI shell, or the agent
+# command running the uninstall — and the ladder then sent it SIGTERM and
+# SIGKILL. scripts/e2e-preflight.sh condemns this exact form by name, with a
+# measurement: its own first draft "reported PRESENT against its own invoking
+# shell". That warning never travelled the two files to here.
+#
+# WHAT IS NOT FIXED HERE, deliberately: `-f` matches a COMMAND LINE, not an
+# executable, so on macOS this still kills anything merely mentioning the
+# string. Narrowing the matcher needs a Darwin host to choose between -x, a
+# pidfile, launchctl and the lsof arm e2e-preflight already uses, and to prove
+# the two-stage stop still stops a tray running from a replaced bundle
+# (uninstall.sh:248-254 records a pid alive 12m after a "complete" uninstall).
+# That half stays open on 1231-cbie. This half is the platform guard, which is
+# decidable and testable from Linux today.
+if [[ "$IS_MACOS" == true ]]; then
+    if pgrep -f tillandsias-tray >/dev/null 2>&1; then
+        pkill -TERM -f tillandsias-tray 2>/dev/null || true
+        sleep 1
+        pkill -KILL -f tillandsias-tray 2>/dev/null || true
+    fi
 fi
 
 # BOTH candidate install dirs, in the installer's own precedence order.
