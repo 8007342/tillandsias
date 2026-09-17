@@ -49,7 +49,12 @@ printf '%s' "$BLOCK" | grep -q 'Tillandsias.app.bak' || fail "block-does-not-rem
 # kill the real tray on a developer's machine. Found live 2026-08-30 — the
 # uninstaller removed the bundle and left the process running from it,
 # still owning the VM.
-printf '%s' "$BLOCK" | grep -q 'pkill -TERM -f tillandsias-tray' || fail "block-does-not-stop-the-running-tray"
+# MATCHER-AGNOSTIC (1231-cbie). Was `grep -q 'pkill -TERM -f tillandsias-tray'`,
+# which pinned the spelling rather than the property: narrowing `-f` to `-x`
+# made this fail with "block-does-not-stop-the-running-tray" about a block that
+# still stops the tray. The failure message named a property that still held,
+# which is how a correct change gets "fixed" back into a defect.
+printf '%s' "$BLOCK" | grep -qE 'pkill -TERM( -[a-zA-Z])? tillandsias-tray' || fail "block-does-not-stop-the-running-tray"
 
 # Behavioural: stub BOTH dirs with an app and its .bak, run the block with
 # /Applications and $HOME redirected into the sandbox, assert both are empty.

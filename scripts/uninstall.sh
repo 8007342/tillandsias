@@ -269,19 +269,30 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # measurement: its own first draft "reported PRESENT against its own invoking
 # shell". That warning never travelled the two files to here.
 #
-# WHAT IS NOT FIXED HERE, deliberately: `-f` matches a COMMAND LINE, not an
-# executable, so on macOS this still kills anything merely mentioning the
-# string. Narrowing the matcher needs a Darwin host to choose between -x, a
-# pidfile, launchctl and the lsof arm e2e-preflight already uses, and to prove
-# the two-stage stop still stops a tray running from a replaced bundle
-# (uninstall.sh:248-254 records a pid alive 12m after a "complete" uninstall).
-# That half stays open on 1231-cbie. This half is the platform guard, which is
-# decidable and testable from Linux today.
+# THE MATCHER IS NOW `-x`, MEASURED ON DARWIN 2026-09-17 (1231-cbie, second
+# half). `-f` matches a COMMAND LINE, so it killed anything merely mentioning
+# the string; `-x` matches the EXECUTABLE NAME exactly.
+#
+# The three facts a Linux host could not establish, each measured here:
+#   1. CFBundleExecutable is `tillandsias-tray` and CFBundleName is
+#      `Tillandsias`, so they DIFFER — a matcher keyed on the bundle name
+#      would have matched nothing at all.
+#   2. `tillandsias-tray` is exactly 16 characters, historically MAXCOMLEN on
+#      BSD, so `-x` was not obviously safe. It is: `ps -o comm=` reports the
+#      full path untruncated and `pgrep -x tillandsias-tray` matches it.
+#   3. The collateral damage is real and `-x` removes it. With a live decoy
+#      named `tillandsias-tray` and an innocent `tail -f .../tillandsias-tray.log`
+#      running alongside, `pgrep -f` returned BOTH pids and `pgrep -x` returned
+#      only the decoy. Under the old form that `tail` got SIGTERM then SIGKILL.
+#
+# THE TWO-STAGE STOP IS DELIBERATELY KEPT, not collapsed: a tray was observed
+# alive 12m after a "complete" uninstall, and the sweeps fixture pins the
+# stop's existence for that reason. Only the matcher narrowed.
 if [[ "$IS_MACOS" == true ]]; then
-    if pgrep -f tillandsias-tray >/dev/null 2>&1; then
-        pkill -TERM -f tillandsias-tray 2>/dev/null || true
+    if pgrep -x tillandsias-tray >/dev/null 2>&1; then
+        pkill -TERM -x tillandsias-tray 2>/dev/null || true
         sleep 1
-        pkill -KILL -f tillandsias-tray 2>/dev/null || true
+        pkill -KILL -x tillandsias-tray 2>/dev/null || true
     fi
 fi
 

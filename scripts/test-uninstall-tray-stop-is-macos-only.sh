@@ -59,7 +59,19 @@ fi
 # ARM 3 — the guard is a PLATFORM test, not a deletion. The stop must still
 # exist in the source for the Darwin path; a fix that removed it would pass
 # arm 1 and lose the 12-minute-survivor defect uninstall.sh:248-254 records.
-if /usr/bin/grep -q 'pkill -KILL -f tillandsias-tray' "$U"; then
+# MATCHER-AGNOSTIC BY CONSTRUCTION (1231-cbie, second half). This arm used to
+# assert the literal `pkill -KILL -f tillandsias-tray`, which pinned the very
+# spelling this packet exists to replace: narrowing `-f` to `-x` made the arm
+# report "the tray stop was removed" about a stop that is still there. The
+# PROPERTY is that a two-stage stop (TERM then KILL) still targets the tray on
+# the Darwin path; HOW the tray is identified is deliberately not pinned.
+#
+# It stays TEXTUAL for the reason the sibling fixture records: a behavioural
+# arm would have to run the real matcher and would kill a developer's live
+# tray. A future move to a pidfile or launchctl WILL need this arm revisited —
+# that is honest, and better than an assertion that silently accepts anything.
+if /usr/bin/grep -qE 'pkill -TERM( -[a-zA-Z])? tillandsias-tray' "$U" \
+   && /usr/bin/grep -qE 'pkill -KILL( -[a-zA-Z])? tillandsias-tray' "$U"; then
     ok "ARM 3: the two-stage stop still EXISTS for the Darwin path — guarded, not deleted"
 else
     bad "ARM 3: the tray stop was removed rather than guarded — that trades this defect for the one 978/848 recorded"

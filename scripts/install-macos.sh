@@ -138,17 +138,17 @@ fi
 DEST="$INSTALL_DIR/Tillandsias.app"
 
 # ── stop running tray + back up existing ─────────────────────────────────
-if pgrep -f tillandsias-tray >/dev/null 2>&1; then
+if pgrep -x tillandsias-tray >/dev/null 2>&1; then
     say "stopping running tillandsias-tray"
     osascript -e 'tell application "tillandsias-tray" to quit' 2>/dev/null || true
     # Give it 5s to quit cleanly, then SIGTERM, then SIGKILL.
     for _ in 1 2 3 4 5; do
-        pgrep -f tillandsias-tray >/dev/null 2>&1 || break
+        pgrep -x tillandsias-tray >/dev/null 2>&1 || break
         sleep 1
     done
-    pkill -TERM -f tillandsias-tray 2>/dev/null || true
+    pkill -TERM -x tillandsias-tray 2>/dev/null || true
     sleep 1
-    pkill -KILL -f tillandsias-tray 2>/dev/null || true
+    pkill -KILL -x tillandsias-tray 2>/dev/null || true
 fi
 
 if [[ -d "$DEST" ]]; then
