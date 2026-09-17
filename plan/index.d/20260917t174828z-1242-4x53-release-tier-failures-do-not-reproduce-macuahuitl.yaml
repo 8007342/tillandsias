@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    order: 1242-4x53
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, release-tier, flake, determinism, ci-full]
+    estimated_hours: 8
+    owned_files:
+      - scripts/local-ci.sh
+      - build.sh
+      - crates/tillandsias-plan/src/groundtruth.rs
+      - scripts/test-enclave-service-health.sh
+    title: |
+      both non-timeout failures in a red `--ci-full` passed on re-run in BOTH regimes, so a retry turns the release tier green without any change — and the two-host 29%/25% gate failure rate may be measuring non-determinism rather than regressions
+    context: |
+      MEASURED ON macuahuitl 2026-09-17, on the scheduled release-tier exercise
+      (890-27mv criterion 1) at head 83dc1cb76. rc=1 after 2161s. Four litmus
+      failures and one rust failure. THREE of the litmus failures are the known
+      1236-bmjh timeout incompleteness and are NOT this row's subject. The other
+      two are, and both of them evaporate on re-run:
+      FAILURE 1 — rust, inside the gate:
+        groundtruth::tests::the_spec_engine_stamps_the_index_frame_not_the_readers_head
+        gate result:            328 passed, 1 FAILED
+        same head, standalone:  1 passed, 0 failed
+        same head, full binary: 329 passed, 0 FAILED
+      FAILURE 2 — litmus, inside the gate:
+        litmus:enclave-service-health-shape STEP 3/5
+        gate result:            enclave-service-health: 22 passed, 1 failed
+        same head, host regime: 23 passed, 0 failed
+        same head, IN TOOLBOX:  23 passed, 0 failed
+      THE TOOLBOX RUN IS THE POINT, and it is why this is filed rather than
+      shrugged at. A host-regime re-run proves nothing on its own — the gate
+      executes inside the tillandsias-builder toolbox, which is a different
+      regime, and "it passes for me" across a regime boundary is the shape that
+      has been wrong repeatedly here. So the fixture was re-run INSIDE the same
+      toolbox the gate uses, and it passed there too. The difference that
+      remains is not the container: it is what else is running concurrently
+      during a full gate.
+      WHY p1 DESPITE EVERYTHING BEING GREEN ON RE-RUN. A release gate that fails
+      for non-code reasons and passes on retry is worse than one that fails
+      honestly, because the correct-looking response — run it again — launders
+      the failure into a green and teaches every host that reds are noise. That
+      is the exact disposition under which a REAL red gets retried away. The
+      failure mode is not the flake; it is what the flake trains.
+      THE CONNECTING NUMBER, and it is a hypothesis rather than a finding.
+      Two hosts pasted cycle-metrics the same day: build-check fail_pct=29 over
+      179 runs on macuahuitl (read 2026-09-17T16:00Z) and fail_pct=25 over 77
+      runs on tlatoanis-macbook-air (read 16:21Z). A quarter of all gate runs
+      fail on both. If failures of the kind measured above are a large share of
+      that, then the fleet's most expensive recurring cost is non-determinism
+      rather than broken code — and nobody can currently tell, because the
+      timing log records exit codes and not whether a failure REPRODUCED. This
+      row does not assert that; it asserts that the question is answerable and
+      unanswered.
+      LIKELY FAMILY, NAMED SO IT CAN BE ELIMINATED RATHER THAN ASSUMED.
+      638-ehzi documented ENV_LOCK in tillandsias-headless: cargo runs a
+      binary's tests as threads in ONE process, so a test mutating HOME is
+      visible to every other test in that binary, at a measured ~1 run in 4.
+      Failure 1 is a groundtruth test about which commit frame is stamped, which
+      is exactly the sort of thing a stray cwd or HOME would move. That is a
+      candidate, not a diagnosis, and it does not obviously cover failure 2.
+    exit_criteria:
+      - 'a gate failure records whether it REPRODUCED: the failing step is re-run once, in the same regime, and the record carries reproduced=yes|no alongside the exit code (pre-fix result: FAILS — the timing log schema is ts/host/step/phase/duration_ms/exit and has no field in which the answer could be written, so today every red is indistinguishable from every other red)'
+      - 'with that field present, the share of gate failures that do NOT reproduce is reported per host over a week, so the 29%/25% figure is split into regressions versus non-determinism instead of being quoted as one number'
+      - 'the two failures measured here are each either fixed or explicitly classified with their mechanism named — and a classification that cannot name a mechanism is recorded as unexplained rather than as a flake, because "flake" is a conclusion and not an observation'
+      - 'NEGATIVE CONTROL: a genuine regression must still be reported as a regression — seed a real failing test and confirm the reproduce-check reports reproduced=yes rather than absorbing it as noise, since a mechanism that retries failures is one bug away from hiding every red'
+    unscoreable: |
+      whether-the-two-instances-share-a-cause: they may be one mechanism or two.
+      Failure 1 is a cargo-threads process-global candidate; failure 2 is a shell
+      fixture whose 23 arms are hermetic by construction, so ENV_LOCK does not
+      obviously reach it. Whoever takes this must not force one story onto both:
+      a single explanation that covers both is a cue to check conditions, not
+      evidence it is right.
+    verifiable_closure: |
+      litmus:timing-telemetry-implausible-guard-shape — extended with an arm
+      that a recorded gate failure carries a reproduced= field, and an arm that
+      a seeded genuine failure is recorded reproduced=yes rather than suppressed.
+    events:
+      - type: filed
+        ts: "2026-09-17T17:48:28Z"
+        agent_id: "linux-macuahuitl-claude-20260917t174828z"
+        host: macuahuitl
+        summary: |-
+          Filed from a scheduled release-tier exercise that came back rc=1 and
+          whose red I could not reproduce twice over. The first re-run was in the
+          host regime and proved nothing; the toolbox re-run is what made this
+          worth filing rather than retrying. Deliberately NOT filed as "two
+          flaky tests": the tests are the instance, the disposition to retry is
+          the defect, and the instrument cannot currently tell the two apart.
+          Also deliberately separated from 1236-bmjh, which owns the three
+          TIMEOUT failures in the same run and has a different remedy entirely.
