@@ -145,6 +145,25 @@ pub struct Fragment {
 /// The ledger is the surface agents query constantly; one bad fragment must not
 /// make the whole plan unreadable. Malformed fragments are reported separately
 /// by [`malformed`] so they are visible rather than silently ignored.
+/// Fragment file paths only — no read, no parse.
+///
+/// ORDER 964-tzmp. The cache fingerprint must decide whether to SKIP reading
+/// the corpus, so it cannot read the corpus to decide. This enumerates the same
+/// files `load_all` would take, and nothing more.
+pub fn fragment_paths(index: &Path) -> Vec<PathBuf> {
+    let dir = fragment_dir(index);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("yaml"))
+        .collect();
+    out.sort();
+    out
+}
+
 pub fn load_all(index: &Path) -> Vec<Fragment> {
     let dir = fragment_dir(index);
     let Ok(entries) = std::fs::read_dir(&dir) else {
