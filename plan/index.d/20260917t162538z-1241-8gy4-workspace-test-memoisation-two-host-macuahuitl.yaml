@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-workspace-test-step-tops-skippable-on-two-hosts-with-zero-failures-in-seven-days-which-is-both-the-case-for-memoising-it-and-the-reason-skipping-it-would-remove-the-only-regression-detector
+    order: 1241-8gy4
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [gate, timing, memoisation, cycle-metrics, cross-host]
+    estimated_hours: 6
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/timing-log.sh
+      - build.sh
+    title: |
+      `running-workspace-tests-cargo-test-workspace-all-targets` tops `skippable:` on BOTH hosts that paste metrics, at fail_pct=0 over seven days — which is simultaneously the whole case for memoising it and the precise reason skipping it would delete the only thing that would notice a regression
+    context: |
+      FILED UNDER THE COORDINATION SKILL'S OWN TRIGGER, which requires two or
+      more hosts before one packet is filed, and which had no second reading
+      until 2026-09-17. Both readings are pasted verbatim below rather than
+      summarised, because an aggregate hides which host earned which number.
+      macuahuitl (linux, fat):
+        step:running-workspace-tests-cargo-test-workspace-all-targets
+        runs=127 avg_ms=88768 fail_pct=0 saved_ms_upper=11184819
+      tlatoanis-macbook-air (macos):
+        step:running-workspace-tests-cargo-test-workspace-all-targets
+        runs=58 avg_ms=187344 fail_pct=0 saved_ms_upper=10678656
+      The SECOND-ranked step is also the same on both hosts
+      (step:running-feature-gated-tests-tray-listen-vsock-1074-w7qv, fail_pct=0,
+      saved_ms_upper 6306048 here and 3591983 there), so this is a shape rather
+      than one step's accident.
+      THE TRAP, AND IT IS macbookair's FORMULATION, WHICH IS BETTER THAN MINE:
+      "a 7-day arm that has never failed is exactly what tempts a skip and
+      exactly where a skip removes the only thing that would notice a
+      regression." fail_pct=0 is not evidence the step is useless. It is the
+      step doing its job over a window in which nothing regressed. A skip keyed
+      on past success is a detector that switches itself off in proportion to
+      how well it has been working. So the remedy this row asks for is
+      MEMOISATION — do not re-run on UNCHANGED INPUTS — and explicitly NOT a
+      skip, a sampling rule, or a fail_pct threshold.
+      saved_ms_upper IS A BOUND AND MUST BE QUOTED AS ONE. The timing log
+      records ts, host, step, phase, duration_ms and exit. It carries NO INPUT
+      IDENTITY. So nobody can claim any of those 127 or 58 runs would have hit a
+      cache; the figure is what would be saved if EVERY run were redundant,
+      which is certainly false and unknowably so. That is not a caveat on the
+      remedy, it is the FIRST PIECE OF WORK: until a content key for the step's
+      inputs is recorded alongside the duration, the saving cannot be estimated
+      at all, let alone realised. A row that proposes memoisation without
+      building the key first would be measured, would save a fraction of its
+      promise, and would be dismissed along with the real finding inside it.
+      THE OTHER TWO-HOST NUMBER, recorded here because it is the larger cost and
+      belongs with this evidence even though it is not this row's subject:
+      `build-check` runs at fail_pct=29 over 179 runs here (avg_ms=370919, read
+      2026-09-17T16:00Z) and fail_pct=25 over 77 runs there (avg_ms=622831, read
+      2026-09-17T16:21Z). Both counts are FRAMED by their reading time on
+      purpose: the timing log is live and this host's run count read 180 twenty
+      minutes later, so a bare count in an append-only fragment decays exactly
+      the way a bare source line number does. A ten-minute gate that
+      fails roughly a quarter of the time is both hosts' single largest cost,
+      and as macbookair put it, at 25% the question of WHY matters more than the
+      duration. Deliberately NOT scoped into this row: a failure-cause breakdown
+      is a different investigation from input-keyed memoisation, and folding
+      them together is how one remedy inherits the other's savings.
+      WHY THIS EVIDENCE DID NOT EXIST UNTIL NOW. The cycle-metrics block is
+      REQUIRED verbatim in every meta-orchestration handoff, and
+      loop-status-metrics-audit reported 23 of 23 stems NOT-PASTING with the
+      newest paste from any host dated 2026-09-05 — twelve days in which no
+      cross-host comparison was possible for anything. Two hosts pasted on
+      2026-09-17 and the trigger fired within the hour. The instrument was
+      healthy the whole time (rows=23 stems=23, no dropped stem); the practice
+      had stopped.
+    exit_criteria:
+      - 'the timing log records an INPUT IDENTITY for this step alongside duration_ms — a content key over the files the step actually reads — so that a redundant run is distinguishable from a necessary one in the record (pre-fix result: FAILS — the schema is ts/host/step/phase/duration_ms/exit and carries nothing about inputs, which is why every saved_ms_upper in the corpus is an unfalsifiable upper bound)'
+      - 'with that key present for at least one week on two hosts, the ACTUAL redundant fraction is reported per host, and the memoisation decision is made against that number rather than against saved_ms_upper'
+      - 'if memoisation lands, a changed input still triggers a real run, proven by mutating one file the step reads and observing the step execute rather than report a cache hit'
+      - 'NEGATIVE CONTROL: the memoised path must FAIL when the underlying test fails, proven by seeding a failing test and observing the gate go red through the cache rather than serving a stale pass — a cache that cannot go red is the regression-detector deletion this row exists to avoid'
+      - 'the step is NOT skipped, sampled, or gated on fail_pct at any point; if the chosen design does any of those, this row is closed as refused with the reasoning recorded rather than closed as done'
+    unscoreable: |
+      whether-the-redundant-fraction-justifies-the-work: criterion 2 can be
+      measured but the decision it feeds cannot be scored in advance. If the
+      real redundant fraction turns out small, the correct outcome is to CLOSE
+      THIS ROW WITHOUT BUILDING THE CACHE and record the measured fraction —
+      that is a success of the instrument, not a failure of the row. Whoever
+      takes this must not treat "no cache was built" as non-delivery.
+    verifiable_closure: |
+      litmus:build-test-timing-telemetry-shape — extended with an arm that a
+      timing record for the workspace-test step carries an input-identity field,
+      and an arm that a memoised result still reports RED when the underlying
+      test fails.
+    events:
+      - type: filed
+        ts: "2026-09-17T16:25:38Z"
+        agent_id: "linux-macuahuitl-claude-20260917t162538z"
+        host: macuahuitl
+        summary: |-
+          Held back deliberately on 2026-09-17 morning when only this host's
+          reading existed, and filed the same afternoon once macbookair pasted
+          the second. The one-host version of this packet would have shipped a
+          fat host's numbers as a fleet rule; the macOS reading turned out to
+          have HALF the run count and TWICE the per-run cost, so the ranking
+          agrees while the underlying economics differ by 4x. The framing that
+          makes this a memoisation row rather than a skip row is macbookair's
+          and is quoted in context rather than paraphrased.
