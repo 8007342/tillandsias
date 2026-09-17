@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    order: 1235-rfub
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [coordination, macos, rust, instrument, fleet]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      A relayed macOS-only change put a clippy hard error on trunk — the relaying Linux gate compiles STUBS for the cfg-gated tray modules, so it can land a tree that does not build on the only platform that runs it
+    context: |
+      MEASURED 2026-09-16/17. macuahuitl relayed 690-w94k criterion 2 to trunk
+      at d44909353. That change contained `.map_err(|e| format!("{e}"))?`,
+      which is clippy::useless_format, and the workspace gate runs clippy with
+      -D warnings. TRUNK WAS THEREFORE RED FOR ANY macOS BUILD from that relay
+      until the fix landed — discovered only when this host's own gate refused,
+      several hours later.
+
+      NEITHER GATE COULD HAVE CAUGHT IT, AND THAT IS THE POINT. Per 739-6r6n
+      the tray crate is fully cfg-gated: a Linux build compiles STUBS for those
+      seven modules, so action_host.rs was never parsed on the relaying host.
+      The authoring host's own pre-relay checks had the exactly matching hole —
+      `cargo test -p <crate> --bins` runs no lints, and `cargo zigbuild
+      --target x86_64-unknown-linux-musl` compiles the Linux side. Between
+      them, neither the linter nor the macOS compiler ever saw the line.
+
+      THIS IS STRUCTURAL, NOT AN OVERSIGHT, which is why it is a packet rather
+      than a note. 1224-zpek forces every macOS code change onto a relay while
+      a tray is live, and the relay's gate is exactly the gate that cannot see
+      macOS-only sources. So the lane that macOS work is REQUIRED to use is the
+      lane least able to verify it, and the failure mode is not subtle
+      (a hard compile error), merely invisible from where the gate runs.
+
+      RELATED BUT DISTINCT: 1228-xc6c / 1228-4xdp cover the same asymmetry's
+      OTHER half — a relay invalidates the macOS source attestation and the
+      re-attestation cannot be pushed back. That one is about bytes drifting;
+      this one is about a tree that does not compile. Same cause, different
+      consequence, and fixing either does not fix the other.
+
+      THE CHEAP MITIGATION IS ALREADY KNOWN AND COSTS SECONDS: on a cfg-gated
+      crate, `cargo clippy -p <crate> --all-targets -- -D warnings` on the
+      NATIVE host before handing anything to a relay. Whether that belongs in
+      the authoring host's discipline, in salvage/relay tooling, or as a
+      refusal in the relay path is the decision this packet carries.
+    exit_criteria:
+      - 'a macOS-only source carrying a clippy hard error cannot reach trunk through the relay lane without some host having linted it natively (pre-fix result: FAILS — it did, and trunk was red for hours)'
+      - 'the check runs on the cfg-gated crate with --all-targets, since a bins-only or Linux-target check is precisely what missed this'
+      - 'the relay path states which host is accountable for the native lint, so the obligation is not merely advice in a commit message'
+    unscoreable: |
+      needs-a-decision-before-a-fixture: the criteria are verifiable but the
+      placement is a lane-policy call belonging to whoever owns
+      scripts/land-on-platform-branch.sh. Filed from the macOS end with the
+      concrete incident, the clippy rule name, and the two commands that each
+      individually miss it, so the decision rests on the measurement.
