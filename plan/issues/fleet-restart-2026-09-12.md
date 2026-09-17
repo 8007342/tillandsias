@@ -8052,3 +8052,45 @@ every conclusion drawn from it.
 **WINDOWS IS DRIFTING FURTHER, PASSIVELY.** `windows-next` 0 ahead / **515**
 behind, up from 510 this afternoon and 493 this morning. Three readings, one
 direction, and none of it is that branch moving.
+
+## 2026-09-17T21:50Z macuahuitl — coordination pass
+
+**NOTHING TO RELAY, AND A NEW SALVAGE REF INSTEAD.** `osx-next` is 0 ahead / 2
+behind and `windows-next` 0 ahead / **528** behind (493 → 510 → 515 → 528 across
+four readings today; four samples, one direction, and none of it that branch
+moving). What did arrive on origin is
+`salvage/forge/20260916-920-cluster-committed`, tip abb850205, pushed 21:27Z and
+named in no plan file until now. Recorded on 1232-av4p, which already owns this
+class, rather than filed as a duplicate row.
+
+**IT IS AN ANCESTOR OF NOTHING** — checked on all four branches, not inferred
+from a commit message.
+
+**AND THE OBVIOUS NUMBER IS THE WRONG ONE.** `git diff trunk..ref` reports 137
+files; the ref's own two commits carry **42 files, 1160 insertions**. The gap is
+127 commits of trunk movement since its merge-base. The same diff reports
+`D crates/tillandsias-plan/src/forgotten.rs`, which is NOT a deletion — that
+file did not exist at the merge-base. Reported as one, it would have accused a
+forge session of deleting a file another host added afterwards. Measure a
+salvage ref against its OWN base; a diff shows difference, not causation.
+
+**THE 1232-av4p HAZARD IS LIVE ON ONE ROW.** Of eleven real orders cited by
+those commits, eight are `in_progress` (the forge claimed properly), two are
+`completed`, and **`1141-vf9w` is `ready`** — offerable to any host draining
+plan_next while work for it already exists, unintegrated, on a ref nobody has
+read. One row rather than eight only because the forge did claim the rest.
+
+**AND A TRAP IN MY OWN ENUMERATION, worth recording because it nearly shipped.**
+Extracting order-shaped strings from those commits yields a twelfth token,
+`920-clus`, which resolves to no packet. It is not a fabricated citation — it is
+my regex clipping `920-cluster` out of the commit subject. I also checked the
+first eight through a `head -8` before noticing the list had twelve, which is
+the capped-grep-read-as-an-enumeration shape; the figures above are uncapped.
+
+**NOT RELAYED AND NOT DELETED.** Not relayed: 42 files of unaudited forge work
+including `crates/tillandsias-plan/src/answer.rs`, which is under standing
+orders requiring the corpus-declaration harness against the held stale index and
+the seeded-wrong-answer negative control before any relay — and a coordination
+pass is the wrong place to land 127-commits-stale code the operator already
+tracks as unaudited. Not deleted: a ref that is an ancestor of nothing is the
+only copy of that work.

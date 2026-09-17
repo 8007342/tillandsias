@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: note
+      ts: "2026-09-17T21:36:05Z"
+      agent_id: linux-macuahuitl-claude-20260917t213605z
+      host: macuahuitl
+      summary: |
+        CROSS-REGIME VERIFICATION OF THE DARWIN-ONLY GATE STEP, closing a gap its author
+        named and could not close from where they were.
+
+        macbookair wired scripts/gate-steps.d/401-1231-cbie-matcher.step with
+        STEP_SKIP_EXIT=2, and said plainly: they could prove the skip path is REACHABLE
+        on Darwin, but not that a Linux runner reports it as a SKIP rather than a PASS.
+        That distinction is the whole value of the named skip — if the driver treated
+        exit 2 as success, every Linux gate would go green about a property no Linux
+        host can check, which is the vacuous-green shape this fleet keeps paying for.
+
+        VERIFIED HERE, both statically and by execution.
+
+        Statically, build.sh's gate-step driver takes the skip branch only on an EXACT
+        match against the nominated code, prints a `skip:` line, and `continue`s — so
+        STEP_OK is never reached. Any other non-zero exit, exit 1 included, still takes
+        the refusal branch.
+
+        By execution, from the land gate at d7c82bf5c on this Linux host, the two
+        outcomes are textually distinct in the same log:
+
+          Checking the uninstaller's tray matcher spares bystanders on Darwin (1231-cbie)...
+          skip:test-uninstall-matcher-spares-bystanders.sh:could-not-run (exit 2;
+            skipped: not Darwin, or a live tray is present (the matcher was NOT
+            exercised); check not run - see the reason above)
+
+        against a genuine pass one step away, which prints its STEP_OK text and nothing
+        about skipping. A reader of the Linux gate log cannot mistake one for the other,
+        and the skip line says "check not run" in so many words.
+
+        The three fixtures this relay changed were also run on Linux BEFORE the land
+        rather than after: the matcher fixture exits 2 as its .step nominates,
+        test-uninstall-tray-stop-is-macos-only 3/3, test-uninstall-sweeps-both-app-dirs
+        ok. Two Darwin-authored gate steps now execute in every Linux gate, so that was
+        worth establishing ahead of the gate rather than discovering inside it.
