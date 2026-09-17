@@ -903,23 +903,56 @@ pub struct Compaction {
 /// nearly every real compaction and the guard would be switched off within a
 /// day. What IS flagged is a status write whose packet does not exist at all,
 /// because that write was discarded rather than outranked.
-fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
-    let mut gaps = Vec::new();
-    let mut packets = Vec::new();
-    crate::collect_packets(result, &mut packets);
+/// The identities a folded result contains: packet ids, and event identities.
+///
+/// ORDER 964-tzmp. HOISTED OUT OF THE PER-FRAGMENT LOOP. `fragment_coverage_gaps`
+/// rebuilt this index on every call, and every caller calls it ONCE PER
+/// FRAGMENT — so `collect_packets` walked the whole folded tree and CLONED
+/// every packet in it 827 times on this ledger. Measured on yoga 2026-09-17:
+/// `check` cost 9,688 ms against a 231 ms load of the same corpus, and the
+/// archive is not involved (9,770 ms with it, 9,688 ms without). The index is
+/// identical for every fragment in a run, so building it once is not an
+/// optimisation of the check — it is the same check, computed once.
+pub(crate) struct FoldedIdentities {
+    ids: BTreeSet<String>,
+    events: BTreeSet<String>,
+}
 
-    let mut ids: BTreeSet<&str> = BTreeSet::new();
-    let mut events: BTreeSet<String> = BTreeSet::new();
-    for p in &packets {
-        if let Some(id) = p.get("packet_id").and_then(Value::as_str) {
-            ids.insert(id);
-            if let Some(evs) = p.get("events").and_then(Value::as_sequence) {
-                for e in evs {
-                    events.insert(event_identity(id, e));
+impl FoldedIdentities {
+    pub(crate) fn of(result: &Value) -> Self {
+        let mut packets = Vec::new();
+        crate::collect_packets(result, &mut packets);
+        let mut ids: BTreeSet<String> = BTreeSet::new();
+        let mut events: BTreeSet<String> = BTreeSet::new();
+        for p in &packets {
+            if let Some(id) = p.get("packet_id").and_then(Value::as_str) {
+                if let Some(evs) = p.get("events").and_then(Value::as_sequence) {
+                    for e in evs {
+                        events.insert(event_identity(id, e));
+                    }
                 }
+                ids.insert(id.to_string());
             }
         }
+        Self { ids, events }
     }
+}
+
+/// Thin wrapper preserving the original signature for one-shot callers.
+fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
+    fragment_coverage_gaps_in(result, &FoldedIdentities::of(result), frag)
+}
+
+/// `result` is still taken for the CHEAP top-level lookups (`capabilities`);
+/// only the packet walk, which is the expensive part, comes from `known`.
+fn fragment_coverage_gaps_in(
+    result: &Value,
+    known: &FoldedIdentities,
+    frag: &Fragment,
+) -> Vec<String> {
+    let mut gaps = Vec::new();
+    let ids = &known.ids;
+    let events = &known.events;
 
     if let Some(ps) = frag.doc.get("packets").and_then(Value::as_sequence) {
         for p in ps {
@@ -1117,10 +1150,12 @@ pub fn overlay_coverage_gaps(index: &Path) -> Vec<(PathBuf, Vec<String>)> {
     };
     let fragments = load_all(index);
     let merged = fold(&base, &fragments);
+    // 964-tzmp: ONE identity index for the whole sweep, not one per fragment.
+    let known = FoldedIdentities::of(&merged);
     fragments
         .iter()
         .filter_map(|f| {
-            let gaps = fragment_coverage_gaps(&merged, f);
+            let gaps = fragment_coverage_gaps_in(&merged, &known, f);
             (!gaps.is_empty()).then(|| (f.path.clone(), gaps))
         })
         .collect()
@@ -1134,10 +1169,12 @@ pub fn overlay_coverage_gaps(index: &Path) -> Vec<(PathBuf, Vec<String>)> {
 pub fn compact(base: &Value, index: &Path) -> Compaction {
     let fragments = load_all(index);
     let merged = fold(base, &fragments);
+    // 964-tzmp: same hoist — compaction sweeps every fragment too.
+    let known = FoldedIdentities::of(&merged);
     let mut consumed = Vec::new();
     let mut refused = Vec::new();
     for f in &fragments {
-        let gaps = fragment_coverage_gaps(&merged, f);
+        let gaps = fragment_coverage_gaps_in(&merged, &known, f);
         if gaps.is_empty() {
             consumed.push(f.path.clone());
         } else {
