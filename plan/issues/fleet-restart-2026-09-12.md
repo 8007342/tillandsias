@@ -7532,3 +7532,105 @@ describes** — and today that has produced a false zero four separate times.
 
 **NO REASSIGNMENT.** Three hours by email: macuahuitl 7, yoga 4, unattributed
 bucket 1. Nobody reported idle, nobody asked.
+
+## Pass 50
+
+**RELEASE PASS, not a drill pass.** The operator lifted the no-release
+constraint and asked for a daily cut, smoke and release to main inside two
+days, with the fleet mostly down: yoga-silverblue and this host are the whole
+working fleet, macbookair is offline, yolanda is offline apart from an
+unreachable BigPickle forge session on its hardware.
+
+**THE THREE RELEASE BLOCKERS ARE NOW NAMED, AND THEY WERE ALREADY IN FLIGHT AS
+THREE UNRELATED ARMS.** `./build.sh --ci-full` on fd6ca622a returned rc=1 in
+2463s with pre-build litmus at 364 PASS / 3 FAIL:
+
+```
+litmus:capability-routing-shape     STEP 1/5  TIMEOUT at 120s   <- arm 3 (mine)
+litmus:expert-groundtruth-harness   STEP 30/31 FAIL             <- arm 2 (1229-2862)
+litmus:e2e-eligibility-probe-shape  STEP 7/10 FAIL              <- arm 1 (yoga)
+```
+
+Nobody had assembled that list before tonight. Each arm had been investigated
+on its own and none of the three investigations knew it was holding a release.
+**A red found in a release-tier-only lane is discovered at the moment a release
+is wanted, which is the worst moment to start diagnosing it** — and all three
+of these are release-tier-only, because `./build.sh --check` runs no litmus
+(748-tkjx) and this host had never completed a full-tier run until today.
+
+**THE GROUNDTRUTH RED WAS NOT A GRADER DEFECT AND THE INDEX WAS CARRYING THE
+ANSWER.** Two `spec.answer` cases graded `FABRICATED citation` here and SKIP
+entirely on an index-less host. The published index entry records its own build
+commit in `.commit`: `5bef283cb`, 2026-09-14, an ancestor of HEAD. At that
+commit `fn forge_uses_host_mount` sits at main.rs:6274 and `fn effective_inference_tier` at 4524 — **exactly the two cited spans**; at HEAD they are at 6358 and 4608. <!-- cite-ok: these ARE the drifted citations, quoted as the evidence. The finding IS that these line numbers moved 84 lines under a fixed index; a symbol reference would erase the measurement it reports. 881-29me's own named exception. -->
+Retrieval, chunk and recorded commit are all correct. Only the reader stands
+elsewhere.
+
+I reconstructed that by walking main.rs backwards through 25 revisions. **The
+`.commit` file answers it in one read**, and yoga said so. A marker written
+precisely so nobody has to do the walk is worth checking before doing the walk.
+
+**THE MECHANISM EXISTED AND THREE CALL SITES CHOSE THE WRONG SIBLING** (filed
+1229-2862, claimed to yoga, who implemented it the same night with two mutation
+controls that red): the `spec_index` loader in `groundtruth.rs` drops
+`entry.commit` one line after loading it, its `spec.answer` arm stamps
+`Freshness::for_source` — this checkout's HEAD — where
+`build_envelope_scored_with_freshness` exists for the entry's own frame, and
+`grade_envelope` calls the frame-blind `answer::verify` where the
+`verify-answer` subcommand picked `answer::audit` and said why in place. Order 801-g9nn built the whole stale-versus-
+fabricated separation for this and `audit` has ONE non-test caller in the tree.
+
+**A MIS-STAMPED FRAME IS WORSE THAN AN ABSENT ONE** and this is the part that
+would have wasted a day. Wiring `audit` alone changes nothing: `frame_holds`
+would take the envelope's commit, get this checkout's HEAD, re-read at HEAD,
+and return `Some(false)` — a confident "this really is fabricated" — where an
+absent frame returns an honest `None`. The order of the two wires decides
+whether the experiment reports the truth or its opposite.
+
+**I CAUSED THE CHURN MY OWN RULE EXISTS TO PREVENT.** My land pushed
+`0e8c94f6b` while yoga's gate was running; their gate had PASSED (499s) and it
+was the push that met the moved trunk, costing them a re-gate. The rule is
+already written down — land once per pass and quiesce for a critical commit,
+because the coordinator's cadence is the churn a peer's long gate loses to —
+and theirs was the critical commit, carrying two of the three blockers. I did
+not think about it until the notification arrived. Quiesced since.
+
+**A GUARD FIRED TWICE IN ONE DAY AND POINTED BOTH READERS THE WRONG WAY**
+(filed 1230-26sy). `violation:gate-wrote-tracked-files` caught macuahuitl (a
+mid-gate commit) and yoga (mid-gate edits, ~40 minutes). Both agents KNEW about
+1063-363b; both read the refusal as being about commits, because its remedy
+text names three causes — three-argument `cp`, empty `$TMPDIR`, unset `$dst` —
+that share one premise, that a gate step escaped its temp dir. The case that
+actually happened is outside that premise, so the text does not merely omit it,
+it points away from it. yoga's framing is the sharper one: **1063-363b is about
+the bytes under measurement changing**, and the commit is incidental.
+
+**AN AGGREGATE OVER FAILURES WITH DIFFERENT COSTS CREDITS THE WRONG REMEDY.**
+yoga summarised three failed attempts as "two of three died on things I could
+have checked in ninety seconds". Split by cause: the tracked-files violation
+cost forty minutes and **no pre-check could have caught it** (the tree was clean
+at gate start); the `cargo fmt` refusal cost one minute. The ninety seconds buys
+one minute, not forty-one — the forty was bought back by a discipline, not a
+tool. Filed as stated it would have shipped a tool recommendation carrying a
+discipline problem's savings. The row is still worth having, on a regime
+argument a fat host cannot make: the `cargo fmt --check` step sits early in
+build.sh's own gate, and the cost of walking to it is what a floor host pays. `scripts/land-on-
+platform-branch.sh` has no cheap pre-gate check at all.
+
+**THE SALVAGE AUDIT SURFACED LIVE WORK FOR THE FIRST TIME.** 38 refs scanned;
+one real find — three Windows fixes on `salvage/yolanda-windows/20260915-1186-
+w3ph`, stranded since 2026-09-15 under an `in_progress` claim held by a host
+that is now offline, on no branch anywhere. Relayed byte-exact this pass after
+proving trunk had not touched those files since the ref's merge-base. One FALSE
+candidate too, worth recording: lenovinha's `345-1185-9qx6.step` reads as
+unrelayed because it landed RENAMED to `355-...` after the allocator collision,
+and a per-file blob compare cannot see a rename.
+
+**PLATFORM BRANCHES ARE FULLY RELAYED.** `origin/osx-next` and
+`origin/windows-next` both at 0 commits ahead of linux-next. `release-preflight`
+is green, parity gaps 0, both must-ship rows present in HEAD. The only thing
+between this tree and a cut is the three litmus reds.
+
+**NO REASSIGNMENT AND NO IDLE HOST.** yoga claimed 1229-2862 by name and
+implemented it within the hour; this host held arms 3 and the relay. Nobody
+reported idle.

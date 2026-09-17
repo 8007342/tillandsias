@@ -1,0 +1,111 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    order: 1233-jqp4
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [litmus, budgets, telemetry, release-gate, corpus-growth, metrics]
+    estimated_hours: 8
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - openspec/litmus-tests/litmus-cycle-metrics-answer-rate-shape.yaml
+    title: |
+      five litmus budgets are calibrated against a corpus that only grows, so correct steps red the release gate — monotonic in fleet activity, no floor, and it reaches the FASTEST host eventually
+    context: |
+      FOUND BY A RELEASE GATE, 2026-09-17T00:30Z, ci-full rc=1 in 2293s on
+      5c13d81e7: pre-build litmus 361 PASS / 6 FAIL / 121 SKIP. ONE failure was
+      a real assertion (fixed the same night). The other FIVE were budget kills,
+      and every one of them is a CORRECT step whose producer exits zero:
+
+        litmus:cycle-batch-triage-shape           STEP 14/26  budget 15s
+        litmus:cycle-metrics-answer-rate-shape    STEP 1/16   budget 10s
+        litmus:timing-telemetry-implausible-guard STEP 1/4    budget 20s
+        litmus:cycle-flow-telemetry-shape         STEP 2/10   budget 10s
+        litmus:build-test-timing-telemetry-shape  STEP 2/10   budget 10s
+
+      MEASURED ON macuahuitl, QUIET HOST (load 0.70, after the gate had exited):
+        .cache/metrics/tillandsias-timing.jsonl   18,267,466 bytes   115,860 lines
+        scripts/cycle-metrics.sh    rc=0   29,908 ms   against budgets of 10,000-20,000 ms
+          its own output: "timing: steps=115860 ... source=.../tillandsias-timing.jsonl"
+        scripts/select-work-batch.sh linux   rc=0   14,883 ms   against a 15,000 ms budget
+      The selector has 117 ms of headroom on a 20-core host. Both producers
+      answer correctly and exit zero. Nothing here is a code defect and nothing
+      here is contention between two of my own jobs.
+
+      THIS IS NOT 1187-iij8 AND FILING IT THERE WOULD PRODUCE THE WRONG FIX.
+      That row says budgets assume a FAST HOST, which is true and BOUNDED: a
+      floor host is slow by a fixed factor, you size for the slowest host, and
+      it stays sized. An implementer reading that raises the number and is
+      correctly done. THIS defect is monotonic in fleet activity and has NO
+      floor: the timing log grows with every gate anyone runs and the ledger
+      grows with every packet, so a budget calibrated today fails later on every
+      host INCLUDING THE FASTEST, and degrades further every day the fleet
+      works. The two share a symptom — a step killed at its budget — and share
+      no remedy. Filed as a note under 1187-iij8 this inherits "raise the
+      number", which buys time and nothing else, and the next reader finds a row
+      saying it was already handled. (yoga-silverblue argued the split and the
+      argument is theirs: a row's framing determines the remedy the implementer
+      builds.)
+
+      THE FLEET IS DISTRIBUTED ALONG THIS AXIS, WHICH IS WHY IT LOOKS LIKE A
+      HOST PROBLEM. Two hosts, same file, same day:
+        macuahuitl   18,267,466 bytes   115,860 lines
+        yoga          9,601,906 bytes    60,521 lines
+      The log is per-host and accumulates independently, so hosts do not fail
+      together — they fail IN ORDER OF HOW MUCH WORK THEY HAVE DONE. The busiest
+      host reds first and reads as an outlier, which is exactly backwards: it is
+      the leading indicator.
+
+      BOTH NUMBERS ABOVE ARE OPTIMISTIC AND THE ROW MUST SAY SO. The 29,908 ms
+      was taken on a QUIET host. All five steps only ever run INSIDE A GATE THAT
+      IS COMPILING, which is the regime they were killed in. So a budget
+      calibrated from a quiet-host reading of a step that never runs quiet is
+      mis-specified on TWO axes at once — wrong corpus size and wrong load — and
+      any recalibration that does not state its regime repeats the mistake.
+      (yoga measured 33.18 s on a corpus HALF this size with a gate compiling,
+      flagged it as confounded rather than sending it, and is re-measuring quiet.
+      A clean pair across two corpus sizes is still owed and belongs on this row.)
+
+      THE SAME CLOCK ALREADY CAUGHT ONE STEP AND THE FIX WAS HEADROOM, NOT A
+      REMEDY. litmus:capability-routing-shape was raised 120s -> 300s earlier the
+      same night on a measured 150s, framed as a fat-host/floor-host budget
+      question. It passed in this run. But its fixture runs against the LIVE
+      LEDGER, so its cost tracks ledger growth exactly like these five — and the
+      raise's own comment says "its cost tracks ledger growth" without drawing
+      the conclusion. A correct sentence answering a question nobody asked it.
+      That step is on this clock too and will return.
+    exit_criteria:
+      - 'the five steps pass inside a gate on a host whose timing log is at least the size measured here (115,860 records / 18.2 MB), with the measurement taken UNDER GATE LOAD rather than quiet (pre-fix result: FAILS — all five were killed at their budgets in ci-full on 5c13d81e7, with both producers exiting zero when run standalone)'
+      - 'the cost of the telemetry readers tracks the DELTA rather than the history, or the corpus is bounded, so the pass does not decay again as the fleet works — a raised number that re-fails later is not a closure'
+      - 'every budget in the tree that reads a growing corpus is identified, and the ones left unchanged are NAMED with the reason — an unnamed sibling is the one that fires next'
+      - 'NEGATIVE CONTROL: a genuinely hung or genuinely wrong producer is still killed and still reds; making room for a slow correct step must not make room for a broken one'
+      - 'each recalibrated budget records the REGIME its number came from (corpus size, host, and whether the reading was taken under gate load), since a quiet-host reading of a step that only runs inside a gate is wrong twice over'
+    unscoreable: |
+      remedy-not-chosen-and-should-not-be-tonight: (a) raise the budgets treats
+      the symptom and re-fails on a schedule nobody tracks; (b) bound or rotate
+      the corpus, or make the readers incremental so cost tracks the delta.
+      Both filers lean (b) and neither will choose it at 00:45 — the design wants
+      a measurement of where the 30 seconds actually goes, because if it is JSON
+      parse it is one fix and if it is a full re-fold per query it is another.
+      The measurements above are complete and re-checkable; the remedy is not
+      chosen.
+    verifiable_closure: |
+      litmus:cycle-metrics-answer-rate-shape — green inside a full ci-full on a
+      host carrying at least 115,860 timing records, with the step's own budget
+      unchanged or its new budget justified by a stated regime.
+    events:
+      - type: filed
+        ts: "2026-09-17T00:45:00Z"
+        agent_id: "linux-macuahuitl-claude-20260917t004500z"
+        host: macuahuitl
+        summary: |-
+          Filed at yoga-silverblue's insistence that this is not 1187-iij8. Their
+          argument decided it: a row's framing determines the remedy the
+          implementer builds, and "budgets assume a fast host" yields a raise
+          where "the corpus only grows" yields a bound. The second host's corpus
+          measurement is theirs, the regime caveat on my own number is theirs,
+          and they flagged their own confounded reading rather than sending it.

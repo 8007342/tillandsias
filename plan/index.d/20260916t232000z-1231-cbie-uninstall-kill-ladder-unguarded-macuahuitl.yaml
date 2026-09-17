@@ -1,0 +1,138 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    order: 1231-cbie
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [uninstall, destructive, macos, platform-guard, process-matching, smoke]
+    estimated_hours: 3
+    owned_files:
+      - scripts/uninstall.sh
+      - scripts/install-macos.sh
+    title: |
+      the uninstaller's tray kill ladder sits under a "macOS desktop cleanup" HEADING with no IS_MACOS GUARD, so `pkill -KILL -f tillandsias-tray` — the command-line match this project already condemned by name — runs on every platform
+    context: |
+      FOUND BY yoga-silverblue 2026-09-16 while correcting a grep of mine, and
+      the scoping was then corrected again here. yoga found the hazard; I found
+      that it is not confined to the lane they assigned it to.
+      THE PROJECT ALREADY LEARNED THIS AND WROTE IT DOWN WITH A MEASUREMENT.
+      scripts/e2e-preflight.sh:139-144 condemns the exact form by name:
+        "NOT `pgrep -f tillandsias-tray`, which is the obvious choice and is
+        WRONG: `-f` matches the whole command line, so it fires on ANY process
+        that merely mentions the string — an editor, a grep, a CI shell, or the
+        agent command that is running this very check. That is not hypothetical:
+        the first draft of this probe reported PRESENT against its own invoking
+        shell during the same 2026-08-17 boot."
+      scripts/delegate-outcome.sh documents it too and ROUTES AROUND the
+      self-matching form (:133, :164, :169), and
+      scripts/test-uninstall-sweeps-both-app-dirs.sh:48 names why a fixture must
+      not run `pkill -f tillandsias-tray`.
+      AND TWO SCRIPTS USE EXACTLY THAT FORM TO DECIDE WHAT TO SIGKILL.
+      scripts/uninstall.sh:255-259 and scripts/install-macos.sh:141-150 both
+      run `pgrep -f tillandsias-tray` as the guard and then a TERM/KILL ladder
+      on `pkill -f tillandsias-tray`. The condemned probe decides a verdict; this
+      decides a signal.
+      THE PART THAT MAKES IT p1 RATHER THAN A MACOS NOTE, verified at the source
+      rather than inferred:
+        uninstall.sh:20-22  IS_MACOS=false, set true only inside the Darwin arm
+        every IS_MACOS guard in the file: :70 :134 :143 :337 :347 :356
+        the kill ladder:    :255, beginning at COLUMN 0 — top level
+        nothing between :143 and :337 encloses it
+      It is UNGUARDED. It runs on Linux. The comment header above it reads
+      "── macOS desktop cleanup ──" and sits four lines after an unconditional
+      LINUX desktop cleanup block (:240-245), so the heading reads as scope and
+      is not. A correctly-reasoned macOS fix was added under a macOS heading in a
+      cross-platform script and nothing made the heading true.
+      THE CONSEQUENCE ON LINUX. `pkill -KILL -f tillandsias-tray` matches any
+      process whose COMMAND LINE contains that literal — not the executable. An
+      agent with `cargo test -p tillandsias-macos-tray` in flight, a grep, an
+      editor, or a tool invocation carrying the string is a match, on the same
+      host, and gets SIGKILL. This is the "never sweep a literal your own command
+      carries" shape in production teardown code, and scripts/uninstall.sh is
+      named by the smoke-curl-install-and-test-e2e runbook.
+      AND IT SHIPS. yoga-silverblue pointed at
+      scripts/test-uninstall-preserves-vm.sh:18 and it is verified here:
+      "uninstall.sh is a SHIPPED release artifact (.github/workflows/release.yml
+      installs it and asserts it is present), so this is operator-reachable,
+      which is why it is pinned rather than merely fixed."
+      Confirmed at the workflow: release.yml:233 installs scripts/uninstall.sh
+      into release-artifacts/ and :286 asserts the file is present. So the blast
+      radius is not this fleet's hosts — it is every machine that installs a
+      release and later uninstalls, where the process swept by command-line
+      substring is whatever that operator happened to be running. This ships
+      with the next cut unless it is fixed first, and that is the operator's
+      risk call rather than ours.
+      THE TWO-STAGE STOP IS CORRECT AND MUST SURVIVE. uninstall.sh:248-254
+      justifies it with a live observation: without it, `uninstall` left the tray
+      running from a deleted bundle, menu bar icon present, STILL OWNING THE VM —
+      "verified live on tlatoanis-macbook-air 2026-08-30: pid alive 12m after a
+      complete uninstall". Removing the stop trades a known-real defect for this
+      one. The fix is the matcher and the guard, never the stop.
+      THIRD INSTANCE TONIGHT OF ONE SHAPE. A lesson stays in the file where it
+      was learned and never reaches the file where it matters: 801-g9nn built the
+      stale-versus-fabricated frame check and the grader could not reach it
+      (1229-2862); a coordinator's note about pgrep self-matching lived on one
+      host and no fleet artifact; and e2e-preflight's condemnation, with its
+      measurement, did not travel two files to the scripts where the consequence
+      is a signal rather than a verdict.
+      ON THE CLOSURE PIN, AND HOW THIS FRAGMENT TRIPPED 885-92iu TWICE. The
+      closure names litmus:uninstall-preserves-vm-image because that litmus
+      EXISTS and already owns the uninstaller's destructive behaviour. The
+      obvious-sounding name — the one matching the script
+      scripts/test-uninstall-sweeps-both-app-dirs.sh — has no litmus behind it,
+      and 885-92iu refuses a pin nothing defines. It was caught before filing.
+      It was then re-introduced BY THE EXPLANATION: writing "the name X does not
+      resolve" INSIDE verifiable_closure put X back in the field the guard
+      parses, and the gate refused again naming X. A guard that reads a field
+      cannot tell a pin from a discussion of a pin. Same shape as 881-29me
+      firing on a quotation of a citation, which is why the reasoning now lives
+      here in context and the closure field carries one resolvable name.
+      LINUX-TESTABLE, WHICH IS WHY pickup_role IS linux AND NOT macos.
+      TILLANDSIAS_UNINSTALL_FAKE_UNAME (uninstall.sh:18) exists so a fixture can
+      drive both platform arms without a Mac, and three uninstall fixtures
+      already use it. The GUARD half needs no macOS host. The MATCHER half on the
+      macOS side — what replaces `-f` when the target genuinely is a .app whose
+      executable name may not be the process name — does need one, and
+      macbookair is offline.
+    exit_criteria:
+      - 'the macOS tray stop in scripts/uninstall.sh does not execute on a non-Darwin host, proven by driving TILLANDSIAS_UNINSTALL_FAKE_UNAME through both arms (pre-fix result: FAILS — the block at :255 begins at column 0 with no IS_MACOS guard between :143 and :337, and the nearest guard is six sections away)'
+      - 'nothing in the uninstall or install path SIGKILLs on a command-line match: the process selector cannot fire on a process that merely mentions the string, and the fixture proves it by running a decoy whose argv contains the literal and showing it survives'
+      - 'the two-stage stop SURVIVES on macOS — a tray running from a replaced or deleted bundle is still stopped, since uninstall.sh:248-254 records a pid alive 12m after a complete uninstall, still owning the VM'
+      - 'NEGATIVE CONTROL: a genuinely running tray is still stopped on macOS, so narrowing the matcher does not trade the defect for its opposite'
+      - 'scripts/install-macos.sh:141-150 gets the same treatment or the row records why the installer may keep the broader match'
+    unscoreable: |
+      matcher-shape-needs-a-macos-host: the platform GUARD is decidable and
+      Linux-testable today. What correctly replaces `pgrep -f` on macOS is not —
+      the target is a .app bundle, `pgrep -x` matches an executable name that may
+      not equal the bundle name, and choosing between -x, a pidfile, launchctl
+      and the lsof arm e2e-preflight already uses needs to be exercised on
+      Darwin. macbookair-macos is offline as of 2026-09-16. The guard half should
+      not wait for the matcher half.
+    verifiable_closure: |
+      litmus:uninstall-preserves-vm-image — extended with two arms: a decoy
+      process whose argv contains the literal `tillandsias-tray` survives an
+      uninstall on a non-Darwin host, and TILLANDSIAS_UNINSTALL_FAKE_UNAME drives
+      both platform branches with the macOS tray stop executing in the Darwin arm
+      only.
+    events:
+      - type: filed
+        ts: "2026-09-16T23:20:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t232000z"
+        host: macuahuitl
+        summary: |-
+          yoga found the unapplied lesson while correcting a grep of mine that
+          had claimed the hazard was undocumented; it is documented precisely,
+          with a live measurement, two files away from where it is violated.
+          They scoped it macOS-lane and declined to touch it for good reasons.
+          Checking the scoping here showed the block is unguarded and runs on
+          Linux, which makes the guard half fixable without a Mac. Filed, not
+          claimed: nobody should edit an uninstaller's kill ladder at the end of
+          a long night with a release gate in flight. yoga then proved the
+          nesting rather than conceding it — the guard at :143 closes at :147 and
+          a depth walk puts :255 at top level — and named their own error
+          precisely: they reasoned from the section HEADER and the subject
+          matter. The comment said macOS; the control flow said everyone.

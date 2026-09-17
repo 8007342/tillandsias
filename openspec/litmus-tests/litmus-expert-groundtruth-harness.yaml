@@ -350,7 +350,25 @@ critical_path:
     # expert_accuracy: line rests on. The fixture carries its own negative
     # control — a genuinely wrong expectation must still FAIL under a declared
     # corpus — so this cannot be satisfied by making everything green.
-    command: "bash scripts/test-groundtruth-corpus-declaration.sh 2>&1 | tail -1"
+    #
+    # ORDER 1226 (yoga 2026-09-16): THE STEP DISCARDED THE FIXTURE'S DIAGNOSIS
+    # AND MASKED ITS EXIT CODE. It was `... 2>&1 | tail -1`. The fixture reports
+    # each scenario's cause through bad() on stderr and then prints one terminal
+    # line, so `tail -1` kept ONLY "fail: groundtruth-corpus-declaration
+    # scenarios failed" and threw away the `FAIL:` line naming WHICH of the nine
+    # died — the one thing a remote reader needs. Measured: green here 9/9 while
+    # red on macuahuitl-fedora, and the red carried no way to tell the two hosts
+    # apart. Several scenarios are host-conditional by design (scenario 6's glob
+    # and scenario 7 both branch on whether this host has a built spec index),
+    # so "which scenario" IS the diagnosis, not colour commentary.
+    #
+    # And the pipeline masked rc: the fixture exits 1, `tail` exits 0, and the
+    # pipeline reports tail's status — so the step logged `[FAIL] rc=0`, an
+    # exit-code mask of exactly the 797-5kqe shape this repo keeps gating for.
+    # The verdict was never fail-open (it comes from expected_behavior, not rc),
+    # but an rc nobody can trust is a trap laid for the next reader who checks
+    # the cheaper signal.
+    command: "out=$(bash scripts/test-groundtruth-corpus-declaration.sh 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then printf '%s\\n' \"$out\" | tail -1; else printf '%s\\n' \"$out\" | grep -E '^(FAIL:|SKIP:|fail:)'; exit 1; fi"
     timeout_ms: 120000
     expected_behavior: "ok:groundtruth-corpus-declaration-fixture:9"
 

@@ -1,0 +1,154 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-groundtruth-grader-calls-the-frame-blind-verifier-so-a-span-that-merely-moved-is-graded-as-a-fabricated-citation
+    order: 1229-2862
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [expert-grading, spec-index, release-gate, citation, rag]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/groundtruth.rs
+      - scripts/test-groundtruth-corpus-declaration.sh
+    title: |
+      the groundtruth grader drops the index's own frame and stamps its checkout HEAD instead, then verifies frame-blind — so a cited span that merely MOVED is graded FABRICATED, and every index-having host reds litmus:expert-groundtruth-harness the moment anyone edits an indexed file
+    context: |
+      FOUND ON THE RELEASE PATH, 2026-09-16, on macuahuitl. ./build.sh --ci-full
+      came back rc=1 in 2463s with pre-build litmus at 364 PASS / 3 FAIL, and one
+      of the three reds is litmus:expert-groundtruth-harness STEP 30/31. It is a
+      cut blocker for a release the operator has asked for inside two days.
+
+      THE SYMPTOM. bash scripts/test-groundtruth-corpus-declaration.sh fails two
+      scenarios here and passes all nine on a host with no spec index:
+        FAIL: committed glob not green: groundtruth-result: sets=4 total=33 pass=31 fail=2
+        FAIL: absent-index skip is not properly accounted: rc=1 line=... sets=1 total=5 pass=3 fail=2
+      The two graded reds are both spec.answer cases in
+      openspec/litmus-tests/groundtruth/spec-rung1.yaml:
+        spec-forge-isolation-and-egress
+        spec-inference-tier-mechanism-is-in-code
+      and every finding under them is of the form
+        main.rs:6274-6285: cited span does not contain 'fn forge_uses_host_mount() -> bool {' — FABRICATED citation
+
+      THE MEASUREMENT THAT NAMES THE CAUSE. This host's published index entry
+      records the commit it was built at, in its own .commit file:
+        5bef283cb 2026-09-14  (an ancestor of HEAD)
+      At 5bef283cb, main.rs carries fn forge_uses_host_mount at line 6274 and
+      fn effective_inference_tier at 4524 — EXACTLY the two cited spans. At HEAD
+      they sit at 6358 and 4608; main.rs has moved 84 lines since the index was
+      built. The retrieval is correct, the chunk is correct, the recorded commit
+      is correct. Only the reader is standing somewhere else.
+
+      THE MECHANISM ALREADY EXISTS AND THREE CALL SITES CHOOSE THE WRONG
+      SIBLING. Order 801-g9nn built the whole stale-versus-fabricated
+      separation, and answer.rs:1003 names this exact symptom as the thing it
+      was written to prevent: "Calling a stale citation FABRICATED slanders a
+      correct answer and teaches agents to ignore the verifier." What is missing
+      is the wiring, in three places, each of which has a correct sibling
+      sitting beside it:
+
+        1. groundtruth.rs:615-617 loads a SpecIndexEntry and keeps only
+           `entry.vectors` and `entry.chunks`. The struct also carries
+           `commit: Option<String>` (spec_index.rs:219) and a freshness()
+           method (spec_index.rs:304) that builds the entry's own frame from
+           its `.commit`. The grader drops it on the floor at load time.
+        2. groundtruth.rs:699 then calls spec::build_envelope_scored, which
+           stamps Freshness::for_source(&root) — THIS PROCESS'S CHECKOUT HEAD.
+           The sibling build_envelope_scored_with_freshness (spec.rs:1205,
+           order 920-pxg6) exists for exactly this case, and its doc comment
+           says so in place: the frame "is the entry's own `.commit` +
+           chunks.jsonl mtime (801-g9nn) — NOT anything derivable from a path
+           in this process's checkout, which is what Freshness::for_source
+           reports."
+        3. groundtruth.rs:396 calls answer::verify, whose doc at answer.rs:770
+           says the rescue "is Some only on the reader-side audit path".
+           main.rs:3570 picked the other one for verify-answer and says why in
+           place: "The reader-side audit, not the frame-blind verify". That is
+           audit's ONLY non-test caller in the tree, so 801-g9nn's separation
+           has been exercised almost entirely by its own unit tests since it
+           landed.
+
+      THE ORDER OF THOSE THREE MATTERS, AND GETTING IT WRONG LOOKS LIKE THE
+      THEORY FAILING. Wiring audit alone changes NOTHING, and not because the
+      frame is absent — because it is present and WRONG. frame_holds
+      (answer.rs:969) would take envelope_commit, get this checkout's HEAD,
+      re-read main.rs at HEAD, find the function is not there, and return
+      Some(false) — a confident "this really is fabricated", which the rescue
+      correctly refuses to launder. A mis-stamped frame is strictly worse than
+      an absent one: absent yields None and an honest "unaskable", while wrong
+      yields a definite verdict against a correct answer. Stamp the entry's
+      commit FIRST, then switch to audit, or the experiment reports the opposite
+      of the truth.
+
+      WHY THIS IS P1 AND NOT A CURIOSITY. The blast radius is every host that HAS
+      an index, and it fires on ordinary work: edit any indexed file above a cited
+      line and the harness reds, with a message that accuses the expert of
+      fabricating a citation it did not fabricate. A host with NO index skips
+      these cases entirely (skipped_engines=spec.answer) and stays green — so the
+      fleet reads as healthy right up to the release-tier run, and "green on
+      yoga" was never coverage, only a newer index. Green on one regime, in both
+      directions at once.
+
+      SECOND, SMALLER DEFECT IN THE SAME FIXTURE. Scenario 7's arm requires
+      sp_rc -eq 0 before it will say "this host HAS an index", so ANY genuine red
+      in spec-rung1 falls through to the else and prints "absent-index skip is
+      not properly accounted". The accounting was fine. One red wears two names
+      and the second name points at innocent code.
+
+      WHY THE CURRENCY PROBE DOES NOT SEE THIS. Index currency is established by
+      a VOCABULARY probe (1172-dyvd) — ask the artifact a question only the
+      current contract answers. Offsets are not words. An index can be
+      vocabulary-current and offset-stale simultaneously, which is the state this
+      host is in, and scenario 8 ("a STALE index is still a HARNESS ERROR")
+      passes throughout. Any consumer that trusts the currency probe for SPAN
+      validity inherits that blindness; grade is simply the one that gates a
+      release.
+
+      NOT A CASE FOR A COMMIT-COMPARISON GATE, AND NOT A CASE FOR RE-ANCHORING
+      EITHER. Comparing the index commit against HEAD and erroring out would turn
+      every code movement into a fleet-wide HARNESS ERROR — a fail-closed
+      stampede, with the pressure then landing on rebuilding indexes constantly
+      or relaxing the check. Re-anchoring chunks by span_contains is a real idea
+      but a producer-side one, and it is not needed here: 801-g9nn is a RESCUE,
+      not a comparison. It only ever moves a finding from violations to stale,
+      never the reverse, and it refuses to rescue anything that does not verify
+      at the named commit — so it cannot red a host that is green today. Both
+      alternatives rebuild a mechanism that is already sitting in the tree.
+    exit_criteria:
+      - 'the two spec-rung1 cases grade non-red on a host whose index is offset-stale but vocabulary-current, and the finding text says the span MOVED and names the frame commit rather than saying FABRICATED (pre-fix result: FAILS — measured 2026-09-16 on macuahuitl, index .commit 5bef283cb, both spans verify there and are reported FABRICATED at HEAD)'
+      - 'a genuinely wrong citation — one that verifies at NO commit — is still a hard red, proven by a negative control in the same run; the rescue must not become a blanket amnesty'
+      - 'litmus:expert-groundtruth-harness passes end to end on this host with the existing 2026-09-14 index still in place, i.e. without rebuilding it, since a remedy that requires a fresh index has not fixed anything'
+      - 'scenario 7 of scripts/test-groundtruth-corpus-declaration.sh distinguishes "this host has an index and some cases FAILED" from "the skip accounting is wrong", so a real red stops accusing the accounting'
+      - 'NEGATIVE CONTROL: a host with NO index still SKIPS loudly with skipped_engines=spec.answer and rc=0 — unchanged'
+    verifiable_closure: |
+      litmus:expert-groundtruth-harness — green on macuahuitl against the
+      offset-stale index published 2026-09-14 (.commit 5bef283cb), with the
+      negative control above in the same run.
+    events:
+      - type: filed
+        ts: "2026-09-16T22:15:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t221500z"
+        host: macuahuitl
+        summary: |-
+          Filed from the release path. Found while answering yoga's blocking ask
+          on the corpus-declaration harness; their suspicion that the grader
+          binary was stale is falsified — build-id and source-revision are
+          identical on both hosts at 0.1.0+660efcb402e408e4.
+      - type: claim
+        ts: "2026-09-16T22:16:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t221500z"
+        host: yoga
+        summary: |-
+          Claimed for yoga, who asked for the implementation half by name and has
+          the host free tonight. They proposed re-anchoring chunks by
+          span_contains and argued against a recorded-commit gate; the second
+          half of that is right and the first is unnecessary — answer::audit
+          already re-reads the span at its own frame and already separates a
+          moved span from a fabricated one. Reached the same conclusion
+          independently within the hour and found the load-time half I had
+          missed; they hold the source read and will run the experiment before
+          building. The work is to stamp the entry's frame, route the grader
+          through audit, and decide what a stale finding means to a GRADE, which
+          is a different question from what it means to a reader.
