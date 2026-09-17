@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-refusal-in-the-tree-must-say-why-it-refused-and-what-would-make-it-not-a-refusal-because-a-verdict-token-alone-tells-an-agent-it-is-stuck-without-telling-it-how-to-stop-being-stuck
+    order: 1247-amcu
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, error-messages, hooks, dx, fleet-wide]
+    estimated_hours: 16
+    owned_files:
+      - scripts
+    title: |
+      OPERATOR DIRECTIVE 2026-09-17: every refusal must carry its affordance — why it refused AND what would make it not a refusal — because 289 of 339 refusal verdicts currently emit a token and nothing an agent can act on
+    context: |
+      OPERATOR RULING, 2026-09-17: "Errors alone are not useful, they should all
+      include the 'affordance' of why this was an error, and what would make this
+      not an error. These checks shouldn't be checks, they should just be better
+      instructions, better error messages, and affordances present everywhere."
+      THE MODEL ALREADY EXISTS AND IS GOOD, which is the first thing to say
+      because it changes the work from invention to propagation. The operator's
+      own example — main-branch protection — is already implemented well in
+      scripts/hooks/pre-push-main-branch-affordance.sh:
+        blocked:main-branch-affordance
+        "main is not pushable from here, and it never was — it carries
+         server-side branch protection with enforce_admins (order 476), so this
+         push would have travelled to GitHub only to be rejected there."
+        "WHAT TO DO: work on '<suggest>' from <where>."  + the exact commands
+        "IF YOU ARE IN A FORGE and did not choose main: the forge seeds its
+         branch from the HOST checkout's current branch, so a host left parked
+         on main pins every forge launched after it (order 531)."
+      That is the shape: WHY it refused, WHAT makes it stop refusing, and the
+      non-obvious second-order case the reader could not have guessed. The job is
+      to make the other refusals look like that one.
+      MEASURED ON macuahuitl 2026-09-17:
+        distinct refusal verdicts across scripts/       339
+        in files carrying any affordance phrase          50
+        in files carrying NONE                          289
+      289 IS A FLOOR, NOT A CEILING, and the heuristic must be stated or the
+      number will be quoted as precise. The scan asks whether a FILE contains an
+      affordance phrase anywhere, so a file with one good message and ten bare
+      verdicts scores all eleven as covered. The true per-verdict gap is larger
+      than 289 and nobody should re-derive that from the same scan and report a
+      smaller number as progress.
+      WHY THIS IS p1 RATHER THAN POLISH. The fleet is agents. A human reading
+      `violation:gate-wrote-tracked-files` can go and look; an agent reads a
+      token, has no next action, and either stops or invents one. The expensive
+      failures this week were all of that shape one level up — a refusal whose
+      remedy text sent a reader to hunt nonexistent conflict markers, a guard
+      that named a remedy which could not run at the locus where it fired, a
+      timeout message that said "genuinely too slow" and pointed at the wrong
+      subject. The operator's framing is sharper than treating these as message
+      bugs: the checks should not read as checks, they should read as
+      instructions that happen to be enforced.
+      THE PROJECT-AGNOSTIC POINT, which generalises past this repo. The operator
+      notes that the tillandsias app is project-agnostic, so a hardcoded "push to
+      linux-next" is wrong in general — a checkout of some other project has no
+      linux-next. An affordance must therefore name the RULE and the way to find
+      the local answer ("this remote protects main; push regulated work to the
+      integration branch, or see the forge's rules for temporary work branches")
+      rather than hardcoding one repo's branch names. The existing hook already
+      derives its suggestion rather than hardcoding it; that pattern is the one
+      to copy.
+    exit_criteria:
+      - 'a guard exists that FAILS when a newly added refusal verdict ships without an affordance, so this does not have to be swept twice (pre-fix result: FAILS — nothing checks, and 289 of 339 verdicts reached trunk without one)'
+      - 'the audit reports PER VERDICT rather than per file, since the file-level heuristic that produced 289 credits a whole file for one good message and will otherwise be quoted as progress it did not measure'
+      - 'the top refusals BY HOW OFTEN AGENTS ACTUALLY HIT THEM are converted first, ranked from the gate logs rather than alphabetically — converting 289 messages nobody encounters while the five that fire daily stay bare would satisfy a count and change nothing'
+      - 'an affordance names the RULE and how to find the local answer, never a hardcoded branch name, because the app is project-agnostic and a checkout of another project has no linux-next'
+      - 'NEGATIVE CONTROL: an affordance must not be able to lie — for at least the most-hit refusals, the suggested remedy is EXECUTED in a fixture and shown to clear the refusal, since a confidently wrong remedy is worse than a bare token (the stale-stamp refusal taught two agents a false model by listing paths that could not have caused it)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: this row's criterion 1 IS the guard,
+      so there is no existing litmus to pin and inventing one would dangle
+      (1068-cxmf) while deleting the pin would leave the row carrying no
+      obligation (977-448j). The future litmus file is named here as a FILENAME
+      rather than as a pin token, because the closure checker parses that field
+      and cannot tell a plan from an instance: openspec/litmus-tests/
+      litmus-refusal-affordance-shape.yaml, to be written in the same commit as
+      the guard it tests.
+      what-counts-as-an-affordance: a sentence containing "WHAT TO DO" is
+      mechanically detectable and is not the property wanted. The property is
+      that a reader who was stuck is now unstuck, which no scan can decide. The
+      guard in criterion 1 can only enforce presence; the ranking in criterion 3
+      and the executed-remedy control in criterion 5 are what keep presence from
+      becoming ritual. Whoever takes this should expect to argue about specific
+      messages and should prefer arguing over widening the regex.
+    verifiable_closure: |
+      unscoreable — see the unpinnable-until-the-guard-exists note above. The
+      closure is: a newly added refusal verdict lacking an affordance is REFUSED
+      by the new guard, and a named high-traffic refusal's suggested remedy is
+      EXECUTED in a fixture and shown to clear that refusal.
+    events:
+      - type: filed
+        ts: "2026-09-17T23:43:21Z"
+        agent_id: "linux-macuahuitl-claude-20260917t234321z"
+        host: macuahuitl
+        summary: |-
+          Filed on an explicit operator directive. The first thing measured was
+          whether the thing they asked for already existed, and for their own
+          example it did and is well done — so this row is propagation, not
+          invention, and says so. The 289 figure is published with its heuristic
+          because a file-level scan will otherwise be re-run by someone else,
+          return a smaller number as files gain one good message each, and be
+          reported as progress that did not happen.

@@ -59,7 +59,7 @@ critical_path:
     # build-check durations 100+300 -> avg 200; litmus-suite 1000+3000 -> avg 2000;
     # slowest across all is litmus-suite:3000. Distinct step namespaces prove no
     # double-count.
-    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":100,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":300,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":1000,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":3000,\"exit\":0}\\n' > $F; out=$(TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^timing:'); rm -f $F; case \"$out\" in *steps=4*build_check_ms_avg=200*litmus_ms_avg=2000*slowest=litmus-suite:3000*) echo 'ok: rolling namespaced averages' ;; *) echo \"observed=$out expected steps=4 build_check_ms_avg=200 litmus_ms_avg=2000 slowest=litmus-suite:3000\"; echo 'fail: rolling namespaced averages' ;; esac"
+    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":100,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":300,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":1000,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":3000,\"exit\":0}\\n' > $F; out=$(TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^timing:'); rm -f $F; case \"$out\" in *steps=4*build_check_ms_avg=200*litmus_ms_avg=2000*slowest=litmus-suite:3000*) echo 'ok: rolling namespaced averages' ;; *) echo \"observed=$out expected steps=4 build_check_ms_avg=200 litmus_ms_avg=2000 slowest=litmus-suite:3000\"; echo 'fail: rolling namespaced averages' ;; esac"
     # ============================================================================
     # !!! ELEVATED TIMEOUT — NOT A BUDGET. REMOVE ME. (order 1236-bmjh) !!!
     # ============================================================================
@@ -103,7 +103,7 @@ critical_path:
     expected_behavior: "ok: rolling namespaced averages"
 
   - step: "an absent timing log reports source=absent with no fabricated numbers"
-    command: "F=$(mktemp -u); out=$(TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^timing:'); case \"$out\" in *steps=0*build_check_ms_avg=-*litmus_ms_avg=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
+    command: "F=$(mktemp -u); out=$(TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^timing:'); case \"$out\" in *steps=0*build_check_ms_avg=-*litmus_ms_avg=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: absent honest"
 
@@ -120,12 +120,12 @@ critical_path:
   - step: "--emit-timing-batch (765-dfry) writes N grammar-valid records in ONE spawn, drops malformed and day-bound lines"
     # Three input lines: valid guard record; day-bound violation (86400000ms);
     # malformed (no numeric duration -> coerced 0, still valid grammar).
-    command: "F=$(mktemp); printf 'step:checking-x\\tbuild\\t42\\t0\\thost1\\nstep:huge\\tbuild\\t86400000\\t0\\thost1\\nlitmus:t-y\\tpre-build\\tnotanumber\\t1\\thost1\\n' | TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --emit-timing-batch; n=$(wc -l < $F | tr -d ' '); ok1=$(head -1 $F | jq -e '.step==\"step:checking-x\" and .duration_ms==42 and .exit==0' >/dev/null 2>&1 && echo y); ok2=$(tail -1 $F | jq -e '.step==\"litmus:t-y\" and .duration_ms==0 and .exit==1' >/dev/null 2>&1 && echo y); rm -f $F; if [ \"$n\" = 2 ] && [ \"$ok1\" = y ] && [ \"$ok2\" = y ]; then echo 'ok: batch grammar and bounds'; else echo \"observed n=$n ok1=$ok1 ok2=$ok2\"; echo 'fail: batch grammar and bounds'; fi"
+    command: "F=$(mktemp); printf 'step:checking-x\\tbuild\\t42\\t0\\thost1\\nstep:huge\\tbuild\\t86400000\\t0\\thost1\\nlitmus:t-y\\tpre-build\\tnotanumber\\t1\\thost1\\n' | TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --no-experts --emit-timing-batch; n=$(wc -l < $F | tr -d ' '); ok1=$(head -1 $F | jq -e '.step==\"step:checking-x\" and .duration_ms==42 and .exit==0' >/dev/null 2>&1 && echo y); ok2=$(tail -1 $F | jq -e '.step==\"litmus:t-y\" and .duration_ms==0 and .exit==1' >/dev/null 2>&1 && echo y); rm -f $F; if [ \"$n\" = 2 ] && [ \"$ok1\" = y ] && [ \"$ok2\" = y ]; then echo 'ok: batch grammar and bounds'; else echo \"observed n=$n ok1=$ok1 ok2=$ok2\"; echo 'fail: batch grammar and bounds'; fi"
     timeout_ms: 10000
     expected_behavior: "ok: batch grammar and bounds"
 
   - step: "a batch emit to an unwritable path still exits 0 (fault injection: timing sink unwritable, gate exit untouched)"
-    command: "printf 'step:x\\tbuild\\t1\\t0\\th\\n' | TILLANDSIAS_TIMING_LOG=/proc/1/nope.jsonl scripts/cycle-metrics.sh --emit-timing-batch; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: batch survives unwritable log'; else echo \"observed rc=$rc\"; echo 'fail: batch emit must never fail its caller'; fi"
+    command: "printf 'step:x\\tbuild\\t1\\t0\\th\\n' | TILLANDSIAS_TIMING_LOG=/proc/1/nope.jsonl scripts/cycle-metrics.sh --no-experts --emit-timing-batch; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: batch survives unwritable log'; else echo \"observed rc=$rc\"; echo 'fail: batch emit must never fail its caller'; fi"
     timeout_ms: 10000
     expected_behavior: "ok: batch survives unwritable log"
 
@@ -167,4 +167,4 @@ failure_modes:
 
 rollback:
   on_failure: "inspect scripts/cycle-metrics.sh --emit-timing emitter and the timing: reporting block, and scripts/timing-log.sh, for grammar or arithmetic drift"
-  command: "F=$(mktemp); printf '{\"step\":\"build-check\",\"duration_ms\":200}\\n{\"step\":\"litmus-suite\",\"duration_ms\":2000}\\n' > $F; TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^timing:'; rm -f $F"
+  command: "F=$(mktemp); printf '{\"step\":\"build-check\",\"duration_ms\":200}\\n{\"step\":\"litmus-suite\",\"duration_ms\":2000}\\n' > $F; TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^timing:'; rm -f $F"
