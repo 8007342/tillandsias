@@ -771,3 +771,26 @@ looked"* will eventually be read as the former.
   about a THING: earlier the `pgrep` for a live tray matched a `--github-login`
   one-shot sharing the binary path, voiding a 1224-zpek measurement I had
   already called decisive. Both were caught by someone checking, not by me.
+
+- 2026-09-17 — 718-jqt5 criterion 2 landed (2c194550c). The real work was not
+  the routing but making criterion 1's projection REACHABLE: it lived in
+  main.rs's CLI arm while `answer_question` lives in the library, so "route
+  through it" was unimplementable until it moved to
+  `crates/tillandsias-plan/src/forgotten.rs`. Extracted, not reimplemented —
+  a second copy would pass criterion 4's same-set control the day it was
+  written and drift after.
+- 2026-09-17 — Held the extraction down on purpose: the arm used
+  `query_packets` with only the status filter, so moving all 107 lines would
+  have dragged in role/claimability rulings this projection never consults.
+  Equivalence proven BY BYTES (417 rows identical at a fixed epoch) with a
+  control, not by reading the diff.
+- 2026-09-17 — My classifier was wrong and the test caught it: fixed phrases
+  missed "which packets IS NOBODY working on" because the auxiliary moves
+  ahead of the subject. Enumerating word orders loses; co-occurrence does not.
+  Unstaged falsification, 2/1 red then 3/0 green.
+- 2026-09-17 — Ran `cargo clippy -p <crate> --all-targets -- -D warnings`
+  natively BEFORE landing, which is the rule last night's trunk-red cost me.
+  It caught dead originals I had moved without deleting, and an imprecise span
+  cut that stranded a test plus the rationale explaining why the projection
+  takes no seed — criterion 4's actual substance. Moved it rather than
+  deleting it.
