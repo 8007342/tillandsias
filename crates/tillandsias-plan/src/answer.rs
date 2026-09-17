@@ -1483,13 +1483,19 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             (headline, packets)
         }
         Intent::Forgotten { limit } => {
-            // `now` only orders packets that HAVE events; 461 of 461 ready
-            // packets carried none when criterion 1 measured it, so the bulk
-            // of this ranking is order-token based and independent of the
-            // clock. Stated because a reader will reasonably wonder whether
-            // this surface is reproducible across hosts: the clock-dependent
-            // part is the minority, and the ordering within it is by age
-            // descending, which is stable for any fixed ledger.
+            // CLOCK DEPENDENCE IS THE MAJORITY CASE, not the minority, and
+            // this comment used to say the opposite. Criterion 1 measured
+            // "461 of 461 ready packets carry no events" on 2026-09-06 and
+            // concluded the clock barely mattered. RE-MEASURED 2026-09-17:
+            // 505 rows, 139 eventless, 366 EVENTED. So `now` orders 72% of
+            // the list.
+            //
+            // That is exactly what criterion 4 is about. "The same seed
+            // yields the same set" needs the set to be reproducible BY
+            // SOMEONE ELSE, and a caller who cannot see the clock this ran
+            // against cannot reproduce it. Reproducible within a second is
+            // not auditable. So the headline states the epoch used, and
+            // `forgotten --now-epoch <that>` reproduces the exact set.
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
@@ -1505,7 +1511,9 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
                 format!(
                     "the {} least-noticed ready packets of {total} (deterministic projection: \
                      age since last event, never-leased, low blocking weight). No inference \
-                     endpoint was consulted, so this is the unphrased list rather than a refusal.",
+                     endpoint was consulted, so this is the unphrased list rather than a refusal. \
+                     Ranked at now-epoch {now}; `forgotten --now-epoch {now}` reproduces this \
+                     exact set.",
                     packets.len()
                 ),
                 packets,

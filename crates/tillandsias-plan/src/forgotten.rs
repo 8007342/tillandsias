@@ -141,11 +141,26 @@ pub fn forgotten_rows(ledger: &Ledger, now: i64, min_age_days: i64) -> Vec<Forgo
             }
         }
 
-        // MEASURED 2026-09-06: 461 of 461 ready packets carry NO events at all,
-        // so "age since last event" is undefined for essentially the whole
-        // ledger. The ORDER TOKEN carries the missing signal: next-order mints
-        // monotonically (581-k3f9), so a lower order number is a packet filed
-        // longer ago. Eventless packets are ranked oldest-first by order.
+        // RE-MEASURED 2026-09-17, and the earlier figure has INVERTED. This
+        // comment read "461 of 461 ready packets carry NO events at all, so
+        // age is undefined for essentially the whole ledger" (measured
+        // 2026-09-06). Eleven days later: 505 rows, 139 eventless, 366
+        // EVENTED. Age is now the majority signal, not the absent one. I
+        // moved this comment into the library verbatim on 2026-09-16 without
+        // re-running it, which is how a measured claim becomes a stale one.
+        //
+        // The ORDER TOKEN still carries the signal for the eventless 139:
+        // next-order mints monotonically (581-k3f9), so a lower order number
+        // is a packet filed longer ago, and those are ranked oldest-first by
+        // order.
+        //
+        // WHAT THE INVERSION COSTS, and it is criterion 4's whole subject:
+        // 366 of 505 rows are now ranked by a value derived from `now`, so
+        // the ordering is CLOCK-DEPENDENT for the majority of the list. Two
+        // hosts asking the same question at different times can legitimately
+        // differ. That is why callers must be able to pin `now` and why the
+        // answer surface states the epoch it used — reproducible is not the
+        // same as auditable, and the criterion asks for both.
         let age_days = newest.map(|e| (now - e) / 86_400);
         let order_num: i64 = order
             .chars()
@@ -270,5 +285,62 @@ mod tests {
         let mut rows = vec![row(None, 300, 0, "zeta"), row(None, 300, 0, "alpha")];
         forgotten_sort(&mut rows);
         assert_eq!(rows[0].4, "alpha");
+    }
+
+    /// ORDER 718-jqt5 CRITERION 4, the negative control, pinned against the
+    /// LIVE ledger rather than synthetic rows — because the property that
+    /// matters is about real data and the synthetic test one screen up cannot
+    /// see it.
+    ///
+    /// THE CRITERION ASKS FOR REPRODUCIBLE AND AUDITABLE. Reproducibility
+    /// within one process is trivial and proves nothing; the question is
+    /// whether ANOTHER host, with a different clock, gets the same set.
+    ///
+    /// MEASURED 2026-09-17, and it inverted the assumption this module was
+    /// written under: 505 rows, 139 eventless and 366 EVENTED, so `now` feeds
+    /// the ranking of 72% of the list — where criterion 1's comment had said
+    /// "461 of 461 carry no events" and concluded the clock barely mattered.
+    ///
+    /// The ordering survives anyway, and the reason is worth stating because
+    /// it is not obvious: `age_days` is `(now - event) / 86_400` for every
+    /// row, so a UNIFORM shift in `now` moves every age by the same amount and
+    /// preserves their relative order. The clock changes what is DISPLAYED,
+    /// not what is RANKED. It can only reorder at a day boundary, where
+    /// integer division makes two ages equal or unequal — and those fall
+    /// through to the blocking/packet_id tiebreak, which is total.
+    ///
+    /// So this asserts the invariance directly, across a 40-day shift.
+    #[test]
+    fn the_ranking_is_invariant_under_a_uniform_clock_shift() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(ledger) = crate::Ledger::load(&root.join("plan/index.yaml")) else {
+            return; // no live ledger in this checkout; nothing to assert
+        };
+        let base = 1_789_660_377i64;
+        let ids = |now: i64| -> Vec<String> {
+            crate::forgotten::forgotten_rows(&ledger, now, 0)
+                .into_iter()
+                .map(|(_, _, _, _, id, _)| id)
+                .collect()
+        };
+
+        let at_base = ids(base);
+        assert!(
+            at_base.len() > 100,
+            "the live ledger should yield a substantial list; got {}",
+            at_base.len()
+        );
+
+        // Same clock, twice: the function must be pure.
+        assert_eq!(at_base, ids(base), "same inputs must give the same set");
+
+        // Different clock, 40 days on: the ORDER must not move.
+        assert_eq!(
+            at_base,
+            ids(base + 86_400 * 40),
+            "a uniform clock shift changed the ranking — two hosts would \
+             disagree about what is forgotten, and the answer surface's \
+             stated now-epoch would stop being a reproducible handle"
+        );
     }
 }
