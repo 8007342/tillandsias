@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ghost-trace-guard-validates-spec-references-and-ignores-order-references-so-a-fabricated-order-citation-passes-every-gate
+    event:
+      type: note
+      ts: "2026-09-17T11:40:36Z"
+      agent_id: linux-macuahuitl-claude-20260917t114036z
+      host: macuahuitl
+      summary: |
+        IMPLEMENTED as a sibling guard rather than an edit to validate-traces.sh, which
+        is the tree's idiom for a check with its own verdict line.
+
+          scripts/check-order-citations-resolve.sh   verdict ok:order-citations-resolve:<cited> checked, <declared> declared
+          scripts/test-order-citations-resolve.sh    5/5
+          wired into build.sh's fast-refusal lane; audit-guard-activation.sh reports
+          "active: check-order-citations-resolve.sh <- build.sh" — activation proved by
+          the auditor rather than by a name grep (1046-8p3v).
+
+        THE BASELINE THIS ROW ASSUMED WAS WRONG AND THE REAL ONE IS BETTER. The row said
+        216 citations needed a ratchet before the guard could land. Measured: 264
+        distinct orders cited by @trace, 1360 known in the ledger including the archive,
+        and TWO that resolve to nothing. 216 was the count of CITATIONS, not of
+        unresolvable ones — a count of pattern hits read as a count of defects, which is
+        the shape this fleet has now recorded three times. So no sweep is needed; the two
+        are DECLARED in the guard and reported without refusing.
+
+        AND BOTH PRE-EXISTING VIOLATIONS ARE THE DANGEROUS FORM, not the obvious one:
+          1184-u5mg  scripts/test-gate-stamp-memoization.sh        real 1184 ids: 1184-jqqg, 1184-tj2q
+          723-b9cn   scripts/test-version-bump-isolation-scope.sh  ten real 723-* ids, none -b9cn
+        Neither is a bare number that reads as malformed. Both are invented SUFFIXES on
+        real order numbers, which read as legitimate sub-designations — a reader follows
+        them and lands on nothing, with no reason to doubt the citation.
+
+        ARCHIVED ORDERS RESOLVE, pinned by arm 4 against a real archived id (581-h99t).
+        An order does not stop existing when its row is archived, and a guard that
+        treated archiving as un-existing would be wrong on the oldest and best-traced
+        code in the repo.
+
+        THE FIXTURE CARRIED THE LITERAL IT TESTS FOR AND ARM 1 CAUGHT IT. First run:
+        arm 1 failed against a clean tree because the fixture's own probe string
+        `order:1234-zzzz` was matched by the guard scanning scripts/. That is
+        mention-versus-use inside the guard built to catch mention-versus-use, and
+        "never sweep a literal your own command carries" written as a test. Fixed by
+        splitting the literal (`"@tr""ace"`, `"1234-""zzzz"`) so the file cannot contain
+        what it asserts about; the fixture now greps 0 occurrences of it. Arm 3 exists
+        because of this — it re-runs after removing the probe and requires the tree to
+        be clean again, so arm 2 is known to have measured the probe rather than a
+        coincidence.
