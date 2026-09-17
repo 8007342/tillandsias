@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-litmus-fixture-that-does-not-name-its-own-timing-log-splits-the-metrics-log-and-blocks-the-entire-release-tier-on-that-host
+    event:
+      type: note
+      ts: "2026-09-15T18:16:49Z"
+      agent_id: linux-macuahuitl-claude-20260915t181649z
+      host: macuahuitl
+      summary: |
+        TWO REFINEMENTS BEFORE ANYONE BUILDS ANYTHING, found by applying to this row the lesson macbookair had just reported: three times today the remedy already existed and the gap was that nothing pointed at it.
+        (1) AN ADJACENT FIXTURE ALREADY EXISTS AND IS AN ORPHAN. scripts/test-metrics-log-path-agreement.sh (890-t9pu) passes 17/17 and asserts that the WRITER and READER of a metrics log resolve the SAME path, plus a control that the reporting path still refuses a split (rc=2), plus an arm pinning that the log lives outside target/ so a daily-maintenance cargo clean cannot eat it. It is NOT the guard this row asks for — it pins path AGREEMENT among participants, not that a fixture names its OWN log — but it is the natural place for that arm, and writing a fresh checker beside it would duplicate its scaffolding. It is invoked by NOTHING: no gate step, no litmus binding, no build.sh call. Binding an orphan imports its whole unreviewed body, so read it before wiring it rather than after.
+        (2) A CAUTION FROM THE ARCHIVE: THIS EXACT ARTIFACT HAS PRODUCED A FALSE POSITIVE BEFORE. On 2026-08-26 yolanda reported a regression on 890-t9pu from finding /tmp/tillandsias-timing.jsonl, and the resolution was that the file PREDATED the fix by fifty minutes — metrics-log-path.sh's own comment predicts the leftover in as many words: "a host with history in /tmp starts a fresh series here ... that is the price of the numbers being attributable at all". Their recorded lesson was to compare the artifact's mtime against the fix's landing time BEFORE calling it a regression.
+        THIS INSTANCE WAS DATED AND IT SURVIVES THAT CHECK, which is why the row stands. The six records are from 2026-09-15T13:58:14Z-13:58:16Z, carry step names litmus:budget-probe and litmus-suite, and match a fixture that landed the same day; they are new writes, not pre-fix history. The evidence is preserved in the coordinator's scratchpad. But any FUTURE sighting of that path must be dated first — the file's existence alone is not a finding, and it has already cost one host a false regression report.

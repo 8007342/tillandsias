@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    event:
+      type: evidence
+      ts: "2026-09-15T15:54:56Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t155456z
+      host: macos
+      summary: |
+        EXIT CRITERION 4 DONE AND FALSIFIED: spawned helpers are reaped, pinned by a
+        test that counts PROCESSES rather than reading source.
+
+        THE DEFECT, re-derived BY SYMBOL because this packet's line citations were stale
+        3-of-3 last time. Three `.spawn()` sites dropped the `Child` without `wait()`:
+        notify_provisioning_failed, notify_crash_loop, and the `open` for the log
+        directory. On Unix dropping a Child does NOT detach it — the handle goes away
+        and the PROCESS stays in the table as a zombie until the parent exits. The tray
+        is long-lived by design, so it was one leaked entry per notification for the
+        life of the process.
+
+        THE COMMENT WAS THE DEFECT'S BEST DISGUISE, quoted from the site it replaced:
+        "Detached — let it complete in the background. macOS notifications fire
+        near-instantly so we don't need to await the child." The second clause is TRUE
+        and is what makes the first sound reasonable. A reviewer checking whether the
+        author had thought about it would find evidence that they had.
+
+        FIX: spawn_and_reap(), which moves the Child into a thread that waits. Thread
+        per spawn rather than a shared reaper with a channel, deliberately: three rare
+        user-triggered call sites, and a channel adds a lifetime and a shutdown question
+        to save a thread that lives milliseconds. Recorded in the doc comment so the
+        trade is visible if a hot path ever needs it. `what` is &'static str because it
+        crosses into the thread — stated in the signature rather than left to a borrow
+        error.
+
+        THE TEST COUNTS ZOMBIES, and the reason is the point: the defect is a property
+        of the PROCESS TABLE, not of the source. A test grepping for `.wait()` would
+        have passed on the broken code the moment someone wrote a comment claiming
+        detachment — which is exactly what had happened. `/bin/ps -o ppid=,stat= -ax`
+        filtered to OUR pid; darwin has no /proc, the same absent-primitive class the
+        dispatch reaper hit, and counting every zombie on the machine would have
+        measured the operator's other work.
+
+        BUILT-IN CONTROL, not an afterthought: the test FIRST spawns N raw children and
+        drops them, and REQUIRES zombies to appear. If this platform ever starts
+        auto-reaping, that arm fails rather than letting the positive arm pass
+        vacuously. The control's zombies are then drained with waitpid(-1) so they
+        cannot be miscounted as the helper's.
+
+        FALSIFIED by reverting spawn_and_reap to the dropped-Child form:
+          "spawn_and_reap left 8 zombie(s) of 8; a dropped Child is not detached on Unix
+           and the tray is long-lived (690-w94k)"
+        Restored: green. 1 selected / 1 passed / 134 filtered out; full crate 133
+        passed, 0 failed; cargo zigbuild --target x86_64-unknown-linux-musl --tests
+        rc=0 (WITH --tests; the bare form builds the lib only and cannot fail).
+
+        REMAINING ON THIS ROW: criteria 2 and 3 are untouched — VzRuntime::start's
+        documented contract with long child-process waits off async workers, and
+        Keychain access off the async worker and bounded so the 30s status path cannot
+        stall. Item 1 (the CFRunLoop spin) landed earlier at e43b3d06f.

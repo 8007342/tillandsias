@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forgotten-now-epoch-set-in-the-past-silently-drops-every-evented-row-so-the-reproducibility-handle-changes-the-population-it-was-added-to-pin
+    event:
+      type: note
+      ts: "2026-09-17T16:31:57Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t163157z
+      host: macos
+      summary: |-
+        A SECOND, SMALLER FIX ON THE SAME SURFACE, and macuahuitl rates it above anything either of us proposed for the flag itself: the headline says "never-leased" as a DESCRIPTION of what the projection is for, and a careful reader took it as a PREDICATE the code applies. It does not. `leased` is computed and stored in the row and never used as a filter — 65 leased rows are present in the output at the real clock.
+
+        That misreading is what produced the lease hypothesis this row already records as refuted, and it came from someone who had just read the file. So the wording is not a cosmetic issue: it caused a wrong mechanism to be proposed for a real discrepancy, and it will do so again. Either the headline stops claiming "never-leased", or it says what the column actually is — "leased shown, not filtered".
+
+        RECORDED HERE RATHER THAN ON 718-jqt5 because that packet is closed on evidence and this is the same surface (the answer headline) that criterion 3 of this row already covers. Not scoped into the exit criteria; a sibling with a decision attached.
+
+        ALSO NOTED so nobody reads them as duplicates: order numbers collided at the 1241 prefix — macuahuitl's 1241-8gy4 (gate-step memoisation) and this row's 1241-nwxy. Different suffixes, distinct ids, ledger is fine. Same situation as 1238-u84w / 1238-b825 earlier today. A shared prefix is normal, not a defect (581-k3f9).

@@ -157,6 +157,43 @@ fn apply_status_text_main_thread(
 /// block. The chip text remains the authoritative failure surface;
 /// the notification is purely a "look here" nudge.
 // parity-surface: notification.provisioning-failed
+/// Spawn a fire-and-forget helper AND REAP IT (order 690-w94k).
+///
+/// THE BELIEF THIS REPLACES, quoted from the call site it replaced: "Detached —
+/// let it complete in the background." The second half of that reasoning is
+/// true — osascript notifications do fire near-instantly — and it is what made
+/// the first half sound reasonable. But dropping a `std::process::Child` on
+/// Unix does NOT detach the child. The handle goes away; the PROCESS stays in
+/// the table as a zombie until its parent exits, because nobody called
+/// `wait()`. The tray is long-lived by design, so that is one leaked entry per
+/// notification for the life of the process.
+///
+/// WHY A THREAD RATHER THAN `wait()` INLINE: these run on the tray's async
+/// workers and a notification must not block one. Thread-per-spawn is chosen
+/// deliberately over a shared reaper thread with a channel: there are three
+/// call sites, all rare and user-triggered, and a channel would add a lifetime
+/// and a shutdown question to save a thread that exists for milliseconds. If a
+/// hot path ever needs this, that trade flips.
+/// `what` is `&'static str` because it crosses into the reaper thread; every
+/// call site passes a literal, so this costs nothing and states the constraint
+/// in the signature rather than leaving it to a borrow error.
+fn spawn_and_reap(mut command: std::process::Command, what: &'static str) {
+    match command.spawn() {
+        Ok(child) => {
+            // The thread owns the handle and exits as soon as the child does.
+            std::thread::spawn(move || {
+                let mut child = child;
+                if let Err(err) = child.wait() {
+                    eprintln!("[tillandsias-tray] {what}: wait failed: {err}");
+                }
+            });
+        }
+        Err(err) => {
+            eprintln!("[tillandsias-tray] {what}: spawn failed: {err}");
+        }
+    }
+}
+
 fn notify_provisioning_failed(reason: &str) {
     // AppleScript single-quote-escape so a `'` in the reason doesn't
     // terminate the literal. Then wrap the whole call in another
@@ -166,20 +203,9 @@ fn notify_provisioning_failed(reason: &str) {
         "display notification \"{escaped}\" with title \"Tillandsias\" \
          subtitle \"Provisioning error\""
     );
-    match std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&body)
-        .spawn()
-    {
-        Ok(_child) => {
-            // Detached — let it complete in the background. macOS
-            // notifications fire near-instantly so we don't need to
-            // await the child.
-        }
-        Err(err) => {
-            eprintln!("[tillandsias-tray] notification: osascript spawn failed: {err}");
-        }
-    }
+    let mut command = std::process::Command::new("osascript");
+    command.arg("-e").arg(&body);
+    spawn_and_reap(command, "notification");
 }
 
 /// Fire the guest crash-loop Notification Center banner — the single
@@ -199,16 +225,9 @@ fn notify_crash_loop(reason: &str) {
         "display notification \"{escaped}\" with title \"Tillandsias\" \
          subtitle \"Guest crash-loop\""
     );
-    match std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&body)
-        .spawn()
-    {
-        Ok(_child) => {}
-        Err(err) => {
-            eprintln!("[tillandsias-tray] crash-loop notification: osascript spawn failed: {err}");
-        }
-    }
+    let mut command = std::process::Command::new("osascript");
+    command.arg("-e").arg(&body);
+    spawn_and_reap(command, "crash-loop notification");
 }
 
 /// AppleScript double-quoted-string escaping: backslash + double-quote
@@ -1542,7 +1561,23 @@ async fn run_start(
     // chip. Emit the curated phases so the status keeps moving instead of
     // looking stalled.
     on_phase("Starting Fedora Linux");
-    vz.start().await?;
+    // Order 690-w94k criterion 2. `VzRuntime::start` states its own contract
+    // in-body: it bridges VZ's dispatch-queue completion handler through an
+    // mpsc channel and PUMPS CFRunLoop on the calling thread until the result
+    // arrives or 30s elapses, so "the caller must run start() on
+    // `tokio::task::spawn_blocking` if invoked from an async runtime."
+    // Awaiting it directly here parked a tokio worker for that entire window
+    // while `on_phase` consumers were live on the same runtime. `VzRuntime` is
+    // `Send + 'static` (compile-asserted below), so the contract is honourable
+    // rather than merely documented.
+    {
+        let vz = Arc::clone(&vz);
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
+            .await
+            .map_err(|e| format!("VM start task panicked: {e}"))?
+            .map_err(|e| e.to_string())?;
+    }
     on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
     Ok(())
@@ -1630,7 +1665,9 @@ impl TrayActionHost {
                 if let Some(home) = std::env::var_os("HOME") {
                     let log_dir = std::path::PathBuf::from(home).join("Library/Logs/Tillandsias");
                     let _ = std::fs::create_dir_all(&log_dir);
-                    let _ = std::process::Command::new("open").arg(&log_dir).spawn();
+                    let mut command = std::process::Command::new("open");
+                    command.arg(&log_dir);
+                    spawn_and_reap(command, "open log directory");
                 }
             }
             MenuAction::OpenObservatorium
@@ -3217,7 +3254,167 @@ fn dispatch_rebuild(
 
 #[cfg(test)]
 mod tests {
+
+    /// Order 690-w94k criterion 2. `VzRuntime::start` pumps CFRunLoop on the
+    /// CALLING thread for up to 30s, and says so in its own body: "the caller
+    /// must run start() on `tokio::task::spawn_blocking` if invoked from an
+    /// async runtime." `run_start` awaited it directly, parking a tokio worker
+    /// for that whole window.
+    ///
+    /// Anchored on the CALL, not on a line number, and the anchor is asserted
+    /// to exist before the window is scanned — otherwise a rename turns this
+    /// into a test that passes while checking nothing (the 828-itr9 failure
+    /// mode, per `live_boot_spec_derives_sizing_from_the_host_not_a_literal`).
+    #[test]
+    fn run_start_drives_the_cfrunloop_pump_off_the_async_worker() {
+        let source = include_str!("action_host.rs");
+        let anchor = "async fn run_start(";
+        assert!(
+            source.contains(anchor),
+            "run_start moved or was renamed — this scan checks nothing until \
+             it is repointed"
+        );
+        let window = source
+            .split(anchor)
+            .nth(1)
+            .and_then(|t| t.split("\n}\n").next())
+            .expect("run_start must have a body");
+        assert!(
+            window.contains("spawn_blocking"),
+            "run_start must honour VzRuntime::start's documented contract and \
+             run it on the blocking pool (690-w94k)"
+        );
+        assert!(
+            !window.contains("vz.start().await"),
+            "a bare `vz.start().await` parks a tokio worker for up to 30s \
+             while the CFRunLoop pump runs (690-w94k)"
+        );
+    }
+
+    /// The contract above is only honourable because `VzRuntime` can cross to
+    /// a blocking-pool thread. Pinned here so a future field that is not
+    /// `Send` fails at compile time with this reason attached, rather than as
+    /// an unexplained error inside `run_start`.
+    const _: fn() = || {
+        fn assert_send_static<T: Send + 'static>() {}
+        assert_send_static::<tillandsias_vm_layer::vz::VzRuntime>();
+    };
     use super::*;
+
+    /// Count this process's OWN children that are zombies (state `Z`).
+    ///
+    /// `ps -o ppid=,stat= -ax` rather than a `/proc` read: darwin has no
+    /// /proc, which is the same absent-primitive class the dispatch reaper
+    /// hit. Filtering on OUR pid matters — a test that counted every zombie
+    /// on the machine would be measuring the operator's other work.
+    #[cfg(unix)]
+    fn own_zombie_children() -> usize {
+        let me = std::process::id().to_string();
+        let out = std::process::Command::new("/bin/ps")
+            .args(["-o", "ppid=,stat=", "-ax"])
+            .output()
+            .expect("ps must run; without it this test measures nothing");
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| {
+                let mut f = l.split_whitespace();
+                Some((f.next()?, f.next()?))
+            })
+            .filter(|(ppid, stat)| *ppid == me && stat.starts_with('Z'))
+            .count()
+    }
+
+    /// ORDER 690-w94k, exit criterion 4: spawned helpers are REAPED.
+    ///
+    /// WHY THIS COUNTS PROCESSES INSTEAD OF ASSERTING WE CALLED `wait()`.
+    /// The defect is a property of the PROCESS TABLE, not of the source: a
+    /// dropped `Child` leaves a zombie until the parent exits, and the call
+    /// site that caused it was commented "Detached — let it complete in the
+    /// background", so source-level intent was exactly what was wrong. A test
+    /// that greps for `.wait()` would have passed on the broken code the
+    /// moment someone wrote a comment claiming detachment.
+    ///
+    /// The mutation control is the raw-spawn loop below: it uses the SAME
+    /// binary and count, drops each Child, and must leave zombies behind. If
+    /// it ever stops doing so, this platform has started auto-reaping and the
+    /// positive arm proves nothing — so the test fails rather than passing
+    /// vacuously.
+    #[cfg(unix)]
+    #[test]
+    fn spawned_helpers_are_reaped_and_do_not_accumulate_zombies() {
+        const N: usize = 8;
+        let before = own_zombie_children();
+
+        // MUTATION CONTROL FIRST: raw spawn, Child dropped — the old behaviour.
+        //
+        // The pid is CAPTURED before the handle is dropped, so the reap below can
+        // target these children specifically. See that reap's comment for why
+        // that matters.
+        let mut control_pids: Vec<u32> = Vec::with_capacity(N);
+        for _ in 0..N {
+            if let Ok(child) = std::process::Command::new("/usr/bin/true").spawn() {
+                control_pids.push(child.id());
+                drop(child);
+            }
+        }
+        let mut leaked = 0;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            leaked = own_zombie_children().saturating_sub(before);
+            if leaked >= N {
+                break;
+            }
+        }
+        assert!(
+            leaked > 0,
+            "the control produced NO zombies, so this platform reaps dropped \
+             children on its own and the arm below cannot distinguish a reaper \
+             from nothing (saw {leaked} of {N})"
+        );
+
+        // Reap the control's zombies so they cannot be counted as the helper's,
+        // TARGETING THEM BY PID.
+        //
+        // This was `waitpid(-1)`, which reaps ANY child of this process — and in
+        // a parallel test binary that is every other test's children too. It
+        // stole the `security` child of
+        // installation_uuid::tests::keychain_persists_credentials_across_calls,
+        // whose own wait then failed ECHILD "No child processes". The tests pass
+        // individually and the suite fails, which is the worst shape of flake:
+        // it looks like the OTHER test is broken. Measured 2026-09-16, one cycle
+        // after this test landed.
+        for pid in &control_pids {
+            unsafe {
+                let mut status: i32 = 0;
+                libc_waitpid(*pid as i32, &mut status as *mut i32, 0);
+            }
+        }
+
+        // THE ARM: the same spawns through spawn_and_reap must leave nothing.
+        let baseline = own_zombie_children();
+        for _ in 0..N {
+            spawn_and_reap(std::process::Command::new("/usr/bin/true"), "test helper");
+        }
+        let mut remaining = usize::MAX;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            remaining = own_zombie_children().saturating_sub(baseline);
+            if remaining == 0 {
+                break;
+            }
+        }
+        assert_eq!(
+            remaining, 0,
+            "spawn_and_reap left {remaining} zombie(s) of {N}; a dropped Child \
+             is not detached on Unix and the tray is long-lived (690-w94k)"
+        );
+    }
+
+    #[cfg(unix)]
+    unsafe extern "C" {
+        #[link_name = "waitpid"]
+        fn libc_waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+    }
 
     /// 733-mppc criterion 3. A peer that ACCEPTS the connection and then goes
     /// silent must fail within a bounded time, naming the stage.

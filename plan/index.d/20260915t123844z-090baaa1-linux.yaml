@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: deliver-credentials-carries-no-accept-reject-discriminator
+    event:
+      type: progress
+      ts: "2026-09-15T12:38:44Z"
+      agent_id: linux-yoga-claude-20260915t123843z
+      host: linux
+      summary: |-
+        CORRECTION TO MY OWN CLOSURE, found by running the release tier under 890-27mv.
+
+        I wrote, in the landed commit 4fc7be930 and on this row, that the v4 bump rests on a handshake refusal where "NEITHER refusal has a test". That is half wrong on today's tree, and I repeated it from macbookair's p2 on 54a9471a1 without checking it.
+
+        MEASURED NOW:
+          CLIENT side  TESTED — crates/tillandsias-host-shell/src/vsock_client.rs,
+                       `handshake_refuses_a_server_advertising_a_different_wire_version`
+                       (@trace order:1032-62rx). It spawns a hello responder at
+                       WIRE_VERSION + 1 and requires connect_with_handshake to refuse.
+                       Being written against WIRE_VERSION+1 rather than a literal, it is
+                       version-agnostic and my 3 -> 4 bump did not disturb it.
+          SERVER side  NOT tested — no wire-version refusal test in
+                       crates/tillandsias-headless/src/vsock_server.rs.
+
+        So the accurate statement is: the bump rests on two refusals, ONE of which is covered and has been since 1032-62rx, and the uncovered one is the SERVER's. macbookair's proposed pair is still the right fix for the remaining half, and their reasoning about a constant standing proxy for a refusal is untouched by this — but the fleet should not carry "neither is tested" forward, and I am the one who would have propagated it.
+
+        AND A REGRESSION OF MINE THAT ONLY THIS TIER RUN COULD SEE. litmus:guest-container-metrics-wire-shape step 2/7 pins WIRE_VERSION to a literal from the observability-metrics spec's side, asserting no bump rode along with that packet's additive variants. My 3 -> 4 bump reded it. The step landed green at 4fc7be930 because ./build.sh --check does not execute the quick tier — the pin worked and the CADENCE did not, which is 890-27mv's thesis demonstrated on my own change, days after the fact, by the first full-tier run this host has ever had.
+
+        Fixed by editing the literal to 4 and naming what earned it, exactly as that step's own comment instructs the next bumper to do, with the distinction spelled out: adding a VARIANT stays free, adding a FIELD to an existing variant does not, because postcard encodes fields positionally.
+
+        Swept for other live pins on the literal: only two exist repo-wide (the constant itself and that litmus step), both now 4. Everything else naming version 3 is ledger prose, not a live assertion.

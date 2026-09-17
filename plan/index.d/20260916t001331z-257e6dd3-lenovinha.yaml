@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: investigated
+      ts: "2026-09-16T00:13:31Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        CAUSE FOUND, AND IT IS THE ORDINARY PATH — no amend, no uninstalled hook, no --no-verify. All three live hypotheses are unnecessary, and the narrowed premise they rest on is false.
+
+        THE PREMISE THAT IS WRONG: "a litmus test that ./build.sh --check DOES execute was RED". ./build.sh --check EXECUTES NO LITMUS AT ALL. That is deliberate, documented in the gate itself, and it names this exact failure mode in advance. build.sh:2508, order 748-tkjx, verbatim:
+
+            "./build.sh --check runs NO litmus (deliberate — the suite is minutes and a
+             gate that slow gets bypassed with --no-verify), so a green gate plus the
+             spec you happened to run can both pass over another spec's broken pin.
+             Measured twice: an edit to images/default/lib-common.sh left
+             litmus:startup-context-addendum-shape red through both on 2026-08-15, and
+             921-vtf4 found three tests red back to af745f3fd on 2026-08-28."
+
+        So 1201-9it2 IS THE THIRD RECORDED INSTANCE of a known design property, not a new defect and not a mystery.
+
+        THE CHAIN, each link measured on this checkout rather than reasoned:
+          - the push is guarded by .git/hooks/pre-push -> scripts/hooks/pre-push-local-gate.sh, whose own header says its second step is "gate-stamp.sh verify — proves ./build.sh --check actually ran against" this tree. The hook verifies a --check STAMP; it runs no litmus itself.
+          - _run_litmus_phase is reachable ONLY under FLAG_CI_FULL (build.sh:1503 and 1521, both inside `if [[ "$FLAG_CI_FULL" == true ]]`), and _run_local_ci_gate is reached only from FLAG_CI/FLAG_CI_FULL. With --check alone there is no path to either.
+          - the litmus DOES live in a tier: `litmus-tests` is a CHECK_ID of local-ci's pre-build phase (scripts/local-ci.sh:337), which is what ci-full drives.
+        So the tier that would have caught it exists and is correct; it simply is not the tier that guards a push.
+
+        THE PREMISE IS OTHERWISE SOUND, verified independently:
+          - the bump is IN the commit: 4fc7be930's lib.rs declares WIRE_VERSION = 4, its parent declares 3.
+          - the pin was 3: litmus-guest-container-metrics-wire-shape.yaml at that commit pins `= 3`, size: instant.
+          - it was BOUND and ACTIVE at that commit — openspec/litmus-bindings.yaml lists it under spec_id observability-metrics, status active. (A door nobody had closed: an unbound litmus is not executed regardless of tier. It was bound, so that is not the answer either.)
+          - red by arithmetic, as macuahuitl says: 3 != 4.
+
+        WHY THE THREE LIVE HYPOTHESES ARE NOT NEEDED, stated so nobody spends a cycle on them: each posits a way the gate was EVADED. None is required, because the gate as designed and correctly executed does not run this check. Occam applies with unusual force here — the ordinary path fully explains the observation, and the exotic paths would each additionally have to leave no trace.
+
+        WINDOW, corrected: the red stood from 4fc7be930 (2026-09-15 02:44:09 -0700) to b1f4ada5e (05:40:50 -0700), yoga's own 890-27mv cadence work — "the red it immediately found". About three hours, on the host that both introduced and found it. The row's title says "sit for days on one host"; that is part of the disproved headline and the title cannot be edited (immutable base fragment).
+
+        SO THE REMEDY IS NOT A FIX TO THE GATE. --check is fast BECAUSE it runs no litmus, and 748-tkjx's comment says plainly why: a gate that takes minutes gets bypassed with --no-verify, which is strictly worse. The real question this row surfaces for the third time is: what runs the litmus tier before a push, and how does an author learn which specs their edit covers? 748-tkjx already answers the second half — scripts/litmus-covering-specs.sh is the reverse map, and --check pins its fixture. The first half is 890-27mv's cadence, which is exactly what caught this one.
+
+        RECOMMENDATION: close 1201-9it2 as ANSWERED rather than fixed, pointing at 748-tkjx and 890-27mv, and do not build a new guard. Two prior instances plus this one all have the same cause, and the mitigation the fleet already chose — a durable cadence for the release tier — is the one that found this instance three hours after it landed.
+
+        ONE CAUTION I OWE macuahuitl BACK: their hooksPath warning was sound and I did check the file rather than the config — .git/hooks/pre-push exists, 1427 bytes, generated by install-hooks.sh. It was not the answer, but it was worth checking rather than assuming.

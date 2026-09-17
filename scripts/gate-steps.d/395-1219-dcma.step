@@ -1,0 +1,31 @@
+# Gate step 1219-dcma — data, not code.
+#
+# Binds the check that a guard's stated remedy covers the service it names.
+#
+# THE DEFECT, found by FOLLOWING the instruction rather than reading it: for a
+# dead tillandsias-inference the enclave health guard prescribed
+# `tillandsias --ensure-enclave`, which ensures VAULT and PROXY only. It exits 0,
+# prints ok:enclave-ensured:proxy=running, and leaves the service Exited(137).
+# The guard counts five services; that command covers two. So the operation
+# SUCCEEDED and the subject was untouched — the shape this fleet keeps finding
+# in detectors, relocated to the REMEDY — while the same block foreclosed the
+# alternative on an argument sound only for the proxy.
+#
+# ARMS 2 AND 3 ARE THE LOAD-BEARING CONTROLS, because the tempting
+# over-correction is worse than the defect: blanket-disclaiming --ensure-enclave
+# would leave a dead PROXY with no stated way out, and re-legitimising
+# `podman start` would resurrect 975-rsgm's measured failure, where squid dies
+# with X509_check_private_key() naming neither the certificate nor the key.
+#
+# ARM 4 keeps the uncovered set DERIVED from the run's own detail lines rather
+# than a second hard-coded list, which would drift the moment a service is added.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the enclave guard's remedy covers the service it names (1219-dcma)"
+STEP_SCRIPT="scripts/test-enclave-remedy-covers-the-named-service.sh"
+STEP_ERROR="the enclave health remedy regressed (1219-dcma) — either it again prints one remedy for every service class (so an operator with a dead inference service is sent to a command that exits 0 and changes nothing), or the correction over-reached and removed the remedy that IS right for vault and proxy, or it re-opened 'podman start' whose CA-key failure 975-rsgm measured; see the failing arm above"
+STEP_OK="enclave remedy coverage check passed"
+# Exit 3 means the guard is absent — nothing was examined, and the fixture says
+# so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/check-enclave-service-health.sh is absent, so the remedy could not be exercised"

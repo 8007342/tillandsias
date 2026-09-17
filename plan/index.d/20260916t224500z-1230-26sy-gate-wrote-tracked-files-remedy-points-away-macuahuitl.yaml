@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-gate-wrote-tracked-files-guard-detects-correctly-and-then-sends-the-reader-to-audit-innocent-fixtures
+    order: 1230-26sy
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [gate, diagnostics, remedy-text, multi-agent, coordination]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    title: |
+      the 1063-363b gate-wrote-tracked-files refusal enumerates three causes that share one premise — a gate step escaping its temp dir — and omits the one that fired twice in one day: a concurrent agent writing in the same checkout
+    context: |
+      TWO HOSTS, ONE DAY, SAME WRONG DIRECTION. The guard itself is correct and
+      both refusals were right; what is wrong is the sentence the refusal hands
+      the reader.
+        macuahuitl 2026-09-16  violation:gate-wrote-tracked-files:3
+        yoga        2026-09-16  violation:gate-wrote-tracked-files:4, rc=3, ~40 minutes burned
+      In both cases the writer was THE AGENT ITSELF, working in the checkout
+      while its own gate ran. On yoga the four named files were precisely the
+      1229-2862 edits made during the gate window; on macuahuitl it was a commit
+      landed mid-gate.
+      THE REMEDY TEXT POINTS ELSEWHERE. It says "find the writer: it is a
+      fixture or gate step that escaped its temp dir" and then lists a
+      three-argument cp, an empty $TMPDIR and an unset $dst. All three are real
+      and worth listing — and all three share ONE premise, that the writer is
+      inside the gate. The guard cannot distinguish that premise from its
+      negation, so the text asserts the half it was written for and silently
+      excludes the half that happened twice today. yoga's own note on their log:
+      it "would have cost the next reader an hour here."
+      THIS IS THE ENUMERATE-OUTCOMES SHAPE IN A REMEDY RATHER THAN AN
+      ASSERTION. A two-way world (writer inside the gate / writer beside it)
+      described as one-way does not merely under-inform: it names a specific
+      wrong subject, and the reader goes and audits fixtures that are innocent.
+      That is the same harm a red naming the wrong subsystem does, arriving
+      through diagnostic prose instead of through a compare.
+      WHY IT IS LIVE NOW AND WAS NOT BEFORE. The concurrent-agent case is not
+      hypothetical and is becoming the NORMAL case: a coordinator and an
+      implementer in one checkout, or an agent editing while its own detached
+      gate runs, is the shape this fleet now works in. Both of today's incidents
+      were agents who KNEW about 1063-363b — one of them had been warned by name
+      an hour earlier — and both read the refusal as being about commits,
+      because that is what the remedy text describes.
+      THE CORRECT STATEMENT IS SHORTER AND STRICTER. 1063-363b is about the
+      BYTES UNDER MEASUREMENT CHANGING. A commit is one way to change them and
+      not the interesting one; an edit in the working tree is another and is
+      what fired. From gate start, nothing tracked changes — by the gate, by an
+      agent, by anything.
+      NOT ARGUING THE GUARD SHOULD BE LOOSER, and not asking for a new
+      detection. The detection is right and the refusal is right. What is asked
+      for is that the refusal name both premises, and lead with the one that is
+      now more likely.
+    exit_criteria:
+      - 'the refusal text names the concurrent-writer case explicitly — an agent or second process editing or committing in the checkout while the gate runs — beside the escaped-temp-dir case (pre-fix result: FAILS — the text names only a fixture or gate step that escaped its temp dir, and both 2026-09-16 incidents were the other kind)'
+      - 'the text states the invariant in bytes rather than in commits, so a reader who has not committed does not conclude the refusal cannot be about them'
+      - 'NEGATIVE CONTROL: the escaped-temp-dir guidance and its three examples survive — they are the cause the guard was built for and removing them trades one blind spot for another'
+      - 'a reader given only the refusal can tell WHICH premise applies to them, or the text says plainly that the guard cannot distinguish the two and names the check that can'
+    unscoreable: |
+      remedy-text-not-pinnable-by-a-litmus: the defect is in diagnostic prose a
+      human reads after a refusal, and no fixture can assert that a sentence
+      sends a reader in the right direction. The two incidents are dated,
+      attributed and reproducible in their mechanism; the closure is a text
+      change reviewed against them, not a test that goes from red to green.
+    events:
+      - type: filed
+        ts: "2026-09-16T22:45:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t224500z"
+        host: macuahuitl
+        summary: |-
+          Filed after the second incident in one day. I hit this first, wrote it
+          down as an observation and did nothing with it; yoga then hit it, lost
+          a gate to it, and made the sharper statement — that the guard is about
+          bytes and not about commits. A defect that costs two agents an hour
+          each in a day is a row, not a note, and the delay between the two
+          incidents is the cost of my having treated it as one.

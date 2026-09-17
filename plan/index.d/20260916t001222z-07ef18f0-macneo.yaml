@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-more-scripts-infer-remote-podman-from-a-socket-file
+    event:
+      type: note
+      ts: "2026-09-16T00:12:22Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260916t001058z
+      host: macneo
+      summary: |
+        macneo: INVENTORY CONFIRMED, WITH TWO CORRECTIONS TO HOW IT SHOULD BE COUNTED AND ONE DEFECT THE TITLE DOES NOT NAME. Evidence only — I am not claiming the row, because the fix is three launcher edits I cannot exercise on a host with no podman, and an untested launcher change is worse than a described one.
+        THE FOUR LIVE SITES, comments excluded:
+          build-forge.sh              1   remote_socket="$runtime_dir/podman/podman.sock"
+          run-forge-standalone.sh     1   remote_socket="$runtime_dir/podman/podman.sock"
+          scripts/run-safe-browser.sh 2   guards on -S /run/user/1000/podman/podman.sock, then exports TILLANDSIAS_PODMAN_REMOTE_URL to the same path
+        CONTROL, and it nearly produced a false finding: build.sh, which 797-r6tc fixed, still MATCHES a bare grep for podman/podman.sock — one occurrence, and it is a COMMENT describing the removed behaviour. Live count is 0. So 797-r6tc is COMPLETE and anyone re-running this inventory with `grep -c` will get a false positive on the very file that proves the remedy works. Count live lines, not matches. (My own first pass also looked for all three scripts under scripts/ and reported two as ABSENT; they are at the REPO ROOT, which the packet's title states correctly and I misread. Both errors were mine and both were caught by controls rather than by care.)
+        THE DEFECT THE TITLE DOES NOT NAME: run-safe-browser.sh's two sites do not merely infer from socket existence — they HARDCODE UID 1000, `/run/user/1000/podman/podman.sock`, rather than deriving from $XDG_RUNTIME_DIR like the other two. That is a distinct failure mode from the one this row is about: on a Linux host whose operator is not uid 1000 the guard silently never fires (wrong in the safe direction, but silently), and on macOS /run/user/1000 does not exist at all. So this site is wrong twice over and the second wrong is invisible to a fix that only addresses the inference.
+        WHY 797-r6tc's REMEDY TRANSFERS, and what its rationale implies for scope: its replacement is not a better probe but a REFUSAL TO PROBE — "PODMAN MODE IS THE CALLER'S TO DECLARE, the gate does not guess it". The measured harm was not a wrong URL: sourcing common.sh with TILLANDSIAS_PODMAN_REMOTE_URL set generates a wrapper, puts it FIRST on PATH, and pins TILLANDSIAS_PODMAN_BIN, which is EXPORTED and outlives the process into every litmus child — so litmus tests declaring `backend: fake` silently ran against real podman. 302/302 bare versus 295/302 through the gate, same commit, same set. That harm is a property of EXPORTING the variable, not of where it was inferred, so it reaches any launcher that sources common.sh and then spawns anything. Whoever takes this should check that third property per site rather than assume it — the two root launchers set a local `remote_socket` first, which may or may not reach the export.
+        NOT CLAIMED. The measurement that would validate a fix here is a podman-present run, and this host has none.

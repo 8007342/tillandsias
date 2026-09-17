@@ -1290,12 +1290,38 @@ const GUEST_MIN_VIABLE_MEMORY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// RAM left to the host: macOS itself, the tray, WindowServer, and whatever the
 /// operator is actually doing on the machine they are also running a forge on.
 /// A VM that boots by swapping its host is worse than a smaller VM.
-const HOST_RESERVED_MEMORY_BYTES: u64 = 6 * 1024 * 1024 * 1024;
+///
+/// LOWERED 6 GiB -> 4 GiB BY OPERATOR RULING 2026-09-16, and this partially
+/// reverses 978-juw4 — say so plainly rather than letting a future reader
+/// discover it. That order lowered the 8 GiB host (macneo) from a 4 GiB guest
+/// to 2 GiB, on the argument that the reserve must be authoritative and a
+/// 4 GiB guest on an 8 GiB Mac over-commits the host into swap. The ruling
+/// restores 4 GiB there, citing later findings and testing on other clients.
+///
+/// WHAT IS PRESERVED, deliberately: 978-juw4's STRUCTURE. The reserve is still
+/// authoritative and is still never overridden upward — there is no lower
+/// clamp, so a host too small to afford a viable guest still reaches the LOUD
+/// REFUSAL in `start()` instead of quietly over-allocating. Only the reserve's
+/// VALUE changed. The alternative reading of the ruling — drop the reserve and
+/// size purely as `min(host/2, cap)` — yields the same two numbers the operator
+/// named but discards that refusal path, so it was not taken.
+const HOST_RESERVED_MEMORY_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
-/// Above this the fraction stops buying anything a forge uses — a 7B model plus
-/// the container stack fits many times over — and the unused pages are better
-/// left to the host.
-const GUEST_MAX_MEMORY_BYTES: u64 = 32 * 1024 * 1024 * 1024;
+/// Hard ceiling on the guest, INDEPENDENT OF HOW LARGE THE HOST IS. Operator
+/// ruling 2026-09-16: 8 GiB maximum for any host of 16 GiB or more.
+///
+/// The reasoning is a platform asymmetry, not a forge requirement. macOS cannot
+/// be a first-class citizen here the way the other lanes are: Virtualization
+/// .framework's memory management is not as transparent as WSL2's, and nowhere
+/// near the near-nil overhead of native podman on the Linux kernel. Memory
+/// handed to a VZ guest is therefore much more expensive to the host than the
+/// same number on the other two platforms, so the ceiling is set by what macOS
+/// can afford to lose rather than by what the guest could use.
+///
+/// This lowers the cap from 32 GiB. Under the old value a 128 GiB host was
+/// sized to a 64-GiB-halved, 32-GiB-capped guest; it now gets 8 GiB, as does
+/// every host at or above 16 GiB.
+const GUEST_MAX_MEMORY_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 fn host_logical_cores() -> usize {
     std::thread::available_parallelism()
@@ -1328,9 +1354,11 @@ fn host_memory_bytes() -> u64 {
 /// (798-q4m9 / 807-bjjv comparability, preserved without re-pinning the size).
 ///
 /// MEMORY: half the host, less whatever `HOST_RESERVED_MEMORY_BYTES` demands,
-/// capped at `GUEST_MAX_MEMORY_BYTES` and rounded down to a whole GiB. On the
-/// 16 GiB M5 of 919-jii2 that is 8 GiB — the allocation the packet asks for,
-/// reached by policy rather than hardcoded. The RESERVE IS AUTHORITATIVE: it
+/// capped at `GUEST_MAX_MEMORY_BYTES` and rounded down to a whole GiB. The two
+/// points the 2026-09-16 operator ruling names both fall out of that policy
+/// rather than being special-cased: an 8 GiB host yields 4 GiB (half is 4, the
+/// 4 GiB reserve also allows 4), and every host at or above 16 GiB yields
+/// 8 GiB (the cap binds). The 16 GiB M5 of 919-jii2 is unchanged at 8 GiB. The RESERVE IS AUTHORITATIVE: it
 /// is never overridden upward, which is what 978-juw4 fixed. The result may
 /// therefore come out below `GUEST_MIN_VIABLE_MEMORY_BYTES` on a host that is
 /// simply too small; `start()` refuses loudly in that case rather than booting.
@@ -1702,6 +1730,7 @@ impl std::error::Error for OpenVsockError {}
 pub mod boot {
     use std::os::raw::c_int;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{Duration, Instant};
 
     use objc2::ClassType;
@@ -1993,6 +2022,32 @@ pub mod boot {
             ) -> i32;
             static kCFRunLoopDefaultMode: *const std::ffi::c_void;
         }
+        // ORDER 690-w94k, item 1. CFRunLoopRunInMode's RESULT IS LOAD-BEARING and
+        // was discarded here (`let _rc = ...`).
+        //
+        // THE CONTRACT: the call parks the thread only while the mode has at
+        // least one source or timer registered. With none, it does NOT wait the
+        // requested seconds — it returns kCFRunLoopRunFinished IMMEDIATELY. The
+        // loop then recomputes a still-positive `remaining` and calls straight
+        // back in, so the intended park becomes a busy spin for the whole
+        // duration.
+        //
+        // MEASURED on this host (macbookair, 2026-09-15) on a bare thread with
+        // no sources: a single call returned rc=1 (Finished) in 43.3µs rather
+        // than the 250ms requested, and this loop as written ran 3,471,102
+        // iterations in 250ms — a saturated core. Nine call sites use this,
+        // including the boot waits, so it is not a corner.
+        //
+        // THE HANDLING: on Finished there is nothing for CoreFoundation to wait
+        // on, so we sleep instead of re-entering. The nap is SHORT and bounded
+        // rather than the whole remaining time, because a source can appear
+        // while we wait (VZ completion handlers arrive via dispatch_async to the
+        // main queue, which registers one) and this function's documented job is
+        // to let those fire promptly. 5ms keeps delivery latency in the same
+        // order as before while taking the iteration count from millions to
+        // tens: MEASURED 3,471,102 -> 34 entries for the same 250ms, with the
+        // wall-clock contract intact (251.7ms elapsed for a 250ms request).
+        const CF_RUN_FINISHED: i32 = 1;
         let deadline = Instant::now() + dur;
         loop {
             let remaining = deadline
@@ -2001,9 +2056,22 @@ pub mod boot {
             if remaining <= 0.0 {
                 break;
             }
-            let _rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
+            PUMP_CF_ITERATIONS.fetch_add(1, Ordering::Relaxed);
+            let rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
+            if rc == CF_RUN_FINISHED {
+                let nap = Duration::from_millis(5).min(Duration::from_secs_f64(remaining));
+                std::thread::sleep(nap);
+            }
         }
     }
+
+    /// Counts `CFRunLoopRunInMode` entries made by [`pump_cf_loop_for`].
+    ///
+    /// Always on, not `cfg(test)`-gated, so the regression test exercises the
+    /// SHIPPED loop rather than a variant compiled only for tests. A relaxed
+    /// increment costs nanoseconds against a loop that now runs tens of times
+    /// per second rather than millions (order 690-w94k).
+    pub static PUMP_CF_ITERATIONS: AtomicU64 = AtomicU64::new(0);
 
     /// Schedule `f` onto libdispatch's main queue. VZ start/stop APIs assert
     /// queue affinity, while the tray calls into this runtime from worker
@@ -2960,6 +3028,59 @@ impl VmRuntime for VzRuntime {
 mod tests {
     use super::*;
 
+    /// ORDER 690-w94k item 1 — the pump must PARK, not SPIN, when the run
+    /// loop mode has no sources.
+    ///
+    /// WHY A BARE THREAD. `CFRunLoopRunInMode` waits only while the mode has a
+    /// source or timer; with none it returns kCFRunLoopRunFinished immediately.
+    /// A freshly spawned thread has registered nothing, which is precisely the
+    /// no-sources regime — and the regime several `pump_cf_loop_for` callers
+    /// run in.
+    ///
+    /// WHY AN ITERATION COUNT rather than CPU time: this crate has no `libc`
+    /// dependency, and wall-clock is identical either way (the loop honours its
+    /// deadline whether it parks or spins) — so elapsed time cannot tell the
+    /// two apart. The iteration count can, by four orders of magnitude.
+    ///
+    /// MEASURED BEFORE THE FIX on this host: 3,471,102 iterations in 250ms.
+    /// After: single digits. The bound below is deliberately loose (500) so it
+    /// pins the DEFECT rather than the timing of a particular machine — a
+    /// spinning loop overshoots it by ~7000x, and no correct implementation
+    /// comes near it.
+    // 690-w94k landed this on osx-next, where `pub mod boot` is compiled — the
+    // THIRD instance of the shape the two tests below already carry a comment
+    // about (804-deux). `pub mod boot` is #[cfg(target_os = "macos")] and this
+    // `mod tests` is #[cfg(test)] ONLY, so on Linux the test references a module
+    // that does not exist and the lib-test target fails with E0433, taking
+    // `cargo test --workspace` down with it — measured here on the relay of
+    // 2026-09-15, which is the first compiler these arms meet. Gated at the TEST
+    // and not at the module: a CFRunLoop park-versus-spin is genuinely macOS-only
+    // behaviour, so skipping it off-macOS is honest, whereas widening the cfg on
+    // `mod tests` would silently drop the platform-independent tests beside it.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn pump_cf_loop_parks_instead_of_spinning_with_no_sources() {
+        let before = boot::PUMP_CF_ITERATIONS.load(std::sync::atomic::Ordering::Relaxed);
+        let handle = std::thread::spawn(|| {
+            boot::pump_cf_loop_for(Duration::from_millis(250));
+        });
+        handle.join().expect("pump thread panicked");
+        let iterations =
+            boot::PUMP_CF_ITERATIONS.load(std::sync::atomic::Ordering::Relaxed) - before;
+
+        assert!(
+            iterations > 0,
+            "the counter never moved ({iterations}) — the test measured nothing, \
+             which is not the same as the loop behaving"
+        );
+        assert!(
+            iterations < 500,
+            "pump_cf_loop_for spun: {iterations} CFRunLoopRunInMode entries in 250ms. \
+             With no sources the call returns kCFRunLoopRunFinished immediately, so a \
+             loop that does not handle that result burns a core (order 690-w94k)."
+        );
+    }
+
     /// Order 804-deux, THE LOAD-BEARING TEST. Two shares reach the VZ
     /// configuration as two devices.
     ///
@@ -3342,17 +3463,21 @@ mod tests {
     fn guest_sizing_lets_the_reserve_win_below_the_crossover() {
         let gib = 1024 * 1024 * 1024;
         // 8 GiB / 6 cores — macneo, the host this order was filed from.
+        // REVALUED by the 2026-09-16 operator ruling: the reserve is 4 GiB
+        // now, so half (4) and after-reserve (4) agree and macneo gets 4 GiB.
+        // Under 978-juw4's 6 GiB reserve this was 2 GiB. The MECHANISM this
+        // test exists to pin is unchanged — the reserve still wins, is still
+        // never overridden upward — so the test keeps its name and its shape
+        // and only its arithmetic moves.
         let (cpus, mem) = guest_sizing(6, 8 * gib);
-        assert_eq!(mem, 2 * gib, "8 GiB host: the 6 GiB reserve leaves 2 GiB");
+        assert_eq!(mem, 4 * gib, "8 GiB host: the 4 GiB reserve leaves 4 GiB");
         assert_eq!(cpus, 4, "6-core host: 80% is 4, and the host keeps 2");
-        // 9 GiB: pre-clamp 3 GiB, which the old floor raised to 4.
+        // 9 GiB: half is 4.5, the reserve allows 5 — half wins, floored to 4.
         let (_, mem) = guest_sizing(6, 9 * gib);
-        assert_eq!(mem, 3 * gib);
-        // 10 GiB: the crossover itself, where the old clamp was already inert.
-        // Identical under both policies — which is precisely why no test that
-        // only looked here could tell them apart.
-        let (_, mem) = guest_sizing(8, 10 * gib);
         assert_eq!(mem, 4 * gib);
+        // 10 GiB: half is 5, the reserve allows 6 — half wins.
+        let (_, mem) = guest_sizing(8, 10 * gib);
+        assert_eq!(mem, 5 * gib);
     }
 
     /// The policy must never hand the guest more memory than the host has.
@@ -3401,19 +3526,69 @@ mod tests {
 
     #[test]
     fn guest_sizing_leaves_the_host_its_reserve_and_caps_large_hosts() {
-        // 12 GiB: half is 6, but the host reserve allows only 6 — both agree.
+        // 12 GiB: half is 6, the reserve allows 8 — half wins. Unchanged by
+        // the 2026-09-16 ruling, which is worth one case: the revaluation
+        // does not move every host, only those the reserve or the cap bound.
         let (_, mem) = guest_sizing(8, 12 * 1024 * 1024 * 1024);
         assert_eq!(mem, 6 * 1024 * 1024 * 1024);
-        // 8 GiB: half is 4, reserve allows 2 — the RESERVE wins (978-juw4).
-        // This assertion was INVERTED by that order. It previously pinned
-        // GUEST_FLOOR_MEMORY_BYTES here, i.e. it asserted the over-allocation
-        // itself was correct, with a comment that narrated the defect
-        // accurately ("the floor wins, host is small") and accepted it.
+        // 8 GiB: half is 4 and the 4 GiB reserve also allows 4 — they agree.
+        // This line has now been written three ways. It pinned the old 4 GiB
+        // FLOOR (over-allocation asserted as correct), then 2 GiB when
+        // 978-juw4 made the reserve authoritative, and now 4 GiB again by
+        // operator ruling. The number matches the first version; the POLICY
+        // producing it does not, and that distinction is the reason the
+        // reserve was revalued rather than the floor reinstated.
         let (_, mem) = guest_sizing(8, 8 * 1024 * 1024 * 1024);
-        assert_eq!(mem, 2 * 1024 * 1024 * 1024);
-        // 128 GiB: half is 64, well past what a forge uses — capped.
+        assert_eq!(mem, 4 * 1024 * 1024 * 1024);
+        // 128 GiB: half is 64, far past what macOS can afford to lose — the
+        // cap binds, and it is 8 GiB since the ruling.
         let (_, mem) = guest_sizing(24, 128 * 1024 * 1024 * 1024);
         assert_eq!(mem, GUEST_MAX_MEMORY_BYTES);
+        assert_eq!(mem, 8 * 1024 * 1024 * 1024);
+    }
+
+    /// OPERATOR RULING 2026-09-16, pinned as STATED rather than as computed.
+    ///
+    /// The ruling has two data points and one universal clause: 4 GiB of guest
+    /// on an 8 GiB host, a MAXIMUM of 8 GiB on hosts of 16 GiB or more, and
+    /// that maximum holds "regardless of the host's RAM size". The tests above
+    /// check the policy's arithmetic at chosen points; this one checks the
+    /// CONTRACT, so that a future re-tuning of the reserve or the fraction
+    /// cannot satisfy them individually while drifting off what was ruled.
+    ///
+    /// The universal clause is swept, not sampled at one large host. A cap is
+    /// exactly the kind of property a single spot-check cannot establish: the
+    /// 32 GiB value it replaced would also have passed a 16 GiB-only check.
+    #[test]
+    fn guest_sizing_obeys_the_2026_09_16_memory_ruling() {
+        let gib = 1024 * 1024 * 1024;
+
+        // "4GB of RAM for the GUEST VM in hosts with 8GB of RAM"
+        let (_, mem) = guest_sizing(6, 8 * gib);
+        assert_eq!(mem, 4 * gib, "8 GiB host must yield a 4 GiB guest");
+
+        // "a MAX of 8GB of RAM for hosts with 16GB of RAM or more" —
+        // and "regardless of the HOST'S RAM SIZE". Swept to 1 TiB.
+        for n in 16u64..=1024 {
+            let (_, mem) = guest_sizing(16, n * gib);
+            assert!(
+                mem <= 8 * gib,
+                "{n} GiB host was sized to {mem} bytes — above the 8 GiB cap \
+                 the ruling sets regardless of host size"
+            );
+        }
+
+        // At and above 16 GiB the cap is not merely an upper bound that some
+        // other term happens to keep us under — it is REACHED. Without this a
+        // policy that quietly under-allocated everywhere would pass the sweep.
+        for n in [16u64, 24, 32, 64, 128, 512] {
+            let (_, mem) = guest_sizing(16, n * gib);
+            assert_eq!(
+                mem,
+                8 * gib,
+                "{n} GiB host should reach the 8 GiB maximum exactly"
+            );
+        }
     }
 
     /// @trace spec:vm-provisioning-lifecycle.provision.idempotency@v1

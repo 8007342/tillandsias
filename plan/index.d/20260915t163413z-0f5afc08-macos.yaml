@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    event:
+      type: progress
+      ts: "2026-09-15T16:34:13Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t163413z
+      host: macos
+      summary: |
+        HANDED OFF VIA RELAY REF, with the reason measured rather than asserted.
+
+        work/690-w94k at 5b249f35f carries this criterion's gated tree. Two consecutive
+        lands refused on the mandated-merge guard, both CORRECT:
+          attempt 1  osx-next does not contain origin/linux-next (e0449cfba)
+          attempt 2  osx-next does not contain origin/linux-next (e7a32362a)
+
+        THE RACE IS ARITHMETIC, NOT LUCK. Trunk took 18 commits in 3 hours and 9 in the
+        last hour — one every ~6.7 minutes — against a full gate that runs longer than
+        that on this host. A macOS code land therefore cannot reliably win the race by
+        re-landing: by the time the gate finishes, trunk has moved again. That is the
+        "a gate or merge policy your host cannot satisfy" case the refusal text itself
+        names, so the relay ref is the documented path rather than a way around the
+        guard. I declined the same hatch twice earlier today because the host COULD
+        satisfy it then; the numbers changed the answer, not the inconvenience.
+
+        WORTH RECORDING FOR ANY SLOW HOST: this cost is invisible from a fast one. The
+        guard is right every time and nothing incorrect has landed; the expense falls
+        entirely on the host whose gate is long, and only that host can see it. Same
+        family as the platform- and tier-scoped blind spots — a property whose evidence
+        exists only where the pain is.
+
+        A WORDING OBSERVATION, not filed as a defect because nothing incorrect landed:
+        the refusal reads "not a lost race, so retrying cannot help". True of retrying
+        the PUSH; false of the operation the tool already performs, since re-running the
+        script merges trunk at attempt start and proceeds. The tool has an attempt 1/4
+        loop it declines to use for this condition and the remedy is a step it already
+        knows. Read at face value it sends you to hand-merge — which I did, twice,
+        before measuring.

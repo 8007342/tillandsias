@@ -584,6 +584,33 @@ fn envelope_commit(envelope: &Envelope) -> Option<String> {
         .filter(|c| gitref::looks_like_sha(c))
 }
 
+/// ORDER 1229-2862 (wire 3) — the cited span AS IT READS AT ITS OWN FRAME, with the
+/// frame that produced it.
+///
+/// The read-side twin of [`frame_holds`], exposed because the GRADER needs the
+/// same question asked in its expectation path: `groundtruth::citation_matches`
+/// re-read `span_contains` needles out of the WORKING TREE, so an index behind
+/// the code failed an expectation that is satisfied at the commit the span was
+/// actually extracted from.
+///
+/// `None` when no frame is named, the object is unfetched, the path did not
+/// exist there, or the range does not fit that blob. An unanswerable question
+/// is NEVER an acquittal — the caller must treat `None` as "no rescue", which
+/// is the property that stops this laundering a real miss (801-g9nn).
+pub fn span_at_frame(
+    c: &Citation,
+    envelope: &Envelope,
+    view: &GitView,
+) -> Option<(String, String)> {
+    let frame = c.commit.clone().or_else(|| envelope_commit(envelope))?;
+    let text = view.file_at(&frame, &c.path)?;
+    let lines: Vec<&str> = text.lines().collect();
+    if c.line_start == 0 || c.line_end < c.line_start || c.line_end > lines.len() {
+        return None;
+    }
+    Some((frame, lines[c.line_start - 1..c.line_end].join("\n")))
+}
+
 /// The answer envelope. FIELDS ARE PRIVATE ON PURPOSE — see the module doc.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Envelope {
@@ -1117,6 +1144,18 @@ pub enum Intent {
         release: Option<String>,
     },
     Burndown(String),
+    /// ORDER 718-jqt5 criterion 2. The story-shaped question — "give me a few
+    /// forgotten bugs nobody is fixing" — routed to the DETERMINISTIC
+    /// projection in `crate::forgotten`.
+    ///
+    /// The packet is explicit that inference should PHRASE and CLUSTER the
+    /// result and never decide it, so this arm decides it and leaves the
+    /// phrasing to whatever sits above. With no inference endpoint present the
+    /// surface therefore DEGRADES TO THE DETERMINISTIC LIST rather than
+    /// refusing, which is the criterion's requirement stated literally.
+    Forgotten {
+        limit: usize,
+    },
     UnsupportedConstraint(String),
 }
 
@@ -1199,6 +1238,24 @@ pub fn classify(ledger: &Ledger, question: &str) -> Option<Intent> {
         || matches!(blocked_by_direction, Some(DependencyDirection::Upstream))
         || matches!(waiting_on_direction, Some(DependencyDirection::Upstream))
         || matches!(depends_on_direction, Some(DependencyDirection::Upstream));
+    // ORDER 718-jqt5 criterion 2. Matched as a TOKEN, not a substring, for
+    // the reason 757-yi8c records one screen down: `contains("ready")` fired
+    // on "alREADY" and served an entire unrelated listing as exact. There is
+    // no English word containing "forgotten" as a substring today, but the
+    // token form costs nothing and does not depend on that staying true.
+    //
+    // The "nobody" arm is CO-OCCURRENCE, not a fixed phrase, and the test is
+    // why: "nobody is fixing" and "nobody is working on" both missed "which
+    // packets IS NOBODY working on", where the auxiliary moves ahead of the
+    // subject. Enumerating word orders is a losing game; requiring "nobody"
+    // plus a work verb is order-free and still narrow, because "nobody" in a
+    // ledger question is already a strong signal and the verb keeps it off
+    // questions like "nobody is blocked by this".
+    let nobody_is_on_it = lower.contains("nobody")
+        && (lower.contains("fixing") || lower.contains("working") || lower.contains("touching"));
+    let wants_forgotten = lower_tokens.iter().any(|t| t == "forgotten")
+        || nobody_is_on_it
+        || lower.contains("stopped noticing");
     let wants_burndown = lower.contains("burndown")
         || lower.contains("children of")
         || lower.contains("milestone")
@@ -1229,6 +1286,12 @@ pub fn classify(ledger: &Ledger, question: &str) -> Option<Intent> {
         }
         Err(_) => None,
     };
+
+    // Before the reference arm: a question naming no packet but asking the
+    // forgotten question must not fall through to token-matching.
+    if wants_forgotten && reference.is_none() {
+        return Some(Intent::Forgotten { limit: 10 });
+    }
 
     if let Some(r) = reference {
         if wants_closure {
@@ -1418,6 +1481,43 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
                 (None, None) => "ready packets".to_string(),
             };
             (headline, packets)
+        }
+        Intent::Forgotten { limit } => {
+            // CLOCK DEPENDENCE IS THE MAJORITY CASE, not the minority, and
+            // this comment used to say the opposite. Criterion 1 measured
+            // "461 of 461 ready packets carry no events" on 2026-09-06 and
+            // concluded the clock barely mattered. RE-MEASURED 2026-09-17:
+            // 505 rows, 139 eventless, 366 EVENTED. So `now` orders 72% of
+            // the list.
+            //
+            // That is exactly what criterion 4 is about. "The same seed
+            // yields the same set" needs the set to be reproducible BY
+            // SOMEONE ELSE, and a caller who cannot see the clock this ran
+            // against cannot reproduce it. Reproducible within a second is
+            // not auditable. So the headline states the epoch used, and
+            // `forgotten --now-epoch <that>` reproduces the exact set.
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let rows = crate::forgotten::forgotten_rows(ledger, now, 0);
+            let total = rows.len();
+            let packets: Vec<&serde_yaml::Value> = rows
+                .iter()
+                .take(*limit)
+                .filter_map(|(_, _, _, _, id, _)| ledger.resolve(id))
+                .collect();
+            (
+                format!(
+                    "the {} least-noticed ready packets of {total} (deterministic projection: \
+                     age since last event, never-leased, low blocking weight). No inference \
+                     endpoint was consulted, so this is the unphrased list rather than a refusal. \
+                     Ranked at now-epoch {now}; `forgotten --now-epoch {now}` reproduces this \
+                     exact set.",
+                    packets.len()
+                ),
+                packets,
+            )
         }
         Intent::Status(r) => (
             format!("status of '{r}'"),
@@ -2789,6 +2889,56 @@ events:
         ));
         assert!(matches!(classify(&ledger, "394a"), Some(Intent::Status(_))));
         assert!(classify(&ledger, "how do I feel today").is_none());
+    }
+
+    /// ORDER 718-jqt5 criterion 2. The story-shaped question routes to the
+    /// deterministic projection instead of being refused.
+    ///
+    /// MEASURED BEFORE THE CHANGE, and quoted because it is the criterion's
+    /// pre-fix result: `answer "give me a few forgotten bugs nobody is fixing"`
+    /// returned `confidence: unsupported`, 0 citations, "not a recognised
+    /// ready/burndown query". Criterion 2 forbids exactly that — an absent
+    /// inference endpoint must DEGRADE to the deterministic list, not refuse.
+    #[test]
+    fn story_shaped_forgotten_questions_route_to_the_deterministic_projection() {
+        let ledger = live_ledger();
+        for q in [
+            "give me a few forgotten bugs nobody is fixing",
+            "what has the fleet stopped noticing?",
+            "which packets is nobody working on",
+        ] {
+            assert!(
+                matches!(classify(&ledger, q), Some(Intent::Forgotten { .. })),
+                "{q:?} must route to the forgotten projection"
+            );
+        }
+    }
+
+    /// The routing must not SWALLOW questions that name a packet. A question
+    /// carrying a resolvable reference belongs to the reference arms even when
+    /// it also says "forgotten" — otherwise asking why one packet was
+    /// forgotten would return a list that does not mention it.
+    #[test]
+    fn a_forgotten_question_naming_a_packet_still_answers_about_that_packet() {
+        let ledger = live_ledger();
+        let referenced = classify(&ledger, "is 718-jqt5 forgotten?");
+        assert!(
+            !matches!(referenced, Some(Intent::Forgotten { .. })),
+            "a question naming a packet must not be captured by the list surface"
+        );
+    }
+
+    /// 757-yi8c in the other direction: the token match must not fire on an
+    /// unrelated question, because a semantically unrelated exact answer is
+    /// worse than an honest unsupported.
+    #[test]
+    fn the_forgotten_match_does_not_capture_unrelated_questions() {
+        let ledger = live_ledger();
+        assert!(classify(&ledger, "how do I feel today").is_none());
+        assert!(!matches!(
+            classify(&ledger, "what is ready for macos"),
+            Some(Intent::Forgotten { .. })
+        ));
     }
 
     #[test]

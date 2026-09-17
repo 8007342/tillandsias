@@ -39,7 +39,7 @@ critical_path:
     timeout_ms: 300000
     success_pattern: "test result: ok."
 
-  - step: "Req: no WIRE_VERSION bump rode along with the additive variants (baseline 3 since 997-e4v2)"
+  - step: "Req: no WIRE_VERSION bump rode along with the additive variants (baseline 4 since 890-y72v)"
     # The PROPERTY is unchanged: this packet's metrics variants are ADDITIVE and
     # must not bump the wire version. What changed is the BASELINE they are
     # additive against.
@@ -51,11 +51,26 @@ critical_path:
     # guards. Pinning 2 after that landed would assert a premise that is no
     # longer true and read as though the metrics work had caused a bump.
     #
+    # ORDER 890-y72v bumped 3 -> 4 by ADDING a field (`outcome`) to the existing
+    # DeliverCredentialsReply variant. That is not the additive case this step
+    # blesses: postcard encodes a struct variant's fields positionally, so an
+    # old reader consumes the fields it knows and then meets a trailing
+    # discriminant, and the next frame starts wherever it stopped. Adding a
+    # VARIANT stays free; adding a FIELD does not, and the distinction is the
+    # whole reason this pin is a literal rather than a range.
+    #
+    # THIS STEP CAUGHT THAT BUMP — from another spec, days after the fact,
+    # because it runs in the quick tier and the daily loop gates on
+    # ./build.sh --check, which never executes it (890-27mv). The bump landed
+    # green at 4fc7be930 and this red was structurally invisible until the
+    # release tier was run here for the first time. The pin worked; the
+    # CADENCE did not.
+    #
     # The literal is deliberate: the next bump must edit this number and say
     # which change earned it, exactly as this one does.
-    command: "grep -qE 'pub const WIRE_VERSION: u(16|32) = 3;' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: WIRE_VERSION still 3 (additive-only since the 997-e4v2 removal)'"
+    command: "grep -qE 'pub const WIRE_VERSION: u(16|32) = 4;' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: WIRE_VERSION still 4 (additive-only since the 890-y72v field addition)'"
     timeout_ms: 10000
-    expected_behavior: "ok: WIRE_VERSION still 3 (additive-only since the 997-e4v2 removal)"
+    expected_behavior: "ok: WIRE_VERSION still 4 (additive-only since the 890-y72v field addition)"
 
   - step: "ROUTING: vsock-only request, response-only reply, pinned in both matrices"
     command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::vsock_routing_matrix -- --exact 2>&1 | tail -3"

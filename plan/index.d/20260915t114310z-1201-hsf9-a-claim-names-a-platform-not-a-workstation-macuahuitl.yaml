@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Split out of 1198-7q95: the channel half is fixed; this half is a DECISION,
+# because the platform default it depends on is deliberate and tested.
+packets:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    order: 1201-hsf9
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [ledger, coordination, instrument, multi-host]
+    estimated_hours: 3
+    parent_order: 1198-7q95
+    unscoreable: "unpinnable-until-the-decision-is-made: this row is a choice before it is a change, and the deliverable depends on which way it goes. Future litmus scripts/test-a-claim-names-its-holder.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: a claim written without an explicit --host is attributable to the WORKSTATION that wrote it, by whatever route the decision picks, and the 772-4se9 guarantee still holds — no build may stamp another platform's name; NEGATIVE CONTROL: an explicit --host still wins."
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      A claim written without an explicit --host records its holder as the compiled PLATFORM, so every host on one platform claims under the same name and a sweep cannot say which machine to ask — and the platform default is deliberate, so this is a decision rather than a defect.
+    context: |
+      FOUND while fixing 1198-7q95, and deliberately not fixed with it. That
+      row's sweep now reads the status write rather than event prose, so it
+      names the host that actually set the claim. On the live ledger that host
+      reads `linux`: yoga's claim on 888-miiy landed as
+      plan/index.d/20260915t073636z-35bca30d-linux.yaml because set-field was
+      called without --host. lenovinha reports the same of their own closure
+      fragments this cycle, for the same reason.
+      WHY THIS IS NOT SIMPLY A BUG. The platform default is DELIBERATE and
+      guarded: 772-4se9 replaced a hardcoded host="linux" — which wrote a
+      wrong FACT into durable events from every non-linux build — with the
+      COMPILED platform, and the unit test
+      writer_host_default_is_the_compiled_platform_never_a_fabricated_linux
+      runs on every host that gates a push specifically to keep it that way.
+      Changing the default to a hostname would have to preserve that
+      guarantee, and would change what every existing caller writes.
+      THE THREE ROUTES, for whoever decides: (a) leave the default and require
+      --host on claims, enforced by set-field refusing to default it for a
+      status write of in_progress specifically — narrow, and it makes the
+      discipline mechanical rather than remembered; (b) default to the short
+      hostname while keeping the compiled platform as the fallback when no
+      hostname is available, which preserves 772-4se9's guarantee (no build
+      stamps another platform's name) and changes every caller's output; (c)
+      leave it and have readers derive the workstation from the agent_id,
+      which already carries it (linux-lenovinha-claude-…, linux-macuahuitl-
+      opus5-…) — but the status entry carries no agent_id, so a reader would
+      have to correlate by timestamp, which is fragile.
+      AND A NOTE ON SCOPE, because the operator ruled on adjacent ground on
+      2026-09-15: durable BLOCKED signals must name a capability rather than a
+      host, since the roster is ephemeral. A CLAIM is the opposite case — it is
+      a transient fact about which machine holds a row right now, read within
+      the hour, and its whole purpose is to tell a coordinator whom to ask. So
+      this row is not in tension with that ruling; it is the other side of the
+      same distinction.
+    exit_criteria:
+      - 'a claim written without an explicit --host is attributable to the workstation that wrote it, by whichever route is chosen (pre-fix result: FAILS — yoga''s 888-miiy claim reads host linux, as do lenovinha''s closure fragments)'
+      - 'the 772-4se9 guarantee still holds: no build may stamp another platform''s name, and its unit test still passes unchanged'
+      - 'NEGATIVE CONTROL: an explicit --host still wins over any default'
+      - 'the choice between the routes is RECORDED with its reason, not left implicit in an implementation'
+    events:
+      - type: filed
+        ts: "2026-09-15T11:43:10Z"
+        agent_id: "linux-macuahuitl-opus5-20260915t113945z"
+        host: macuahuitl
+        summary: |-
+          Split out of 1198-7q95 by the coordinator: the channel half is fixed
+          and landed; this half is a decision about a deliberate default.

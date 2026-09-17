@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Follow-up to 1211-34v6. Sharpens the landed refusal text against a
+# measurement yolanda-windows took AFTER that text was written.
+packets:
+  - packet_id: the-login-refusal-says-the-guest-holds-no-checkout-when-the-sharper-true-statement-is-that-it-ships-no-tool-to-make-one-and-the-refusal-it-writes-is-recorded-in-a-file-nothing-points-at
+    order: 1212-kqcg
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [fail-loud, docs, credentials, tooling]
+    estimated_hours: 1
+    unscoreable: "not-scoreable-by-a-litmus-but-PINNABLE-BY-THE-EXISTING-TEST: the deliverable is again the text of one refusal, already held by crates/tillandsias-headless/src/main.rs, tests::github_login_refusal_names_a_remedy_that_works. The implementer extends that test's assertions rather than minting a new fixture or a litmus name. A litmus here would shell out to grep a source string, which is strictly weaker than the unit test that already holds the constant (same reasoning as 1211-34v6)."
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The landed login refusal explains the tray lane's failure as "the guest holds no checkout", which invites the remedy "then give the guest a checkout" — but the guest ships no git to clone one, and separately the refusal IS written to a log file that nothing points the operator at
+    context: |
+      FOLLOW-UP TO 1211-34v6 (landed e15c81e6d, closed 2faf4c3ce). That row
+      removed an inert remedy and named a working one. This row sharpens the
+      sentence explaining WHY the tray lane cannot satisfy the probe, against
+      two measurements taken by yolanda-windows after the text was written.
+
+      MEASUREMENT 1 — PERISHABLE, AND FLAGGED AS SUCH BY ITS AUTHOR. In the
+      WSL distro `tillandsias`, Fedora Linux 44 (Container Image), guest binary
+      Tillandsias v56.9.12.2, measured 2026-09-15: `rpm -q git` and `rpm -q gh`
+      both answer "package ... is not installed". yolanda first measured this
+      with `command -v` and replaced it, correctly: `command -v` answers about
+      one shell's PATH, `rpm -q` answers about the installed package set, and
+      the second is the claim actually being made. THIS IS A PROPERTY OF THAT
+      IMAGE BUILD, NOT OF "THE GUEST". An implementer must re-measure before
+      restating it; if a later image ships git, the sharpened sentence is wrong
+      and must change with it.
+
+      THE DURABLE HALF, which does not depend on the image: the resolver
+      SURVIVES the absence. Command::new("git") fails to spawn, and
+      read_host_project_origin_url falls through to parse_gitdir_origin_url,
+      which reads .git/config directly. yolanda hand-wrote one in the guest and
+      it parsed. So a checkout in the guest is NOT impossible — what is missing
+      is a tool to CLONE one. "Lacks a tool" and "cannot hold a checkout" are
+      different claims wanting different fixes, and the landed text implies the
+      second.
+
+      MEASUREMENT 2 — AND THE REASON THIS ROW IS NOT THE ROW I FIRST DRAFTED.
+      I was going to file "the tray lane has no sink for the refusal". That is
+      FALSE. The Windows tray tees the full output to
+      /root/.cache/tillandsias/github-login-last.log
+      and prints the path on exit. The file is 1263 bytes and holds the entire
+      refusal.
+
+      CITE IT CORRECTLY, because I got this wrong first: the tee is NOT Rust.
+      In crates/tillandsias-windows-tray/src/wsl_lifecycle.rs the enclosing
+      symbol is `WslLifecycle::inject_bootstrap_logic`, and the LOG= assignment
+      naming github-login-last.log lives inside a SHELL HEREDOC that function
+      injects — it is injected script, not code the Rust compiler ever sees.
+      An implementer editing "the function that writes the log" will not find
+      it by reading Rust. (I have misread a heredoc body as code twice before;
+      this is the check that caught it.)
+
+      RELEVANT HISTORY IN THE SAME FILE: a doc comment there records that a
+      0-byte github-login-last.log is what produced the v0.4.260809.2 blank —
+      so this sink has already failed once by existing and being empty, which
+      is another well-formed output. Read that comment before changing the tee. yolanda withdrew their
+      own row on this and rewrote it as a withdrawal rather than deleting it.
+
+      HAD I FILED THE DRAFT, THE IMPLEMENTER WOULD HAVE BUILT A SINK THAT
+      ALREADY EXISTS. The defect is not that the message is lost; it is that
+      tray.log — the log an investigator actually opens — carries no pointer to
+      the guest-side file, and the path is announced in a window that closes.
+      That cost yolanda a session of guest forensics (podman event timelines,
+      Vault state, source reading) reconstructing a message the tool names on
+      its way out. One session is the measurement, and it is why this is worth
+      a line rather than nothing.
+
+      WHY BOTH LIVE ON ONE ROW: they are the same sentence's two halves. The
+      implementer is editing the paragraph that explains the tray lane's
+      failure, and it should say that the lane reaches the refusal every time,
+      that the refusal IS recorded and where, and that the guest lacks the tool
+      to produce the checkout the remedy asks for — not that it cannot have one.
+
+      SCOPE, STATED SO A LATER READER DOES NOT OVERREAD IT: this changes text
+      only. It does not decide where a login should resolve its repository from
+      when its lane has no checkout by construction — that design question is
+      yolanda's row and is untouched here. It also does not assert anything
+      about macOS, and it is not about the retry loop.
+    events:
+      - type: progress
+        ts: "2026-09-15T22:00:00Z"
+        agent_id: "linux-yoga-claude-20260915t220000z"
+        host: yoga
+        summary: |
+          FILED, NOT IMPLEMENTED. Landing 1211-34v6 mid-conversation is what
+          made this a separate row: the implementation was already in its gate
+          when yolanda's measurements arrived, and restarting a green gate to
+          improve a sentence is not a trade worth making. The text as landed is
+          accurate; this row makes it sharper.
+
+          I am recording the drafting error deliberately, because the row would
+          have been actively harmful and nothing in my own reasoning caught it.
+          I had concluded "the message is unreadable" from yolanda's true
+          observation that tray.log records the login spawn and the sign-out
+          flip and nothing about the outcome. tray.log is a complete, correct
+          log — it simply is not the log holding the answer, and a truthful
+          record does not announce its own boundary. yolanda generalised the
+          same observation into "unrecorded anywhere" and spent a session on
+          forensics; I generalised it into a missing sink and nearly spent an
+          implementer's cycle on one.
+
+          That is the fourth instance today of one condition, across four
+          unrelated subsystems: THE FAULT'S OUTPUT IS WELL-FORMED, so only the
+          reader it blocks can find it. The other three are rules or remedies
+          read wider than written, where the reader STOPS. This one inverts:
+          a RECORD read past its scope, where the reader PROCEEDS CONFIDENTLY
+          on a false conclusion. yolanda holds the class row and has retitled
+          it to the condition; this row is an instance, not a duplicate of it.

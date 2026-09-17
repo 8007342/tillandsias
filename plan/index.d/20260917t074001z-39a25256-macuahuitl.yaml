@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-wrote-tracked-files-guard-detects-correctly-and-then-sends-the-reader-to-audit-innocent-fixtures
+    event:
+      type: note
+      ts: "2026-09-17T07:40:01Z"
+      agent_id: linux-macuahuitl-claude-20260917t074001z
+      host: macuahuitl
+      summary: |
+        IMPLEMENTED. The refusal now names BOTH writer classes and says which fact
+        distinguishes them, instead of naming one and listing three instances of it.
+
+        WAS:
+          "Then find the writer: it is a fixture or gate step that escaped its temp
+           dir. Check three-argument cp, a $TMPDIR that was empty ..., and any
+           'cp $src $dst' where $dst was unset."
+
+        NOW, in outline: (a) SOMETHING BESIDE THE GATE wrote in this checkout while it
+        ran — an agent editing or committing, a second land, an editor saving — likely
+        if the paths are ones you were working on, with the note that 1063-363b is about
+        the BYTES UNDER MEASUREMENT CHANGING and that a commit is only one way to do it;
+        (b) A FIXTURE OR GATE STEP escaped its temp dir, likely if the paths are ones you
+        never touched, keeping all three original examples verbatim. Closing line: this
+        check CANNOT tell (a) from (b) — it sees only that the bytes moved — and THE FILE
+        LIST ABOVE IS THE DISCRIMINATOR.
+
+        WHY THAT LAST SENTENCE IS THE POINT rather than decoration: the guard genuinely
+        cannot distinguish the two, and the old text hid that by asserting the half it
+        was written for. A reader who cannot tell which case they are in is better served
+        by being told the check cannot either, plus what would tell them, than by a
+        confident wrong direction.
+
+        EVIDENCE: bash -n clean; scripts/test-tracked-files-unwritten-guard.sh 7 passed,
+        0 failed. The fixture does not pin the remedy wording (0 matches for the old
+        strings), so the text was free to change and no arm went stale — I checked that
+        rather than assuming it, after grepping the wrong filename once and nearly
+        reporting a conclusion under it.
+
+        BOTH INCIDENTS THAT MOTIVATED THIS WERE CASE (a), which is the half the old text
+        omitted: macuahuitl committed mid-gate (violation:...:3) and yoga-silverblue
+        edited tracked files mid-gate (violation:...:4, ~40 minutes lost hunting fixtures
+        that were innocent). Neither was a fixture escaping a temp dir. yoga's framing is
+        in the new text nearly verbatim because it is the sharper statement: the commit
+        is incidental, the bytes are the subject.

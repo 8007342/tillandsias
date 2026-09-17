@@ -127,13 +127,36 @@ else
 fi
 
 echo "arm 2b — NEGATIVE CONTROL: no busctl at all (macOS, forge) still reads missing:"
-mk_bin "$W/bin-nobusctl" absent
-D="$(scratch nobusctl)"
-run_guard "$D" "$W/bin-nobusctl"
-if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
-    ok "missing:no-credential-channel with no busctl on PATH"
+# THIS ARM USED TO PREPEND ITS STUB DIR TO $PATH, which does not remove anything
+# — the system busctl at /usr/bin stayed reachable, so the guard probed THIS
+# host's real keyring. It passed for a year of minutes only because the keyring
+# happened to be unlocked at the time; the moment this host's login collection
+# re-locked, the arm reported "a host without busctl" while reading a host that
+# has one. That is 1109-t8kw's class exactly: a fixture asserting a property of
+# the environment it runs in. Build the PATH from nothing instead, the way arm 9
+# does, so "absent" means absent.
+_bin2b="$W/bin-nobusctl-real"
+mkdir -p "$_bin2b"
+for _t in bash sh git grep sed awk cat cut tr wc head tail date mktemp dirname \
+          basename sort uniq stat env printf id hostname find xargs jq rm mkdir chmod expr timeout; do
+    _p="$(command -v "$_t" 2>/dev/null)" && ln -sf "$_p" "$_bin2b/$_t"
+done
+cat > "$_bin2b/gh" <<'GH'
+#!/usr/bin/env bash
+exit 1
+GH
+chmod +x "$_bin2b/gh"
+if PATH="$_bin2b" command -v busctl >/dev/null 2>&1; then
+    bad "could not build a busctl-free PATH — this arm would assert about the wrong host"
 else
-    bad "a host without busctl must read missing:, got '$OUT'"
+    D="$(scratch nobusctl)"
+    OUT2B="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_HOST_KIND \
+              PATH="$_bin2b" bash "$GUARD" 2>/dev/null )"
+    if printf '%s' "$OUT2B" | grep -q '^missing:no-credential-channel$'; then
+        ok "missing:no-credential-channel with genuinely no busctl on PATH"
+    else
+        bad "a host without busctl must read missing:, got '$OUT2B'"
+    fi
 fi
 
 echo "arm 3 — NEGATIVE CONTROL: an UNLOCKED collection does not trip the lock arm"
@@ -182,6 +205,51 @@ if [ $((_t1 - _t0)) -le 60 ]; then
     ok "verdict in $((_t1 - _t0))s"
 else
     bad "the locked arm took $((_t1 - _t0))s — a guard that hangs is the failure it reports"
+fi
+
+echo "arm 9 — REGRESSION (1193-yw6u): with NO timeout(1)/gtimeout(1), a healthy gh"
+echo "        must not read as 'no credential channel'"
+#
+# THE BLIND SPOT THIS ARM CLOSES. 1189-2ra5 bounded `gh auth status` in
+# _ccc_timeout, which on a host with no timeout(1) AND no gtimeout(1) returns 127
+# WITHOUT RUNNING THE COMMAND (order 988's refusal to run a probe unbounded). The
+# gh arm therefore went false on a healthy gh and the verdict fell through to
+# missing:no-credential-channel — a channel that EXISTS, reported as absent,
+# pointing the reader at the `gh auth login` that 1025-a896 forbids. Both macOS
+# hosts lost the ability to land for a day.
+#
+# NO LINUX OR WINDOWS GATE COULD SEE IT: check-host-tools.sh's prover row for
+# `timeout` is scoped platform: macos, so the only arm that exercised this state
+# runs on the two hosts that were broken by it. This arm reproduces the state on
+# ANY platform by curating PATH, so the next regression of this shape is caught
+# by whoever writes it rather than by whoever it breaks.
+_bin9="$W/bin-notimeout"
+mkdir -p "$_bin9"
+# Symlink the tools the guard needs, DELIBERATELY EXCLUDING timeout and gtimeout.
+for _t in bash sh git grep sed awk cat cut tr wc head tail date mktemp dirname \
+          basename sort uniq stat env printf id hostname find xargs jq rm mkdir chmod expr; do
+    _p="$(command -v "$_t" 2>/dev/null)" && ln -sf "$_p" "$_bin9/$_t"
+done
+# A gh that HAS a token: `auth status` green, exactly the healthy macOS host.
+cat > "$_bin9/gh" <<'GH'
+#!/usr/bin/env bash
+exit 0
+GH
+chmod +x "$_bin9/gh"
+if [ -x "$_bin9/bash" ] && ! PATH="$_bin9" command -v timeout >/dev/null 2>&1; then
+    D9="$(scratch notimeout)"
+    OUT9="$( cd "$D9" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_HOST_KIND \
+             PATH="$_bin9" bash "$GUARD" 2>/dev/null )"
+    case "$OUT9" in
+        missing:no-credential-channel)
+            bad "a healthy gh with no timeout(1) reads as missing:no-credential-channel — 1193-yw6u is back, and every macOS host is blocked" ;;
+        blocked:*|ok:*|unverified:*)
+            ok "verdict is '$OUT9' — the absence of coreutils is not an answer about the credential" ;;
+        *)
+            bad "unexpected verdict with no timeout(1): '$OUT9'" ;;
+    esac
+else
+    printf 'skip: could not build a timeout-free PATH on this host\n'
 fi
 
 echo

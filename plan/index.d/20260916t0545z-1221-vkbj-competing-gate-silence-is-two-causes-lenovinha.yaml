@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-competing-gate-check-reports-a-missing-host-side-assertion-on-a-host-that-has-no-dispatch-to-assert-about-so-nothing-to-do-and-fix-the-call-site-print-the-same-token
+    order: 1221-vkbj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [ci, fail-loud, instrument, toolbox, gate]
+    estimated_hours: 3
+    unscoreable: unpinnable-until-the-guard-exists — the deliverable includes the fixture that would score it, scripts/test-competing-gate-no-dispatch-cause.sh, written in the same commit as the change it tests (1136-n8sh)
+    owned_files:
+      - scripts/check-no-competing-gate.sh
+      - build.sh
+    title: |
+      build.sh's competing-gate call prints could-not-run:no-host-side-assertion on EVERY gate on a host with no dispatch — a cause that means FIX THE CALL SITE, reported where there is no call site to fix, and then discarded by `|| true`
+    context: |
+      MEASURED ON lenovinha 2026-09-16, directly, before filing:
+
+        bash scripts/check-no-competing-gate.sh
+          could-not-run:competing-gate:no-host-side-assertion
+          (this caller did not assert --host-side <pid>; only a caller that can
+           see the dispatch's host side may be answered)                  rc=3
+
+        environment at that moment:
+          TOOLBOX_PATH=<unset>  container=<unset>  TILLANDSIAS_WRAPPER_TOKEN=<unset>
+
+      That is build.sh:1898's exact invocation — unflagged, `|| true`. So on this
+      host the detector 1141-vf9w built to be "exercised every gate" is, at the
+      one site that runs every gate, never exercised at all, and has not been
+      since it was wired.
+
+      THE TOKEN IS NOT MERELY UNINFORMATIVE, IT POINTS AT THE WRONG ACTION.
+      `no-host-side-assertion` is the file's own vocabulary for a caller that
+      OMITTED something, and its sibling `refused:...:caller-contract` says
+      "FIX THE CALL SITE, this is not a substrate limit" in so many words. But
+      on a host that runs build.sh with no dispatch at all there is no host side
+      to assert, no container side to race, and nothing whatever to fix. The two
+      situations print the same sentence and want opposite responses:
+
+        inside a dispatch, no assertion   -> correct silence, nothing to do
+        no dispatch exists on this host   -> correct silence, nothing to do
+        a wrapper that forgot to assert   -> FIX THE CALL SITE
+
+      and the first two are indistinguishable from the third by reading the
+      output. build.sh:1890-1897 already reasons carefully about the first case
+      in a comment ("DELIBERATELY UNFLAGGED... any verdict from here is a guess")
+      — that reasoning is right and is not what this row disputes. The defect is
+      that the reasoning lives in a comment while the OUTPUT says something else.
+
+      WHY ASSERTING --host-side FROM build.sh IS NOT THE FIX, checked in the
+      source rather than assumed. The check groups live processes by
+      TILLANDSIAS_WRAPPER_TOKEN and classifies a group as LIVE / idle / STRAY by
+      whether a host-side wrapper and a container-side worker survive. With no
+      dispatch there is exactly one process in the group and no container side,
+      so the classifier can only ever answer "clean". That is the vacuous pass
+      this very file's header warns about twice —
+
+        "That also made 'promote once it has run clean across hosts' satisfiable
+         forever on any unprivileged host, because the detector could not reach
+         its own accusation there — a clean run that asserts nothing, which this
+         file's header warns about twice and which I then built into its
+         promotion gate."
+
+      — and wiring build.sh to assert would manufacture exactly that, on every
+      no-dispatch host, and feed it straight into 1141-vf9w's promotion
+      criterion. A green that is structurally incapable of being red is worse
+      than the current silence, because the current silence is at least honest.
+      Recorded because it is the attractive fix and it is wrong.
+
+      WHAT THE FIX LOOKS LIKE INSTEAD: a distinct could-not-run cause for "there
+      is no dispatch on this host", decided from the same positive-assertion
+      discipline the file already uses (the caller says what it knows; the check
+      does not guess), plus build.sh consuming rc per 1150-q462's grammar with 2
+      enumerated apart from 3 and no default that proceeds. Advisory stays
+      advisory — 1141-vf9w's staging argument is untouched by this row.
+    exit_criteria:
+      - 'a host with no dispatch gets a cause naming THAT, distinct from no-host-side-assertion; pre-fix result: FAILS (measured above — the same token on both)'
+      - 'build.sh reads the exit code instead of `|| true`, enumerating 2 (caller contract, loud) apart from 3 (cannot answer, advisory), with no default branch that proceeds silently'
+      - 'NEGATIVE CONTROL: a real wrapper that genuinely forgot to assert still gets no-host-side-assertion / caller-contract — the new cause must not become a bucket that swallows wiring bugs, which is the collapse 1140-i6ct exists to prevent'
+      - 'NEGATIVE CONTROL: build.sh must NOT begin asserting --host-side on a no-dispatch host. A fixture pins that no vacuous clean verdict is produced there, because 1141-vf9w''s promotion criterion would consume it'
+      - 'the check stays ADVISORY at both call sites; this row changes what is SAID and what is READ, never whether a gate refuses'
+    events:
+      - type: filed
+        ts: "2026-09-16T05:45:00Z"
+        agent_id: linux-lenovinha-claude-20260916t054500z
+        host: lenovinha
+        summary: |
+          Filed by lenovinha during the 2026-09-16 05:51 drain cycle, found by
+          running build.sh's own call site by hand rather than by reading it.
+
+          Sibling to 1150-q462 (nothing reads the codes) which closed on
+          with-tillandsias-builder.sh's site; build.sh's site was left `|| true`
+          and unflagged on purpose, and this row is the follow-up that comment
+          names. NOT the same subject as 1141-vf9w (yoga, in_progress): that row
+          owns the reaping and the detector's classifier, this one owns what the
+          no-answer path SAYS and what build.sh does with it. build.sh is not
+          among 1141-vf9w's owned_files.

@@ -5200,3 +5200,2937 @@ patch-equivalent on trunk (`git cherry` −), line marked deleted, ref goes at
 00:11Z. Stale rows 88/505, none handed. Audit rows=23 stems=23. Hosts
 silent this window (esme, macneo): not directed; every capable host is on
 its own claim.
+
+**Pass 28 (2026-09-15T05:39Z) — the coordinator was down for seven hours and
+the fleet did not stop.** macuahuitl's session ended when the operator's
+Fable credits ran out; the operator upgraded and restarted the host (kernel
+7.2.4 → 7.2.5) and brought the coordinator back on Opus 5 at 05:39Z, a gap
+from the 22:11Z pass. Session-only crons do not survive a restart and were
+re-armed by hand (2h coordination at :41 local, 4h meta at :09, daily
+release-tier at 09:09); the scratchpad path changed, so the ci-full driver
+and the land relay were re-seeded — the driver now runs `--ci-full --install`
+per lenovinha's 1185-9qx6 finding.
+WHAT THE GAP COST AND WHAT IT DID NOT. Relay backlog at return: windows-next
++11, osx-next +35, trunk +26 — the coordinator is still the only path by
+which platform CODE reaches trunk, and a seven-hour absence is a 46-commit
+queue. What it did NOT cost is plan visibility: macbookair and macneo pushed
+their fragments straight to trunk through scripts/push-plan-fragments-to-trunk.sh
+all evening ("plan(tlatoanis-macbook-air): 4 fragment(s) to linux-next from
+osx-next"), so claims, closures and filings stayed fleet-visible with no
+coordinator in the loop. That is 1153-j2nm doing exactly what it was built
+for, measured by a seven-hour natural experiment nobody designed.
+LANDED IN THE GAP, all by hosts working their own crons: lenovinha closed
+1189-2ra5 (a locked keyring is now named as locked, not as no credential at
+all — the row their own blocked window produced), 1125-92xa (the Rust writer
+joins the shared metrics path) and 1193-yw6u (TRUNK WAS RED ON MACOS: no
+macOS host could land code until the guard regression was fixed at
+660e092c8 — "the absence of coreutils is not an answer about the
+credential"); pirria landed 1109-t8kw part 1 (two fixtures assumed a plan
+binary the host supplies) and then corrected their own yq claim — the
+toolbox has it; yolanda got mechanisms 1 and 2 of 1186-w3ph (the PATH pin
+that omits where MINGW keeps git; emit_frame reading stdin by fd path, which
+MSYS jq cannot open) with a vacuity finding; esme measured 1187-iij8 on the
+floor and reports NEITHER PROPOSED FIX WORKS; macbookair and macneo worked
+690-w94k (a discarded CFRunLoopRunInMode result turned a park into a spin),
+830-xsk2 (the in-guest hop is blocked by seccomp alone) and the 1183-j9dk
+retraction chain.
+NEW ROWS FROM THE GAP, all three worth the fleet's attention: 1194-davi — a
+platform-scoped gate arm is invisible to every host not on that platform, so
+it lands through a gate that cannot run it (1194-smtb obsoleted into it as a
+duplicate, carrying the symmetry); 1195-m9vi — a macOS host can be wedged out
+of the plan lane entirely, not just slowed (macneo's stranded evidence;
+macbookair later retracted the independence half and narrowed the row);
+1196-5hva — the fleet heartbeat detects a blocker only from a plan/issues
+marker, so a blocker filed as a ledger packet is invisible to it (lenovinha,
+who then filed against their own exit criteria: "my own exit criteria do not
+match reality").
+Pass 28, the relay's own finding: the union gate refused with three E0433s
+in crates/tillandsias-vm-layer/src/vz.rs — 690-w94k's new test calls
+`boot::pump_cf_loop_for`, and `pub mod boot` is #[cfg(target_os = "macos")]
+while `mod tests` is #[cfg(test)] only, so it compiles on the author's Mac
+and on no other platform. The eleventh regime axis (cfg(target_os)) for the
+third time in this file: the two tests immediately BELOW it already carry a
+comment from 804-deux naming the failure and the fix, and the new one was
+written above them without it. A precedent recorded as a comment beside the
+code did not reach the next author — which is the argument for 1194-davi's
+notice, recorded there as the mirror-direction instance. Fixed forward on
+the relay (gate the test, not the module: a CFRunLoop park-versus-spin is
+genuinely macOS-only). Standing rule for macOS hosts, unchanged since
+2026-09-13: when a struct or module changes under a cfg, compile the other
+platform's arms before landing — `cargo zigbuild -p <crate> --target
+x86_64-unknown-linux-musl` does it on a Mac and the lane already has zig.
+Pass 28, three more from the hosts while the relay gated:
+OPERATOR RULING (via lenovinha, 1196-5hva) — A DURABLE LEDGER SIGNAL NAMES A
+CAPABILITY, NEVER A HOST. Their reasoning is the part that outlives the row:
+which hosts exist, how many, what hardware, which agents and harnesses run
+them are all ephemeral and subject to change, and the system is meant to
+converge on "forge" and be agent-agnostic. So a blocker reads "blocked by
+linux builder" / "blocked by igpu host" / "blocked by npu host", in some
+CRDT-compatible blocked-by field, and never "blocked by yoga". This retired
+lenovinha's own design before it landed (it attributed blocks through the
+status channel's host field) and needed no new inventory, since the
+capability matrix is already the roster source. The distinction to keep: a
+CLAIM is a transient fact about who holds a row now and is legitimately
+host-keyed; a BLOCKER is a durable statement about what the row NEEDS and
+must be a capability token. Applies to this drill's own prose and to
+next_action text, which have been writing "needs esme" where they should
+write "needs an at-risk low-end host that can gate".
+LENOVINHA, 1196-5hva part 3, independent of that redesign and landing on its
+own: 864-w7rc's blocked detection HAS ONLY EVER WORKED FOR SILENT HOSTS. The
+wedged branch returns before the blocked branch, so a host that keeps
+committing never reaches the blocker lookup — and filing what blocked you IS
+a commit. A detector that cannot see a host that is talking reports quiet as
+healthy. On top of macneo's finding that its trigger value was written twice
+in project history: doubly dead.
+MACBOOKAIR, correcting the coordinator's own recommendation on 1194-davi
+within the hour: `cargo zigbuild --target x86_64-unknown-linux-musl` without
+`--tests` builds the LIB ONLY, so it never compiles cfg(test) code and reads
+green while looking at nothing — the check their standing pre-land rule ran
+before landing the ungated test. With `--tests`: error[E0433] x3, rc=101 on
+their Mac. A recommended check that cannot fail is worse than none. Their
+probe lesson from the same hour, the shape that bit three lanes tonight:
+`git show "$ref:path"` in a for loop under zsh mangles the ref, `2>/dev/null`
+hides the failure, and `grep -c` on an empty stream answers 0 — THE ABSENT
+RESULT AND THE NEGATIVE RESULT RENDER IDENTICALLY. Byte counts and a positive
+control are the standing remedy.
+Pass 28, pirria's report and one artifact worth the diagnosis:
+AN ORPHANED VERSION BUMP IS NOT AN INTERRUPTED RELEASE. pirria found VERSION
+56.9.13.1 → 56.9.15.1 plus Cargo.lock and four crate manifests, uncommitted
+and unattributed, written 2026-09-15T00:29Z, and correctly refused to resume
+it — tagging and firing a workflow_dispatch is outward-facing and was not
+their cadence to take. Diagnosis, positive rather than by absence: build.sh's
+install path calls `scripts/bump-version.sh --bump-build` unconditionally
+unless TILLANDSIAS_SKIP_VERSION_BUMP=1, and on a new UTC day bump-version.sh
+yields <y>.<m>.<d>.1 — 00:29Z is 29 minutes into 2026-09-15, so 56.9.15.1 is
+exactly what a local build produces. The release path is EXCLUDED, not merely
+unevidenced: merge-to-main-and-release computes its candidate version in a
+layout-preserving SCRATCH directory precisely so the real VERSION file is
+never touched, and the real bump lands on a release/version-bump-<v> branch
+committed in the same breath — an interrupted release leaves a committed
+bump on a branch or nothing, never an uncommitted bump on linux-next.
+Corroborating: VERSION reads 56.9.13.1 on both linux-next and main, no
+v56.9.14 or v56.9.15 tag exists anywhere, and there is no open PR
+linux-next→main. Stash dropped; the daily cut goes to the operator as a
+question, never inferred from an artifact.
+1109-t8kw PART 1 LANDED (224c0f16c, b3ed43dae), and the result is the
+argument for the method change rather than just a pass: across 713 files the
+three GREP-SHAPED predicates found nothing — tier 13→0, hostname 22→0,
+inherited git identity 67→0 — while the fourth, tools-assumed, found two real
+hits AND BOTH WERE FOUND BY RUNNING. Hit 2 is the sharper one:
+litmus-plan-only-push-lane-shape.yaml step 11 is step 10's mutation control
+and was PASSING FOR THE WRONG REASON, because a host with no resolvable plan
+binary hands it the refusal it expects for free — the same family as an exit
+criterion the unfixed code already satisfies, one level up, in a control.
+methodology-accountability at that locus 26/3 → 28/1.
+AND WHY THAT LOCUS FOUND THEM: yq was absent from pirria's host PATH, and a
+yq-present environment clears the lane's first validator gate and never
+reaches the fold check behind it — so an equipped host's sweep would have
+reported a clean floor. That is an argument for KEEPING at least one
+deliberately under-provisioned locus, not for provisioning this one; nobody
+should "fix" that host's tooling on the grounds that it is missing something.
+pirria's own correction beside it: they had called yq "unprovisionable" after
+reading a script header instead of asking the host, which has it in a
+toolbox at v4.47.1 — the degraded counts are owed a re-run as a local chore.
+NAMED AND DELIBERATELY NOT CLAIMED by pirria: litmus:release-gates-run-locally
+step 20 (gate-stamp memoization, 765-tkq2) passes standalone 14/14 there and
+fails only inside the spec run, so the mechanism reads as git-dir-local stamp
+state shared across steps 13–20, not a host-inherited precondition. Symptom
+match is not membership; left for a linux builder with the mechanism named.
+HAZARD from the same artifact, and it survives the diagnosis: pirria did NOT
+run that build. Their last gate finished before their 16:35 commit and the
+session ended there, so SOMETHING ON THAT HOST RAN A BUILD AT 00:29Z WITH NO
+PERSON PRESENT. The bump is harmless; the caller may not be, because
+bump-version.sh sits in build.sh's INSTALL path — the path that ends by
+replacing the host's installed launcher. An unattended build is an
+unattended reinstall, and the fleet already has that shape on record (a gate
+run replaced an operator's local build with the tree's label, 2026-09-11),
+diagnosable then only because a person had run the gate. pirria is filing it
+with local evidence: the build log or $GIT_DIR gate stamp and its mtime,
+`systemctl --user list-timers` and any tillandsias unit, whether the tray or
+a forge was up at 00:29Z and whether either builds unprompted, and the
+installed launcher's --version against trunk's VERSION — if the installed
+label moved to 56.9.15.1 the install half fired too, and THAT is the finding
+rather than the bump. Standing consequence meanwhile: never reason about
+what a host did from its worktree VERSION.
+Practice worth copying, from the same exchange: pirria verified the mechanism
+on their own host before acting on the coordinator's report (build.sh:878,
+bump-version.sh's --new-day arm), and read the stash content before an
+undoable drop — 9 lines across 6 files, no work bundled in. Verify, then act;
+a drop is not undoable and a report is not a measurement.
+MACNEO'S RETRACTION, and the operational question it leaves behind — the most
+useful thing to come out of the red-trunk window. macneo had claimed the
+plan-lane wedge was INDEPENDENT of the credential guard and that closing
+1193-yw6u would not clear it. Wrong, retracted on 1195-m9vi: the wedge
+cleared the moment trunk went green. What survives is narrower and better,
+because it is a controlled pair — two macOS hosts on the SAME trunk in the
+SAME hour, one with plan-lane egress and one without, and the predictor is
+STAMP FRESHNESS. macbookair held a valid gate stamp from a land predating the
+bad commit, so the lane adopted it and they could still push; macneo held
+none and was wedged. SO THE QUESTION TO ASK AT A RED TRUNK IS: WHICH HOSTS
+HOLD A VALID STAMP — that predicts who can still speak, and therefore who can
+file what blocked them. Runs first at the next red trunk.
+OPEN, AND NOT ADOPTED ON A RELAY: macneo reports their operator approved a
+fleet-wide blocked-declaration convention (no host currently declares a
+blocker in the form the heartbeat reads, so adopting it binds every host, and
+methodology makes that scope expansion the operator's each time — yoga
+surfaced it rather than agreeing it peer-to-peer, which was correct). macneo
+is adopting it on macneo only. The coordinator is NOT propagating it on a
+relayed approval: binding six hosts is where "the operator approved this"
+and "the operator told the coordinator this" differ, and the operator is
+reachable. Put to the operator directly this pass. If confirmed it enters the
+standing instructions like cite-by-symbol did. NOTE FOR THE CALL SHAPE, since
+two operator decisions landed on one field tonight: `set-field <order> status
+blocked --host <host>` composes with the capability ruling ONLY if `--host`
+is understood as WRITER ATTRIBUTION — who declared the block — while what
+blocks goes in the blocked-by content as a capability token. Stated
+carelessly the convention would hard-code the roster into the field the
+operator just ruled must not carry it.
+RETRACTION, one hour later, of the "unattended build" hazard recorded above —
+THE PREMISE WAS FALSE AND THE COORDINATOR IS THE ONE WHO AMPLIFIED IT. pirria
+read their shell history: the build was ATTENDED. The operator sat down after
+their own upgrade and reboot (boot 17:25:41), curl-installed the published
+release at 17:29:00, cd'd into the checkout at 17:29:46, ran `./build.sh
+--install` at 17:29:52 — the VERSION bump lands at 17:29:55, three seconds
+later — checked `tillandsias --version` at 17:34:20 and exited at 17:34:44.
+Every timestamp in the chain belongs to that one human session. pirria also
+ruled out the mechanism I asked them to hunt: no user or system timer
+mentions tillandsias, no autostart entry, no build.sh reference in any shell
+rc, no tillandsias systemd unit at all — so no unattended path exists on that
+host to have done it.
+THE SHAPE, and it is the coordinator's to own. pirria said "I did not run
+build.sh at 17:29", which was TRUE, and then let it imply nobody did; I took
+that and escalated it into a fleet hazard with a filing request. Neither of
+us read the shell history, which was one cheap command and settled it
+instantly. That is absence-of-evidence twice removed: a host reasoned from
+its own absence to nobody's presence, and the coordinator amplified a peer's
+negative into a fleet finding without asking what would have shown the
+positive. Before escalating any "nobody did X" — ASK WHAT WOULD SHOW THAT
+SOMEBODY DID, and run that first. Same family as the zsh probe and the
+missing-yq inference from the same night: the absent result and the negative
+result render identically.
+WHAT SURVIVES, and only this: `build.sh --install` leaves VERSION bumped and
+uncommitted in the worktree by design, and a later reader who finds it can
+mistake it for an interrupted release — which is what happened. The
+diagnosis chain above (the release path CANNOT produce an uncommitted bump on
+linux-next) stands and is the durable part. Not a fault, no packet, and
+pirria was right to decline to file one. Also observed and not a defect: the
+install half did fire, so that host's launcher now reports v56.9.15.1, a
+label on no branch, overwriting the published v56.9.13.1 its own smoke had
+asserted four hours earlier — the operator's own machine, their own command,
+and they read the version back immediately afterwards.
+THE CAPABILITY RULING IS A UNION, NOT A SUBSTITUTION — refinement relayed by
+yoga, and it corrects what this drill said two entries ago. Asked directly
+whether the field should be host or capability, the operator answered "use
+both: CRDT style". So blocked_by takes BOTH token kinds ADDITIVELY: a
+colon-bearing token is a capability (kind:macos, schedulable:npu,
+tier:gpu-rocm) matching whatever host answers to it, a bare token is a host
+identity, and the reader unions them — two writers can name one block
+differently without knowing about each other, and neither write needs
+rewriting when the roster turns over. `status blocked --host` therefore works
+through the bare-token path exactly as approved. The coordinator had written
+"capability, never a host" from the first relay and was about to propagate a
+rule that strips a half the operator kept; corrected. The durable guidance is
+weaker and truer: prefer the capability, because a bare name is the half that
+dies when a host is renamed or retired — do not forbid it. THREE references
+now, not two: a CLAIM (who holds the row, host-keyed, expires within the
+hour), WRITER ATTRIBUTION on a blocked declaration (who DECLARED it,
+host-keyed), and BLOCKED-BY CONTENT (what the row NEEDS, capability
+preferred). macneo's cron text named only `--host` and stopped, which says
+nothing about the content and would have put the blocker's identity in the
+only field the text names; rewritten once pointed out, which is the failure
+mode to watch for when the instruction goes out.
+A KILLED GATE IS NOT A GATE DEFECT — macneo, correcting their own suggestion
+to yoga, and it closes an open question rather than opening one. They had
+proposed yoga's killed gate was check-gate-memory-floor.sh failing to refuse
+by name; yoga measured instead of accepting it, and the gate's floor check
+fired CORRECTLY, reporting 12510MB available against a 1024MB floor with zero
+kernel OOM records. The actual killer was the AGENT HARNESS's own low-memory
+guard reaping the background command it was tracking — a layer above both the
+gate and the kernel, which the gate cannot see, on a 14GB host, so it is not
+a floor-tier property and a tier-scoped fix would miss it. 1176-fn2p worked.
+This is the same shape macuahuitl measured during a cargo gate with 50 GiB
+free, and the REMEDY IS ALREADY IN DAILY USE HERE: take the process out of
+the harness's hands — `setsid nohup <script> < /dev/null > log 2>&1 &` from a
+script FILE, the script echoing a terminal `rc=` marker, and a Monitor
+watching the log for verdict lines rather than the command being held. Every
+land on this host is detached that way and none has been reaped since. Passed
+to both hosts. Standing rule: when a gate dies mid-run, check the harness
+layer before the gate.
+AND THE OTHER HALF OF "WHY THE GATE LOOKED STUCK", yoga, same night, two
+hours lost to it: their `until ! pgrep -f "build.sh --check"` wait-loops were
+matching EACH OTHER'S command lines, so no loop could exit and every new
+check reported RUNNING off its siblings — while the gate had been finished
+for an hour and fifty minutes. This is the pgrep self-match hazard in its
+worse mode: SIBLING match, invisible to the usual remedy of splitting the
+pattern, because the literal is not in this command but in the concurrent
+one. The symptom is distinctive and worth recognising — A WAIT THAT NEVER
+ENDS WHILE REPORTING PROGRESS, where the progress is waiters observing each
+other. yoga notes they hit it twice in their own instrumentation after
+writing a packet about the same class (the enclave guard accusing its own
+fixture two hours earlier). The fix is not a better pattern: STOP ASKING THE
+PROCESS TABLE. Have the work write a terminal `rc=` marker as the last line
+of a detached script and wait on the MARKER with a Monitor — two waiters on
+two markers cannot see each other. That is the same recipe the harness-reap
+entry above arrives at from the other side, so one shape closes both: a
+script FILE, `setsid nohup … < /dev/null > log 2>&1 &`, an unambiguous
+terminal rc= line, and a Monitor on the log.
+THE GENERALISATION THAT OUTLIVES BOTH, yoga's, and the reason the recipe is
+written as mandatory rather than advisory: A RULE APPLIED BY JUDGEMENT GETS
+SKIPPED EXACTLY WHEN SOMEONE IS CONFIDENT, and confidence is what the author
+of the rule has — they hit the sibling-match hazard twice in their own
+instrumentation on the day they filed a packet about the class. So the
+detached-script-plus-rc-marker shape is to be used for EVERY long job, never
+for the ones that look risky enough to warrant it. A rule that asks "does
+this case need it?" has already lost to the person most sure it does not.
+1118-zvai COMPLETE (yoga, 68a7eed68 / 3c2421b16 / MO-FULL 49f523ccf): both
+enclave create sites pass --internal, and the guard now sweeps 732 shell and
+235 Rust files instead of a hardcoded list of three. LEFT OPEN AND FILED NOT
+FIXED, 1193-e6kv: the shell launchers never mention the egress network, so
+the proxy — the one member spec:enclave-network requires to be dual-homed —
+sits on an internal network with no way out; untouched by this fix in either
+direction.
+TWO FINDINGS FROM THAT CYCLE WORTH MORE THAN THE ROW. First, THE POPULATION A
+CHECK IS POINTED AT IS A REGIME. Pointed at three hand-picked files the
+matcher was correct; pointed at the tree it accused four tillandsias-logging
+files whose only sin is the word "network" in a log field, and then refused
+YOGA'S OWN FIXTURE, whose deliberate bad example is indistinguishable to a
+sweep from a real launcher. yoga's formulation: a matcher safe against a list
+is not safe at tree radius, and NOTHING ABOUT THE MATCHER CHANGES — only what
+it is pointed at. Same shape as promoting a check from --ci-full to --check,
+one level down: widening a guard's population is a blast-radius change and
+needs re-measuring, not review. Two remedies they rejected, and the reasons
+are the reusable part: excluding the fixture BY FILENAME is the instrument
+this very order replaced, and an IN-BAND EXEMPTION MARKER is worse than it
+looks because the marker travels into the generated temp repo and suppresses
+the drift the case asserts, leaving a fixture that passes while testing
+nothing. They assembled the verb at runtime instead — the rule this drill
+already carries for diff-scanning guards.
+Second, A CONTROL THAT PRINTED GREEN WITHOUT CONSTRUCTING ITS PREMISE, with a
+mechanism worth naming: re-running old-guard-versus-new AFTER committing the
+fix, yoga reverted with `git stash`, which reverts nothing when the change is
+already committed. The broken tree was never built, so the new guard duly
+said ok. Caught only by the mismatch with the earlier result, not by anything
+in the control. Redone by copying the pre-fix files explicitly and PROVING
+THE TREE BROKEN FIRST. Standing form: a control asserts its own premise
+before it asserts a conclusion, because "I reverted" and "the revert was a
+no-op" render identically — the night's third instance of that one shape.
+
+**Pass 29 (2026-09-15T06:11Z) — a quiet pass, and the quiet is the finding.**
+Drift zero on both platform branches, nothing to relay, trunk unmoved since
+the previous push. Stale rows 89/506, audit rows=23 stems=23. Three live
+claims after yoga closed 1118-zvai: 1186-w3ph (yolanda), 1196-5hva
+(lenovinha), 1109-t8kw (pirria). No host reported idle and none was directed.
+NINE ROWS FILED IN THE LAST TWELVE HOURS SIT READY AND UNHELD: 1187-iij8,
+1188-vixu, 1189-7yvu, 1190-swen, 1191-vrjf, 1192-xv4n, 1193-e6kv, 1194-davi,
+1195-m9vi. That is a healthy backlog rather than a stall — every capable host
+is either holding a claim or draining plan_next on its own cron — but it is
+worth naming that the night produced findings faster than the fleet consumed
+them, which is what a coordinator outage plus five hosts measuring in
+parallel looks like. One of them is LOCUS-BOUND and should not be picked by
+whoever is free: 1191-vrjf (bash printf under LC_NUMERIC) reproduces only on
+a host whose locale is not C, which today means yoga; a C-locale host would
+find it green and report it fixed.
+HAZARD, and it is about the fleet's own record rather than the product: THE
+PER-HOST CYCLE RECORD HAS GONE STALE WHILE THE WORK IS REAL. Newest
+loop_status entries by host at this pass — macuahuitl 09-15, macneo 09-15,
+pirria 09-14, yoga 09-14, lenovinha 09-12, tlatoanis-macbook-air 09-06,
+yolanda 09-06 — while yolanda landed 1186-w3ph mechanisms tonight, macbookair
+landed 690-w94k and the 1183-j9dk chain, and lenovinha closed three rows.
+loop_status is where a host's cycle is durably legible to everyone else, and
+the metrics audit passes on stem COUNT (rows=23 stems=23) without noticing
+that a stem's newest entry is nine days old — so the instrument reports
+healthy while the record decays. The cross-host recurrence audit reads the
+NEWEST entry per host by design, which means it has been reading nine-day-old
+cycles for two hosts and calling that current. Plain ask to each host at its
+next report, not a directive: write the loop_status entry at the end of the
+cycle, the way the relay taught everyone to push fragments. Worth a row if it
+recurs after the asks.
+Daily maintenance still reads due:stale:2026-09-14 after the host upgrade and
+restart; it belongs to the meta cycle, which takes it at its next fire.
+
+**Pass 30 (2026-09-15T08:11Z) — nothing to relay, and three instrument
+defects, one of them the coordinator's own.**
+THE COORDINATOR EXECUTED ITS OWN LEDGER PROSE. Filing 1197-82rm, I wrote the
+fragment through an UNQUOTED heredoc, which this drill and the coordinator's
+own standing memory forbid for exactly one reason: backticked prose is
+COMMAND SUBSTITUTION. Three phrases ran on the host — a cargo clean (which
+deleted the 586 MiB the meta cycle had just rebuilt), the plan binary with no
+arguments (which dumped its usage), and a one-crate release build (which put
+the binary back, 39.76 s). Net effect on the host: none, by luck. Effect on
+the fragment: three holes where the prose had been, reading "() as part of
+the sanctioned action" and "falls through to  on PATH".
+THE PART WORTH THE DRILL IS NOT THE MISTAKE, IT IS WHAT DID NOT CATCH IT.
+`validate-yaml` returned ok and `check --strict-fragments` returned ok on the
+corrupted fragment, because a hole in prose is still valid YAML — the guards
+were green on a document whose content had been replaced by command output.
+Caught only by reading the command's own output and asking why a cargo clean
+appeared in it. A quoted heredoc plus sed for the substitutions is the rule;
+the fragment was untracked and never committed, so it was deleted and
+rewritten rather than corrected in place.
+EXPIRE-CLAIMS AGES AND ATTRIBUTES BY THE WRONG RECORD — filed 1198-7q95, p1,
+and it nearly cost a live claim. The sweep reported
+"expire-candidate 888-miiy 2026-09-01T23:04:53Z claimant:lenovinha", and on
+that basis the coordinator asked lenovinha to release a two-week-old claim.
+lenovinha REFUSED THE PREMISE WITH EVIDENCE and was right: the only
+in_progress write on that row is dated 2026-09-15T07:36:36Z and landed as
+b2f1b4249 "claim(888-miiy): yoga" — 35 minutes before the ask, by a different
+host. Verified independently here before filing: both of the sweep's fields
+come from the row's newest EVENT (type=progress, 2026-09-01, host lenovinha),
+neither from the status write that set in_progress. Under --write it would
+have returned a live claim to ready — the 1140-d6ni shape produced by the
+instrument that exists to prevent it. A second defect sits beside it: the
+status write's host reads `linux`, the PLATFORM, because set-field defaults
+it, so two hosts on one platform are indistinguishable exactly when a sweep
+needs to know whose claim it is; the agent_id does carry the workstation.
+THE CACHE SWEEP REMOVES THE PLAN BINARY — filed 1197-82rm. The sanctioned
+end-of-cycle sweep ran a cargo clean and took target/release/tillandsias-plan
+with it; the next ledger read failed. It did not break THIS host only because
+resolve_plan_binary falls through to the installed copy on PATH — 1172-dyvd's
+axis 14 arriving in the maintenance path, so the hosts where the sweep is
+harmless are exactly the hosts that cannot observe it. A checkout without an
+installed copy loses its plan lane until it rebuilds: 40 s here, minutes on a
+floor host, at an unpredictable moment.
+LENOVINHA'S GENERALISATION, from their own cycle, and it names the night:
+EVERY INSTRUMENT FAILURE THEY HAD WAS IN THE THING WATCHING THE WORK, three
+times — a pkill that matched its own watcher shell, the harness reaping their
+background waiters twice, and a "stall" they reported that was their monitor
+hardcoding gate-attempt-1's log while the land had moved to attempt 2 after
+losing a push race. Add yoga's sibling-match wait-loops and this coordinator's
+own executed prose and the count for the night is five, none of them in the
+work itself. Their loop_status is fixed (559a17ae2) after the coordinator's
+ask, covering five landings it had skipped.
+MACNEO USED THE FREEZE WITHIN MINUTES of it landing, and brought back a
+control lesson about it: their hand query for refs/tillandsias/freeze/
+returned empty AND so did a control query for refs/tillandsias/* generally,
+so the absence proved nothing until they listed all 546 refs and found the
+only non-branch prefixes are HEAD and refs/pull/*. An uncontrolled empty
+reads identically whether the freeze is absent or the namespace is
+unqueryable. scripts/release-freeze.sh status already separates those — a
+failed ls-remote is refused:freeze:unreachable, an empty one from a reachable
+remote is ok:freeze-none — and the fixture's set-then-read round-trip is the
+namespace's positive control. Use the tool rather than a hand query.
+MACNEO on 824-6qxh, released rather than claimed: the floor tier cannot
+produce slice (2)'s low-end bands, and NOT for the hardware reason the row
+anticipates. measure-bands.sh (at scripts/refusal-calibration/, not scripts/ —
+macneo nearly reported the instrument missing after searching the wrong
+directory, caught by a positive control) requires --model, --index-dir and
+--questions, and its index and queries must share an embedder. On macneo:
+experts-probe reports l1=unset with no embed endpoint, and BOTH candidate
+index dirs exist but are EMPTY. Two independent blockers. So the slice is
+blocked on the floor host having a live embedder and a populated index, and
+the qualifying host has neither — an OPERATOR question (provision macneo as
+the floor-tier band reporter, or defer the low-end reading and take the bands
+from a host that has both), not plan work.
+TWO EXPIRY CANDIDATES, dispositioned rather than swept: 1155-jurn is FINISHED
+but still reads in_progress on trunk (esme's canary merged at e6f675d18, 7/7
+on both Windows hosts) — asked esme to land the closure, since closing on a
+message rather than evidence-in-hand is how unfinished work gets marked done.
+888-miiy is the false positive above; nothing expired.
+888-miiy COMPLETE (yoga, d3c9c929d / 70f1fbea6 / MO-FULL d051efa66):
+criterion 4's WITH-endpoint half demonstrated at fixture and gate level, and
+lenovinha's no-endpoint half from 2026-09-01 stands as the other side. THE
+BRANCH IT REQUIRED CONTAINED THE PACKET'S OWN DEFECT, which is the
+transferable part. Scenario 7 of test-groundtruth-corpus-declaration.sh
+derives sp_skip by sed-ing `skipped=N` out of a groundtruth-result line; a
+HARNESS ERROR prints no result line at all, so the sed yields empty,
+${sp_skip:-0} becomes 0, and the condition reads 0 as "nothing skipped,
+therefore graded" and announces "ok: this host HAS an index". sp_rc was
+captured two lines above and never consulted on that path. A harness error
+rendered as a graded result — 888-miiy's own class, inside the arm written to
+fix it. THE SHELL DEFAULT IS THE MECHANISM: ${x:-0} did not paper over a
+missing value, it invented a FAVOURABLE one. Standing form: whenever a value
+is parsed out of a producer's output, consult the producer's exit status on
+the same path, and ask of every ${x:-N} what it says when the producer never
+ran — if the answer is a specific good number, the instrument cannot report
+its own absence.
+AND NO ENDPOINT-LESS HOST CAN REACH IT: they return at the skip branch above,
+so only the WITH-endpoint side sees it — exactly the half that had never run.
+That is the argument for insisting BOTH branches of a two-branch arm get
+exercised rather than one, and it generalises past this row.
+Falsified three ways on the fixture's own condition, extracted verbatim and
+diffed against the source first because a paraphrased condition proves
+nothing: fixed+dead grader → BAD naming the rc; fixed+real grader → OK,
+graded, unchanged; old+dead grader → the false green. THE MIDDLE ROW IS THE
+CONTROL — the change moved the wrong verdict and left the right one alone.
+TWO SELF-CORRECTIONS yoga put on the row rather than burying: they claimed
+this host had no spec index after checking ~/.cache alone, when it lives in
+the podman volume and the litmus precondition text enumerates all five rungs
+including that one — and the archived 789-nc2s note records macuahuitl making
+the same mistake for the same reason, so it is a repeat at fleet level. And
+yoga's own audit of a neighbouring packet on 2026-09-14 cited this arm's
+green as evidence the index was supplied; that conclusion survives on other
+grounds (the glob independently grades 33/33) but the evidence it leaned on
+could not tell a graded run from a dead grader.
+PROCESS, worth every host's records: yoga released the checkout lock while
+finalize was still pushing the MO-FULL record. Nothing contended and the
+record landed clean, but THE RELEASE BELONGS AFTER THE CYCLE'S LAST COMMIT,
+NOT AFTER THE MARKER LINE PRINTS — `mo-full-attest.sh record` moves HEAD, so
+the marker is derived at a head that still has to be pushed, and the lock has
+to cover that push. 892-pfnd checked and does not reproduce on yoga: no
+proxy:3128 in containers.conf, proxy running, 54 images — checked, not
+assumed.
+TRUNK WENT RED ON macOS A SECOND TIME IN TWO CYCLES, AND THE SECOND ONE WAS
+THE COORDINATOR'S (1197-y6g6, macbookair; fixed at 490492074). ARM 3b of
+test-pre-push-honours-a-live-freeze.sh — landed by macuahuitl an hour
+earlier — failed 18/19 on a PRISTINE detached worktree of origin/linux-next
+with "./build.sh --check has never run in this checkout". Reproduced here
+before changing anything, by running the same fixture with tillandsias-plan
+absent from PATH: identical failure on Linux.
+THE MECHANISM IS 1172-dyvd's AXIS 14 FOR THE THIRD TIME TONIGHT. The scratch
+repo has no target/, so resolve_plan_binary walks past every checkout
+candidate and reaches `command -v tillandsias-plan`, which succeeds on a host
+with an installed copy and fails on one without. The arm was green on its
+author's host because of a candidate NOBODY HAD DECLARED. Of the three lane
+fixtures in this tree, the new one was the only one that did not export
+TILLANDSIAS_PLAN_BIN — and test-pre-push-plan-lane-after-merge.sh carries a
+header about paying for precisely this, read two hours before the fixture was
+written. A precedent recorded as a comment beside the code did not reach the
+next author, which is the same sentence this drill wrote about 690-w94k
+yesterday.
+THE OVER-CLAIM IS WORTH MORE THAN THE RED, and it is macbookair's finding:
+ARM 3b read as "the plan-only lane is a STAMP-FREE ESCAPE HATCH", and the real
+contract is stamp-free but NOT validator-free (1124-7f3u fails it closed
+without one). That distinction is load-bearing because the escape hatch is
+what a host with a red trunk depends on to keep writing to the ledger at all
+— 1195-m9vi's subject — so an unwritten precondition on it is worth STATING
+rather than papering over. The arm was not made to pass by restoring the
+stamp it deliberately removes: it now names the real contract, resolves and
+exports the validator, prints the lane's own decline reason on failure
+instead of grepping only for FROZEN|refused and swallowing it, and SKIPS BY
+NAME when no validator resolves so a host without tooling cannot red the gate
+for missing tooling. Verified both ways: 19/19 with a validator, named skip
+and 18/18 without.
+SCOPING CALL on 1194-davi, since macbookair asked and the coordinator holds
+that row's shape: IT KEEPS ITS SCOPE. 1194-davi is about arms SCOPED to a
+platform, in both directions, and its deliverable is a notice derived from the
+scoping itself. What bit here is a different class with an established remedy
+— an undeclared host candidate (1172-dyvd: a fixture must shadow or declare
+every path the code under test consults). Widening 1194-davi to cover both
+would hand it an inventory it cannot derive and blur the one thing it can
+mechanise. Recorded instead as the third axis-14 recurrence; 1197-82rm is the
+maintenance-path instance of the same axis, filed an hour before this one.
+890-y72v COMPLETE (yoga, 4fc7be930 / 8f19d7671 / MO-FULL 359438f00): wire
+v3→v4, DeliverCredentialsReply carries an accept/reject discriminator, three
+tray sites consult it. CLOSED PARTIALLY ON PURPOSE, with the remainder filed
+as 1200-ih38 and the trap named: `Accepted` means STORED AND PERSISTED, not
+"authenticates against a live vault", and the share that does not open the
+vault — the operator's 2026-08-17 failure, the case that produced the packet
+— still reports Accepted, because nothing on the deliver path asks the vault
+anything (the unseal happens later in ensure_vault_running, spawned after the
+reply is sent). Widening the word would have reintroduced this packet's own
+failure mode one level up. The trap on the remainder: a host with no vault
+running must NOT manufacture a Rejected, because "could not check" and
+"checked and refused" are different answers and `Unstated` already exists for
+the first — a three-way world, refusing to be flattened into two.
+THE VERIFICATION LESSON, and it is the fleet's third instrument finding today:
+`cargo check -p tillandsias-macos-tray` on Linux COMPILES ONLY THE CRATE'S
+DEPENDENCIES — a deliberate syntax error planted in the target file produces
+ZERO errors and rc 0. "I cross-checked it" can mean nothing was checked. yoga
+held the change unlanded on work/890-y72v until macbookair compiled it, and
+macbookair falsified their own instrument first: planted error → rc 101, two
+errors on lib AND --tests; restored byte-identically → rc 0. Neither host
+overclaimed — the report reads "the types line up at all seven sites on
+macOS", NOT "macOS verified", because a compile is not a run and the v3→v4
+behaviour against a live guest is unproven by either. Same shape as
+macbookair's zigbuild-without---tests finding this morning: PLANT A
+DELIBERATE ERROR AND CONFIRM THE INSTRUMENT REPORTS IT before trusting its
+green.
+A NUMBER STANDING PROXY FOR A REFUSAL, made explicit rather than left silent:
+the v4 bump is safe only because the handshake refuses a mismatched peer, and
+macbookair's p2 on 54a9471a1 established that neither refusal is tested —
+what is pinned is the version CONSTANT. yoga's change lays a second
+transition on that unproven mechanism; they offered to hold, macbookair
+argued that holding does not make the refusal tested and only leaves a live
+defect standing, and yoga accepted. macbookair has taken the refusal test as
+their next slice. Ask of any constant-pinning guard what BEHAVIOUR the number
+stands in for, and whether that behaviour is tested anywhere.
+THREE THINGS CAUGHT BY GUARDS RATHER THAN BY THE AUTHOR, which is the system
+working: the version pin went red on the legitimate bump; the pre-push hook
+refused the work/ branch for want of a gate stamp, and RUNNING THE GATE
+RATHER THAN REACHING FOR --no-verify is what surfaced the pin; and
+macbookair's --tests advice found error[E0063] in yoga's OWN crate — plain
+check rc=0, --tests found a broken fixture — before anything else ran.
+AND YOGA'S SELF-CORRECTION, which is the sharpest line of the exchange: they
+said all seven sites would break at compile time. Three did not. Those three
+match `{ success: true, .. }` and THE REST PATTERN ABSORBED THE NEW FIELD
+SILENTLY — so they needed rewriting rather than getting a reprieve, and "a
+reader trusting the compiler would have shipped the old behaviour under a new
+wire version". A rest pattern makes the compiler stop being a change detector
+exactly where you are relying on it to be one.
+
+**Pass 31 (2026-09-15T10:11Z) — osx-next relayed, and the coordinator's own
+red is closed on the macOS side too.** windows-next 0, main 0, osx-next +12
+relayed in one land: macbookair's 1084-x8ya criterion-4 pin (a guest still
+coming up is not a failure), step (b) landed at 5ba5e30ea with (c) routed on,
+and their records for 1197-y6g6 — including the sentence this coordinator
+adopted verbatim into the fixture, THE LANE IS STAMP-FREE BUT NOT
+VALIDATOR-FREE. One code path in the relay (the macOS tray's diagnose.rs), so
+a full gate rather than the lane. Stale rows 88/507, audit rows=23 stems=23,
+no live freeze, no gate-step prefix collision.
+1155-jurn REMAINS in_progress AND REMAINS UNTOUCHED. It is the one expiry
+candidate left after 888-miiy closed, and it is the finished-but-open case,
+not a stalled one: esme's canary merged at e6f675d18 with 7/7 on both Windows
+hosts. esme is offline and the ask to land its closure is queued for their
+next connect. NOT expired and NOT closed from here — closing on a message
+rather than evidence in hand is how unfinished work gets marked done, and the
+expiry sweep that would otherwise have swept it is itself under repair
+(1198-7q95), so acting on its list right now would compound two faults.
+
+**Pass 32 (2026-09-15T12:11Z) — nothing to relay, and the sharpest hazard of
+the pass is that the gate caught a rule its author already holds.** All three
+siblings level: windows-next 0 ahead, osx-next 0 ahead, main 0 ahead. Every
+host's landed work is on trunk, so there is no relay this pass and no land of
+somebody else's commits — the first pass since the restart where the
+coordinator's single-point-of-failure role had nothing queued behind it.
+ARM 4 OF MY OWN 1198-7q95 FIXTURE WAS WRITTEN AS `if ! <pipeline> && [ … ]`
+AND THE LAND REFUSED IT, rc 3, 795-imz3. The refusal is correct and the shape
+is 1076-kft9: under pipefail a SIGPIPE from `grep -q` can invert the guard, so
+the arm could have passed for the wrong reason — in a fixture whose ENTIRE JOB
+is to discriminate one output from another, and which I had just finished
+arguing needs no mutant because arms 1 and 2 differ in output rather than in
+source text. That argument was right and it did not protect arm 4. The rule is
+in this coordinator's own memory, written down, and it was skipped anyway,
+while writing carefully, on a row about instrument correctness. A rule applied
+by judgement is applied when you remember it; the gate applies it every time,
+and that difference is the whole reason the gate step exists rather than a
+paragraph in a skill. Fixed by capturing the count and the token into
+variables — no arm in that fixture now consults a pipeline's exit status.
+THE CHANNEL IS RIGHT NOW AND THE GRANULARITY IS STILL WRONG. With 1198-7q95
+landed the live sweep reports exactly one candidate, 1155-jurn, and reports it
+as `claimant:windows`. That is the correct host string: it is what the claim
+recorded, and 772-4se9 makes the platform default deliberate. But esme and
+yolanda are BOTH windows, so the sweep that now reads the right channel still
+cannot say which of two hosts holds the row. An hour ago this coordinator
+asked the wrong host to release a live claim because the sweep read the wrong
+channel; the same wrong message is still constructible from a sweep that reads
+the right one, one layer down. That is 1201-hsf9, filed this cycle with three
+routes and no decision, and it is the transient counterpart to the operator's
+ruling that a BLOCKER names a capability: a blocker should name a capability
+because the roster is ephemeral, and a claim should name a workstation because
+only a workstation can be asked to let go.
+THE RECURRENCE INSTRUMENT HAS ZERO INPUTS, FLEET-WIDE, THREE DAYS AFTER THE
+RESTART. `scripts/loop-status-metrics-audit.sh` reports rows=23 stems=23 — no
+dropped stem, the check that matters for the two-host trigger — and then
+reports 23 of 23 stems NOT-PASTING. Every host, including macuahuitl: my own
+last paste was 2026-09-05. So `recur:` and `skippable:` have had no fleet data
+for ten days, which means the cross-host recurrence audit that is supposed to
+run once per pass has nothing to audit and cannot, even in principle, fire its
+two-or-more-hosts trigger. The audit's own rule says an empty result is a
+finding about the HOST and never "no candidates"; twenty-three empty results
+is a finding about the instrument's reach. It is an order-531 shape one level
+up: the audit reads as running because it produces output every pass, and the
+output is the same null every time. Not filed as a new row this pass — it
+belongs to the existing metrics work — but recorded here so the next
+coordinator does not read a clean audit line as a clean fleet.
+
+**Pass 32 addendum (2026-09-15T12:20Z) — the pass-32 record above is WRONG
+about macbookair, and their correction is sharper than the thing I got right.**
+I wrote that their slice "was taken by message" and that from trunk this is
+indistinguishable from an idle host. The inference was right and the premise
+was false: they DID file it, 1201-t6ms, flipped to in_progress this cycle,
+committed locally at cfa791d41 — and they verified my blindness rather than
+asserting it, running `git grep -l 1201-t6ms origin/linux-next -- plan/index.d/`
+with a control search proving the probe discriminates. The claim is riding an
+IN-FLIGHT LAND that is still in the gate.
+THE REAL SHAPE IS ONE LEVEL DOWN FROM MINE AND THEY NAMED IT THEMSELVES: the
+claim fragment was batched into the same commit as the code and handed to a
+gate, so from trunk it is silence for the whole duration of a build — minutes
+on that host. The plan-only lane exists precisely so a claim does not wait on
+a build, and the discipline is to push the status flip ALONE, BEFORE the work
+starts. They have taken that as the rule and will push 920-pxg6's flip to
+osx-next as a plan-only commit before starting. So the coordinator's
+"indistinguishable from silence" was true of the window, not of the host, and
+the remedy is the lane rather than a message.
+A COLLISION I ALMOST ESCALATED, DISSOLVED BY ONE COMMAND. Their 1201-t6ms and
+my 1201-hsf9 share an order number, allocated minutes apart on two hosts,
+because `next-order` reads the fold of the local branch and a packet in flight
+through a gate is invisible to it. I was about to file that as a hazard — the
+same in-flight-is-silence shape hitting the allocator instead of the claim —
+and checked first: `ls plan/index.d | grep -oE '[0-9]{3,4}-[a-z0-9]{4}' | sort -u
+| cut -d- -f1 | sort | uniq -c | awk '$1>1'` returns FIFTEEN order numbers
+already used twice or more, including 1176, 1194 and 1197, all filed by this
+coordinator in the last two days. Duplicate order numbers are the ledger's
+normal state and the four-character suffix is load-bearing, which is why every
+reference in this file carries it. Not a defect, and the check that dissolved
+it cost one command against a paragraph of prose I would have had to retract —
+the pirria shape from pass 29, caught before broadcasting this time.
+THEIR FINDING IS WORTH MORE THAN THE STATUS THEY WERE ASKED FOR. 1201-t6ms is
+the SERVER-side wire-version refusal: the server refuses a mismatched client at
+`if first.wire_version != WIRE_VERSION` by logging and returning, nothing
+exercised it, and v3 and now v4 both rest on it. Two tests, and the second is
+the one that matters — a positive control requiring a MATCHING peer to still
+get its HelloAck, because the refusal alone asserts "you got nothing" and a
+dead handler satisfies that perfectly. Deleting the branch reds the refusal
+while the control stays green, which is what proves the mutation was surgical.
+It also corrected their own p2 that yoga had relied on: they had claimed
+NEITHER refusal was tested, and the client half was covered by 1032-62rx. The
+asymmetry is the finding — that test's own doc says the client arm is
+UNREACHABLE against a current server, so the tested arm serves only a peer old
+enough to answer without validating, while the arm gating a live mismatched
+peer was the untested one. A test can be green, real, and pointed at the
+reachable half of the pair.
+
+**Pass 32 addendum 2 (2026-09-15T12:24Z) — macneo answered with the REGIME and
+the regime was the whole answer, and the floor tier turns out to be blocked on
+tooling rather than on being the floor.** I asked for the yq question before
+the counts and named "yq is absent here too" as a complete answer; macneo
+returned exactly that and ran nothing, rather than producing 47 numbers that
+would have repeated pirria's caveat. A second DEGRADED run is not a second
+regime. That is the instruction working, and it is cheaper than the run.
+THEIR PROBE WAS BETTER THAN THE ASK. `command -v yq` was checked under BOTH
+the agent's non-login PATH and an augmented one carrying ~/.cargo/bin,
+/opt/homebrew/bin and /usr/local/bin — deliberately both, because PATH
+composition had produced a false MISSING on that host earlier this week — with
+`command -v jq` resolving to /usr/bin/jq as the control that the probe
+discriminates. They then checked the runner's SECOND source,
+${PROJECT_ROOT}/target/litmus-runtime/bin/yq, with a tree-wide find controlled
+by locating target/release/tillandsias-plan the same way. Two sources, two
+controls, one negative that can be trusted. This is 1172-dyvd axis 14 answered
+BEFORE it bit, on a host that had every reason to answer it carelessly.
+AND THE DISTINCTION THAT MAKES IT ACTIONABLE: pirria's yq is UNPROVISIONABLE —
+the runner's auto-provision branch requires `toolbox`, which is Silverblue-only
+— while macneo's is one command away, brew present at /opt/homebrew/bin/brew
+and yq a bottled stable formula at 4.53.6. So the 45 arms that currently have
+NO host in the fleet able to produce them have a candidate. macneo did NOT
+install it, and was right not to: adding a package to a workstation is a
+configuration change of the same class as the embed-endpoint provisioning
+already queued on 824-6qxh, and not a cargo-check-only lane's call to make
+unilaterally and report afterwards. It is now ONE operator decision, not two.
+THE SHAPE, WHICH MACNEO NAMED AND WHICH BELONGS HERE INDEPENDENT OF ANY ROW:
+this fleet now wants THREE floor-tier measurements from macneo — 824-6qxh's
+low-end bands, 1187-iij8's yq-present arms, and 1109-t8kw part 2 which they
+disqualified on SAFE — and TWO OF THE THREE ARE BLOCKED ON THAT HOST LACKING A
+TOOL OR AN ENDPOINT rather than on anything about its tier. This sharpens the
+standing rule that an under-provisioned locus is an instrument: it is an
+instrument for the code paths an equipped host cannot reach, and it is sparse
+in precisely the ways that stop it REPORTING what it reaches. Both halves are
+true at once. The remedy is not to "fix the floor" — that would destroy the
+instrument — but to distinguish the sparseness that is the measurement from
+the sparseness that is only a missing binary, and to provision the second
+while leaving the first alone. yq is the second kind; so is an embed endpoint.
+
+**Pass 32 addendum 3 (2026-09-15T12:33Z) — THE RELEASE TIER HAD NEVER RUN ON
+YOGA, AND IT HAS NEVER RUN HERE EITHER.** yoga landed 890-27mv's cadence half
+(b1f4ada5e, attested 5223471de, both verified on trunk) and left the row
+in_progress, correctly: its bar is a fresh green and the first full-tier run
+was red. The number is the report. `never:release-tier`, 35 records on that
+host, EVERY ONE phase-only. One run produced THIRTEEN red litmus tests on a
+machine that has completed attested cycles daily for weeks.
+I RAN THE SAME CHECK HERE BEFORE WRITING ANY OF THIS DOWN, and macuahuitl
+answers `never:release-tier:no target/convergence/check-logs.jsonl on this
+host — the release tier has NEVER been exercised here`. There is no
+target/convergence directory at all. This is the COORDINATOR: the host that
+relays every platform branch, lands for hosts that cannot, and gates what
+reaches trunk, and it has never once run the tier the release gates on. The
+daily 09:09 exercise exists as a cron and has not yet fired since the restart.
+So yoga's thirteen reds are not a yoga finding; they are the first sample from
+a fleet where nobody knows what the release tier says about their host, and
+the coordinator is the least-sampled host of all.
+THE MECHANISM, WHICH IS THE PART TO CARRY: one of the thirteen was YOGA'S OWN
+and it is the packet's thesis landing on its author. Their 3 -> 4 WIRE_VERSION
+bump in 890-y72v (4fc7be930, on trunk) broke litmus:guest-container-metrics-
+wire-shape step 2/7, which pins the constant from the observability-metrics
+side. It landed GREEN — through `./build.sh --check`, through a work/ hand-off,
+through macbookair's macOS compile — because --check DOES NOT EXECUTE THE QUICK
+TIER. THE PIN WORKED AND THE CADENCE DID NOT, and it sat red for days with
+every gate in the fleet reporting success. They fixed the literal, named what
+earned it per that step's own comment, and swept first: only two live pins on
+the constant exist repo-wide, both now 4. That is the sweep-before-edit
+discipline doing its job, and it is worth saying that the defect was found by
+RUNNING THEIR OWN WORK rather than by review.
+FILED AS 1201-9it2 (verified on trunk at
+plan/index.d/20260915t125500z-1201-9it2-cross-tier-blind-spot-yoga.yaml): a
+pre-land NOTICE naming the arms a change touches that the author's gate will
+not run, advisory and not refusing, silent when nothing tier-scoped is touched
+— its own two negative controls. Filed at macbookair's hand-off because this
+coordinator ruled 1194-davi keeps its PLATFORM scope; 1201-9it2 is the same
+structure cross-TIER on a single host, which is the right split.
+FIVE OF THE THIRTEEN ARE 1187-iij8's CLASS AND THEY ARE NOT CONTENDED — the
+runner's own cpu.pressure line says so. cycle-batch-triage 14/26 at 15s,
+capability-routing 1/5 at 120s, forge-experts-discoverability 10/13 at 30s,
+and both mirror container arms at 300s and 420s. With pirria's floor numbers
+and esme's MINGW kill that is now five data points across four files, and it
+argues for the GUARD 1192-xv4n proposes over five hand-raised budget numbers.
+It also settles the direction pirria's measurement pointed: budgets are not a
+tier problem, they are a budget-tally problem.
+TWO MORE OF YOGA'S OWN DEFECTS, both caught only by running their own work.
+The installer REFUSED ITS OWN TEMPLATES, because its placeholder guard matched
+the comment that documents placeholders — a guard reading its own
+documentation as the thing it forbids. And a fixture arm passed VACUOUSLY:
+`grep -l` over files that do not exist prints nothing, and on the first run the
+render had failed entirely, so the arm reported green about a world that had
+not been built. That is the eight-MINGW-fixtures shape (1186-w3ph) reappearing
+in a different file, and it is why a negative needs a positive control.
+NOT ARMED, AND CORRECTLY NOT: the timer is written, gated and fixture-covered
+but not enabled on yoga. Installing a recurring job changes host state outside
+the checkout and outlives the session, and 856-s56y's precedent is that the
+OPERATOR runs the installer. `scripts/install-release-tier-timer.sh
+--interval 24h`, per host. Queued to the operator as its own ask, alongside
+macneo's provisioning — both are "let a host report what it cannot currently
+report", and both are configuration changes no agent should make for itself.
+THE HANDSHAKE CORRECTION ARRIVED TWICE, INDEPENDENTLY, WHICH IS THE FLEET
+METHOD WORKING. yoga's landed commit said "neither handshake refusal is
+tested"; macbookair reached the same correction from the other side while
+landing the server half (cfa791d41, relayed this pass). The client side WAS
+tested by 1032-62rx. Two hosts converging on one retraction without either
+being told is worth more than either's confidence was.
+
+**Pass 32 addendum 4 (2026-09-15T13:02Z) — correcting the label I used one
+addendum ago, because yoga retracted it and my own text carries it.** Addendum
+3 called the five not-contended budget misses "1187-iij8's CLASS". yoga has
+since withdrawn that framing about their own report: they described the five
+that way "as though tier were the axis", and on the cross-host data the axis
+is not tier at all. The label is wrong even though the sentence after it is
+right — addendum 3 goes on to say budgets are a tally problem and not a tier
+problem, so the record contradicts its own heading. 1187-iij8's title is about
+a FLOOR-TIER timeout, so naming that row as the class silently reasserts the
+axis the evidence removed.
+WHAT THE FIVE ACTUALLY SHARE is a budget miss tallied as an assertion failure,
+on hosts that the runner's own cpu.pressure line says were NOT contended. The
+three regimes agree with each other and disagree with the tier story: pirria
+at the Linux floor came in at 182.6s against a 300s budget and was NOT killed;
+esme was killed at 300.6s on the SAME arm at the MINGW locus; yoga's five
+misses are on a fat host. A floor host under budget, a fat host over it, and a
+kill that reads as a MINGW-ism. Tier does not predict speed. The class is
+BUDGET-TALLY, it is 1192-xv4n's subject rather than 1187-iij8's, and yoga has
+said they will not carry the tier framing forward. Neither will this file.
+Worth keeping as a shape: a correct conclusion can travel under a wrong label,
+and the label is what the next reader greps for. This one would have routed a
+tally fix to the floor-tier row for as long as the phrase survived.
+
+**Pass 32 addendum 5 (2026-09-15T13:58Z) — TWO OF THIS COORDINATOR'S OWN EXIT
+CRITERIA WERE WRONG AS FILED TODAY, both caught by the implementer reading the
+code, and they are the same shape.** yoga landed 1187-iij8 arm (a)
+(35193f5dd, attested 872a94aa3, both verified on trunk) and asked for a ruling
+instead of quietly satisfying the criterion — the right call, and the criterion
+is mine.
+CRITERION 1 AS I WROTE IT WOULD HAVE BUILT A FAIL-OPEN GATE. It says a step
+killed at its budget is "tallied as BUDGET, not FAIL". Literally implemented, a
+step that ran out of clock stops failing: a spec goes green on steps that never
+finished, and a release passes on a machine slow enough that nothing completed.
+820-c8q8 — completed, titled
+`litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host` — settled
+that a timed-out step still FAILS, and the runner's own rc=124 site says so in
+as many words, "Reported, never used to change the verdict". I did not look it
+up before filing. esme flagged the same reconciliation when they RELEASED the
+row; yoga hit it while implementing. Two hosts reached it independently and
+neither of them wrote it.
+RATIFIED: TESTS_BUDGET_KILLED counts IN ADDITION to TESTS_FAILED, never instead
+of it — step fails, spec fails, run exits non-zero, and the summary gains one
+line only when non-zero, worded as a SUBSET of the FAIL above rather than a
+sibling. That serves what the criterion was FOR (a closure row reading "7 FAIL"
+cannot tell seven broken assertions from seven steps that ran out of clock)
+without doing what it said. Verified here as a second regime:
+scripts/test-litmus-budget-tally.sh -> ok:litmus-budget-tally:7.
+THE OTHER ONE WAS THIS MORNING. 1198-7q95's criterion 3 said a row with events
+and no status write must never be aged off an event; reading the code showed
+that fallback is deliberate under 672-bz7u, and implementing the criterion as
+written would have deleted a working guard. So: two criteria, one day, both
+filed by the coordinator, both specifying a remedy that silently reversed a
+settled decision the filer had not looked up, both caught by whoever went to
+implement them.
+THE SHAPE, and it is the useful part: A CRITERION THAT NAMES THE OUTPUT THE
+CLOSURE NEEDS IS SAFE; A CRITERION THAT NAMES THE MECHANISM IS A DESIGN
+DECISION WEARING A TEST'S CLOTHES. "The closure must be able to distinguish a
+budget kill from a failed assertion" is checkable and leaves the design open.
+"Tally it as BUDGET, not FAIL" is a patch written by someone who has not read
+the code, ratified by the act of filing, and handed to someone whose job is
+made to look like compliance. The filer is the person LEAST likely to notice,
+because the criterion reads as an obvious consequence of the symptom that
+prompted it. The remedy is not more care while filing — it is that a criterion
+naming a mechanism must cite the decision it is consistent with, or say
+explicitly that it has not checked.
+BOTH IMPLEMENTERS DID THE RIGHT THING AND IT COST THEM A ROUND TRIP EACH.
+That is the tax this shape charges, and it is paid by the wrong person.
+ARM (b) IS WITHDRAWN, NOT DEFERRED: pirria 182.6s under a 300s floor budget and
+NOT killed, esme killed at 300.6s on the same arm at MINGW, yoga's five
+not-contended misses on a fat host. Tier does not predict speed.
+FOUR DEFECTS IN YOGA'S OWN FIXTURE, one family, worth the drill as a set:
+test data indistinguishable from the thing it describes. No bindings registry
+in the throwaway root, so the runner refused at rc=3 and FOUR arms reported
+green over a run that executed nothing; the premise arm added to catch that
+matched the spec NAME, which appears in the runner's own "selected 1 test(s)
+and executed NONE" line, so it passed on the very message saying nothing ran;
+an `echo "ok: probe"` interpolated into a double-quoted YAML scalar rendered
+`command: "echo "ok: probe""`, which the runner SKIPPED rather than erroring
+on, reading as success to an absence assertion; and the gate refused the
+fixture under 721-77yu for carrying a bare `litmus:<name>` token no declared
+test provides. THAT LAST REFUSAL IS CORRECT AND YOGA DID NOT WORK AROUND IT —
+the fixture manufactures the test inside a throwaway root rather than claiming
+it, so the name is assembled at runtime, the same remedy 1118-zvai used when a
+repo-wide sweep refused its own fixture's test data. 913-27ex caught two of the
+four; 721-77yu caught the fourth. Each guard was written by someone bitten the
+same way, which is the whole argument for writing them down.
+
+**Pass 33 (2026-09-15T14:11Z) — nothing to relay, and the third near-miss of
+the day dissolved by enumerating instead of concluding.** windows-next 0 ahead,
+osx-next 0 ahead, main unchanged; no host has filed a report in the thirteen
+minutes since pass 32 closed, which is what a fleet mid-slice looks like. Six
+rows in_progress, one expiry candidate (1155-jurn, esme's, untouched by
+design), audit rows=23 stems=23, stale-ready 88/507.
+I ALMOST FILED A DEFECT AGAINST THE LEDGER AND AGAINST A HOST THAT HAD DONE
+EVERYTHING RIGHT. macbookair pushed a status flip for 920-pxg6 to in_progress
+at 12:33:14Z — alone and first, exactly the discipline this coordinator asked
+them for an hour earlier — and the fold still reads `ready` with plan_next
+OFFERING the row. Read two ways, that is "the claim did not take", which would
+have been a serious instrument finding: the discipline produced no protection.
+The enumeration says otherwise. Every status write on that packet_id, in order:
+in_progress 09-13T11:51:14Z, ready 09-13T11:55:23Z, in_progress
+09-15T12:33:14Z, ready 09-15T12:37:28Z — all host=macos. They claimed it, did
+the darwin half, and RELEASED IT BACK four minutes later because only their
+half was done. The fold is correct, the flip took, and the row is claimable
+because there is claimable work in it.
+THAT IS THREE TODAY, AND THEY ARE ONE SHAPE. The 1201 order number shared with
+macbookair, which fifteen prior duplicates showed to be the ledger's normal
+state; this; and pass 29's pirria hazard, which their shell history dissolved.
+Each time the wrong answer was AVAILABLE FROM THE SAME DATA and each time it
+accused someone. The discriminator is never care — it is enumerating the
+outcomes before comparing, because a two-way read of a three-way world returns
+a specific falsehood rather than a shrug, and the specific falsehood is what
+gets sent to the host. One `grep` over the status channel cost less than the
+message I would have had to retract, as it did the other two times.
+STALE-READY, SURFACED NOT CLOSED: 1201-t6ms reads `ready` and a landed commit
+cites it (cfa791d41, on trunk via this pass's predecessor). macbookair wrote
+that `ready` DELIBERATELY — "release 1201-t6ms as landed" — so the claim was
+released correctly and the terminal status was not set, which leaves finished,
+landed work sitting in the ledger as unfinished. That is 1155-jurn's shape
+mirrored: one is finished work reading in_progress, this is finished work
+reading ready. Surfaced to its owner with the evidence, never closed from here;
+the row's own verification is theirs to run. 1183-j9dk is the other candidate,
+four citing commits, and it is a live blocker under 804-deux rather than an
+abandoned row — also surfaced, not judged.
+NOTHING ASSIGNABLE TO THE ONE IDLE HOST, AND THAT IS THE HONEST ANSWER. macneo
+is free, answered this coordinator's measurement ask within the hour, and is
+blocked on provisioning that only the operator can authorise. The floor-tier
+work that remains for it is a curl-install smoke, which on macOS is
+DESTRUCTIVE of that workstation's app state and VM directories, and macneo
+holds NO standing consent (1004-vsh2). So the queue for that host is empty
+until the operator answers, and inventing a slice to avoid saying so would be
+worse than the idleness.
+
+**Pass 33 addendum (2026-09-15T14:26Z) — the imperative is what gets applied,
+and the qualifier underneath it does not travel.** macbookair closed 1201-t6ms
+properly (b01f8c8ca, verified on trunk, row now `completed`) and reported the
+cause as a rule they had wrong: their lane's instruction says "RELEASE THE
+CLAIM AT CYCLE END, unconditionally" and they applied it literally to work that
+was finished and landed.
+I WENT AND READ THE SHARED TEXT RATHER THAN ACCEPTING THE DIAGNOSIS, and it is
+half right in the way that matters. `skills/advance-work-from-plan/SKILL.md`
+§4's BODY already made the distinction — "Completed work moves to its terminal
+status (§7.2). Work you did NOT finish goes back to `ready`" — so the rule was
+never wrong. Its HEADING was "Release on exit, unconditionally", and the
+heading is the part a reader executes. One bolded imperative, one qualifier one
+line below it, and the imperative won on a careful host. Fixed at the heading:
+"Release on exit — a CLAIM is released unconditionally, a ROW is closed", with
+the measured instance written into the step so the next reader meets the
+distinction where they would otherwise skip it.
+THIS IS THE MIRROR OF THE STRANDING THE STEP EXISTS TO PREVENT. 641-e2qa left
+21 packets `in_progress` and hid them from ready and from burndown; this leaves
+a finished row `ready` and offers it to the whole fleet through plan_next. Both
+cost a host a cycle, and the step only warned about one of them, which is
+probably why "unconditionally" got written in the first place.
+AND A GATE EARNING ITS KEEP, worth recording because gates usually enter this
+file as friction: `set-field status completed` REFUSES without `--evidence`
+(650-dq6u), and that refusal is precisely why this coordinator could not close
+the row from here — no run to cite. The closure came back with the mutation arm
+RE-EXECUTED rather than quoted from the landing cycle (deleting the refusal
+branch reds the refusal test while the positive control still passes; restored
+byte-clean, porcelain 0). macbookair also corrected their own closure wording,
+which said `--lib` on a crate that has no lib target: a plain run there reports
+"0 passed; 525 filtered out" with rc=0 — success-shaped and measuring nothing.
+A closure that sends the next reader to a command that CANNOT FAIL is the same
+vacuity as a green arm over a run that executed nothing, one layer out.
+
+**Pass 33 addendum 2 (2026-09-15T14:52Z) — COMPLETING A PARTIAL FIX, and
+saying so rather than letting `fixed` mean two things in one file.** The
+heading correction landed at 0dbdb7ca3 and was HALF the defect. macbookair
+caught the other half while the gate was still running: §4's only code block
+showed the `ready` path. Three surfaces — heading, sole example, prose
+qualifier — and before the fix two of them were wrong for finished work while
+the correct one was the one a tired reader skims past. Fixing the heading alone
+would have left the example teaching the wrong ending under a heading that now
+reads as authoritative. This land adds the terminal block and the rule above
+both; the drill records it as completing a partial, not as a new fix, because a
+record that reads as complete when it is half done is the same failure as the
+heading.
+I GAVE THE RIGHT ORDER FOR A REASON I HAD NOT MEASURED. I said put the terminal
+block first because "the finished path is the common one". macbookair counted
+their lane: cycle-end writes run `ready` 12 to `completed` 3. I reproduced it
+here by a different method before conceding — all 76 fragments carrying
+`host: macos` in plan/index.d/, counted by status value, gives the same 12 and
+3 — and re-ran it uncapped, because my first pass used `head -400` and a capped
+enumeration read as a count is its own trap. My justification was a
+plausible-sounding assertion offered in the middle of a day spent catching
+exactly that, by both of us, in each other.
+THE REPLACEMENT RULE IS BETTER AND REACHES THE SAME ANSWER HARDER, and it is
+now written ABOVE the two blocks where a future editor will meet it: PUT FIRST
+THE BLOCK WHOSE MIS-COPY FAILS LOUD. Copying `ready` onto finished work is
+silent and advertises it fleet-wide — that was the bug, and it survived until a
+stale-row sweep. Copying `completed` onto unfinished work is refused by
+650-dq6u, which wants a SHA and a named check result and cannot be satisfied by
+fabrication. Frequency argues for `ready` first; asymmetry argues for
+`completed` first; asymmetry is right and FREQUENCY IS THE TRAP. Without the
+rule written down, the next editor finds the 12-to-3 and helpfully reverses the
+order, correct about the frequency and wrong about the risk. GENERALISED, and
+worth carrying past this step: when two examples sit together and one can be
+mis-copied silently while the other refuses, THEIR ORDERING IS A SAFETY
+PROPERTY, NOT A STYLE CHOICE.
+macbookair's sentence goes into the step verbatim because it is the only part
+that explains the original wording: A RULE WRITTEN FROM ONE FAILURE MODE READS
+AS ABSOLUTE ABOUT THE OTHER. This step was built from 641-e2qa, saw only the
+stranding direction, and stated its remedy without a boundary. What is being
+corrected is not carelessness but a structure that defeats care — which is the
+only kind of correction worth making to a rule careful people were already
+following.
+LENOVINHA IS PAUSED, NOT SILENT, AND THE EXPOSURE IS SMALLER THAN THIS
+COORDINATOR FIRST SAID. Their keyring has answered blocked:gh-keyring-locked
+for three consecutive cycles — the second lock tonight, the first having
+produced 1189-2ra5 — and they have cancelled the :51 drain rather than emit
+identical no-op reports, on the correct ground that a cadence reporting the
+same sentence asserts a freshness it does not have. No gh auth login, no
+refresh, no peer push, no --no-verify, no hook edit; the unlock is the
+operator's and is queued as such. Verified from here: their salvage ref
+refs/heads/salvage/lenovinha/20260915-1199-aw6m is NOT on origin (control: six
+salvage refs are, including their own 20260914 one, so the namespace and their
+access both work) and none of bbf70a8ba / cc6c5564b / 44b76c169 exist in this
+checkout.
+BUT THE HAZARD WAS NEVER "UNPUSHED" AND THIS COORDINATOR FRAMED IT WRONG.
+872-c9nd's actual hazard is work existing in ONE PLACE SOMETHING MIGHT DELETE.
+lenovinha wrote a bundle and a self-contained patch series OUTSIDE the
+checkout and sent the bundle off the machine entirely, which closes that
+without going near the credential. I had escalated it with deadline urgency it
+no longer carries, and the correction is mine: naming a pressure point is not
+the same as offering an alternative to it, and they found the alternative I
+should have.
+THEIR VERIFICATION IS THE DAY'S ONE INVERSE FINDING AND IT BELONGS BESIDE THE
+OTHERS FOR ITS POLARITY. Everything else this fleet caught today was a false
+GREEN — a vacuous arm over a run that executed nothing, a guard matching the
+comment documenting what it forbids, a stub PATH that removed nothing, a
+closure citing a command that cannot fail. Theirs is a false RED:
+`git bundle verify` PASSES, and the fetch into an EMPTY repo fails on "lacks
+these prerequisite commits: b61c1759a" — a prerequisite that is
+origin/linux-next's own tip, which every real clone has and only the test
+environment lacked. A CORRECT ARTIFACT READ AS BROKEN BECAUSE THE RECOVERY TEST
+RAN IN AN ENVIRONMENT THE RECOVERY WILL NEVER HAPPEN IN. Believing it would
+have meant rebuilding a working bundle, or concluding the work was
+unrecoverable while holding a good copy. The patch series, needing no
+prerequisite at all, is the artifact to reach for first precisely because it
+has no environment to get wrong.
+AND THEIR ARM 2b, WHICH IS THE SHARPEST INSTRUMENT FINDING OF THE DAY. The
+1189-2ra5 fixture arm whose stated subject is "a host with no busctl at all"
+built its PATH as "$stub:$PATH" — WHICH REMOVES NOTHING. It had been probing
+the host's real keyring all along and passed only while that keyring was
+unlocked; the re-lock is the only reason anyone found out. In their words, its
+passing history was never evidence about its stated subject, which is why they
+rebuilt it from nothing rather than patching the PATH. It now passes WITH the
+keyring locked — the state it had silently depended on being false. That is
+1109-t8kw's class, and today's tally in that class is: yoga's four in the
+budget-tally fixture, lenovinha's one, and two of this coordinator's own
+(1176-9vqn's hidden PATH candidate, 1198-7q95's if-not pipeline). Seven
+instrument failures against zero work failures, in one day, across four hosts.
+
+**Pass 34 (2026-09-15T16:11Z) — a remedy this coordinator broadcast fleet-wide
+never ran on half the fleet, and the sweep it triggered found two more
+instances than the host that reported it could reach.** osx-next +6 relayed
+(macbookair's 1201-t6ms closure, their drill correction, and a 690-w94k claim);
+windows-next 0.
+MY DETACH RECIPE IS LINUX-ONLY. `setsid` DOES NOT EXIST ON macOS, and
+`setsid nohup <script> …` fails outright on both Macs — macneo hit it running
+the very suites the operator had just provisioned yq for. This coordinator has
+prescribed that line as THE fleet standard for weeks, in two skills and in its
+own standing notes, and no Mac had ever executed it. Corrected in both skills
+with the platform pair written out, and the two load-bearing details confirmed
+unchanged on either platform: a script FILE rather than an inline command, and
+a terminal `rc=` marker for the Monitor. This is green-on-one-regime arriving
+at the author of that rule: a remedy measured on one regime is a property of
+THAT REGIME until a second one executes it, and "it works everywhere" is the
+assumption a coordinator is best placed to make and worst placed to check.
+THE PROVISIONING PAID FOR ITSELF IN ITS FIRST RUN, which is the argument for it
+made by it. With yq 4.53.6 installed and ZERO warn:litmus-degraded-no-yq,
+macneo produced the fleet's first undegraded readings of those suites:
+forge-environment-discoverability 18/0/7 in 24s, meta-orchestration 21/2/1 in
+117s. TWO ARMS THAT PASS DEGRADED FAIL ONCE THEY ACTUALLY EXECUTE, and macneo
+checked each rather than handing over a count: both are ARM defects, not
+product defects.
+THE SWEEP FOUND THREE SITES WHERE macneo COULD ONLY REACH ONE. Their find is
+BSD `wc -l` padding to width 8, so a hermetic arm's `[ "$dirt" = "0" ]` fails
+on whitespace alone while the gate under test is entirely correct — 1130-i6xj's
+class, with a positive control against an unpadded 0 isolating padding as the
+whole difference. Before fixing it this coordinator swept the corpus, and the
+discriminator is NOT "uses wc -l" (58 do) but "compares wc -l output as a
+STRING": `[ "$n" -eq 0 ]` tolerates the padding, `[ "$n" = 0 ]` does not. Three
+sites qualified — forge-findings-persistence-shape (macneo's),
+forge-experts-teardown-ephemeral, and plan-compaction-format-preservation —
+and the last carried TWO occurrences, caught only because the edit asserted its
+match count was 1 and refused when it was 2. A fourth candidate my own scan
+flagged, build-test-timing-telemetry-shape, was ALREADY detainted; the scan's
+negative lookahead had missed a `wc -l < $F | tr -d ' '`, so the scan was wrong
+in both directions and printing each site's actual assignment is what settled
+it. All three fixed with the project's own `| tr -d ' '` idiom; re-scan clean.
+THE OTHER ARM IS HANDED BACK RATHER THAN GUESSED AT. macneo's first failure is
+litmus:e2e-eligibility-probe-shape 6/7, which stubs a fake `podman` on PATH and
+requires `skip:live-runtime-present`; on macneo the probe answered `eligible`
+and the preflight reported services-no-podman. The arm is hermetic BY
+CONSTRUCTION — it builds its own stub — so the interesting question is WHY the
+stub did not take effect there, and this host cannot answer it: the stub
+resolves correctly here, so every fix written from this machine would be a
+guess dressed as a remedy. Shipping a `skip:` for a mechanism nobody has
+identified would convert an honest red into a silent skip, which is worse than
+the red. Handed back as a discriminating probe instead.
+
+**Pass 34 addendum (2026-09-15T17:02Z) — A PEER MEASURED THE COST OF A RULE
+THIS COORDINATOR WROTE AND WAS NOT FOLLOWING.** macbookair's macOS land refused
+twice on the mandated-merge guard, each refusal costing a full gate, and rather
+than calling it bad luck they measured the race: trunk taking a commit every
+~6.7 minutes against a gate longer than that. I checked their arithmetic against
+trunk before answering and IT IS WORSE THAN THEY REPORTED — 21 commits in three
+hours, 9 in the last hour, mean interval 5.5 MINUTES — and the attribution is
+the part that matters: EIGHT OF THE 21 ARE MINE. The coordinator is the single
+largest source of the churn the slow hosts cannot outrun.
+THE RULE ALREADY EXISTS AND IT IS MINE: "the coordinator's cadence is the churn
+slow hosts lose to; land once per pass, relay-land work/<order> branches,
+quiesce for a critical commit." Pass 33 landed twice. No pass today reached the
+third clause. A rule held in a standing note and applied by judgement is applied
+when you remember it — which is the same sentence this file already carries
+about the 795-imz3 refusal, now recurring at the level of cadence rather than
+syntax, and costing a peer two gates instead of one land.
+THEIR REASONING FOR TAKING THE RELAY REF IS THE PART TO KEEP. They declined the
+same hatch TWICE earlier today because the host could satisfy the guard then,
+and what changed their mind was the numbers rather than the inconvenience. A
+gate longer than trunk's inter-commit interval is not an unlucky sequence, it is
+arithmetic, and "a gate or merge policy your host cannot satisfy" is exactly the
+case the refusal text names — so taking the offered path is COMPLIANCE, not
+routing around the guard. The distinction is worth preserving because the same
+action taken for the wrong reason would be the thing the guard exists to stop.
+RELAYED AND QUIESCING. 5b249f35f merged and landing with this record. After it,
+NO FURTHER CODE LANDS FROM THIS HOST until the platform hosts have had a clear
+window; lenovinha (6 of the 21) is told the same. The window is worth more to
+them than to me, which is the whole content of the rule I was not following.
+THE REFUSAL WORDING IS FIXED, AND THEIR READING IS SHARPER THAN THE NOTE
+ALREADY IN THE FILE. 1064-r8fv fixed the dead-end half by adding a lane hint,
+but left "not a lost race, so retrying cannot help" absolute. It is TRUE of
+retrying the PUSH and FALSE of re-running the script, whose attempt loop merges
+trunk at attempt start and re-gates — the tool declines to use, for this
+condition, a remedy it already performs. A tired reader takes the sentence at
+face value and hand-merges, which is what that host did twice before measuring.
+The message now names which retrying is futile, names the step the tool already
+takes, and — the part their report earned — tells the reader to MEASURE the
+interval before spending another gate on it, with the command to do so.
+AND THEIR FIXTURE CARRIES THE CONTROL THE DAY'S OTHER VACUITY FINDINGS LACKED.
+It counts ZOMBIES through /bin/ps filtered to its own pid rather than grepping
+for `.wait()`, because a source-level test would have passed on the broken code
+THE MOMENT THE MISLEADING COMMENT WAS WRITTEN — and that comment, "Detached —
+let it complete in the background", is a specimen worth keeping: its second
+clause is true, which is precisely what makes the first sound reasoned rather
+than absent. The built-in control spawns raw children and REQUIRES zombies to
+appear, so the arm cannot pass vacuously if a platform ever auto-reaps.
+
+**Pass 35 (2026-09-15T18:11Z) — ONE MISSING ENV EXPORT IN ONE FIXTURE MADE THE
+ENTIRE RELEASE TIER UNMEASURABLE, and the arm that reported it accused the
+wrong subject.** osx-next +2 relayed (macbookair's 690-w94k relay-ref record and
+the trunk-race measurement); windows-next 0.
+THE CHAIN, TRACED FROM SYMPTOM TO CAUSE ACROSS SIX LAYERS, each link verified:
+a litmus fixture that does not export TILLANDSIAS_TIMING_LOG runs the runner
+from a scratch dir that is not a git checkout, so metrics_default_log correctly
+falls back to /tmp and writes records carrying the REAL host name into
+/tmp/tillandsias-timing.jsonl — the production name in a shared path.
+cycle-metrics.sh then sees two timing logs and REFUSES, correctly, on the
+ground that any runs= computed from either is a partition presenting as a
+total. The refusal makes cycle-metrics emit NOTHING, so every arm driving it
+observes zeros. litmus:mcp-expert-health-probe-shape 18/20 therefore failed
+with "healthy-but-unexposed must be distinct from healthy" while
+`exposed_ok=0` — ITS OWN CONTROL — was also zero. Pre-build failed, ci-full
+exited before post-build, the record carried ci_phase=pre-build only, and
+check-release-tier-freshness.sh still answers `never:release-tier`. A host
+carrying this defect CAN NEVER RECORD A FULL-TIER RUN however often the cadence
+fires.
+THE ARM NAMED THE WRONG SUBJECT AND THAT IS THE REUSABLE HALF. Its message
+accuses the FEATURE — which is implemented, with a long comment citing
+801-m9tk — when its own negative control reading zero says the measurement did
+not happen at all. A control at zero is not a failed comparison; it is the
+absence of one, and an arm that reports a verdict anyway sends a fixer at
+working code. That is 1109-t8kw's class reaching the release gate: a correct
+refusal scoring as an assertion failure.
+THE DEFECT IS A GUARD GAP, NOT A FIXTURE SLIP, and the author could not have
+known. 1096-p3tn diagnosed this exact split and fixed it BY HAND in eleven
+fixtures, documenting the remedy in their comments. MEASURED TODAY: 10 of 16
+litmus fixtures export TILLANDSIAS_TIMING_LOG and SIX DO NOT, and no check-*.sh
+enforces it. The rogue records were litmus:budget-probe and litmus-suite at
+13:58Z, from a fixture that landed the same day. A remedy applied by hand to
+the instances that existed, with nothing to catch the next one, is verbatim the
+shape this file recorded eleven hours earlier about a rule held in a standing
+note: applied when remembered, while a gate applies it every time. Filed
+1204-3s2s (p1). Debris removed on this host after preserving the six records;
+cycle-metrics immediately emitted `mcp: servers=1 ... health=ok` again, which
+unblocks macuahuitl and fixes nothing.
+AND A CLAIM OF MINE THAT WAS WRONG, CORRECTED BY READING RATHER THAN REPEATED.
+I told the operator the ci-full's VERSION bump had blocked this host's push
+lane. It had not: the plan-only lane scopes the OUTGOING DIFF, not the
+worktree — `attempt_plan_only_lane` requires every outgoing PATH to be a new
+fragment, and uncommitted VERSION changes are in neither. Two filings went out
+unimpeded. I had asserted it twice before checking, which is the day's own
+lesson arriving one more time.
+
+**Pass 36 (2026-09-15T20:11Z) — the diagnostic that manufactured a false belief
+in two independent readers, and the asymmetry that makes it the worst of four.**
+osx-next +2 relayed (macbookair filing and claiming 1207-n96g, the eligibility
+arm this coordinator routed to them); windows-next 0. 1204-3s2s CLOSED by
+lenovinha at 4bb890517, guard landed 9e4ff2d62.
+THE FOURTH INSTANCE TODAY OF "THE REMEDY ALREADY EXISTED AND NOTHING POINTED AT
+IT", AND IT IS NOT LIKE THE OTHER THREE. macbookair's Darwin construction sat
+green in the same file; the orphan fixture was invisible to a search for
+enforcement; macneo's podman oracle had been retired deliberately. Those cost a
+search. THIS ONE THIS COORDINATOR ARGUED AGAINST: 930-i6x4 already excludes the
+plan fast lane from the gate stamp and 1142-85zx extended it, and I recorded
+that exact remedy on 1203-dzxn as an UNSAFE candidate WITH A DISPROOF, which
+pirria then strengthened with a supporting instance. Two signatures on a
+rejection of something that shipped. pirria's formulation is the one to keep: an
+unfound remedy costs a search; a remedy argued against, written down with
+reasoning and co-signed costs a search PLUS THE AUTHORITY OF THE REJECTION, and
+the more carefully the disproof is written the more expensive it is to dislodge.
+It took an accident to break — a retry reporting ok:land-adopts-valid-stamp in a
+log I happened to be watching — and accidents are not a retrieval strategy.
+THE PROXIMATE CAUSE IS A DIAGNOSTIC AND pirria FILED IT AS 1207-4zwf. The
+stale-stamp refusal builds its CHANGED SINCE list inside
+`enforce_stamp_scope` (pre-push-local-gate.sh), where `_changed` comes from
+`git ls-files --cached --others` filtered by MTIME ALONE, with no 930-i6x4 exclusion — so paths that DO NOT HASH appear
+in a list captioned "CHANGED SINCE THE GATE RAN" printed directly under a
+refusal, where a list of paths reads as the cause because that is what such a
+list means everywhere else. The code is not confused; the comment above `_changed` says mtime "is
+the cheap signal... it points straight at a live writer", which is a fine
+heuristic for catching a BACKGROUND WRITER. The defect is that the same output
+is consumed as the cause of THIS refusal.
+AND IT IS CAPPED, WHICH COMPOUNDS IT — verified here and added to their row. The
+construction ends in `head -12`, and the caption this coordinator received read
+"(12 path(s), newest-first by mtime)", EXACTLY THE CAP: a sample read as an
+enumeration, a shape this fleet already has a rule about. The newest-first sort
+means the twelve shown are the just-rebased ledger fragments while the real
+cause falls off the end — pirria established by looking properly that what
+staled their stamps was crates/tillandsias-control-wire/src/lib.rs, Cargo.lock
+and build.sh, all hashing, none of them shown. SO THE DIAGNOSTIC DOES NOT MERELY
+FAIL TO EXCLUDE THE INNOCENT PATHS; IT PREFERENTIALLY SHOWS THEM AND HIDES THE
+GUILTY ONE. Two independent readers formed the same false belief from that
+output on the same day, which is about as strong a demonstration as a diagnostic
+defect can get.
+SURFACED NOT CLOSED: 1202-jpzy's code is on trunk at b9a82bf63 and the row still
+reads in_progress. That is 1155-jurn's shape again — finished, landed work whose
+row claims it is unfinished — and it is pirria's evidence to cite, not this
+coordinator's to assume. lenovinha's own follow-up is the mirror of it: closing
+1204-3s2s they recorded that 1125-92xa's verification remains UNBOUND, which is
+1205-aipn's subject reported by its own discoverer against their own row.
+
+**Pass 36 addendum (2026-09-15T21:05Z) — yolanda returned, and the defect the
+operator hit is a correct guard whose input the tray lane cannot supply.**
+ROOT CAUSE, found by yolanda and VERIFIED HERE IN THE SOURCE rather than taken
+on report: `run_provider_login` runs the 759-vceg push-authorization probe
+between the login and the Vault write, and it resolves the target repository
+with `read_host_project_origin_url(Path::new("."))` — THE PROCESS'S CURRENT
+WORKING DIRECTORY. On None it returns a long, well-written refusal whose
+literal text includes "Nothing was written to Vault". Confirmed present.
+THE INPUT IS UNOBTAINABLE IN THAT LANE ON THIS HOST, measured by yolanda in the
+guest: `find / -maxdepth 6 -name .git -type d` returns NOTHING — not one git
+checkout anywhere in the VM — /home/forge/src exists and is EMPTY after the
+~/src removal, and a guest login shell's cwd is /root. So the None arm is
+guaranteed on every login attempt whatever token is pasted. THE GUARD IS
+CORRECT AND ITS PRECONDITION IS UNSATISFIABLE WHERE IT RUNS, which is a design
+gap rather than a bug in either half, and it bites Windows and macOS tray hosts
+first because their login always runs in the guest.
+THE OPERATOR'S ~/src INSTINCT WAS RIGHT BY A PATH NOBODY WAS LOOKING AT. Their
+hypothesis was that project listing still resolved through a checkout that no
+longer exists; yolanda and yoga both read the enumeration code and correctly
+withdrew it. It turned out the checkout dependency is upstream of enumeration
+entirely — in the LOGIN's authorization probe — so the symptom they reported
+(auth succeeds, projects never list) was produced by a checkout dependency, in
+a different function, two steps earlier.
+FOUR SELF-CORRECTIONS FROM ONE HOST IN ONE SESSION, each unprompted and each
+before it cost anyone else: the ~/src hypothesis withdrawn on yoga's reading;
+"the login script never writes to Vault" corrected after finding the separate
+write step; "run_podman_command_silent swallows stderr" corrected after this
+coordinator read the function (it returns stderr AS the error); and "exec #2
+was the Vault write" corrected to `gh auth status` once the timeline resolved —
+the Vault write NEVER RAN, which is why the secret is absent and why nothing in
+Vault was ever touched. They also proved the Vault path FUNCTIONAL by
+measurement rather than by reading, with operator authorisation, and cleaned up
+after: minted a real SecretID, wrote, read back, deleted, and verified
+`kv list secret/` identical to the pre-probe state.
+AND THEY NEARLY FILED A FALSE FINDING OFF A `| head`-TRUNCATED LIST — a missing
+AppRole that was below the cut — and flagged it rather than letting it travel.
+That is this fleet's own capped-enumeration rule, caught on their own work; the
+coordinator hit the same trap six hours earlier reading a refusal's "12 path(s)"
+as a complete set and needed three retractions to unwind it.
+CONSENT, RECORDED AS REPORTED AND NOT AS VERIFIED: yolanda states the operator
+confirmed destructive-teardown consent DIRECTLY to them, in session, for this
+host on 2026-09-15. This coordinator did not hear it from the operator and
+cannot verify a consent given to someone else, so it is recorded with its
+attribution and surfaced for the operator to confirm or correct. yolanda
+correctly refused to act on the coordinator's word earlier and has run NO
+destructive teardown — and on this diagnosis does not need one: nothing is
+corrupt, the flow is refusing correctly on a precondition the host cannot meet.
+
+**Operator rulings, 2026-09-15 evening — recorded here because a standing
+authorization that lives only in a transcript is not an authorization anyone
+can check later.**
+DESTRUCTIVE TESTS: the operator approved FLEET-WIDE destructive tests as
+needed, given directly to this coordinator in session. That supersedes the
+per-host consent bookkeeping this file has been carrying all day, in which
+esme, macbookair and pirria held standing consent and yolanda and macneo did
+not. yolanda's separately-obtained per-run consent for 2026-09-15, recorded
+earlier as REPORTED-not-verified, is now subsumed by the general approval and
+needs no further confirmation.
+WHAT DOES NOT CHANGE: 1004-vsh2's reasoning about WHY the consent matters. A
+workstation's guest holds work the operator has not finished with, and an
+orchestrator's or peer's instruction to run a destructive procedure is still
+not the operator's consent to destroy a particular machine's state. The
+approval removes the need to ASK; it does not make a destructive run the right
+move when a diagnosis does not call for one. yolanda's own judgement tonight is
+the model — they had the consent, and declined to use it because nothing was
+corrupt and wiping would only reproduce the same refusal on a colder machine.
+WEBSITE: the operator authorised updating tillandsias.org directly, and the
+work is deployed at 778a078 — the git-mirror decision explained across levels
+1-4 at increasing relevance, three new slides with a nested-boxes figure, and
+the install lines shortened to site-hosted static shims that resolve the
+release channel at run time. The shim design preserves the property the long
+GitHub URLs were protecting: the site redeploys on commit while the release
+channel moves on its own, so the shims never need rebuilding when the app
+releases.
+
+**Pass 37 (2026-09-15T22:11Z) — the expiry sweep cannot see work that is
+committed but unlanded, and a guard was cfg-gated off every host that gates.**
+Nothing to relay: windows-next and osx-next both 0 ahead. Six rows in_progress,
+TWO expiry candidates, and NEITHER should be swept.
+1186-w3ph READS STALE AND ITS HOST IS THE MOST ACTIVE ON THE FLEET. The sweep
+reports claimant:yolanda with no activity since 2026-09-14T22:00Z, which is
+over the TTL. yolanda has been working all evening — three rows filed, a root
+cause found, four self-corrections — and their 1186-w3ph commits DO exist: at
+eb83f855e, on refs/heads/salvage/yolanda-windows/20260915-1186-w3ph, verified
+NOT an ancestor of trunk. So the work is committed and unlanded, and the ledger
+cannot see it. THE SWEEP MEASURES LANDED ACTIVITY AND CALLS IT HOST ACTIVITY.
+A host that commits, salvages, and is blocked on a gate or a decision looks
+identical to a host that walked away. This is the third distinct way this
+instrument has misread a live claim today, after the channel defect (1198-7q95)
+and the platform-versus-workstation attribution (1201-hsf9), and it is the
+first that is not a defect in the sweep at all — the sweep is reading the only
+signal it has.
+1155-jurn is the other candidate, unchanged all day: esme offline, finished
+work, left untouched by design.
+A GUARD WAS CFG-GATED OFF EVERY HOST THE FLEET GATES ON (yoga, 1213-ysme,
+completed and verified on trunk). The assertion forbidding a de-pipe of the
+GitHub-login wrapper lived inside a cfg(target_os = "windows") module, so on
+linux-next the doc comment warning a future debugger was PROSE: the change it
+forbids would have passed every gate available to whoever made it. Two hosts,
+same crate and filter — yoga 0 passed / 18 filtered out, a green ok over zero
+executed which 913-27ex settles is not a pass; yolanda 1 passed / 123 filtered.
+The fix was free because the assertion reads the file as text and never needed
+the module.
+AND THE DETECTION METHOD IS yolanda's, AND IT IS THE REUSABLE HALF: 105 tests
+exist on one host and not the other, and NEITHER OUTPUT SAYS SO. Comparing PASS
+counts cannot detect it — 0 and 1 are both plausible — but comparing
+FILTERED-OUT counts can. That is the first cheap test the fleet has for "this
+gate is not running what you think it is", and it needs no new machinery. They
+scoped their row to one crate and two hosts, flagged the generalisation as
+inferred, and named the cfg-gated modules as where to look without claiming any
+currently hides a guard.
+THE COORDINATOR'S OWN INSTRUMENT ERROR, CAUGHT BY CHECKING RATHER THAN BY CARE.
+Reading yoga's "roughly 17 cfg-gated module declarations", this coordinator
+counted 4 and was about to report the discrepancy. The query required `cfg` and
+`mod` on the SAME LINE, and the attribute normally sits on the line BEFORE the
+declaration — so it was structurally incapable of finding the ordinary case.
+Counted correctly: 17 in the attribute-then-declaration form, 2 same-line, 238
+cfg(target_os) attributes overall as the control. yoga's number was right. That
+is the fourth time today a wrong query produced a confident, plausible number.
+THE WEBSITE NOW CARRIES THE PROJECT'S UNTRACKED DEBT, filed as 1213-rbt9. Across
+the five levels at their pinned release: 38 published shortcomings, and FOURTEEN
+whose PATH line is the site's own sentinel, "No path to green is recorded in the
+repo." Five of the fourteen are security items. Levels 3 and 4 now link the
+tracking entry, so an outside reader who wants to argue with one — or report it
+— has somewhere to attach it rather than rediscovering it independently.
+
+**Pass 38 (2026-09-16T00:11Z) — a technique rediscovered three times in one
+night, and an escalation routed before its author could double-claim it.**
+Nothing to relay: windows-next and osx-next both 0 ahead. Eight rows
+in_progress, two expiry candidates, NEITHER swept — 1155-jurn (esme, offline,
+finished work) and 1186-w3ph (yolanda, commits on a salvage ref), both
+established last pass as false positives of a sweep that measures landed
+activity and calls it host activity.
+THE DECOUPLED-FRAGMENT LANE WAS REDISCOVERED INDEPENDENTLY THREE TIMES TONIGHT
+and each rediscovery cost a refusal first — pirria twice, macbookair once. It is
+now recorded as a recipe on 1203-dzxn rather than as three anecdotes. Branch
+from origin/linux-next, cherry-pick ONLY the fragment, push that: the plan-only
+lane judges the OUTGOING DIFF, not the worktree, so a branch taken fresh from
+trunk carries no code and needs no stamp. A platform host whose mandated merge
+brought code can therefore still make a claim visible without spending a gate.
+AND ITS TRAP IS A DIAGNOSTIC DEFECT, NOT A LANE DEFECT. The fresh branch carries
+TRUNK's tree, so a newly-landed plan crate leaves the resolved binary stale and
+the push refuses with "full gate required" when the remedy is a 25-second
+rebuild. This coordinator hit it twice and macbookair once. macbookair's
+phrasing is the one recorded: THE REFUSAL TEXT DOES NOT DISTINGUISH "you need a
+full gate" FROM "you need a 25-second rebuild". Same family as 1207-4zwf, where
+a correct refusal names paths that are not the cause — both point at a remedy
+more expensive than the situation requires.
+A CONFLATION WORTH KEEPING, caught by macbookair against themselves. They
+argued a message to the coordinator satisfied the claim-first rule because the
+coordinator is the consumer and was reading it. THE CONSUMER IS THE SELECTOR. A
+host draining plan_next reads the ledger, not anyone's inbox, so telling the
+coordinator separates nobody from anybody. They noted it slipped past them
+precisely because they were arguing economics at the time — the substitution of
+"the coordinator knows" for "the fleet can see" is invisible while you are
+defending the cost of the alternative.
+AND THE CHECK THAT NEARLY MISSED IT WAS MINE. Asked whether another host could
+still take 690-w94k, I ran `next` for three roles, got zero each time, and
+nearly ruled the risk absent. `next` returns "top 5 of 194 eligible" — a zero
+means NOT IN THE TOP FIVE, not "not offered". The row IS eligible. Fifth wrong
+number from a capped or mis-scoped query on this host today.
+ROUTED 1201-9it2 TO lenovinha BEFORE ITS AUTHOR COULD DOUBLE-CLAIM IT. yoga
+filed it, disproved its own headline, eliminated five candidates and explicitly
+asked for it to be routed rather than absorbed — then said they would take it on
+their next cron if still unowned. Both are the right instinct and together they
+are a double-claim, which the flip prevents. WHOEVER READS THAT ROW MUST READ
+ITS EVENTS AND NOT ITS TITLE: the title still carries the disproved explanation
+because a base fragment is immutable, and a reader starting from it would
+re-derive a disproof that already exists.
+
+## Pass 39 — 2026-09-16, macuahuitl (coordinator)
+
+**A HOST THAT CAN SPEAK BUT CANNOT LAND IS NOT A WEDGE, AND THE ARITHMETIC IS THE
+REPORT.** macneo-macos refused its own land after two attempts rather than
+spending a third gate, and sent numbers instead of a feeling: origin/linux-next
+ran 19 commits in the hour at ~3 min mean against a ~17 min macOS gate. I
+reproduced the same order on the trunk side minutes later — 21 commits, ~2.9 min
+mean — three of them mine, which is worth naming because the coordinator's own
+cadence is part of the interval a slow host cannot land against. The race is
+unwinnable BY ARITHMETIC, not by luck. macneo's plan-only relays all succeeded,
+so the host can speak and cannot land; that asymmetry is 1142-85zx's clock seen
+from the side that pays it.
+
+**THE BINDING CONSTRAINT IS GATE DURATION AGAINST TRUNK VELOCITY, NOT DIFF SIZE.**
+macneo's sharpest point, and the one a reader of 1142-85zx will most easily miss:
+shortening the gate for plan-only diffs helps that host land NOTHING, because the
+diff it cannot land is the one carrying trunk's own mandated merge.
+
+**I POINTED A CORRECTED REMEDY AT THE WRONG REF, AND A PEER CAUGHT IT IN UNDER AN
+HOUR.** Earlier tonight I rewrote land-on-platform-branch.sh's push-failed block
+after macbookair showed the old "retrying cannot help" sentence was absolute
+where it should have been specific. My replacement told the reader to measure
+`origin/$BRANCH` — the branch being pushed. For a mandated-merge refusal that is
+the wrong ref: the refusal names the ref the branch must CONTAIN. macneo followed
+the text literally, measured osx-next, found it quiet at 0 commits for the hour,
+and the text therefore said "quiet, spend the gate" about the one ref that was
+not racing them. THE SHAPE: a correction that fixes the sentence and leaves the
+subject wrong reads more confidently than the error it replaced, because it now
+names a specific command. Fixed to say MEASURE THE REF NAMED IN THE REFUSAL, with
+macneo's numbers and a stop rule.
+
+**SIX DIAGNOSES LANDED AS PROSE WITH NO LEDGER ROW, SO NOTHING WOULD EVER ROUTE
+THEM.** yolanda-windows' Windows login batch landed eight files; the two ledger
+fragments both belonged to one unrelated packet, and the six issue documents had
+no packet at all. Four were actionable and are now filed (1215-xazj, 1215-cxgb,
+1215-8jui, 1215-5uba); the other two are correctly not work items — one is
+WITHDRAWN by its own author and one is a pattern synthesis. MEASURED while
+filing, and stated with its caveat rather than as a defect: 436 of 609
+plan/issues documents carry no ledger row. Most are legitimately not work items —
+drill logs, smoke reports, audit records — so that number is NOT 436 dropped
+rows, and reading it that way would be the two-way-compare-over-a-three-way-world
+error. What it does mean is that an actionable finding filed as prose is routable
+only if someone happens to notice it.
+
+**ONE OF THE FOUR HAS A CLOCK AND IS ADDRESSED TO THE OPERATOR, NOT TO A HOST.**
+1215-cxgb: yolanda-windows' working GitHub login depends on a hand-written
+`.git/config` nothing provisions, inside a guest the tray reprovisions on its own
+(observed 2026-09-12). Its three options all cost the operator's own workstation
+something, so `pickup_role: operator` — routing it to a working host would hand a
+peer a decision about somebody else's machine, which a peer cannot make. yolanda
+filed it unclaimed for the same reason and said so.
+
+**AND ONE IS LATENT FLEET-WIDE WHILE LOOKING HOST-SPECIFIC.** 1215-xazj: the
+759-vceg push probe resolves its repository from the process CWD, and the tray
+always runs the login in the guest where no checkout exists. Any host that has
+not re-authenticated since the ~/src removal is running on a credential seeded
+while a checkout still existed — it works, and keeps working, until the next
+login. Established by controlled experiment with the operator running both arms,
+one variable. The guard is correct and is vindicated twice in that record: it
+refused three times when it could not verify, and the once it did verify, the
+credential it approved genuinely pushed.
+
+**I OFFERED TO ABSORB A LIMITATION THE HOST DID NOT HAVE, AND IT DECLINED THE
+OFFER CORRECTLY.** I asked macneo whether they wanted me to file the relay-ref
+row here, reasoning that adding a row to "a host that cannot land" was
+unkind. What I had measured was a host that cannot land CODE; filing is a
+plan-only write, and they had just done three of them in the same cycle. They
+filed it themselves as 1216-ewaz (verified on trunk, 4d50d48e3) and said why:
+"declining a ledger row on that basis would have been me accepting a limitation
+I do not have." THE SHAPE, and it is a coordinator-specific one: a courtesy
+extended from a measurement read one notch too wide moves work off the host that
+has the evidence and onto the host with the merge button, for no reason. The
+generous reading and the accurate one were not the same reading.
+
+**1216-ewaz IS THE ESCAPE-HATCH HALF OF 1142-85zx.** The refs/heads/work/ relay
+is the only route that does not require winning the gate-versus-trunk race, and
+it is documented ONLY INSIDE THE REFUSAL YOU GET AFTER LOSING THAT RACE. A path
+you can learn about only by first failing is not a documented path. macneo's
+first exit criterion is the one I would have missed: the surface must name WHO
+MERGES THE REF AFTERWARDS, because a gated tree sitting on a ref nobody watches
+is a slower version of the same starvation. Negative control: a host that has
+never seen a land refusal must find the path from the pre-land surface alone.
+
+## Promotion — v56.9.13.1 to stable, 2026-09-16, on the operator's instruction
+
+**PROMOTE-EXISTING, NOT A CUT, AND THE DISTINCTION SAVED THE BLESSING.** The
+operator installed from tillandsias.org on macbookair over dinner, got
+v56.9.12.2 (2026-09-12), and asked how far we were from a release carrying the
+git-mirror fixes. The answer was already on the shelf: v56.9.13.1 had been cut
+2026-09-14, was GREEN on ./build.sh --ci-full at 7a089997d (33/33 checks,
+358/358 pre-build litmus), and had been smoked PASS on ALL THREE PLATFORMS —
+esmeraldinha (Windows), pirria (Linux), macbookair (macOS, the same machine the
+operator was holding). 952-mrsl's rule applies exactly: a fresh cut would have
+discarded the artifacts that blessing verified. Flipped instead:
+`gh release edit v56.9.13.1 --prerelease=false --latest`.
+
+**NO MAIN MERGE WAS NEEDED AND THE SKILL'S LITERAL TEXT WOULD HAVE BEEN WRONG
+HERE.** merge-to-main-and-release's PROMOTE-EXISTING path says to merge
+linux-next into main first. That step assumes you are promoting shortly after a
+cut, when trunk and main are close. MEASURED: origin/main was 6b8342f3f, which
+IS v56.9.13.1 exactly, and trunk was 540 commits ahead. Merging trunk into main
+would have put 540 unreleased commits on main under a tag that does not contain
+them — a de-facto release with no tag and no gate. The promotion is a flag flip
+on an existing tag and needs no branch movement at all. Verified the tag was
+already an ancestor of main before flipping, rather than assuming it.
+
+**VERIFIED THROUGH THE PATH THE OPERATOR ACTUALLY USED, NOT THE ONE I CHANGED.**
+`gh release list` showing Latest is the API's answer, not the installer's. The
+website shims default to `${TILLANDSIAS_RELEASE_BASE:-.../releases/latest/download}`,
+so the check that matters is whether that redirect moved: it now 302s to
+tag/v56.9.13.1, and Tillandsias.dmg and install-macos.sh both return 200 through
+it. No website deploy was required — the shims resolve the channel at run time,
+which is the property they were built for.
+
+**WHAT THE PROMOTION DOES NOT FIX, STATED BEFORE IT WAS ASKED.** Two defects
+ship with this stable and both were named to the operator before the flip:
+1171-ccf2, the Windows zip not carrying tillandsias-headless.exe — `implemented`
+on trunk, NOT in this tag, so Windows hosts still hit it; and 1215-xazj, p1 and
+unfixed in stable, in the daily AND on trunk, so the tray's --github-login is
+broken at a newer version number rather than repaired by it. A promotion that
+raises the version while leaving a p1 in place is exactly the kind of thing a
+release note must say out loud.
+
+**STILL UNRELEASED ON TRUNK:** 890-y72v (DeliverCredentialsReply carries an
+accept/reject discriminator — a WIRE v4 bump, so host and guest must move
+together), 1201-t6ms and 1211-34v6, plus the 1171-ccf2 fix. Those want the next
+cut and their own blessing round, not a rushed promotion.
+
+## Pass 40 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY, AND THAT IS A MEASUREMENT RATHER THAN AN ABSENCE.** Both
+platform branches are fully contained in trunk: `windows-next` at 34796b2fd
+(ahead=0, behind=299) and `osx-next` at 5560b12bd (ahead=0, behind=78). No land
+this pass. `main` sits at 6b8342f3f — which IS v56.9.13.1 — behind=559.
+
+**FIVE OF SEVEN UNLANDED REFS ARE SUPERSEDED, AND ANCESTRY ALONE WOULD HAVE
+MISREAD ALL SEVEN.** Seven refs on origin are not ancestors of trunk. Checking
+each against its ROW rather than its ancestry: `1185-9qx6`, `1189-2ra5` and
+`1199-aw6m` are **completed**, `1069-c9w6` and `1087-h2z9` are **verified**. So
+five carry work that landed by another route, exactly as 1032-class warns —
+"integrated is proven by ancestry" cuts both ways, and a ref that is not an
+ancestor is not thereby outstanding. The two `salvage/unknown/20260902-opsx-*`
+refs are a fortnight old and belong to a cycle-refusal snapshot.
+
+**THE ONE LIVE ONE IS 1186-w3ph, AND "UNLANDED, WANTING A GATE" WAS TOO COARSE
+TO ACT ON.** The row is `in_progress` (yolanda's) and its salvage ref carries 11
+files. Compared by CONTENT, not by ancestry: **7 are byte-identical on trunk**
+already, and three `fix(1186-w3ph)` commits landed on 2026-09-14 (79b222739,
+125ae5d21, plus the claim and the mechanisms record). Of the four that differ,
+direction matters and splits them:
+
+- `litmus-forge-upstream-auth-gate.yaml` — **trunk is AHEAD** (371dde08a,
+  2026-09-15T20:07Z, after the 08:21Z salvage snapshot). The salvage is stale here.
+- `litmus-plan-answer-envelope-citability.yaml`, `post-commit-expert-refresh.sh`,
+  `test-salvage-net.sh` — trunk last touched them 2026-08-17, 2026-08-28 and
+  2026-09-14T10:14Z respectively, all BEFORE the snapshot, so these three carry
+  changes trunk lacks.
+
+Not acted on: the row is yolanda's claim, they have not reported this pass, and a
+salvage ref is a dirty-tree snapshot rather than a gated branch — three files
+differing is a question for its author, not a licence to land. Recorded so
+whoever resumes it inherits the split instead of re-deriving it.
+
+**THE CYCLE-METRICS PASTE HAS BEEN DEAD FLEET-WIDE FOR ELEVEN DAYS AND THE
+AUDIT THAT SAYS SO IS RUN BY THE HOST THAT ALSO STOPPED.** `rows=23 stems=23`
+(no dropped stem, so the count is trustworthy), and EVERY stem reads
+NOT-PASTING. Last pastes cluster in early September and then stop:
+macuahuitl 2026-09-05T22:58Z, yoga 2026-09-05T01:29Z, yolanda 2026-09-05T03:34Z,
+macbookair 2026-09-04T23:00Z, lenovinha 2026-09-04T21:55Z.
+
+The obvious reading — thirteen hosts each forgot — is wrong, and the
+discriminating checks say so:
+
+- the instrument WORKS. `scripts/cycle-metrics.sh` runs clean, rc=0, and emits
+  the full block including `recur:` (29683 runs, 640 steps), `skippable:` (96
+  candidates) and `tokens:`.
+- the instruction EXISTS, in **five** skills — advance-work-from-plan,
+  meta-orchestration, coordinate-multihost-work, smoke-curl-install-and-test-e2e,
+  deslop-sweep.
+- compliance has ALWAYS been poor and is now zero: **82 of 586** loop_status
+  entries ever carried a metrics line (14%), and tonight's entries from macneo
+  and macuahuitl carry none.
+- **1001-q3zf, the row that built it, is `completed`.**
+
+So the instrument was built, the row closed as done, and the consumption never
+happened — while the audit has reported NOT-PASTING every pass since and nothing
+changed, including about the host running the audit. THIS IS 1218-25z3's SHAPE
+ONE FLOOR OVER: an instruction with no gate. A blocker list nobody is required
+to open and a metrics paste nobody is required to make are the same object —
+protection that exists, is never consulted, and reports nothing when it fails to
+fire. The difference is that this one has an audit that DOES report, every pass,
+and is itself ignored, which is worse: a live alarm nobody silences and nobody
+acts on trains its readers to skip the line.
+
+Not filed as a new row this pass. It belongs to whoever takes 1218-25z3, as the
+second instance proving the shape is general rather than a release-path quirk.
+
+**NO REASSIGNMENT, AND THE FLEET IS NOT IDLE.** Three hosts reported since the
+last pass and all three closed cleanly with self-determined next work: macneo
+(cycle closed, clean, back on hourly cadence), yoga (story complete, taking
+1218-25z3 before the 1217-54vw costing), macbookair (cycle closed, 690-w94k
+criterion 3 released because it was claimed and never started, back on cadence).
+None asked for work and none is stuck, so nothing was flipped on anyone's
+behalf. 1215-5uba's second-instance measurement suits a floor-tier host and is
+`ready` with `pickup_role: any` — available to whoever drains next, not assigned.
+
+## Pass 41 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY; TRUNK HAS NOT MOVED SINCE THE MO CYCLE CLOSED.** Both
+platform branches remain fully contained — `windows-next` ahead=0 behind=309,
+`osx-next` ahead=0 behind=88 — and `origin/linux-next` is still 059173270, this
+host's own attestation head. No new host reports and no peer messages since pass
+40, so the quiet is a short interval rather than a fleet state, and no idleness
+is inferred from it (1005-class: idleness is established by asking, never by a
+timestamp).
+
+**THE CLAIM-EXPIRY SWEEP OFFERED TWO CANDIDATES THAT LOOK IDENTICAL AND WANT
+OPPOSITE RESPONSES.** Run READ-ONLY, no `--write`:
+
+```
+expire-candidate  1155-jurn   2026-09-14T07:56:09Z  claimant:windows
+expire-candidate  1186-w3ph   2026-09-14T22:00:00Z  claimant:yolanda
+summary: in_progress=6 expired=2 held=0 unknown_age=0 ttl_hours=24 mode=dry-run
+```
+
+Checked each by hand, because the output does not distinguish them:
+
+- **1155-jurn is SAFE to expire.** `refs/heads/work/1155-jurn` IS an ancestor of
+  trunk — the work landed. And its claimant is `windows`, a PLATFORM rather than
+  a workstation: 772-4se9's old default, the exact shape 1201-hsf9 now refuses at
+  write time. This is a pre-fix defaulted claim on a row whose work is done.
+- **1186-w3ph would STRAND WORK.** yolanda's salvage ref is not contained and
+  THREE files still carry changes trunk lacks, verified by content rather than
+  ancestry. Returning it to ready invites a second host onto work whose holder
+  has real changes parked on origin.
+
+`--write` applies both together. NOTHING WAS EXPIRED THIS PASS, and the reason
+is recorded per candidate rather than as a blanket caution.
+
+**FILED 1220-zb7q FOR THE BLIND SPOT ITSELF.** The sweep reads only the ledger,
+so it cannot see unlanded work on an origin ref, and a coordinator must redo
+this ancestry-and-content check by hand every pass — the kind of manual step
+that gets skipped on the pass where it matters. THIS IS 1187-iij8's SHAPE IN THE
+LEDGER TOOL: there a floor-tier timeout and a real assertion failure wore the
+same colour and sent a fixer to something not broken; here a landed claim and a
+claim holding parked work wear the same verdict word. The instrument is not
+wrong about what it measures — it is silent about the fact that changes the
+answer. Filed asking for an ANNOTATION with three outcomes (contained / not
+contained / could not check), explicitly not for a refusal: consulting origin is
+a network call and the sweep must still work without one.
+
+**NO REASSIGNMENT.** The four hosts heard from recently all hold
+self-determined work — yoga (1218-25z3 then the 1217-54vw costing), lenovinha
+(landed 1219-dcma an hour ago), macneo and macbookair (both closed clean and
+back on hourly cadence). None reported idle, none asked, and none was directed.
+
+## Pass 41 addendum — 2026-09-16, the self-kill is now a fleet pattern
+
+**A SECOND HOST KILLED ITS OWN TOOL SHELL WITH `pkill -f <name>`, AND THE WORST
+CONSEQUENCE WAS NOT THE KILL.** yoga-silverblue, stopping a spinning loop in
+`check-must-ship-rows.sh`, ran `pkill -f` matching the script name; the shell's
+own command line contained that name, so the sweep killed the shell. **The loop
+survived** and kept burning CPU — found afterwards with `pgrep` and killed by
+PID. macuahuitl hit the identical shape earlier in this restart window, which is
+why it is recorded here as a pattern rather than as one host's slip: the cause is
+structural — a `-f` match reads the FULL command line of every process, and the
+process issuing the sweep is one of them.
+
+**THE THIRD-ORDER CONSEQUENCE IS THE ONE WORTH CARRYING.** The dead shell was
+midway through a COMPOUND command, so an edit yoga believed had applied had NOT.
+They caught it only by grepping for the new text rather than resuming from the
+intended state. So after any shell dies mid-command the tree is in a BELIEVED
+state, not a known one, and the only safe move is to re-derive it from the files
+— grep for the new text, read the diff — never to continue from what the command
+was supposed to have done. That is the "a result is not evidence unless the
+producer ran" shape pointed at your own editor instead of at a test, and it is
+how a half-applied edit reaches a gate looking intentional.
+
+**AND THE LOOP ITSELF WAS THE BETTER FINDING.** The arm yoga wrote for the
+coordinator's silent-unknown-argument defect caught a different and worse one:
+`--marker` with no value made `shift 2` fail with the argument count unchanged,
+so the loop SPUN FOREVER under `set -uo pipefail` with no `-e`. A release-path
+script that HANGS is worse than one that answers wrongly — no verdict, no error,
+only a stopped terminal, and nothing to read afterwards. Verified fixed from the
+landed tree here, BOUNDED with `timeout 15` rather than run bare, because
+verifying a hang fix by invoking it unbounded reproduces the hang in the
+verifier: `fail:must-ship:missing-value`, terminated on its own, rc=0 not 124.
+
+## Pass 42 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=326, `osx-next` ahead=0
+behind=105, both fully contained. `main` behind=586. No land needed.
+
+**COMMIT AUTHORSHIP DOES NOT IDENTIFY THE HOST, AND I MISREAD IT IN THIS PASS
+BEFORE CATCHING IT.** Counting trunk activity by `%an` this pass returned
+`8 Tlatoāni / 6 Tlatoani` and my first reading was "my own name split across two
+spellings". IT IS TWO DIFFERENT HOSTS: `Tlatoāni` (macron) is
+`tlatoani@yoga.ayahuitlcalpan.com` and `Tlatoani` (no macron) is
+`tlatoani@macuahuitl.ayahuitlcalpan.com`. I had the attribution backwards — the
+8 were yoga's, the 6 mine — and caught it only by resolving shas yoga had named
+in a message against `%ae`.
+
+MEASURED over the last 7 days, ELEVEN distinct (name, email) pairs, with the
+name collapsing across hosts:
+
+- `Tlatoani` maps to FOUR emails — `bulloncito@gmail.com`,
+  `bulloncito+lenovinha@gmail.com`, `tlatoani@macuahuitl.ayahuitlcalpan.com`,
+  and `tlatoani@Tlatoanis-MacBook-Neo.local`.
+- `Tlatoāni` maps to TWO — `bulloncito@hotmail.com`,
+  `tlatoani@yoga.ayahuitlcalpan.com`.
+- Plus `8007342`, `Dany Boy`, `lapto`, `esmeraldinha`, `lenovinha`.
+
+THE COST IS NOT COSMETIC. Last 24h, the two views disagree about who exists:
+
+```
+by EMAIL   macuahuitl 99 | bulloncito@gmail 59 | yoga 51 | lenovinha 36 | macneo 9
+by NAME    Tlatoani  159 | Tlatoāni        51 | lenovinha 36 | lapto      8
+```
+
+The name view MERGES macuahuitl and an unattributed bucket into one row of 159,
+and LOSES macneo ENTIRELY — its 9 commits fold into that same 159. So a host
+that is working reads as silent. This pass exists partly to find idle hosts and
+reassign them; an instrument that reports an active host as absent is the exact
+opposite of what the pass needs, and 1005-class already forbids inferring
+idleness from timestamps for the same reason.
+
+REMEDY, AND IT IS FREE: count by `%ae`, and prefer the
+`<user>@<host>.ayahuitlcalpan.com` form, which is the only shape that names a
+host. `bulloncito@gmail.com` at 59 commits is an UNATTRIBUTED BUCKET and must
+never be read as a host — the same rule `loop-status-metrics-audit.sh` already
+enforces for platform-label stems (order 1012-hu7d, "never read a bucket as a
+host"). The git-author view has the identical failure mode and no such guard.
+
+NOT ACTED ON BEYOND RECORDING: per-host git identity is host configuration, and
+agents never change deployments. Routed to the operator as a plain ask rather
+than repaired here.
+
+**NO REASSIGNMENT.** Four hosts are identifiable-active in the last 24h by email
+— macuahuitl, yoga, lenovinha, macneo — and all four hold self-determined work:
+yoga closed the 1217-54vw costing and released the claim, lenovinha closed
+1219-dcma, macneo and macbookair are on hourly cadence. None reported idle and
+none asked. No claim was flipped onto anyone.
+
+## Pass 43 — 2026-09-16, macuahuitl (coordinator)
+
+**RUN READ-ONLY WHILE AN MO CYCLE HELD THE CHECKOUT.** The coordination prompt
+arrived with this host's own meta-orchestration cycle mid-flight: a land gating,
+914-nkc4 unclosed, no attestation yet, and `cycle-checkout-lock.sh status`
+answering `skip:overlap-lock-held:lane=operator-prompt pid=22560`. The branch
+audit, the activity read and the host reports need no writes, so they ran; the
+drill entry and every ledger write were HELD until the gate finished. Writing
+plan fragments underneath a running gate is the lapse yoga-silverblue
+self-reported an hour earlier — the digest skips `plan/index.d/*.yaml`
+(gate-stamp.sh, the fast-lane `continue`), so the STAMP is safe, but the
+ledger checks inside `./build.sh --check` read a tree that would be changing
+beneath them. The lock said so and was obeyed rather than argued with.
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=336, `osx-next` ahead=0
+behind=115. `main` behind=596.
+
+**PASS 42's AUTHORSHIP HAZARD NOW HAS A NAMED HOST, AND IT IS NOT A RELAY
+ARTEFACT.** Pass 42 found that `bulloncito@gmail.com` is an unattributed bucket
+carrying 59 commits in 24h. This pass identifies it: **macbookair commits
+directly under the operator's own identity and has no host-identified git
+address anywhere.** Across BOTH branches over 14 days there are nine distinct
+author emails and not one of them names that host:
+
+```
+bulloncito@gmail.com          bulloncito@hotmail.com
+bulloncito+lenovinha@gmail.com  bulloncito@outlook.com
+esmeraldinha@esmeraldinha…    lenovinha@lenovinha…
+tlatoani@macuahuitl…          tlatoani@Tlatoanis-MacBook-Neo.local (macneo)
+tlatoani@yoga…
+```
+
+CHECKED BEFORE RECORDING, because "fragments FROM macbookair" reads like relayed
+work, and a relayed commit is legitimately authored by the relayer. It is not
+relay: `plan(690-w94k): claim criterion 3` and `plan(690-w94k): release criterion
+3 unstarted` are macbookair's OWN actions under `bulloncito@gmail.com`. The
+contrast is in the same query — this host's relays say so in the subject
+(`plan(coordination): relay macbookair's 690-w94k…`) and are authored by
+macuahuitl. So the fleet is SPLIT: macneo, lenovinha, yoga, esmeraldinha and
+macuahuitl carry per-host identities; macbookair carries the operator's, and its
+work is distinguishable only by PROSE IN A SUBJECT LINE.
+
+**AN INSTRUMENT DEFECT OF MINE IN THIS PASS, recorded because it is the shape
+this drill exists for.** Probing for a macbookair email I wrote
+`grep … | head; echo "  (empty = none)"` — the label prints UNCONDITIONALLY,
+whatever the grep returns. It returned `Tlatoanis-MacBook-Neo.local` (macneo's
+host, not macbookair's) and my own output then announced "empty = none"
+underneath a non-empty result. A hardcoded conclusion beside a real result is
+worse than no label: it reads as the instrument's verdict. Caught by reading the
+two lines together; the corrected form asks what the matched line IS.
+
+**NO REASSIGNMENT, AND THE FLEET IS WORKING.** By email over the last two hours:
+lenovinha 6 commits (closed 1221-vkbj plus a 1132-r4mt measurement, attested),
+macuahuitl 2, and macbookair 2 under the shared identity — it RE-CLAIMED
+690-w94k criterion 3, the row it released earlier tonight as claimed-and-never-
+started, which is a host taking work back up rather than an idle one. yoga closed
+the 1217-54vw costing and released that claim. Nobody reported idle, nobody
+asked, and no claim was flipped onto anyone.
+
+## Pass 43 addendum — 2026-09-16, a code land exhausted its attempt budget, and the coordinator is the traffic
+
+**yoga-silverblue hit `refused:land:attempts-exhausted:4` on a CODE land**, and
+reported it as a fleet condition rather than a blocker, explicitly not asking for
+a change. Recording it with the part they were too polite to compute.
+
+**THE MECHANISM, WHICH IS A FAIRNESS PROPERTY AND NOT A DEFECT.** A host landing
+CODE pays a full gate — 921s in their measurement, ~690-750s here — before its
+FIRST push. A host landing PLAN-ONLY pays none: the fast lane admits it without
+a build stamp. So on a shared branch the two classes have wildly different costs
+of entry, and if plan traffic is dense enough the code host can lose every push
+race inside its four attempts and retire with the work unlanded, while every
+plan-only push succeeds immediately. Nobody does anything wrong and nothing is
+broken.
+
+**THE STAMP DESIGN ALREADY SOFTENS IT, and this is the part worth carrying.**
+`gate-stamp.sh`'s digest EXCLUDES the plan fast lane (the `continue` arm for
+`plan/index.d/*.yaml`, `plan/loop_status.d/*.md`,
+`plan/mo-full-attestations.d/*.md`), so merging plan-only commits does NOT stale
+a code stamp. A code land racing plan-only traffic therefore pays ONE gate, not
+one per collision — later attempts are PURE PUSH RACES and adopt the earlier
+gate's stamp (1174-u5wp). Verified independently here twice tonight: both of
+this host's lands showed attempt 1 running a real gate and attempt 2 adopting
+that same stamp, each time confirmed by matching the gate log's mtime to the
+stamp timestamp rather than trusting the message.
+
+**THE COORDINATOR IS THE LARGEST SINGLE SOURCE OF THAT TRAFFIC. MEASURED:** of
+14 trunk commits in the 90 minutes around yoga's exhausted land, **12 were
+plan-only and SIX of those were macuahuitl's** — coordination records, ledger
+notes and row filings, pushed one at a time as each was written. That is the
+1005-class rule arriving as a measurement instead of a maxim: the coordinator's
+cadence is the churn slow hosts lose to.
+
+**WHAT CHANGES HERE, self-imposed and not asked for:** plan-only pushes from this
+host BATCH to one per pass instead of one per item. Six pushes carrying six
+records is six race losses for anyone gating; one push carrying six records is
+one. It costs this host nothing — the records are written either way — and it is
+the only lever the coordinator holds that does not trade another host's latency
+for its own. yoga was right not to ask for the attempt budget to be raised;
+raising it would have moved the cost onto whoever gates next.
+
+**AND yoga's OWN SHA WAS REWRITTEN AGAIN.** They reported the work as local at
+`b41e992ae`; it landed as `0f8616a22`. Third instance tonight of the land's
+rebase arm rewriting a pre-land sha — the unpushed set carried no merge commit,
+so `_unpushed_merges` was 0 and the tool rebased. The rule is unchanged and now
+has three witnesses: a local sha is not a shared address until it is on origin,
+and the sender can tell which arm applies with `git rev-list --merges --count
+origin/<branch>..HEAD` BEFORE quoting one.
+
+## Pass 44 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=352, `osx-next` ahead=0
+behind=131. `main` behind=612. One land this pass, batched — see below.
+
+**I REPRODUCED PASS 42's OWN DEFECT IN THIS PASS's FIRST MEASUREMENT.** Pass 42
+recorded that commit author NAME does not identify the host and that the remedy
+is to count by `%ae`. This pass opened its activity read with `%ae` and then
+printed `${e%%@*}` — stripping the domain, which is the only part that names the
+host — so macuahuitl and yoga both rendered as `tlatoani` and the first reading
+of trunk composition was unusable. The recipe was followed and the DISPLAY threw
+away what the recipe exists to preserve. Re-measured with full addresses; filed
+as **1223-wzc4**, p3, because the corrected recipe lives in prose and prose gets
+retyped. The precedent is exact and already in the coordination skill: the
+loop-status metrics audit was typed from memory on 2026-09-05, lost both its
+fixes, and was moved into a script with "RUN THE SCRIPT. DO NOT RETYPE THE LOOP."
+above it. The host-activity read has the same shape and no such script.
+
+**TRUNK COMPOSITION, 3h, by host (the corrected read):**
+
+```
+macuahuitl 10  (8 plan-only, 2 code)   yoga 3   macneo 3   lenovinha 3   gmail-bucket 2
+```
+
+Ten of twenty-one commits are this host's, eight of them plan-only — the same
+proportion that produced yoga's `refused:land:attempts-exhausted:4`. The
+batching commitment made last pass holds: this pass makes ONE plan-only push
+carrying both records instead of one per item.
+
+**THE EXPIRY SWEEP IS UNCHANGED AND NEITHER CANDIDATE WAS ACTIONED.** Same two
+rows as pass 41 — `1155-jurn` (claimant `windows`, a platform not a host; its
+`work/1155-jurn` ref IS contained in trunk, so expiring strands nothing) and
+`1186-w3ph` (yolanda's salvage ref still not contained, three files still
+carrying changes trunk lacks, so expiring would strand work). `--write` applies
+both together; nothing was written. The blind spot is filed as 1220-zb7q.
+
+**NO REASSIGNMENT, AND EVERY HOST HEARD FROM IS WORKING.** lenovinha claimed
+`679-rp9m` (the login Vault poll) this pass; yoga landed `1132-r4mt`'s criterion 4
+as CODE after four attempts and said criterion 2 remains unanswered rather than
+letting the delivered half imply it; macneo relayed a ledger-only cycle and
+emitted its first token record; macbookair holds `690-w94k` criterion 3. Seven
+rows are `in_progress`. Nobody reported idle, nobody asked, and no claim was
+flipped onto anyone.
+
+## Pass 45 addendum — 2026-09-16, a lane blocker with a bootstrap loop, and my own third repeat
+
+**macbookair CANNOT LAND CODE WHILE A TRAY OWNS THE VM**, filed as 1224-zpek,
+and it has cost that host two cycles. CONFIRMED HERE FROM A LINUX HOST BY
+READING THE SOURCE — possible because the defect is in the test's SHAPE, not in
+macOS behaviour. `exec_guest_stdin.rs` carries `assert_reached_stdin_path`,
+documented as "Guard against a vacuously-passing assertion", which then
+implements that guard as an `assert!` — so it FAILS, with the message "this test
+proved nothing". **The file states the problem and encodes the wrong remedy in
+adjacent lines.** A red says the stdin path is broken; the truth is it was never
+executed. PASS-vacuously was correctly rejected and FAIL was chosen as the safe
+direction; SKIP BY NAME is the third option, and it is the one this tree already
+settled in 1141-vf9w.
+
+**THE BOOTSTRAP LOOP IS THE PART TO PLAN AROUND, and the relay ref does not
+escape it.** The fix cannot be landed from the host it unblocks, because landing
+requires the gate the tray is redding — and pushing to `refs/heads/work/<order>`
+still requires a green stamp, so that path is closed too. It needs a macOS host
+with no tray, an operator quitting theirs once, or nothing.
+
+**STRANDED WORK, MEASURED NOT ESTIMATED:** 690-w94k criterion 3 is DONE and
+falsified at `b3eb557a9`, local to macbookair. It bounds the keychain calls,
+kills and reaps on the bound, and asserts THE PROCESS TABLE rather than elapsed
+time — which is what makes it catch macneo's 21h45m surviving-SecurityAgent
+case, a failure a timing-only assertion passes. It also repairs a `waitpid(-1)`
+shipped last cycle that reaped other tests' children.
+
+**AND THAT HOST READS UNATTESTED ON PURPOSE.** It declined to run finalize-cycle
+because the land needs the same gate and would have spent ~15 minutes to obtain
+a refusal already measured at cycle start. An unattested host that says why is
+worth more than one that spends a gate to look complete.
+
+**MY OWN THIRD REPEAT, and three makes it a habit rather than a slip.** Checking
+whether the test file was tracked I wrote `git ls-files | grep …; echo "  (empty
+= not tracked on this branch)"` — the label prints unconditionally. The grep
+returned the file and my output announced "empty" beneath it. Pass 43 recorded
+this exact idiom after doing it once; I have now done it twice more. The idiom
+is retired: a label that does not read its own result is a hardcoded conclusion,
+and beside a real result it reads as the instrument's verdict. Where a
+conclusion is wanted, it must be computed from the result or not printed.
+
+## Pass 45 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=364,
+`osx-next` ahead=0 behind=143 — **BUT WORK WAS STRANDED ON A SALVAGE REF AND
+NEITHER OF US HAD LOOKED.** macbookair reported 690-w94k criterion 3 as "done,
+falsified, committed at b3eb557a9, and unlandable here": its gate cannot pass
+while a tray owns the VM (1224-zpek), and I had confirmed the relay-ref escape
+does not help, since `refs/heads/work/<order>` also requires a green stamp. We
+both reasoned about escape routes. **The work was already on origin the whole
+time** — 872-c9nd's salvage net had pushed
+`salvage/tlatoanis-macbook-air/20260916-restart-20260916-115025` hours earlier,
+reachable by any host with a working gate. The net did its job and nobody
+queried it. **Before concluding a host's work is unreachable, LIST ITS SALVAGE
+REFS.**
+
+**THREE GATE REFUSALS ON THAT RELAY, THREE DISTINCT CAUSES, NONE SPURIOUS, AND
+NONE REACHABLE FROM THE ORIGINATING HOST:**
+
+- `cargo fmt`: rustfmt wanted `use super::{SECURITY_CALL_BUDGET, spawn_bounded}`
+  where the relayed source had them reversed. One line, no logic. It matters
+  because **fmt runs BEFORE the tests**, so the tray-red tests cannot have
+  masked it — the likeliest cause is a rustfmt difference between the hosts
+  (here 1.9.0-stable, 48a229ceae).
+- `881-29me`: their drill entry cites `main.rs:150` — in a passage ABOUT being <!-- cite-ok: quoting the citation under discussion; a symbol here would erase the thing being described -->
+  caught writing that citation. **The fix was NOT to rewrite it.** The guard
+  names two remedies and the narrow one applies: `<!-- cite-ok: … -->`, because
+  converting the quote to a symbol would delete what the entry records. The
+  broad fix would have looked tidier and destroyed the meaning.
+- third pending at the time of writing.
+
+A Linux gate on macOS code is a PARTIAL answer and the relay commit says so:
+`tillandsias-macos-tray` is a workspace member so it compiles and non-gated
+tests run, but `#[cfg(target_os = "macos")]` tests cannot. Recorded in the
+commit rather than left for a reader to discover.
+
+**yoga's THREE TOOLING ERRORS, relayed because two are generic and one I share.**
+(1) A reproduction using a bin target name that does not exist: cargo errored,
+the grep matched nothing, and the harness reported "0 failed lines" for THREE
+RUNS THAT NEVER COMPILED A TEST. **The tell was the missing `test result:` line
+beside the zero** — a count is a measurement only if the thing that produces
+counts also ran. (2) An arg-inserting script that patched a STRING LITERAL
+merely naming the builder in a source-scan data table. (3) **A monitor armed on
+the PREVIOUS run's log**, which fired with the old summary — a real, well-formed
+number from the wrong producer, which would have been recorded as the post-fix
+result.
+
+**I CHECKED MY OWN SUBSTRATE FOR (3) AND IT IS THE TRAP EXACTLY:** this
+scratchpad holds THIRTEEN similarly-named `land*.log` files spanning 34 hours,
+six of them predating the compaction. My habit — a fresh numbered name per
+attempt plus `rm -f` before launch — held, but BY HABIT, NOT BY DESIGN. Arm a
+monitor on a path that cannot pre-exist, and when reading any log for a result,
+confirm it is the log THIS run wrote rather than that it contains a plausible
+number.
+
+**AND THE STAMP TECHNIQUE CLOSED A LOOP FOR THE FIRST TIME.** yoga re-landed
+after AMENDING a commit, did not want to take the adoption line's word, and got
+three independent agreements: the stamp's mtime matched its own `stamped …Z`
+field to the second; attempt-2.log's mtime matched, proving attempt 2 wrote what
+attempt 3 adopted; and `gate-stamp.sh movers` reported EMPTY against the landed
+tree. Two clock checks and one content check, the last from the instrument that
+landed this morning. That is what the mtime-versus-stamp habit was for.
+
+### Pass 45 addendum — the coordinator moved the tree under its own gate
+
+**I COMMITTED AND MERGED WHILE A GATE WAS RUNNING**, three passes after writing
+into this same file that doing so is the lapse yoga self-reported, and one pass
+after warning macbookair about it. The gate refused with
+`violation:gate-wrote-tracked-files:3`, naming
+`plan/mo-full-attestations.d/yoga.md`, this file, and
+`crates/tillandsias-headless/src/main.rs` — the last arriving via the merge I
+did mid-gate, carrying yoga's b75677788. Cost: one wasted gate, no bad push, and
+every guard refused correctly. Knowing a rule and holding it in the moment are
+different acts; that sentence has now been passed to two hosts by a coordinator
+who then failed it.
+
+**THEN I MADE IT WORSE WITH A CARELESS `git rebase --onto`**, which flattened
+the merge and replayed yoga's two landed commits onto my branch as new shas.
+Caught by patch-id before any push: 5c33a36ee matched b75677788 and 51f468c0d
+matched 00d9551f8, both already on trunk. Recovered by resetting to
+origin/linux-next and cherry-picking only my own two commits. **A patch-id
+comparison is the check that distinguishes "my work" from "someone's work
+wearing a new sha", and it takes one command.**
+
+**1063-363b DETECTS CORRECTLY AND DIAGNOSES TOO NARROWLY.** Its remedy text
+reads "find the writer: it is a fixture or gate step that escaped its temp dir",
+and lists three candidate shapes, all internal to the gate. Here the writer was
+an AGENT IN THE SAME CHECKOUT, which the text does not admit as a possibility —
+so a reader following it hunts inside the gate for something that is not there.
+The detection is right and the causal hint excludes the actual cause. Same
+family as everything else tonight, in a guard that has been correct all along.
+
+**AND THE REFUSAL TAUGHT ME SOMETHING I HAD ASSERTED WRONGLY.** I told
+macbookair, and wrote into a commit message, that a Linux gate compiles their
+macOS code because the crate is a workspace member. Per 739-6r6n it does NOT:
+the crate is fully cfg-gated, seven modules a non-macOS build never parses, and
+Linux compiles STUBS. The gate said so in a line I would have skimmed —
+`stale:sources-drifted:macos-only:4`. The member-list was true and my conclusion
+was false.
+
+**THE USEFUL HALF: THE macOS ATTEST DOES NOT NEED THE VM.** The gate names
+`cargo test -p tillandsias-macos-tray --bins`, and `--bins` selects BINARY
+TARGETS ONLY — it never builds `tests/exec_guest_stdin.rs`, the integration test
+that is red while a tray is up. So macbookair can very likely attest its own
+macOS-only sources TODAY, tray running, and neither of us had spotted it while
+reasoning about the bootstrap loop.
+
+**AND THE GUARD CAUGHT THIS ENTRY TOO, WHICH IS THE THIRD LEVEL.** macbookair
+wrote a line citation; their drill entry ABOUT being caught quoted it and was
+caught; this entry ABOUT that quoted it again and was caught again. Each level
+is a legitimate quotation of evidence and each needs its own `cite-ok`. The
+guard cannot distinguish a citation from a QUOTATION OF a citation — nothing
+textual can — so it asks the writer to declare intent, and it asked three times
+correctly. A guard that fired only on the first level would be the broken one.
+
+
+### Pass 45 close — the attestation relayed, and two instrument lessons
+
+**THE BLIND SPOT MY OWN RELAY OPENED IS CLOSED.** 2263daf85 landed seven
+cfg-gated macOS modules that a Linux gate compiles as STUBS and never parses,
+with `stale:sources-drifted:macos-only:4` left visible as the sanctioned state.
+macbookair attested them from the one host that can parse them and I relayed it
+at 3ed6a01e2; the checker now answers **`ok:sources-verified:macos-only:7`**,
+confirmed by RUNNING it rather than by observing that the file landed.
+
+**THE ATTESTATION'S VALIDITY TURNED ON HASHES, NOT ON THE TEST RESULT.** An
+attestation records source hashes, so a stale one is worthless however green its
+transcript. All seven attested hashes matched trunk's current blobs exactly —
+including `installation_uuid.rs`, which carries the rustfmt fix this host
+applied during the earlier relay. They attested AFTER taking trunk's version, so
+it attests what is on trunk rather than what was on their host. That check is
+the whole difference between a relay and a rubber stamp.
+
+**AND `--bins` WAS AVAILABLE THE WHOLE TIME.** macbookair had been treating
+1224-zpek as blocking everything downstream; it blocks `./build.sh --check`
+specifically. `--bins` selects BINARY TARGETS ONLY and never builds
+`tests/exec_guest_stdin.rs`, the integration test the tray reds — confirmed with
+a control rather than asserted (that name appears 0 times in the attest
+transcript). Neither of us had looked for a narrower command while reasoning
+about the bootstrap loop. **Filed the recurring half as 1225-q7cq**: the
+one-line rustfmt divergence hit this relay lane twice in one day, and the
+originating host structurally cannot see it because `fmt` runs BEFORE the tests
+its gate stops at.
+
+**I NEARLY KILLED A HEALTHY GATE.** Checking whether the attestation gate had
+wedged: the log mtime was unchanged across two samples and every candidate
+process read `00:00:00` CPU — the dead signature from 1112-class. A 150-second
+sample showed the log advancing within 15s: **the gate was working.** Both
+earlier readings were worthless for reasons worth naming. The two mtime samples
+were SECONDS apart, which is below the resolution of the thing being measured.
+And every zero-CPU process was HOST-SIDE — the bash wrapper, `podman`, `conmon`
+— while the work runs inside the `tillandsias-builder` toolbox, where a host
+`ps` grep for `cargo|rustc` sees nothing BY CONSTRUCTION. Zero CPU on a
+container monitor says nothing about what is in the container. Acting on it
+would have been 1132-r4mt exactly: kill the host wrapper, leave the in-container
+build.sh alive, and refuse the next gate on the survivor's scratch.
+
+**WHAT HELD THIS TIME, AND IT WAS STRUCTURE RATHER THAN CARE.** The rustfmt row
+was drafted in the scratchpad while the gate ran and written to the worktree
+only after it cleared — the lapse from two passes earlier, not repeated. The
+citation and ledger guards were run BEFORE committing rather than discovered by
+a refusal. And the conflict in macbookair's drill file was checked for leftover
+markers and duplicated bullets before staging, per the merge-then-add rule.
+
+## Pass 46 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=373, `osx-next` ahead=0
+behind=152, both fully contained. `main` behind=633.
+
+**THE SALVAGE SWEEP IS NOW ROUTINE, AND THE FIRST ROUTINE RUN GOT IT WRONG
+TWICE.** Pass 45 established that salvage refs strand work. Making that a
+per-pass check produced two confidently wrong answers before a right one, in
+OPPOSITE directions, and that is worth more than the result:
+
+- **Ancestry is not integration.** Nine refs read "not contained" — two of them
+  I had personally relayed by cherry-pick hours earlier, so their content was
+  fully on trunk and their ancestry never would be.
+- **Three-dot overcounts.** `git diff trunk...REF` lists what the ref changed
+  since the MERGE BASE, including files trunk added independently. Six
+  macbookair fragments read as differing; direct comparison showed all six
+  BYTE-IDENTICAL, same size, empty diff.
+- **Two-dot overcounts far worse.** Tip-to-tip includes all of trunk's progress
+  since the branch point: **526, 2009, 2061** files for refs whose genuine
+  outstanding content is **3, 0, 0**. A reader taking those would conclude the
+  fleet is drowning.
+- **And "differs" still does not say which side is AHEAD.** lenovinha's
+  1185-9qx6 differs on build.sh and local-ci.sh — trunk touched both TWO DAYS
+  AFTER that snapshot, row `completed`. Stale, not stranded.
+
+**THE ANSWER, by the three-step method (candidates from three-dot, real set by
+blob compare, direction by date plus row status): of twelve salvage refs,
+yolanda's 1186-w3ph ALONE holds genuinely outstanding work** — four files, its
+row `in_progress`, theirs to adjudicate. Every other ref is landed, superseded
+or stale. Filed as **1226-jb8y**, with the two wrong answers as its evidence,
+because a reader shown only the method will not believe it needs three steps.
+
+**NO REASSIGNMENT.** Over 12h by email: yoga 18 (11 plan, 7 code), lenovinha 11,
+macuahuitl 36, macneo 3, unattributed bucket 6. yoga closed 1021-hf9e's second
+pass and returned it to ready with a third contention LOCATED; lenovinha holds
+679-rp9m; macbookair attested the macOS sources and is blocked only on its own
+full gate. Nobody reported idle, nobody asked, no claim was flipped.
+
+**AND macuahuitl IS STILL THE DOMINANT PUBLISHER** — 36 of 74 commits in 12h,
+31 of them plan-only. The batching commitment holds (this pass makes ONE
+plan-only push carrying both records), but batching reduces the count, not the
+share. That number is the standing argument for keeping coordinator output to
+one push per pass.
+
+## Pass 47 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY.** `windows-next` ahead=0 behind=378, `osx-next` ahead=0
+behind=157. `main` behind=638. First pass run entirely through the two
+instruments built this cycle rather than by re-deriving the queries.
+
+**THE SALVAGE AUDIT IN ONE COMMAND, where pass 46 needed three wrong attempts
+and a manual reconstruction:** of twelve refs, only two hold genuinely
+outstanding content — lenovinha's 1185-9qx6 (one gate step, row `completed`) and
+yolanda's 1186-w3ph (three files). Everything else reports nothing, including
+both macbookair refs this host relayed by cherry-pick, which ancestry would
+still call stranded.
+
+**THE TWO INSTRUMENTS COMPOSE, AND THAT IS THE PASS'S FINDING.** `expire-claims`
+offered THREE candidates:
+
+```
+890-27mv   claimant:linux     platform, not a host   0 salvage refs   SAFE
+1155-jurn  claimant:windows   platform, not a host   0 salvage refs   SAFE
+1186-w3ph  claimant:yolanda   3 files outstanding                     WOULD STRAND
+```
+
+The first two are 772-4se9's defaulted-claim shape, the one 1201-hsf9 now
+refuses at write time. The third is provably unsafe — and it took one command to
+know that, because 1226-jb8y's audit answers what the sweep cannot see. That is
+exactly the ranking 1220-zb7q asked for, now available OUTSIDE the sweep.
+
+**AND THE SWEEP STILL CANNOT USE IT.** `expire-claims` accepts no order and no
+selection flag — verified, `expire-claims 890-27mv` returns `error: unknown
+expire-claims flag`. `--write` applies every candidate together. So the choice
+is strand yolanda's work or expire nothing. **Nothing was expired, third
+consecutive pass, and the reason has shifted from "cannot tell" to "CAN tell and
+cannot act".** Recorded on 1220-zb7q: the remedy it asked for was an annotation,
+and what is actually missing is GRANULARITY — an annotation would leave the same
+all-or-nothing write at the end of it.
+
+**A COST THAT IS GROWING:** the defaulted-platform-claim population is up from
+one to two — 1155-jurn in passes 41 and 44, now 890-27mv. Each is a substantive
+row sitting `in_progress` under a claimant that is not a host, so `plan_next`
+does not offer it and the work is HIDDEN rather than queued. 890-27mv is "the
+recurring-loops gate and the release gate are different tiers". Real work,
+claimed by nobody, invisible to the selector.
+
+**NO REASSIGNMENT.** Six hours by email: macuahuitl 16 (13 plan, 3 code), yoga 7
+(4 plan, 3 code), unattributed bucket 3. yoga holds 1021-hf9e at ready with its
+third contention located; lenovinha on 679-rp9m; macbookair re-claimed 690-w94k
+and attested the macOS sources. Nobody reported idle, nobody asked.
+
+### Pass 47 addendum — a quiet cycle that was not an idle host, and an orphaned SAFETY note
+
+**THE SELECTOR RE-OFFERS AN EPIC WHETHER ITS ROWS CANNOT BE STARTED OR HAVE
+ALREADY BEEN FINISHED.** macneo reported the same six-row
+forge-local-experts slice three cycles running, having WORKED FIVE of the six —
+the remaining one is 8h of Rust plus a live guest, correctly declined by a
+measurements lane. They went to `ready macos` directly, found 241 rows, and
+reported it as an exhausted SLICE rather than an empty queue.
+
+Verified here, and the attribution matters: **it is not `next`.**
+`tillandsias-plan next macos` returns "top 5 of 197 eligible" across FIVE
+different release_targets, so blaming `next` sends a fixer to the wrong file. It
+is `scripts/select-work-batch.sh`, which picks ONE epic by design — and its seed
+is **host identity + UTC date**, stated in its own header. So a host running
+several cycles in one day draws the same epic EVERY time, by construction rather
+than by luck; two consecutive invocations here both returned
+`batch: epic=socket-audit-master`.
+
+Recorded on **1057-dgij**, which is the same symptom from the opposite cause —
+that row's 2026-09-05 case was the SAME EPIC re-offered because its packets were
+*unstartable*; macneo's is the same epic re-offered because its packets were
+*already worked*. Shared root: the selector remembers neither. **A narrow-tier
+lane exhausts a slice faster than the seed rotates, and then reports a quiet
+cycle while 182 rows are eligible** — which this fleet reads as an idle host,
+and 1005-class says never to.
+
+**AND yoga's SAFETY SWEEP FOUND ONE LIVE SITE, WITH A DIFFERENT DEFECT THAN
+EXPECTED.** They asked for a look wherever `SAFETY: single-threaded` appears.
+Eight sites; **six are fine and I am saying so rather than handing anyone an
+eight-site hunt** — two are yoga's own corrections, two are production startup
+paths where the claim is true (`main.rs` argument parsing and startup), one is a
+doc comment in `tillandsias-podman` discussing the phrase, one in
+`tillandsias-plan` `spec_index.rs` makes a narrower plausible claim.
+
+The live one is an **ORPHAN rather than a falsehood**, in `main.rs` `write_forge_gitconfig_handles_ssh_origin_with_https_redirect`:
+`// SAFETY: single-threaded test, no concurrent env reads.` sits at the END of
+`write_forge_gitconfig_handles_ssh_origin_with_https_redirect`, after the last
+assertion, and that function contains NO `unsafe`, NO `set_var`, NO `env::` at
+all. yoga's fix removed the unsafe it stood over; the justification stayed.
+
+**That is worse than a false justification, not better.** A false SAFETY note is
+attached to the thing it wrongly excuses, so a reader of the unsafe reads the
+excuse and can doubt it. An orphaned one is a **PRE-AUTHORISATION** — it waits in
+the function, and the next person to add an env write there finds the
+justification already written in the project's own voice, with nothing to check
+it against. **Removing an unsafe does not remove its justification, and the
+justification is what a later reader inherits.**
+
+## Pass 48 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=386,
+`osx-next` ahead=0 behind=165 — **BUT THE AUDIT FOUND AN ELEVEN-DAY-OLD LEDGER
+EVENT STRANDED ON A `work/` REF, AND ITS OWN DEFAULT PATTERN WOULD NEVER HAVE
+LOOKED THERE.**
+
+`scripts/salvage-audit.sh` defaults to `refs/heads/salvage/*`. Running it with
+`--pattern 'refs/heads/work/*'` audits **24 further refs** and turned up
+`work/1069-c9w6` carrying
+`plan/index.d/20260905t185305z-013bda76-lenovinha.yaml` — **ABSENT from trunk**,
+a `note` event on 1069-c9w6 written 2026-09-05. Restored and relayed in this
+pass's land; it validates clean and the ledger folds to 1005 packets.
+
+**THAT IS A GAP IN THE INSTRUMENT I BUILT YESTERDAY.** 1226-jb8y's row and the
+coordination skill both say RUN THE SCRIPT — and with the default pattern it
+looks at one of the two stranding surfaces. `work/` refs are the OTHER one, and
+the land tool's own refusal text recommends them as the escape hatch when a host
+cannot win the gate race, so they are where a blocked host is TOLD to put work.
+The default should cover both, or the skill should say to run it twice. Recorded
+rather than fixed this pass: the fix is a code land and this pass lands
+plan-only.
+
+**THE EXPIRE BACKLOG IS GROWING AND ONE ROW IS HOLDING THREE HOSTAGE.** Four
+candidates now, up from three last pass and two before that:
+
+```
+890-27mv   claimant:linux    platform default, nothing stranded          SAFE
+1109-t8kw  claimant:pirria   work/1109-t8kw holds nothing outstanding     SAFE
+1155-jurn  claimant:windows  platform default, nothing stranded          SAFE
+1186-w3ph  claimant:yolanda  three files outstanding on its salvage ref  WOULD STRAND
+```
+
+Classifying `1109-t8kw` required the `work/` pattern too — a ref exists for it
+and the audit had to be pointed at that namespace to show it carries nothing.
+**`--write` applies all four**, so three safe expiries are blocked by one unsafe
+one, and NOTHING WAS EXPIRED for the fourth consecutive pass. That is 1220-zb7q's
+missing granularity, now quantified: the ratio is 3:1 and the backlog grows each
+pass.
+
+**AND 890-27mv IS CLAIMED BY NOBODY WHILE WORK IS BEING DONE ON IT.** The
+release-tier exercise ran this host's criterion-1 cadence half (b) an hour ago —
+41 minutes, rc=1, freshness unchanged — on a row sitting `in_progress` under
+`claimant:linux`, a platform rather than a host. The claim neither reserves the
+row nor reflects who is working it, which is what 1201-hsf9 now refuses to
+create and what these aged rows still carry.
+
+**NO REASSIGNMENT.** Four hours by email: macuahuitl 8, macneo 2, yoga 2,
+unattributed bucket 1. Nobody reported idle, nobody asked.
+
+## Pass 49 — 2026-09-16, macuahuitl (coordinator)
+
+**NOTHING TO RELAY FROM A PLATFORM BRANCH** — `windows-next` ahead=0 behind=397,
+`osx-next` ahead=0 behind=176 — **BUT THE AUDIT FIX FROM AN HOUR AGO PAID FOR
+ITSELF IMMEDIATELY.**
+
+`scripts/salvage-audit.sh` surfaced
+`salvage/tlatoanis-macbook-air/20260916-690-w94k-crit2-spawn-blocking` holding
+`action_host.rs` as `ref-may-be-AHEAD`. **macbookair had not reported it.** That
+ref sits in `refs/heads/work`-adjacent territory the audit covered by default
+only since 1227-fegu landed an hour earlier; before that it was invisible,
+exactly as the eleven-day-old lenovinha event had been. Relayed at d44909353.
+
+**THE FIX IS SOUND AND STATES ITS OWN REASONING.** `VzRuntime::start` declares
+in-body that it bridges VZ's dispatch-queue completion handler through an mpsc
+channel and PUMPS CFRunLoop on the calling thread until a result arrives or 30s
+elapses — so a caller on an async runtime must use `spawn_blocking`. Awaiting it
+directly parked a tokio worker for that entire window while `on_phase` consumers
+were live on the same runtime.
+
+**IT UN-ATTESTED THE FILE, PREDICTED BEFORE LANDING AND CONFIRMED AFTER.** The
+attested hash for `action_host.rs` was 48632ca51e0d; the salvage version is
+9a791b323e87. The verdict moved from `ok:sources-verified:macos-only:7` to
+`stale:sources-drifted:macos-only:1` on landing, and trunk's blob is now exactly
+9a791b323e87. **That is the attestation working — it covers BYTES and the bytes
+changed — and must not be read as a regression.** Re-attesting costs macbookair
+one `--bins` run with their tray up, which is how they attested this morning.
+
+**THE EXPIRE POPULATION IS ACCELERATING: four last pass, SIX now**, and three
+carry `claimant:linux` — a platform, not a host:
+
+```
+778-hb3x   claimant:linux     1109-t8kw  claimant:pirria
+890-27mv   claimant:linux     1155-jurn  claimant:windows
+1187-iij8  claimant:linux     1186-w3ph  claimant:yolanda  (WOULD STRAND)
+```
+
+Five are the defaulted shape 1201-hsf9 now refuses to create; one holds three
+outstanding files. `--write` still applies all six, so **nothing was expired for
+the fifth consecutive pass** and the ratio is now 5:1. 1220-zb7q's missing
+granularity is costing more each pass, and each held row is substantive work
+`plan_next` cannot offer because it reads as claimed.
+
+**A GREP PATTERN OF MINE WAS WRONG AGAIN, AND THE CONTRADICTION IS WHAT CAUGHT
+IT.** Verifying the relay I grepped trunk's `action_host.rs` for
+`spawn_blocking contract` and got 0 — while the attestation simultaneously
+reported that same file as DRIFTED. Two of my own instruments disagreeing is
+what exposed it: the string is in the COMMIT SUBJECT, not the file. Re-grepped
+for text actually in the file: 6 matches, blob 9a791b323e87, relay present.
+**A pattern assembled from a commit message will not match the code it
+describes** — and today that has produced a false zero four separate times.
+
+**NO REASSIGNMENT.** Three hours by email: macuahuitl 7, yoga 4, unattributed
+bucket 1. Nobody reported idle, nobody asked.
+
+## Pass 50
+
+**RELEASE PASS, not a drill pass.** The operator lifted the no-release
+constraint and asked for a daily cut, smoke and release to main inside two
+days, with the fleet mostly down: yoga-silverblue and this host are the whole
+working fleet, macbookair is offline, yolanda is offline apart from an
+unreachable BigPickle forge session on its hardware.
+
+**THE THREE RELEASE BLOCKERS ARE NOW NAMED, AND THEY WERE ALREADY IN FLIGHT AS
+THREE UNRELATED ARMS.** `./build.sh --ci-full` on fd6ca622a returned rc=1 in
+2463s with pre-build litmus at 364 PASS / 3 FAIL:
+
+```
+litmus:capability-routing-shape     STEP 1/5  TIMEOUT at 120s   <- arm 3 (mine)
+litmus:expert-groundtruth-harness   STEP 30/31 FAIL             <- arm 2 (1229-2862)
+litmus:e2e-eligibility-probe-shape  STEP 7/10 FAIL              <- arm 1 (yoga)
+```
+
+Nobody had assembled that list before tonight. Each arm had been investigated
+on its own and none of the three investigations knew it was holding a release.
+**A red found in a release-tier-only lane is discovered at the moment a release
+is wanted, which is the worst moment to start diagnosing it** — and all three
+of these are release-tier-only, because `./build.sh --check` runs no litmus
+(748-tkjx) and this host had never completed a full-tier run until today.
+
+**THE GROUNDTRUTH RED WAS NOT A GRADER DEFECT AND THE INDEX WAS CARRYING THE
+ANSWER.** Two `spec.answer` cases graded `FABRICATED citation` here and SKIP
+entirely on an index-less host. The published index entry records its own build
+commit in `.commit`: `5bef283cb`, 2026-09-14, an ancestor of HEAD. At that
+commit `fn forge_uses_host_mount` sits at main.rs:6274 and `fn effective_inference_tier` at 4524 — **exactly the two cited spans**; at HEAD they are at 6358 and 4608. <!-- cite-ok: these ARE the drifted citations, quoted as the evidence. The finding IS that these line numbers moved 84 lines under a fixed index; a symbol reference would erase the measurement it reports. 881-29me's own named exception. -->
+Retrieval, chunk and recorded commit are all correct. Only the reader stands
+elsewhere.
+
+I reconstructed that by walking main.rs backwards through 25 revisions. **The
+`.commit` file answers it in one read**, and yoga said so. A marker written
+precisely so nobody has to do the walk is worth checking before doing the walk.
+
+**THE MECHANISM EXISTED AND THREE CALL SITES CHOSE THE WRONG SIBLING** (filed
+1229-2862, claimed to yoga, who implemented it the same night with two mutation
+controls that red): the `spec_index` loader in `groundtruth.rs` drops
+`entry.commit` one line after loading it, its `spec.answer` arm stamps
+`Freshness::for_source` — this checkout's HEAD — where
+`build_envelope_scored_with_freshness` exists for the entry's own frame, and
+`grade_envelope` calls the frame-blind `answer::verify` where the
+`verify-answer` subcommand picked `answer::audit` and said why in place. Order 801-g9nn built the whole stale-versus-
+fabricated separation for this and `audit` has ONE non-test caller in the tree.
+
+**A MIS-STAMPED FRAME IS WORSE THAN AN ABSENT ONE** and this is the part that
+would have wasted a day. Wiring `audit` alone changes nothing: `frame_holds`
+would take the envelope's commit, get this checkout's HEAD, re-read at HEAD,
+and return `Some(false)` — a confident "this really is fabricated" — where an
+absent frame returns an honest `None`. The order of the two wires decides
+whether the experiment reports the truth or its opposite.
+
+**I CAUSED THE CHURN MY OWN RULE EXISTS TO PREVENT.** My land pushed
+`0e8c94f6b` while yoga's gate was running; their gate had PASSED (499s) and it
+was the push that met the moved trunk, costing them a re-gate. The rule is
+already written down — land once per pass and quiesce for a critical commit,
+because the coordinator's cadence is the churn a peer's long gate loses to —
+and theirs was the critical commit, carrying two of the three blockers. I did
+not think about it until the notification arrived. Quiesced since.
+
+**A GUARD FIRED TWICE IN ONE DAY AND POINTED BOTH READERS THE WRONG WAY**
+(filed 1230-26sy). `violation:gate-wrote-tracked-files` caught macuahuitl (a
+mid-gate commit) and yoga (mid-gate edits, ~40 minutes). Both agents KNEW about
+1063-363b; both read the refusal as being about commits, because its remedy
+text names three causes — three-argument `cp`, empty `$TMPDIR`, unset `$dst` —
+that share one premise, that a gate step escaped its temp dir. The case that
+actually happened is outside that premise, so the text does not merely omit it,
+it points away from it. yoga's framing is the sharper one: **1063-363b is about
+the bytes under measurement changing**, and the commit is incidental.
+
+**AN AGGREGATE OVER FAILURES WITH DIFFERENT COSTS CREDITS THE WRONG REMEDY.**
+yoga summarised three failed attempts as "two of three died on things I could
+have checked in ninety seconds". Split by cause: the tracked-files violation
+cost forty minutes and **no pre-check could have caught it** (the tree was clean
+at gate start); the `cargo fmt` refusal cost one minute. The ninety seconds buys
+one minute, not forty-one — the forty was bought back by a discipline, not a
+tool. Filed as stated it would have shipped a tool recommendation carrying a
+discipline problem's savings. The row is still worth having, on a regime
+argument a fat host cannot make: the `cargo fmt --check` step sits early in
+build.sh's own gate, and the cost of walking to it is what a floor host pays. `scripts/land-on-
+platform-branch.sh` has no cheap pre-gate check at all.
+
+**THE SALVAGE AUDIT SURFACED LIVE WORK FOR THE FIRST TIME.** 38 refs scanned;
+one real find — three Windows fixes on `salvage/yolanda-windows/20260915-1186-
+w3ph`, stranded since 2026-09-15 under an `in_progress` claim held by a host
+that is now offline, on no branch anywhere. Relayed byte-exact this pass after
+proving trunk had not touched those files since the ref's merge-base. One FALSE
+candidate too, worth recording: lenovinha's `345-1185-9qx6.step` reads as
+unrelayed because it landed RENAMED to `355-...` after the allocator collision,
+and a per-file blob compare cannot see a rename.
+
+**PLATFORM BRANCHES ARE FULLY RELAYED.** `origin/osx-next` and
+`origin/windows-next` both at 0 commits ahead of linux-next. `release-preflight`
+is green, parity gaps 0, both must-ship rows present in HEAD. The only thing
+between this tree and a cut is the three litmus reds.
+
+**NO REASSIGNMENT AND NO IDLE HOST.** yoga claimed 1229-2862 by name and
+implemented it within the hour; this host held arms 3 and the relay. Nobody
+reported idle.
+
+## Pass 51
+
+**THE RELEASE GATE RAN, AND EVERY RED IT FOUND WAS TRUE.** ci-full on 5c13d81e7:
+rc=1 in 2293 s, pre-build litmus **361 PASS / 6 FAIL / 121 SKIP**. All four of
+pass 50's blockers were on trunk before it started. What it found instead was
+one defect introduced by tonight's own fix, and five that nobody had looked at.
+
+**A FIX INTRODUCED A FALSE GREEN AND A NEGATIVE CONTROL CAUGHT IT.** Wire 3 —
+the frame rescue for the expectation matcher — graded a **deliberately wrong
+answer GREEN**: a packet claimed `ready` when it is `completed` came back
+`STALE` at rc=0. The step that caught it has been in the harness since 394d and
+had never fired. The cause was four lines: the rescue predicate called only the
+needle check, where the working-tree predicate checks path, kind, **every
+authority key**, and then the needles. **A rescue weaker than the check it
+rescues from is a laundering path**, and this one was written four hours after
+its author split `span_needles` precisely so two reads could not drift — the
+needle half got one predicate over two inputs and the record half kept two
+predicates over one fact. Fixed by `citation_matches_record`, which both paths
+now call. Verified here in both directions: the seeded answer is red again, the
+unseeded set is untouched, and genuinely stale spans still rescue.
+
+**AND THE JUSTIFICATION FOR THE BUG WAS IN ITS OWN DOC COMMENT** — "they are
+properties of the citation record, not of any file, so they cannot be stale."
+True, and answering a question nobody asked: staleness was never the issue,
+STRENGTH was. A correct sentence answering the wrong question is harder to spot
+than a wrong one, which is why it stays in the tree rather than being deleted.
+
+**FIVE CORRECT STEPS KILLED AT THEIR BUDGETS** (1233-jqp4). Every producer exits
+zero: `cycle-metrics.sh` at 29,908 ms against budgets of 10,000-20,000 ms,
+`select-work-batch.sh` at 14,883 ms against 15,000 ms — **117 ms of headroom on
+a twenty-core host**. Not contention, not code.
+
+**I FILED THAT ROW WITH THE WRONG CORPUS AND FALSIFIED IT MYSELF WITHIN THE
+HOUR.** The row named the telemetry log. Measured non-destructively:
+
+```
+115,860 records -> 29,908 ms      40,000 -> 28,927 ms      20,000 -> 28,622 ms
+```
+
+**17% of the corpus returned 4% of the time.** A host that rotated the log would
+have found the gate still red and blamed the measurement. The real cost is the
+plan-ledger fold: the groundtruth grade alone is 18,291 ms of the 29,908, and
+removing the spec index changes it to 18,512 — so the index is not it. The
+claim survives, the subject changes, and the subject decides everything:
+telemetry is a rotatable cache, the ledger is the product and is append-only, so
+"bound the corpus" is unavailable and the fix must be on the reader. **Which is
+already a filed row** — 964-tzmp, p1, ready, unleased, deliverable written,
+parent measurement already met. Handed to yoga this pass as a claim flip on
+trunk; `plan_next` no longer offers it.
+
+**TEN FABRICATED ORDER CITATIONS LANDED, AND NOTHING IN THE GATE LOOKS**
+(1234-zade). `1232-wire3` seven times in the plan crate, bare `ORDER 1233` once
+in the headless crate, `ORDER 1234` twice more. None is a filed packet — while
+`1232-av4p` IS one, about the forge's claims, so a reader following
+`1232-wire3` lands on the wrong row. **`grep -c order scripts/validate-traces.sh`
+is ZERO**: the ghost-trace guard validates `spec:` and never looks at `order:`,
+though the documented annotation carries both and 216 `@trace order:` citations
+exist in this tree. Order UNIQUENESS is gated; order EXISTENCE is not.
+
+**The bare number is the tell and the invented suffix is the danger.** A bare
+`1233` reads as malformed and gets questioned. `1232-wire3` reads as a
+legitimate sub-designation of a real packet and does not.
+
+**I NEARLY COMMITTED THAT ROW'S OWN DEFECT INTO THAT ROW**, drafting its closure
+pinned to a litmus name that does not exist, and caught it by checking the
+litmus names before filing rather than at the gate — the lesson from three hours
+earlier, arriving in time for once.
+
+**THE FORGE SESSION IS ALIVE, LOOPING, AND WORKING BLIND.** A second salvage ref
+47 minutes after the first, superset, same subject: dirty worktree preserved
+before a cycle refusal. It is on a base eight hours stale, and **two of its three
+newest claimed packets are already `completed` on trunk**. The invisible-claim
+problem runs both directions — we could not see its claims until the salvage
+audit surfaced them, and it cannot see our completions. Its eight earlier claims
+were relayed so `plan_next` stops offering finished work; its 441 lines stay
+unaudited and its `implemented` writes stay unrelayed.
+
+**THE GUEST-STAGING TRAP REPRODUCED ON SCHEDULE.** Tonight's ci-full bumped
+VERSION and re-staged, so the mismatch re-armed and would have fired on the next
+rebase. Cleared twice in one night. **It is not a host oddity: it fires on every
+`--ci-full --install` that does not go on to complete a cut**, which is the
+common case for a failed gate.
+
+**I CAUSED A PEER'S RE-GATE TWICE AND THE SECOND TIME I THOUGHT I WAS FOLLOWING
+THE RULE.** My own note says land once per pass and quiesce for a critical
+commit. The second push was plan-only, and I had told myself the fast lane made
+it free. **It does not: the lane's cheapness is about MY gate.** Any push moves
+trunk and costs a peer with a running gate a complete re-gate. The rule is
+"quiesce while a peer's gate is running, whatever lane you are in". The
+consolation is real — that forced re-gate is the only reason the `$HOME` race
+surfaced tonight rather than inside a release gate.
+
+**FOUR WAYS A CORRECT-LOOKING MEASUREMENT WAS ABOUT SOMETHING ELSE**, all in one
+file, in one night, between two agents each checking the other: the pattern
+matched its own commentary; the pattern matched its own definition; the window
+was anchored where the answer was not; the glob named no file. Every one was
+caught by the other host, and three of the four by the person who wrote the
+pattern.
+
+**NO REASSIGNMENT BEYOND 964-tzmp.** yoga reported idle with a clean tree after
+landing four fixes and filing 1235-b5sf; this host held the gate, the index copy
+and the coordination. Nobody else reported.
+
+### Pass 51 — correction to the attribution, appended not edited
+
+Pass 51 ends the four-measurement-classes paragraph with "Every one was caught
+by the other host, and three of the four by the person who wrote the pattern."
+**That sentence contradicts itself and both halves are wrong.** If three of four
+were caught by their author, they were not caught by the other host.
+
+The actual split, checked against what happened rather than remembered:
+
+| class | found by |
+|---|---|
+| the pattern matched its own commentary | yoga, self-caught |
+| the pattern matched its own **definition** | macuahuitl, checking yoga's count |
+| the window was anchored where the answer was not | yoga, self-caught |
+| the glob named no file | yoga, self-caught |
+
+So **three of four were self-caught by the host that made them**, which is the
+more interesting fact and the one the wrong sentence obscured — this did not
+need a reviewer, it needed the author to re-measure. The fourth needed the other
+host, and specifically needed a host whose tree **could not contain** the line
+that made the two counts differ: the +27 offset was invisible from the inside
+and obvious from the outside.
+
+yoga asked for this correction on the grounds that the classes are half mine.
+They are not half mine — one of four is — and the corrected table says so in the
+direction that credits them, not me. **Appended rather than edited**, for the
+same reason every other correction tonight was: if the wrong sentence is quietly
+replaced, nobody learns that a summary written at the end of a long night got
+its own attribution backwards while describing four ways a measurement can be
+about something other than what was asked.
+
+## Pass 52
+
+**THE OPERATOR CAME IN ANGRY AND THE OBVIOUS DIAGNOSIS WAS WRONG TWICE.** Every
+terminal they open shows an installed version days old, despite hosts building
+several times a day. They closed macbookair over it and left until morning.
+
+**WRONG 1:** `build.rs` reads a tracked `VERSION` that only moves at release.
+The chain is real — the file was last changed 2026-09-13 by a release commit —
+and it is NOT what produced the symptom.
+
+**WRONG 2:** `build.sh` tells the agent `git checkout -- VERSION …` after a
+bump, and I had followed it three times that night believing I was discarding a
+date stamp. **I was not.** `WORKSPACE_VERSION` is baked in at COMPILE time, so
+reverting the file cannot un-stamp a binary that is already built. The advice is
+correct. **I was one edit from "fixing" correct advice on the strength of my own
+wrong diagnosis**, and stopped only because the next measurement contradicted me.
+
+**WHAT THE MEASUREMENT SAID:**
+
+```
+old launcher   v56.9.12.2    mtime 2026-09-12 07:09
+56.9.12.x IS 2026-09-12 — the stamp was CORRECT for the day it was built
+one ./build.sh --install  ->  v56.9.17.1, today, 71 s, rc=0
+```
+
+**The stamping works.** The defect is INSTALL FREQUENCY (1237-f9dy): only
+`--install` and `--ci-full --install` write the launcher, routine work is
+`--check`, and every `--ci-full --install` here since 09-12 died before its
+install step. Builds stamp correctly; **none of them reach the launcher.** The
+operator was seeing a stale INSTALL faithfully reporting the day it was made.
+
+**A THREE-WEEK-OLD RULING GAINED AN AMENDMENT THAT WOULD HAVE SHIPPED WRONG.**
+862-zhr2 has waited since 2026-08-23 for A-versus-B, with two hosts correctly
+declining to guess. The operator ruled the REQUIREMENT tonight — every build
+carries the date — but resolution A as written labels dev binaries
+`<VERSION>+local.<stamp>`, rendering `56.9.13.1+local.xxxx`: **still leading
+with the last cut's date.** A does not satisfy the requirement it would be
+chosen for. Recorded on the row above the recommendation, because "the operator
+said yes to A" was one message away from being true and wrong.
+
+**AND 1237-f9dy WAS DELIBERATELY NOT FOLDED INTO 862-zhr2.** Resolving that
+ruling either way leaves the launcher exactly as stale — folding them means the
+ruling lands, the operator opens a terminal, sees an old date again, and
+concludes the fix failed. Two defects, one symptom, and the symptom belongs to
+the one nobody had filed.
+
+**FLEET CHECK OUTSTANDING, BY DESIGN.** 1237-f9dy's fourth criterion requires a
+second host's launcher version and install mtime, because this was measured on
+one host and reported fleet-wide. Asked of yoga this pass rather than
+extrapolated — after a night in which a one-host number was wrong four separate
+times.
+
+**NOTHING TO RELAY.** `osx-next` reads 4 commits ahead and every file those
+commits touch is byte-identical to trunk; `windows-next` is at 0. A commit count
+is not a measure of divergence, and this is the second consecutive pass where
+reading it as one would have produced a phantom relay.
+
+**NO REASSIGNMENT.** yoga holds 964-tzmp with layer 1 landed (4.2x on the fold,
+27x on `check`, output byte-identical); macbookair is closed by the operator;
+the forge remains unreachable. Nobody idle, nobody to direct.
+
+## 2026-09-17T16:00Z macuahuitl — coordination pass
+
+**A REAL RELAY, AFTER SIX PHANTOM ONES.** `osx-next` reads 6 commits ahead, and
+this time the trees genuinely differ — on exactly two plan-only files, +23 lines:
+macbookair's own section of this file, and one `MO-FULL: COMPLETE` line from
+2026-09-17T12:22Z. There is a single merge base, so a three-dot diff would have
+been reliable here; the two-dot tree compare was used anyway because the rule
+does not get suspended on the pass where it happens to agree. `windows-next` is
+**0 ahead and 493 behind**. That is not divergence and it is not a relay — it is
+an abandoned branch while its host is offline, and the next Windows landing pays
+a 493-commit integrate.
+
+**THE CYCLE-METRICS CHANNEL DIED FLEET-WIDE ON 2026-09-05, AND NOBODY NOTICED
+FOR TWELVE DAYS — INCLUDING ME.** `scripts/loop-status-metrics-audit.sh` returns
+`rows=23 stems=23`, so the instrument is healthy and dropped no stem. All 23
+stems read `NOT-PASTING`, and the newest `last-paste` of any stem is
+`20260905t012936z`. The meta-orchestration handoff REQUIRES the cycle-metrics
+block verbatim; that requirement has been unmet by every host, every cycle, for
+twelve days. The skill's remedy — "route it as a plain ask to that host" — is
+written for one silent host and misfires at 23 of 23: it would generate a nag per
+host for a practice that stopped collectively, which is an aggregate being
+charged to the wrong remedy. This pass pasted its own block rather than asking
+anyone else first, because a coordinator who has not pasted since 09-05 asking
+others to paste is the instrument problem wearing a hat.
+
+**NO SKIPPABLE PACKET FILED, DELIBERATELY.** This host's `skippable:` names
+`cargo test --workspace --all-targets` at `runs=127 avg_ms=88768
+saved_ms_upper=11184819`. The rule is one packet only when the SAME step tops two
+or more hosts' readings, and 23 of 23 stems are not pasting, so no second reading
+exists to compare. `saved_ms_upper` is a bound and must be quoted as one — the
+timing log carries no input identity, so nobody can claim those runs would have
+hit a cache. Filing from n=1 here would broadcast a fat-host number as a fleet
+rule, which is the shape that was wrong four separate times on 09-16.
+
+**A GREEN GATE THAT RAN NONE OF THE BOUND LITMUS, CAUGHT BY THE TOOL AND ACTED
+ON.** The land printed the 1201-9it2 notice: four bound litmus tests across three
+specs assert on the pushed files and `./build.sh --check` ran none of them. One
+of the four was `litmus:uninstall-preserves-vm-image` — the declared closure of
+the very packet being landed. That is yesterday's defect exactly: a caveat stated
+in a landing message and treated as if stating it discharged it. The four were
+run: `app-lifecycle` 3 pass / 0 fail, `cache-recovery-mechanism` 2 pass / 0 fail,
+and the closure test was confirmed EXECUTED rather than skipped — the one skip in
+each spec was `litmus:environment-isolation`, unrelated. A pass rate hides which
+test produced it, so the skip was named before the green was believed.
+
+**AN INSTRUMENT WHOSE SILENCE IS INDISTINGUISHABLE FROM A PASS — 1240-g673.**
+Asking `scripts/audit-guard-activation.sh` whether a newly written fixture was
+wired returned `0 matches, verdict=ok, orphan=0` — identically with the fixture
+wired inline, wired as a gate-step file, and not wired at all. Its population is
+`check-*.sh`, as its own header comment states. Counted three ways rather than
+two, the gate-step bindings are 63 `test-*.sh`, 12 `check-*.sh`, and 2 that are
+neither — and one of the two is the auditor's OWN binding, which it therefore
+cannot audit. "Activation is proved by what ran" points the fleet at this
+instrument; the instrument covers 12 of 77 bindings.
+
+**THE OPERATOR'S VERSION COMPLAINT ALREADY HAS A FILED HOME: 643-64bx, pending,
+p1, v0.5.** Measured rather than inferred, after two wrong diagnoses of mine:
+tracked `VERSION` is `56.9.13.1`, last moved 2026-09-13, four days, on a host
+that builds many times a day. The date derivation is NOT broken — a bump today
+produces `56.9.17.1` in a scratch layout, and this host's installed launcher
+correctly reports `v56.9.17.1`. What breaks it is that `_bump_build_version` in
+`build.sh` dirties a tracked file the pre-push VERSION guard refuses off `main`,
+so on every platform branch the build instructs the agent to REVERT the bump. The
+counter is therefore computed and thrown away on every build, and the tracked
+VERSION can only move at a release — which is why every host's tree carries the
+last cut's date. 643-64bx's first exit criterion is precisely the decision the
+operator and yoga were reaching for: whether the local build counter should touch
+tracked files at all. Its own note forbids the tempting shortcut: do not fix this
+by relaxing the VERSION guard.
+
+## 2026-09-17T17:50Z macuahuitl — coordination pass
+
+**THE RELEASE TIER IS RED, AND IT HAS NEVER BEEN GREEN ON THIS HOST.** The
+scheduled 890-27mv exercise ran `./build.sh --ci-full --install` at 83dc1cb76:
+rc=1 after 2161s. The freshness verdict BEFORE the run was
+`never:release-tier` and it is still `never:release-tier` AFTER it, because the
+run died in pre-build and a phase-only run is not a release-tier answer
+(1174-6r4k). Thirty-six minutes bought no verdict. That is worth stating
+plainly: the fleet has been treating this host as release-capable and its
+release tier has produced no full-tier answer at all.
+
+**THE FOUR LITMUS FAILURES SPLIT TWO WAYS AND THE SPLIT DECIDES THE REMEDY.**
+Three are the 1236-bmjh elevation being incomplete — each died on the first
+step AFTER the one that order raised, and each carries its own adjudication,
+"step NOT contended at kill time; genuinely too slow for its 10s budget", so
+load is excluded by measurement rather than by assumption. No budget was raised
+and 300000 was copied nowhere; the evidence is recorded on 1236-bmjh for
+whoever sequences the removal. The fourth is unrelated and is covered below.
+
+**AND THE TWO NON-TIMEOUT FAILURES BOTH EVAPORATED — 1242-4x53, filed p1.**
+A rust test (`the_spec_engine_stamps_the_index_frame_not_the_readers_head`,
+328 passed 1 failed in the gate) passes standalone AND passes the full binary
+suite 329/329 at the identical head. The enclave fixture (22 passed 1 failed in
+the gate) passes 23/23 on re-run — and, because a host-regime re-run across a
+regime boundary proves nothing, it was re-run INSIDE the tillandsias-builder
+toolbox the gate actually uses, where it also passes 23/23. The container is
+not the difference; concurrent gate load is the remaining candidate.
+The reason that is p1 rather than an annoyance: a gate that fails for non-code
+reasons and passes on retry launders its own failures, and the correct-looking
+response — run it again — is the exact disposition under which a REAL red gets
+retried away. The defect is not the flake, it is what the flake trains.
+
+**A NUMBER THAT MAY BE MEASURING THE WRONG THING, stated as a hypothesis.**
+Both hosts that paste cycle-metrics report roughly a quarter of all gate runs
+failing: build-check fail_pct=29 over 179 runs here, fail_pct=25 over 77 runs on
+macbookair. If failures of the kind above are a large share of that, the fleet's
+biggest recurring cost is non-determinism rather than broken code. Nobody can
+currently tell, because the timing log records an exit code and not whether a
+failure REPRODUCED — which is 1242-4x53's first exit criterion.
+
+**THE VERSION DEADLOCK REPRODUCED ITSELF LIVE, one hour after being measured.**
+The ci-full bumped VERSION to 56.9.17.1, failed, and `build.sh` then instructed
+reverting the bump because the pre-push guard refuses a VERSION change off
+`main`. The revert was performed after confirming the diff contained zero
+non-version lines. So the tree is back at 56.9.13.1, four days stale, by
+design — which is precisely 643-64bx and precisely what the operator is angry
+about. The operator's launcher was NOT touched: `--install` never ran because
+the gate failed first, so the terminal still reads v56.9.17.1, which is NEWER
+than the tree.
+
+**NOTHING TO RELAY FROM WINDOWS FOR THE SECOND CONSECUTIVE PASS.**
+`windows-next` is 0 ahead and 510 behind — up from 493 earlier today, so trunk
+is moving and that branch is not. It is not diverging; it is abandoned while its
+host is offline, and the next Windows landing pays the whole integrate.
+`osx-next` was 2 ahead with a single merge base and three plan-only fragments,
+all read before relaying.
+
+## 2026-09-17T18:03Z macuahuitl — CORRECTION to two entries above
+
+**"THE CYCLE-METRICS CHANNEL DIED FLEET-WIDE ON 2026-09-05" IS FALSE. THE
+AUDIT WENT BLIND.** Both entries above that assert it — the one calling it a
+hazard "including me", and the one explaining why no skippable packet could be
+filed from one host — rest on `scripts/loop-status-metrics-audit.sh` reporting
+23 of 23 stems NOT-PASTING. That verdict carries no information.
+
+The audit anchors on the literal `skippable: candidates=`.
+`scripts/cycle-metrics.sh` now emits `skippable: window=7d candidates=`. The
+interposed `window=7d ` breaks the match. Measured, with the positive control
+that makes the count mean something:
+
+    entries since 2026-09-06 carrying `skippable: window=`  : 8
+    entries in that window matching the audit's own anchor   : 0
+
+Zero is the control: the anchor has matched NOTHING since the format changed.
+Last readable entry 20260905t225806z; first unreadable 20260911t191740z. Filed
+as 1243-yiyq, p1.
+
+**HOW IT WAS CAUGHT, because it was not caught by suspicion.** I wrote a
+loop_status entry specifically to stop being one of the 23, re-ran the audit,
+and it named my minutes-old file as the host's newest entry and reported
+NOT-PASTING on the same line. Found the file, could not read it.
+
+**THE PART I GOT WORST.** I wrote above that the instrument was "healthy the
+whole time (rows=23 stems=23, no dropped stem)" and offered that as grounds for
+trusting the finding. That check is real and it passed — and it certifies
+ENUMERATION, not COMPREHENSION. A numeric agreement plus a verdict reads exactly
+like a self-check while the tool faithfully enumerates hosts it can no longer
+parse. My own written rule is to ask what an instrument would have printed if it
+were broken; here the answer is "precisely what it printed", and I did not ask.
+
+**WHAT SURVIVES.** 1241-8gy4's two-host finding stands: both readings were taken
+by hand from the hosts' own pasted blocks, not from the audit, and the trigger
+condition was genuinely met. What changes is the story around it — the evidence
+may have been available earlier and invisible, rather than newly arriving. A
+correction is appended to that row too, since its context carries the same false
+sentence and a fragment cannot be edited.
+
+**AND THE SHAPE IS THE DAY'S SECOND INSTANCE.** macbookair's
+`git grep "pkill -f"` returned zero because the live form is `pkill -TERM -f` —
+a literal broken by a field interposed between its halves, yielding a zero
+indistinguishable from "nothing to find". Same shape, unrelated file, same day.
+Two instances suggest a sweep rather than two point fixes.
+
+## 2026-09-17T19:55Z macuahuitl — coordination pass
+
+**1243-yiyq IS FIXED, GATED, AND INDEPENDENTLY CONFIRMED ON A SECOND HOST.**
+The loop-status audit's anchor now tolerates interposed key=value fields, a
+corpus with entries and zero readable lines refuses with
+`violation:anchor-matches-nothing` instead of blaming every host, and a six-arm
+fixture is wired as a gate step. Mutation control was RUN: arms 1, 4 and 6 fail
+against the pre-fix audit while 2, 3 and 5 pass, which is how the fix is known
+to have widened the anchor rather than moved it. Activation proved by what ran —
+gate log line 6098, 20.3s, inside the gate that gated the push. The step also
+cleared `ok:step-metrics-isolation:4`, which was a live risk since it invokes
+cycle-metrics.sh inside the gate.
+
+**macbookair's CONFIRMATION CARRIED A BETTER CONTROL THAN MINE, and the
+difference is instructive.** I measured 0 anchor matches inside the drift window
+and treated that as proof. They added the count that makes it diagnosable:
+**63 entries match that anchor ELSEWHERE in the corpus.** A bare zero is equally
+consistent with "the expression never worked at all"; zero-inside-window beside
+63-overall is a format BOUNDARY. My control established that something was
+wrong and theirs established what.
+
+**AND THE TELL WORTH CARRYING TO THE SWEEP.** They observed that the audit's
+reported "newest paste 2026-09-05" is exactly the last entry before the emitter
+changed shape — the date was not a decline in practice that happened to start
+somewhere, **the date IS the instrument going blind**. Any check anchored on a
+literal dates its own blindness this way, and it looks plausible precisely
+because a stale anchor always reports the changeover as the last healthy day.
+That is a cheap diagnostic for the whole class: when a checked-in guard reports
+a behaviour change beginning on a specific date, test whether that date is a
+format boundary before believing it is a behaviour.
+
+**THEIR RANKING RULE FOR THE SWEEP, ADOPTED.** Their `pkill -f` miss and this
+one are the same shape — a literal broken by a field interposed between its
+halves — but theirs was a SEARCH typed once and this was a CHECKED-IN GUARD
+reporting for twelve days. The same defect costs far more wired than typed, so a
+sweep for the shape should rank checked-in anchors above ad-hoc ones.
+
+**AND A CORRECTION I OWE THE ENTRY ABOVE.** My earlier correction said the
+fleet-wide-death claim was FALSE. Measured per stem after the fix: post-drift
+entries are macuahuitl 7, macos 1, and ZERO for yolanda, lenovinha, yoga and
+esmeraldinha, who have 10, 10, 7 and 3 pre-drift entries respectively. So the
+audit was blind AND those four have genuinely not pasted since. "23 of 23
+including me" was false about me and substantially right about them. I let a
+refutation carry further than its evidence; fixing a premise does not falsify
+every conclusion drawn from it.
+
+**WINDOWS IS DRIFTING FURTHER, PASSIVELY.** `windows-next` 0 ahead / **515**
+behind, up from 510 this afternoon and 493 this morning. Three readings, one
+direction, and none of it is that branch moving.
+
+## 2026-09-17T21:50Z macuahuitl — coordination pass
+
+**NOTHING TO RELAY, AND A NEW SALVAGE REF INSTEAD.** `osx-next` is 0 ahead / 2
+behind and `windows-next` 0 ahead / **528** behind (493 → 510 → 515 → 528 across
+four readings today; four samples, one direction, and none of it that branch
+moving). What did arrive on origin is
+`salvage/forge/20260916-920-cluster-committed`, tip abb850205, pushed 21:27Z and
+named in no plan file until now. Recorded on 1232-av4p, which already owns this
+class, rather than filed as a duplicate row.
+
+**IT IS AN ANCESTOR OF NOTHING** — checked on all four branches, not inferred
+from a commit message.
+
+**AND THE OBVIOUS NUMBER IS THE WRONG ONE.** `git diff trunk..ref` reports 137
+files; the ref's own two commits carry **42 files, 1160 insertions**. The gap is
+127 commits of trunk movement since its merge-base. The same diff reports
+`D crates/tillandsias-plan/src/forgotten.rs`, which is NOT a deletion — that
+file did not exist at the merge-base. Reported as one, it would have accused a
+forge session of deleting a file another host added afterwards. Measure a
+salvage ref against its OWN base; a diff shows difference, not causation.
+
+**THE 1232-av4p HAZARD IS LIVE ON ONE ROW.** Of eleven real orders cited by
+those commits, eight are `in_progress` (the forge claimed properly), two are
+`completed`, and **`1141-vf9w` is `ready`** — offerable to any host draining
+plan_next while work for it already exists, unintegrated, on a ref nobody has
+read. One row rather than eight only because the forge did claim the rest.
+
+**AND A TRAP IN MY OWN ENUMERATION, worth recording because it nearly shipped.**
+Extracting order-shaped strings from those commits yields a twelfth token,
+`920-clus`, which resolves to no packet. It is not a fabricated citation — it is
+my regex clipping `920-cluster` out of the commit subject. I also checked the
+first eight through a `head -8` before noticing the list had twelve, which is
+the capped-grep-read-as-an-enumeration shape; the figures above are uncapped.
+
+**NOT RELAYED AND NOT DELETED.** Not relayed: 42 files of unaudited forge work
+including `crates/tillandsias-plan/src/answer.rs`, which is under standing
+orders requiring the corpus-declaration harness against the held stale index and
+the seeded-wrong-answer negative control before any relay — and a coordination
+pass is the wrong place to land 127-commits-stale code the operator already
+tracks as unaudited. Not deleted: a ref that is an ancestor of nothing is the
+only copy of that work.
+
+## 2026-09-17T22:05Z macuahuitl — a Windows host reported for work
+
+**yolanda-windows IS BACK, fresh session, asking for work.** That changes the
+routing picture: the msys half of 920-pxg6 had been open all day with nowhere to
+send it, and `windows-next` at 532 behind had no owner. Both are now dispatched.
+
+**THEIR BRANCH POINT IS SAFE AND I CHECKED RATHER THAN ASSUMED.** They report a
+clean tree on `plan-rows-20260915` at 35fa7da5f, which is not a ref on origin.
+That looked like a stranding risk of the 1232-av4p shape, so: 35fa7da5f IS
+contained by origin/linux-next and origin/osx-next — it is a 2026-09-15 trunk
+commit and nothing of theirs is stranded on it. It is two days stale and it is
+not `windows-next`, which is where Windows work commits, so the dispatch says to
+move before pushing anything.
+
+**PRIMARY: 920-pxg6 task 4.5, msys half**, carrying macbookair's method verbatim
+because the clean is the load-bearing part — `vendored` builds Lua from C
+source, so the real question is whether a working C toolchain exists, and a
+cached artifact produces an identical green while compiling nothing. The
+dispatch also tells them what NOT to claim: task 4.5 and 902-5bf9's criterion are
+two obligations, and msys evidence does not advance the second while nothing is
+wired.
+
+**SECONDARY: the windows-next integration.** 0 ahead / 532 behind. The
+coordination discipline triggers a Sibling Integration task above five commits
+of drift; this is a hundred times over. Merge origin/linux-next INTO
+windows-next and resolve there, never rebase published commits across branches.
+A clean-looking merge at that distance deserves suspicion, not relief.
+
+**ON THE DESTRUCTIVE-RESET OFFER, RECORDED BECAUSE IT IS A BOUNDARY.** They
+report that the operator has pre-approved destructive local resets on their
+host. I neither authorised nor relied on that: a coordinator cannot grant it,
+and a relayed approval is not the approval. Both assignments were chosen so that
+neither needs any destruction — a cargo build and a merge. Whatever standing
+consent exists on that host is between that host and the operator.
+
+**FLEET AS OF THIS PASS:** macbookair active (21:21Z, delivered the darwin half),
+yolanda active as of 22:05Z with two assignments, this host coordinating. yoga
+last attested 2026-09-16T19:37Z and lenovinha 2026-09-16T07:16Z — still outside
+the report-for-work rule, still directed nowhere.

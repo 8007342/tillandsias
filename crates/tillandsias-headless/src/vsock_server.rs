@@ -1506,7 +1506,12 @@ async fn serve_ready_stream(
                 installation_uuid,
                 root_token,
             } => {
-                crate::vault_bootstrap::set_in_vm_credentials(
+                // 890-y72v: the reply is built FROM this value now. It used
+                // to be discarded and the reply hardcoded `success: true`,
+                // which is how a delivery this guest deliberately dropped —
+                // superseded by a newer in-guest handover — reached the host
+                // as an acceptance.
+                let outcome = crate::vault_bootstrap::set_in_vm_credentials(
                     unseal_share_b64,
                     installation_uuid,
                     root_token,
@@ -1527,7 +1532,12 @@ async fn serve_ready_stream(
                     seq: env.seq,
                     body: ControlMessage::DeliverCredentialsReply {
                         seq_in_reply_to: seq,
+                        // Unchanged meaning, deliberately: frame-level receipt,
+                        // for peers that predate 890-y72v. The envelope did
+                        // arrive and was handled. `outcome` carries the answer
+                        // the host actually needs.
                         success: true,
+                        outcome,
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
@@ -2133,6 +2143,116 @@ mod tests {
     /// The two frames are written in ONE `write_all` so they are guaranteed to
     /// be available to a single read, which is what makes the buffer-loss
     /// window reachable at all.
+    /// ORDER 1201-t6ms: the SERVER-side wire-version refusal actually fires.
+    ///
+    /// WHY THIS ARM AND NOT THE CLIENT'S. 1032-62rx tested the client refusing
+    /// a server that advertises a different version, and its own doc records
+    /// that against a CURRENT server that arm is UNREACHABLE — the server
+    /// validates the client's Hello and returns BEFORE any HelloAck. So the
+    /// tested arm serves only a peer old enough to answer without validating,
+    /// and the arm that gates a live mismatched peer today is THIS one, which
+    /// nothing exercised. Two wire-version transitions rest on it: 3 (997-e4v2)
+    /// and 4 (890-y72v). What was pinned instead was the CONSTANT — a number
+    /// standing proxy for a refusal.
+    ///
+    /// THE REFUSAL IS A CLOSE, NOT A MESSAGE: the handler logs and returns
+    /// without writing, so the peer observes EOF. The assertion is therefore
+    /// "read reaches end-of-stream", and it is bounded by a timeout because a
+    /// regression that leaves the connection OPEN would otherwise hang the
+    /// suite instead of failing it — and a hanging test reports nothing.
+    ///
+    /// @trace order:1201-t6ms, spec:vsock-transport
+    #[tokio::test]
+    async fn server_refuses_a_client_advertising_a_different_wire_version() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let _server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: the shipped default is On; a test that wants the
+            // plaintext path must ask for it explicitly.
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+
+        let hello = encode_frame_for_test(&ControlEnvelope {
+            wire_version: WIRE_VERSION + 1,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "a-peer-from-the-future".to_string(),
+                capabilities: Vec::new(),
+                build_version: None,
+            },
+        });
+        tokio::io::AsyncWriteExt::write_all(&mut client, &hello)
+            .await
+            .expect("write mismatched hello");
+        tokio::io::AsyncWriteExt::flush(&mut client)
+            .await
+            .expect("flush");
+
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(
+            Duration::from_secs(5),
+            tokio::io::AsyncReadExt::read(&mut client, &mut buf),
+        )
+        .await
+        .expect("the server must CLOSE a mismatched peer, not leave it hanging");
+
+        assert_eq!(
+            read.expect("read after refusal"),
+            0,
+            "a client advertising WIRE_VERSION + 1 must be closed with NO reply; \
+             the server sent at least one byte instead"
+        );
+    }
+
+    /// POSITIVE CONTROL for the refusal above. Without it that test passes
+    /// against a server that is simply broken and answers nobody — its
+    /// assertion is "you got nothing", which a dead handler satisfies perfectly.
+    ///
+    /// @trace order:1201-t6ms, spec:vsock-transport
+    #[tokio::test]
+    async fn server_still_acks_a_client_on_the_matching_wire_version() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let _server_task = tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+
+        let hello = encode_frame_for_test(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "a-current-peer".to_string(),
+                capabilities: Vec::new(),
+                build_version: None,
+            },
+        });
+        tokio::io::AsyncWriteExt::write_all(&mut client, &hello)
+            .await
+            .expect("write matching hello");
+        tokio::io::AsyncWriteExt::flush(&mut client)
+            .await
+            .expect("flush");
+
+        let env = tokio::time::timeout(Duration::from_secs(5), read_envelope(&mut client))
+            .await
+            .expect("a matching peer must be answered, or the refusal test proves nothing")
+            .expect("HelloAck decodes");
+
+        assert!(
+            matches!(env.body, ControlMessage::HelloAck { .. }),
+            "a matching peer must receive HelloAck; got {:?}",
+            env.body
+        );
+    }
+
     #[tokio::test]
     async fn pipelined_hello_and_subscribe_both_survive_the_handoff() {
         let state = VmStateHandle::new();

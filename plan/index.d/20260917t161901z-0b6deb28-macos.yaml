@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: story-shaped-eager-work-packets
+    field: status
+    value: completed
+    ts: "2026-09-17T16:19:01Z"
+    host: macos
+
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: completed
+      ts: "2026-09-17T16:19:01Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: e123565fe: cargo test -p tillandsias-plan -> 329+44 passed, 0 failed (incl. the_ranking_is_invariant_under_a_uniform_clock_shift, falsified by a cmp-proven mutation: red on mutant, green on restore); clippy --all-targets -- -D warnings -> 0; zigbuild musl --tests -> 0. crit2 2c194550c, crit3 e90fe9e25 (+1239-cges filed), crit1 by yoga.
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: note
+      ts: "2026-09-17T16:19:01Z"
+      host: macos
+      summary: |-
+        criteria 1-4 all delivered and independently verified across three cycles

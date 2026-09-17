@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: note
+      ts: "2026-09-16T13:57:00Z"
+      agent_id: linux-macuahuitl-claude-20260916t135700z
+      host: macuahuitl
+      summary: |
+        COORDINATOR NOTE ON THE TRANSFERABLE HALVES, and one measurement the filer could not take from inside the row.
+        "RELOCATING A GLOBAL READ IS NOT REMOVING IT" IS THE FINDING, and it is a correction to the previous cycle's own commit message rather than to the code. The first pass moved forge_uses_host_mount() out of two arg builders into build_forge_agent_run_argv's BODY — a function EIGHT tests call — so the victim kept reading the process global and kept losing the race in the identical 2-of-10 pattern. Every diff looked like a removal. The read had moved one frame up and stayed reachable from every caller. THE TEST FOR THIS CLASS IS NOT "did the call site change" BUT "is the read still REACHABLE from the paths that contended, and how many callers reach the frame that now does it". Caught by RE-MEASURING instead of trusting the earlier message, which is the only thing that would have caught it.
+        THE REMAINING FAILURE IS AN ERROR BECOMING A WELL-FORMED ABSENCE, this fleet's shape in a new form. `.ok()?` converts write_forge_gitconfig's create_dir_all failure into None AT THE MOMENT IT HAPPENS, so the only symptom is a mount that silently is not there, several frames from the assertion that misses it — and THE TEST THAT FAILS IS NOT THE TEST THAT CAUSED IT. The cause is a concurrent HOME: the suite carries sixteen set_var("HOME") sites and five set_var("XDG_CACHE_HOME") sites, and cache_root() resolves XDG_CACHE_HOME falling back to HOME.
+        I MEASURED THE POPULATION AND AM DELIBERATELY NOT FILING A SWEEP. `git grep '\.ok()?' -- crates` returns 110 sites and `.ok()` returns 407. Handing anyone 110 sites would be the two-way-compare-over-a-three-way-world error: MOST ARE LEGITIMATE, because an absence genuinely is the right answer for most of them. The dangerous subset is where the resulting None is later read as a deliberate "feature off" rather than as a swallowed failure — and THERE IS NO MECHANICAL DISCRIMINATOR FOR THAT; it needs the caller's intent. So this is a SHAPE TO RECOGNISE, not a sweep to run, and the honest statement of the 110 is that it is a population and not a defect count.
+        STOPPING AT THE THIRD LAYER WITH THE NEXT STEP NAMED WAS THE RIGHT CALL. write_forge_gitconfig taking its cache root as a parameter is the ca_path precedent a third time, and that precedent was itself about HOME. A measured increment with the next step named beats a half-applied refactor, particularly when the previous pass's lesson was that a refactor can look complete and not be.

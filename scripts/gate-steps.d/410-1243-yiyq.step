@@ -1,0 +1,49 @@
+# Gate step 1243-yiyq — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. scripts/loop-status-metrics-audit.sh parses each host's newest
+# loop_status entry for its cycle-metrics block. It anchored on the literal
+# `skippable: candidates=`; scripts/cycle-metrics.sh later began emitting
+# `skippable: window=7d candidates=`. One interposed field broke every match for
+# twelve days, and the audit reported every host as NOT-PASTING the whole time.
+#
+# WHY THAT WAS EXPENSIVE RATHER THAN UNTIDY. That output is the coordination
+# skill's designated evidence for whether hosts paste their metrics, and the
+# skill prescribes routing a plain ask to any host that does not. On 2026-09-17
+# a coordinator read 23 of 23 stems NOT-PASTING, concluded the practice had died
+# fleet-wide, RECORDED IT AS A HAZARD, repeated it in a landed commit message,
+# wrote it into a packet's context as the reason cross-host evidence had been
+# unavailable, and told a peer — who pasted because they were told the channel
+# was dark. Every artifact downstream of a parser that had quietly gone blind.
+#
+# AND THE AUDIT LOOKED HEALTHY THROUGHOUT. It ends with `rows=N stems=N` and
+# exits non-zero on a dropped stem. That check is real and it passed. It
+# certifies ENUMERATION, not COMPREHENSION — a numeric agreement beside a
+# verdict reads exactly like a self-check while the tool faithfully enumerates
+# hosts it can no longer parse.
+#
+# THE TEETH ARE ARMS 1, 4 AND 6, and the mutation control was RUN, not assumed:
+# against the pre-fix audit those three FAIL and the other three pass (they are
+# regression guards, not teeth). Arm 1 pins that the audit reads what the
+# emitter emits today. Arm 4 is what keeps arm 1 true next month: it extracts
+# the audit's OWN SHAPE and runs the REAL cycle-metrics.sh output against it, so
+# the two files cannot drift apart again silently. Arm 6 pins that a corpus with
+# zero readable lines refuses with a FORMAT-DRIFT verdict instead of a
+# fleet-behaviour claim — "no host is pasting" and "I cannot read any host" send
+# a reader to opposite places and used to print identically.
+#
+# COST, MEASURED HERE 2026-09-17: 19.76 / 19.84 / 19.90 s. Essentially all of it
+# is arm 4's single cycle-metrics.sh invocation; the five audit runs are cheap.
+# That is the price of a BEHAVIOURAL tie. A source-grep for the format string
+# would cost nothing and could not tell a format cycle-metrics.sh MENTIONS from
+# one it EMITS, which is the exact distinction this defect turned on.
+# `--no-repo-scan` was measured as an escape and is not one: 18.7s, and it emits
+# no skippable line at all. NOT in the fast-refusal lane, whose admission rule
+# is a median under one second.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the loop-status audit can still read what cycle-metrics emits (1243-yiyq)"
+STEP_SCRIPT="scripts/test-loop-status-audit-reads-current-emitter.sh"
+STEP_ERROR="the loop-status audit and cycle-metrics.sh have drifted apart again (1243-yiyq) — the audit will report every host NOT-PASTING while parsing nothing; read which arm failed above"
+STEP_OK="Loop-status audit parses the current emitter"

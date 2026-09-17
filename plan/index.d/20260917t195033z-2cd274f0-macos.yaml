@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    field: status
+    value: in_progress
+    ts: "2026-09-17T19:50:33Z"
+    host: macos
+
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: note
+      ts: "2026-09-17T19:50:33Z"
+      host: macos
+      summary: |-
+        claimed for cycle 2026-09-17T18 by macos-tlatoanis-macbook-air-claude-20260917t195033z: the Darwin matcher half, plus the wired fixture that pins the literal, plus e2e-step2-macos.sh per macuahuitl's scope ruling

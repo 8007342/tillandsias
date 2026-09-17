@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    order: 1213-rbt9
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [ledger, website, accountability, security, tech-debt]
+    estimated_hours: 6
+    owned_files:
+      - plan/index.yaml
+    title: |
+      tillandsias.org publishes 14 shortcomings whose PATH line says no remedy is recorded, so the public page is ahead of the plan
+    context: |
+      MEASURED 2026-09-15 across the five explanation levels of tillandsias.org
+      at their pinned release v56.9.12.2: 38 `RED:` shortcomings, and FOURTEEN
+      of their `PATH:` lines are the site's own honest sentinel — "No path to
+      green is recorded in the repo." That sentence is written only after
+      looking, so each of the fourteen is a defect the project has DESCRIBED IN
+      PUBLIC and has not recorded a remedy for anywhere in plan/.
+      WHY THIS IS A ROW RATHER THAN AN OBSERVATION. The site is an outward
+      honesty surface: the operator's intent is that outside readers and other
+      agents use it to find shortcomings, and that criticism may arrive as
+      GitHub issues. A shortcoming published with no tracking row means an
+      outside report has nothing to attach to, two people can rediscover it
+      independently, and the project cannot say whether it is known-and-deferred
+      or simply lost.
+      THE FOURTEEN, by level, in the site's own words compressed to their
+      subject. Level 3: the inference engine is fetched at first run from an
+      unpinned "latest" with no checksum or signature and then executed inside
+      the enclave; the enclave push path is anonymous, so any peer reaching the
+      mirror can have the privileged relay carry updates upstream; the agent
+      context file advertises a Vault address the TLS-only listener does not
+      answer, with a one-hour token nothing renews; the context file advertises
+      a Local Experts mode only one lane can reach; the publish sibling serves
+      the repository root so a subdirectory site 404s and `.git` is reachable
+      through the router; the browser tool is spec-only in three places and
+      partial in a fourth; the spec's "remove the network at exit when empty"
+      has no implementation and the membership guard counts only two function
+      families; two sibling scripts create the network without the flag and pass
+      a gate that checks a fixed list of three files; and the spec's promise
+      that the host working copy is fast-forwarded after a successful push has
+      no implementing code at that release.
+      Level 4, and these are the security half: the proxy's second port is a
+      reachable allowlist bypass, listening on every interface with every
+      destination allowed and no source restriction; the published proxy spec
+      describes a per-launch two-level EC P-256 chain held only on tmpfs while
+      the shipped launcher makes one self-signed RSA-2048 certificate in
+      persistent state; the macOS lane signs an allow-list of three named assets
+      and runs no integrity check; nothing a user runs by default verifies a
+      signature, and no install path checks a cosign bundle; and the Vault
+      unseal share is written to a plaintext cache file where no OS keyring is
+      available — unconditionally inside a guest — with nothing deleting it and
+      the "share present in keychain" check satisfied by that file.
+      WHAT IS MEASURED AND WHAT IS NOT. Measured: the count, the level
+      attribution, and that each carries the no-remedy sentinel. Spot-checked
+      against the ledger for the five security items with a grep whose positive
+      control passed — "permissive port" and "cosign" each matched once and BOTH
+      matches are incidental prose in unrelated rows, not tracking entries. NOT
+      measured: whether each shortcoming still holds against current trunk. The
+      site describes the stable channel at its pin, so some may already be
+      fixed in a daily and simply not re-verified; that is the first question
+      for whoever takes a row, not an assumption this one makes.
+      A NOTE ON THE INSTRUMENT, because it nearly produced a false answer here:
+      the first ledger search used a `query --text` constraint that does not
+      exist. It returned empty for all five subjects and read exactly like a
+      clean negative. A positive control on a term certain to appear — "mirror"
+      — also returned empty, which is what exposed it. An empty result from a
+      wrong query is indistinguishable from an absence, and only the control
+      separates them.
+    exit_criteria:
+      - 'each of the fourteen is dispositioned: a tracking row exists, or the site records a deliberate decision that it stays unremedied with the reason (pre-fix result: FAILS — all fourteen carry the no-remedy sentinel today)'
+      - 'the five security items are triaged FIRST and their current status against trunk is stated, since the site describes a pinned stable release and some may already be fixed'
+      - 'NEGATIVE CONTROL: a shortcoming that genuinely has no remedy keeps the sentinel rather than gaining an empty row, so the count can fall to a floor above zero and stop'
+      - 'the site can point a reader from a published shortcoming to its tracking entry, so an outside report has something to attach to'
+    unscoreable: |
+      unpinnable-until-triage: the deliverable is fourteen dispositions and the
+      work each implies is unknown until the first question is answered — does
+      the shortcoming still hold at trunk? Several may close on re-verification
+      alone. The measurement is complete; the remediation is not scopeable from
+      the count.
+    events:
+      - type: filed
+        ts: "2026-09-15T21:52:54Z"
+        agent_id: "linux-macuahuitl-claude-20260915t215254z"
+        host: macuahuitl
+        summary: |-
+          Filed from the website work the operator authorised. The page was
+          built to keep the project honest and is now ahead of the ledger in
+          fourteen places, five of them security shortcomings. The operator's
+          stated intent is that outside readers and agents use the site to find
+          defects, which makes an untracked published shortcoming a gap in the
+          channel rather than only in the plan.

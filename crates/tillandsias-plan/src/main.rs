@@ -1443,6 +1443,27 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         "capability_tags",
         "deliverable",
         "depends_on",
+        // ORDER 1218-25z3. `must_ship` marks a row as REQUIRED IN THE NEXT CUT,
+        // and scripts/check-must-ship-rows.sh reads it from this projection.
+        //
+        // IT IS HERE RATHER THAN AS A TAG BECAUSE THE ALTERNATIVES WERE
+        // MEASURED AND BLOCKED, not because a field was the first idea:
+        //   * capability_tags IS projected and IS exactly filterable, but
+        //     set-field REFUSES list-valued fields (1184-tj2q) — writing one
+        //     would read the existing list as unset and replace it with a
+        //     string, after which the row matches NO tag query. So an existing
+        //     row cannot be marked, and declarations are immutable.
+        //   * a novel top-level field validates fine under `check
+        //     --strict-fragments` but never reaches this JSON, so it would be
+        //     writable and unreadable.
+        // `must_ship` is a SCALAR, so set-field can write it on any row today.
+        //
+        // Adding it here is the same lesson 627-cx24 records twenty lines up: a
+        // projection that silently drops a field a consumer reads fails in a
+        // direction nothing observes. A consumer of THIS field reading nothing
+        // would report "no rows are marked" — the answer that looks like
+        // success.
+        "must_ship",
     ] {
         if let Some(value) = packet.get(key) {
             obj.insert(
@@ -1788,15 +1809,19 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                     id: selected[0].1.id.clone(),
                     engine: format!("{} (captured envelope)", selected[0].1.engine),
                     failures: vec![format!("input is not an answer envelope: {e}")],
+                    // A malformed envelope has no citations to be stale ABOUT.
+                    stale: Vec::new(),
                 });
                 report(&outcomes, &[], &sets, started);
                 return 1;
             }
         };
+        let found = groundtruth::grade_envelope_audited(&envelope, &selected[0].1.expect, &root);
         outcomes.push(groundtruth::Outcome {
             id: selected[0].1.id.clone(),
             engine: format!("{} (captured envelope)", selected[0].1.engine),
-            failures: groundtruth::grade_envelope(&envelope, &selected[0].1.expect, &root),
+            failures: found.failures,
+            stale: found.stale,
         });
     } else {
         // One harness PER RESOLVED CORPUS, cached: a set that declares its own
@@ -1879,10 +1904,15 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 }
             };
             let grade_root = harnesses[slot].1.clone();
+            // ORDER 1229-2862: the AUDITED form, which separates a frame-stale
+            // citation from a genuine failure. `grade_envelope` folds the two
+            // back together and is kept for callers that have no third outcome.
+            let found = groundtruth::grade_envelope_audited(&envelope, &case.expect, &grade_root);
             outcomes.push(groundtruth::Outcome {
                 id: case.id.clone(),
                 engine: case.engine.clone(),
-                failures: groundtruth::grade_envelope(&envelope, &case.expect, &grade_root),
+                failures: found.failures,
+                stale: found.stale,
             });
         }
     }
@@ -1900,15 +1930,34 @@ fn report(
     started: std::time::Instant,
 ) -> usize {
     let mut failed = 0;
+    let mut stale = 0;
     for o in outcomes {
         if o.passed() {
             println!("PASS  {}  [{}]", o.id, o.engine);
+            continue;
+        }
+        // ORDER 1229-2862. STALE is checked BEFORE fail and is defined as "no
+        // genuine failure", so a case carrying both grades FAIL and its stale
+        // citations are printed underneath it. A stale index must never become
+        // somewhere a real regression can sit quietly.
+        if o.is_stale() {
+            stale += 1;
+            println!(
+                "STALE {}  [{}]  NOT VALID in this checkout: the index is behind the code",
+                o.id, o.engine
+            );
+            for sv in &o.stale {
+                println!("        - {sv}");
+            }
             continue;
         }
         failed += 1;
         println!("FAIL  {}  [{}]", o.id, o.engine);
         for f in &o.failures {
             println!("        - {f}");
+        }
+        for sv in &o.stale {
+            println!("        - (also stale) {sv}");
         }
     }
     // ORDER 888-miiy. A SKIPPED case is printed per-case and counted in the
@@ -1922,16 +1971,36 @@ fn report(
     let mut engines: Vec<&str> = skipped.iter().map(|(_, e, _)| e.as_str()).collect();
     engines.sort_unstable();
     engines.dedup();
+    // ORDER 1229-2862. Stale engines are named in the summary for the same
+    // reason skipped ones are: a condition that shrinks what a run CERTIFIES
+    // must be legible from the one machine-readable line, not only from the
+    // per-case output a consumer may be tailing away.
+    let mut stale_engines: Vec<&str> = outcomes
+        .iter()
+        .filter(|o| o.is_stale())
+        .map(|o| o.engine.as_str())
+        .collect();
+    stale_engines.sort_unstable();
+    stale_engines.dedup();
     // `total` counts every case the set DECLARED, so pass+fail+skipped == total
     // and a skip cannot quietly shrink the denominator. A shrinking bar is a
     // lowered bar (the same rule the committed-set step already enforces).
+    // `total` still counts every case the set DECLARED, so
+    // pass+fail+stale+skipped == total. A stale case may no more shrink the
+    // denominator than a skipped one may (1229-2862 keeping 888-miiy's rule).
     println!(
-        "groundtruth-result: sets={} total={} pass={} fail={} skipped={}{} elapsed_ms={}",
+        "groundtruth-result: sets={} total={} pass={} fail={} stale={} skipped={}{}{} elapsed_ms={}",
         sets.len(),
         outcomes.len() + skipped.len(),
-        outcomes.len() - failed,
+        outcomes.len() - failed - stale,
         failed,
+        stale,
         skipped.len(),
+        if stale_engines.is_empty() {
+            String::new()
+        } else {
+            format!(" stale_engines={}", stale_engines.join(","))
+        },
         if engines.is_empty() {
             String::new()
         } else {
@@ -1939,6 +2008,13 @@ fn report(
         },
         started.elapsed().as_millis()
     );
+    if stale > 0 {
+        eprintln!(
+            "WARNING: {} case(s) cite spans that are SOUND at the index's own commit but stale in this checkout (engines: {}). The index is behind the code; scripts/spec-index-ensure.sh republishes one. This run does not certify those cases.",
+            stale,
+            stale_engines.join(",")
+        );
+    }
     if !skipped.is_empty() {
         eprintln!(
             "WARNING: {} case(s) were NOT GRADED on this host (engines: {}). This run does not certify those engines; it certifies the {} case(s) it could grade.",
@@ -5924,111 +6000,14 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 i += 1;
             }
 
-            // Dependents, counted over EVERY ready packet — the same edge set
-            // blocking-counts uses, for the same reason it does not fold into
-            // select-rows.
-            let mut dependents: std::collections::BTreeMap<String, usize> =
-                std::collections::BTreeMap::new();
-            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
-                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
-                    for d in deps {
-                        let key = match d {
-                            serde_yaml::Value::String(s) => s.clone(),
-                            serde_yaml::Value::Number(n) => n.to_string(),
-                            _ => continue,
-                        };
-                        *dependents.entry(key).or_insert(0) += 1;
-                    }
-                }
-            }
-
-            // (age_days, order_num, blocking, order, packet_id, leased)
-            let mut rows: Vec<ForgottenRow> = Vec::new();
-            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
-                let id = ledger.id_of(p).to_string();
-                let order = p
-                    .get("order")
-                    .map(|o| match o {
-                        serde_yaml::Value::Number(n) => n.to_string(),
-                        serde_yaml::Value::String(s) => s.clone(),
-                        _ => "?".to_string(),
-                    })
-                    .unwrap_or_else(|| "?".to_string());
-
-                // MILESTONES ARE CONTAINERS, NOT FORGOTTEN WORK. A milestone
-                // holds criteria and is never claimed for implementation
-                // (ambitious_milestone_reduction.milestone_packet_semantics);
-                // its children are. MEASURED: 15 ready milestones would
-                // otherwise sit in this list, and every one of them is a row a
-                // reader must learn to skip. Excluded here rather than left for
-                // the caller, because a projection whose top rows are all
-                // un-actionable teaches people to stop reading it.
-                if p.get("kind").and_then(serde_yaml::Value::as_str) == Some("milestone") {
-                    continue;
-                }
-
-                let mut newest: Option<i64> = None;
-                let mut leased = false;
-                if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
-                    for ev in evs {
-                        if let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str)
-                            && let Some(e) = answer::iso8601_to_epoch(ts)
-                            && newest.is_none_or(|cur| e > cur)
-                        {
-                            newest = Some(e);
-                        }
-                        let ty = ev.get("type").and_then(serde_yaml::Value::as_str);
-                        if ty == Some("claim") {
-                            leased = true;
-                        }
-                        // The claim CONVENTION is a note whose summary says so
-                        // (943-unii): a `claim` type is the audit record, and
-                        // plenty of real claims are notes. Both count as "someone
-                        // has had hands on this".
-                        if let Some(sum) = ev.get("summary").and_then(serde_yaml::Value::as_str)
-                            && sum.contains("claimed for cycle")
-                        {
-                            leased = true;
-                        }
-                    }
-                }
-                // MEASURED 2026-09-06: 461 of 461 ready packets carry NO events
-                // at all, so "age since last event" is undefined for essentially
-                // the whole ledger and cannot rank anything on its own. That is
-                // a finding about the ledger, not a gap in the query — most
-                // packets are declared and never touched again until claimed.
-                //
-                // The ORDER TOKEN carries the missing signal. next-order mints
-                // monotonically (581-k3f9), so a lower order number is a packet
-                // filed longer ago; order 491 predates 1085 by construction.
-                // Eventless packets are therefore ranked oldest-first by order,
-                // which surfaces the genuinely ancient ones instead of the
-                // alphabetically unlucky.
-                let age_days = newest.map(|e| (now - e) / 86_400);
-                let order_num: i64 = order
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect::<String>()
-                    .parse()
-                    .unwrap_or(i64::MAX);
-                let blocking = dependents.get(&id).copied().unwrap_or(0);
-                // --min-age-days filters on a MEASURED age; an eventless
-                // packet has no age to compare, and dropping it would hide the
-                // most-forgotten rows behind a flag meant to narrow the list.
-                if let Some(a) = age_days
-                    && a < min_age_days
-                {
-                    continue;
-                }
-                rows.push((age_days, order_num, blocking, order, id, leased));
-            }
-
-            // TOTAL ORDER, so the same ledger yields the same list on every host
-            // and every run (criterion 4's negative control depends on it):
-            // most-neglected first, then fewest dependents, then packet_id as
-            // the tiebreak — never insertion order, which is fragment-order and
-            // therefore host-dependent.
-            forgotten_sort(&mut rows);
+            // ORDER 718-jqt5 criterion 2. The projection MOVED to
+            // `tillandsias_plan::forgotten` so the library — and therefore
+            // `answer_question` — can reach it. This arm keeps the flag
+            // parsing and the formatting; the computation is shared, so the
+            // CLI and the story-shaped query surface cannot drift apart.
+            // That shared definition IS criterion 4's negative control: a
+            // second copy would pass the control the day it was written.
+            let rows = tillandsias_plan::forgotten::forgotten_rows(&ledger, now, min_age_days);
 
             let mut shown = 0usize;
             for (age_days, _order_num, blocking, order, id, leased) in &rows {
@@ -7000,6 +6979,80 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 eprintln!("error: resolved packet has no packet_id");
                 std::process::exit(1);
             };
+
+            // ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION.
+            //
+            // `status: in_progress` is the one write whose whole purpose is to
+            // tell a coordinator WHOM TO ASK. Defaulted, it records the compiled
+            // platform (772-4se9, deliberate and unit-tested), so every host on
+            // one platform claims under the same name and the sweep that has to
+            // name one cannot. MEASURED 2026-09-15: this coordinator asked the
+            // wrong host to release a live claim, and after the channel fix
+            // (1198-7q95) the same wrong message was still constructible,
+            // because 1155-jurn reads `claimant:windows` and esme and yolanda
+            // are both windows.
+            //
+            // ROUTE (a) OF THE THREE THE ROW RECORDS, chosen because it is the
+            // only one that keeps 772-4se9's guarantee AND its test
+            // byte-identical: the default is untouched everywhere else, and the
+            // claim is refused rather than mis-attributed. It makes a discipline
+            // that was already written down mechanical — the worker skill's
+            // canonical claim has passed `--host "$(hostname -s)"` all along,
+            // and the claims that landed as `linux` were the ones that did not
+            // follow it.
+            //
+            // NARROW BY CONSTRUCTION. It fires only when the host would be the
+            // COMPILED PLATFORM: an explicit `--host` always wins (even
+            // `--host linux`), and TILLANDSIAS_HOST_KIND=forge still answers, so
+            // the forge lane is untouched. Only the platform fallback — the one
+            // string that cannot identify a machine — is refused.
+            //
+            // PLACED HERE, BEFORE THE LIST/SCALAR SPLIT, AND THAT IS LOAD-BEARING.
+            // set-field resolves the writer host in TWO places, once per branch
+            // (1184-tj2q added the list arm). The first draft of this guard went
+            // into the first `flagged("--host")` the file offered, which is the
+            // LIST arm — and `status` is a scalar, so the guard was never reached
+            // and a claim with no host still wrote `host: linux`. The fixture's
+            // arm 1 caught it. A guard that must hold for a field belongs above
+            // every branch that field can take.
+            //
+            // AN EXPLICIT --host ALWAYS WINS, INCLUDING `--host <platform>`.
+            // The defect is a SILENT DEFAULT producing a claim nobody can
+            // attribute; an explicit platform is a deliberate, traceable choice
+            // by someone who can be asked why. Refusing that too would leave no
+            // override at all, and a guard with no escape hatch is an argument
+            // for reaching past it — the same reasoning that makes a narrow
+            // override better than `--no-verify`. So the condition tests
+            // ABSENCE of the flag, not the value of the resolved host.
+            {
+                let host_flag_given = args.iter().any(|a| a == "--host");
+                let claim_host = resolve_writer_host();
+                if field == "status"
+                    && value == "in_progress"
+                    && !host_flag_given
+                    && claim_host == std::env::consts::OS
+                {
+                    eprintln!(
+                        "refused:set-field:claim-without-a-host — a claim on '{pid}' would record \
+                         its holder as '{claim_host}', the compiled platform, which every host on \
+                         this platform shares (1201-hsf9).\n\
+                         \n\
+                         WHY THIS IS REFUSED RATHER THAN DEFAULTED. A claim's whole purpose is to \
+                         tell a coordinator whom to ask to let go. Two hosts claiming as \
+                         '{claim_host}' are indistinguishable exactly when a sweep needs to name \
+                         one, and the coordinator then asks the wrong host — measured twice on \
+                         2026-09-15.\n\
+                         \n\
+                         REMEDY, which the worker skill already prescribes:\n\
+                           set-field {pid} status in_progress --host \"$(hostname -s)\" --reason ...\n\
+                         \n\
+                         An explicit --host always wins, including --host {claim_host} if you \
+                         genuinely mean the platform. Every other field and every other status \
+                         value is unaffected; the 772-4se9 platform default is unchanged."
+                    );
+                    std::process::exit(2);
+                }
+            }
             // ORDER 1184-tj2q — A LIST IS NOT AN UNSET SCALAR, AND TREATING IT
             // AS ONE MAKES THE ROW VANISH.
             //
@@ -7142,6 +7195,84 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                         "       retired words (claimed, stalled, provisional, failed-retryable, parked, tested) are invalid to write — see methodology/distributed-work.yaml status_transition_protocol"
                     );
                     std::process::exit(1);
+                }
+                // ORDER 1211-q9bm — REFUSE A TERMINAL FLIP THAT WOULD STRAND THE
+                // LONG-RUNNING VIEW, at the flip rather than at someone else's gate.
+                //
+                // plan/long-running.md is a filtered view of ACTIVE multi_cycle
+                // packets, so a terminal packet must leave it.
+                // check-long-running-view.sh enforces that correctly — but it runs
+                // inside the gate (build.sh), so the refusal fires for WHOEVER LANDS
+                // NEXT. Measured 2026-09-15: completing 330 left its row behind, and
+                // the fleet-wide land block was paid for by yoga, who had to prove
+                // the refusal was not theirs, find the owner, and decide whether
+                // editing another host's lane was acceptable. The author never saw it.
+                //
+                // The checker's own message already names the right moment — "remove
+                // each stale one, in the same commit as the change that moved it" —
+                // which is a COMPLETION-TIME instruction delivered at LAND TIME to a
+                // different person. Everything needed to say it earlier is here: the
+                // packet, the new status, multi_cycle, and the view's contents.
+                //
+                // NOT A REPLACEMENT FOR THE LAND-TIME CHECK. That stays: a flip made
+                // by anything that bypasses set-field would strand the view again,
+                // and this guard cannot see those. Same reasoning as 940-f77j — the
+                // early refusal is a courtesy to the author, the gate is the backstop.
+                //
+                // Same shape as the fragment-status-loss precedent recorded at
+                // evidence_event_shape() above, where a checker refused AFTER the
+                // write and AFTER a commit and cost this host two cycles in an hour.
+                if tillandsias_plan::is_terminal_status(&value)
+                    && packet
+                        .get("multi_cycle")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                {
+                    let view_path = std::env::var("TILLANDSIAS_LONG_RUNNING_VIEW")
+                        .unwrap_or_else(|_| "plan/long-running.md".to_string());
+                    if let Ok(view) = std::fs::read_to_string(&view_path) {
+                        // The view keys rows by ORDER, in the same `| <order> |`
+                        // shape the checker parses (its view_orders() sed).
+                        let order = packet
+                            .get("order")
+                            .map(|o| match o {
+                                serde_yaml::Value::Number(n) => n.to_string(),
+                                serde_yaml::Value::String(s) => s.clone(),
+                                _ => String::new(),
+                            })
+                            .unwrap_or_default();
+                        // Mirror the checker's parser rather than inventing a second
+                        // one: its view_orders() is
+                        //   sed -n 's/^| *\([0-9][0-9a-z-]*\) *|.*/\1/p'
+                        // i.e. a leading pipe, the order token as the FIRST CELL,
+                        // then a pipe. Comparing the trimmed first cell says exactly
+                        // that without a regex, and keeps the two in step — a looser
+                        // match here would refuse a row the gate does not see.
+                        let listed = !order.is_empty()
+                            && view.lines().any(|l| {
+                                let t = l.trim_start();
+                                t.starts_with('|')
+                                    && t[1..]
+                                        .split('|')
+                                        .next()
+                                        .is_some_and(|cell| cell.trim() == order)
+                            });
+                        if listed {
+                            eprintln!(
+                                "error: '{order}' is multi_cycle and still listed in {view_path}, which is a filtered view of ACTIVE multi_cycle packets."
+                            );
+                            eprintln!(
+                                "       Remove its row in the SAME COMMIT as this status change (the wording check-long-running-view.sh uses)."
+                            );
+                            eprintln!(
+                                "       Refused here rather than at land time, where the cost falls on whoever lands next rather than on you (1211-q9bm)."
+                            );
+                            eprintln!(
+                                "       The prose columns are editorial and cannot be generated, so the row is yours to delete — not this tool's."
+                            );
+                            std::process::exit(1);
+                        }
+                    }
                 }
                 let cur_rank = tillandsias_plan::closure_rank(&current);
                 let new_rank = tillandsias_plan::closure_rank(&value);
@@ -7868,45 +7999,6 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
     log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
 }
 
-/// ORDER 718-jqt5. One `forgotten` row: (age_days, order_num, blocking,
-/// order, packet_id, leased).
-type ForgottenRow = (Option<i64>, i64, usize, String, String, bool);
-
-/// The TOTAL ORDER for `forgotten`, split out so it can be tested without a
-/// ledger — the same reason `child_env_with_home` and `expire_claim_candidates`
-/// are split out.
-///
-/// Determinism is the point, and it is stronger than the packet's criterion
-/// asked for. 718-jqt5's negative control says "the same seed yields the same
-/// set". This projection takes NO seed: the order is total, so the same ledger
-/// yields the same list on every host and every run, and reproducibility does
-/// not depend on remembering to record a seed. A seed belongs to the SAMPLING
-/// layer above this (which epics to spread across), not to the projection.
-///
-/// The rules, in order:
-///   1. eventless packets first — nothing has ever happened to them;
-///   2. within those, LOWEST ORDER first: `next-order` mints monotonically
-///      (581-k3f9), so a lower number was filed longer ago;
-///   3. within evented packets, GREATEST age first;
-///   4. then fewest dependents, because a leaf is what a residual-maximising
-///      selector never reaches;
-///   5. then packet_id — never insertion order, which is fragment order and
-///      therefore differs between hosts.
-fn forgotten_sort(rows: &mut [ForgottenRow]) {
-    rows.sort_by(|a, b| {
-        let bucket = |r: &ForgottenRow| if r.0.is_none() { 0u8 } else { 1u8 };
-        bucket(a)
-            .cmp(&bucket(b))
-            .then_with(|| match (a.0, b.0) {
-                (None, None) => a.1.cmp(&b.1),
-                (Some(x), Some(y)) => y.cmp(&x),
-                _ => std::cmp::Ordering::Equal,
-            })
-            .then(a.2.cmp(&b.2))
-            .then(a.4.cmp(&b.4))
-    });
-}
-
 /// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
 /// the policy is unit-testable without a filesystem: given the folded ledger
 /// and a cutoff timestamp, partition every `in_progress` packet into
@@ -8131,6 +8223,35 @@ fn expire_claim_candidates<'a>(
             }
         }
 
+        // ORDER 1198-7q95 — THE STATUS CHANNEL FIRST, HERE TOO.
+        //
+        // 1065-4t7t corrected the sibling `live_claims` for exactly this and
+        // left THIS function on the event channel, so the two halves of one
+        // instrument disagreed about who holds a claim. The event scan above
+        // finds the newest event whose summary READS like a claim, which is
+        // prose; the status entry that actually set `in_progress` is a fact,
+        // and the fold already records which entry won.
+        //
+        // MEASURED on the live ledger 2026-09-15: 888-miiy carried a status
+        // write of 2026-09-15T07:36:36Z (yoga's claim, 35 minutes old) and an
+        // unrelated `progress` event from 2026-09-01 by another host. This
+        // function reported "2026-09-01T23:04:53Z claimant:lenovinha", the
+        // coordinator acted on it and asked the wrong host to release work it
+        // had never held, and `--write` would have returned a live claim to
+        // ready — 1140-d6ni's duplication produced by the instrument built to
+        // prevent it.
+        //
+        // The event path stays as the fallback for a status that came from the
+        // base index, which carries no claimant; prose is the thing that
+        // failed, so it is not the primary.
+        let lease = ledger
+            .status_lease_of(pid)
+            .filter(|(h, t)| !h.is_empty() && !t.is_empty());
+        if let Some((h, t)) = lease {
+            claim_host = Some(h);
+            claim_ts = Some(t);
+        }
+
         let mut last_ts: Option<String> = None;
         if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
             for ev in seq {
@@ -8155,6 +8276,25 @@ fn expire_claim_candidates<'a>(
                 }
             }
         }
+
+        // ORDER 1198-7q95 — SETTING A CLAIM *IS* ACTIVITY, so the claim's own
+        // timestamp is a floor under the row's last activity, exactly as
+        // `live_claims` treats it ("a row whose only record is the claim
+        // itself takes the claim ts as its last activity").
+        //
+        // Without this floor the lease fix above would be half a fix: the
+        // event loop keeps only the CLAIMANT's own events, and a claimant
+        // recorded as a platform (`linux`, the deliberate default of
+        // 772-4se9) matches no event written by a workstation, so a freshly
+        // claimed row would fall through with last_ts = None and be reported
+        // as unknown-age rather than young. A claim made a minute ago is not
+        // a row of unknown age.
+        if let Some(ct) = claim_ts
+            && last_ts.as_deref().is_none_or(|cur| ct > cur)
+        {
+            last_ts = Some(ct.to_string());
+        }
+
         // ORDER 864-k8dp — A REAP HOLD THE REAPER CAN ACTUALLY SEE.
         //
         // The reaper decides on ONE fact: time since the last event. It cannot
@@ -8416,107 +8556,6 @@ mod tests {
         assert!(!role_satisfies("linuxfoo", "linux"));
         assert!(!role_satisfies("linux", "linuxfoo"));
         assert!(role_satisfies("linux", "linux-foo"));
-    }
-
-    use super::{ForgottenRow, forgotten_sort};
-
-    fn row(age: Option<i64>, order: i64, blocking: usize, id: &str) -> ForgottenRow {
-        (
-            age,
-            order,
-            blocking,
-            order.to_string(),
-            id.to_string(),
-            false,
-        )
-    }
-
-    /// ORDER 718-jqt5 criterion 1. Eventless packets come FIRST — nothing has
-    /// ever happened to them — and within that bucket the LOWEST order wins,
-    /// because next-order mints monotonically so a lower number was filed
-    /// longer ago (581-k3f9).
-    #[test]
-    fn forgotten_puts_eventless_packets_first_oldest_order_first() {
-        let mut rows = vec![
-            row(Some(3), 900, 0, "recent-event"),
-            row(None, 1085, 0, "new-and-untouched"),
-            row(None, 151, 0, "ancient-and-untouched"),
-        ];
-        forgotten_sort(&mut rows);
-        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
-        assert_eq!(
-            ids,
-            vec!["ancient-and-untouched", "new-and-untouched", "recent-event"]
-        );
-    }
-
-    /// Among packets that DO have events, the stalest ranks first. Without this
-    /// the bucket rule above could be satisfied by ignoring age entirely.
-    #[test]
-    fn forgotten_ranks_evented_packets_by_descending_age() {
-        let mut rows = vec![
-            row(Some(2), 100, 0, "fresh"),
-            row(Some(90), 900, 0, "stale"),
-            row(Some(30), 500, 0, "middling"),
-        ];
-        forgotten_sort(&mut rows);
-        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
-        assert_eq!(ids, vec!["stale", "middling", "fresh"]);
-    }
-
-    /// A LEAF is what a residual-maximising selector never reaches: the epic
-    /// score weights `blocking` at 1.5, so a packet nothing depends on barely
-    /// moves its epic and is never the reason one wins. Fewest dependents
-    /// first, at equal age.
-    #[test]
-    fn forgotten_prefers_the_leaf_at_equal_age() {
-        let mut rows = vec![
-            row(None, 200, 7, "blocks-many"),
-            row(None, 200, 0, "blocks-nothing"),
-        ];
-        forgotten_sort(&mut rows);
-        assert_eq!(rows[0].4, "blocks-nothing");
-    }
-
-    /// THE NEGATIVE CONTROL 718-jqt5 ASKS FOR, and it is stronger than the
-    /// criterion. The criterion says "the same seed yields the same set"; this
-    /// projection takes no seed, so the order is total and the same input
-    /// yields the same output regardless of how it arrived. Shuffling the input
-    /// must change nothing — which is what rules out insertion order (fragment
-    /// order, and therefore host-dependent) leaking into the ranking.
-    #[test]
-    fn forgotten_is_reproducible_without_a_seed() {
-        let build = || {
-            vec![
-                row(None, 500, 1, "e"),
-                row(Some(10), 100, 0, "a"),
-                row(None, 200, 0, "c"),
-                row(Some(10), 900, 0, "b"),
-                row(None, 200, 3, "d"),
-            ]
-        };
-        let mut first = build();
-        forgotten_sort(&mut first);
-
-        let mut shuffled = build();
-        shuffled.reverse();
-        forgotten_sort(&mut shuffled);
-        assert_eq!(first, shuffled, "input order must not reach the ranking");
-
-        let mut rotated = build();
-        rotated.rotate_left(3);
-        forgotten_sort(&mut rotated);
-        assert_eq!(first, rotated);
-    }
-
-    /// Equal age AND equal blocking must still be a total order, or two hosts
-    /// can print the same set in different sequences and a batch stops being
-    /// replayable.
-    #[test]
-    fn forgotten_breaks_full_ties_on_packet_id() {
-        let mut rows = vec![row(None, 300, 0, "zeta"), row(None, 300, 0, "alpha")];
-        forgotten_sort(&mut rows);
-        assert_eq!(rows[0].4, "alpha");
     }
 
     use super::*;

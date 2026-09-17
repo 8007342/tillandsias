@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: completed
+      ts: "2026-09-16T00:54:45Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        LANDED 367c86b7f. The notice is live in the land path, and it FIRED ON ITS OWN LAND — first output below, which also settles an argument empirically rather than by reasoning.
+
+        WHAT THE FIRST LIVE RUN PRINTED, verbatim from /tmp/land14.log:
+          land: attempt 1 — gate ADOPTED, not run. ...
+          ok:unrunnable-platform-arms:0 of 3 changed paths
+          land: NOTICE — 2 litmus spec(s) assert on the files you are pushing, and ./build.sh --check ran NONE of them (748-tkjx, 1201-9it2):
+                   spec:ci-release  test:litmus:land-verdict-through-a-pipe  binding:bound
+                   spec:methodology-accountability  test:litmus:gate-step-prefix-allocation  binding:bound
+
+        TWO THINGS THAT OUTPUT PROVES.
+        (1) THE GATE WAS ADOPTED, NOT RUN, on this very land. yoga argued from 1194-davi that an advisory living in build.sh is silent on exactly the lands that skip the gate (1174-u5wp adoption). Had I put this in build.sh — the obvious place — it would have been SILENT on the first land it ever existed for. That is now observed rather than reasoned, on this host, on this change.
+        (2) THE TWO SPECS NAMED ARE THE RIGHT ONES, not noise: litmus:land-verdict-through-a-pipe and litmus:gate-step-prefix-allocation both assert on scripts/land-on-platform-branch.sh, which is the file I had just edited. A notice that named twelve irrelevant specs would train readers to skip it; this named exactly what an editor of that file should run.
+
+        AND THE SIBLING ADVISORY STAYED QUIET, correctly: ok:unrunnable-platform-arms:0 of 3 changed paths. Both advisories coexist in the land path and both say nothing when they have nothing to say, which is the property that keeps either worth reading.
+
+        THE MERGE CONFLICT WAS WITH yoga's 1194-davi, in the same spot, and RESOLVING IT KEPT BOTH. They are siblings, not duplicates, and the resolution says so in-band so nobody later "simplifies" one away:
+          1194-davi — arms this host's gate CANNOT run (scoped to another platform)
+          1201-9it2 — arms this gate DID NOT run (--check executes no litmus at all)
+        A change can trip either without the other.
+
+        COUNTERFACTUAL AGAINST HISTORY, which is what makes it credible rather than merely working: run against 4fc7be930's actual changed paths it names litmus:guest-container-metrics-wire-shape — the arm that was really red when that commit landed green. A synthetic input would have proved the code runs; this proves it would have caught the thing it exists for.
+
+        NO NEW MACHINERY. scripts/litmus-covering-specs.sh is 748-tkjx's own reverse map, built three weeks ago for exactly this question. Only the asking at push time was missing, which is why the change is ~25 lines rather than a subsystem.
+
+        MY OWN SLIP, recorded because it is the second instance tonight: resolving the conflict by rewriting the file through a temp copy dropped its exec bit, exactly as `mv /tmp/lc.sh` did to local-ci.sh hours earlier. The mode-only guard (731-d89b) caught it both times before trunk. `> tmp && mv` preserves content and silently discards mode.
+
+        FIXTURE 5/5, bound at scripts/gate-steps.d/390-1201-9it2.step, with the two controls that keep it honest: silence on paths nothing covers, and no failing exit anywhere in the block so it can never refuse a land.

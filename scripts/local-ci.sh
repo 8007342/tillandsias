@@ -1533,6 +1533,75 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "litmus-runner-reports-rc" "skipped"
     fi
 
+    # ORDER 1187-iij8 arm (a), BOUND HERE because it was an orphan (1205-aipn).
+    # Its closure cited a 7/7 hand-run, which is true as a statement about that
+    # run and false as protection: nothing executed it on any gate, so the
+    # fail-open mutation it exists to catch could have landed unnoticed.
+    #
+    # Bound beside the rc-reporting fixture deliberately — both assert that the
+    # runner's VERDICT and its TALLY keep saying different things, and 820-c8q8
+    # is the ruling both defend: a step killed at its budget still FAILS, so
+    # BUDGET is a reporting dimension and never an exemption. Measured 2.1s on
+    # yoga; it drives the runner in throwaway roots and touches no real corpus.
+    if [[ -f "scripts/test-litmus-budget-tally.sh" ]]; then
+        if bash scripts/test-litmus-budget-tally.sh 2>&1 | tee /tmp/litmus-budget-tally.log; then
+            log_pass "Litmus runner tallies a budget kill apart from a failed assertion"
+            archive_check_log "litmus-budget-tally" "pass" /tmp/litmus-budget-tally.log
+        else
+            log_fail_tracked "litmus-budget-tally" "Litmus BUDGET tally regression (see /tmp/litmus-budget-tally.log)"
+            archive_check_log "litmus-budget-tally" "fail" /tmp/litmus-budget-tally.log
+        fi
+    else
+        log_fail_missing_guard "litmus-budget-tally" "scripts/test-litmus-budget-tally.sh"
+        archive_check_log "litmus-budget-tally" "skipped"
+    fi
+
+    # Order 1194-davi. The advisory it falsifies is invoked from the LAND path,
+    # not from this gate, because a land that adopts a valid stamp skips the
+    # gate entirely (1174-u5wp) and an advisory inside the gate would be silent
+    # on exactly those lands. Its FIXTURE belongs here, where fixtures run.
+    if [[ -f "scripts/test-unrunnable-platform-arms.sh" ]]; then
+        if bash scripts/test-unrunnable-platform-arms.sh 2>&1 | tee /tmp/unrunnable-platform-arms.log; then
+            log_pass "Cross-platform gate-arm advisory names arms this host cannot run"
+            archive_check_log "unrunnable-platform-arms" "pass" /tmp/unrunnable-platform-arms.log
+        else
+            log_fail_tracked "unrunnable-platform-arms" "Cross-platform arm advisory regression (see /tmp/unrunnable-platform-arms.log)"
+            archive_check_log "unrunnable-platform-arms" "fail" /tmp/unrunnable-platform-arms.log
+        fi
+    else
+        log_fail_missing_guard "unrunnable-platform-arms" "scripts/test-unrunnable-platform-arms.sh"
+        archive_check_log "unrunnable-platform-arms" "skipped"
+    fi
+
+    # Order 1218-25z3, sibling of the above: advisory invoked from the release
+    # path, fixture run here.
+    if [[ -f "scripts/test-must-ship-rows.sh" ]]; then
+        if bash scripts/test-must-ship-rows.sh 2>&1 | tee /tmp/must-ship-rows.log; then
+            log_pass "Must-ship-next release advisory names rows absent from the cut"
+            archive_check_log "must-ship-rows" "pass" /tmp/must-ship-rows.log
+        else
+            log_fail_tracked "must-ship-rows" "Must-ship advisory regression (see /tmp/must-ship-rows.log)"
+            archive_check_log "must-ship-rows" "fail" /tmp/must-ship-rows.log
+        fi
+    else
+        log_fail_missing_guard "must-ship-rows" "scripts/test-must-ship-rows.sh"
+        archive_check_log "must-ship-rows" "skipped"
+    fi
+
+    # Order 970-7fqk, sibling of the above.
+    if [[ -f "scripts/test-gate-stamp-names-content-movers.sh" ]]; then
+        if bash scripts/test-gate-stamp-names-content-movers.sh 2>&1 | tee /tmp/gate-stamp-movers.log; then
+            log_pass "Stale-stamp refusal names content movers, not mtime movers"
+            archive_check_log "gate-stamp-movers" "pass" /tmp/gate-stamp-movers.log
+        else
+            log_fail_tracked "gate-stamp-movers" "Stale-stamp content-mover regression (see /tmp/gate-stamp-movers.log)"
+            archive_check_log "gate-stamp-movers" "fail" /tmp/gate-stamp-movers.log
+        fi
+    else
+        log_fail_missing_guard "gate-stamp-movers" "scripts/test-gate-stamp-names-content-movers.sh"
+        archive_check_log "gate-stamp-movers" "skipped"
+    fi
+
     # Order 1004-inkc. `--expect none` disables the absent detection, which is
     # that order's entire subject: a production caller passing it restores a
     # health check that cannot fail on a DELETED service. The escape hatch was

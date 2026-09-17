@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    order: 1238-b825
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, versioning, instrument, fleet, macos]
+    estimated_hours: 3
+    owned_files:
+      - scripts/build-macos-tray.sh
+      - scripts/bump-version.sh
+    title: |
+      A build stamps whatever date VERSION last happened to hold — tonight's macOS build shipped 56.9.13.1 on 2026-09-17, encoding a date FOUR days stale, and no build path checks
+    context: |
+      OPERATOR-FOUND, 2026-09-17, and it cost them the session. They asked why a
+      CALENDAR-versioned build of today carries a date days in the past. It is a
+      real defect, not a display quirk.
+
+      THE ENCODING MAKES THE DATE LOAD-BEARING. bump-version.sh documents the
+      format as an operator ruling of 2026-08-31: epoch-anchored CalVer,
+      `<years_since_epoch>.<month>.<day>.<build>`, years = UTC year - 1970, so
+      56 = 2026. `56.9.13.1` therefore LITERALLY ENCODES 2026-09-13. Tonight is
+      2026-09-17T05:22Z. The build counter is documented to reset to 1 on a new
+      UTC day, so tonight's first build should have been 56.9.17.1.
+
+      MEASURED, all of it:
+        VERSION                     = 56.9.13.1
+        VERSION last written        = 2026-09-13T17:54:04-07:00, commit 1a6f9c616
+                                      ("release: bump VERSION to 56.9.13.1")
+        build-macos-tray.sh:54      = VERSION="$(cat VERSION | tr -d '[:space:]')"
+        built binary --version      = tillandsias-tray 56.9.13.1
+                                      (git 849a3fd6e, built 2026-09-17T02:11:45Z)
+
+      THE BINARY KNEW THE TRUTH AND PRINTED IT NEXT TO THE LIE. The same
+      --version string carries the correct build timestamp and commit. Every
+      input needed to stamp an honest CalVer was present at build time; the
+      script read the stale file instead.
+
+      WHAT THIS BREAKS IS THE ONLY GUARANTEE CalVer EXISTS TO GIVE: the version
+      IS the date. `56.9.13.1` now names at least two different binaries — the
+      one cut on the 13th and tonight's, built from 849a3fd6e carrying an
+      operator ruling on guest memory that the 13th's build does not contain.
+      Nothing in the version distinguishes them, and
+      `tillandsias-tray-${VERSION}-macos-arm64.tar.gz` (build-macos-tray.sh:282)
+      reuses the same artifact NAME for both.
+
+      THE DETECTION ALREADY EXISTS AND NOTHING CALLS IT. bump-version.sh:120
+      already prints `WARNING: Version date (...) is behind today (...)`. So the
+      project already treats date-behind-today as noteworthy — but that warning
+      fires only when bump-version.sh is RUN, and:
+        - NO release path invokes bump-version.sh. Grepping scripts/ and
+          .claude/skills/ for it returns only portability checks that reference
+          the filename, plus the script itself. The bump is entirely manual.
+        - NO build path checks date currency. build-image.sh and
+          build-guest-binaries.sh were checked specifically and have no such
+          check either. This is NOT macOS-specific.
+      So the drift is silent by construction on every lane: any build on any day
+      after the last manual bump stamps a stale date and says nothing.
+
+      NOT A STYLE QUESTION — the fix direction is a real decision. Either a
+      non-release build DERIVES its date from the build clock so the artifact is
+      self-describing, or the build REFUSES when VERSION's encoded date is not
+      today. The second is louder and harder to ignore. Note that 702-eusw
+      constrains the space: an automatic bump must never be swept into an
+      unrelated commit (check-version-bump-isolation.sh exists because a
+      security fix once carried a bump and blocked the whole fleet), so
+      "just bump automatically in the build" is the option most likely to
+      reintroduce that P0 and should be weighed against it rather than assumed.
+    exit_criteria:
+      - 'a build whose VERSION encodes a date other than today either refuses or stamps the real date, demonstrated on the measured case (pre-fix result: FAILS — 2026-09-17 build shipped 56.9.13.1 silently)'
+      - 'the check covers every build path, since build-macos-tray.sh, build-image.sh and build-guest-binaries.sh were all measured to lack it'
+      - 'two builds on different UTC days cannot produce the same artifact filename, which is the consequence an operator actually hits'
+      - 'whatever is chosen does not reintroduce 702-eusw: no version bump may be swept into an unrelated commit'
+    unscoreable: |
+      needs-a-decision-before-a-fixture: the criteria are verifiable but
+      derive-vs-refuse is a release-policy call, and 702-eusw makes the
+      obvious third option (bump inside the build) the riskiest. Filed with the
+      encoding rule, the four measurements, the existing unused warning at
+      bump-version.sh:120, and the confirmed absence of any caller.

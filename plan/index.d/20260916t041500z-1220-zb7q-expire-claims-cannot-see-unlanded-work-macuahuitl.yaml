@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: expire-claims-reads-only-the-ledger-so-it-rates-a-claim-whose-holder-has-unlanded-work-on-origin-identically-to-one-whose-work-already-landed
+    order: 1220-zb7q
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [ledger, claims, coordination, fail-loud, instrument]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      The claim-expiry sweep reads only the ledger, so a claim whose holder has unlanded work on an origin ref is listed identically to one whose work already landed — and the two want opposite responses
+    context: |
+      MEASURED ON THE LIVE LEDGER 2026-09-16, during a coordination pass, with
+      both cases present at once. `expire-claims` (dry run) reported:
+        summary: in_progress=6 expired=2 held=0 unknown_age=0 ttl_hours=24
+      and listed exactly two candidates, which look identical in its output:
+        expire-candidate  1155-jurn   ...  2026-09-14T07:56:09Z  claimant:windows
+        expire-candidate  1186-w3ph   ...  2026-09-14T22:00:00Z  claimant:yolanda
+      THEY ARE NOT THE SAME CASE, and the difference is invisible to the sweep:
+        1155-jurn  — refs/heads/work/1155-jurn IS an ancestor of origin/linux-next.
+                     The work LANDED. The claimant is `windows`, a PLATFORM rather
+                     than a workstation — 772-4se9's old default, the exact shape
+                     1201-hsf9 now refuses at write time. Returning this row to
+                     ready strands nothing and is correct.
+        1186-w3ph  — refs/heads/salvage/yolanda-windows/20260915-1186-w3ph is NOT
+                     contained, and THREE files still carry changes trunk lacks
+                     (litmus-plan-answer-envelope-citability.yaml,
+                     post-commit-expert-refresh.sh, test-salvage-net.sh), verified
+                     by content comparison rather than by ancestry. Returning this
+                     row to ready invites a second host to claim work whose first
+                     holder has real changes parked on origin.
+      SO ONE CANDIDATE IS SAFE TO EXPIRE AND THE OTHER WOULD STRAND WORK, and
+      `--write` applies them together. A coordinator reading the dry run has no
+      signal distinguishing them and must go and do this ancestry-and-content
+      check by hand, per candidate, every pass — which is precisely the kind of
+      manual step that gets skipped on the pass where it matters.
+      THIS IS 1187-iij8's SHAPE IN THE LEDGER TOOL. There, a floor-tier timeout
+      and a genuine assertion failure wore the same colour and sent a fixer to
+      something that was not broken. Here, a landed claim and a claim holding
+      unlanded work wear the same verdict word, and the two want OPPOSITE
+      responses. The instrument is not wrong about what it measures; it is silent
+      about a fact that changes the answer.
+      NOT A REQUEST TO MAKE THE SWEEP REFUSE. Consulting origin is a network call
+      and the sweep is used in contexts where that may be unavailable — so a
+      likely shape is an ANNOTATION plus an explicit unknown when the remote
+      cannot be reached, never a silent pass. Enumerate the three outcomes
+      (contained / not contained / could not check) rather than collapsing to two.
+    exit_criteria:
+      - 'the sweep distinguishes a candidate whose holder has unlanded work on an origin ref from one whose work is contained in the branch, in its DRY-RUN output where a coordinator reads it (pre-fix result: FAILS — 1155-jurn and 1186-w3ph print identically today, verbatim above, while one is safe and one strands work)'
+      - 'a candidate whose remote state CANNOT be determined is reported as a third outcome, never silently as either of the other two'
+      - 'NEGATIVE CONTROL: with no origin reachable the sweep still runs and still lists candidates, marking them unknown rather than refusing or hiding them'
+      - 'the fixture drives the real binary against a scratch ledger plus scratch refs and asserts on the OUTPUT LINES, since the defect is two cases printing the same words'
+    unscoreable: |
+      annotation-versus-refusal-not-chosen: whether an unlanded-work candidate is
+      merely flagged, demoted out of the expire list, or blocks `--write` is a
+      policy call affecting every coordinator pass. The measurement is complete
+      and both live cases are reproducible on the current ledger; the response is
+      not chosen.
+    events:
+      - type: filed
+        ts: "2026-09-16T04:15:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t041500z"
+        host: macuahuitl
+        summary: |-
+          Filed from a coordination pass that ran the sweep read-only and then
+          checked each candidate by hand. Both live cases were present in the
+          same run, which is why the pair is the evidence rather than an argument.
+          Nothing was expired this pass.

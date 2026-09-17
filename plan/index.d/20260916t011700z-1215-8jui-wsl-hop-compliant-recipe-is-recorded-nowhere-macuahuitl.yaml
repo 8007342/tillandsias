@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-to-wsl-hop-mangles-dollar-expansions-and-the-one-line-compliant-recipe-is-recorded-in-no-cheatsheet
+    order: 1215-8jui
+    status: ready
+    kind: docs
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, wsl, cheatsheet, measurement-hygiene, silent-corruption]
+    estimated_hours: 2
+    owned_files:
+      - cheatsheets
+    title: |
+      The Windows→WSL hop silently blanks `$` expansions, the compliant one-line recipe is verified but written down nowhere, and the base64 ban reads as forbidding the obvious workaround
+    context: |
+      FILED BY THE COORDINATOR FROM yolanda-windows' landed finding, which had no
+      ledger row and so could never be offered by plan_next. Evidence:
+      plan/issues/windows-wsl-hop-mangles-shell-expansions-2026-09-15-yolanda-windows.md.
+      THE MEASUREMENT. Passing a script to a WSL guest inside the wsl.exe argument
+      string corrupts every $ expansion, before any shell sees the text, and
+      quoting does not help:
+        wsl.exe -d tillandsias -- bash -lc '... echo "token_len=${#TOK}" ...'
+          -> token_len=0        on a file that is really 28 bytes
+      Two further shapes, same cause: a heredoc written inside the command string
+      arrived with $ADDR and ${#TOK} both empty, producing three misleading
+      "permission denied" results against a blank VAULT_ADDR; and the usual escape
+      of writing the script on the Windows side fails because /mnt/c is not
+      mounted in the tillandsias distro.
+      THE DANGEROUS PART IS THE EMPTY VALUE, NOT THE ERROR. ${#TOK} arriving as 0
+      does not look like a transport fault; it looks like an empty file, which is
+      a plausible finding about the system under test. It produced a confident
+      wrong reading — "the Vault root token is empty" — that survived until a
+      second probe contradicted it. THE STRONGEST INSTANCE IS THE AUTHOR'S OWN,
+      about an hour after filing the row and while deliberately working this lane:
+      a two-iteration loop whose $b arrived empty printed two well-formed lines
+      reading ": " and said nothing. A discipline reminder would not have helped;
+      a form that carries no $ through the argument string did.
+      BROADER THAN 1155-jurn, SAME TRANSPORT. 1155-jurn established that exit
+      status through this hop is decoration. This is the same hop and the same
+      class of silent corruption, but it is ANY $ expansion, not only $?.
+      THE RECIPE, VERIFIED ON THAT HOST (${#TOK} survives intact, len=8 on an
+      8-character value), and currently recorded in no cheatsheet or methodology
+      file, so each host rediscovers the problem:
+        cat p.sh | wsl.exe -d <distro> -- bash -c 'cat > /tmp/p.sh; bash /tmp/p.sh'
+      The script never enters the argument string, so there is nothing for the
+      transport to rewrite, and it can be authored normally with a quoted heredoc.
+      THE BAN QUESTION IS ALREADY RULED AND THE RULING IS THE OTHER HALF OF THIS
+      ROW. Reaching for base64 is the natural move and base64_script_injection_ban
+      then reads as forbidding it — "unconditionally", "any other file" — and a
+      prior base64 podman shim really was removed under that rule, which makes the
+      mapping look confirmed. macuahuitl read the rule text and ruled an
+      interactive transport shim OUTSIDE its scope: the corollary scopes the harm
+      to presence in SOURCE CODE as a mechanism to generate and execute a script
+      at runtime, its incident was smuggling Python past tlatoani_hard_no_python,
+      a command line is not a file, and bash is an approved language. The author
+      raised it rather than self-acquitting, which is the right order. The
+      recurring shape worth naming: a correctly-scoped rule that READS as broader
+      than it is, met at the moment someone is blocked.
+    exit_criteria:
+      - 'the verified recipe is in a cheatsheet on the Windows lane, findable BY SYMPTOM (${#VAR} empty, heredoc variables blank, /mnt/c absent) and not only by cause, beside the 1155-jurn exit-status control (pre-fix result: FAILS — grep the cheatsheets for the recipe and it is absent)'
+      - 'the cheatsheet entry states that quoting does not help and why, so a reader does not try quoting first'
+      - 'a one-line scope note distinguishing a committed base64 literal from an interactive transport is added to base64_script_injection_ban, OR the decision not to narrow the wording is recorded on this row with its reason — either outcome is acceptable, silence is not'
+    unscoreable: |
+      documentation-placement-is-a-judgement: which cheatsheet, and how the
+      symptom-first index is worded, cannot be scored by a test. The
+      transport behaviour and the recipe are both measured and reproducible.
+    events:
+      - type: filed
+        ts: "2026-09-16T01:17:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t011700z"
+        host: macuahuitl
+        summary: |-
+          Coordinator-filed to make yolanda-windows' finding routable. The ban
+          ruling recorded in the context is this host's, given when the author
+          raised it during the diagnosis; it is repeated here so the next reader
+          does not spend the same time re-deriving it.

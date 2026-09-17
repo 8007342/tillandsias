@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    field: status
+    value: completed
+    ts: "2026-09-16T04:20:05Z"
+    host: linux
+
+events:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    event:
+      type: completed
+      ts: "2026-09-16T04:20:05Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: b4cd4f864 landed on linux-next with scripts/check-must-ship-rows.sh, its 10-arm fixture, and must_ship in query's projection; validated against v56.9.13.1 where it reports the 1211-34v6 miss this row was filed for

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: progress
+      ts: "2026-09-16T19:06:19Z"
+      agent_id: linux-yoga-claude-20260916t173528z
+      host: linux
+      summary: |
+        ALL THREE EXIT CRITERIA ARE MET. The gate's serial pin is now a choice rather than a requirement, which is this row's deliverable.
+
+        CRITERION 3, MEASURED: FIVE REAL ./build.sh --check runs with --test-threads=1 dropped from the workspace step, every one GREEN — 973s, 887s, 885s, 886s, 900s. litmus:build-ci-dispatch-shape's serial arm is INVERTED in the same commit, as the criterion requires.
+
+        A NEAR-MISS THAT WOULD HAVE FAKED THIS RESULT, and it is the row's own subject one level up. My first attempt at the five runs reported rc=0 four times while re-running NOTHING: ./build.sh --check short-circuits on its own fresh stamp with `ok:gate-fresh — Tree bytes and toolchain are unchanged since that passing gate`, and EXITS 0. That is correct behaviour and indistinguishable from a passing gate by exit code alone. Had I counted rc=0 as green I would have justified changing the fleet's gate on ONE real run and four no-ops. The harness required a completion marker the run only prints if it did the work, and reported NO PHASE TOTAL — did not complete instead. The four were re-run with TILLANDSIAS_FORCE_CHECK=1, which the short-circuit message itself names.
+
+        THE EVIDENCE IS SPLIT, AND THE SPLIT IS THE POINT:
+          WORKSPACE STEP — PIN DROPPED. Ten parallel runs of the headless bin suite gave 544 passed and an identical empty set every time; five parallel `cargo test --workspace` runs gave 74 result lines, zero failures, identical sets.
+          --features tray,listen-vsock STEP — PIN STAYS, and now for a measured reason rather than by inheritance. Five parallel runs of THAT build gave four clean and ONE failure: tray::tests::mcp_connection_serves_browser_family_over_the_socket, `left: Null, right: "tillandsias-host-services"`. Different feature set, different global. CRITICALLY, NONE OF MY EARLIER RUNS COMPILED THAT CODE AT ALL — `cargo test --workspace` builds default features, so every prior measurement was silent about it. I nearly dropped both pins on evidence that covered one.
+
+        THE SPEED ARGUMENT, CORRECTED IN BOTH DIRECTIONS. The old comment justified serial partly as FASTER (51.6s vs 61s) because contention cost more than threads won; with the contention removed the bin suite is 1.9s parallel against 4.7s serial, so that inverts. But AT GATE LEVEL it buys nothing: 885-973s with the pin dropped against 921s measured with it in place. The workspace test step is a small slice of a gate dominated by compilation and litmus. Determinism is the whole return here, and I am stating that rather than letting the suite figure imply a gate speedup it does not deliver.
+
+        THE INVERTED ARM CAUGHT A DEFECT IN ITSELF ON ITS FIRST RUN. It grepped for the bare flag and FAILED — on build.sh's OWN PROSE explaining when restoring the pin would be the right move. A MENTION IS NOT AN INVOCATION, and a guard that cannot tell them apart reports the documentation as the defect. It now anchors on non-comment lines (`^[^#]*`), the reason is written into the litmus file so nobody "simplifies" it back, and I falsified it both ways: restoring a real pin reds it, a comment naming the flag does not.
+
+        WHAT A FUTURE READER SHOULD DO IF THIS GOES NON-DETERMINISTIC AGAIN: the arm's own failure text says it. Restoring the flag is a one-line mitigation, and the defect would be NEW SHARED STATE, not this line. That is the sentence the original pin lacked, and why it survived as a permanent fixture of the gate rather than as the temporary measure it was filed as.

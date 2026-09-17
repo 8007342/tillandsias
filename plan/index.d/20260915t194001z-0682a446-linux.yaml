@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    event:
+      type: progress
+      ts: "2026-09-15T19:40:01Z"
+      agent_id: linux-yoga-claude-20260915t194000z
+      host: linux
+      summary: |-
+        EXIT CRITERION 2 MET, on both sides of the conflation. Criteria 1 and 3 are NOT taken and are named as such below.
+
+        THE DEFECT WAS SYMMETRIC AND THE ROW ONLY NAMES HALF OF IT. The criterion asks that the probe's error verdict carry the no-heads reason. It does now — but reading the consumer showed the same conflation on the other side: check-credential-channel told the operator "(network/transport failure?)" for EVERY error verdict, so an unseeded mirror and a dead network produced identical text there too, and the remedy for one is futile for the other. Publishing a reason nobody displays would have satisfied the criterion's letter and left the row's title true: still invisible on the cheap surface.
+
+        PUBLISHER — images/git/probe-upstream-auth.sh. Three finish-error sites now carry distinct reasons via 809-w2xy's existing mechanism, which finish-denied already used and these did not: no-local-heads (unseeded, or seeding failing), unresolvable-head (a head exists and does not resolve — a damaged mirror, not an unseeded one), and transport (the advertisement was attempted and matched no known authorization token). The STATE stays error at all three. The probe genuinely cannot answer without a ref, and turning an honest error into a friendlier verdict would be the fail-open trade this project refuses.
+
+        CONSUMER — scripts/check-credential-channel.sh. The error branch now says which error, and an absent or unknown reason keeps the old wording verbatim, because an older mirror publishes error/<epoch> with no reason and a guard that got quieter against an older peer would be a regression.
+
+        THE VERDICT TOKEN DID NOT MOVE. Still exactly one blocked:upstream-auth-error in the file. Consumers branch on the token; this changes what an operator reads, never what a caller tests, and the fixture asserts that separately for all three cases.
+
+        BACKWARD COMPATIBILITY VERIFIED, NOT ASSUMED — and 809-w2xy's own comment is why I insisted: it records that the parse was checked against git ls-remote in 2026-08-29 rather than assumed, "because a guard that silently stopped seeing the verdict would fail OPEN on the one signal that blocks drain". I extracted the consumer's parse verbatim and drove it with six ref shapes: the three new error/<reason>/<epoch> forms, the legacy error/<epoch>, denied/sso/<epoch> and authorized/<epoch>. Every one yields the correct state; the legacy shape yields no reason; denied and authorized are untouched.
+
+        PINNED ON BOTH SIDES, and both pins FALSIFIED:
+          PUBLISHER — a new step on litmus:forge-upstream-auth-gate (spec git-mirror-service), which already covers this mechanism and had no arm for the no-heads path. Confirmed EXECUTING as STEP 4/16 rather than inferred from a green spec, because compact mode hides passing steps. Reverting the reason reds it, and the failure output names the bare error/<epoch> ref it fell back to: 20/0 -> 19/1.
+          CONSUMER — three arms appended to scripts/test-check-credential-channel.sh, which build scratch BARE repos carrying the published refs and read the message. Reverting my consumer change reds the first two and leaves the THIRD green, which is the one that matters: arm 3 pins the legacy wording for a reasonless verdict, so it is testing backward compatibility rather than echoing my implementation.
+
+        I CHOSE AN ALREADY-BOUND FIXTURE DELIBERATELY. After 1205-aipn — two of my own closures citing orphans this same day — I checked binding before writing: test-check-credential-channel.sh is invoked directly from build.sh, so these arms run on every land gate and need no gate-divergence declaration. The publisher pin is a litmus step, which is execution by construction.
+
+        AND I INVENTED AN IDENTIFIER ON THE WAY, which is worth recording because macuahuitl flagged the same class an hour earlier. My first draft sourced "$GUARD_SOURCE_FOR_TESTS", a variable that does not exist anywhere — I wrote a plausible-looking name instead of checking. The guard cannot be sourced at all (it ends in a standalone block that runs and exits), so the real mechanism is awk extraction, the idiom this repo already uses on probe_mirror_reachable. A premise arm now proves the extraction is non-empty before any assertion reads it.
+
+        NOT TAKEN, so this closure is not read as covering them:
+          criterion 1, the HEALTHCHECK surface — a Containerfile change whose verification wants a live mirror container in the seeding-failed state, which I cannot construct here without disturbing a running stack.
+          criterion 3, the launcher seeded-gate surfacing the last seed-failure line — untraced by me, and it explicitly demands its own litmus pin, so it deserves its own claim.

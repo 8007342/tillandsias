@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full
+    event:
+      type: note
+      ts: "2026-09-16T23:41:39Z"
+      agent_id: linux-macuahuitl-claude-20260916t234139z
+      host: macuahuitl
+      summary: |
+        CORRECTION TO THE EVENT ABOVE, from a falsifier yoga-silverblue handed me and I
+        ran on the preserved artifact. My ahead/behind asymmetry framing is WRONG and is
+        retracted; the real mechanism is two readers of one fact using different criteria.
+
+        staging_is_current (the currency gate in front of verify_binaries) tests
+        `strings "$BIN" | grep -F "$VERSION_VAL"` — a loose substring anywhere in the
+        binary. verify_binaries tests `"$BIN" --version` compared EXACTLY. An ahead
+        binary should have failed the loose gate and skipped at rc=0; it did not, which
+        is why the hard error was reachable at all.
+
+        WHAT MADE THE AHEAD BINARY LOOK CURRENT, measured:
+          strings <binary> | grep -c -F 56.9.13.1   ->  4
+          the binary's own --version                ->  Tillandsias v56.9.16.1
+          strings | grep -c -F 56.9.16.1            ->  1
+        All four hits are LEDGER PROSE embedded in the binary — drill and plan text
+        ABOUT the v56.9.13.1 cut:
+          "# the v56.9.13.1 cut, a host merged trunk, gated for 2476 s and pushed, and"
+          "... Asset names measured on v56.9.13.1"
+          "(drill: plan/issues/fleet-restart-2026-09-12.md, v56.9.13.1 PUBLISHED):"
+          "MEASURED 2026-09-16: promoting `v56.9.13.1` to stable, the correct action was to"
+        Four MENTIONS of the version, zero USES of it, and the probe concluded current.
+
+        THIS IS SELF-REINFORCING AND THAT IS THE PART THAT MATTERS. Every cut generates
+        prose naming that version; the ledger is embedded in the binary; so binaries of
+        OTHER versions look progressively more current as we write more carefully about
+        releases. The probe degrades in proportion to how well the ledger is kept.
+
+        It is 1172-dyvd one turn further — currency is a vocabulary probe, not an mtime,
+        and a vocabulary probe can be fooled by vocabulary ABOUT the thing rather than OF
+        it. Asking whether an artifact contains a word is not asking whether it answers
+        the question.
+
+        REMEDY: make staging_is_current ask the SAME question verify_binaries asks —
+        `"$BIN" --version` compared exactly — rather than grepping bytes. One check over
+        one input, not two criteria over one fact. Mechanism credited to
+        yoga-silverblue, who read the source and handed me a two-outcome falsifier
+        rather than a conclusion; it came back against their first guess and for their
+        second.
+
+        UNCHANGED BY THIS CORRECTION: a failed `--ci-full --install` leaves the host in a
+        state where the next gate reds on unchanged code, and target-guest/ being
+        gitignored is what carries it through a rebase. yoga's host never staged and
+        verifies rc=0 / verify:skip-stale-staging, which is the control.

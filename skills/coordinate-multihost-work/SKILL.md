@@ -82,6 +82,54 @@ it, and when the cross-branch check reports `claimed-elsewhere:<order>:<branch>`
 relay the fragment or ask the host to push it — the check remains the
 coordinator's control, because a host can still claim without the helper.
 
+## Is Any Host's Work Stranded — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
+
+```bash
+scripts/salvage-audit.sh                    # or --branch <ref> --pattern refs/heads/work/*
+```
+
+Order 1226-jb8y. Reports each salvage/work ref that holds content not on the
+branch, and for every differing file WHICH SIDE IS AHEAD. Only
+`ref-may-be-AHEAD` and `ABSENT` lines are relay candidates; a
+`<branch>-is-AHEAD` line means the branch moved past a stale snapshot.
+
+**BEFORE CONCLUDING A HOST'S WORK IS UNREACHABLE, RUN THIS.** On 2026-09-16
+macbookair's finished work sat on origin for hours — 872-c9nd's net had pushed
+it — while two hosts reasoned about escape routes and neither queried the refs.
+
+**It is a script because the question has three parts and every one-command
+shortcut answers a different one.** Ancestry is not integration: a ref relayed
+by cherry-pick is never an ancestor and is fully landed. `git diff A...B`
+overcounts by listing what B changed since the merge base, including files A
+added independently — six fragments read as differing and all six were
+byte-identical. `git diff A B` overcounts far worse by counting the branch's own
+progress: 526, 2009 and 2061 files against a truth of 3, 0 and 0. And "differs"
+is not "outstanding" — a file the branch touched after the snapshot is the
+branch moving on.
+
+## Which Hosts Are Active — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
+
+```bash
+scripts/fleet-activity.sh --since 3.hours      # or --since 24.hours, --ref <branch>
+```
+
+Order 1223-wzc4. It reports one row per HOST with plan-only and code counts, and
+a separate UNATTRIBUTED BUCKET row for addresses that name no host.
+
+**This is a script for the same reason the loop-status metrics audit is.** The
+recipe was recorded as drill prose in one pass and retyped WRONG two passes
+later — `%ae` was used and then `${e%%@*}` printed, stripping the domain, which
+is the only part that names the host, so two different hosts both rendered as
+`tlatoani`. Three corrections travel with the file and none of them survives
+paraphrase: count by EMAIL not name (author name maps to four addresses for one
+name); derive the host from the DOMAIN under every convention the fleet uses,
+including `<Host>.local`, not one hard-coded suffix; and report an address that
+names no host as a BUCKET, never as a host row (1012-hu7d).
+
+**It cannot answer idleness and says so on every run.** A host absent from the
+window landed nothing in the window — mid-analysis, gating, blocked and asleep
+are indistinguishable from here. Idleness is established by ASKING.
+
 ## Active Coordination & Mediation Audit
 
 In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:

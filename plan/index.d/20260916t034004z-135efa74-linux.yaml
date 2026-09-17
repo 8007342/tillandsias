@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-login-refusal-advertises-an-environment-variable-its-own-resolver-never-reads-so-a-stuck-operator-following-the-message-gets-the-same-refusal-and-learns-nothing
+    field: must_ship
+    value: next
+    ts: "2026-09-16T03:40:04Z"
+    host: linux
+
+events:
+  - packet_id: the-github-login-refusal-advertises-an-environment-variable-its-own-resolver-never-reads-so-a-stuck-operator-following-the-message-gets-the-same-refusal-and-learns-nothing
+    event:
+      type: note
+      ts: "2026-09-16T03:40:04Z"
+      host: linux
+      summary: |-
+        1218-25z3: required in the next cut. The promoted stable still ships the inert TILLANDSIAS_PROJECT_REMOTE_URL remedy this row removed, and the operator read it live on macbookair 2026-09-16.

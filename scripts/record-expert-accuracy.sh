@@ -149,11 +149,21 @@ total="$(_f total)";   [ -n "$total" ] || total=0
 pass="$(_f pass)";     [ -n "$pass" ] || pass=0
 fail="$(_f fail)";     [ -n "$fail" ] || fail=0
 skipped="$(_f skipped)"; [ -n "$skipped" ] || skipped=0
+# ORDER 1229-2862. A case whose citations are sound at the index's own commit
+# and stale in this checkout. Defaults to 0 so a grader that predates the field
+# records exactly what it did before rather than a blank.
+stale="$(_f stale)";   [ -n "$stale" ] || stale=0
 sets="$(_f sets)";     [ -n "$sets" ] || sets=0
 elapsed="$(_f elapsed_ms)"; [ -n "$elapsed" ] || elapsed=0
 skipped_engines="$(_f skipped_engines)"
+stale_engines="$(_f stale_engines)"
 
-graded=$(( total - skipped ))
+# A STALE CASE IS NOT GRADED EITHER (1229-2862). It was not certified: the
+# answer is sound somewhere this checkout is not. Counting it as graded would
+# let a fleet drifting onto stale indexes hold its accuracy rate steady while
+# the population behind that rate quietly shrank — the same "unexamined thing
+# reported as clean" 888-miiy refused for skips, one condition over.
+graded=$(( total - skipped - stale ))
 [ "$graded" -ge 0 ] || graded=0
 
 # THE NEGATIVE CONTROL. Nothing graded is never a rate — see the header.
@@ -213,14 +223,17 @@ if command -v jq >/dev/null 2>&1; then
         --arg im "$idx_model" --arg ig "$idx_gen" --arg ic "$idx_commit" \
         --arg q "$quant" --arg e "$engine" --arg lane "$lane" \
         --arg se "${skipped_engines:-}" \
+        --arg ste "${stale_engines:-}" \
         --argjson pass "$pass" --argjson fail "$fail" --argjson graded "$graded" \
         --argjson total "$total" --argjson skipped "$skipped" \
+        --argjson stale "$stale" \
         --argjson sets "$sets" --argjson elapsed "$elapsed" \
         --argjson rate "$rate" \
         '{ts:$ts, host:$host, commit:$commit, status:$status, source:$src,
           validated_pass:$pass, validated_fail:$fail,
-          graded:$graded, total:$total, skipped:$skipped,
+          graded:$graded, total:$total, skipped:$skipped, stale:$stale,
           skipped_engines:(if $se=="" then null else ($se|split(",")) end),
+          stale_engines:(if $ste=="" then null else ($ste|split(",")) end),
           validated_rate_pct:$rate,
           estimated_rate_pct:null,
           sets:$sets, elapsed_ms:$elapsed,
@@ -229,7 +242,8 @@ if command -v jq >/dev/null 2>&1; then
 else
     # jq-less hosts still get a record; the schema is identical.
     _se="null"; [ -n "${skipped_engines:-}" ] && _se="[\"${skipped_engines//,/\",\"}\"]"
-    rec="{\"ts\":\"$ts\",\"host\":\"$host\",\"commit\":\"$commit\",\"status\":\"$status\",\"source\":\"$src\",\"validated_pass\":$pass,\"validated_fail\":$fail,\"graded\":$graded,\"total\":$total,\"skipped\":$skipped,\"skipped_engines\":$_se,\"validated_rate_pct\":$rate,\"estimated_rate_pct\":null,\"sets\":$sets,\"elapsed_ms\":$elapsed,\"model\":{\"id\":\"$idx_model\",\"quantisation\":\"$quant\",\"engine\":\"$engine\",\"lane\":\"$lane\"},\"index\":{\"generation\":\"$idx_gen\",\"corpus_commit\":\"$idx_commit\"}}"
+    _ste="null"; [ -n "${stale_engines:-}" ] && _ste="[\"${stale_engines//,/\",\"}\"]"
+    rec="{\"ts\":\"$ts\",\"host\":\"$host\",\"commit\":\"$commit\",\"status\":\"$status\",\"source\":\"$src\",\"validated_pass\":$pass,\"validated_fail\":$fail,\"graded\":$graded,\"total\":$total,\"skipped\":$skipped,\"stale\":$stale,\"skipped_engines\":$_se,\"stale_engines\":$_ste,\"validated_rate_pct\":$rate,\"estimated_rate_pct\":null,\"sets\":$sets,\"elapsed_ms\":$elapsed,\"model\":{\"id\":\"$idx_model\",\"quantisation\":\"$quant\",\"engine\":\"$engine\",\"lane\":\"$lane\"},\"index\":{\"generation\":\"$idx_gen\",\"corpus_commit\":\"$idx_commit\"}}"
 fi
 
 if [ "$DRY" -eq 1 ]; then
@@ -245,5 +259,5 @@ printf '%s\n' "$rec" >> "$LOG" || { echo "blocked:expert-accuracy:append-failed:
 if [ "$status" = "never-called" ]; then
     echo "ok:expert-accuracy-recorded:never-called graded=0 total=${total} host=${host}"
 else
-    echo "ok:expert-accuracy-recorded:${status} rate=${rate}% pass=${pass} graded=${graded} total=${total} skipped=${skipped} model=${idx_model} lane=${lane} host=${host}"
+    echo "ok:expert-accuracy-recorded:${status} rate=${rate}% pass=${pass} graded=${graded} total=${total} skipped=${skipped} stale=${stale} model=${idx_model} lane=${lane} host=${host}"
 fi

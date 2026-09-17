@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-long-running-view-is-checked-at-land-time-so-a-stale-row-is-paid-for-by-whoever-lands-next-rather-than-by-whoever-created-it
+    field: status
+    value: completed
+    ts: "2026-09-15T23:05:35Z"
+    host: linux
+
+events:
+  - packet_id: the-long-running-view-is-checked-at-land-time-so-a-stale-row-is-paid-for-by-whoever-lands-next-rather-than-by-whoever-created-it
+    event:
+      type: completed
+      ts: "2026-09-15T23:05:35Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 5f8253874
+  - packet_id: the-long-running-view-is-checked-at-land-time-so-a-stale-row-is-paid-for-by-whoever-lands-next-rather-than-by-whoever-created-it
+    event:
+      type: note
+      ts: "2026-09-15T23:05:35Z"
+      host: linux
+      summary: |-
+        set-field now refuses a terminal flip on a multi_cycle packet whose plan/long-running.md row is still present, at the flip rather than in whoever-lands-next's gate, quoting the checker's own 'same commit as the change that moved it' so the two cannot drift; the parser mirrors the checker's view_orders() sed rather than inventing a second one. Verified the refusal precedes the write (rc=1, zero fragments). Three negative controls hold: row already absent, non-multi_cycle packet, and NON-TERMINAL flip all allowed — the last matters most because in_progress is what a multi_cycle packet does every cycle. The land-time check REMAINS as the backstop (arm 5), since this guard cannot see a flip that bypasses set-field. Fixture 7/7 hermetic, bound at scripts/gate-steps.d/385-1211-q9bm.step. Landed 5f8253874 (NOT the pre-land d0d9179c2, which the integrate rewrote), gate 1152s no violations

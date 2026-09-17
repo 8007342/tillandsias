@@ -8,8 +8,15 @@
 # default: the 2026-09-13 reset ruling is that the clean room stays clean.
 #
 # Runs on any host: every path is derived from $HOME, and the only
-# macOS-specific command is `pkill`, which is harmless (typically a no-op,
-# since the pattern never matches) elsewhere.
+# macOS-specific command is `pkill`.
+#
+# THAT LINE USED TO SAY the pkill is "harmless (typically a no-op, since the
+# pattern never matches) elsewhere". That was an ASSUMPTION about every machine
+# that would ever run this, which is the class of reasoning 1231-cbie exists to
+# remove — "typically" and "never matches" are not measurements. Replaced with
+# a matcher that is narrow by construction rather than by hope: `-x` matches an
+# EXECUTABLE NAME exactly, so a host with no such executable running matches
+# nothing regardless of what its command lines happen to say.
 #
 # Usage: scripts/e2e-step2-macos.sh <LOG_DIR>
 set -uo pipefail
@@ -17,7 +24,18 @@ set -uo pipefail
 LOG_DIR="$1"
 mkdir -p "$LOG_DIR"
 
-pkill -KILL -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
+# 1231-cbie: was `-f 'Tillandsias.app/Contents/MacOS/tillandsias-tray'`, a
+# COMMAND-LINE match. Narrower than the uninstaller's bare-word form, but still
+# able to hit an editor or a tail holding that path. `-x` matches the
+# executable name exactly (measured on Darwin: CFBundleExecutable is
+# `tillandsias-tray`, 16 chars, and `pgrep -x` matches it untruncated).
+#
+# THE SEMANTIC CHANGE IS DELIBERATE AND WORTH STATING: the old pattern targeted
+# a tray running from ONE bundle path; `-x` targets any process with that
+# executable name. For a clean-room reset that is the intended scope — a tray
+# left running from a replaced or moved bundle is exactly what this step exists
+# to clear, and it is the case the path match would have missed.
+pkill -KILL -x tillandsias-tray 2>/dev/null || true
 
 VM_DIR="$HOME/Library/Application Support/tillandsias"
 CACHE_DIR="$HOME/Library/Caches/tillandsias"

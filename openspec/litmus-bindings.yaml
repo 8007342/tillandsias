@@ -640,6 +640,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:claims-fleet-visible
+  - litmus:release-freeze-holds-code
+  - litmus:expire-claims-reads-the-status-write
+  - litmus:a-claim-names-a-workstation
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape

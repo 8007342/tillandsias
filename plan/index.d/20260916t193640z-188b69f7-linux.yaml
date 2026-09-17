@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: yoga-proxy-key-secret-desynced-from-the-regenerated-ca
+    event:
+      type: progress
+      ts: "2026-09-16T19:36:40Z"
+      agent_id: linux-yoga-claude-20260916t193639z
+      host: linux
+      summary: |
+        THE DESYNC IS CLEARED ON YOGA, MEASURED: scripts/check-enclave-ca-consistency.sh returns ok:enclave-ca-consistent, rc=0. That is criterion 1, and it is the closure this row named for itself.
+
+        WHAT CLEARED IT, as far as evidence allows — and I am NOT certifying a remedy I did not watch work, because criterion 2 says in its own words that a remedy which was not observed working is not a remedy.
+
+        MEASURED FACTS:
+          - The CA bundle is unchanged since the regeneration that caused this: $HOME/.local/state/tillandsias/ca/intermediate.key is still 2026-09-04 06:37, matching the row's original record.
+          - The podman secret tillandsias-ca-key was created 2026-09-11 19:12:16 — SEVEN DAYS AFTER that regeneration, and seven days after this row was filed. So the secret was replaced, not the bundle, which is exactly the direction ensure_proxy_ca_key_secret's --replace produces.
+          - NO OPERATOR STEP IS RECORDED ANYWHERE. plan/issues/fleet-restart-2026-09-12-yoga.md, the nearest drill record, does not mention the enclave, the proxy, the CA or the secret.
+          - No host log survives from that moment: the oldest log under ~/.cache/tillandsias is 2026-09-15.
+
+        SO THE STATEMENT CRITERION 2 ASKS FOR: no operator action was required and none is recorded. The desync cleared during ordinary use, in the seven days after filing, by one of the paths that refreshes the secret. I did not observe WHICH, and no record of that moment survives, so I am naming the mechanism as supported-by-timestamps rather than as verified.
+
+        A FINDING THAT REFRAMES THE ROW'S "WHY IT MATTERS BEYOND ONE HOST". ensure_proxy_ca_key_secret has FOUR production callers, not one: ensure_proxy_running (the launch path the guard's remediation names), run_status_check, run_opencode_mode, and monitor_and_cleanup_browser. The original worry was that a host which regenerates its bundle without a launch sits one command from a squid failure that names neither file. That is still true of a BARE podman start (975-rsgm's order), but the self-healing surface is much wider than "the launch path": several ordinary operations refresh the secret. A host in this state is likely to leave it by ordinary use, which is consistent with what happened here.
+
+        WHY I DID NOT MANUFACTURE THE OBSERVATION. The obvious way to certify the remedy is to re-create the desync and watch a launch clear it. That means deliberately breaking the operator's proxy on their own machine, and it is their call for that specific run, not mine. I also declined the cheaper-looking probe: run_status_check DOES refresh the secret, but it calls cleanup_stack_containers and cleanup_shared_stack_if_no_running_forge FIRST, so invoking it would tear down containers a parallel session may be using. A probe that removes the operator's running containers to observe a timestamp is not a cheap probe.
+
+        CRITERION 3 IS NOT TRIGGERED: it applies only if the launch path does NOT clear the desync, and the evidence is that it (or a sibling path) did. Nothing to file against the launch path.
+
+        WHAT WOULD SETTLE IT, for whoever wants certainty: with the operator's per-run consent, regenerate the CA bundle, confirm the guard reports desync:enclave-ca-key-secret, run the enclave orchestration, and confirm it returns to ok. That is a twenty-minute observation and it needs a human's yes, which is why it is written down here rather than done.

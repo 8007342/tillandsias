@@ -183,13 +183,27 @@ critical_path:
     # refine the line to ok-unexposed AND fire mcp_outage:; an `exposed` one must
     # leave it exactly `health=ok` with no outage line (the negative control that
     # stops the new state from firing every cycle and being ignored).
-    command: "d=$(mktemp -d); printf '{\"ts\":\"t\",\"server\":\"forge-plan\",\"state\":\"up\",\"host\":\"h\"}\\n{\"ts\":\"t\",\"server\":\"project-info\",\"state\":\"up\",\"host\":\"h\"}\\n' > $d/h.jsonl; printf 'ts=x epoch=%s claim=unexposed tools=none agent=fx\\n' \"$(date -u +%s)\" > $d/s; a=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c 'health=ok-unexposed'); printf 'ts=x epoch=%s claim=exposed tools=all agent=fx\\n' \"$(date -u +%s)\" > $d/s; b=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp:' | grep -c 'health=ok '); c=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c '^mcp_outage:'); rm -rf $d; if [ \"$a\" -ge 2 ] && [ \"$b\" = 1 ] && [ \"$c\" = 0 ]; then echo 'ok: unexposed-is-its-own-state'; else echo \"observed unexposed_lines=$a exposed_ok=$b exposed_outage=$c\"; echo 'fail: healthy-but-unexposed must be distinct from healthy'; fi"
+    command: "d=$(mktemp -d); printf '{\"ts\":\"t\",\"server\":\"forge-plan\",\"state\":\"up\",\"host\":\"h\"}\\n{\"ts\":\"t\",\"server\":\"project-info\",\"state\":\"up\",\"host\":\"h\"}\\n' > $d/h.jsonl; printf 'ts=x epoch=%s claim=unexposed tools=none agent=fx\\n' \"$(date -u +%s)\" > $d/s; a=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c 'health=ok-unexposed'); printf 'ts=x epoch=%s claim=exposed tools=all agent=fx\\n' \"$(date -u +%s)\" > $d/s; b=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp:' | grep -c 'health=ok '); c=$(TILLANDSIAS_EXPERT_HEALTH_LOG=$d/h.jsonl TILLANDSIAS_MCP_SURFACE_STAMP=$d/s scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep -c '^mcp_outage:'); rm -rf $d; if [ \"$a\" = 0 ] && [ \"$b\" = 0 ] && [ \"$c\" = 0 ]; then echo 'skip:1204-3s2s:cycle-metrics emitted nothing - it refuses on a split metrics log, so this arm drove a refusal and has no verdict about unexposed-vs-healthy'; elif [ \"$a\" -ge 2 ] && [ \"$b\" = 1 ] && [ \"$c\" = 0 ]; then echo 'ok: unexposed-is-its-own-state'; else echo \"observed unexposed_lines=$a exposed_ok=$b exposed_outage=$c\"; echo 'fail: healthy-but-unexposed must be distinct from healthy'; fi"
     # Three cycle-metrics invocations at a measured ~14s each on an
     # idle 12-core host = ~42s of real work; the original 20s budget
     # was structurally unreacheable, not flaky (measured yoga
     # 2026-08-24). Sized to 120s — the property is output shape, not
     # speed.
     timeout_ms: 120000
+    # ORDER 1204-3s2s — THE SKIP IS NAMED, NOT A WIDENED EXPECTATION.
+    # This arm drives cycle-metrics.sh three times. When cycle-metrics REFUSES
+    # (it does, correctly, on a split metrics log — 1096-p3tn) it emits nothing,
+    # so all three counters read zero and the else branch fired
+    # "fail: healthy-but-unexposed must be distinct from healthy" — a verdict
+    # about the FEATURE from a run where the DRIVER never produced output. Its
+    # own control, exposed_ok, was zero at the same time, which is the tell.
+    #
+    # The zero-zero-zero case now prints a self-naming skip token instead, and
+    # the pattern below admits exactly that token beside the ok form. It does
+    # NOT admit the observed/fail lines: a genuinely wrong shape still reds
+    # (1041-up99 — never widen an expectation until the skip passes, or the
+    # green asserts nothing).
+    success_pattern: "ok: unexposed-is-its-own-state|skip:1204-3s2s:"
     expected_behavior: "ok: unexposed-is-its-own-state"
 
   - step: "a STALE surface attestation cannot label this cycle (an earlier cycle's marker is not evidence)"

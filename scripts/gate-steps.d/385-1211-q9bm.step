@@ -1,0 +1,32 @@
+# Gate step 1211-q9bm — data, not code.
+#
+# Binds the completion-time refusal for plan/long-running.md. Hermetic: every arm
+# builds a throwaway plan/ tree and runs the binary there, so no arm writes a
+# fragment into this checkout or reads its real view.
+#
+# WHY THE REFUSAL MOVED. check-long-running-view.sh is correct and stays — but it
+# runs inside the GATE, so a stale row is paid for by whoever lands NEXT rather
+# than by whoever created it. Measured 2026-09-15: completing 330 left its row
+# behind and blocked landing fleet-wide; yoga had to prove the refusal was not
+# theirs, find the owner, and decide whether editing another host's lane was
+# acceptable. The author never saw it. The checker's own message already names
+# the right moment — "in the same commit as the change that moved it" — which is
+# a completion-time instruction delivered at land time to a different person.
+#
+# THE ARMS THAT MATTER ARE THE NEGATIVE CONTROLS (2, 3, 4). This guard must fire
+# ONLY on the exact stranding condition: a row already absent, a packet that is
+# not multi_cycle, or a non-terminal flip must all pass untouched, or it becomes
+# a tax on every closure in the fleet and on the in_progress flips a multi_cycle
+# packet makes between cycles. Arm 5 pins that the LAND-TIME CHECK REMAINS — this
+# is an early courtesy to the author and cannot see a flip that bypasses
+# set-field, so removing the backstop would trade a late refusal for none.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a terminal flip that would strand the long-running view is refused at the flip (1211-q9bm)"
+STEP_SCRIPT="scripts/test-long-running-view-refuses-at-completion.sh"
+STEP_ERROR="the completion-time refusal for plan/long-running.md regressed (1211-q9bm) — either a terminal flip can again strand the view (so the next host to land pays for it), or the guard has widened and is refusing closures it should not: a non-multi_cycle packet, a row already removed, or the in_progress flip a multi_cycle packet makes every cycle; see the failing arm above"
+STEP_OK="long-running view completion-time refusal check passed"
+# Exit 3 means no plan binary was resolvable — nothing was exercised, and the
+# fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no tillandsias-plan binary resolved, so the refusal could not be exercised"

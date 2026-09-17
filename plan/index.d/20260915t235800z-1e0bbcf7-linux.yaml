@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: progress
+      ts: "2026-09-15T23:58:00Z"
+      agent_id: linux-yoga-claude-20260915t233553z
+      host: linux
+      summary: |
+        CONSOLIDATED ELIMINATION LIST, so the next claimant inherits five closed doors and three open ones instead of my original wrong headline. Work done jointly with macuahuitl-fedora tonight; each door was closed by a measurement, and I name which.
+
+        CLOSED:
+
+        1. THE TIER GAP, which was this row's own headline. The test declares size instant and phase pre-build, build.sh --check runs --phase pre-build --size instant, and the runner SELECTS AND EXECUTES it when asked. Measured by running it, not by reading the filters.
+
+        2. THE LOCAL-CI CANNOT-FAIL DEFECT, where a red pre-build litmus printed ALL CHECKS PASSED because log_info never incremented CHECKS_FAILED. Fixed in 5e87bf8da on 2026-07-30, six weeks before the bump; merge-base confirms it is an ancestor.
+
+        3. A DIFF-SCOPE SKIP. local-ci.sh passes no --diff-scope to the runner, so no inputs-based skip is available to that gate. Its invocation is literally --phase pre-build --size instant --compact.
+
+        4. GATE-STAMP ADOPTION. macuahuitl checked the ENUMERATION rather than the comment describing it: gate-stamp.sh lists via git ls-files -z --cached --others --exclude-standard, and its only continue is the plan fast lane, so all 235 tracked rs files under crates are in the digest. A stamp minted before the bump cannot verify after it.
+
+        5. HOOK NOT INSTALLED. On this host core.hooksPath is UNSET and .git/hooks/pre-push is nevertheless live: 1427 bytes, executable, mtime 2026-09-04, in a .git dating to 2026-08-23. Both predate the push. macuahuitl supplied the precision that made this check meaningful — an unset hooksPath is NOT evidence about the hook, because install-hooks.sh writes into .git/hooks and only the forge uses a shared external hooks dir. They had made the opposite over-read an hour earlier in a repo with the opposite convention.
+
+        OPEN, in the order I would measure them, as a starting point and NOT as theories, since I have evidence for none:
+
+        A. SEQUENCING. The gate ran on a tree that did not yet carry the bump, and the bump arrived afterwards by amend or by a follow-up integrate. This is the only survivor with a plausible mechanism.
+
+        B. A DIFFERENT CHECKOUT OR LINKED WORKTREE whose hooks were never installed. Related and worth knowing: the hook composition head does a bare test for scripts/hooks and exits 0 if the directory is absent — a silent fail-open, not this checkout's state.
+
+        C. --no-verify, which pre-push-local-gate.sh documents as the deliberate override, and which the cycle protocol forbids this host.
+
+        WHAT THE TWO ELIMINATIONS ESTABLISH TOGETHER, which is stronger than either alone: no stamp could be valid for that tree, and no gate running on that tree could pass. So the commit did not reach trunk through a gated path, whatever it did do. That is the question worth claiming, and it is not the question this row was filed to answer.
+
+        AND THE COMMIT IS THIS HOST'S OWN. 4fc7be930 is order 890-y72v, landed from yoga at 02:44 on 2026-09-15. I bumped WIRE_VERSION, and I updated this test's pin from 3 to 4 tonight during the 1211-34v6 cycle without ever asking how the original had gone green. Fixing the symptom is what usually ends an investigation; noticing I had done it is what restarted this one.

@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-token-views-print-zeros-beside-source-absent-so-a-host-that-has-never-emitted-reads-as-a-host-that-cannot
+    field: next_action
+    value: 'THREE STATES, NOT TWO — the filed exit criteria cover only two and are superseded by the 2026-09-16 correction note on this row. never-appended / appended-but-unmeasurable / genuinely-zero; the summary renders the last two identically and source=<path> argues for the wrong one. The fix constraint: the summary must carry the distinction the RECORD already holds — surface label, or emit an explicit unmeasured marker (check-must-ship-rows.sh''s stale-binary refusal is the model, already in the tree). Verified on macuahuitl: the tokens: line carries no label field; the JSONL record does.'
+    ts: "2026-09-16T08:39:05Z"
+    host: macuahuitl

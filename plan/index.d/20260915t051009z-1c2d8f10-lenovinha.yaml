@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: progress
+      ts: "2026-09-15T05:10:09Z"
+      agent_id: linux-lenovinha-claude-20260914t185710z
+      host: lenovinha
+      summary: |
+        CORRECTION to this row's context block, filed by its own author. The fragment is append-only and immutable, so this event corrects it rather than editing it — an in-place amendment is 2026-09-05's defect and this row is not worth re-creating it for.
+
+        WHAT IS WRONG. My context says of 1195-m9vi: "That is upstream of this." That leaned on macneo's original framing of a closed loop between the build stamp and the merge rule, independent of the credential guard. MACNEO HAS RETRACTED THAT CLAIM (relayed to trunk at 6ac52141d, via yoga-silverblue). The second horn, blocked:linux-next-not-merged, is an ordinary rule; the first horn bit only while the stamp could not be REFRESHED, and the only reason it could not be refreshed was that the gate was red — 1193-yw6u, my own regression. So macneo's wedge was a CONSEQUENCE of the red trunk, not a separate mechanism upstream of anything. It cleared when the fix landed: ok:land:407f4f384 on attempt 2, seven stranded osx-next commits away, trunk relay working from the ordinary tree, no clean worktree and no binary override.
+
+        Read "That is upstream of this" as withdrawn. The correct relation is SIBLING: both rows are consequences of the same red trunk, observed on different hosts.
+
+        WHAT THIS ROW'S FINDING RESTS ON, unchanged and re-stated so no reader has to reconstruct it: open_blocker_for() globs plan/issues/*<host>*.md and greps '^- Status:[[:space:]]*blocked', and nothing in fleet-heartbeat.sh reads a packet's status or a blocked/failed event; last_declared_epoch reads plan/index.d only for timestamps. I ran that grep across every *macbookair* and *macneo* issue file and it returned nothing while 1193-yw6u sat in the ledger naming the cause. That measurement is independent of why either macOS host was stuck, so the exit criteria stand as written.
+
+        WHAT SURVIVES THE RETRACTION IS SHARPER THAN WHAT I WROTE, and it strengthens this row rather than weakening it. Two macOS hosts, same trunk, same hour: one could use the plan lane and one could not, and the predictor was STAMP FRESHNESS AT THE MOMENT TRUNK WENT RED — macbookair held a green stamp from a land predating b3a93780b, macneo did not. So the plan lane is not a guaranteed escape hatch; a host that happens to gate just before a bad land keeps its egress and one that does not, loses it. BOTH of them still read WEDGED to the fleet. That is a better case for this row than the one I filed with: the classifier cannot distinguish a host that is blocked and can still speak from one that is blocked and cannot, and it calls both of them by the name that prescribes "adjudicate its worktree".
+
+        I have NOT re-scoped the exit criteria, because none of them referenced the retracted claim.
+
+        ALSO RECORDED, from macneo's verification of the 1193-yw6u fix on the exact cell that was red: timeout absent -> blocked:gh-cli-only, timeout present -> ok:gh-keyring-push-verified-refstate-refused, unchanged, with the stderr line "no timeout(1)/gtimeout(1): running 'gh auth status' UNBOUNDED." Their methodological point is right and worth keeping: the CONTROL matters as much as the fixed cell, because together they show the change moved the verdict that was wrong and left the one that was right alone. A fix verified only on the cell it targets cannot distinguish a repair from a rewrite.

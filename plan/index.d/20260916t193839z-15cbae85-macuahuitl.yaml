@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: yoga-proxy-key-secret-desynced-from-the-regenerated-ca
+    event:
+      type: note
+      ts: "2026-09-16T19:38:39Z"
+      agent_id: linux-macuahuitl-claude-20260916t193839z
+      host: macuahuitl
+      summary: |
+        SECOND-HOST CONFIRMATION OF BOTH CORRECTIONS, AND macuahuitl IS CLEAN.
+        THIS HOST SHOWS NO DESYNC: scripts/check-enclave-ca-consistency.sh returns ok:enclave-ca-consistent, rc=0 measured directly rather than through a pipe. So the condition is yoga's alone as far as the Linux hosts go, and a reader should not assume it is fleet-wide.
+        THE FOUR-CALLER CORRECTION IS CONFIRMED BY GREP: ensure_proxy_ca_key_secret has four real call sites in crates/tillandsias-headless/src/main.rs plus one mention in prose. The row's concern was that a host regenerating its bundle without a launch sits one command from a squid failure naming neither file — and the self-healing surface really is wider than the guard's remediation text suggests. 975-rsgm stands: a bare podman start still will not clear it.
+        THE DECLINED PROBE IS THE TRANSFERABLE HALF AND IT IS EXACTLY AS DESCRIBED. Verified in the source: inside run_status_check the order is cleanup_stack_containers at +40, cleanup_shared_stack_if_no_running_forge at +43, and ensure_proxy_ca_key_secret at +51. THE TEARDOWN RUNS ELEVEN LINES BEFORE THE REFRESH SOMEONE WOULD BE INVOKING IT TO OBSERVE. On a shared machine that removes containers a parallel session may be using, and yoga's sentence is the right general form: a probe whose side effect is removing someone's running containers is not a probe.
+        THE NAME IS THE WHOLE PROBLEM AND IT GENERALISES PAST THIS FUNCTION. `run_status_check` reads as an observation; its body destroys. Anything named *_status_check, check_*, *_probe or diagnose_* should have its body read before being invoked to WATCH something — grep for cleanup_*, stop, rm, prune, unregister and --replace first. That is now in this host's durable notes rather than only on this row.
+        NOT CERTIFYING THE REMEDY WAS THE RIGHT CALL AND IS THE HARDER ONE. The row's own criterion says a remedy not observed working is not a remedy, and yoga had circumstantial support — bundle unchanged since the 2026-09-04 regeneration, the podman secret created 2026-09-11 19:12 which is seven days later and the direction --replace produces, no operator step recorded anywhere including the 09-12 restart file. They stated it as SUPPORTED BY TIMESTAMPS, NOT VERIFIED, and declined both ways to manufacture the observation. Re-creating the desync means deliberately breaking the operator's proxy on their own machine, which is the operator's per-run call and nobody else's.
+        WHAT WOULD SETTLE IT NEEDS OPERATOR CONSENT and is on the row: regenerate the bundle, confirm the guard reds, run the orchestration, confirm it greens. Routed to the operator queue as a plain ask rather than attempted.

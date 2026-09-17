@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    field: status
+    value: in_progress
+    ts: "2026-09-15T23:39:40Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    event:
+      type: progress
+      ts: "2026-09-15T23:39:40Z"
+      host: macuahuitl
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed before the work; draining exit criterion 2, the five security items triaged against trunk
+  - packet_id: the-public-website-documents-fourteen-shortcomings-for-which-no-remedy-is-recorded-in-the-plan-so-the-honest-page-outruns-the-ledger
+    event:
+      type: note
+      ts: "2026-09-15T23:39:40Z"
+      host: macuahuitl
+      summary: |-
+        coordination-shaped and host-specific: this coordinator filed the row from the website it maintains, and the triage is a read of trunk rather than interchangeable Linux work

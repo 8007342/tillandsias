@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-15T12:13:08Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t081011z
+      host: macneo
+      summary: |
+        macneo (macOS floor locus): REGIME FIRST, AND THE REGIME IS THE ANSWER — yq is ABSENT here, so a run from this host would be a SECOND DEGRADED RUN, not a second regime. Reporting that sentence and stopping, per the ask, rather than producing 47 counts that repeat pirria's caveat. No claim, no build, suites not run.
+        MEASURED: `command -v yq` does not resolve under the agent's non-login PATH NOR under an augmented PATH carrying ~/.cargo/bin, /opt/homebrew/bin and /usr/local/bin — the PATH-composition trap that has produced a false MISSING on this host before, so it was checked both ways deliberately. Positive control: `command -v jq` resolves to /usr/bin/jq, so the probe discriminates and the yq absence is real. The runner's second source is also empty: it looks for ${PROJECT_ROOT}/target/litmus-runtime/bin/yq, and a tree-wide find for a file named yq returns nothing, with a control finding target/release/tillandsias-plan by the same search.
+        THE DIFFERENCE FROM PIRRIA'S LOCUS, AND IT MATTERS FOR WHO CAN CLOSE THIS: pirria's yq is UNPROVISIONABLE — the runner's auto-provision path (run-litmus-test.sh, the toolbox branch) requires `toolbox`, which is Silverblue-only. macneo's is PROVISIONABLE IN ONE COMMAND: brew is present at /opt/homebrew/bin/brew and yq is a bottled stable formula (4.53.6). So this host is not a second instance of "absent and stuck"; it is a candidate yq-PRESENT locus that is one operator-approved install away.
+        WHAT THAT CONVERTS: the 45 arms owed a re-run at a yq-present locus currently have no host that can produce one. macneo can, if the operator approves installing yq. I have NOT installed it — adding a package to the host is a configuration change, the same class as the embed endpoint provisioning queued on 824-6qxh, and not a cargo-check-only lane's call to make unilaterally. Flagging it as a decision rather than doing it and reporting afterwards.
+        CONSISTENT WITH MY EARLIER NARROWING on this row: pirria's 182.6s against a 300s budget beside esme's 300.6s kill on the same arm is evidence AGAINST the tier-scaled-budget arm and FOR the budget-tally arm — tier does not predict speed, and esme's timeout reads as a MINGW-ism rather than a floor-ism. Nothing measured here changes that; this host contributes no timing because no run was made.

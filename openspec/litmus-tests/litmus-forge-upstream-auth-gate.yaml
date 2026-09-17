@@ -62,6 +62,20 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: probe-403-goes-denied"
 
+  # ORDER 778-hb3x. An UNSEEDED mirror and a dead network both published a bare
+  # `error`, so the one cheap surface an operator can read could not tell them
+  # apart — and the remedy for one is futile for the other. The STATE stays
+  # `error` (the probe genuinely cannot answer without a ref; dressing that as
+  # success would be fail-open); what changes is that the namespace now says
+  # WHICH error, using 809-w2xy's reason segment that `denied` already uses.
+  - step: "778-hb3x: a mirror with NO LOCAL HEADS publishes error/no-local-heads, not a bare error"
+    # A bare bare-repo with an origin and zero refs is exactly the unseeded
+    # state. No PUSH_PROBE is needed: the probe cannot reach the push at all,
+    # which is the point — it has nothing to probe with.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/up\"; git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin \"$d/up\"; out=$(images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$ref\" in refs/tillandsias/upstream-auth/error/no-local-heads/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 1 ] && echo 'ok: no-heads-names-itself' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-heads-names-itself"
+
   - step: "NEGATIVE CONTROL (mirror cannot reach Vault at all): no vault client publishes agent-unauthenticated/<epoch>, exits 1, and never touches the network"
     # VAULT_CLI points at a nonexistent path, so the probe must refuse before
     # any push attempt — hermetic by construction (the https branch returns

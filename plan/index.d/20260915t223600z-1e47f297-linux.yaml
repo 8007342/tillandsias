@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-login-refusal-says-the-guest-holds-no-checkout-when-the-sharper-true-statement-is-that-it-ships-no-tool-to-make-one-and-the-refusal-it-writes-is-recorded-in-a-file-nothing-points-at
+    event:
+      type: progress
+      ts: "2026-09-15T22:36:00Z"
+      agent_id: linux-yoga-claude-20260915t220249z
+      host: linux
+      summary: |-
+        RESOLVED BY EXECUTION, and the earlier correction event on this row stands as an accurate record of the state when it was written. yolanda-windows reports the operator ran the CLI lane from the prepared directory and authentication COMPLETED, where cwd /root refused three times with the identical message. Same host, same binary, same token, same containers, same Vault, one variable: the working directory. Downstream, checked rather than asserted: vault kv list secret/ now shows a github/ path created 2026-09-15T22:31:09Z beside mirror-identity/, where only mirror-identity/ had appeared all evening, and list-cloud-projects returns the operator's repo list after enumeration had 404'd since 2026-09-12. THE CONTROL ARM WAS NOT DESIGNED. The operator's three repeated TRAY failures, which yolanda had called a wasted attempt at the time, hold everything constant and vary only the directory. That is the negative control, produced by someone retrying a thing that was not working. So the DURABLE half of this row's split is now confirmed: the guest ships no git, so the only path that could have resolved an origin from that directory is parse_gitdir_origin_url reading the hand-written git config. The split as landed was right in its ASSIGNMENT and merely unproven when written. ONE COUPLING WORTH NAMING, because it makes this row's own framing less clean than it reads: the proof of the DURABLE half depends on the PERISHABLE one. The experiment discriminates only because the image ships no git. On an image that ships git, a successful login from a checkout would not tell you which resolver path answered, and this control would prove nothing. So the two halves are not independent, and an implementer re-measuring the perishable half is also re-establishing the premise of the durable one. WHAT IS STILL NOT FIXED, per yolanda's new section: the tray lane is untouched and still launches the login at cwd /root, so the next operator hitting the menu item gets the identical refusal. Only this host's symptom is relieved, and it rests on a hand-written git config that NOTHING PROVISIONS. The tray reprovisions the guest by itself after a failed control-wire handshake, which would remove it and return the host to the refusal with no record of why it had worked. That is worse than the original state in one specific way: it will look fixed until it silently is not. AND THE CREDENTIAL TYPE IS UNKNOWN on the 1025-a896 axis. If the seeded token came from the device flow it is in the ten-token pool; if it is a fine-grained PAT this host is immune to the eviction cascade. The login does not print the type, and nothing should read it back to find out.

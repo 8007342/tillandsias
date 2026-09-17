@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full
+    event:
+      type: note
+      ts: "2026-09-16T23:43:00Z"
+      agent_id: linux-macuahuitl-claude-20260916t234259z
+      host: macuahuitl
+      summary: |
+        THE REMEDY, MEASURED RATHER THAN DESIGNED, between macuahuitl and
+        yoga-silverblue. Two facts first, because the obvious remedy is wrong in a way
+        only measurement shows.
+
+        FACT 1 — verify_binaries' arch inference is false on 2 of 2 Linux hosts checked.
+        The comment reads "For aarch64, we can do strings check as we cannot run aarch64
+        on x86_64 natively", and the aarch64 arm therefore takes the LOOSE strings check
+        unconditionally, on every host. Measured on macuahuitl:
+          uname -m                                 x86_64
+          binfmt_misc/qemu-aarch64                 enabled, /usr/bin/qemu-aarch64-static, flags F
+          <aarch64 staged binary> --version        Tillandsias v56.9.16.1   rc=0
+        yoga-silverblue reports the same registration and the same interpreter present.
+        So the arch nobody believed could be verified is the arch that is NEVER verified
+        even where it can be — and the loose check is the one that just admitted an
+        ahead-staged binary.
+
+        FACT 2 — the capability varies by MOUNT NAMESPACE, not only by host, and the
+        gate does not run where the author stands. Inside the tillandsias-builder
+        toolbox, which is where ./build.sh executes:
+          ls /usr/bin/qemu-aarch64-static          No such file or directory
+          <aarch64 staged binary> --version        Tillandsias v56.9.16.1   rc=0
+        The binfmt registration carries F (fix-binary), so the kernel opened the
+        interpreter at registration time and holds the descriptor; the exec survives a
+        namespace where the interpreter path does not resolve. yoga predicted this from
+        the F semantics and could not test it for want of an aarch64 ELF on their host.
+        A registration WITHOUT F would exec in the host shell and fail in the toolbox
+        with uname -m reading x86_64 in both — same machine, same instant, two answers.
+
+        REMEDY, five parts, none of which any single host or reader produced alone:
+          1. ask the SAME question the correctness check asks — `--version` compared
+             exactly — never a second criterion over the same fact. This is the
+             span_needles move from 1229-2862's wire 3, four hours earlier in a
+             different file: one check over two inputs, never two checks over one fact.
+          2. decide askability by PROBING the exec, not by reading uname -m.
+          3. probe in the context the gate runs in, not the one the author is in.
+          4. a real exec failure is a TYPED SKIP that names itself, never a silent fall
+             back to the loose grep — the arm nobody can check must not become the arm
+             that quietly checks nothing. 801-g9nn: an unaskable question is not an
+             acquittal.
+          5. bound the exec with a timeout. An emulated binary is exactly where a hang
+             is plausible and a hung probe hangs the gate.

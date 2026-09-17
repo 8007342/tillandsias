@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-launcher-is-only-installed-by-a-gate-that-must-pass-so-a-fleet-that-builds-daily-runs-a-binary-from-the-last-green-day
+    order: 1237-f9dy
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [build, install, versioning, developer-experience, release-gate]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+    title: |
+      the launcher is installed ONLY at the end of a gate that must pass, so a fleet building several times a day runs a binary from the last day a gate went green — five days, measured
+    context: |
+      REPORTED BY THE OPERATOR 2026-09-17, angrily and correctly: every host
+      builds several times a day, and every terminal they open shows an
+      installed version days old. They closed macbookair over it.
+      MEASURED ON macuahuitl, and the measurement corrects the obvious
+      diagnosis rather than confirming it:
+        installed launcher      v56.9.12.2    mtime 2026-09-12 07:09
+        56.9.12.x IS 2026-09-12 — the stamp was CORRECT for the day it was built
+        one ./build.sh --install  ->  v56.9.17.1, today, 71 s, rc=0
+      So the version-stamping mechanism WORKS. The date in the version is the
+      date of the build that produced the binary, exactly as the scheme intends.
+      THE DEFECT IS INSTALL FREQUENCY, NOT STAMPING. Only `./build.sh --install`
+      and `./build.sh --ci-full --install` write the launcher. A host's routine
+      work is `--check` (which deliberately never installs) and release gates —
+      and EVERY `--ci-full --install` on this host since 2026-09-12 has failed
+      before reaching its install step: the four litmus reds of 2026-09-16, the
+      budget kills of 2026-09-17. A failed gate installs nothing, so the
+      launcher on PATH is frozen at the last day a gate went green.
+      That is the whole mechanism: builds stamp correctly, and none of them
+      reach the launcher. The operator is not seeing a stale stamp. They are
+      seeing a stale INSTALL, and the version is faithfully reporting the day
+      that install was made.
+      WHY THIS IS NOT 862-zhr2 AND MUST NOT BE FOLDED INTO IT. That row is the
+      tracked-VERSION-versus-guard contradiction and is waiting on an operator
+      ruling since 2026-08-23. It is real and it is unrelated to this symptom:
+      resolving it either way leaves the launcher exactly as stale, because
+      nothing about A or B causes an install to happen. Folding this in would
+      mean the ruling lands, the operator opens a terminal, sees a five-day-old
+      version again, and concludes the fix did not work.
+      A FIRST DIAGNOSIS THAT WAS WRONG, recorded because it is the one a reader
+      will reach for. I told the operator the cause was build.rs reading a
+      tracked VERSION that only moves at release. The chain is real; it is not
+      what produced the symptom, and the mtime evidence above refutes it. I also
+      believed build.sh's `git checkout -- VERSION` advice was destroying date
+      stamps and was about to "fix" it — WORKSPACE_VERSION is baked in at COMPILE
+      time, so reverting the file cannot un-stamp a built binary. Correct advice,
+      nearly edited on the strength of a wrong diagnosis.
+      THE DESIGN QUESTION THIS ROW OWNS: what makes the installed launcher track
+      the tree without requiring a full release gate to pass first. Candidates,
+      none chosen: install on a green `--check` rather than only on `--ci-full`;
+      a separate cheap `--install-only` path that does not gate; or a gate whose
+      install step runs before the phases most likely to red. Each trades
+      freshness against the guarantee that an installed binary passed something.
+    exit_criteria:
+      - 'a host that builds daily has a launcher whose version is no more than one day old, without an agent running --install by hand (pre-fix result: FAILS — measured 2026-09-17, launcher five days stale at v56.9.12.2 on a host that gated repeatedly in that window)'
+      - 'the freshness does not come from installing something that passed nothing: whatever triggers the install names what it verified first, and a red gate still refuses to install'
+      - 'NEGATIVE CONTROL: ./build.sh --check still installs NOTHING — a verification gate must not mutate the host under any resolution, which the current design gets right and a careless fix would lose'
+      - 'the fleet-wide shape is checked rather than assumed: at least one other host reports its launcher version and install mtime, since this was measured on one host and the operator reports it fleet-wide'
+    unscoreable: |
+      trigger-not-chosen: install-on-green-check, a separate --install-only
+      path, and reordering the gate's install step are three coherent answers
+      with different guarantees about what an installed binary has passed. The
+      measurement is complete and reproducible — launcher version versus mtime
+      versus the gate history — and the remedy is a design decision about how
+      much verification an installed launcher must carry.
+    events:
+      - type: filed
+        ts: "2026-09-17T03:45:00Z"
+        agent_id: "linux-macuahuitl-claude-20260917t034500z"
+        host: macuahuitl
+        summary: |-
+          Filed after the operator's report and after correcting my own first
+          diagnosis twice. The launcher on this host is current as of tonight
+          (v56.9.17.1) because I ran --install by hand; that is a patch on one
+          host, not the fix, and the row exists so nobody mistakes the one for
+          the other.
