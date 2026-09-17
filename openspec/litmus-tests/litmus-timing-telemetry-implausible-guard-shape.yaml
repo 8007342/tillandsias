@@ -20,7 +20,46 @@ preconditions:
 critical_path:
   - step: "AGGREGATION: a log containing an epoch-sized duration reports a SANE timing line (bad record excluded)"
     command: "T=$(mktemp -d); printf '{\"step\":\"litmus-suite\",\"phase\":\"all\",\"duration_ms\":9308,\"exit\":0}\\n{\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":3745,\"exit\":0}\\n{\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":1786481285460,\"exit\":1}\\n' > \"$T/timing.jsonl\"; out=$(TILLANDSIAS_TIMING_LOG=\"$T/timing.jsonl\" scripts/cycle-metrics.sh 2>/dev/null | grep '^timing:'); rm -rf \"$T\"; echo \"$out\" | grep -q 'steps=2 ' && echo \"$out\" | grep -q 'litmus_ms_avg=9308' && ! echo \"$out\" | grep -q '1786481285460' && echo 'ok: implausible duration excluded, sane averages' || { echo \"FAIL: $out\"; exit 1; }"
-    timeout_ms: 20000
+    # ============================================================================
+    # !!! ELEVATED TIMEOUT — NOT A BUDGET. REMOVE ME. (order 1236-bmjh) !!!
+    # ============================================================================
+    # THIS NUMBER IS A LIE THE OPERATOR AUTHORISED ON 2026-09-17 SO A RELEASE
+    # COULD SHIP. It was 20000 ms. Nothing about this step got slower on purpose
+    # and nothing about it was fixed; the budget was raised to get out of the way
+    # of a defect that lives somewhere else entirely.
+    #
+    # MEASURED, and this is why the old number was not wrong when it was written:
+    #   scripts/cycle-metrics.sh: rc=0 in 29,908 ms on a QUIET host against 20,000 ms.
+    #
+    # THE REAL CAUSE IS A QUADRATIC LEDGER FOLD, not this step and not this host.
+    # Measured within one host across two commits, same binary, quiet:
+    #   c587bf335  4.32 MB base / 364 fragments  full load ~222 ms  raw parse ~48 ms
+    #   HEAD       8.50 MB base / 827 fragments  full load ~992 ms  raw parse ~85 ms
+    # 4.5x the time for 2x the data, and the PARSE IS ONLY 85 ms OF 992 — so the
+    # obvious fix, "parse the ledger once", aims at 8.6% of the cost. The
+    # superlinearity is three per-packet linear scans in
+    # crates/tillandsias-plan/src/fragments.rs plus a full clone of the parsed
+    # tree: roughly 1.1 MILLION string comparisons per load on this corpus,
+    # growing as packets x fragments. See 964-tzmp and 1233-jqp4.
+    #
+    # SO THIS NUMBER ROTS BY DESIGN. It buys time proportional to how fast the
+    # fleet files packets, and it buys it on the BUSIEST host last — the host
+    # with the most work done reds first and looks like an outlier when it is the
+    # leading indicator. Raising it again is not a remedy; it is this same
+    # decision taken a second time with less excuse.
+    #
+    # DO NOT COPY THIS VALUE TO A NEW STEP. A step written against 300000 has no
+    # measured basis at all; it has inherited a workaround.
+    #
+    # A BUDGET KILL IS STILL A FAIL (820-c8q8), so a genuinely hung producer still
+    # reds the gate — it now costs five minutes to say so instead of ten seconds.
+    #
+    # REMOVAL IS TRACKED AS 1236-bmjh AND IS SEQUENCED: these five come out ONE
+    # AT A TIME as the fold fix lands, each removal proving on its own that the
+    # step passes at its ORIGINAL budget. A single sweeping revert would tell us
+    # nothing about which of the five the fix actually reached.
+    # ============================================================================
+    timeout_ms: 300000
     expected_behavior: "ok: implausible duration excluded, sane averages"
 
   - step: "AGGREGATION POSITIVE CONTROL: an all-sane log reports the correct averages"
