@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform.pickup_role was ALREADY 'macos', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: note
+      ts: "2026-09-17T16:19:50Z"
+      host: macos
+      summary: |-
+        the Linux guard half landed; only the Darwin matcher work remains, so linux is now wrong (macuahuitl's own correction, flipped here rather than opening a land for the field)

@@ -814,3 +814,26 @@ looked"* will eventually be read as the former.
 - 2026-09-17 — Classes 2 and 3 (rank-4 epic, below-frontier epic; 0 of 20
   seeds each) are starved BY DESIGN — top-3 entropy is documented — so only
   class 1 was filed. A measured gap is not automatically a defect.
+
+- 2026-09-17 — 718-jqt5 CLOSED completed with evidence: criteria 1-4 delivered
+  across three cycles (crit 1 yoga; crit 2 2c194550c; crit 3 e90fe9e25 plus
+  1239-cges; crit 4 e123565fe). The closing gate refused `completed` until an
+  `--evidence` ref was supplied, which is 650-dq6u doing exactly its job.
+- 2026-09-17 — Criterion 4 corrected a measurement I had carried myself: the
+  module comment said "461 of 461 ready packets carry NO events" (2026-09-06);
+  re-measured 505 rows, 139 eventless, 366 EVENTED. I moved that comment into
+  the library verbatim the day before without re-running it.
+- 2026-09-17 — The worry it raised was refuted by measuring rather than
+  assuming: a uniform clock shift does NOT reorder the list, because age_days
+  derives from a shared `now`, so every age moves together. Pinned against the
+  live ledger across 40 days, falsified with a cmp-proven mutation.
+- 2026-09-17 — Land lost the mandated-merge race once, then succeeded on the
+  retry. The retry was ARITHMETIC, not preference: trunk moved 4 times in the
+  hour (~900s) against a ~500s gate, so the land script's own criterion
+  favoured one more gate — the mirror of the 177s case where it favoured the
+  relay ref. Second attempt landed via `ok:land-adopts-valid-stamp`, the path
+  I wrongly called unreachable on this host two days running.
+- 2026-09-17 — Accepted 1231-cbie's Darwin half. Verification found a THIRD
+  production site (`e2e-step2-macos.sh`, full-bundle-path match, narrower blast
+  radius) and confirmed a wired gate step pins the exact literal the packet
+  removes, failing with a message that blames a property which still holds.
