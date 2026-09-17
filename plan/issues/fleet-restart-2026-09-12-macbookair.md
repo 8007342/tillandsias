@@ -720,3 +720,31 @@ looked"* will eventually be read as the former.
   order — a rustfmt difference between hosts, not a logic change. Took trunk's
   on merge. Worth knowing before the next relay: my fmt and macuahuitl's
   (1.9.0-stable, 48a229ceae) disagree on import ordering.
+
+- 2026-09-17 — Operator ruling on guest VM memory, filed 1235-kjdf and gated
+  green: 8 GiB ceiling regardless of host RAM, 4 GiB of guest on an 8 GiB host.
+  Implemented as two constants (`GUEST_MAX_MEMORY_BYTES`,
+  `HOST_RESERVED_MEMORY_BYTES`) so both of the operator's numbers fall out of
+  the existing derivation in `guest_sizing` rather than being special-cased.
+  It partially reverses 978-juw4 and the constant's doc comment says so; the
+  reserve was revalued rather than deleted, so that order's structure — reserve
+  authoritative, no lower clamp, loud refusal on a too-small host — survives.
+- 2026-09-17 — Ephemerality asked for by the ruling turned out to need NO code,
+  and I verified that rather than asserting it: `guest_sizing` has exactly one
+  production call site, inside `VzRuntime::start`, feeding the boot spec's
+  `setMemorySize`; `VzBootConfig` has no serde derive and its `defaults()` is
+  reached only from tests. Nothing about RAM is persisted, so latest-config-wins
+  already holds by construction.
+- 2026-09-17 — I put a clippy hard error on trunk (`useless_format`, via
+  macuahuitl's 690-w94k relay) and it was red for every macOS build for hours.
+  Filed 1235-rfub. The lesson is not "run clippy" but WHERE the blindness is:
+  the relaying Linux gate compiles stubs for the cfg-gated tray modules, and my
+  own two checks were blind in the same direction — `--bins` runs no lints,
+  `zigbuild --target x86_64-unknown-linux-musl` compiles the other side. On a
+  cfg-gated crate, lint natively with `--all-targets` before any relay.
+- 2026-09-17 — Land lost the mandated-merge race and I stopped at two attempts
+  BY ARITHMETIC rather than by feel: trunk's median inter-commit interval
+  measured 177 s against a multi-minute gate, matching macneo's ~3 min vs
+  ~17 min figure. Took the relay ref the land script names. Measuring the
+  branch being pushed would have said "quiet, spend the gate" — the ref that
+  matters is the one the refusal names.
