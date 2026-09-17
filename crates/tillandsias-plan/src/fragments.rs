@@ -196,6 +196,53 @@ pub fn malformed(index: &Path) -> Vec<PathBuf> {
     bad
 }
 
+/// Top-level keys the fold actually reads, per channel. Add a key here the
+/// moment a new channel lands; a fragment whose only top-level keys are NOT in
+/// this set cannot contribute a single folded row or event.
+const FOLD_CHANNELS: &[&str] = &["packets", "events", "fields", "status", "capabilities"];
+
+/// ORDER 920-eqjr — fragments the fold can read NOTHING from.
+///
+/// A fragment that parses as YAML yet contributes zero foldable rows and zero
+/// events passes every gate silently: [`malformed`] names files that do not
+/// parse and [`overlay_coverage_gaps`] (order 866-pvsx) names packet/event
+/// ENTRIES the fold dropped, but a file that simply talks past the fold —
+/// freestyle top-level keys with no `packets:` / `events:` / `fields:` /
+/// `status:` / `capabilities:` channel at all — is invisible to both. Two
+/// Antigravity prose fragments were lost exactly this way (filed 2026-08-28;
+/// re-emitted canonically after the osx-next merge surfaced them).
+///
+/// Classified inert when it:
+///   1. parses (a parse failure is `malformed:`, a different verdict), and
+///   2. declares NO recognized fold channel key — even an EMPTY one, because a
+///      `packets: []` fixture is documentation, not a loss, and
+///   3. still has at least one top-level key — a pure comment header parses to
+///      an empty (null) document and is not a lost finding.
+///
+/// Verdict token is `inert-fragment: <path>`, distinct from `malformed:` so a
+/// caller can branch on the class.
+pub fn inert_fragments(index: &Path) -> Vec<PathBuf> {
+    let mut inert: Vec<PathBuf> = load_all(index)
+        .into_iter()
+        .filter(|frag| {
+            let Some(doc) = frag.doc.as_mapping() else {
+                return false; // empty/null doc = comment header — not a loss
+            };
+            if doc
+                .keys()
+                .filter_map(|k| k.as_str())
+                .any(|k| FOLD_CHANNELS.contains(&k))
+            {
+                return false; // an explicit channel (even empty) is on the record
+            }
+            !doc.is_empty()
+        })
+        .map(|frag| frag.path)
+        .collect();
+    inert.sort();
+    inert
+}
+
 /// ORDER 606-h9vy — the 1-indexed INCLUSIVE line span of the list item under
 /// the top-level `section:` key whose block contains `packet_id: <packet_id>`
 /// and every needle in `must_contain`. This is how winning-source spans are
@@ -2639,6 +2686,49 @@ packets:
             doc: serde_yaml::from_str(yaml).expect("fragment parses"),
             raw: yaml.to_string(),
         }
+    }
+
+    /// 920-eqjr. The inert-fragment class, exercised against a temp index dir:
+    /// a comment header and a valid-empty channel are NOT losses, a freestyle
+    /// prose fragment with a finding in it is, and a capabilities-channel
+    /// fragment is a recognized channel (order 843-624y / 846-idhn).
+    #[test]
+    fn inert_fragments_only_flags_freestyle_prose() {
+        let dir = std::env::temp_dir().join(format!(
+            "plan-inert-fragments-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("index.d")).expect("create index.d");
+        let index = dir.join("index.yaml");
+        std::fs::write(&index, "packets: []\n").expect("write base index");
+
+        let comment_only = dir.join("index.d/aa-comment-only.yaml");
+        let empty_channel = dir.join("index.d/bb-empty-channel.yaml");
+        let capabilities = dir.join("index.d/cc-capabilities.yaml");
+        let freestyle = dir.join("index.d/dd-freestyle-prose.yaml");
+
+        std::fs::write(&comment_only, "# just notes\n").expect("comment fixture");
+        std::fs::write(&empty_channel, "packets: []\n").expect("empty channel fixture");
+        std::fs::write(
+            &capabilities,
+            "capabilities:\n  - ts: \"2026-01-01T00:00:00Z\"\n    host: windows\n",
+        )
+        .expect("capabilities fixture");
+        std::fs::write(
+            &freestyle,
+            "fragment_type: probe\ncontent: a finding\nsummary: lost\n",
+        )
+        .expect("freestyle fixture");
+
+        let inert = inert_fragments(&index);
+        assert_eq!(
+            inert,
+            vec![freestyle.clone()],
+            "only the freestyle prose fragment is inert"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn packet_ids(doc: &Value) -> Vec<String> {

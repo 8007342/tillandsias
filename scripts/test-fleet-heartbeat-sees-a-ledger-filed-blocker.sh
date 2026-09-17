@@ -69,9 +69,20 @@ esac
 exit 0
 STUB
     chmod +x "$d/plan-stub"
+    # THE IDENTITY IS PINNED IN THE ENVIRONMENT, NOT ONLY IN git config.
+    # last_commit_epoch() matches `git log --author=probe`, so the whole WEDGED
+    # signal depends on this commit being authored by `probe`. `git config
+    # user.name probe` is NOT enough: an ambient GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL
+    # overrides repo config, and a forge (or any agent session) exports both —
+    # measured 2026-09-16, the scaffold commit landed as
+    # "Tlatoani <bulloncito@gmail.com>", `git log --author=probe` was empty, and
+    # arms 1/3/4/8 read SILENT. Pin author AND committer in the env so the
+    # fixture is hermetic against the session it runs in.
     ( cd "$d" && git init -q 2>/dev/null \
-        && git config user.email probe@probe && git config user.name probe \
-        && git -c commit.gpgsign=false commit -q --allow-empty -m "recent activity by probe" ) >/dev/null 2>&1
+        && GIT_AUTHOR_NAME=probe GIT_AUTHOR_EMAIL=probe@probe \
+           GIT_COMMITTER_NAME=probe GIT_COMMITTER_EMAIL=probe@probe \
+           git -c commit.gpgsign=false commit -q --allow-empty \
+               -m "recent activity by probe" ) >/dev/null 2>&1
     printf '%s' "$d"
 }
 

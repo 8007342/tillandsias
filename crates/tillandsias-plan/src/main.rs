@@ -5096,6 +5096,21 @@ fn main() {
                     emit(&format!("dropped-entry: {}: {gap}", path.display()));
                 }
             }
+            // ORDER 920-eqjr. A fragment the fold can read NOTHING from is the
+            // fourth authoring failure mode the ledger README warns about, and
+            // the only one with no reporter: `malformed:` names files that do
+            // not PARSE, `dropped-entry:` names entries the fold DROPPED, and a
+            // freestyle fragment (no packets/events/fields/status/capabilities
+            // channel at all) is invisible to both while every gate answers ok.
+            // Two Antigravity prose findings were lost this way (refiled
+            // canonically after the osx-next merge surfaced them). Same posture
+            // as `malformed:` — named always, refused only by a caller that
+            // opted into a partial-corpus refusal — because the same 699-dycj
+            // rationale applies: build.sh runs this on every host.
+            let inert = tillandsias_plan::fragments::inert_fragments(&index);
+            for path in &inert {
+                emit(&format!("inert-fragment: {}", path.display()));
+            }
             if !report.violations.is_empty() && !skipped.is_empty() {
                 // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
                 // target is DEFINED in the unreadable fragment reports here as
