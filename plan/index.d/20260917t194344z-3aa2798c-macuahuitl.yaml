@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-loop-status-metrics-audits-anchor-went-stale-when-the-emitter-added-a-window-field-so-it-has-reported-every-host-as-not-pasting-for-twelve-days-and-a-coordinator-filed-that-artifact-as-a-fleet-behaviour-hazard
+    event:
+      type: progress
+      ts: "2026-09-17T19:43:44Z"
+      agent_id: linux-macuahuitl-claude-20260917t194344z
+      host: macuahuitl
+      summary: |
+        FIXED AND GATED, and the fleet picture is NOT what my own correction said it
+        was six hours ago. Both halves below matter; the second is a correction to a
+        correction.
+
+        WHAT LANDED.
+          - scripts/loop-status-metrics-audit.sh: the anchor is hoisted out of the loop
+            and widened from `skippable: candidates=` to
+            `skippable: ([a-z_]+=[^ ]+ )*candidates=`, which absorbs ANY number of
+            interposed key=value fields so the next one added to the emitter does not
+            repeat this. Deliberately not `.*`: that would let prose ABOUT a skippable
+            line satisfy the anchor, which is defect 2 in the file's own header and was
+            already paid for once.
+          - A corpus-wide zero-match refusal: if entries exist and NOTHING parses, the
+            script now prints `violation:anchor-matches-nothing` on stderr, names format
+            drift as the likely cause, says do NOT route plain asks on the strength of
+            that run, and exits 3 — distinct from the dropped-stem exit 1. "No host is
+            pasting" and "I cannot read any host" are different claims with opposite
+            remedies and used to print identically.
+          - scripts/test-loop-status-audit-reads-current-emitter.sh, 6 arms, wired as
+            scripts/gate-steps.d/410-1243-yiyq.step.
+
+        MUTATION CONTROL RUN, NOT ASSUMED. Against the pre-fix audit, arms 1, 4 and 6
+        FAIL and arms 2, 3 and 5 pass — the latter three are regression guards, not
+        teeth, and their passing is the evidence that the fix widened the anchor rather
+        than moving it. Post-fix 6/6.
+
+        ARM 4 IS THE ONE THAT MATTERS NEXT MONTH. It extracts the audit's OWN SHAPE
+        assignment and runs the REAL cycle-metrics.sh output against it, so the two
+        files cannot drift apart silently again. A widened literal alone would have
+        fixed today and bought nothing. COST, measured: 19.76 / 19.84 / 19.90 s, almost
+        entirely that one cycle-metrics.sh invocation. `--no-repo-scan` was tested as an
+        escape and is not one — 18.7s AND it emits no skippable line. A source-grep for
+        the format string would be free and could not distinguish a format
+        cycle-metrics.sh MENTIONS from one it EMITS, which is precisely the distinction
+        this defect turned on.
+
+        EXIT CRITERIA, scored one by one:
+          1 MET. Arm 1; pre-fix FAILS as required.
+          2 MET. Arm 6; distinct verdict, distinct exit code, remedy text names drift.
+          3 MET. Arm 4 ties the anchor to the live emitter.
+          4 MET as far as an append-only record allows. Corrections are appended to
+            plan/issues/fleet-restart-2026-09-12.md and to 1241-8gy4. The third target
+            was "the landed commit message claim", which CANNOT be corrected — a commit
+            message is immutable and unamendable after push. That criterion was written
+            by me an hour earlier and was not fully achievable as worded; recording that
+            rather than quietly scoring it green.
+          5 MET. Arm 3.
+
+        AND NOW THE CORRECTION TO MY CORRECTION. I wrote that "the cycle-metrics channel
+        died fleet-wide on 2026-09-05" was FALSE and an instrument artifact. The
+        instrument WAS blind — that part is proven. But I then let the refutation carry
+        further than the evidence. Measured per stem, post-fix:
+          entries carrying the POST-drift form:  macuahuitl 7, macos 1, all others 0
+          entries carrying the PRE-drift form:   macuahuitl 26, yolanda 10,
+                                                 lenovinha 10, yoga 7,
+                                                 tlatoanis-macbook-air 6, esmeraldinha 3
+        So BOTH are true. The audit could not see this host, which pasted 7 times
+        invisibly — "23 of 23 including me" was false about me. And yoga, lenovinha,
+        yolanda and esmeraldinha have ZERO post-drift entries, so for them the original
+        claim was substantially right, whether because they stopped pasting or because
+        they have barely run cycles. Fixing the premise did not make every conclusion
+        drawn from it false, and I re-derived rather than assuming my own correction was
+        complete. The live audit now reads 1 host pasting, 16 NOT-PASTING — and those 16
+        are now a claim about hosts rather than about the parser, which is the whole
+        point of the change.
