@@ -7956,3 +7956,49 @@ is moving and that branch is not. It is not diverging; it is abandoned while its
 host is offline, and the next Windows landing pays the whole integrate.
 `osx-next` was 2 ahead with a single merge base and three plan-only fragments,
 all read before relaying.
+
+## 2026-09-17T18:03Z macuahuitl — CORRECTION to two entries above
+
+**"THE CYCLE-METRICS CHANNEL DIED FLEET-WIDE ON 2026-09-05" IS FALSE. THE
+AUDIT WENT BLIND.** Both entries above that assert it — the one calling it a
+hazard "including me", and the one explaining why no skippable packet could be
+filed from one host — rest on `scripts/loop-status-metrics-audit.sh` reporting
+23 of 23 stems NOT-PASTING. That verdict carries no information.
+
+The audit anchors on the literal `skippable: candidates=`.
+`scripts/cycle-metrics.sh` now emits `skippable: window=7d candidates=`. The
+interposed `window=7d ` breaks the match. Measured, with the positive control
+that makes the count mean something:
+
+    entries since 2026-09-06 carrying `skippable: window=`  : 8
+    entries in that window matching the audit's own anchor   : 0
+
+Zero is the control: the anchor has matched NOTHING since the format changed.
+Last readable entry 20260905t225806z; first unreadable 20260911t191740z. Filed
+as 1243-yiyq, p1.
+
+**HOW IT WAS CAUGHT, because it was not caught by suspicion.** I wrote a
+loop_status entry specifically to stop being one of the 23, re-ran the audit,
+and it named my minutes-old file as the host's newest entry and reported
+NOT-PASTING on the same line. Found the file, could not read it.
+
+**THE PART I GOT WORST.** I wrote above that the instrument was "healthy the
+whole time (rows=23 stems=23, no dropped stem)" and offered that as grounds for
+trusting the finding. That check is real and it passed — and it certifies
+ENUMERATION, not COMPREHENSION. A numeric agreement plus a verdict reads exactly
+like a self-check while the tool faithfully enumerates hosts it can no longer
+parse. My own written rule is to ask what an instrument would have printed if it
+were broken; here the answer is "precisely what it printed", and I did not ask.
+
+**WHAT SURVIVES.** 1241-8gy4's two-host finding stands: both readings were taken
+by hand from the hosts' own pasted blocks, not from the audit, and the trigger
+condition was genuinely met. What changes is the story around it — the evidence
+may have been available earlier and invisible, rather than newly arriving. A
+correction is appended to that row too, since its context carries the same false
+sentence and a fragment cannot be edited.
+
+**AND THE SHAPE IS THE DAY'S SECOND INSTANCE.** macbookair's
+`git grep "pkill -f"` returned zero because the live form is `pkill -TERM -f` —
+a literal broken by a field interposed between its halves, yielding a zero
+indistinguishable from "nothing to find". Same shape, unrelated file, same day.
+Two instances suggest a sweep rather than two point fixes.
