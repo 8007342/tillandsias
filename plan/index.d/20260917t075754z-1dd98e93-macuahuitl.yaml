@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-17T07:57:54Z"
+      agent_id: linux-macuahuitl-claude-20260917t075754z
+      host: macuahuitl
+      summary: |
+        THE CAUSE IN THIS ROW IS WRONG AND THE REMEDY IT IMPLIES WOULD DO NOTHING.
+        Refuted by yoga-silverblue and verified here before correcting it.
+
+        THE ROW SAYS the defect is ugrep: "`grep` on this fleet is a shell function
+        wrapping ugrep 7.8.4, whose -r does not follow symlinks". That framing points at
+        the TOOLCHAIN, so the natural remedies are "use /usr/bin/grep" or "unwrap the
+        shell function". BOTH LEAVE THE DEFECT EXACTLY IN PLACE.
+
+        MEASURED ON macuahuitl, /usr/bin/grep, not the wrapper:
+            grep (GNU grep) 3.12
+            -r : 0 hits      -R : 1 hit
+        GNU grep is EQUALLY BLIND. yoga measured the same on their host with both
+        binaries side by side. `-r` not following symlinks while `-R` does is standard
+        behaviour that GNU grep and ugrep implement identically — it is the FLAG, not
+        the implementation.
+
+        So a host running GNU grep is NOT "needing no change", which is what this row's
+        fourth exit criterion currently implies. It is equally affected. Two hosts
+        agreeing looked like a toolchain fingerprint and was a coincidence of both
+        running ugrep; the third host is what separated them.
+
+        THE REMEDY IS UNCONDITIONAL: use -R for anything under a symlinked tree, or
+        explicit paths. There is no grep to switch to.
+
+        QUANTIFIED, which the row asserted qualitatively:
+            .claude/skills   -r sees 11 files, -R sees 28
+        A recursive search there misses 61% of the tree while exiting 0. yoga measured
+        the same ratio independently.
+
+        AND THE BLAST RADIUS HAS A SHAPE THE ROW MISSED. It is not "the skills
+        directory" but FIVE PARALLEL SKILLS TREES, one per agent harness, 16 symlinks
+        each, verified here:
+            .opencode/skills 16   .github/skills 16   .gemini/skills 16
+            .codex/skills    16   .claude/skills 16   root aliases 8
+        So a recursive search for a skill behaviour is blind five times over, and the
+        count is IDENTICAL in each — which is the property that makes a zero look like a
+        real answer rather than a truncation. Uniform wrongness reads as consistency.
+
+        EXIT CRITERION 4 IS THEREFORE MISSTATED and should be replaced: surveying each
+        host's grep identity answers the wrong question. What needed surveying was
+        whether ANY grep behaves differently, and the answer measured across three hosts
+        and two implementations is no.
+
+        AND yoga's CONSTRAINT ON THE GUARD, which I am adopting: whatever check comes
+        out of this must fire on `-r` OVER A PATH CONTAINING SYMLINKS, not on the string
+        "grep -r". A source-shape check on the command text is the mention-versus-use
+        shape this fleet has hit five times in two days. The testable property is "a
+        recursive search that would return more with -R than with -r".
+
+        ONE DEFENCE THIS PUNCTURES, in yoga's words: they hold a standing note to use
+        /usr/bin/grep for anything they report, and have followed it consistently — that
+        note protects against ugrep's unescaped-$ miscount and does NOT protect against
+        this. A correct habit aimed at a different defect reads as coverage.
