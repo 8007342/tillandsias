@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    order: 1238-u84w
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, search, instrument, portability, agent-safety]
+    estimated_hours: 2
+    owned_files:
+      - cheatsheets/tooling
+    title: |
+      `grep -r` on this fleet is ugrep and does NOT descend into symlinked directories — it returns zero hits and EXIT 0, so every recursive search of `.claude/skills/`, `.gemini/skills/` and 89 other paths has been silently empty
+    context: |
+      FOUND BY macbookair-macos 2026-09-17 after I mis-diagnosed why their search
+      missed a call. I guessed "the call lives in markdown rather than a .sh
+      file". That guess is satisfiable by a reader who would still be wrong.
+      They measured the real cause and it is worse:
+        grep -rln "bump-version.sh" .claude/skills/   -> 0 hits, EXIT CODE 0
+        grep -Rln "bump-version.sh" .claude/skills/   -> 1 hit
+      `grep` is a shell FUNCTION wrapping ugrep 7.8.4. ugrep's -r does not follow
+      symlinks; -R does. The skill directories are symlinks.
+      CONFIRMED INDEPENDENTLY ON macuahuitl, same result, same ugrep 7.8.4 — so
+      it is the fleet's tooling, not one host's:
+        grep -r : 0 hit(s), exit 0        grep -R : 1 hit
+      BLAST RADIUS, MEASURED HERE: 89 symlinked paths at depth <= 3, including
+      every `.claude/skills/*` and `.gemini/skills/*` entry, plus GEMINI.md,
+      CODEX.md and .github/copilot-instructions.md — all symlinks to AGENTS.md.
+      So a recursive search for anything in the agent instructions or the skill
+      runbooks returns nothing and says it succeeded.
+      WHY THIS IS p1 RATHER THAN A TOOLING NOTE. It already produced a UNIVERSAL
+      NEGATIVE that was one message from becoming a release blocker: "NO release
+      path invokes bump-version.sh", asserted from one recursive grep, in a
+      message whose subject told the coordinator to check something before
+      cutting. The release runbook invokes it twice. Had it been relayed instead
+      of checked at the source, the row would have read as a cut blocker to
+      whoever picked up the release in the morning.
+      IT IS THE ABSENT-VERSUS-NEGATIVE TRAP MANUFACTURED BY THE TOOL. A broken
+      search and a clean tree print the same bytes AND the same exit code. There
+      is no stderr to read, no 2>/dev/null hiding anything — macbookair re-ran
+      without the redirect and it changed nothing, because nothing failed. Every
+      other instrument failure this fleet has catalogued announces itself
+      somewhere; this one cannot.
+      RELATED AND NOT A DUPLICATE: the 2026-09-13 portability row already names
+      "a PATH-dependent tool identity (ugrep/rg installed as grep)" as a runtime
+      fact its scan cannot see, and records `find` resolving to bfs 4.1.1 and
+      inverting a test verdict on the same machine in the same minute. That row
+      is about identity changing a result; this one is about identity silently
+      changing SCOPE, with success reported either way.
+    exit_criteria:
+      - 'a recursive search of the skills tree from an agent shell finds a string that is present there, or fails loudly (pre-fix result: FAILS — `grep -rln bump-version.sh .claude/skills/` returns 0 hits and exit 0 on macuahuitl and on macbookair, while -R returns 1)'
+      - 'the remedy does not rely on every agent remembering -R: either the wrapper passes -R, or a recursive search that skipped a symlink says so on stderr, or the symlinks are replaced by real paths'
+      - 'NEGATIVE CONTROL: a genuinely absent string still returns zero — the fix must not make every search report a phantom hit to prove it descended'
+      - 'the fleet is surveyed rather than assumed: each host reports its `grep` identity, since two hosts agreeing is not the fleet and a host with GNU grep needs no change'
+    unscoreable: |
+      remedy-not-chosen: the wrapper is not ours to redefine casually (it exists
+      for other reasons), replacing 89 symlinks has its own blast radius, and a
+      stderr warning depends on ugrep offering one. The measurement is complete
+      and reproducible on two hosts; the remedy is a choice between changing the
+      tool, the tree, or the habit, and only the first two are enforceable.
+    events:
+      - type: filed
+        ts: "2026-09-17T04:20:00Z"
+        agent_id: "linux-macuahuitl-claude-20260917t042000z"
+        host: macuahuitl
+        summary: |-
+          macbookair found the mechanism and corrected my wrong explanation of
+          their own error, which is the harder direction. They said they had
+          recorded it "where I will hit it again" — a note on one host is not a
+          fleet artifact, which this fleet learned tonight from a pgrep note that
+          lived in one place and was rediscovered from scratch. Filed here with
+          the second-host confirmation and the 89-path blast radius.
