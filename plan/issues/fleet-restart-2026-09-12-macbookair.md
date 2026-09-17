@@ -837,3 +837,32 @@ looked"* will eventually be read as the former.
   production site (`e2e-step2-macos.sh`, full-bundle-path match, narrower blast
   radius) and confirmed a wired gate step pins the exact literal the packet
   removes, failing with a message that blames a property which still holds.
+
+- 2026-09-17 — 1231-cbie CLOSED completed (9f864f9e2). The Darwin half: matcher
+  narrowed `-f` -> `-x` across seven sites in two files plus a third under
+  macuahuitl's scope ruling. Three facts a Linux host could not establish:
+  CFBundleExecutable (`tillandsias-tray`) DIFFERS from CFBundleName
+  (`Tillandsias`); the 16-char name does not truncate under `pgrep -x`; and a
+  live `tail -f .../tillandsias-tray.log` is matched by `-f` and spared by `-x`.
+- 2026-09-17 — THREE GAPS IN MY OWN WORK, each found by reading criteria rather
+  than trusting a green. (a) The criteria asked for a FIXTURE; I had proven the
+  behaviour interactively and nearly closed on that. (b) The fixture's first
+  draft truncated the extracted block, eval died on a syntax error, `|| true`
+  swallowed it, and ARM 1 PASSED WITH NOTHING EXECUTED — the negative control
+  caught it. (c) Criterion 2 names "the uninstall OR INSTALL path" and my
+  fixture touched only the uninstaller.
+- 2026-09-17 — Falsifications made DISCRIMINATING, not just red/green: mutating
+  only install-macos.sh turned ARM 3 red while ARM 1 stayed green. An arm that
+  fires on the wrong file's defect teaches nothing about what it tests.
+- 2026-09-17 — TWO fixtures pinned the literal, not the one macuahuitl warned
+  of; ARM 3 of their own newly-landed guard did too, reporting "the tray stop
+  was removed" about a stop still present. Both now assert the property.
+- 2026-09-17 — Third zsh word-splitting bite of the day, this time inside the
+  829-dkuc mutation proof itself: `set -- $pair` does not split in zsh, so `cmp`
+  compared two empty names and reported "changed" unconditionally. The proof
+  that a mutation applied was itself vacuous. Redone with explicit names and a
+  control on cmp.
+- 2026-09-17 — Left UNMEASURED rather than asserted: install-macos.sh's
+  graceful quit names `tillandsias-tray` while CFBundleName is `Tillandsias`.
+  Probing with no tray running returned rc=0 for both names — inconclusive, so
+  it is not claimed broken.
