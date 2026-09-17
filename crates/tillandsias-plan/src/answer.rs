@@ -584,7 +584,7 @@ fn envelope_commit(envelope: &Envelope) -> Option<String> {
         .filter(|c| gitref::looks_like_sha(c))
 }
 
-/// ORDER 1232-wire3 — the cited span AS IT READS AT ITS OWN FRAME, with the
+/// ORDER 1229-2862 (wire 3) — the cited span AS IT READS AT ITS OWN FRAME, with the
 /// frame that produced it.
 ///
 /// The read-side twin of [`frame_holds`], exposed because the GRADER needs the

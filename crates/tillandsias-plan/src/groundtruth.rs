@@ -337,7 +337,7 @@ pub fn grade_envelope(envelope: &Envelope, expect: &Expect, root: &Path) -> Vec<
 /// ledger, no engine. Only the RETURN is richer, which is the 920-pxg6 move
 /// next door: a sibling that carries what the older form had nowhere to put.
 pub fn grade_envelope_audited(envelope: &Envelope, expect: &Expect, root: &Path) -> GradeFindings {
-    // 1232-wire3: one view per graded envelope. GitView::run is fail-soft by
+    // 1229-2862 wire 3: one view per graded envelope. GitView::run is fail-soft by
     // construction — git missing, root not a repository, object unfetched all
     // yield None — so building it can never turn a gradeable case into an error.
     let view = crate::gitref::GitView::new(root);
@@ -403,7 +403,7 @@ pub fn grade_envelope_audited(envelope: &Envelope, expect: &Expect, root: &Path)
                 }
             });
         if !hit {
-            // ORDER 1232-wire3. BEFORE CALLING THIS A FAILURE, ASK THE FRAME.
+            // ORDER 1229-2862 (wire 3). BEFORE CALLING THIS A FAILURE, ASK THE FRAME.
             //
             // `citation_matches` reads the WORKING TREE, so an index published
             // before the code moved fails an expectation that is satisfied at
@@ -535,7 +535,7 @@ fn citation_matches(
 
 /// The needle half of [`citation_matches`], against a span the caller supplies.
 ///
-/// Split out by 1232-wire3 so the working-tree check and the frame check are
+/// Split out by 1229-2862 (wire 3) so the working-tree check and the frame check are
 /// the SAME check over different bytes. Two copies would drift, and the drift
 /// would show up as a frame rescue that accepts something HEAD would refuse.
 fn span_needles(c: &Citation, m: &CitationMatch, span: &str) -> Result<(), String> {
@@ -553,7 +553,7 @@ fn span_needles(c: &Citation, m: &CitationMatch, span: &str) -> Result<(), Strin
     Ok(())
 }
 
-/// ORDER 1232-wire3 — does this citation satisfy `m` AT ITS OWN FRAME?
+/// ORDER 1229-2862 (wire 3) — does this citation satisfy `m` AT ITS OWN FRAME?
 ///
 /// `Ok(frame)` means every needle is present in the span as that commit holds
 /// it: the expectation is satisfied and the READER is standing somewhere else.
@@ -562,7 +562,7 @@ fn span_needles(c: &Citation, m: &CitationMatch, span: &str) -> Result<(), Strin
 /// unanswerable question is not an acquittal. The caller must therefore treat
 /// every `Err` as a genuine failure, which is what keeps this from laundering.
 ///
-/// ORDER 1234. THE RECORD CHECKS RUN HERE TOO, AND LEAVING THEM OUT WAS A
+/// ORDER 1229-2862 (wire 3, follow-up). THE RECORD CHECKS RUN HERE TOO, AND LEAVING THEM OUT WAS A
 /// FALSE GREEN — the defect this function was written to prevent, inside it.
 ///
 /// The first version skipped path/kind/authority "because they are properties
@@ -1621,7 +1621,7 @@ citations_include:
         );
     }
 
-    // ── ORDER 1232-wire3: the EXPECTATION path's frame ───────────────────────
+    // ── ORDER 1229-2862 (wire 3): the EXPECTATION path's frame ───────────────────────
 
     /// An expectation whose span_contains needle sits in the cited span at the
     /// index's commit and NOT at the reader's HEAD. macuahuitl-fedora's
@@ -1715,7 +1715,7 @@ citations_include:
         assert!(!found.failures.is_empty(), "must stay a failure");
     }
 
-    /// The exclude path is a SAFETY property and 1232-wire3 must not touch it:
+    /// The exclude path is a SAFETY property and wire 3 (1229-2862) must not touch it:
     /// "no citation may match this" is what stops a return-everything
     /// regression from satisfying the include list. A frame rescue there would
     /// let a forbidden citation through on the grounds that it is forbidden
@@ -1751,7 +1751,7 @@ citations_include:
         );
     }
 
-    /// ORDER 1234 — THE ARM THAT WAS MISSING, and the one 394d's seeded-wrong-
+    /// ORDER 1229-2862 (wire 3, follow-up) — THE ARM THAT WAS MISSING, and the one 394d's seeded-wrong-
     /// status control was carrying alone.
     ///
     /// A citation whose NEEDLES pass at the frame but whose AUTHORITY is false
