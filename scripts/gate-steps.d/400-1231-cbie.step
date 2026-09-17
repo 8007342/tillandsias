@@ -26,11 +26,13 @@
 # still EXISTS for Darwin — deleting the ladder outright would satisfy arm 1
 # forever and silently strip macOS's uninstall of its tray stop.
 #
-# WHAT THIS DOES NOT COVER, and it is half the order. The `-f` matcher itself
-# is unchanged: on a DARWIN host the ladder still matches on the full command
-# line and can still kill a bystander that merely mentions the literal. 1231-cbie
-# stays open for that half, which needs a Darwin host to measure. This step
-# proves only that the blast radius is now confined to Darwin.
+# WHAT THIS DOES NOT COVER, and it is half the order — NOW COVERED ELSEWHERE.
+# This step proves only that the blast radius is confined to Darwin. The matcher
+# itself was narrowed from `-f` to `-x` on 2026-09-17 after a Darwin host
+# measured it, and the bystander-safety half is guarded by the sibling step
+# 401-1231-cbie-matcher (scripts/test-uninstall-matcher-spares-bystanders.sh).
+# Keep the two separate: this one runs anywhere, that one can only run on Darwin
+# and skips when a live tray is present.
 #
 # NOT IN THE FAST-REFUSAL LANE, deliberately. MEASURED here 2026-09-17:
 # 1.55s / 1.55s / 1.53s over three runs. That lane's admission rule is "median
