@@ -51,6 +51,8 @@ pub mod groundtruth;
 /// `## ACTIVE RELEASE` sections are LWW-REGISTER written only by the operator,
 /// and every other section is base-only. See the module doc for the full
 /// justification and the fail-closed guards.
+/// ORDER 964-tzmp — derived, disposable redb cache of the folded ledger.
+pub mod ledger_cache;
 pub mod loop_status;
 /// Lua runtime for the adversarial decomposition pipeline. Sandboxed,
 /// hot-reloadable, type-checked middle layer between Rust and Shell.
