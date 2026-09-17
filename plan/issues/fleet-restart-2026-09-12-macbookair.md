@@ -794,3 +794,23 @@ looked"* will eventually be read as the former.
   cut that stranded a test plus the rationale explaining why the projection
   takes no seed — criterion 4's actual substance. Moved it rather than
   deleting it.
+
+- 2026-09-17 — 718-jqt5 criterion 3 delivered, and the projection earned its
+  keep on its first real run: `socket-audit-master` (order 151) is the ONLY
+  epic head of fourteen that is not `kind: milestone`. It is ready,
+  `audit+refactor`, has 31 children naming it, heads the highest-residual epic
+  — and the selector structurally cannot offer it, because membership is
+  `release_target` and a head belongs to no epic. Filed 1239-cges.
+- 2026-09-17 — Measured the negative rather than asserting it: 20 seeds x
+  budget 6 offered 14 distinct packets, zero overlap with the forgotten
+  top-12, plus a positive control proving the intersection can find overlap.
+  The selector chose exactly three epics across all 20 seeds.
+- 2026-09-17 — MY FIRST MECHANISM WAS WRONG AND THE FOLD CAUGHT IT. I proposed
+  the rows were unreachable because they were UNGROUPED; 11 of 12 in fact carry
+  a release_target. I had inferred "ungrouped" from `status` printing three
+  fields, after seeing `answer` print six — two commands, two output shapes,
+  and I read the shape as data. Third time in two days I concluded from a
+  tool's rendering rather than from the data it renders.
+- 2026-09-17 — Classes 2 and 3 (rank-4 epic, below-frontier epic; 0 of 20
+  seeds each) are starved BY DESIGN — top-3 entropy is documented — so only
+  class 1 was filed. A measured gap is not automatically a defect.
