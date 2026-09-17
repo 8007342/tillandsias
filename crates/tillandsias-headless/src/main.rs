@@ -18124,12 +18124,11 @@ mod tests {
     ///
     /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
     /// env_guard, consistently — a consistent order cannot deadlock.
-    /// EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
-    /// THIS mutex, taken before env_lock/env_guard — the fake-podman tests
+    /// EVERY writer of TILLANDSIAS_PODMAN_BIN ANYWHERE IN THIS CRATE
+    /// serializes on the canonical `runtime_assets::podman_seam_lock`, taken before env_lock/env_guard — the fake-podman tests
     /// hold it via `podman_seam_lock()` while their TestEnvRestore manages
     /// the value. A writer outside the lock reintroduces the mid-test
     /// var-drop this exists to end.
-    static PODMAN_SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// ORDER 1119-w2rj. `set_current_dir` is PROCESS-GLOBAL and Rust runs tests
     /// as threads in one process, so a test that moves the CWD races every other
@@ -18138,8 +18137,13 @@ mod tests {
     /// directory must hold this and restore the original before releasing it.
     static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// Delegates to the CANONICAL seam lock. This used to be a private
+    /// `PODMAN_SEAM_LOCK` static living in this tests mod, which is why the
+    /// invariant above could say "every writer in this tests mod" and still be
+    /// satisfied while `accel_probe` repointed the same var under a mutex of
+    /// its own. The scope of the guarantee was the bug.
     fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
-        PODMAN_SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+        crate::runtime_assets::podman_seam_lock()
     }
 
     fn podman_false_seam() -> PodmanFalseSeam {
