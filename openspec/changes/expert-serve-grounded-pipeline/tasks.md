@@ -49,9 +49,16 @@
       `tokio::time::timeout` around dispatch.
 - [x] 4.4 Correct `lua_runtime.rs` docs to describe only what exists — no
       re-promised phantom sandbox.
-- [ ] 4.5 mlua portability evidence from the darwin/msys lanes (902-5bf9's
-      blocking criterion) — OPEN: needs those hosts; the Lua surface kept
-      here is deliberately thin enough to replace if evidence fails.
+- [x] 4.5 mlua portability evidence from the darwin/msys lanes (902-5bf9's
+      blocking criterion) — BOTH LANES REPORTED 2026-09-17, 7/7 lua_runtime
+      each, both from a forced `cargo clean -p mlua-sys` rebuild rather than
+      a cached artifact. msys built vendored Lua (32 .c sources ->
+      lua5.4.lib) through Visual Studio 2022 via cc-rs/vswhere, NOT MinGW
+      gcc — MSYS names the shell there, not the C toolchain, so an MSYS
+      host without Visual Studio remains untested. This answers 4.5's
+      portability question only; 902-5bf9 is NOT advanced, as the litmus
+      wiring it gates on does not exist yet (run-litmus-test.sh has no
+      `steps:` and no lua reference).
 
 ## 5. One pipeline, two front-ends (exit criterion 5)
 
