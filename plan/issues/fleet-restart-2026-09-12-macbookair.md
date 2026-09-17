@@ -748,3 +748,26 @@ looked"* will eventually be read as the former.
   ~17 min figure. Took the relay ref the land script names. Measuring the
   branch being pushed would have said "quiet, spend the gate" — the ref that
   matters is the one the refusal names.
+
+- 2026-09-17 — Filed 1238-b825 after the operator found a CalVer build stamping
+  a date four days stale (`56.9.13.1` built on 2026-09-17). The encoding makes
+  the date load-bearing: `bump-version.sh` documents
+  `<years_since_epoch>.<month>.<day>.<build>`, so 56 = 2026 and the version
+  literally names 2026-09-13.
+- 2026-09-17 — I then published a FALSE universal negative in that row — "NO
+  release path invokes bump-version.sh" — and put it in a message telling
+  macuahuitl to check before cutting. The release runbook invokes it twice.
+  Corrected at e756a912c; the released artifact was always fine and the row is
+  not a cut blocker.
+- 2026-09-17 — THE CAUSE IS AN INSTRUMENT DEFECT AND IT IS INVISIBLE: `grep`
+  here wraps ugrep 7.8.4, whose `-r` does not follow symlinks, and the
+  `.claude/skills/` directories ARE symlinks. `grep -rln ... .claude/skills/`
+  returns 0 hits with EXIT CODE 0 — it reports success having descended into
+  nothing. `-R` finds it. There is no error to suppress or un-suppress, so
+  re-running "more carefully" changes nothing. Use `-R` for anything crossing
+  `.claude/`, and run a positive control inside the target tree before trusting
+  a recursive negative.
+- 2026-09-17 — Second time in one evening I matched a PATTERN and concluded
+  about a THING: earlier the `pgrep` for a live tray matched a `--github-login`
+  one-shot sharing the binary path, voiding a 1224-zpek measurement I had
+  already called decisive. Both were caught by someone checking, not by me.
