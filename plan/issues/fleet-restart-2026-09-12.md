@@ -7634,3 +7634,137 @@ between this tree and a cut is the three litmus reds.
 **NO REASSIGNMENT AND NO IDLE HOST.** yoga claimed 1229-2862 by name and
 implemented it within the hour; this host held arms 3 and the relay. Nobody
 reported idle.
+
+## Pass 51
+
+**THE RELEASE GATE RAN, AND EVERY RED IT FOUND WAS TRUE.** ci-full on 5c13d81e7:
+rc=1 in 2293 s, pre-build litmus **361 PASS / 6 FAIL / 121 SKIP**. All four of
+pass 50's blockers were on trunk before it started. What it found instead was
+one defect introduced by tonight's own fix, and five that nobody had looked at.
+
+**A FIX INTRODUCED A FALSE GREEN AND A NEGATIVE CONTROL CAUGHT IT.** Wire 3 —
+the frame rescue for the expectation matcher — graded a **deliberately wrong
+answer GREEN**: a packet claimed `ready` when it is `completed` came back
+`STALE` at rc=0. The step that caught it has been in the harness since 394d and
+had never fired. The cause was four lines: the rescue predicate called only the
+needle check, where the working-tree predicate checks path, kind, **every
+authority key**, and then the needles. **A rescue weaker than the check it
+rescues from is a laundering path**, and this one was written four hours after
+its author split `span_needles` precisely so two reads could not drift — the
+needle half got one predicate over two inputs and the record half kept two
+predicates over one fact. Fixed by `citation_matches_record`, which both paths
+now call. Verified here in both directions: the seeded answer is red again, the
+unseeded set is untouched, and genuinely stale spans still rescue.
+
+**AND THE JUSTIFICATION FOR THE BUG WAS IN ITS OWN DOC COMMENT** — "they are
+properties of the citation record, not of any file, so they cannot be stale."
+True, and answering a question nobody asked: staleness was never the issue,
+STRENGTH was. A correct sentence answering the wrong question is harder to spot
+than a wrong one, which is why it stays in the tree rather than being deleted.
+
+**FIVE CORRECT STEPS KILLED AT THEIR BUDGETS** (1233-jqp4). Every producer exits
+zero: `cycle-metrics.sh` at 29,908 ms against budgets of 10,000-20,000 ms,
+`select-work-batch.sh` at 14,883 ms against 15,000 ms — **117 ms of headroom on
+a twenty-core host**. Not contention, not code.
+
+**I FILED THAT ROW WITH THE WRONG CORPUS AND FALSIFIED IT MYSELF WITHIN THE
+HOUR.** The row named the telemetry log. Measured non-destructively:
+
+```
+115,860 records -> 29,908 ms      40,000 -> 28,927 ms      20,000 -> 28,622 ms
+```
+
+**17% of the corpus returned 4% of the time.** A host that rotated the log would
+have found the gate still red and blamed the measurement. The real cost is the
+plan-ledger fold: the groundtruth grade alone is 18,291 ms of the 29,908, and
+removing the spec index changes it to 18,512 — so the index is not it. The
+claim survives, the subject changes, and the subject decides everything:
+telemetry is a rotatable cache, the ledger is the product and is append-only, so
+"bound the corpus" is unavailable and the fix must be on the reader. **Which is
+already a filed row** — 964-tzmp, p1, ready, unleased, deliverable written,
+parent measurement already met. Handed to yoga this pass as a claim flip on
+trunk; `plan_next` no longer offers it.
+
+**TEN FABRICATED ORDER CITATIONS LANDED, AND NOTHING IN THE GATE LOOKS**
+(1234-zade). `1232-wire3` seven times in the plan crate, bare `ORDER 1233` once
+in the headless crate, `ORDER 1234` twice more. None is a filed packet — while
+`1232-av4p` IS one, about the forge's claims, so a reader following
+`1232-wire3` lands on the wrong row. **`grep -c order scripts/validate-traces.sh`
+is ZERO**: the ghost-trace guard validates `spec:` and never looks at `order:`,
+though the documented annotation carries both and 216 `@trace order:` citations
+exist in this tree. Order UNIQUENESS is gated; order EXISTENCE is not.
+
+**The bare number is the tell and the invented suffix is the danger.** A bare
+`1233` reads as malformed and gets questioned. `1232-wire3` reads as a
+legitimate sub-designation of a real packet and does not.
+
+**I NEARLY COMMITTED THAT ROW'S OWN DEFECT INTO THAT ROW**, drafting its closure
+pinned to a litmus name that does not exist, and caught it by checking the
+litmus names before filing rather than at the gate — the lesson from three hours
+earlier, arriving in time for once.
+
+**THE FORGE SESSION IS ALIVE, LOOPING, AND WORKING BLIND.** A second salvage ref
+47 minutes after the first, superset, same subject: dirty worktree preserved
+before a cycle refusal. It is on a base eight hours stale, and **two of its three
+newest claimed packets are already `completed` on trunk**. The invisible-claim
+problem runs both directions — we could not see its claims until the salvage
+audit surfaced them, and it cannot see our completions. Its eight earlier claims
+were relayed so `plan_next` stops offering finished work; its 441 lines stay
+unaudited and its `implemented` writes stay unrelayed.
+
+**THE GUEST-STAGING TRAP REPRODUCED ON SCHEDULE.** Tonight's ci-full bumped
+VERSION and re-staged, so the mismatch re-armed and would have fired on the next
+rebase. Cleared twice in one night. **It is not a host oddity: it fires on every
+`--ci-full --install` that does not go on to complete a cut**, which is the
+common case for a failed gate.
+
+**I CAUSED A PEER'S RE-GATE TWICE AND THE SECOND TIME I THOUGHT I WAS FOLLOWING
+THE RULE.** My own note says land once per pass and quiesce for a critical
+commit. The second push was plan-only, and I had told myself the fast lane made
+it free. **It does not: the lane's cheapness is about MY gate.** Any push moves
+trunk and costs a peer with a running gate a complete re-gate. The rule is
+"quiesce while a peer's gate is running, whatever lane you are in". The
+consolation is real — that forced re-gate is the only reason the `$HOME` race
+surfaced tonight rather than inside a release gate.
+
+**FOUR WAYS A CORRECT-LOOKING MEASUREMENT WAS ABOUT SOMETHING ELSE**, all in one
+file, in one night, between two agents each checking the other: the pattern
+matched its own commentary; the pattern matched its own definition; the window
+was anchored where the answer was not; the glob named no file. Every one was
+caught by the other host, and three of the four by the person who wrote the
+pattern.
+
+**NO REASSIGNMENT BEYOND 964-tzmp.** yoga reported idle with a clean tree after
+landing four fixes and filing 1235-b5sf; this host held the gate, the index copy
+and the coordination. Nobody else reported.
+
+### Pass 51 — correction to the attribution, appended not edited
+
+Pass 51 ends the four-measurement-classes paragraph with "Every one was caught
+by the other host, and three of the four by the person who wrote the pattern."
+**That sentence contradicts itself and both halves are wrong.** If three of four
+were caught by their author, they were not caught by the other host.
+
+The actual split, checked against what happened rather than remembered:
+
+| class | found by |
+|---|---|
+| the pattern matched its own commentary | yoga, self-caught |
+| the pattern matched its own **definition** | macuahuitl, checking yoga's count |
+| the window was anchored where the answer was not | yoga, self-caught |
+| the glob named no file | yoga, self-caught |
+
+So **three of four were self-caught by the host that made them**, which is the
+more interesting fact and the one the wrong sentence obscured — this did not
+need a reviewer, it needed the author to re-measure. The fourth needed the other
+host, and specifically needed a host whose tree **could not contain** the line
+that made the two counts differ: the +27 offset was invisible from the inside
+and obvious from the outside.
+
+yoga asked for this correction on the grounds that the classes are half mine.
+They are not half mine — one of four is — and the corrected table says so in the
+direction that credits them, not me. **Appended rather than edited**, for the
+same reason every other correction tonight was: if the wrong sentence is quietly
+replaced, nobody learns that a summary written at the end of a long night got
+its own attribution backwards while describing four ways a measurement can be
+about something other than what was asked.
