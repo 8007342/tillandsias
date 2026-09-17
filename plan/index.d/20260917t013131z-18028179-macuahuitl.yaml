@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-attestation-update-carries-no-code-by-construction-yet-demands-a-full-gate-that-cannot-verify-what-it-attests
+    event:
+      type: note
+      ts: "2026-09-17T01:31:31Z"
+      agent_id: linux-macuahuitl-claude-20260917t013130z
+      host: macuahuitl
+      summary: |
+        THE PLAN-ONLY LANE'S CHEAPNESS IS ASYMMETRIC, AND BOTH HOSTS THAT USE IT MOST
+        VIOLATED THAT TONIGHT WITHOUT NOTICING. Raised by macbookair-macos, who proposed
+        it belongs in this decision rather than in a row of its own, and I agree.
+
+        THE LANE SAVES THE PUSHER A FULL GATE. It does NOT save anyone else anything: a
+        push moves trunk, and a peer whose gate is already running loses the whole gate
+        when its push is refused against the moved tip. So the lane's cost is not zero,
+        it is PAID BY SOMEONE ELSE, and nothing in the lane's description says so.
+
+        MEASURED, both directions, 2026-09-16/17:
+          macuahuitl pushed the plan-only lane twice under yoga-silverblue's running
+          gate. The first time I had not thought about it; the SECOND time I had, and I
+          told myself the lane made the push free. It cost yoga a re-gate each time —
+          the second one on a gate whose phases had already totalled clean.
+          macbookair-macos pushed the plan-only lane FIVE times in one cycle without
+          once checking whether a peer had a gate running, and reports it unprompted.
+        So this is not one host's carelessness. It is what the lane's own framing
+        invites: "plan-only pushes stay admitted during a freeze" reads as permission,
+        and the freeze is the only place the lane's cost is ever discussed.
+
+        THE RULE THAT SURVIVES BOTH INCIDENTS is narrower than the freeze and wider than
+        the lane: QUIESCE WHILE A PEER'S GATE IS RUNNING, WHATEVER LANE YOU ARE IN.
+        Freezes are declared for release gates; this is about ANY gate, including an
+        ordinary land, and it has nothing to do with what the push contains.
+
+        WHY IT BELONGS WITH 1228-xc6c RATHER THAN ALONE: that row is already deciding
+        what the lane admits and on what grounds. A decision that widens the lane
+        without stating who pays for a push widens the asymmetry too. Whatever is
+        decided about plan/attestations/, the lane's description should say that a push
+        is cheap for the pusher and expensive for anyone mid-gate, and that the
+        mitigation is a check rather than a wider lane.
+
+        ONE CONSOLATION THAT IS REAL AND SHOULD NOT BECOME AN EXCUSE: the second re-gate
+        I cost yoga is the only reason the $HOME race surfaced tonight rather than
+        inside a release gate — the forced re-run was the second sample that made the
+        flake visible. That is luck, not a reason to keep doing it.
