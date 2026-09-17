@@ -18387,7 +18387,7 @@ mod tests {
     /// mount changed — goes red here.
     #[test]
     fn nix_cache_launch_args_parity_is_two_sided() {
-        // ORDER 1233. THIS TEST READS $HOME TWICE AND COMPARES THE RESULTS.
+        // ORDER 1235-b5sf. THIS TEST READS $HOME TWICE AND COMPARES THE RESULTS.
         //
         // Once below, to build `script_args` from the shell script's variable
         // table, and again inside `build_nix_cache_run_args` (:5503), which

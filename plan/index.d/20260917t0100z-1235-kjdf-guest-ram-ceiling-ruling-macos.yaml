@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-vm-memory-ceiling-is-8gib-regardless-of-host-ram-operator-ruling
+    order: 1235-kjdf
+    status: in_progress
+    kind: change
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm, rust, release]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+    evidence_refs: refs/heads/work/1235-kjdf
+    title: |
+      Guest VM memory is capped at 8 GiB regardless of host RAM, and an 8 GiB host gets a 4 GiB guest — operator ruling 2026-09-16, must ship in the next app update
+    context: |
+      OPERATOR RULING, 2026-09-16, verbatim in substance: "4GB of RAM for the
+      GUEST VM in hosts with 8GB of RAM, and a MAX of 8GB of RAM for hosts with
+      16GB of RAM or more", the maximum holding "regardless of the HOST'S RAM
+      SIZE". Delivery is explicitly requested for the next app update.
+
+      THE STATED REASON IS A PLATFORM ASYMMETRY, NOT A FORGE REQUIREMENT, and
+      it belongs in the ledger because it governs future tuning: macOS cannot
+      be a first-class citizen in the tillandsias approach because
+      Virtualization.framework's memory management is not as transparent as
+      WSL2's, and nowhere near the near-nil overhead of native podman on the
+      Linux kernel. Memory handed to a VZ guest costs its host far more than
+      the same number costs on the other two lanes, so the ceiling is set by
+      what macOS can afford to lose rather than by what a forge could use.
+
+      IMPLEMENTED AS TWO CONSTANTS, NOT A NEW POLICY:
+      GUEST_MAX_MEMORY_BYTES 32 GiB -> 8 GiB, HOST_RESERVED_MEMORY_BYTES
+      6 GiB -> 4 GiB. Both of the operator's numbers then fall out of the
+      existing derivation rather than being special-cased: an 8 GiB host has
+      half = 4 and after-reserve = 4, and every host at or above 16 GiB is
+      bound by the cap.
+
+      THIS PARTIALLY REVERSES 978-juw4 AND THE CODE SAYS SO. That order moved
+      the 8 GiB host (macneo) from a 4 GiB guest down to 2 GiB, arguing the
+      reserve must be authoritative and that 4 GiB on an 8 GiB Mac
+      over-commits the host into swap. The ruling restores 4 GiB, citing later
+      findings and testing on other clients. The tension is recorded in the
+      constant's own doc comment so it is not rediscovered later as an
+      unexplained regression.
+
+      WHAT 978-juw4 KEEPS IS ITS STRUCTURE. The reserve is still authoritative
+      and still never overridden upward; there is no lower clamp, so a host
+      too small to afford a viable guest still reaches the LOUD REFUSAL in
+      start() instead of quietly over-allocating. Only the reserve's VALUE
+      moved. The other reading of the ruling — drop the reserve entirely and
+      size as min(host/2, cap) — produces the same two numbers the operator
+      named but discards that refusal path, so it was NOT taken. A 4 GiB host
+      still refuses; a 6 GiB host still boots at 2 GiB.
+
+      EPHEMERALITY / IDEMPOTENCY: ALREADY SATISFIED, VERIFIED RATHER THAN
+      ASSUMED, NO CODE REQUIRED. The ruling asks that a VM created with
+      different parameters be recreated rather than the operator asked. Guest
+      memory is recomputed on EVERY start: guest_sizing has exactly one
+      production call site (inside start()), its result flows straight into the
+      boot spec's setMemorySize, VzBootConfig carries no Serialize/Deserialize,
+      and VzBootConfig::defaults() is reached only from tests. Nothing about
+      RAM is persisted, so the latest config wins at runtime by construction
+      and there is no stale VM to recreate for this parameter.
+
+      STATE: gated GREEN on macOS and pushed to refs/heads/work/1235-kjdf. It
+      is NOT on osx-next — the land lost the mandated-merge race, and that was
+      settled by arithmetic rather than by retrying: trunk's median
+      inter-commit interval measured 177 s against a multi-minute gate, which
+      matches macneo's 2026-09-16 measurement of ~3 min against a ~17 min gate.
+      A trunk host needs to merge the relay ref for this to ship.
+    exit_criteria:
+      - 'an 8 GiB host yields a 4 GiB guest and every host at or above 16 GiB yields exactly 8 GiB, swept rather than sampled (pre-change result: FAILS — 8 GiB host yielded 2 GiB, a 128 GiB host yielded 32 GiB)'
+      - 'the 8 GiB ceiling holds for arbitrarily large hosts, so the cap is pinned as a universal rather than at one convenient size'
+      - 'a host too small to afford a viable guest still reaches the loud refusal, so lowering the reserve did not silently reinstate over-allocation'
+      - 'the ruling reaches a published app update, which is what the operator actually asked for and is not satisfied by landing on a platform branch'
+    unscoreable: |
+      pinned-by-unit-tests-not-a-litmus: guest_sizing is a pure function of two
+      numbers, so the obligation is fully verifiable in-crate and IS enforced —
+      guest_sizing_obeys_the_2026_09_16_memory_ruling pins the ruling as STATED
+      rather than as computed, sweeps 16 GiB..1 TiB for the universal clause
+      instead of sampling, and asserts the cap is REACHED so an
+      under-allocating policy could not pass. Both constants carry independent
+      mutation controls.
