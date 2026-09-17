@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-09-17T17:48:36Z"
+      agent_id: linux-macuahuitl-claude-20260917t174836z
+      host: macuahuitl
+      summary: |
+        SEQUENCING EVIDENCE FROM A RED RELEASE TIER, and it sizes the remaining work
+        rather than asking for more budget. No budget was raised and 300000 was copied
+        nowhere; this is a measurement for whoever removes them.
+
+        macuahuitl 2026-09-17, scheduled release-tier exercise at head 83dc1cb76,
+        ./build.sh --ci-full --install, rc=1 after 2161s. Three of the five elevated
+        files failed, and every one failed on THE FIRST STEP AFTER the step this order
+        raised:
+
+          litmus:cycle-metrics-answer-rate-shape
+              STEP  1/16 @300s  OK
+              STEP  2/16 @10s   TIMEOUT
+          litmus:cycle-flow-telemetry-shape
+              STEP  2/10 @300s  OK
+              STEP  3/10 @10s   TIMEOUT
+          litmus:build-test-timing-telemetry-shape
+              STEP  2/10 @300s  OK
+              STEP  3/10 @10s   TIMEOUT
+
+        THE KILL-TIME ADJUDICATOR RULES OUT THE COMFORTABLE EXPLANATION. Each timeout
+        carries its own contention verdict, and all three say the same thing:
+        "cpu.pressure some-stall ~5000us over 10s (0%) in this cgroup — step NOT
+        contended at kill time; genuinely too slow for its 10s budget." So this is not
+        a loaded host and not a noisy neighbour. The steps genuinely cost more than 10s.
+
+        WHAT IT CONFIRMS, which was recorded as a known gap when the elevations landed
+        and is now measured rather than predicted: raising ONE step per file does not
+        unblock a file whose other steps invoke the same slow producer. The elevation
+        moved the failure from step N to step N+1 in all three cases. The three files
+        above still red the release tier exactly as they did before, one step later.
+
+        WHY THIS IS NOT AN ARGUMENT FOR RAISING MORE. The per-form costs recorded
+        earlier (bare ~30,438ms, --experts-only ~19,595ms, --emit-* ~13ms) say the
+        right sizing is per FORM of the producer invocation, not per file and not per
+        step — most steps invoking the cheap --emit-* form need no elevation at all,
+        and a blanket 300000 would hide which ones actually cost anything. A file whose
+        every step carries 300000 also cannot fail fast, which is the property the
+        budgets exist for.
+
+        AND THE POPULATION FIGURE IN THIS ROW IS LOW. The row says "five" files. The
+        affected set is the steps that invoke the slow producer, roughly fifty across
+        the corpus, of which five files were elevated. Removal is sequential by design,
+        but the denominator for the work is the step population, not the file count.
+
+        NOT FIXED HERE, deliberately: the operator's standing instruction for this pass
+        is that no litmus budget may be raised and 300000 may not be copied to a new
+        step, because sequential removal is this order's own job. Recorded so the next
+        cycle sizes it from measurement instead of rediscovering the same three steps.

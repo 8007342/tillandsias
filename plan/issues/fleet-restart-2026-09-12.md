@@ -7899,3 +7899,60 @@ last cut's date. 643-64bx's first exit criterion is precisely the decision the
 operator and yoga were reaching for: whether the local build counter should touch
 tracked files at all. Its own note forbids the tempting shortcut: do not fix this
 by relaxing the VERSION guard.
+
+## 2026-09-17T17:50Z macuahuitl — coordination pass
+
+**THE RELEASE TIER IS RED, AND IT HAS NEVER BEEN GREEN ON THIS HOST.** The
+scheduled 890-27mv exercise ran `./build.sh --ci-full --install` at 83dc1cb76:
+rc=1 after 2161s. The freshness verdict BEFORE the run was
+`never:release-tier` and it is still `never:release-tier` AFTER it, because the
+run died in pre-build and a phase-only run is not a release-tier answer
+(1174-6r4k). Thirty-six minutes bought no verdict. That is worth stating
+plainly: the fleet has been treating this host as release-capable and its
+release tier has produced no full-tier answer at all.
+
+**THE FOUR LITMUS FAILURES SPLIT TWO WAYS AND THE SPLIT DECIDES THE REMEDY.**
+Three are the 1236-bmjh elevation being incomplete — each died on the first
+step AFTER the one that order raised, and each carries its own adjudication,
+"step NOT contended at kill time; genuinely too slow for its 10s budget", so
+load is excluded by measurement rather than by assumption. No budget was raised
+and 300000 was copied nowhere; the evidence is recorded on 1236-bmjh for
+whoever sequences the removal. The fourth is unrelated and is covered below.
+
+**AND THE TWO NON-TIMEOUT FAILURES BOTH EVAPORATED — 1242-4x53, filed p1.**
+A rust test (`the_spec_engine_stamps_the_index_frame_not_the_readers_head`,
+328 passed 1 failed in the gate) passes standalone AND passes the full binary
+suite 329/329 at the identical head. The enclave fixture (22 passed 1 failed in
+the gate) passes 23/23 on re-run — and, because a host-regime re-run across a
+regime boundary proves nothing, it was re-run INSIDE the tillandsias-builder
+toolbox the gate actually uses, where it also passes 23/23. The container is
+not the difference; concurrent gate load is the remaining candidate.
+The reason that is p1 rather than an annoyance: a gate that fails for non-code
+reasons and passes on retry launders its own failures, and the correct-looking
+response — run it again — is the exact disposition under which a REAL red gets
+retried away. The defect is not the flake, it is what the flake trains.
+
+**A NUMBER THAT MAY BE MEASURING THE WRONG THING, stated as a hypothesis.**
+Both hosts that paste cycle-metrics report roughly a quarter of all gate runs
+failing: build-check fail_pct=29 over 179 runs here, fail_pct=25 over 77 runs on
+macbookair. If failures of the kind above are a large share of that, the fleet's
+biggest recurring cost is non-determinism rather than broken code. Nobody can
+currently tell, because the timing log records an exit code and not whether a
+failure REPRODUCED — which is 1242-4x53's first exit criterion.
+
+**THE VERSION DEADLOCK REPRODUCED ITSELF LIVE, one hour after being measured.**
+The ci-full bumped VERSION to 56.9.17.1, failed, and `build.sh` then instructed
+reverting the bump because the pre-push guard refuses a VERSION change off
+`main`. The revert was performed after confirming the diff contained zero
+non-version lines. So the tree is back at 56.9.13.1, four days stale, by
+design — which is precisely 643-64bx and precisely what the operator is angry
+about. The operator's launcher was NOT touched: `--install` never ran because
+the gate failed first, so the terminal still reads v56.9.17.1, which is NEWER
+than the tree.
+
+**NOTHING TO RELAY FROM WINDOWS FOR THE SECOND CONSECUTIVE PASS.**
+`windows-next` is 0 ahead and 510 behind — up from 493 earlier today, so trunk
+is moving and that branch is not. It is not diverging; it is abandoned while its
+host is offline, and the next Windows landing pays the whole integrate.
+`osx-next` was 2 ahead with a single merge base and three plan-only fragments,
+all read before relaying.
