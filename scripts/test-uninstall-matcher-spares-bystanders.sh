@@ -111,6 +111,32 @@ else
 fi
 DECOY=""
 
+# ARM 3 — THE INSTALL PATH, because criterion 2 says "the uninstall OR INSTALL
+# path" and a fixture that only exercises the uninstaller proves half of it.
+# install-macos.sh stops a running tray before replacing the bundle, using the
+# same selector. It defines `say`, so stub it rather than extracting around it.
+INSTALL="$ROOT/scripts/install-macos.sh"
+IBLOCK="$(sed -n '/^if pgrep -[fx] tillandsias-tray >\/dev\/null 2>&1; then$/,/^fi$/p' "$INSTALL" | awk '1; /^fi$/{exit}')"
+if [ -z "$IBLOCK" ]; then
+  bad "ARM 3 SETUP: the installer's stop block was not found — locate it by its pgrep guard, do not delete this arm"
+elif ! bash -n <(printf '%s\n' "$IBLOCK") 2>/dev/null; then
+  bad "ARM 3 SETUP: the installer's block does not parse, so executing it would prove nothing"
+else
+  touch "$TMP/tillandsias-tray.log"
+  tail -f "$TMP/tillandsias-tray.log" >/dev/null 2>&1 &
+  BYSTANDER=$!
+  sleep 1
+  say() { :; }
+  eval "$IBLOCK" >/dev/null 2>&1 || true
+  sleep 1
+  if kill -0 "$BYSTANDER" 2>/dev/null; then
+    ok "ARM 3: the INSTALLER's stop also spared a bystander that merely mentions the literal"
+  else
+    bad "ARM 3: the installer's stop killed a bystander — install-macos.sh still matches on the command line"
+  fi
+  kill "$BYSTANDER" 2>/dev/null; BYSTANDER=""
+fi
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
   echo "ok:uninstall-matcher-spares-bystanders"
