@@ -1215,6 +1215,8 @@ run_litmus_test_file() {
     local -a step_success_patterns=()
     local -a step_failure_patterns=()
     local -a unparsed_step_names=()
+    # ORDER 1252-znbn. critical_path items opened by a key other than `step:`.
+    local -a malformed_items=()
     local success_criteria=()
     local failure_criteria=()
 
@@ -1276,6 +1278,30 @@ run_litmus_test_file() {
                 current_step_expected=""
                 current_step_success_pattern=""
                 current_step_failure_pattern=""
+            elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*): ]]; then
+                # ORDER 1252-znbn. A critical_path ITEM may only be opened by
+                # `- step: "..."`. An item opened by ANY other key — `- name:`
+                # is the measured case — does not match the branch above, falls
+                # through this chain, and its `command:`/`timeout_ms:`/... keys
+                # OVERWRITE the step already in progress. The item MERGES
+                # BACKWARDS into its predecessor, later keys win, and the file
+                # yields one unlabelled step that can never pass.
+                #
+                # NOTHING CAUGHT THIS BEFORE. The YAML is well-formed, so
+                # ./build.sh --check's metadata validator passes the file, and
+                # the runner reported a step count that silently omitted the
+                # merged item. A lost step and a step that was never written
+                # produced identical output.
+                #
+                # `- step:` with an UNQUOTED value lands here too, by the same
+                # fall-through and with the same silence, so it is refused here
+                # rather than being allowed to merge.
+                #
+                # SAFE BY MEASUREMENT, not by assumption: across the 435 files
+                # in openspec/litmus-tests, all 2514 critical_path items are
+                # opened by `- step:` and all 2514 of their names are
+                # double-quoted, so this refusal cannot redden the corpus.
+                malformed_items+=("${BASH_REMATCH[1]}|${line}")
             elif [[ "$line" =~ ^[[:space:]]*command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between
@@ -1333,6 +1359,25 @@ run_litmus_test_file() {
     # commands post-slice-2, so an unparseable step is authoring drift, not
     # legacy debt — silently thinner coverage was the original dead-check
     # vector (31 steps skipped since authoring before the rewrite).
+    # ORDER 1252-znbn. Reported BEFORE the checks below: a merged item makes
+    # the step count itself wrong, so every later verdict is over the wrong set.
+    if [[ "${#malformed_items[@]}" -gt 0 ]]; then
+        printf '  %b[PARSE ERROR]%b %s: critical_path item not opened by `- step: "..."`\n' "${RED}" "${NC}" "$test_file" >&2
+        local mi mkey mline
+        for mi in "${malformed_items[@]}"; do
+            mkey="${mi%%|*}"
+            mline="$(printf '%s' "${mi#*|}" | sed 's/^[[:space:]]*//')"
+            if [[ "$mkey" == "step" ]]; then
+                printf '%s\n' "         ${mline}" >&2
+                printf '%s\n' "         a step name must be a double-quoted scalar: - step: \"...\"" >&2
+            else
+                printf '%s\n' "         ${mline}" >&2
+                printf '%s\n' "         only '- step:' opens an item; '- ${mkey}:' MERGES into the previous step and overwrites its keys" >&2
+            fi
+        done
+        return 1
+    fi
+
     if [[ "${#unparsed_step_names[@]}" -gt 0 ]]; then
         printf '  %b[PARSE FAIL]%b %s\n' "${RED}" "${NC}" "$test_file" >&2
         for us in "${unparsed_step_names[@]}"; do
