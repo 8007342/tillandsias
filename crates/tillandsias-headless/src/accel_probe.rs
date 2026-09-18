@@ -6696,7 +6696,7 @@ mod tests {
         let llvmpipe = vk_device(4, 13, "llvmpipe (LLVM 22.1.8, 256 bits)");
 
         // ARM 1: lavapipe alone is a refusal, not a GPU.
-        match wsl2_vulkan_verdict_from(Some(&[llvmpipe.clone()]), true, 12) {
+        match wsl2_vulkan_verdict_from(Some(std::slice::from_ref(&llvmpipe)), true, 12) {
             Wsl2VulkanVerdict::Unusable { reason } => assert!(
                 reason.contains("software-rasterizer"),
                 "the refusal must name the rasterizer, not a missing ICD: {reason}"
