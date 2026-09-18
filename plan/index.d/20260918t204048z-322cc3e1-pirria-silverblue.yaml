@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-18T20:40:48Z"
+      agent_id: linux-pirria-claude-20260918t204047z
+      host: pirria-silverblue
+      summary: |
+        REVERTED ON TRUNK, 2026-09-18 — and the reason matters more than the revert.
+
+        `.gemini/skills` is back to its sixteen per-skill symlinks on linux-next. The
+        directory symlink red `./build.sh --check` FLEET-WIDE:
+
+          violation:missing-from-runtime:.gemini/skills/advance-work-from-plan   rc=1
+
+        `check-skills-single-source.sh` Direction 2 requires each canonical skill to be
+        individually tracked at mode 120000 under `.gemini/skills/<skill>`. A directory
+        symlink tracks only `.gemini/skills` itself, so the first skill trips it. Filed
+        as 1256-f7td: the check asserts the MECHANISM (per-skill symlinks) where the
+        invariant it protects is the OUTPUT (each canonical skill reachable, no second
+        source), and a directory symlink satisfies the output.
+
+        THE MEASUREMENT IS UNAFFECTED. `-r` still does not descend into a symlink met
+        during the walk, on ugrep 7.8.4 and GNU grep 3.12 alike; exit criterion 4's
+        premise is still false; the remedy shape is still right. What changed is that it
+        cannot land until 1256-f7td widens Direction 2 — whose owned file is in
+        `scripts/`, which the release freeze holds. So this row is now blocked on TWO
+        things: 1253-nmmy (the 44 real openspec files in the other four trees) and
+        1256-f7td (the gate check), and both are post-freeze work.
+
+        HOW THIS REACHED ORIGIN AT ALL, recorded because it is the reusable part: two
+        guard gaps compounded. The author's host had NO git hooks (1255-s4im), so
+        nothing refused the push locally; and the check that would have refused it was
+        asserting the wrong property. The host that could not be refused was the one
+        that introduced the change, and the host that caught it (yoga) was blocked by it.
+        A guard gap on the AUTHOR'S side and a mis-specified guard on the FLEET'S side
+        is the combination that lets a fleet-blocking change land, and neither alone
+        would have.
+
+        Full evidence, including macuahuitl's contaminated-vs-pure control regime,
+        stays in cheatsheets/tooling/recursive-grep-symlinks.md. That sheet is the
+        durable artifact of this row; the tree change is not.

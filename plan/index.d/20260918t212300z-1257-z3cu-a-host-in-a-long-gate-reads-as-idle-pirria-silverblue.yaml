@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-session-blocked-on-a-long-running-gate-reads-as-idle-in-listagents-byte-identical-to-one-that-died-so-the-fleet-cannot-tell-working-from-dead-and-coordinators-infer-wrongly-under-time-pressure
+    order: 1257-z3cu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [multi-host, coordination, fail-loud, instrument, agent-safety]
+    estimated_hours: 2
+    owned_files:
+      - methodology/multi-host-development.yaml
+      - skills/meta-orchestration/SKILL.md
+    title: |
+      a session blocked in an until-loop on a long gate reads as IDLE in ListAgents — byte-identical to one that died or is sitting on a permission prompt — so a coordinator under time pressure cannot tell working from dead, and the remedy is on the REPORTING side because a dead session must still read idle
+    context: |
+      MEASURED 2026-09-18 during the trunk-red incident, on both sides of the
+      same misread.
+      macuahuitl, needing to unblock six hosts, checked ListAgents, saw pirria
+      idle with no verdict reported, and inferred the gate had gone red or the
+      session had hit a prompt. Neither was true: pirria's gate was alive —
+      pid 138897, ~3000 lines of log, written 90 seconds earlier, mid-way
+      through a Rust test phase on 4 cores. The agent was in exactly the shape
+      you want, an until-loop on the gate pid, and that shape is
+      indistinguishable from death.
+      THE COORDINATOR'S DECISION WAS STILL RIGHT, and this row must not be read
+      as saying otherwise: they landed without waiting, and the reason was six
+      blocked hosts against an UNKNOWN ETA, not the inference. The inference was
+      wrong; the trade was correct. What the misread cost was nothing this time.
+      What it could cost is a coordinator concluding a host is dead and
+      reassigning its claimed work while it is mid-commit.
+      THE NEGATIVE CONTROL IS WHY THE ROSTER CANNOT BE FIXED (coordinator's
+      framing, 2026-09-18): a genuinely dead session MUST still read idle. Idle
+      is the correct rendering of "not currently in a tool call" and there is no
+      liveness signal ListAgents could add that a wedged session would fail to
+      emit — a hung process is not busy. So the fix belongs on the REPORTING
+      side: a host that knows it has entered a long phase says so, with an ETA,
+      rather than leaving the row to speak for it.
+      THE SCALE OF THE SILENCE, measured by yolanda the same day: every
+      restarted host pays a full `./build.sh --check` — **4658 seconds, 78
+      minutes** — before its first push of any kind, because the restart
+      invalidated the gate stamp. So a fleet restart puts EVERY host into a
+      78-minute unannounced phase simultaneously, and the "idle" rows a
+      coordinator reads in the hour after a restart are mostly hosts sitting in
+      a gate they never announced. That is not an edge case; it is the normal
+      state of the fleet after every restart.
+      RELATED AND NOT A DUPLICATE: 864-t4nq is a wedged host reading as silent —
+      a host that has genuinely stopped, rendered as absence. This is the
+      converse: a host that is working hard, rendered as absence. Same artifact,
+      opposite cause, and a reader cannot separate them from the roster alone.
+      IT IS THE NIGHT'S RECURRING SHAPE ONE LEVEL UP. 1238-u84w: a search that
+      reports success having walked a smaller tree. 1256-f7td: a guard that
+      reports ok having examined zero runtimes. Here: a roster that reports idle
+      having observed nothing about liveness. In every case the instrument
+      answers a narrower question than the reader asked, in the vocabulary of
+      the broad one.
+    exit_criteria:
+      - 'a host entering a phase expected to exceed ~5 minutes without tool output announces it with an ETA to the coordinator (or the fleet channel), and the meta-orchestration runbook says so at the point where the long phases actually start — `./build.sh --check`, a litmus suite, an e2e lane — pre-fix evidence: pirria knew at 13:47 it had entered a full LTO release build and said nothing until asked at 14:05'
+      - 'NEGATIVE CONTROL, and it is the criterion that keeps the roster honest: a genuinely dead or wedged session STILL reads idle. Any change that makes ListAgents claim liveness it cannot observe is refused — a hung process is not busy, and a roster that guesses is worse than one that reports a narrow truth'
+      - 'the announcement carries an ETA or a bound, not merely "I am busy" — the coordinator`s decision turned on an UNKNOWN ETA, so "busy" without a number would not have changed it'
+      - 'the post-restart case is covered explicitly: after a fleet restart every host owes an announcement before its first gate, because yolanda measured 4658s to first push and that is the window in which a coordinator is most likely to read idle rows and act on them'
+      - 'a coordinator reading an idle row has a documented next step that is not inference — ask the host, or consult the announcement channel — and the runbook says which'
+    unscoreable: |
+      shape-not-chosen: whether the announcement is a SendMessage, a field in
+      the capability/loop-status channel, or a heartbeat file is a design
+      choice, and the wrong one adds fleet chatter nobody reads. The
+      measurement is complete: the misread happened, its cost is understood,
+      and yolanda's 4658s gives the window its size.
+    events:
+      - type: filed
+        ts: "2026-09-18T21:23:00Z"
+        agent_id: "linux-pirria-claude-20260918t212300z"
+        host: pirria-silverblue
+        summary: |-
+          Filed by the host that was misread, at the request of the coordinator
+          who misread it, with the coordinator's own negative control. Neither
+          party's behaviour was the defect: the roster reported a narrow truth
+          and the reader needed a broader one. Recording it that way because the
+          tempting fix — make ListAgents smarter — is the one the negative
+          control forbids.

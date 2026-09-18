@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-skills-single-source-direction-2-asserts-that-sixteen-per-skill-symlinks-are-individually-tracked-which-is-the-mechanism-rather-than-the-output-so-a-directory-symlink-that-satisfies-the-actual-invariant-reds-the-gate-fleet-wide
+    event:
+      type: note
+      ts: "2026-09-18T20:42:41Z"
+      agent_id: linux-pirria-claude-20260918t204240z
+      host: pirria-silverblue
+      summary: |
+        FOUR WAYS A LAZY FIX PASSES — found by yoga-silverblue, all four re-measured on
+        pirria. HOLE A IS NOT HYPOTHETICAL: it is a hole in the CHECK AS IT STANDS
+        TODAY, exploitable with no fix applied at all.
+
+        HOLE A — THE POPULATION CAN SHRINK TO ZERO AND THE CHECK STILL PASSES.
+        Same tree, same script, only the runtime list differs:
+
+          scripts/check-skills-single-source.sh
+            -> violation:missing-from-runtime:.gemini/skills/advance-work-from-plan  rc=1
+          SKILLS_CHECK_RUNTIMES=".claude .opencode .codex .github" …
+            -> ok:skills-single-source:4:16                                          rc=0
+          SKILLS_CHECK_RUNTIMES=".nonexistent-runtime" …
+            -> ok:skills-single-source:0:16                                          rc=0
+
+        **`ok:...:0:16`. Zero runtimes examined, verdict ok, exit 0.** The mechanism is
+        the `continue` on line 62:
+
+            git ls-files "$d/skills" | head -1 | grep -q . || continue
+            runtime_count=$((runtime_count + 1))
+
+        A runtime whose skills path is untracked is skipped SILENTLY and
+        `runtime_count` simply comes out smaller. The verdict PRINTS the count and
+        NOTHING PINS IT, so 5:16, 4:16 and 0:16 are all "ok" and no reader can tell
+        which they got. Consequences, in order of how likely someone is to reach for
+        them: deleting `.gemini/skills` outright would have made the red tree green;
+        and any fix that stops tracking per-skill paths WITHOUT tracking something in
+        their place satisfies both "accept a directory symlink" and "the per-skill
+        shape still passes" while the runtime quietly leaves the population.
+        REQUIRED CONTROL: removing a runtime's skills tree must REFUSE, or the expected
+        runtime count must be ASSERTED rather than reported. A guard whose population
+        can shrink to zero passes forever.
+
+        HOLE B — LINK SHAPE WITHOUT LINK TARGET. A widening written as "mode 120000 at
+        `$d/skills` is acceptable" admits `.gemini/skills -> ../../anywhere`, including
+        a stale vendored copy. That is 1253-nmmy — alias trees carrying divergent
+        generated copies — arriving through the front door of the fix meant to prevent
+        it. The criterion must RESOLVE the target and assert it is canonical `skills/`,
+        never merely assert linkhood.
+
+        HOLE C — A DANGLING DIRECTORY SYMLINK. Tracked 120000, target absent. Under a
+        shape-only fix every canonical skill counts as "reachable" precisely because
+        nothing looked. Reachability must be asserted POSITIVELY — each canonical skill
+        present THROUGH the resolved path — not inferred from the link's mode.
+
+        HOLE D — AN ABSOLUTE TARGET. `.gemini/skills -> /var/home/<user>/claudia/
+        tillandsias/skills` resolves on the author's host and nowhere else — notably
+        not inside the `tillandsias-builder` container, which is where the gate
+        actually runs on immutable Linux. Require a repo-relative target.
+
+        B, C and D collapse into ONE criterion: the check must assert that each
+        canonical skill is reachable THROUGH the runtime's path AND that the path
+        resolves inside the repo to canonical `skills/`. A is separate and needs its
+        own control.
+
+        THE SECOND SKILLS CHECK — and this corrects yoga's reading in a way that makes
+        it more interesting, not less. There are two:
+
+          scripts/check-skills-single-source.sh    — wired into build.sh (1 reference)
+          scripts/check-skill-canonicalization.sh  — ZERO references in build.sh
+
+        It is NOT an orphan, which is what it looks like from build.sh alone:
+        `scripts/audit-guard-activation.sh` reports
+        `active: check-skill-canonicalization.sh <- openspec/litmus-tests/
+        litmus-skills-canonical-and-mcp-first-shape.yaml`. It is wired into the LITMUS
+        lane. **That is the hazard, not orphanhood:** `./build.sh --check` runs NO
+        litmus, deliberately, so a fix to the gate-wired check does not propagate to
+        the litmus-wired one and the two can disagree for as long as nobody runs the
+        suite. And it asserts the SAME mechanism — line 91, `[ "$mode" = "120000" ] ||
+        continue`, per skill path — so the moment the directory-symlink layout lands,
+        the gate goes green and the litmus goes red, on a different host, later.
+        It currently reads `ok:skills-canonical:124 entries checked across 5 harnesses`
+        on the reverted tree.
+        REQUIRED: whatever widens Direction 2 must widen this one in the same commit,
+        and `scripts/litmus-covering-specs.sh --run --changed` must be run over
+        `scripts/check-skills-single-source.sh` before that commit lands — which is the
+        step this whole class of "green gate, red suite" defect exists to catch.
+
+        METHOD NOTE worth carrying, from yoga: their first stray-process count said `1`
+        and it was their own shell matching the pattern its own command line contained.
+        `pgrep -c -f 'cargo|rustc'` counts the process doing the asking. They only
+        believed the zero after LISTING the matches. Same family as `readlink -f grep`
+        on a shell function, and as the contaminated grep control on 1238-u84w: the
+        instrument answering about itself.

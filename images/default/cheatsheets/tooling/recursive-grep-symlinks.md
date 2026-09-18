@@ -113,7 +113,7 @@ after:  .gemini/skills -> ../skills                                             
 `.claude/skills -> ../skills` listed all 16 project skills, so collapsing the
 per-skill links does not cost skill discovery.
 
-### Only `.gemini/` could take it. Read this before you "finish the job".
+### Only `.gemini/` could take it — and it LANDED. Read this before you "finish the job".
 
 The five alias trees are **not** pure alias trees, and finding that out cost a
 `git reset` here. Four of them carry **real, non-symlink content** mixed in with
@@ -170,6 +170,70 @@ GEMINI.md -> AGENTS.md    CODEX.md -> AGENTS.md    .github/copilot-instructions.
 These are symlinks to a **file**, never traversed by a directory walk, and their
 real target `AGENTS.md` sits at the repo root where any `grep -r .` reaches it.
 Naming one directly (`grep PAT GEMINI.md`) opens it normally.
+
+## A confident zero: the walk is short, or the population is short
+
+**A search over a population that cannot contain the answer returns zero, and
+zero reads as absence.** (yoga-silverblue, 2026-09-18, after getting one wrong.)
+
+Everything else on this page is one instance of that. There are two ways the
+thing you searched fails to be the thing you meant to search, and they produce
+an identical artifact — a clean, confident, exit-0 nothing:
+
+| | what goes short | example |
+|---|---|---|
+| **the WALK** | `-r` skips a symlinked directory it meets | `grep -rln PAT .claude/skills/` |
+| **the POPULATION** | a hand-picked path list omits a tree | `grep -rln PAT scripts/ build.sh` |
+
+Neither announces what it did not look at.
+
+**THE WORKED EXAMPLE, with a real wrong answer in it.** On 2026-09-18 a host
+reported that `scripts/check-skill-canonicalization.sh` was an orphan guard —
+"referenced by `build.sh` zero times, appears only in `check-bash-dialect.sh`
+and its own test" — and said so to two other hosts with confidence. It is not an
+orphan. It is bound by
+`openspec/litmus-tests/litmus-skills-canonical-and-mcp-first-shape.yaml`, whose
+arms run it and assert its verdict. The grep was over `scripts/` and `build.sh`
+only; `openspec/` was never in the search. **The matcher worked perfectly. The
+population was wrong.**
+
+### The rule that makes it falsifiable
+
+Write **`0 hits across <paths>`**, never `0 hits`. The first can be checked by a
+reader; the second cannot. If you are about to report that something is
+unreferenced, unused, or absent, the sentence must carry where you looked.
+
+Before claiming anything is unreferenced, search the WHOLE tree once:
+
+```bash
+find -L . -path ./.git -prune -o -type f -print | xargs grep -l 'needle'
+```
+
+**`find -L` is not incidental here.** It is the one invocation that survives
+BOTH failure modes: it enumerates the whole tree rather than a guessed subset,
+and `-L` follows the symlinked directories that `grep -r` would skip. A reader
+who fixes only the population problem by reaching for `grep -r` walks straight
+into the walk problem, and a reader who fixes only the walk problem with `-R`
+still greps the three directories they expected the answer to be in.
+
+### Why this pairs with the contaminated control above
+
+All three failures on this page are the same shape wearing different clothes —
+**an instrument answering a narrower question than the one you asked, and
+reporting the narrow answer in the vocabulary of the broad one:**
+
+- a contaminated probe word measures a different regime than the one you meant;
+- `-r` walks a smaller tree than the one you named;
+- a path list searches a smaller corpus than the one you meant.
+
+A fourth, from the same night, for the shape rather than the tool: a host
+counted stray processes with `pgrep -c -f 'cargo|rustc'` and got `1` — its own
+shell, matching the pattern its command line contained. The instrument counted
+the process doing the asking. It believed the zero only after LISTING the
+matches instead of counting them.
+
+**So: list what matched, name what you searched, and be suspicious of any zero
+you did not have to work for.**
 
 ## Common pitfalls
 
