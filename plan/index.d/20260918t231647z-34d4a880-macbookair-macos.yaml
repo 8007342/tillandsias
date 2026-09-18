@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: progress
+      ts: "2026-09-18T23:16:47Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        PART (a) MEASURED — the populated-cache split, taken through the product's own path, not a synthetic. tlatoanis-macbook-air 2026-09-18, app bundle 56.9.13.1, live VZ guest, image localhost/tillandsias-inference:v56.9.13.1, the exact build_inference_run_args flag set, model pulled via the engine's own /api/pull. THE PRECONDITION WAS VERIFIED, NOT ASSUMED: baseline models=0 in-guest before the run, so this is a genuine empty-to-populated transition and not a re-read of a warm cache. THE SPLIT: models total 437M — blobs 380M (qwen2.5:0.5b, 397,821,319 B by the API's own size field), manifests 4.0K, .tools engine payload 58M; /var/lib/containers 7.5G. So IMAGES TO MODELS IS ROUGHLY 17:1, and the virtiofs share protects the 437M while the 7.5G of container images stays inside rootfs.img and is still lost on every VM-directory deletion. That ratio is the answer to the row's question and it points somewhere the row did not: the share was the right fix for the model half, and the model half is the SMALL half. LIFECYCLE NOTE CARRIED FORWARD from the 2026-09-14 event and now confirmed from the other side: --init populates images only (that reading was 6.1G images / 0 models); models arrive at first inference run; the 437M/7.5G above is the steady state after both. Images have grown 6.1G -> 7.5G between 09-14 and 09-18. A CORRECTION THE ROW SHOULD NOT SWALLOW WHOLE, because I measured disk and the row states download: the context block's re-download floor credits the ollama arm64 engine at 1.44 GiB (content-length of v0.32.14/ollama-linux-arm64.tar.zst), but the engine payload ON DISK is 58M, because the entrypoint now installs the pinned 'core' backend set (v0.34.0, 23M libs) rather than the whole tarball. Those are different quantities and I did NOT measure bytes transferred, so I am not claiming the ~2.47 GB floor is wrong — I am flagging that its largest term is a 2026-08 figure for a different engine version and delivery shape, and that whoever cites the floor next should re-measure the transfer rather than inherit it. ONE THING OBSERVED AND NOT EXPLAINED, recorded rather than smoothed over: /var/lib/containers went 7.1G -> 7.5G across this run, while the 380M model was written to the SHARE, not to container storage. Candidates are the inference container's writable layer and logs, but I did not isolate it and am not asserting a cause.
