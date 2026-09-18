@@ -109,6 +109,21 @@ if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR:-/dev/null}" ]]; then
 fi
 
 readonly REAL_PODMAN_BIN="$(command -v podman 2>/dev/null || true)"
+# PUBLISH THE REAL PODMAN TO STEP CHILDREN (release gate ci4, 2026-09-18).
+# litmus-inference-deferred-model-pulls and litmus-inference-model-warm-timing
+# bypass the shim below on purpose — they drive the real container lane — and
+# read `${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}`. This runner already
+# resolves the real binary one line up and never exported it, so inside the
+# tillandsias-builder toolbox (where ./build.sh --ci-full runs) the default
+# fired and both steps died with "/usr/bin/podman: No such file or directory":
+# in the toolbox podman is /usr/local/bin/podman and /usr/bin/podman is absent.
+# Same shape as the vault SELinux probe fixed the same night — a host path
+# carried into a namespace where it does not exist. An operator's explicit
+# TILLANDSIAS_REAL_PODMAN still wins; this only seats the resolved path when
+# nobody has.
+if [[ -n "$REAL_PODMAN_BIN" ]]; then
+    export TILLANDSIAS_REAL_PODMAN="${TILLANDSIAS_REAL_PODMAN:-$REAL_PODMAN_BIN}"
+fi
 mkdir -p "$LITMUS_RUNTIME_DIR/bin" "$LITMUS_PODMAN_ROOT" "$LITMUS_PODMAN_RUNROOT" "$LITMUS_PODMAN_TMPDIR"
 chmod 700 "$LITMUS_PODMAN_ROOT" "$LITMUS_PODMAN_RUNROOT" "$LITMUS_PODMAN_TMPDIR"
 cat >"$LITMUS_RUNTIME_DIR/bin/podman" <<EOF

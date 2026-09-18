@@ -196,8 +196,6 @@ features:
 # as STALE BASELINE, so this list only shrinks.
 surface_baseline:
   - "menu.status"
-  - "menu.local-projects"
-  - "menu.local-projects.empty"
   - "menu.cloud-projects"
   - "menu.cloud-projects.empty"
   - "menu.cloud-projects.loading"
