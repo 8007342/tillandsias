@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-live-freeze-fixture-arm-3b-reds-on-a-macos-host-so-trunk-refuses-every-macos-land-again
+    field: status
+    value: completed
+    ts: "2026-09-18T05:51:16Z"
+    host: macos
+
+events:
+  - packet_id: the-live-freeze-fixture-arm-3b-reds-on-a-macos-host-so-trunk-refuses-every-macos-land-again
+    event:
+      type: completed
+      ts: "2026-09-18T05:51:16Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: MEASURED on tlatoanis-macbook-air 2026-09-18 under macuahuitl's LIVE freeze: scripts/test-pre-push-honours-a-live-freeze.sh -> rc=0, PASS 19/19, ZERO skips (grep -ic 'skip|could not|cannot|unavailable' = 0), where 2026-09-15 gave rc=1 / 18-19 at ARM 3b. My closure's TEETH clause verified, not just the rc: ARM 3a still writes a fresh stamp and ARM 3b still 'rm -f's the gate stamp, so with-stamp and no-stamp stay distinguishable; the fix resolves the checkout's own plan binary via plan-binary-probe.sh and exports TILLANDSIAS_PLAN_BIN, and its comment says to run the arm and FAIL rather than skip when unresolvable. Closure says 'at origin/linux-next': test-pre-push-honours-a-live-freeze.sh, hooks/pre-push-local-gate.sh and plan-binary-probe.sh are all byte-identical to origin/linux-next (git hash-object == git rev-parse), and the fixture is self-contained in a mktemp scratch with its own origin, so this run IS the trunk test.
+  - packet_id: the-live-freeze-fixture-arm-3b-reds-on-a-macos-host-so-trunk-refuses-every-macos-land-again
+    event:
+      type: note
+      ts: "2026-09-18T05:51:16Z"
+      host: macos
+      summary: |-
+        the named hypothesis (attempt_plan_only_lane needs a resolvable validator) was correct and has been fixed upstream; re-measured green on the filing host

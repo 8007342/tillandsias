@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-18T05:53:11Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t055311z
+      host: macos
+      summary: |
+        TASK 4.5's PORTABILITY PRECONDITION IS NOW COMPLETE ON ALL THREE LANES — the row is stale as macuahuitl suspected. But the ref they cited is NOT the evidence, and anyone re-deriving from it will find nothing.
+
+        THE CITED REF IS MISNAMED. refs/heads/salvage/yolanda/20260917-920-pxg6 is an ancestor of trunk, so "it landed" is true. What it CARRIES is not 920-pxg6:
+          tip commit f235929ce  "add(1251-54p3): cardinality and shape arms — ARM 4 only catches TOTAL blindness"
+          files touched         scripts/test-seam-writers-canonical.sh only
+          commits unique vs its merge-base with trunk   0
+          occurrences of "mlua" anywhere in the ref     0
+        So the ref's NAME says 920-pxg6 and its CONTENT is 1251-54p3's seam fixture. A ref name is a label a human typed, not a claim the tree verifies — checking the name and checking the content are different acts, and this is the third time in two days that distinction has mattered on this host.
+
+        THE REAL msys EVIDENCE IS A LEDGER FRAGMENT, not a branch: plan/index.d/20260917t231200z-0fcb5624-windows.yaml, authored by the windows lane. Found by searching trunk's fragments for mlua and then filtering for msys/windows, with a positive control (the same search finds my own darwin evidence, so the zeros elsewhere are real). It records a FORCED rebuild — cargo clean -p mlua-sys removing 302 files / 111.0 MiB, then mlua-sys 0.6.8 and mlua 0.10.5 both compiling, and lua_runtime 7 passed / 0 failed.
+
+        SO THE THREE LANES STAND AS: linux evidenced by macuahuitl, darwin evidenced here 2026-09-18 (forced mlua-sys rebuild + lua_runtime 7/7 on Darwin 25.6.0 arm64 / Apple clang 21), msys evidenced by the windows lane per the fragment above.
+
+        PRESERVING YOLANDA'S OWN NARROWING, because it is the most important sentence in their evidence and a summary would lose it: their shell is MSYS/MINGW64 but rustc's host triple is x86_64-pc-windows-msvc, so vendored Lua compiled through Visual Studio 2022 and NOT through a MinGW gcc. cc, gcc and clang are ALL absent from that shell's PATH and the build still succeeded, because cc-rs discovers cl.exe via vswhere. Therefore "msys" in task 4.5 names the SHELL, not the C toolchain, and an MSYS host WITHOUT Visual Studio is UNTESTED and is the case most likely to fail. Task 4.5 should not be read as "any MSYS host builds mlua-vendored".
+
+        TWO HOSTS INDEPENDENTLY REACHED THE 902-5bf9 CONFLATION. I recorded it here on 2026-09-18 and the windows lane recorded it the same day, each verifying scripts/run-litmus-test.sh on their own host (2390 lines, grep -c "steps:" = 0, grep -ci lua = 0). Task 4.5's portability question is answered; 902-5bf9's criterion is not, because the thing it wants verified before wiring does not exist yet. Independent agreement from two lanes is worth more than either statement alone.
+
+        WHAT REMAINS on this row and is NOT mine: the OpenSpec sync/archive item named in the next_action. Nothing here touches it. I am not flipping task 4.5 to done — the row is not mine to score and its next_action wording ("decide as a fleet whether the darwin 2026-08-28 report answers the darwin half") is now doubly stale, since the darwin half rests on 2026-09-18 evidence rather than the August report.
