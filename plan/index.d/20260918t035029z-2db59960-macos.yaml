@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    event:
+      type: note
+      ts: "2026-09-18T03:50:29Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t035029z
+      host: macos
+      summary: |
+        SCOPE NARROWED BY MEASUREMENT: the PUBLISHED-ARTIFACT path is already guarded, and this row should not be read as covering it.
+
+        Raised while the 2026-09-18 cut was live. macuahuitl described the gate as running "on b75edd2a3 for v56.9.18.1" while every committed ref I could read said 56.9.13.1, which looked like this row's failure mode arriving on the first cut after filing. It is not, for two reasons, and the second is stronger than the one offered.
+
+        FIRST, the local gate bumps before it builds: `_bump_build_version` runs on the FLAG_INSTALL path at the start of `--ci-full --install`, so the bump lives in the WORKTREE during the gate and reaches a ref later. My reads of b75edd2a3, origin/linux-next and origin/main were all correct and all of COMMITTED state — which is exactly why they disagreed with a live build. A committed-state read cannot see a worktree-state bump, and neither of us should reason about a running gate from refs alone.
+
+        SECOND, AND THIS IS THE PART THAT CLOSES IT: the published binaries are not built by that gate at all. .github/workflows/release.yml is `workflow_dispatch` with its own `actions/checkout`, so artifacts are built by CI from the tagged ref. And its "Resolve and validate version" step REFUSES a mismatch outright:
+
+            FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+            ... RESOLVED_VERSION from the dispatch input, else FILE_VERSION ...
+            if [ "${RESOLVED_VERSION}" != "${FILE_VERSION}" ]; then
+              echo "::error::Resolved version (...) does not match VERSION file (...)"
+              exit 1
+            fi
+
+        So the ordering hazard macuahuitl named — dispatching against a ref whose VERSION was never bumped, main before the bump PR merges — FAILS LOUD rather than shipping a v56.9.18.1 release whose binary answers 56.9.13.1. That is precisely the "refuse on stale" remedy this row lists as a candidate, already implemented on the path where it matters most.
+
+        WHAT THIS ROW STILL COVERS, unchanged: LOCAL, NON-RELEASE build paths. scripts/build-macos-tray.sh reads VERSION with no currency check and stamps whatever it finds — measured on 2026-09-17, a build at 02:11Z producing tillandsias-tray 56.9.13.1 whose own --version string carried the correct build timestamp beside the stale number. build-image.sh and build-guest-binaries.sh were checked and have no such check either. That population is real and is what the operator hit.
+
+        WHY NARROWING MATTERS RATHER THAN JUST BEING TIDY: an implementer reading this row as written could reasonably go add a currency check to the release path, where one already exists, or weaken the existing guard to accommodate a dispatch input it is designed to reject. The remedy belongs where the gap is.
+
+        702-eusw still constrains the fix as recorded: "bump automatically at build" is the riskiest option, not the easiest.
