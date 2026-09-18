@@ -41,6 +41,35 @@ Measured on pirria-silverblue 2026-09-18, **identical for ugrep 7.8.4 and GNU
 grep 3.12**. Both follow a symlink given on the command line under plain `-r`;
 neither descends into one found during the walk.
 
+## Two controls, and the contaminated one is the DANGEROUS case
+
+Confirmed on macuahuitl 2026-09-18, independently of the pirria run below.
+**Which probe word you pick decides which failure you see**, and the obvious
+choice gives you the worse one while looking milder:
+
+| control | probe word | grep | `-r` | `-R` |
+|---|---|---|---|---|
+| **pure** — word exists ONLY under a symlinked skills dir | `checkpoint` | ugrep 7.8.4 | exit 1, **0 hits** | exit 0, 2 hits |
+| **pure** | `checkpoint` | GNU grep 3.12 | exit 1, **0 hits** | exit 0, 2 hits |
+| **contaminated** — word ALSO lives in a real dir on the search path | `openspec` | GNU grep 3.12 | **exit 0, 11 hits** | exit 0, **16 hits** |
+
+The contaminated row is the one that bites. `-r` exits **0**, prints eleven
+hits, and silently omits five. A green status and a non-empty result set is
+what "it worked" looks like to every reader and every script. The pure case at
+least returns nothing, which someone eventually questions.
+
+**So when you probe for this defect, choose a word that exists ONLY behind the
+symlink.** A word that also lives in a real directory on the same path proves
+nothing — you will measure the contaminated regime and read it as health. Order
+1238-u84w's original evidence ("0 hits, exit 0") came from a contaminated
+control and was relayed fleet-wide overnight as the milder finding; it was
+actually a demonstration of the worse one.
+
+**And do not `readlink -f` the bare name `grep` to find out what it is.** On
+these hosts `grep` is a shell FUNCTION, so `readlink -f grep` manufactures a
+path to a file that does not exist and invites you to report a phantom shim.
+Use `type grep`.
+
 ## This is not a ugrep quirk — correcting the record
 
 Order 1238-u84w was filed as "`grep -r` on this fleet is ugrep and does NOT
