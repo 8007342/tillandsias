@@ -1,4 +1,5 @@
 # freshness: auditor=linux-macuahuitl-claude-20260918 date=2026-09-18 verdict=new scope=the fixture is hermetic (tempdir trees) so it does not red when 1250-92ty lands
+# @trace spec:ci-release
 name: litmus:seam-writer-canonical-lock-shape
 spec: ci-release
 description: >
@@ -23,10 +24,16 @@ preconditions:
   - workspace contains scripts/test-seam-writers-canonical.sh
 
 critical_path:
-  - step: "the guard's five arms hold, including comment-only rejection and the no-writers positive control"
+  # THE COUNT IS PART OF THE ASSERTION, not incidental. An arm silently removed
+  # changes this number and reds here — which is the same cardinality property
+  # ARM 5 itself exists to enforce inside the guard (a positive control asking
+  # "did I see anything?" catches only TOTAL blindness; partial needs a count).
+  # When an arm is legitimately added, update this number deliberately rather
+  # than loosening the match.
+  - step: "the guard's seven arms hold: comment-only rejection, the no-writers positive control, cardinality under pipefail, and the shape ban"
     command: "bash scripts/test-seam-writers-canonical.sh 2>&1 | tail -1"
     timeout_ms: 60000
-    expected_behavior: "ok:seam-writers-canonical-fixture:5"
+    expected_behavior: "ok:seam-writers-canonical-fixture:7"
 
   - step: "scripts/check-seam-writers-canonical.sh refuses a crate whose seam var has no writers, rather than reporting ok:0"
     command: "bash scripts/check-seam-writers-canonical.sh crates/tillandsias-plan TILLANDSIAS_PODMAN_BIN podman_seam_lock 2>&1 | tail -1"
