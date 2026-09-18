@@ -8265,3 +8265,268 @@ Installed launcher reads v56.9.17.1; tracked VERSION reads 56.9.13.1. The
 INSTALLED artifact is four days newer than the source of truth, because the
 build counter is bumped and then reverted on every platform branch (643-64bx).
 This cut is what closes that gap.
+
+# Hazards found 2026-09-18, to file in plan/issues/fleet-restart-2026-09-12.md
+
+## H1. release-freeze.sh reports `unreachable` for a refusal that is not a reachability failure
+
+`scripts/release-freeze.sh clear linux-next` returned:
+
+    refused:freeze:unreachable:could not delete refs/tillandsias/freeze/linux-next/macuahuitl/1789703272
+
+Origin was reachable throughout — `git ls-remote origin` answered in under a
+second, and the freeze ref was present. The real cause was the pre-push hook
+refusing the push because the BRANCH commits changed VERSION:
+
+    The commits being pushed CHANGE VERSION. That belongs on main…
+
+The freeze tool collapsed a specific, actionable hook refusal into a network
+verdict. A reader acting on `unreachable` checks DNS, VPN and credentials —
+none of which is the problem — and the actual remedy ("your branch carries a
+VERSION change; VERSION bumps land on main") is nowhere in the output.
+
+**Affordance it should carry** (operator directive, 2026-09-17: every error
+states why it is an error and what would make it not one): pass the push's
+stderr through, and distinguish `unreachable` (ls-remote failed) from
+`refused-by-hook` (push ran and was declined). Those need opposite responses.
+
+Cost here: one misdirected diagnosis during a release cut. The verdict is
+also the kind that reads as environmental and therefore retryable, so the
+natural next move is to retry a thing that will refuse identically forever.
+
+## H2. The VERSION-on-linux-next trap has no affordance until the push
+
+`./build.sh --ci-full --install` bumps VERSION in the worktree by design (the
+install target is the local build). On linux-next those bytes cannot be
+committed: the pre-push hook refuses VERSION changes outside main, and
+correctly — every `release: bump VERSION to …` commit in linux-next's history
+reached it by BACK-MERGE from main (verified: 1a6f9c616 is an ancestor of
+origin/main).
+
+Nothing says so until a push is attempted, and the failure arrives at the end
+of a gate rather than at the commit. I committed the bump, then had to drop
+it. The hook's message is good; it is simply delivered several minutes too
+late, and `git commit` is where it would be free.
+
+**Affordance**: a commit-msg or pre-commit check on a non-main branch whose
+staged set contains VERSION — "VERSION bumps land on main via
+release/version-bump-*; this looks like a local --install artifact, restore it
+with `git checkout -- VERSION`".
+
+## H3. A long-running.md row for a fragment-only multi_cycle packet REDS TRUNK
+
+The rule "a `multi_cycle` packet needs a `plan/long-running.md` row" is true at
+COMPACTION and false at FILING, and following it at filing time reds
+`./build.sh --check` fleet-wide.
+
+`scripts/check-long-running-view.sh` builds its `live` set with an awk pass over
+the FOLDED BASE (`^      multi_cycle: true`, six-space indent). Its fragment
+overlay only reclassifies orders already found there; it never ADDS a
+fragment-only packet. The gate is BIDIRECTIONAL —
+`violation:long-running-view:missing=<n>:stale=<n>`, exit 1 — so a row for an
+order that lives only in a fragment is counted `stale` and refuses every host's
+push.
+
+Caught before landing, not after: baseline verified `ok:long-running-view:26
+live packets listed` at 8dd482881, and only `check-long-running-view.sh` and
+`check-stranded-in-progress.sh` key on `multi_cycle` at all, so nothing demands
+the row at filing time.
+
+**Affordance**: the checker's refusal should say WHY an order can be stale —
+"this order is not in the folded base; if you just filed it as a fragment, the
+row is due at compaction, not now" — because the current text ("remove each
+stale one") tells a filer to delete a row they correctly intend to add later.
+
+## H4. Monitoring a detached job on a non-unique marker reports a false completion
+
+A land was watched with `until [ -f "$SP/land.rc" ]`. A file of that exact name
+from 08:56 the same day satisfied it INSTANTLY, and the watcher reported
+`rc=0` — for a land that had not started. The land was in fact still running
+`./build.sh --check`, and origin was unchanged.
+
+It was caught only because the verdict was checked against origin
+(`git merge-base --is-ancestor`, then a blob comparison) rather than believed.
+Had it been believed, the next step was a release tag on an unlanded tree.
+
+The discipline already existed and did not survive a context boundary: markers
+`land2.rc` … `land27.rc` were used all session; the regression to a bare
+`land.rc` happened immediately after a compaction.
+
+**Affordance**: a completion marker must carry the identity of the run that
+wrote it, so a stale one is distinguishable rather than merely old — same
+property 1252-fg9e specifies for the executor's Result. Failing that: remove the
+marker before arming a watch, and never conclude from an exit code that a push
+happened — ask the remote.
+
+## H5. The coordination STATE block's host roster is stale and contradicts the live session list
+
+The recurring pass carries "Working fleet: yoga-silverblue, macbookair-macos,
+this host; Yolanda offline apart from an unreachable forge session". Measured
+this pass: `ListAgents` shows **yolanda-windows reachable and idle** and lists
+**no yoga session at all**, while yoga's newest `loop_status.d` entry is
+2026-09-14 and it has no commit in 24h.
+
+Both halves of the roster are wrong in opposite directions, so acting on it
+would have skipped a reachable host and directed an absent one. Handled by
+asking both peers directly rather than by trusting either list — idleness is
+established by asking (and a Remote Control send reports nothing back, so
+silence is not agreement).
+
+**Affordance**: the pass should derive its roster from `ListAgents` plus recent
+trunk activity at run time, and treat the prompt's STATE block as provenance
+for what was true when written, not as the roster.
+
+## H6. Running a "safe no-op" to demonstrate compliance MANUFACTURES EVIDENCE
+
+Raised by yolanda-windows, 2026-09-18, refusing a coordinator ask — and the
+refusal is better reasoning than the ask was.
+
+The coordinator relayed a STATE-block claim that yolanda had a forge session
+looping on dirty-worktree refusals, and asked them to run
+`scripts/salvage-dirty-worktree.sh` first (order 872-c9nd). Their host had no
+forge at all: one worktree, clean; `podman` not on PATH for the entire session;
+`ListAgents` showing no forge. They declined, on the grounds that on a clean
+tree the script no-ops, and **the resulting ref on origin would read to a later
+reader as evidence that dirty work had existed there.**
+
+That is the general shape and it is worth more than the instance: an artifact
+created to demonstrate compliance is INDISTINGUISHABLE from one created by the
+condition it claims to record. "It is a no-op, run it anyway" is therefore not
+free — it costs the record its meaning. `salvage/<host>/<date>-<slug>` refs are
+specifically read as "work existed here and was rescued", so a decorative one
+corrupts exactly the signal 872-c9nd exists to preserve.
+
+**How to apply**: before asking a peer to run something defensively, ask what
+its artifact will mean to someone reading it later with no memory of why it was
+run. If the artifact asserts a condition, do not create it unless the condition
+holds. And an ask premised on an unverified claim should carry the claim's
+provenance, so the peer can refute the premise instead of executing against it.
+
+## H7. The phantom forge had NO ledger source — it came from the prompt's STATE block
+
+Chased on yolanda's request rather than left as "stale info". Result, measured:
+
+  - no line-level claim of a yolanda forge anywhere under plan/ (the `grep -l`
+    hits were "Yolanda" and "forge" co-occurring in long paragraphs — the
+    false-adjacency trap, and the file-level search is what made it look real)
+  - `tillandsias-plan query --json` filtered on claimed_by: NO yolanda claims
+  - no lease
+
+So the claim originates in the recurring coordination prompt's STATE block,
+frozen at 2026-09-17T12:00Z and authored outside the ledger. The same block
+lists yoga as working (no session in `ListAgents`, no commit in 24h, newest
+loop_status entry 2026-09-14) while calling yolanda offline — wrong in both
+directions at once.
+
+**Affordance**: the pass must derive its roster at run time from `ListAgents`
+plus recent trunk activity, and read the STATE block as provenance for what was
+true when written. A stale roster is not merely unhelpful: acting on it directs
+an absent host and skips a present one, and in this case nearly produced a
+manufactured salvage ref (H6).
+
+## H8. A comment stripper keyed to the WRONG LANGUAGE is worse than none
+
+Found by yolanda-windows 2026-09-18, in their own new ARM 6, on its first
+outing — and retracted by them before it misled anyone further.
+
+`scripts/check-seam-writers-canonical.sh` strips comments with `sed 's://.*::'`,
+which is correct for the RUST sources it scans under crates/. ARM 6 pointed the
+same check at a SHELL file, where comments begin with `#`. The stripper ran,
+removed nothing, and the check then matched this line:
+
+    # CAPTURE THEN MATCH (795-imz3). `producer | grep -q` lets grep exit on
+
+— a comment EXPLAINING the defect, reported as an instance of it. yolanda
+counted that as a third sighting of the `| grep -q` shape and relayed the count
+to the coordinator, which manufactured a phantom regression on a branch the
+coordinator could not inspect. Verified after the retraction: trunk's check
+carries ZERO non-comment `| grep -q` pipelines, and the true history is exactly
+two instances (c7e860ff1 carried it, 2b777de3e fixed it).
+
+**Why this is worse than having no stripper**: an absent stripper is a known
+blindness and a reader discounts the hits. A stripper keyed to the wrong
+comment syntax LOOKS handled, so its false positives carry the authority of a
+filtered result — and they land on precisely the lines that document the
+hazard. The failure therefore SCALES WITH DOCUMENTATION QUALITY: the better a
+codebase explains a defect, the more instances of it the guard reports. Same
+degradation curve as the `strings "$BIN" | grep -F "$VERSION"` currency probe,
+which got more wrong the better the ledger was kept (a-guard-cannot-tell-mention-from-use).
+
+**How to apply**: a comment stripper must be selected by the scanned file's
+LANGUAGE, not by the guard's home language, and a guard that scans more than
+one language needs either per-language stripping or an explicit refusal to scan
+what it cannot parse. Silent no-op stripping is the trap. Related: 881-29me and
+885-92iu, where guards fired on prose exhibiting the very error they police.
+
+**Second-order lesson, and the reason this entry exists at all**: the false
+positive was reported to a peer as a COUNT ("three instances"), and a count
+travels without its evidence. The coordinator could not inspect the branch and
+was one step from searching trunk for a reintroduction that never happened. A
+sighting relayed across hosts should carry the matched LINE, not the tally —
+`ask-what-the-matched-line-is`, arriving through a message channel instead of a
+terminal.
+
+## H9. A ref's NAME is not its CONTENT — I cited one as evidence and it carried none
+
+Caught by macbookair-macos 2026-09-18, checking a claim the coordinator relayed.
+
+The coordinator asserted that yolanda's msys mlua evidence for 902-5bf9 / 920-pxg6
+had landed via `salvage/yolanda/20260917-920-pxg6`. Verified on two hosts:
+
+    tip                                  f235929ce
+                                         "add(1251-54p3): cardinality and shape arms"
+    unique commits vs origin/linux-next  0
+    files differing from the merge-base  none
+
+The ref's NAME says 920-pxg6; its unique content is 1251-54p3's seam fixture,
+and it carries no unique content at all. "It landed" was true of the REF and
+false of the WORK. The coordinator had checked that the ref was an ancestor of
+trunk and treated ancestry-of-a-named-ref as evidence about its subject.
+
+**The real evidence was a fragment, not a branch**:
+`plan/index.d/20260917t231200z-0fcb5624-windows.yaml`, recording a forced
+rebuild (`cargo clean -p mlua-sys`, 302 files / 111.0 MiB), mlua-sys 0.6.8 +
+mlua 0.10.5 compiling, lua_runtime 7/7. Found by searching trunk's fragments
+for mlua and filtering for msys/windows WITH A POSITIVE CONTROL — the same
+search surfaces the darwin evidence, so the zeros elsewhere are real absences
+rather than a broken search.
+
+**How to apply**: ancestry proves a ref is integrated; it says nothing about
+what the ref contains. Before citing a ref as evidence for a subject, diff it
+against its merge-base and read the files — `git rev-list --count trunk..<ref>`
+of 0 means it contributes nothing, whatever it is called. Sibling of
+`a-diff-shows-difference-not-causation` and `integrated-is-proven-by-ancestry`:
+both say ancestry answers a narrower question than the one usually being asked.
+
+**Refinement worth keeping**: `git grep -c mlua <ref>` returns 26 files even
+here, because a ref with 0 commits ahead has TRUNK'S TREE. The zero is a
+property of the ref's unique content, not of its tree — so even the refutation
+has a wrong-denominator variant.
+
+## H10. A platform label that names a SHELL does not name a TOOLCHAIN
+
+yolanda's narrowing, preserved verbatim by macbookair rather than summarised,
+and it materially narrows a claim the coordinator had already broadcast.
+
+The coordinator stated that 902-5bf9's three-platform mlua precondition was
+satisfied — "linux here, darwin by macbookair, msys by yolanda". What is
+actually evidenced is linux + darwin + **windows-msvc**:
+
+  - the shell is MSYS/MINGW64, but rustc's host triple is x86_64-pc-windows-msvc
+  - cc, gcc and clang are ALL ABSENT from PATH
+  - cc-rs located cl.exe via vswhere, so vendored Lua built through
+    Visual Studio 2022, NOT MinGW gcc
+
+So "msys" names the SHELL the agent was typing in, not the toolchain that built
+the artifact. **An MSYS host WITHOUT Visual Studio is untested, and is the case
+most likely to fail** — precisely the configuration a reader would assume the
+"msys" label had covered.
+
+**How to apply**: when recording portability evidence, name the TOOLCHAIN
+(target triple + compiler actually invoked), never the shell, distro or package
+manager the operator happened to be using. A claim keyed to the label is
+narrower than it reads, and the gap is invisible to everyone downstream because
+the label sounds like the broader case. Attach the regime
+(`attach-the-regime-before-broadcasting`): here the regime is the triple, and
+omitting it converted a one-configuration result into an apparent
+three-platform green.

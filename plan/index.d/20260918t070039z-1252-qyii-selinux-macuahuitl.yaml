@@ -1,0 +1,125 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: selinux-from-audit-to-enforcement-starting-with-the-forge-container-because-the-policy-sources-already-exist-unloaded-while-one-spec-mandates-label-disable-as-a-security-default-and-another-spec-asserts-guarantees-that-cannot-hold-under-it
+    order: 1252-qyii
+    status: ready
+    kind: research
+    multi_cycle: true
+    priority: p2
+    desired_release: v0.6
+    release_target: stable-milestone-v1
+    pickup_role: linux
+    capability_tags: [selinux, security, podman, forge, hardening, audit]
+    estimated_hours: 40
+    owned_files:
+      - images/selinux
+      - openspec/specs/podman-orchestration
+      - openspec/specs/default-image
+    title: |
+      SELinux from AUDIT to enforcement, forge container first — the policy sources already exist and are unloaded, while one spec mandates `label=disable` as a "non-negotiable security default" and a sibling spec asserts guarantees that cannot hold under it
+    context: |
+      OPERATOR REQUEST 2026-09-18: progressive enablement — audit/advisory mode
+      first, record what agents and tests actually do for a while, then write
+      policy from the observations. Forge container primarily; also investigate
+      whether the guest base image or any other container needs hardening.
+      Explicitly multi-step, multi-day, possibly multi-release.
+      THE PREMISE WAS "our SELinux policies are just prose without enforcement"
+      (../tillandsias.org). MEASURED ON macuahuitl AT 8dd482881, that is not
+      quite the finding, and the real one is sharper. Correcting it here so the
+      work starts from what is true:
+        - `getenforce` on this host: ENFORCING.
+        - Policy SOURCE EXISTS and is not prose: images/selinux/ carries a
+          Makefile, tillandsias_headless.{te,fc,if}, tillandsias_vault.{te,fc}
+          and vault_container.cil. `vault_container_t` is a real declared type
+          with real allow rules.
+        - `semodule -l | grep tillandsias` on this host: NOTHING LOADED. So the
+          policy is written, buildable, and inert.
+        - `--security-opt=label=disable` appears ~40 times across 23 files.
+        - openspec/specs/podman-orchestration/spec.md does not merely omit
+          SELinux. It CODIFIES THE OPPOSITE as an invariant
+          (`podman-orchestration.invariant.mounts-respect-security-opts`):
+          "Because `--security-opt=label=disable` is applied as a non-negotiable
+          security default (disabling SELinux separation for the container),
+          volume mounts do not require `:z` or `:Z`".
+        - openspec/specs/default-image/spec.md names "SELinux Phase 6
+          (planned): future release will apply SELinux MCS labels to the forge
+          domain". That phase was named and never executed. THIS PACKET IS
+          PHASE 6.
+        - openspec/specs/podman-secrets-integration/spec.md asserts SELinux
+          policy semantics — "read access MUST succeed (SELinux policy allows
+          `container_t` to read `container_file_t`)" — which CANNOT HOLD under
+          label=disable, because the process is not in container_t at all. That
+          is a guarantee resting on a mechanism a sibling spec disables.
+        - Of 427 litmus files, 2 mention SELinux and neither tests policy.
+      SO THE DEFECT IS A THREE-WAY INCONSISTENCY, not an absence: policy exists
+      and is unloaded; one spec mandates disabling the confinement another
+      spec's guarantee depends on; and a named hardening phase never ran. Any
+      plan that starts from "SELinux is missing" will write a fourth
+      inconsistent thing.
+      WHY label=disable IS NOT SIMPLY WRONG, and why this is research not a fix:
+      at least one call site documents a real reason (nix-cache-service.sh: the
+      store is a shared 6.5 GiB host directory where `:Z` relabeling would be
+      destructive and slow). Removing the flag fleet-wide without per-site
+      analysis will break mounts in ways that look like unrelated failures. The
+      flag has to be retired site by site with evidence, which is exactly why
+      the operator asked for audit-first.
+      AUDIT MODE IS THE INSTRUMENT AND IT MUST RUN LONG. Permissive/audit
+      collection has to cover the real workload — agents running cycles, gates,
+      forge launches, guest boots — because a policy written from a short sample
+      denies something a rare path needs, and an SELinux denial surfaces as an
+      unrelated-looking EACCES days later. Collect first, generalise second.
+      SCOPE NOTE: the containers in this tree are builder, chromium, default,
+      dmg, git, inference, proxy, router, selinux, vault, vm, web. The forge is
+      the priority per the operator; the guest base image and the rest are in
+      scope for INVESTIGATION in this row, not necessarily for policy.
+    exit_criteria:
+      - 'PHASE 1 (correctness of the record): the three-way inconsistency is resolved in the SPECS before any policy is written — podman-orchestration''s label=disable invariant, default-image''s unexecuted Phase 6, and podman-secrets-integration''s container_t guarantee are reconciled into one statement of what is actually true today (pre-fix result: FAILS — the three specs currently contradict each other and all three read as authoritative)'
+      - 'PHASE 2 (the policy is real, not written): `semodule -l` shows the tillandsias modules LOADED on at least one host, and a litmus step asserts loaded-ness rather than file presence (pre-fix result: FAILS — sources exist, nothing is loaded on macuahuitl, and no litmus asserts either)'
+      - 'PHASE 3 (audit corpus): AVC denials are collected in permissive mode across a stated workload — at minimum one full ci-full, one forge launch-to-teardown, and one guest boot — and the raw corpus is committed with the workload and duration recorded beside it, because a policy generalised from an unstated sample cannot be reviewed'
+      - 'PHASE 4 (per-site retirement): each of the ~40 `label=disable` call sites is classified as RETIRED with evidence, or KEPT with a written reason — the nix-cache shared-store case is the example of a legitimate KEEP, and a blanket removal is not an acceptable outcome'
+      - 'PHASE 5 (forge enforcing): the forge container runs in a confined domain with policy loaded, and a NEGATIVE CONTROL proves confinement is real — an operation the policy forbids is attempted and DENIED, recorded with the AVC. A forge that merely starts under a policy proves nothing about whether the policy constrains it'
+      - 'PHASE 6 (breadth): the guest base image and each remaining container is assessed and recorded as needs-hardening or out-of-scope-with-reason, so the question is closed rather than left open per container'
+    unscoreable: |
+      whether-full-enforcement-is-reachable-on-every-host: the fleet spans
+      Fedora Workstation, Silverblue, macOS and Windows/WSL2, and SELinux is a
+      Linux-only mechanism with different posture on ostree hosts. This row can
+      close with confinement proven on Linux while the macOS and Windows lanes
+      have no SELinux story at all, and that is not a failure of the row — it is
+      the platform. Equally unsettled: whether MCS separation per forge (the
+      Phase 6 wording) is the right granularity, or whether a single confined
+      domain suffices. That is a design question the audit corpus should inform
+      rather than a decision to make up front.
+    verifiable_closure: |
+      the three specs reconciled into one non-contradictory statement; the
+      tillandsias policy modules shown LOADED via `semodule -l` with a litmus
+      asserting loaded-ness; a committed AVC corpus with its workload and
+      duration stated; every `label=disable` call site classified RETIRED with
+      evidence or KEPT with a reason; and a recorded negative control in which
+      the confined forge is DENIED a forbidden operation, with the AVC quoted.
+    events:
+      - type: filed
+        ts: "2026-09-18T05:35:00Z"
+        agent_id: "linux-macuahuitl-claude-20260918t052959z"
+        host: macuahuitl
+        summary: |-
+          Filed at the operator's request, deliberately open-ended and
+          multi_cycle. The premise relayed into the request ("policies are just
+          prose") was checked on this host before filing and is not accurate:
+          policy SOURCE exists under images/selinux/ and is simply not loaded,
+          while a spec invariant actively mandates label=disable. Filing the
+          corrected finding rather than the relayed one, because a plan starting
+          from "SELinux is missing" would add a fourth inconsistent artifact.
+          LONG-RUNNING VIEW ROW IS DUE AT COMPACTION, NOT NOW, and the reason is
+          mechanical rather than a preference. check-long-running-view.sh builds
+          its `live` set with an awk pass over the FOLDED BASE
+          (`^      multi_cycle: true`); a fragment-only packet never enters that
+          set. The gate is BIDIRECTIONAL — it reports
+          `violation:long-running-view:missing=<n>:stale=<n>` and exits 1 — so a
+          row added for this order while it lives only in a fragment counts as
+          `stale=1` and reds ./build.sh --check for every host on the fleet.
+          Verified before filing: the checker reads ok:long-running-view:26 live
+          packets listed at 8dd482881, and only check-long-running-view.sh and
+          check-stranded-in-progress.sh key on multi_cycle at all, so nothing
+          demands the row at filing time. WHOEVER COMPACTS THIS PACKET INTO THE
+          BASE OWNS ADDING ITS ROW in the same commit; that is the moment the
+          gate starts requiring it.
