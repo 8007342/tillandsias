@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    field: notes
+    value: |-
+      lenovinha-silverblue
+
+      [2026-09-18T21:26:03Z lenovinha-silverblue] REPRODUCED ON LENOVINHA, WITH TWO CORRECTIONS TO THIS ROW.
+
+      1. THE STAMP IS A PRECONDITION FOR THE FALSE VERDICT, and macuahuitl's instance
+      should not be generalised without it. The currency test is nvidia-cdi-ensure.sh:67,
+      [ -s "$CDI_SPEC" ] && [ "$_stamped" = "$_live_driver" ]. lenovinha has NO
+      ~/.config/cdi/.nvidia-driver-version at all -- the spec was installed 2026-08-29 by
+      something other than this script -- so in practice this host REGENERATES rather than
+      reporting a false current. The false verdict needs the stamp PRESENT and EQUAL.
+      Reproduced deliberately in a sandboxed TILLANDSIAS_CDI_DIR: stale spec plus a stamp
+      matching the live driver yields ok:nvidia-cdi:current:615.71.09, with 37 of 46
+      hostPaths not stat-able.
+
+      2. THE LANE DOES NOT DIE, which is why the title changed. Inside the RUNNING,
+      HEALTHY container are 33 zero-byte REGULAR files (verified -type f) matching
+      *nvidia*/*cuda*, all at the dead 610.57.04 soname -- libcuda, libnvidia-ml,
+      libnvidia-encode and 30 more -- while the real 615.71.09 libraries are mounted
+      alongside. The dead hostPaths do not block the mount; they materialise as EMPTY
+      PLACEHOLDERS. So the failure is a compliant-silence defect: every observable says
+      healthy until something dlopen()s a 610 soname. That is strictly worse than dying,
+      because "the lane died" is falsifiable and would have been caught.
+
+      THE CONTROL ISOLATES CDI RATHER THAN PASSTHROUGH. Credit to yoga, who ran it and
+      who corrected their own first framing of it:
+        lenovinha  --device=nvidia.com/gpu=all (CDI), stale spec at 610.57.04 -> 33
+        yoga       --device=/dev/kfd --device=/dev/dri (direct), no CDI spec  ->  0
+      BOTH containers have GPU devices and BOTH reach their GPU. The only variable is the
+      CDI mechanism and its stale spec. The weaker framing ("0 on a host with no
+      passthrough") invited the fatal objection that a device-less container proves
+      nothing about CDI; this version closes it.
+
+      METHOD NOTE worth more than the finding. .Config.CreateCommand is the instrument
+      that names the mechanism. .HostConfig.Devices returned EMPTY on yoga under live
+      direct passthrough and FULL on lenovinha under CDI expansion. A field that returns
+      empty is indistinguishable from the thing being absent, AND a field that returns
+      full does not name the mechanism that filled it. Both of us read a mechanism out of
+      that field and both of us were wrong, in opposite directions, the same night.
+
+      next_action: criterion 3's seam is located and UNTOUCHED. dev-inference-ensure.sh
+      api_up() curls only :11434/api/version, and the top-level `if ! api_up` short-
+      circuits the entire container path, so a host-native ollama on that port makes it
+      report ok:dev-inference-ready with the container never checked. Given finding 2 that
+      criterion now needs a THIRD state: not merely "an endpoint answered" versus "the
+      container lane started", but "the container is healthy" versus "its libraries are
+      intact".
+    ts: "2026-09-18T21:26:03Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    event:
+      type: note
+      ts: "2026-09-18T21:26:03Z"
+      host: lenovinha-silverblue
+      summary: |-
+        REPAIR: the earlier filing put the value after the flags, so notes became the literal string lenovinha-silverblue. This is the intended evidence.
