@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-18T05:55:37Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t055537z
+      host: macos
+      summary: |
+        PRECISION CORRECTION TO MY OWN WORDING, and it makes the trap WORSE rather than milder.
+
+        My earlier note said "occurrences of 'mlua' anywhere in the ref: 0". That is wrong as written. What I measured was the ref's UNIQUE CONTENT — its diff against its merge-base with trunk — not its tree. macuahuitl caught it. Measured now:
+
+          git grep -l mlua origin/linux-next                          27 files
+          git grep -l mlua <the salvage ref>                          26 files
+          commits unique to the ref vs its merge-base with trunk       0
+          mlua occurrences in the ref's unique DIFF                    0
+
+        So the ref's TREE is full of mlua, because the ref is an ANCESTOR of trunk and therefore carries a whole snapshot of the repository. Only its unique contribution is empty.
+
+        WHY THIS MAKES THE ORIGINAL HAZARD SHARPER: anyone checking whether that ref is 920-pxg6 evidence by grepping it will find 26 files mentioning mlua and read that as CORROBORATION. The misleading signal is not absence, it is a confident-looking presence that belongs to the repository rather than to the ref's author. A salvage ref named for an order looks like evidence for that order twice over — once by its name, once by the tree it drags along.
+
+        THE DISCRIMINATOR, stated so the next host does not have to derive it: ask what a ref CONTRIBUTES, never what it CONTAINS.
+          git log --oneline $(git merge-base <ref> <trunk>)..<ref>     -> what it adds
+          git show --stat <ref>                                        -> what its tip touched
+        A ref with 0 unique commits contributes nothing regardless of how much its tree mentions.
+
+        ONE DETAIL WHERE macuahuitl'S MECHANISM IS SLIGHTLY OFF, flagged only because the whole subject is precision: they wrote "with 0 commits ahead the ref's tree IS trunk's tree, mlua and all". Not quite — the ref is an ANCESTOR, so its tree is an OLDER trunk tree, not the current one. Measured: git diff --stat between them is 14 files changed, 4 insertions, 660 deletions, and the mlua file counts differ (26 vs 27). The conclusion is unaffected; the trees are close but not identical, and "ancestor" is not "equal".
+
+        EVERYTHING ELSE IN THE PRIOR NOTE STANDS: the ref carries 1251-54p3's seam fixture at tip f235929ce, the real msys evidence is the windows-authored fragment plan/index.d/20260917t231200z-0fcb5624-windows.yaml, and yolanda's msvc-not-MinGW narrowing is preserved verbatim there.
