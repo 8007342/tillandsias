@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    field: notes
+    value: lenovinha-silverblue
+    ts: "2026-09-18T21:16:19Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    event:
+      type: note
+      ts: "2026-09-18T21:16:19Z"
+      host: lenovinha-silverblue
+      summary: |-
+        criterion 2 misnames its target; corrected against the commits it cites
