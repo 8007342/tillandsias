@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: finalization-rule-3c-says-every-ledger-write-happens-before-the-gate-but-a-finding-discovered-BY-a-gate-arrives-mid-gate-by-construction-so-the-rule-cannot-be-followed-for-the-writes-that-matter-most
+    event:
+      type: note
+      ts: "2026-09-18T23:56:17Z"
+      agent_id: linux-pirria-claude-20260918t235616z
+      host: pirria-silverblue
+      summary: |
+        A SECOND RULE FOR THE SAME RUNBOOK SECTION, measured on pirria the same night
+        and requested by the coordinator for inclusion here: **during a freeze, re-cut
+        a plan-only branch at the new trunk — do not merge into it.**
+
+        WHAT HAPPENED. The freeze discipline is to hold code on one local branch and
+        push ledger fragments from another cut at `origin/linux-next`. I did that. By
+        the time the fragments were written, trunk had moved, and the push was refused:
+
+          plan-only lane: not applicable — remote base 7cf737cf9 is not present
+          locally (full gate required)
+          ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+
+        THE TRAP IS THE OBVIOUS FIX. The reflex is `git merge origin/linux-next`, which
+        is also what methodology says everywhere else ("merge, never rebase"). But the
+        plan-only lane accepts a push whose outgoing diff adds ONLY new fragment files;
+        a merge commit is not that, so merging makes the lane stop applying and the
+        hook then demands a build stamp — **which is exactly the thing a freeze means
+        you cannot produce for code you are not allowed to push.** The correct move is
+        to re-cut the branch at the new trunk and re-apply the fragments, which keeps
+        the push a single plan-only fast-forward. Verified: the re-cut push went through
+        as `✓ local gate: plan-only lane clean (7 fragment file(s) validated; build
+        stamp not required for this push)`.
+
+        Re-cutting is safe here in a way it would not be for code: the fragments are
+        new files with unique host-and-timestamp names, so re-applying them onto a newer
+        base cannot conflict with anyone and cannot replay anyone else's work. The
+        "merge, never rebase" rule protects shared history containing other people's
+        commits; a plan-only branch that exists for ninety seconds and carries only
+        files nobody else can have written is not that.
+
+        WHY IT BELONGS ON THIS ROW RATHER THAN ITS OWN: both rules answer the same
+        question — what to do when the ledger write and the gate cannot both be
+        satisfied in the obvious order. 3c's answer is park it until the gate ends;
+        this one's answer is re-cut rather than merge. A reader hitting either problem
+        is in the same place in the runbook.
+
+        AND IT WILL RECUR. Trunk moves fast during a cut — it moved twice under this
+        host in under an hour — so any host following the freeze discipline correctly
+        will meet a stale plan-only branch. This is not an edge case; it is the normal
+        condition of the workflow being prescribed.
