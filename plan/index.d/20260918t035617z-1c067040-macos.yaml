@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-attach-retest-on-healthy-substrate
+    event:
+      type: progress
+      ts: "2026-09-18T03:56:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t035617z
+      host: macos
+      summary: |
+        SCOPING RE-VERIFIED 2026-09-18: ONE OF THE THREE BLOCKERS IS GONE, the other two stand, and the operator's burden is now smaller than the row implies. No capture taken — criterion 1 is operator-driven and remains so.
+
+        The 2026-08-17 scoping named three things this host could not do unattended. Re-measured each rather than assuming a month-old list still holds:
+
+        (a) RESOLVED. It read: "the installed bundle (Aug 14) and staged guest binary (Aug 16 11:25) both PREDATE order 270 (b99a5726 12:44, bf29595d 13:10), so a rebuild+install is a precondition." A current bundle now exists at dist/Tillandsias.app, built 2026-09-17T02:12:07Z from 849a3fd6e, reporting `tillandsias-tray 56.9.13.1 (git 849a3fd6e)`. Tested by ANCESTRY rather than by date, because dates are the weaker claim:
+            b99a57264 in 849a3fd6e: YES
+            bf29595dd in 849a3fd6e: YES
+        It also carries staged guest binaries for both arches at Contents/Resources/guest/. So order 270's detached image-build helper IS in this build, and the REBUILD half of that precondition is done.
+
+        (b) UNCHANGED. The first-use forge-base build measured >>300s on this host. Nothing about that has moved and nothing here addresses it.
+
+        (c) UNCHANGED, AND IT IS THE HARD ONE. scripts/macos-tray-ax-smoke.sh still enumerates TOP-LEVEL status-menu titles only — its own usage line says "enumerate top-level menu items", and a search for AXMenu/submenu descent returns ZERO. It cannot reach a project submenu's agent leaf, which is precisely why criterion 1 says OPERATOR-DRIVEN. No amount of host-side work removes this; it is a UI-navigation gap, not a substrate one.
+
+        WHAT ACTUALLY CHANGED FOR WHOEVER DOES THIS: the operator's steps drop from "rebuild + install + drive the menu" to "install + drive the menu", and the rebuild is already sitting in dist/. Nothing is installed — /Applications and ~/Applications both hold no Tillandsias.app — so the install step is real but is one command.
+
+        I DID NOT INSTALL IT. The standing operator consent on this host covers destructive resets and the curl-install smoke on a PUBLISHED release; putting a locally-built dev bundle into /Applications is neither, and it would replace whatever the operator expects to find there. Recording the readiness is the useful act; choosing to install a dev build over their environment is theirs.
+
+        THE PRIOR SCOPING'S ANTI-SHORTCUT WARNING STILL BINDS and I am restating it because it is the trap a later cycle would fall into: do NOT substitute a CLI --opencode one-shot for the capture. diagnose.rs sends ExecOneShot without --cloud and without the PTY bridge, so it exercises neither the argv 273 blames nor the tee the criterion names, and treating them as equivalent would manufacture a false MOOT. That reasoning is a source-read from 2026-08-17 and I have not re-verified the diagnose.rs path today; flagging it as inherited rather than re-measured.
+
+        VERDICT ON 273 UNCHANGED at the prior scoping's "MOOT-pending-tee", and still not flipped from here: 273 is pickup_role linux. Status returns to ready — nothing in this note is the capture the criterion asks for.

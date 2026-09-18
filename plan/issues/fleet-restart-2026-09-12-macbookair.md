@@ -894,3 +894,24 @@ looked"* will eventually be read as the former.
 - 2026-09-18 — Left 781-hseq's DECISION to its owner. Wiring adds a product
   surface; tombstoning deletes 747 spec-traced lines. Neither should happen
   because a cycle selected an unowned p3.
+
+- 2026-09-18 — 774-b529 re-verified against a month-old scoping instead of
+  re-deriving it. Of its three unattended blockers, (a) is GONE: the dist
+  bundle built 2026-09-17 from `849a3fd6e` carries order 270 by ANCESTRY
+  (`b99a57264` and `bf29595dd` both ancestors), tested that way because dates
+  are the weaker claim. (b) unchanged. (c) unchanged and decisive —
+  `macos-tray-ax-smoke.sh` still enumerates top-level titles only, zero
+  submenu descent, which is why criterion 1 says operator-driven.
+- 2026-09-18 — Net effect recorded for whoever does it: the operator's steps
+  drop from rebuild+install+drive to install+drive, and the rebuild already
+  exists. Did NOT install it — standing consent covers destructive resets and
+  the smoke on a PUBLISHED release, not replacing their /Applications bundle
+  with a dev build.
+- 2026-09-18 — Flagged the prior scoping's anti-shortcut warning as INHERITED
+  rather than re-measured: its claim that a CLI `--opencode` one-shot cannot
+  substitute (no `--cloud`, no PTY bridge) is a 2026-08-17 source-read I did
+  not re-run today.
+- 2026-09-18 — I truncated my own output to 170 columns and read the
+  truncation as the file's content, briefly concluding a scoping event was
+  missing from the fragments. It was in the fold, longer than my print width.
+  Same shape as reading a `head -2` as a complete list earlier.
