@@ -8134,3 +8134,86 @@ consent exists on that host is between that host and the operator.
 yolanda active as of 22:05Z with two assignments, this host coordinating. yoga
 last attested 2026-09-16T19:37Z and lenovinha 2026-09-16T07:16Z — still outside
 the report-for-work rule, still directed nowhere.
+
+## 2026-09-18T02:00Z macuahuitl — coordination pass
+
+**THIS CRON PROMPT'S STATE BLOCK IS STALE AND SHOULD NOT BE RE-DERIVED FROM.**
+It is frozen at 2026-09-17T12:00Z and still lists as blocking: 862-zhr2,
+redb, 1237-f9dy, 1215-xazj and 1217-54vw. The operator ruled on all of them
+during the evening — the version scheme is
+`YEAR_FROM_EPOCH.MONTH.DAY.LOCAL_BUILD_NUMBER` used correctly with monotonic
+increments and no `+local.xxxx`; redb is INTEGRATED (1246-ih7g carries the
+migration policy); 1237-f9dy is (a) plus auto-install on every green gate; and
+1215-xazj / 1217-54vw were taken off the operator's queue as coordinator-mandate
+calls. A pass that reads the prompt as current will re-queue five settled items.
+
+**THE GPU CONTAINER LANE HAD BEEN DEAD FOR A MONTH AND ITS OWN CURRENCY CHECK
+SAID OK** — 1248-j6vd. `crun: cannot stat /usr/lib64/libnvidia-egl-gbm.so.1.1.3`
+while the host carries 1.1.4. `nvidia-cdi-ensure.sh` compares the DRIVER version,
+which never moved (610.57.04); libnvidia-egl-gbm ships separately and versions on
+its own cadence. The check anticipated exactly one way to go stale and the spec
+went stale the other way, printing `ok:nvidia-cdi:current` throughout.
+
+**AND A SECOND DEFECT IS WHY NOBODY SAW IT.** `dev-inference-ensure.sh` probes a
+PORT. With a host-native ollama on 11434 it returned `ok:dev-inference-ready`
+WITHOUT STARTING A CONTAINER. Under the operator's engine-selection ruling
+(1249-xngp) preferring bare metal is CORRECT — so the defect is not the
+preference, it is that the verdict cannot say WHICH LANE SERVED, and a fallback
+that cannot start therefore rots unobserved on every host where the preferred
+path happens to work. Surfacing it required killing the preferred engine by hand.
+
+**THE ACCELERATOR NUMBERS ARE A BASELINE, NOT FLEET CONSTANTS.** Measured with
+the shared harness on this host only (A5000, 20 threads, qwen2.5:0.5b, 3 reps):
+host-native gpu decode 488/561/514 tok/s at 7 ms/chunk embed; container gpu
+24.9/467/463 at 18-19 ms; host-native cpu 72.6/71.7/72.8 at 7 ms; and 7b on gpu
+at 116/117/117. Three readings that change decisions rather than decorate them:
+containerisation costs ~10% of WARM decode but 19x on the FIRST rep, which a
+three-rep mean reports as ~318 and hides; container embedding is 2.6x slower on
+every rep and gains nothing from the GPU on either lane; and a 7B here beats a
+0.5B on this host's CPU, so consumer hardware is a different MODEL CLASS rather
+than a slower version of this one.
+
+**THE SEAM RACE IS FIXED, AND THE HOST THAT COULD NOT REPRODUCE IT DID NOT
+VERIFY IT.** 1245-wbqh closed on yolanda's evidence: 5 consecutive 544/544 at 16
+cores against 3/3 red immediately before. This host ran 544/544 rc=0 and that
+confirms NO REGRESSION only — a green from a host where the test cannot fail is
+indistinguishable from the green it already produced. Recorded so nobody later
+reads the coordinator's run as the verification.
+
+**A PEER'S RESTRAINT SAVED A VERIFIED FIX.** They shipped a second change that
+was necessary neither for the failure nor the repair, kept it on plausibility
+with the suite RED 4/4, and it deadlocked the gate — presenting as a ten-minute
+HANG with no output, because a deadlock produces no verdict. It cost one revert
+instead of contaminating the fix ONLY because it was committed separately with a
+message admitting it had no failing control. Filed as 1250-92ty with the fix
+ORDER as the headline: inner acquisitions removed FIRST, then unify. Reversed, it
+deadlocks.
+
+**WINDOWS-NEXT IS 542 BEHIND AND THAT IS NOW CHEAP TO FIX.** The full 533-commit
+integration exists complete and verified on `salvage/yolanda/20260917-920-pxg6`,
+so whoever lands it inherits the merge rather than redoing it. Two ~70-minute
+gates were lost to the mandated pre-push merge racing a moving trunk before that
+ref existed; the relay of the seam fix to linux-next removed the reason to push
+that branch at all tonight.
+
+**AND THE CLASS GUARD FOR TONIGHT'S RACE IS IN THE TREE, UNPROMOTED** —
+1251-54p3. yolanda prototyped, scored and mutation-tested it; verified here on a
+second platform before relaying. Linux GNU bash 5.3.9: fixture 5/5, and the
+mutation (comment-stripping removed from the canonical match) reds ARM 3b ALONE
+with the other four green — targeted, matching their result on MSYS-driving-WSL.
+Exit codes checked before promotion rather than at it: a refusal exits 1, and so
+does the no-writers positive control, so wiring it later will gate on something.
+It currently refuses `crates/tillandsias-headless/src/remote_projects.rs`,
+which is 1250-92ty's hazard and 1250-92ty's to clear — hence advisory tier with
+no gate-steps.d entry and no build.sh reference, both verified zero.
+
+**THE THIRD SILENCE OF THE NIGHT, AND THEY BELONG TOGETHER.** A deadlock that
+presented as a ten-minute hang with no output; a failed `sed` sabotage that
+presented as five green arms against a pristine mutant; and, earlier, a
+loop-status audit that reported every host NOT-PASTING while parsing nothing.
+None produced a red. The common form is that an ABSENCE OF A VERDICT WAS READ AS
+A GOOD VERDICT, and in each case what separated truth from silence was a COUNT
+TAKEN BEFORE THE RUN — survivors, then occurrences, then entries-matching-anchor.
+When a check's failure mode is silence, a positive measurement taken beforehand
+is the only thing that distinguishes it afterwards, because silence and success
+are the same bytes.
