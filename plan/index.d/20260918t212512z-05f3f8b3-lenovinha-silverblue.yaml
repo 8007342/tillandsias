@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    field: context
+    value: |-
+      SHELLCHECK IS NOT AN OPTION HERE, AND THIS WAS CHECKED RATHER THAN
+      ASSUMED. `command -v shellcheck` finds nothing on macuahuitl, and
+      `toolbox run --container tillandsias-builder command -v shellcheck`
+      finds nothing either. A shellcheck-based gate would pass where it happens
+      to be installed and skip silently everywhere else — the green-on-one-
+      regime shape that froze four lanes in one night. tree-sitter-bash vendors
+      into a Rust crate, travels with the build, and needs nothing on the host.
+      THIS IS NOT A NEW PARADIGM FOR THIS TREE, which is the main argument for
+      it. crates/tillandsias-litmus-rust ALREADY depends on tree-sitter 0.25 and
+      tree-sitter-rust 0.24, and already runs declarative `rust_queries:` out of
+      litmus YAML with `processor: syn | tree_sitter`, `required:`, `usage:`,
+      `score:` and `name_quality:`. Measured: of 427 litmus files, 1 carries
+      rust_queries and 0 carry any bash equivalent. So the work is EXTENDING an
+      existing declarative query layer to the bash surface, with a landing shape
+      that already exists — not inventing one.
+      THE FOUR SHAPES, all detectable on a bash AST, with file counts measured
+      at 8dd482881 over 669 scripts (whole-file co-occurrence, an UPPER BOUND):
+        195  a pipeline whose last command is `grep -q` in a file setting pipefail
+         65  a pipeline ending in `tail -1`
+         27  an `if` whose condition is a negated pipeline (795-imz3)
+          7  a `pgrep`/`pkill` command with `-f` and a string literal argument
+      AST GRANULARITY IS THE POINT AND IS WHY THE COUNTS ARE UPPER BOUNDS. The
+      measurement above asks "does this FILE contain pipefail anywhere and a
+      `grep -q` pipeline anywhere", which over-counts: the pipeline may run in a
+      function where pipefail is not set. A parser can ask whether THIS pipeline
+      is in scope of that option, which grep cannot. Reporting the true count is
+      part of the deliverable — an upper bound is what we have today.
+      ADVISORY BEFORE GATING, NOT AS CAUTION BUT BECAUSE OF THE ARITHMETIC: at
+      up to 195 candidate sites, wiring this into ./build.sh --check on day one
+      reds trunk for every host on a backlog nobody owns yet, and a guard that
+      reds trunk gets disabled rather than obeyed. Same ordering 1251-54p3 is
+      already following. Stage advisory, watch one in-situ run, then gate.
+      RELATIONSHIP TO 1252-fg9e: independent and startable immediately. The
+      executor makes NEW hazards unconstructible; this lint finds the EXISTING
+      ones. Neither substitutes for the other, and this one delivers value
+      without a single call site migrating.
+
+
+      [2026-09-18T21:25:12Z lenovinha-silverblue] lenovinha-silverblue
+    ts: "2026-09-18T21:25:12Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    event:
+      type: note
+      ts: "2026-09-18T21:25:12Z"
+      host: lenovinha-silverblue
+      summary: |-
+        the gate order that 'essentially solved' did not cover — four residuals, three of them real

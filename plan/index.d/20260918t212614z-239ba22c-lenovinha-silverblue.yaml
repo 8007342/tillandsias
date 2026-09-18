@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    field: context
+    value: |-
+      SHELLCHECK IS NOT AN OPTION HERE, AND THIS WAS CHECKED RATHER THAN
+      ASSUMED. `command -v shellcheck` finds nothing on macuahuitl, and
+      `toolbox run --container tillandsias-builder command -v shellcheck`
+      finds nothing either. A shellcheck-based gate would pass where it happens
+      to be installed and skip silently everywhere else — the green-on-one-
+      regime shape that froze four lanes in one night. tree-sitter-bash vendors
+      into a Rust crate, travels with the build, and needs nothing on the host.
+      THIS IS NOT A NEW PARADIGM FOR THIS TREE, which is the main argument for
+      it. crates/tillandsias-litmus-rust ALREADY depends on tree-sitter 0.25 and
+      tree-sitter-rust 0.24, and already runs declarative `rust_queries:` out of
+      litmus YAML with `processor: syn | tree_sitter`, `required:`, `usage:`,
+      `score:` and `name_quality:`. Measured: of 427 litmus files, 1 carries
+      rust_queries and 0 carry any bash equivalent. So the work is EXTENDING an
+      existing declarative query layer to the bash surface, with a landing shape
+      that already exists — not inventing one.
+      THE FOUR SHAPES, all detectable on a bash AST, with file counts measured
+      at 8dd482881 over 669 scripts (whole-file co-occurrence, an UPPER BOUND):
+        195  a pipeline whose last command is `grep -q` in a file setting pipefail
+         65  a pipeline ending in `tail -1`
+         27  an `if` whose condition is a negated pipeline (795-imz3)
+          7  a `pgrep`/`pkill` command with `-f` and a string literal argument
+      AST GRANULARITY IS THE POINT AND IS WHY THE COUNTS ARE UPPER BOUNDS. The
+      measurement above asks "does this FILE contain pipefail anywhere and a
+      `grep -q` pipeline anywhere", which over-counts: the pipeline may run in a
+      function where pipefail is not set. A parser can ask whether THIS pipeline
+      is in scope of that option, which grep cannot. Reporting the true count is
+      part of the deliverable — an upper bound is what we have today.
+      ADVISORY BEFORE GATING, NOT AS CAUTION BUT BECAUSE OF THE ARITHMETIC: at
+      up to 195 candidate sites, wiring this into ./build.sh --check on day one
+      reds trunk for every host on a backlog nobody owns yet, and a guard that
+      reds trunk gets disabled rather than obeyed. Same ordering 1251-54p3 is
+      already following. Stage advisory, watch one in-situ run, then gate.
+      RELATIONSHIP TO 1252-fg9e: independent and startable immediately. The
+      executor makes NEW hazards unconstructible; this lint finds the EXISTING
+      ones. Neither substitutes for the other, and this one delivers value
+      without a single call site migrating.
+
+
+      [2026-09-18T21:25:12Z lenovinha-silverblue] lenovinha-silverblue
+
+      [2026-09-18T21:25:26Z lenovinha-silverblue] lenovinha-silverblue
+
+      [2026-09-18T21:25:39Z lenovinha-silverblue] lenovinha-silverblue
+
+      [2026-09-18T21:26:14Z lenovinha-silverblue] THE PRE-PUSH ORDER FOR A NEW CRATE, IN GATE ORDER. This row was reported
+      "essentially solved" on a green build, green tests and two green shell suites,
+      and the tree was refused TWICE after that. The honest closure note is the
+      ordered list, because each step refused a tree the others had passed:
+
+        1. cargo fmt --all --check                 <- the FIRST Rust step in build.sh
+        2. cargo clippy --workspace --all-targets --all-features -- -D warnings
+        3. cargo test -p <crate>
+        4. the shell suites
+
+      WHAT ACTUALLY HAPPENED, in order:
+        - build + tests + suites green        -> reported "essentially solved"
+        - clippy REFUSED (collapsible_match). Predicted in advance by macuahuitl,
+          which is why the lint was split out of the unblocking land rather than
+          riding it into a relay eight hosts were waiting on.
+        - cargo fmt REFUSED: one "let Ok(src) = ... else { continue };" that rustfmt
+          expands to three lines. It runs BEFORE clippy, so it refused a tree that
+          had already passed clippy.
+
+      Three of those four steps have now refused a tree the others passed. A NEW
+      crate is where that happens, because a mature crate has already been through
+      all four. Run them in this order before pushing instead of discovering them one
+      land at a time, as this row did.
+
+      METHOD NOTE, and it is the same defect this lint reports. My verification of the
+      merged tree was written as "cargo clippy ... | tail -5; echo EXIT=$?", which
+      reports TAIL's status: it printed EXIT=0 over a FAILED build. A pipeline's exit
+      status is its last command. That is hazard shape 1, written by the author of
+      this lint, in the same session in which they measured 545 instances of it and
+      had already been burned once by the same shape in the lint's own launcher.
+      TWICE, by someone who knew it cold. That is the argument for 1252-fg9e: the
+      executor packet is about the shape being CONSTRUCTIBLE, not about ignorance.
+
+      AND A THIRD TIME, IN THE ACT OF FILING THIS NOTE. The first attempt passed this
+      text as a double-quoted shell argument containing backticks; the shell
+      command-substituted them and fragment 20260918t212512z-05f3f8b3 recorded only an
+      attribution line with the body consumed. A second attempt using read -d '' set
+      an empty variable and lost it again (20260918t212526z-099e1d95). That is the
+      unquoted-heredoc-into-an-immutable-fragment incident that
+      scripts/host-capability-probe.sh exists to prevent, reproduced twice by someone
+      who had read that file's header the same session. The --append contract is what
+      limited the damage: every prior line was preserved both times, so the loss was
+      only my own addition, and the two empty fragments remain in the ledger as
+      evidence rather than being editable away.
+
+      ALSO: a verification run in a bare "git worktree" produces a FALSE RED. cargo
+      hits a build script needing the sidecar staging that build.sh performs, and the
+      failure reads like a code defect rather than a missing setup step. Verify in a
+      real checkout. macuahuitl hit the same thing within the hour on the litmus half
+      of a different check.
+    ts: "2026-09-18T21:26:14Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    event:
+      type: note
+      ts: "2026-09-18T21:26:14Z"
+      host: lenovinha-silverblue
+      summary: |-
+        gate-order closure note; filed correctly after three losses to my own argument-order error

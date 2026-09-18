@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    event:
+      type: evidence
+      ts: "2026-09-18T21:33:05Z"
+      agent_id: linux-yoga-claude-20260918t213305z
+      host: yoga-silverblue
+      summary: |
+        INDEPENDENT REPRODUCTION FROM YOGA — TWO HOSTS, OPPOSITE LANES, FOUR MINUTES APART.
+
+        lenovinha found this from the CUDA side and filed it at 2026-09-18T21:28Z; I hit
+        it from the Vulkan/iGPU side at 21:29Z while producing yoga's criterion-6 record
+        for 917-6iwv, before either of us had read the other's message. Recording it here
+        as a second host's evidence rather than as a second row.
+
+        WHAT YOGA MEASURED. scripts/record-expert-accuracy.sh resolves the field as
+
+          lane="${TILLANDSIAS_EXPERT_LANE:-cpu}"
+
+        directly beneath a comment that reads "The accelerator lane actually in use, from
+        the capability row rather than from the hostname". The code does not read the
+        capability row, and it does not read anything else either — the value is a
+        literal with an environment override.
+
+        THE OVERRIDE IS NEVER SET. Searching the whole tree, including symlinked
+        directories, TILLANDSIAS_EXPERT_LANE occurs in exactly ONE file: the script that
+        defines it. Nothing in scripts/, skills/, build.sh or any harness sets it. So the
+        default is not a fallback for unusual hosts, it is what every record the fleet has
+        ever written carries.
+
+        THE FALSIFYING RUN. yoga's first dry-run produced
+
+          "model":{"id":"all-minilm","quantisation":"unknown","engine":"unknown","lane":"cpu"}
+
+        while ollama's own log, for the very embedding runner that had just built the
+        25146-chunk index and served the grade, reported eighteen times:
+
+          runner.inference="[{ID:0 Library:Vulkan}]" runner.vram="25.5 MiB"
+
+        The workload was on the iGPU through Vulkan. The record said cpu. The landed
+        record reads lane=gpu only because I set TILLANDSIAS_EXPERT_LANE by hand after
+        measuring — which means the honest value required an operator who already knew the
+        answer, and that is not an instrument.
+
+        WHY THE TWO-HOST PAIR IS WORTH MORE THAN EITHER HALF. lenovinha's host reaches its
+        GPU by CDI with a fully-qualified device name; yoga's reaches its GPU by direct
+        /dev/kfd and /dev/dri passthrough. Different vendors, different APIs, different
+        passthrough mechanisms, different memory models — and the same literal `cpu` in
+        both records. That rules out any host-specific explanation and locates the defect
+        squarely in the script.
+
+        IT CONTRADICTS THE SCRIPT'S OWN DOCTRINE, which is unusually explicit and is the
+        reason this is worth more than a cosmetic fix. The header states: "a record that
+        cannot establish one of them writes the field as `unknown` RATHER THAN OMITTING IT
+        — an absent field reads as 'not applicable', an explicit `unknown` reads as 'we did
+        not establish this', and those are different claims." A hardcoded `cpu` is a third
+        thing the doctrine does not contemplate and would clearly forbid: a positive false
+        claim. The same record carries two fields that correctly read `unknown` and one
+        that confidently reads wrong.
+
+        WHERE IT HURTS. This is stamped into the PERSISTENT SERIES whose entire purpose is
+        comparing models ACROSS LANES. A series in which every row says cpu cannot answer
+        the question 917-6iwv exists to ask, and nothing in the record marks the value as
+        unestablished, so a later reader has no way to discount it.
+
+        RELATED AND NOT RE-FILED HERE: the same record's `quantisation` and `engine` read
+        unknown because the show-lookup 404s, and the series itself is written under
+        gitignored .cache/ — both filed together as order 1257-jxu9. The lane literal is
+        the third provenance field on one record and belongs to this row.
+
+        Same shape as 1253-54zj (a probe verdict written as a literal) and 1254-47xd (a
+        lane derived from one input while a stronger input sits unused in the same
+        document), now on a third field.
