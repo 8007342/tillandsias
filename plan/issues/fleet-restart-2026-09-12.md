@@ -8530,3 +8530,52 @@ the label sounds like the broader case. Attach the regime
 (`attach-the-regime-before-broadcasting`): here the regime is the triple, and
 omitting it converted a one-configuration result into an apparent
 three-platform green.
+
+## H11. A preflight that passes tells you only about what it checks
+
+Two consecutive land refusals on 2026-09-18, both real ledger-write defects, and
+the batch script written to catch them ran SIX checkers green and caught NEITHER:
+added-fragments-parse, all-fragments-intact, scorable-obligation-added,
+declared-closures-added, fragment-events-land, long-running-view.
+
+What the gate then refused: (1) `violation:issue-citation-line-numbers:3`
+(881-29me) — a new plan/issues document cited `<file>:<line>` three times, and
+no checker in the batch looks at citations; (2) `depends_on -> unresolved
+reference '1252-fg9e'` — `depends_on` resolves against PACKET_IDS, and the order
+token is valid YAML that names nothing. `check-added-fragments-parse` was green
+because parse-success and reference-soundness are different questions over the
+same bytes; the checker that answers the second is `tillandsias-plan check`,
+which was not in the batch.
+
+**Why this is an entry**: the batch's green READ as "safe to commit" and was a
+statement about six specific properties. The failures that fired were outside all
+six. A preflight's green is scoped to its checks; treating it as a verdict on the
+change is the same shape as a green gate that ran no tests.
+
+**How to apply**: any ledger-write preflight includes `tillandsias-plan check` and
+the citation guard; and when a preflight passes, say WHAT it checked.
+
+## H12. `depends_on` takes a packet_id; the order token is the human handle
+
+Orders (`1252-fg9e`) are what conversations, row titles and cron prompts use; the
+dependency graph is keyed on `packet_id`. Writing the order where the key belongs
+parses, passes a parse check, and silently names nothing. Read the target's id
+and paste it; never type the order.
+
+## H13. A session-scoped scratchpad is not where unlanded work may sit
+
+2026-09-18: the coordinator's session ended on token exhaustion with three
+drafts — an operator ruling fragment, two hazard entries, and the PoC scripts
+1252-fg9e's first exit criterion expects "to arrive intact" — sitting in
+/tmp/claude-1000/.../scratchpad, plus the only copy of a 40-minute gate's log.
+The directory was empty on resume. The drafts were reconstructed from the
+transcript; the gate log was not recoverable and the failing test had to be
+re-derived from persistent archives.
+
+Everything that had been LANDED survived. This is 872-c9nd one layer up: the
+refusal path was not the trap this time, the staging path was. The
+scratchpad is correct for intermediate output that is REGENERATED; it is wrong
+for anything whose loss costs a re-derivation. Draft ledger writes into the
+worktree (which is durable and is what gets landed) whenever no gate is running
+there, and when one is, copy drafts under `plan/localwork/` before the session
+can end — not after.
