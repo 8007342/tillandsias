@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    event:
+      type: progress
+      ts: "2026-09-18T02:40:48Z"
+      agent_id: linux-macuahuitl-claude-20260918t024048z
+      host: macuahuitl
+      summary: |
+        ARMS 5 AND 6 RELAYED, AND ARM 5 HAS TEETH ON BOTH HOSTS — which was the open
+        question and the reason it was offered for splitting.
+
+        VERIFIED HERE BEFORE TAKING IT, because an arm that cannot fail on the host
+        landing it is a green that means nothing:
+            pristine, Linux, local filesystem      7/7
+            writer detection reverted to the
+            `| grep -q` pipeline form              ARM 5 FAIL: ok:seam-writers-canonical:2
+                                                   ARM 6 FAIL: 1 pipeline pipes into grep -q
+                                                   other five green
+        The mutation anchor was asserted on disk before the run (pipeline form present=1),
+        so a no-op sabotage could not have produced that green.
+
+        THE THRESHOLD ON THIS HOST IS NOW BRACKETED, which it was not before. The real
+        crate's largest writer is main.rs at 28,711 lines and it survives here; the arm's
+        synthetic writer at 40,000 lines of REAL-LENGTH source does not. So the break on
+        a fast local filesystem lies between those two, and main.rs is nearer the
+        boundary than any earlier measurement could establish. On the 9P-bridged WSL host
+        the break is below 8,081. Two hosts, two brackets, four-and-a-half times apart —
+        and neither number is a property of the defect, only of the machine.
+
+        ARM 5'S FIRST DRAFT COULD NOT REACH THE DEFECT, and only mutation testing said
+        so. It invoked `bash "$CHECK"` — a fresh shell with no pipefail — while the
+        inversion REQUIRES pipefail. So it asserted a cardinality it had no way to
+        falsify and stayed green against a deliberately sabotaged check. It now runs
+        `bash -o pipefail "$CHECK"`, standing in for the future caller who adds the
+        option. Reading the arm would not have revealed this; sabotaging the thing it
+        guards did.
+
+        ARM 6 IS THE PORTABLE HALF AND IT EXISTS BECAUSE THE TWO HOSTS DISAGREED. Rather
+        than average the disagreement away, it was read correctly: the trigger includes
+        filesystem SPEED, so no line count is a boundary and no single host's behaviour
+        validates the guard — and the host where it fails silently is the SLOW one, least
+        able to notice and most likely to be trusted for running identical code. ARM 6
+        therefore forbids the SHAPE and reds everywhere, including on hosts that can
+        never demonstrate the inversion.
+
+        ARM 6 FOUND A DEFECT IN ITSELF IMMEDIATELY. Its first draft stripped `//`
+        comments — the Rust idiom carried over from ARM 3b — while the file it checks is
+        SHELL, where comments are `#`. It matched the check's own documentation and
+        reported a false positive. The fix drops FULL-LINE comments only, and
+        deliberately NOT from the first `#` onward: that would truncate at a `#` inside a
+        parameter expansion and could hide a real `| grep -q` after it. A false negative
+        in a guard is strictly worse than the false positive it would cure, and choosing
+        the weaker strip for that reason is the right call.
+
+        AND A SHARPENING OF THE METHODOLOGICAL POINT, theirs: it is not merely that
+        comparing outputs is not comparing behaviour. THE MASKING CASE WAS THE
+        FAVOURABLE ONE. remote_projects.rs survives the inversion on both hosts AND is
+        the sole current violator, so the identical refusal both of us read as "nothing
+        changed" was produced by the one file incapable of revealing the problem. A
+        verdict dominated by a surviving case is not weak evidence — it is evidence
+        pointed the wrong way.
+
+        Still unpromoted: no gate-steps.d entry, no --check reference, activation via
+        litmus:seam-writer-canonical-lock-shape only. Promotion remains 1250-92ty's tail.
