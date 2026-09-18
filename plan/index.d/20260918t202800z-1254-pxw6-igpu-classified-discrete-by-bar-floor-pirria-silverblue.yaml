@@ -1,0 +1,97 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-integrated-gpu-with-a-resizable-bar-is-classified-discrete-because-the-bar-floor-is-the-only-rule-that-can-fire-and-the-unified-branch-needs-amdgpu-only-sysfs-attributes
+    order: 1254-pxw6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [accel, capability-probe, routing, portability, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/accel_probe.rs
+    title: |
+      `memory_model_from_evidence` reports an Intel iGPU as `discrete` on the strength of a 3.5 GiB resizable BAR that is a window into SYSTEM RAM, and its `unified` branch is UNREACHABLE on any non-amdgpu GPU because it requires `mem_info_vram_total`
+    context: |
+      FOUND BY pirria-silverblue 2026-09-18 during a normal meta-orchestration
+      cycle. `scripts/check-capability-row.sh` reported
+      `stale:capability-row-drifted:pirria:row-only=-,probe-only=gpu/container/ollama`,
+      and the row the generator wanted to publish describes hardware this host
+      does not have.
+      THE HOST: Intel N150, 4 physical cores, 15.3 GB RAM, Alder Lake-N
+      [Intel Graphics] at /dev/dri/renderD128 on i915. No discrete GPU. No
+      nvidia-smi. The operator's own description of this host is "modest
+      hardware, no accelerated GPU or NPU". The probe emits:
+        "device_class": "gpu", "memory_model": "discrete", "system_ram_gb": null
+      MEASURED MECHANISM, `crates/tillandsias-headless/src/accel_probe.rs:2700`
+      `memory_model_from_evidence`, three rules in order:
+        1. vram_total & vis_vram_total present, vis < vram          -> "discrete"
+        2. largest_prefetchable_bar >= DISCRETE_BAR_FLOOR_BYTES (1 GiB) -> "discrete"
+        3. vram_total & vis_vram_total present, vis >= vram, bar < 1 GiB -> "unified"
+      On this host, /sys/bus/pci/devices/0000:00:02.0 has NO `mem_info_*`
+      attributes at all — those are **amdgpu-only** sysfs files. So rules 1 and
+      3 cannot fire, and the only reachable rule is 2:
+        BAR 2:  256.00 MiB prefetchable
+        BAR 9: 3584.00 MiB prefetchable   <- 3.5 GiB >= the 1 GiB floor
+      BAR 9 is a resizable BAR aperture into SYSTEM RAM, which is what an
+      integrated GPU has instead of VRAM. The probe reads the presence of a
+      large aperture as evidence of dedicated memory, when on an iGPU it is
+      evidence of the opposite.
+      THE STRUCTURAL PART, and it is the reason this is a packet rather than a
+      threshold tweak: **rule 3 is dead code on every non-AMD GPU.** It is the
+      only rule that can ever answer "unified", and it requires two sysfs
+      attributes that exist only under amdgpu. So an Intel or Nvidia GPU can be
+      classified `discrete` or `None`, never `unified` — the function cannot
+      express the correct answer for the hardware it is being asked about.
+      Raising the BAR floor would move which iGPUs are misclassified; it would
+      not make `unified` reachable.
+      WHY IT MATTERS: capability-aware routing (847-wgy4) consumes this row.
+      `memory_model: discrete` beside `system_ram_gb: null` reads to a consumer
+      as a GPU with its own memory budget. This is the same failure the
+      meta-orchestration skill already records once — "the release gate was
+      routed to yoga for a gpu/container/ollama engine yoga never had" — and
+      here the row would be published by the SANCTIONED generator, with the
+      drift check demanding it be committed. The row is not hand-assembled and
+      the check is not wrong; the probe's evidence rule is.
+      AMPLIFIER, recorded but NOT claimed by this packet: the same fragment
+      publishes `engines: [{name: ollama, supported_device_classes: [cpu, gpu],
+      lanes: [container]}]`, which `check-capability-row.sh` folds to the token
+      `gpu/container/ollama`. That is a claim about what ollama supports as a
+      class, not about what this host can deliver — there is no ollama GPU
+      backend for i915 here. Whether an engine row should state host capability
+      rather than engine capability is a separate design question; it is named
+      here because the two together are what make a floor box advertise GPU
+      inference.
+      HONESTY ABOUT WHAT WAS NOT DONE: pirria has no Rust toolchain, so this
+      packet was NOT reproduced through a unit test on this host, and the
+      `crates/` freeze was live, so no fix was attempted. The sysfs readings,
+      the absent `mem_info_*` attributes and the emitted fragment are all
+      directly measured here; the control-flow claim is read from the cited
+      span at 2700-2721.
+    exit_criteria:
+      - 'an Intel iGPU whose largest prefetchable BAR exceeds the floor is NOT reported `discrete` — pre-fix evidence, reproducible on any Alder Lake-N: BAR 9 = 3584 MiB, no `mem_info_*` attrs present, probe emits "memory_model": "discrete"'
+      - 'a non-amdgpu GPU can reach a `unified` verdict at all — today rule 3 requires `mem_info_vram_total`/`mem_info_vis_vram_total`, which only amdgpu publishes, so `unified` is unreachable on i915 and on nvidia by construction'
+      - 'NEGATIVE CONTROL, and this is the criterion that stops an over-correction: a genuine discrete GPU still reports `discrete`. The existing unit fixtures at accel_probe.rs:7357 and :7879 (rtx3070) must stay green, and a host with a real dGPU must be re-probed to confirm it did not become `unified`'
+      - 'the verdict distinguishes "integrated" from "unknown": a GPU whose memory model cannot be determined must say so rather than defaulting to either answer, per the probe`s own stated rule at :2723 that absence is a claim about the probe and zero is a claim about the hardware'
+      - 'a fleet host with a real dGPU (macuahuitl, A5000 24GB) and one with only an iGPU (pirria, yoga, yolanda) both publish rows a router can tell apart — two hosts is not the fleet, and this was found on exactly one'
+    unscoreable: |
+      not-yet-reproduced-in-a-test: the mechanism is read from the source span
+      and the inputs are measured on the host, but pirria cannot compile, so no
+      fixture pins it yet. A host with a toolchain should add the i915 case to
+      the existing evidence fixtures before choosing a remedy — the fixture is
+      the cheap part and it is what makes the negative control checkable.
+    events:
+      - type: filed
+        ts: "2026-09-18T20:28:00Z"
+        agent_id: "linux-pirria-claude-20260918t202800z"
+        host: pirria-silverblue
+        summary: |-
+          Filed rather than silently committing the drifted row. The capability
+          row WAS regenerated and committed this cycle, because the generator is
+          the sanctioned path and a stale row is its own hazard — so the fleet
+          now carries a published row saying pirria has a discrete GPU, and this
+          packet is the reason that is not an accident. A consumer of the
+          capability matrix should read this row before routing GPU work to
+          pirria.

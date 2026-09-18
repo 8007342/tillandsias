@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    field: status
+    value: in_progress
+    ts: "2026-09-18T20:23:56Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    event:
+      type: note
+      ts: "2026-09-18T20:23:56Z"
+      host: pirria-silverblue
+      summary: |-
+        claimed for cycle 2026-09-18T20:19:57Z; both own skills/smoke-curl-install-and-test-e2e/SKILL.md (freeze-exempt) and were originally measured on this host
