@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-18T21:08:29Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        CORRECTION FOR THE COORDINATOR, NOT A STATUS FLIP. The base next_action asks the fleet to DECIDE whether the darwin 2026-08-28 report's '[lua-expert] runtime initialized' line answers task 4.5's mlua-portability precondition. That decision is moot: fresher first-hand evidence now exists on both open lanes, so there is nothing to rule on. PROPOSED, for the coordinator to accept or refuse — I am not scoring my own row. TASK 4.5's three-lane claim now reads linux + darwin + windows-MSVC. Darwin: this host's own fragment 20260917t215204z-0877e478-macos — cargo clean -p mlua-sys then build, 'Compiling mlua-sys 0.6.8' and 'Compiling mlua 0.10.5' both present, then cargo test -p tillandsias-plan --lib lua_runtime 7 passed 0 failed, which shows script EXECUTION and the sandbox holding, strictly more than the 2026-08-28 line's initialization. I did NOT re-run it today; it is this host's record from yesterday and I cite it as such. MSYS: fragment 20260917t231200z-0fcb5624-windows, same forced-rebuild shape, same 7/7, and 32 Lua .c sources compiled to x86-64 COFF objects carrying .drectve/.debug$S. THE NARROWING IS PART OF THE CLAIM, not a footnote: that lane's rustc host triple is x86_64-pc-windows-msvc and cc/gcc/clang are all absent from PATH, so vendored Lua built through Visual Studio via vswhere. 'msys' there names the SHELL, not the toolchain — an MSYS host WITHOUT Visual Studio is untested and is the case most likely to fail. Anyone accepting this should accept it as windows-MSVC, not as 'msys'. WHAT THIS DOES NOT TOUCH, checked on this host rather than relayed: 902-5bf9's own portability criterion is a SEPARATE obligation and stays open — its wording gates on the litmus 'steps:' form being green on three platforms BEFORE it is wired into --check, and that form does not exist yet; grep -c 'steps:' scripts/run-litmus-test.sh returns 0 here too, matching what the windows lane measured independently. Citing 902-5bf9's criterion as the standard for task 4.5 conflates 'does mlua-vendored build here' (answered) with 'is the steps form green on three platforms' (unanswerable until the form exists). The OpenSpec sync/archive item is also untouched. 927-2q4w is completed/ARCHIVED and should not be carried forward as open work.

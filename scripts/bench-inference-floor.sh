@@ -52,6 +52,27 @@
 
 set -uo pipefail
 
+# THIS HARNESS EMITS MACHINE-READABLE NUMBERS, so it must not emit them in the
+# operator's number format. awk's "%.2f" honours LC_NUMERIC, and on a host whose
+# locale uses a comma decimal separator it prints 100,00 rather than 100.00.
+#
+# MEASURED on tlatoanis-macbook-air 2026-09-18, LC_NUMERIC=fr_CH.UTF-8:
+#   awk 'BEGIN{printf "%.2f", 100}'            -> 100,00
+#   LC_ALL=C awk 'BEGIN{printf "%.2f", 100}'   -> 100.00
+#
+# THE FAILURE IS SILENT AND IT CORRUPTS THE MEASUREMENT, which is worse than a
+# crash. Every consumer of this output parses with a [0-9.] character class, so
+# a comma does not fail to match — it TRUNCATES: prefill_tok_s=100,00 is read as
+# 100, and prefill_range=1512,00-2195,00 as 1512-2195. The numbers still look
+# like numbers, the harness still exits 0, and the published figure is wrong by
+# whatever the decimals carried. scripts/test-bench-prompt-uniqueness.sh caught
+# it here only because it compares against the exact string "100.00".
+#
+# C for the WHOLE script, not per-awk: sort, printf and any later numeric
+# formatter have the same exposure, and a locale pinned in one place cannot
+# drift out of one of them.
+export LC_ALL=C
+
 EP="${BENCH_ENDPOINT:-${TILLANDSIAS_INFERENCE_ENDPOINT:-http://127.0.0.1:11434}}"
 CLAIMED="${BENCH_ENGINE_LABEL:-unspecified}"
 NUM_PREDICT="${BENCH_NUM_PREDICT:-200}"
