@@ -1,0 +1,120 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    packet_kind: methodology
+    order: 1259-kn83
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [methodology, multi-host, developer-loop]
+    estimated_hours: 4
+    owned_files:
+      - methodology/multi-host-development.yaml
+      - scripts/pre-push-checks.sh
+    unscoreable: |
+      needs-a-slow-host-and-a-busy-trunk-together. The defect is a RACE, so it
+      cannot be exhibited on a host whose gate finishes faster than trunk moves
+      — which is every Linux lane in this fleet, and why the rule has looked
+      correct for as long as it has existed.
+
+      WHAT A FIXTURE MUST ASSERT, so it is not weakened into a unit test of the
+      hook's happy path: given a local branch merged from trunk revision A, a
+      fresh gate stamp for that merged tree, and trunk since advanced to B where
+      A..B touches ONLY plan/ paths, the pre-push check ADMITS the push. A
+      MUTATION ARM must show it REFUSES when A..B touches a non-plan path —
+      otherwise the fixture proves only that some push was once allowed, and
+      the rule's actual protection has been silently deleted rather than
+      narrowed.
+    verifiable_closure: ""
+    title: |
+      pull_merge_cadence.pre_push_gate requires a trunk merge before every platform-branch push and a gate stamp for the merged tree, so on a host whose gate is slower than trunk's landing cadence the two conditions cannot be held true at once, and the push is refused for a reason the pushing host cannot influence
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-18, and independently from the
+      stamp side by esmeraldinha the same day (esme: ~6000s per gate; cited as
+      the second host, not inspected from here).
+
+      THE LOOP, with real timings:
+        1. merge origin/linux-next (1ec62e55b) into osx-next — clean
+        2. ./build.sh --check -> BUILD_RC=0 at 15:51:13, gate phases 1241s
+           (an earlier green on this host: 1087s)
+        3. git push -> REFUSED: blocked:linux-next-not-merged:osx-next
+           Trunk had advanced 1ec62e55b -> ccf678d30 DURING step 2.
+        4. re-merge, re-gate, and the window opens again.
+
+      WHY IT IS NOT A HOST DEFECT AND NOT IMPATIENCE. Nothing the pushing host
+      does changes the outcome: the gate cannot be made shorter than the tree it
+      validates, and the merge cannot be made to predate a landing that has not
+      happened yet. The loop terminates ONLY if trunk stays quiet for one full
+      gate duration. That probability falls as the fleet gets BUSIER, so the
+      rule degrades exactly when coordination matters most, and it degrades
+      hardest on the slowest host — which is also the host least able to afford
+      the retries.
+
+      THE ASSUMPTION THE RULE ENCODES, never stated: that a gate is fast
+      relative to trunk's landing cadence. True on every Linux lane here.
+      False on a macOS host at ~20 minutes with no Push CI (this hook is the
+      trunk's only gate), and false by a wider margin on esme.
+
+      COST OBSERVED TONIGHT: eight commits held, including a closed packet's
+      evidence, two fixes and three filings; a SECOND macOS host (macneo)
+      idled by agreement waiting for the resulting SHA; and a coordinator
+      forced to freeze three hosts' pushes to hand out a quiet window so one
+      slow host could land. The interim remedy worked, and needing it is the
+      finding.
+
+      THE RULE IS NOT WRONG ABOUT WHAT IT PROTECTS. version_divergence_hazard
+      is real and this row must not be read as an argument for weakening it.
+      What it is wrong about is treating ALL trunk movement as equally
+      dangerous.
+    deliverable: |
+      The rule admits a push that is safe, and still refuses one that is not.
+      Two candidate shapes, named so an implementer starts with a decision
+      rather than a blank page:
+
+        1. PLAN-ONLY TRUNK MOVEMENT DOES NOT COUNT AS UNMERGED. If everything
+           in <last-merged-trunk>..<current-trunk> is confined to plan/ paths,
+           the platform branch is not diverging in any sense the rule protects:
+           a ledger fragment cannot conflict with code, and the gate that just
+           passed validated the code. This is the structural fix and it removes
+           most of the race, because plan/ churn is the bulk of trunk's
+           landing traffic on a busy night.
+           THE CARE IT NEEDS: "confined to plan/" must be computed from the
+           actual diff of that range, not from commit subjects, and the
+           exemption must not extend to plan/ paths that are INPUTS to code
+           (openspec/ bindings and litmus definitions are not plan/, and should
+           stay outside the exemption).
+
+        2. A COORDINATOR QUIET WINDOW for slow hosts, as the interim. Used
+           successfully tonight: the coordinator held three hosts' pushes for
+           ~25 minutes. It works and it does not scale — it costs the whole
+           fleet's landing throughput to serve one host, and it needs a human
+           or a coordinator in the loop for what should be a mechanical
+           decision.
+
+      Whichever is taken, the fixture in `unscoreable` is part of it: a
+      narrowing of a safety rule that ships without a mutation arm is
+      indistinguishable from a deletion of it.
+    next_action: >
+      Reproduce the race before changing the rule, because a fix aimed at the
+      wrong half will look like it works on a quiet trunk: on any host, merge
+      trunk, start ./build.sh --check, land a plan-only commit on linux-next
+      from a second host mid-run, then push — expect
+      blocked:linux-next-not-merged even though nothing in the range can
+      conflict. Then read scripts/pre-push-checks.sh for where the
+      merged-ness test is computed, and methodology/multi-host-development.yaml
+      for pull_merge_cadence.pre_push_gate, and decide between candidate 1 and
+      candidate 2 explicitly rather than implementing whichever is nearer the
+      cursor. DO NOT start by making the gate faster: that is a different row
+      and it does not close this one, because any finite gate loses this race
+      on a busy enough trunk.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-18 at the coordinator's
+      request, after hitting the refusal with a green gate in hand. The timings,
+      SHAs and refusal string are this host's, on disk (check5.log 1087s,
+      check6.log 1241s BUILD_RC=0, stamp mtime 15:51:13). esmeraldinha's ~6000s
+      figure is carried as a SOURCED CLAIM relayed by the coordinator and has
+      not been inspected from here. The interim remedy in candidate 2 is
+      recorded because it was actually used tonight, not because it is proposed.

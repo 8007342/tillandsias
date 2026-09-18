@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    field: next_action
+    value: |-
+      Reproduce first; it needs no build and no host change — `LC_NUMERIC=fr_CH.UTF-8 awk 'BEGIN{printf "%.2f", 100}'` prints 100,00 on any host with that locale generated, and `LC_ALL=C` prints 100.00. Then take the four scripts one at a time: for each, find where its %.Nf output is CONSUMED and confirm the consumer parses with a [0-9.]-style class before pinning, because the fix is only warranted where the truncation is reachable. Read scripts/bench-inference-floor.sh's locale comment first — it is the same lesson with the measurement and the two arms already written out. Do NOT close this by pinning all four on the grep alone: the grep establishes exposure, and this packet's own claim register says so.
+
+
+      [2026-09-18T22:01:59Z macbookair-macos] REMEDY SHAPE, and it is the whole trap in this row: pin LC_ALL=C on the PRODUCER AND EVERY CONSUMER OF ITS NUMBERS, OR ON NEITHER. A host that greps for LC_NUMERIC and pins the awk it finds will half-fix scripts/select-work-batch.sh and silently corrupt the work selector. That script's awk scores go straight into 'sort -k1,1nr' and 'sort -n', and sort honours the SAME LC_NUMERIC awk just used: awk writes 3,500, sort reads 3,500 as 3.5, and the ranking is self-consistent today. Pin the awk ALONE and awk emits 3.500 while sort still parses under the comma locale and reads it as 3 — a ranking that is wrong with no error anywhere. So for each remaining candidate, find where the number is CONSUMED before touching the producer, and pin both ends together or leave both alone. Scope the pin, too: scripts/hooks/pre-commit-openspec.sh took LC_ALL=C on its two awk formatters only, NOT on the whole script, because LC_ALL=C changes COLLATION as well as numerics and that hook also sorts and matches user-facing text; scripts/bench-inference-floor.sh could take it script-wide because everything it emits is machine-readable. DONE, each caught by a real gate red rather than by inspection: bench-inference-floor.sh (bb8cbda96) and hooks/pre-commit-openspec.sh (21c578622). LEFT: freshness-inventory.sh (one %.1f percentage), select-work-batch.sh (see the trap above — awk and sort together or neither), refusal-calibration/measure-bands.sh (one %.4f margin). None of the three is confirmed defective; the grep establishes EXPOSURE, not defect, and this row will not accept a blanket pin as closure. GUARD still owed, per unscoreable: a fixture that SETS a comma locale around each producer and asserts a dot separator, with a mutation arm that reds when the pin is removed — under LC_NUMERIC=C, which every CI lane runs, a fixture that merely executes the producers proves nothing.
+    ts: "2026-09-18T22:01:59Z"
+    host: macbookair-macos
