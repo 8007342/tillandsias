@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: log-query-language-has-zero-consumers
+    event:
+      type: progress
+      ts: "2026-09-17T23:52:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t235248z
+      host: macos
+      summary: |
+        ORPHAN STATUS RE-MEASURED 2026-09-17 AND CONFIRMED — a month after filing, with a method that closes a hole the original search had.
+
+        THE ORIGINAL AUDIT SEARCHED ONE STRING: "zero matches for tillandsias_logging::query outside the crate". That is the MODULE PATH, and it cannot see consumption through a re-export. crates/tillandsias-logging/src/lib.rs:38 re-exports at crate root:
+          pub use query::{AggregationOp, Filter, JsonFilter, Query, QueryExecutor, parse};
+        so any real consumer would write tillandsias_logging::QueryExecutor and never the string that was searched for. The conclusion happened to be right; the method would not have detected the case that falsifies it.
+
+        ENUMERATED THE CLASS, THEN SEARCHED EACH MEMBER:
+          tillandsias_logging::query (module path)                     0 consumers outside the crate
+          use tillandsias_logging::{...query...}                       0
+          each re-exported symbol by name (QueryExecutor,
+            AggregationOp, JsonFilter)                                 0
+          qualified tillandsias_logging::(Query|Filter|parse|...)      0
+          ParseError                                                   7 hits, NONE from this crate
+              (checked rather than counted: a common type name, and all seven belong to other crates' own error types)
+
+        POSITIVE CONTROL, which is what makes the zeros mean anything: tillandsias_logging IS consumed outside itself, in three files across tillandsias-headless and tillandsias-core. What they use is tillandsias_logging::BudgetEnforcer and tillandsias_logging::CardinalityAnalyzer. So the crate is live, the search apparatus works, and the query module specifically is the unconsumed part. A bare zero here would have been indistinguishable from a dead crate or a broken search.
+
+        SUBJECT CONFIRMED PRESENT: crates/tillandsias-logging/src/query.rs, 747 lines, still spec-traced.
+
+        THE DECISION IS NOT MINE TO TAKE UNILATERALLY, and I am recording why rather than picking. This row is kind: audit+decision, and its criterion reads "the telemetry/logging owner either wires query.rs to a real surface (CLI, MCP tool, or expert backend) with one end-to-end test proving the WIRING, or tombstone". Both branches are larger than an unowned p3 decided by a passing host: wiring adds a product surface, and tombstoning deletes 747 lines of spec-traced code plus its spec in the same commit. Neither should happen because a cycle happened to select the row.
+
+        WHAT THE OWNER NOW HAS THAT THEY DID NOT: the claim is current rather than a month old, it survives a search that covers re-exports, and the positive control distinguishes "nobody calls query" from "nobody calls this crate". The natural owner named in the context is the 682 local-telemetry-for-bottleneck-finding family, which is also this row's release_target.
+
+        ONE OBSERVATION FOR WHOEVER DECIDES, offered as data not advocacy: the two things this crate DOES export and that ARE consumed — BudgetEnforcer and CardinalityAnalyzer — are both telemetry-cost surfaces. A query language is a different shape of thing from what its only consumers actually reach for, which is weak evidence toward tombstone rather than wiring. Weak, because absence of a consumer is not absence of a use case, and 781-hseq exists precisely because "built and tested" reads as healthy while unwired.
