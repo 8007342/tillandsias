@@ -89,8 +89,18 @@ if [[ -f "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" ]]; then
     . "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
 fi
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
-readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"
-readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"
+# ORDER 1252-znbn. Overridable alongside LITMUS_TESTS_DIR below, with the same
+# unchanged default. The two are a PAIR — bindings name the tests, the directory
+# holds them — so overriding one without the other gives a fixture half a seam
+# and a discovery path that silently finds nothing. Both or neither.
+readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspec/litmus-bindings.yaml}"
+# ORDER 1252-znbn. Overridable, defaulting to exactly the previous value, so a
+# fixture can exercise ADJUDICATION against its own throwaway corpus instead of
+# writing test files into the real one. Without this the structured `assert:`
+# arms could only be tested by polluting openspec/litmus-tests, and a guard that
+# cannot be tested without touching the tree it guards does not get tested.
+# The default is unchanged, so every existing caller resolves identically.
+readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
 readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
 readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
@@ -916,6 +926,71 @@ check_signal() {
     [[ -z "$failure_pattern" ]] || return 0
 }
 
+# ORDER 1252-znbn. STRUCTURED ADJUDICATION — the replacement for
+# behavior_matches_output's natural-language `case` arms.
+#
+# WHY. behavior_matches_output is a natural-language interpreter written in
+# bash `case` arms: `*"multiple"*` means "grep the first integer and require
+# >= 2", `*"succeeds"*` means "ignore the output and honour the exit code",
+# `*"cargo"*` means "grep the output for cargo". REWORDING AN ENGLISH SENTENCE
+# CHANGES THE RULE THAT DECIDES THE VERDICT, with no diff anywhere saying the
+# test now checks something else. 64 steps carry a sentence containing
+# "succeeds" whose content is therefore decorative.
+#
+# The fields here name the OUTPUT they check instead of describing it in prose:
+#   assert_exit: <n>                exact exit status
+#   assert_output_contains: "..."   literal substring, case-sensitive
+#   assert_output_matches: "..."    ERE regex
+# Declaring ANY of them adjudicates the step by those fields ONLY — the
+# expected_behavior sentence beside them becomes documentation and cannot
+# change the verdict, which is the whole point of the row.
+#
+# assert_output_matches EXISTS BECAUSE OF 868-p8xi. An expectation written as
+# an `(a|b)` alternation was searched for VERBATIM by the fallback
+# `grep -Fqi`, so it could never match and litmus:sidecar-arch-derivation
+# failed while printing one of its own listed alternatives. A regex field is
+# matched AS a regex.
+#
+# WHAT THIS CANNOT DO, AND WHY IT IS NOT AN OVERSIGHT. There is no
+# assert_stdout_* / assert_stderr_* pair, because the runner redirects every
+# step with `>"$step_capture" 2>&1` — the two streams are MERGED before
+# adjudication can see them, so naming which stream matched is not information
+# this runner still has. Separating them is order 1252-fg9e's executor; when a
+# step's fds arrive separately these fields widen rather than change shape.
+# A field absent by CONSTRAINT reads identically to one nobody thought of
+# unless the code says which, so this paragraph is the difference.
+#
+# A TIMEOUT IS NOT AN ASSERTION FAILURE. timeout(1) reserves 124, and the
+# runner already branches on it — but nothing in this tree is responsible for
+# keeping that true, so it is asserted explicitly here rather than relied on.
+# A step that times out reports that it timed out; it does not report that its
+# output failed to match, which would send a reader to the wrong question.
+structured_assert_declared() { # <exit> <contains> <matches>
+    [[ -n "${1}${2}${3}" ]]
+}
+
+structured_assert_matches() { # <output> <exit_code> <a_exit> <a_contains> <a_matches>
+    local output="$1" exit_code="$2" a_exit="$3" a_contains="$4" a_matches="$5"
+
+    if [[ "$exit_code" -eq 124 && "$a_exit" != "124" ]]; then
+        printf '%s\n' "         assert: step TIMED OUT (rc=124) — not an assertion miss; raise timeout_ms or fix the step" >&2
+        return 1
+    fi
+    if [[ -n "$a_exit" && "$exit_code" -ne "$a_exit" ]]; then
+        printf '%s\n' "         assert_exit: expected ${a_exit}, got ${exit_code}" >&2
+        return 1
+    fi
+    if [[ -n "$a_contains" ]] && ! grep -Fq -- "$a_contains" <<<"$output"; then
+        printf '%s\n' "         assert_output_contains: literal not found: ${a_contains}" >&2
+        return 1
+    fi
+    if [[ -n "$a_matches" ]] && ! grep -Eq -- "$a_matches" <<<"$output"; then
+        printf '%s\n' "         assert_output_matches: regex did not match: ${a_matches}" >&2
+        return 1
+    fi
+    return 0
+}
+
 behavior_matches_output() {
     local output="$1"
     local expected="$2"
@@ -1208,12 +1283,23 @@ run_litmus_test_file() {
     local current_step_expected=""
     local current_step_success_pattern=""
     local current_step_failure_pattern=""
+    # ORDER 1252-znbn. Structured assertions. Declared here and reset at EVERY
+    # site that resets the other step fields. A field reset in three of four
+    # places leaks into the next step, which is the same defect class as the
+    # item-merge this parser was just fixed for.
+    local current_step_assert_exit=""
+    local current_step_assert_contains=""
+    local current_step_assert_matches=""
     local -a step_names=()
     local -a step_commands=()
     local -a step_timeouts=()
     local -a step_expecteds=()
     local -a step_success_patterns=()
     local -a step_failure_patterns=()
+    # ORDER 1252-znbn — parallel arrays for the structured assertion fields.
+    local -a step_assert_exits=()
+    local -a step_assert_contains_all=()
+    local -a step_assert_matches_all=()
     local -a unparsed_step_names=()
     # ORDER 1252-znbn. critical_path items opened by a key other than `step:`.
     local -a malformed_items=()
@@ -1235,6 +1321,9 @@ run_litmus_test_file() {
         step_expecteds+=("$current_step_expected")
         step_success_patterns+=("$current_step_success_pattern")
         step_failure_patterns+=("$current_step_failure_pattern")
+        step_assert_exits+=("$current_step_assert_exit")
+        step_assert_contains_all+=("$current_step_assert_contains")
+        step_assert_matches_all+=("$current_step_assert_matches")
     }
 
     while IFS= read -r line; do
@@ -1252,6 +1341,9 @@ run_litmus_test_file() {
             current_step_expected=""
             current_step_success_pattern=""
             current_step_failure_pattern=""
+            current_step_assert_exit=""
+            current_step_assert_contains=""
+            current_step_assert_matches=""
             in_critical_path=0
             in_gating_points=1
             continue
@@ -1265,6 +1357,9 @@ run_litmus_test_file() {
             current_step_expected=""
             current_step_success_pattern=""
             current_step_failure_pattern=""
+            current_step_assert_exit=""
+            current_step_assert_contains=""
+            current_step_assert_matches=""
             in_critical_path=0
             in_gating_points=0
         fi
@@ -1278,6 +1373,9 @@ run_litmus_test_file() {
                 current_step_expected=""
                 current_step_success_pattern=""
                 current_step_failure_pattern=""
+                current_step_assert_exit=""
+                current_step_assert_contains=""
+                current_step_assert_matches=""
             elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*): ]]; then
                 # ORDER 1252-znbn. A critical_path ITEM may only be opened by
                 # `- step: "..."`. An item opened by ANY other key — `- name:`
@@ -1340,6 +1438,16 @@ run_litmus_test_file() {
                 current_step_success_pattern="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
             elif [[ "$line" =~ failure_pattern:\ \"(.+)\" ]]; then
                 current_step_failure_pattern="$(yaml_unescape_dq "${BASH_REMATCH[1]}")"
+            # ORDER 1252-znbn — STRUCTURED ASSERTIONS. These are anchored at
+            # the start of the line, unlike the timeout_ms/expected_behavior
+            # branches above, so a value that merely CONTAINS the key name
+            # cannot be mistaken for the key.
+            elif [[ "$line" =~ ^[[:space:]]*assert_exit:[[:space:]]+([0-9]+) ]]; then
+                current_step_assert_exit="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ ^[[:space:]]*assert_output_contains:[[:space:]]+\"(.+)\" ]]; then
+                current_step_assert_contains="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ ^[[:space:]]*assert_output_matches:[[:space:]]+\"(.+)\" ]]; then
+                current_step_assert_matches="${BASH_REMATCH[1]}"
             fi
         fi
 
@@ -1413,6 +1521,12 @@ run_litmus_test_file() {
         local step_expected="${step_expecteds[$idx]}"
         local step_success_pattern="${step_success_patterns[$idx]}"
         local step_failure_pattern="${step_failure_patterns[$idx]}"
+        local step_assert_exit="${step_assert_exits[$idx]}"
+        local step_assert_contains="${step_assert_contains_all[$idx]}"
+        local step_assert_matches="${step_assert_matches_all[$idx]}"
+        # ORDER 1252-znbn. Non-empty when the step declares ANY structured
+        # assertion, which takes precedence over every legacy arm below.
+        local step_structured="${step_assert_exit}${step_assert_contains}${step_assert_matches}"
         local step_output=""
         local exit_code=0
 
@@ -1507,7 +1621,7 @@ run_litmus_test_file() {
         # migration discipline; the corpus was 156/156 strict at flip
         # time). TILLANDSIAS_LITMUS_STRICT_EXIT=0 is the emergency opt-out
         # — using it on a red is a finding to file, not a fix.
-        if [[ $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
+        if [[ -z "$step_structured" && $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
             if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-1}" != "0" ]]; then
                 # ORDER 1018-5f5a. This arm already NAMED the number on its
                 # detail line, and that was not enough: a reader scanning for a
@@ -1528,7 +1642,14 @@ run_litmus_test_file() {
         # authoritative for regex-based pass/fail. Otherwise fall back to the
         # expected_behavior heuristic for backward compatibility with steps
         # that rely on its keyword-matching logic.
-        if [[ -n "$step_success_pattern" ]]; then
+        if [[ -n "$step_structured" ]]; then
+            if ! structured_assert_matches "$step_output" "$exit_code" \
+                    "$step_assert_exit" "$step_assert_contains" "$step_assert_matches"; then
+                printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
+                printf '%s\n' "         output=${step_output}" >&2
+                return 1
+            fi
+        elif [[ -n "$step_success_pattern" ]]; then
             if ! check_signal "$step_output" "$step_success_pattern" "$step_failure_pattern"; then
                 # ORDER 1018-5f5a. A pattern miss and a CRASH look identical
                 # here without the rc: both print [FAIL] and whatever the step
