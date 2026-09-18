@@ -18114,23 +18114,6 @@ mod tests {
     /// secondary failures that bury the defect which caused them.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
-    /// lifetime, on its own dedicated mutex, restoring on drop. The forge
-    /// arg-builder family reaches `vault_bootstrap::container_running` (via
-    /// `read_provider_api_key`), which resolves podman — bare resolution in a
-    /// parallel test run is the race that stopped the live enclave. /bin/false
-    /// makes the vault probe a deterministic "not running" (the no-vault
-    /// builder path these hermetic tests mean to exercise anyway).
-    ///
-    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
-    /// env_guard, consistently — a consistent order cannot deadlock.
-    /// EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
-    /// THIS mutex, taken before env_lock/env_guard — the fake-podman tests
-    /// hold it via `podman_seam_lock()` while their TestEnvRestore manages
-    /// the value. A writer outside the lock reintroduces the mid-test
-    /// var-drop this exists to end.
-    static PODMAN_SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     /// ORDER 1119-w2rj. `set_current_dir` is PROCESS-GLOBAL and Rust runs tests
     /// as threads in one process, so a test that moves the CWD races every other
     /// test that touches a relative path. Serialised the same way ENV_LOCK
@@ -18138,8 +18121,26 @@ mod tests {
     /// directory must hold this and restore the original before releasing it.
     static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
+    /// lifetime, restoring on drop. The forge arg-builder family reaches
+    /// `vault_bootstrap::container_running` (via `read_provider_api_key`),
+    /// which resolves podman — bare resolution in a parallel test run is the
+    /// race that stopped the live enclave. /bin/false makes the vault probe a
+    /// deterministic "not running" (the no-vault builder path these hermetic
+    /// tests mean to exercise anyway).
+    ///
+    /// EVERY writer of TILLANDSIAS_PODMAN_BIN ANYWHERE IN THIS CRATE
+    /// serialises on the canonical `runtime_assets::podman_seam_lock`, which
+    /// this delegates to. It used to be a private `PODMAN_SEAM_LOCK` static
+    /// living in this tests mod — which is exactly why the invariant could say
+    /// "every writer in this tests mod" and be TRUE AS WRITTEN while
+    /// `accel_probe` repointed the same var under a mutex of its own. The
+    /// scope of the guarantee was the bug, not its wording.
+    ///
+    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
+    /// env_guard, consistently — a consistent order cannot deadlock.
     fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
-        PODMAN_SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+        crate::runtime_assets::podman_seam_lock()
     }
 
     fn podman_false_seam() -> PodmanFalseSeam {

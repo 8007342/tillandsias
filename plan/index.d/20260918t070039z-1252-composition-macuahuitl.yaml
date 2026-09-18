@@ -1,0 +1,369 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    order: 1252-fg9e
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, tests, process, async, composition]
+    estimated_hours: 10
+    owned_files:
+      - crates
+      - scripts
+    title: |
+      an idiomatic command executor in Rust — argv not shell strings, stdout and stderr captured SEPARATELY and drained CONCURRENTLY, exit status as a value, and a run identity on every Result so a stale artifact cannot read as a fresh one
+    context: |
+      OPERATOR DIRECTIVE 2026-09-18: "We're not trying to fix a problem, we're
+      trying to fix the architecture so the problem doesn't exist." This is the
+      foundation packet for that; 1252-hsrz, 1252-znbn and 1252-r72q sit on it.
+      THE DEFECT SURFACE, MEASURED ON macuahuitl AT 8dd482881, not estimated.
+      `find -L scripts -name '*.sh'` is 669 files. Whole-file co-occurrence of
+      each hazard shape, an UPPER BOUND because co-occurrence is not proof the
+      specific pipeline runs under that option:
+        195  `pipefail` + `| grep -q`   verdict inverts on SIGPIPE
+         65  `| tail -1`                discards the guard's reasoning
+         27  `if ! <pipeline>`          795-imz3 guard inversion
+          7  inline `pgrep|pkill -f`    self-match, exit 144
+      THE INVERSION IS DETERMINISTIC, NOT INTERMITTENT, and that is the part
+      that makes it dangerous. Over a 200,000-line input whose FIRST line
+      matches, `sed … | grep -q` under pipefail returned rc=141 and reported
+      NO-MATCH on 5 of 5 trials while the string was present 200,000 times;
+      capture-then-match was correct 5/5. At small inputs the producer finishes
+      before grep exits and the bug is invisible — so a guard is green for
+      months and flips the day its corpus grows. That is exactly how
+      check-seam-writers-canonical.sh behaved.
+      WHAT THE LAYER FIXES BY CONSTRUCTION, of the ten defects that cost time in
+      the 2026-09-17/18 session: SIGPIPE inversion (no OS pipe between stages),
+      `set -e` assignment exit (status is a value), shell options not
+      propagating into a child `bash -c` (the layer owns the invocation),
+      `if ! <pipeline>`, `tail -1` discarding stderr (separate capture), and
+      `pgrep -f` self-match (argv assembled callee-side).
+      WHAT IT DOES NOT FIX, said plainly because the motivating incident is in
+      this column: the litmus YAML indentation defect that actually reddened the
+      release gate, command-vs-argument position when patching YAML, `head -8`
+      over a 12-item list, and a regex that clipped an order token. Those are
+      data-format and enumeration defects. Do not sell this packet as fixing
+      them.
+      ASYNC IS REQUIRED FOR CORRECTNESS, NOT ELEGANCE. A child writing past the
+      pipe buffer (~64KB) on stdout while nobody drains stderr DEADLOCKS. Both
+      fds must be drained concurrently. The bash shape prototype dodged this
+      only by writing to files, which is why it is a shape prototype and not the
+      implementation.
+      RUN IDENTITY IS IN SCOPE AND IS NOT A NICETY. On 2026-09-18 a land was
+      monitored with `until [ -f land.rc ]`; a 13-hour-old file of that name
+      satisfied it instantly and the tool reported rc=0 for a land that had not
+      started. Verifying against origin is what caught it. A Result that carries
+      the identity of the run that produced it makes that unrepresentable, and
+      the same shape is what lets a cached verdict be distinguished from a fresh
+      one in 1252-hsrz.
+      ARGV, NEVER SHELL STRINGS, is the single constraint doing the most work:
+      it deletes quoting, word-splitting, globbing and injection as a CLASS, and
+      it is precisely what bash cannot offer. `run{"git","status"}`, never
+      `run("git status")`.
+      PRECEDENT AND SCOPE: crates/tillandsias-podman is the shape to copy — an
+      idiomatic Rust layer callers describe intent to. This packet does NOT
+      migrate the 669 scripts. Migrate on touch, exactly as the operator ruled
+      for redb; a sweep is how a second substrate appears that the gate does not
+      run.
+    exit_criteria:
+      - 'a Result carries exit status, stdout and stderr as three SEPARATE values, and a test proves stderr survives when a caller reads only stdout (pre-fix result: FAILS — scripts/run-litmus-test.sh:1403 redirects every step with >"$step_capture" 2>&1, so no litmus step can distinguish them today)'
+      - 'a command whose child writes 1 MiB to stdout AND 1 MiB to stderr completes and returns both in full (pre-fix result: FAILS — a sequential single-fd read deadlocks at the pipe buffer; this criterion is the reason the executor must drain concurrently)'
+      - 'the SIGPIPE reproducer at poc/01-demonstrate-inversion.sh, which returns rc=141 and NO-MATCH 5/5 through a shell pipeline under pipefail, returns the correct verdict 5/5 through the executor on the same 200,000-line input'
+      - 'the API accepts an argv sequence and there is NO entry point taking a shell string; a test asserts a literal containing a space, a quote and a glob reaches the child as ONE argument unaltered (pre-fix result: FAILS — no such API exists)'
+      - 'every Result carries an identity distinct per invocation, and a test asserts two runs of the same command produce different identities, so a stale artifact cannot be mistaken for a fresh one'
+      - 'a timeout fires on a child that ignores SIGTERM and the Result says the run was killed rather than reporting an exit status the child never produced'
+    unscoreable: |
+      whether-the-tree-converges-on-it: adoption is migrate-on-touch by operator
+      ruling, so this row closing says the executor exists and is correct, NOT
+      that any script uses it. How fast call sites move, and whether the
+      ergonomics are good enough that they do, cannot be settled by this row and
+      should not be read into its closure. A later finding that scripts are not
+      adopting it is evidence about ergonomics, not a reopening of this packet.
+    verifiable_closure: |
+      a committed test module in which: stderr is readable when only stdout is
+      consumed; a 1 MiB/1 MiB dual-stream child completes without deadlock; the
+      200,000-line SIGPIPE reproducer returns the correct verdict 5/5 where the
+      shell pipeline returns rc=141 5/5; an argument containing a space, a quote
+      and a glob arrives at the child as one unaltered argv entry; two
+      invocations carry distinct run identities; and a SIGTERM-ignoring child is
+      reported as killed rather than as exited.
+    events:
+      - type: filed
+        ts: "2026-09-18T05:29:59Z"
+        agent_id: "linux-macuahuitl-claude-20260918t052959z"
+        host: macuahuitl
+        summary: |-
+          Filed on the operator's approval of the Rust+Lua split, 2026-09-18.
+          The hazard counts and the 5/5 SIGPIPE reproduction were measured on
+          this host at 8dd482881 before filing; the reproducer and a bash SHAPE
+          prototype (not the implementation) are in the filing session's
+          scratchpad and the first exit criterion expects the reproducer to
+          arrive intact rather than be rewritten from this description.
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    order: 1252-hsrz
+    status: blocked
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, lua, forge, tests, caching]
+    estimated_hours: 12
+    depends_on: [an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result]
+    owned_files:
+      - crates/tillandsias-plan/src/lua_runtime.rs
+      - lua
+    title: |
+      a Lua predicate bridge whose CACHEABLE class cannot reach the shell — purity enforced by symbol ABSENCE, not by documentation — so a forge agent can validate uncommitted specs and litmus without recompiling the host binary
+    context: |
+      WHY LUA AND NOT MORE RUST, in the operator's words 2026-09-18: an agent
+      inside the forge has "no place to recompile their own binary when adding
+      specs or work implementation". If predicates are Rust, a forge agent
+      cannot validate a spec it just wrote, and the runtime-verifiable-obligation
+      vision is unreachable from where most of the work happens. That makes the
+      dynamic layer a RUNTIME REQUIREMENT, not a convenience.
+      THIS DOES NOT REOPEN 920-pxg6, and the distinction matters. That audit
+      pinned Lua to deterministic data-in/data-out work and deleted a PHANTOM
+      sandbox claim from lua_runtime.rs. The division of labour survives here
+      intact: Lua DECLARES and DECIDES; Rust (1252-fg9e) SPAWNS, owns fds,
+      enforces timeouts and reaps. Nothing in the forge argument argues for
+      moving fork/exec into Lua.
+      THE MODEL IS CAPABILITY-PASSING AND ALREADY EXISTS. lua_runtime.rs today
+      exposes exactly `expert.log_info` and `expert.now_ms` and nils out
+      os.execute, io.popen, io.open, require, dofile and debug. Adding verbs
+      WIDENS an audited capability set; it does not invent a trust model.
+      THE CACHE PURITY TRAP, which is the reason this packet exists in this
+      shape. The performance case wants cached predicate results over read-only
+      state. A cached result is sound only if the predicate is genuinely pure —
+      and the moment a shell verb is in scope, predicates OBSERVE THE WORLD and
+      are not. Cache those and you get stale verdicts indistinguishable from
+      fresh ones: a green gate that ran nothing, which is the failure this whole
+      programme exists to prevent.
+      THE FIX IS STRUCTURAL, NOT DOCUMENTARY: two predicate classes, and the
+      cacheable one simply DOES NOT HAVE the shell verb in its environment. A
+      pure predicate that tries to shell out fails to resolve the symbol. That
+      is what keeps the classification from drifting away from reality;
+      a documented rule drifts the first time someone is in a hurry.
+      SELINUX CANNOT BE CITED AS CONTAINMENT AND MUST NOT BE. ../tillandsias.org
+      found the SELinux policies are PROSE — not enforced, not scoped, not
+      required anywhere. Claiming SELinux containment here would recreate
+      precisely the phantom that 920-pxg6 deleted from this very file. Note also
+      that a spec requiring SELinux which nothing enforces is the same
+      prose-versus-enforceability defect measured in the litmus corpus, one
+      layer down. Containment today = a small audited verb set + the forge's
+      existing container boundary. Nothing else may be asserted.
+      PROVENANCE IS THE REAL COST AND IS NOT SOLVED HERE. Today `lua/` is
+      trusted code in the checkout. A forge agent authoring a predicate for
+      uncommitted work moves the boundary from "code we shipped" to "code an
+      agent just wrote". That is a provenance question, not a sandbox question,
+      and "we are the only ones manipulating it" stops being the safeguard the
+      moment agents author predicates. Bounding blast radius by the verb set is
+      the mitigation this packet delivers; signing/attesting predicate
+      provenance is NOT in scope and needs its own row.
+    exit_criteria:
+      - 'a predicate registered in the cacheable class and calling the shell verb FAILS TO RESOLVE THE SYMBOL at call time, proven by a test asserting the failure (pre-fix result: FAILS — there is no predicate class distinction today, so nothing can be asserted about it)'
+      - 'a predicate in the observing class IS able to call the shell verb, and its result is never served from cache — proven by mutating the observed state between two calls and asserting the verdict changes (pre-fix result: FAILS — no cache and no classes exist)'
+      - 'a forge agent adds a NEW litmus predicate for an UNCOMMITTED spec and it executes, with no recompilation of the host binary anywhere in the transcript — this is the packet''s whole justification and an exit criterion that does not exercise it does not close this row'
+      - 'the runtime exposes an enumerable verb list, and a test asserts the enumeration matches the audited set exactly — so widening the capability set is a visible diff rather than an accident'
+      - 'lua_runtime.rs states what containment IS (verb set + container boundary) and explicitly that SELinux is NOT relied upon, so the next reader cannot infer a guarantee that does not exist'
+    unscoreable: |
+      whether-the-verb-set-is-the-right-size: it can only be learned by use.
+      Too narrow and predicates get written in bash again, which is the status
+      quo; too wide and the blast-radius argument weakens. This row closes on
+      the MECHANISM being enforceable and enumerable, not on the set being
+      final. Also unsettled: predicate provenance once agents author them — a
+      real question, explicitly out of scope here, and needing its own row
+      rather than being smuggled into this one's closure.
+    verifiable_closure: |
+      a committed test module proving: a cacheable-class predicate cannot
+      resolve the shell verb; an observing-class predicate can, and is never
+      served stale across a state mutation; the verb enumeration matches the
+      audited list; plus a recorded transcript of a forge agent executing a new
+      predicate against an uncommitted spec with no recompilation step in it.
+    events:
+      - type: filed
+        ts: "2026-09-18T05:29:59Z"
+        agent_id: "linux-macuahuitl-claude-20260918t052959z"
+        host: macuahuitl
+        summary: |-
+          Filed with 1252-fg9e on the operator's approval of the Rust+Lua split.
+          Blocked on 1252-fg9e: the bridge has nothing safe to expose until the
+          executor exists. The cache-purity split was not in the operator's
+          proposal — it was raised as a hazard during the design pass, because a
+          cached impure predicate is a green gate that ran nothing, and it was
+          approved as part of "purity completeness while keeping efficiency".
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    order: 1252-znbn
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tests, litmus, adjudication, yaml]
+    estimated_hours: 8
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - openspec/litmus-tests
+    title: |
+      replace the natural-language keyword interpreter that adjudicates litmus steps with a structured `assert:` — today rewording an English sentence silently changes the rule that decides the verdict
+    context: |
+      MEASURED ON macuahuitl AT 8dd482881 across all 427 litmus files, and the
+      first cut of this measurement WAS WRONG in a way worth recording: an
+      initial classifier reported 89.6% of steps as unenforced prose. It
+      required values to contain no spaces, so it missed `ok: consumers-wired`
+      — a perfectly enforceable literal. Corrected figures, of 2,541 steps
+      carrying a `command:`:
+        1,622  verdict-prefixed literal (ok:/PASS:/refused:/…)  ENFORCED
+          580  other short literal (<=60 chars)                 ENFORCED
+           85  success_pattern regex                            ENFORCED
+          180  exit code only, no pattern declared              strict since 267
+           64  expected_behavior CONTAINING THE WORD "succeeds" NOT ENFORCED
+           10  long English sentence (>60 chars)                NOT ENFORCED
+      So the prose-vs-enforceability gap is ~74 steps, NOT 2,276. The corpus
+      self-selected toward verdict tokens because the fallback is strict
+      (`grep -Fqi`, then return 1). Do not re-derive the larger number; it is
+      wrong and this row exists partly so nobody has to rediscover that.
+      THE MECHANISM IS THE FINDING, not the count. `behavior_matches_output` in
+      scripts/run-litmus-test.sh is a NATURAL-LANGUAGE INTERPRETER WRITTEN IN
+      BASH `case` ARMS. `*"multiple"*` and `*"several"*` mean "grep the first
+      integer out of the output and require >= 2". `*"succeeds"*` means "ignore
+      the output entirely, honour the exit code" — so 64 steps have a sentence
+      whose content is decorative. `*"cargo"*` means "grep the output for
+      cargo". Rewording a sentence changes the adjudication rule, with no diff
+      anywhere saying the test now checks something else.
+      IT HAS ALREADY DRAWN BLOOD: order 868-p8xi is the scar. An expectation
+      written as an `(a|b)` alternation is searched for VERBATIM, so it can
+      never match and the step fails on every one of its own legitimate
+      outcomes — litmus:sidecar-arch-derivation printed exactly one of its three
+      listed alternatives and still failed.
+      FOUR OF THE TEN ENGLISH SENTENCES ASSERT TIMING ("~10 minutes", "slower
+      than cached path"). Nothing can check those, and they should be deleted
+      rather than translated — a timing claim belongs in a budget, not a
+      predicate.
+      MIGRATE THE 74 FIRST. They are the steps with no teeth today, so they are
+      where translation BUYS something; the 2,287 enforceable ones are working
+      and a sweep over them is churn with a chance of regression. This is the
+      migrate-on-touch rule applied to the corpus.
+      ORDERING NOTE: the structured form should be expressible as a 1252-hsrz
+      predicate eventually, but this row does NOT depend on it. The keyword
+      interpreter can be replaced by declarative assert fields in YAML with no
+      Lua at all, and holding this behind the runtime would leave 64 toothless
+      steps in the gate for another two packets' duration.
+    exit_criteria:
+      - 'a step declaring a structured assertion on exit status, stdout and stderr is adjudicated by those fields ONLY, and a test proves changing unrelated prose in the same step does not change the verdict (pre-fix result: FAILS — today a sentence gaining the word "succeeds" silently converts the step to an exit-code check)'
+      - 'the 64 steps whose expected_behavior contains "succeeds" are migrated, and for each the migration states what the step now checks BEYOND exit status — or records that exit status was genuinely all it ever checked'
+      - 'a step asserting an (a|b) alternation passes when the output matches either branch (pre-fix result: FAILS — 868-p8xi, matched verbatim as a literal, unpassable by construction)'
+      - 'the four expected_behavior values asserting wall-clock timing are removed rather than translated, with any real budget expressed as timeout_ms'
+      - 'NEGATIVE CONTROL: for at least one migrated step, a deliberately wrong output is fed in and the step goes RED — a translation that cannot fail has moved the prose, not the teeth'
+      - 'the keyword case arms are deleted, not merely bypassed, and a grep for the interpreter''s distinctive arms returns nothing (pre-fix result: FAILS — the arms are live and reachable)'
+    unscoreable: |
+      whether-the-remaining-2287-should-follow: they are enforced today by
+      literal substring match, which is crude but honest, and migrating them is
+      churn against working tests. Whether a structured form is worth that churn
+      is a judgement this row cannot settle and should not pre-empt; it closes
+      on the interpreter being gone and the toothless 74 having teeth.
+    verifiable_closure: |
+      the keyword case arms absent from scripts/run-litmus-test.sh; a structured
+      assertion adjudicating exit status, stdout and stderr independently of
+      surrounding prose; the 64 "succeeds" steps migrated with a stated
+      before/after for each; an alternation step passing on either branch; the
+      four timing assertions removed; and at least one migrated step shown RED
+      against a deliberately wrong output.
+    events:
+      - type: filed
+        ts: "2026-09-18T05:29:59Z"
+        agent_id: "linux-macuahuitl-claude-20260918t052959z"
+        host: macuahuitl
+        summary: |-
+          Filed with 1252-fg9e. The corpus was measured twice: the first
+          classifier over-reported the gap roughly thirtyfold by requiring
+          values to contain no spaces, which excluded `ok: <token>` forms. Both
+          the wrong and the corrected figures are in context deliberately, so
+          the next reader does not repeat the first measurement and act on it.
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    order: 1252-r72q
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, tree-sitter, static-analysis, guard, tests]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-litmus-rust
+      - scripts
+    title: |
+      a tree-sitter-bash lint for the four MEASURED composition hazards — vendored so it travels with the build, because shellcheck is absent both on this host AND inside the builder toolbox
+    context: |
+      SHELLCHECK IS NOT AN OPTION HERE, AND THIS WAS CHECKED RATHER THAN
+      ASSUMED. `command -v shellcheck` finds nothing on macuahuitl, and
+      `toolbox run --container tillandsias-builder command -v shellcheck`
+      finds nothing either. A shellcheck-based gate would pass where it happens
+      to be installed and skip silently everywhere else — the green-on-one-
+      regime shape that froze four lanes in one night. tree-sitter-bash vendors
+      into a Rust crate, travels with the build, and needs nothing on the host.
+      THIS IS NOT A NEW PARADIGM FOR THIS TREE, which is the main argument for
+      it. crates/tillandsias-litmus-rust ALREADY depends on tree-sitter 0.25 and
+      tree-sitter-rust 0.24, and already runs declarative `rust_queries:` out of
+      litmus YAML with `processor: syn | tree_sitter`, `required:`, `usage:`,
+      `score:` and `name_quality:`. Measured: of 427 litmus files, 1 carries
+      rust_queries and 0 carry any bash equivalent. So the work is EXTENDING an
+      existing declarative query layer to the bash surface, with a landing shape
+      that already exists — not inventing one.
+      THE FOUR SHAPES, all detectable on a bash AST, with file counts measured
+      at 8dd482881 over 669 scripts (whole-file co-occurrence, an UPPER BOUND):
+        195  a pipeline whose last command is `grep -q` in a file setting pipefail
+         65  a pipeline ending in `tail -1`
+         27  an `if` whose condition is a negated pipeline (795-imz3)
+          7  a `pgrep`/`pkill` command with `-f` and a string literal argument
+      AST GRANULARITY IS THE POINT AND IS WHY THE COUNTS ARE UPPER BOUNDS. The
+      measurement above asks "does this FILE contain pipefail anywhere and a
+      `grep -q` pipeline anywhere", which over-counts: the pipeline may run in a
+      function where pipefail is not set. A parser can ask whether THIS pipeline
+      is in scope of that option, which grep cannot. Reporting the true count is
+      part of the deliverable — an upper bound is what we have today.
+      ADVISORY BEFORE GATING, NOT AS CAUTION BUT BECAUSE OF THE ARITHMETIC: at
+      up to 195 candidate sites, wiring this into ./build.sh --check on day one
+      reds trunk for every host on a backlog nobody owns yet, and a guard that
+      reds trunk gets disabled rather than obeyed. Same ordering 1251-54p3 is
+      already following. Stage advisory, watch one in-situ run, then gate.
+      RELATIONSHIP TO 1252-fg9e: independent and startable immediately. The
+      executor makes NEW hazards unconstructible; this lint finds the EXISTING
+      ones. Neither substitutes for the other, and this one delivers value
+      without a single call site migrating.
+    exit_criteria:
+      - 'the lint reports the TRUE per-pipeline count for each of the four shapes, and states how it differs from the whole-file upper bounds recorded here (195/65/27/7) — a lint that merely reproduces the grep numbers has not used the parser it depends on'
+      - 'run against check-seam-writers-canonical.sh at its pre-fix commit, the lint NAMES the `| grep -c` pipeline that inverted under pipefail (pre-fix result: the lint does not exist, and that defect was found by hand after it had shipped)'
+      - 'NEGATIVE CONTROL: a file containing the word pipefail only inside a COMMENT, beside a `grep -q` pipeline, is NOT reported — comment-blind source scans are a repeat defect in this repo (881-29me, 885-92iu, and the comment arm of 1251-54p3)'
+      - 'it runs in the ADVISORY tier and is promoted to ./build.sh --check only once the reported population is owned by a row, so it cannot red trunk on an unowned backlog'
+      - 'the lint runs with nothing installed on the host beyond the built binary, proven by executing it inside the builder toolbox where shellcheck is absent'
+    unscoreable: |
+      whether-195-is-mostly-real-or-mostly-noise: the whole-file co-occurrence
+      number cannot distinguish a genuine in-scope pipeline from a file that
+      merely mentions pipefail elsewhere, and the true figure is unknown until
+      the parser reports it. It could plausibly land anywhere from a handful to
+      most of them. That uncertainty is the reason the first exit criterion asks
+      for the true count rather than a remediation, and closing this row does
+      not commit anyone to fixing whatever it finds.
+    verifiable_closure: |
+      a vendored tree-sitter-bash lint executing inside the builder toolbox with
+      no host tooling, reporting per-pipeline counts for the four shapes beside
+      the recorded upper bounds, naming the pre-fix check-seam-writers-canonical
+      inversion, staying silent on a comment-only pipefail mention, and wired in
+      the advisory tier.
+    events:
+      - type: filed
+        ts: "2026-09-18T05:29:59Z"
+        agent_id: "linux-macuahuitl-claude-20260918t052959z"
+        host: macuahuitl
+        summary: |-
+          Filed with 1252-fg9e. shellcheck absence was verified on the host and
+          inside the tillandsias-builder toolbox before ruling it out, and the
+          existing tree-sitter dependency in crates/tillandsias-litmus-rust was
+          read before claiming precedent. Independent of the other three rows
+          and startable now.

@@ -1,0 +1,46 @@
+# freshness: auditor=linux-macuahuitl-claude-20260918 date=2026-09-18 verdict=new scope=the fixture is hermetic (tempdir trees) so it does not red when 1250-92ty lands
+# @trace spec:ci-release
+name: litmus:seam-writer-canonical-lock-shape
+spec: ci-release
+description: >
+  Pin that scripts/check-seam-writers-canonical.sh can still tell a file that
+  references the canonical seam lock from one that only mentions it in a
+  comment, and that it refuses rather than passing vacuously when the target
+  variable has no writers at all.
+
+  ADVISORY TIER ON PURPOSE (order 1251-54p3). The guard currently REFUSES
+  crates/tillandsias-headless/src/remote_projects.rs, which is 1250-92ty's
+  hazard and 1250-92ty's to clear. Running it against the live tree here would
+  red for every host on a defect another row owns, and a guard like that gets
+  disabled rather than obeyed. So this litmus exercises the guard against the
+  HERMETIC trees its fixture builds under a tempdir, never against the checkout.
+  Promotion to ./build.sh --check is 1250-92ty's tail.
+severity: medium
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/check-seam-writers-canonical.sh
+  - workspace contains scripts/test-seam-writers-canonical.sh
+
+critical_path:
+  # THE COUNT IS PART OF THE ASSERTION, not incidental. An arm silently removed
+  # changes this number and reds here — which is the same cardinality property
+  # ARM 5 itself exists to enforce inside the guard (a positive control asking
+  # "did I see anything?" catches only TOTAL blindness; partial needs a count).
+  # When an arm is legitimately added, update this number deliberately rather
+  # than loosening the match.
+  - step: "the guard's seven arms hold: comment-only rejection, the no-writers positive control, cardinality under pipefail, and the shape ban"
+    command: "bash scripts/test-seam-writers-canonical.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:seam-writers-canonical-fixture:7"
+
+  - step: "scripts/check-seam-writers-canonical.sh refuses a crate whose seam var has no writers, rather than reporting ok:0"
+    command: "bash scripts/check-seam-writers-canonical.sh crates/tillandsias-plan TILLANDSIAS_PODMAN_BIN podman_seam_lock 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "refused:seam-var-has-no-writers:TILLANDSIAS_PODMAN_BIN"
+
+observability:
+  traces:
+    - "@trace order:1251-54p3"
+  expected_log: "the seam-writer guard distinguishes a code reference from a comment"

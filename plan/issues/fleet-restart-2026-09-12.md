@@ -8134,3 +8134,448 @@ consent exists on that host is between that host and the operator.
 yolanda active as of 22:05Z with two assignments, this host coordinating. yoga
 last attested 2026-09-16T19:37Z and lenovinha 2026-09-16T07:16Z — still outside
 the report-for-work rule, still directed nowhere.
+
+## 2026-09-18T02:00Z macuahuitl — coordination pass
+
+**THIS CRON PROMPT'S STATE BLOCK IS STALE AND SHOULD NOT BE RE-DERIVED FROM.**
+It is frozen at 2026-09-17T12:00Z and still lists as blocking: 862-zhr2,
+redb, 1237-f9dy, 1215-xazj and 1217-54vw. The operator ruled on all of them
+during the evening — the version scheme is
+`YEAR_FROM_EPOCH.MONTH.DAY.LOCAL_BUILD_NUMBER` used correctly with monotonic
+increments and no `+local.xxxx`; redb is INTEGRATED (1246-ih7g carries the
+migration policy); 1237-f9dy is (a) plus auto-install on every green gate; and
+1215-xazj / 1217-54vw were taken off the operator's queue as coordinator-mandate
+calls. A pass that reads the prompt as current will re-queue five settled items.
+
+**THE GPU CONTAINER LANE HAD BEEN DEAD FOR A MONTH AND ITS OWN CURRENCY CHECK
+SAID OK** — 1248-j6vd. `crun: cannot stat /usr/lib64/libnvidia-egl-gbm.so.1.1.3`
+while the host carries 1.1.4. `nvidia-cdi-ensure.sh` compares the DRIVER version,
+which never moved (610.57.04); libnvidia-egl-gbm ships separately and versions on
+its own cadence. The check anticipated exactly one way to go stale and the spec
+went stale the other way, printing `ok:nvidia-cdi:current` throughout.
+
+**AND A SECOND DEFECT IS WHY NOBODY SAW IT.** `dev-inference-ensure.sh` probes a
+PORT. With a host-native ollama on 11434 it returned `ok:dev-inference-ready`
+WITHOUT STARTING A CONTAINER. Under the operator's engine-selection ruling
+(1249-xngp) preferring bare metal is CORRECT — so the defect is not the
+preference, it is that the verdict cannot say WHICH LANE SERVED, and a fallback
+that cannot start therefore rots unobserved on every host where the preferred
+path happens to work. Surfacing it required killing the preferred engine by hand.
+
+**THE ACCELERATOR NUMBERS ARE A BASELINE, NOT FLEET CONSTANTS.** Measured with
+the shared harness on this host only (A5000, 20 threads, qwen2.5:0.5b, 3 reps):
+host-native gpu decode 488/561/514 tok/s at 7 ms/chunk embed; container gpu
+24.9/467/463 at 18-19 ms; host-native cpu 72.6/71.7/72.8 at 7 ms; and 7b on gpu
+at 116/117/117. Three readings that change decisions rather than decorate them:
+containerisation costs ~10% of WARM decode but 19x on the FIRST rep, which a
+three-rep mean reports as ~318 and hides; container embedding is 2.6x slower on
+every rep and gains nothing from the GPU on either lane; and a 7B here beats a
+0.5B on this host's CPU, so consumer hardware is a different MODEL CLASS rather
+than a slower version of this one.
+
+**THE SEAM RACE IS FIXED, AND THE HOST THAT COULD NOT REPRODUCE IT DID NOT
+VERIFY IT.** 1245-wbqh closed on yolanda's evidence: 5 consecutive 544/544 at 16
+cores against 3/3 red immediately before. This host ran 544/544 rc=0 and that
+confirms NO REGRESSION only — a green from a host where the test cannot fail is
+indistinguishable from the green it already produced. Recorded so nobody later
+reads the coordinator's run as the verification.
+
+**A PEER'S RESTRAINT SAVED A VERIFIED FIX.** They shipped a second change that
+was necessary neither for the failure nor the repair, kept it on plausibility
+with the suite RED 4/4, and it deadlocked the gate — presenting as a ten-minute
+HANG with no output, because a deadlock produces no verdict. It cost one revert
+instead of contaminating the fix ONLY because it was committed separately with a
+message admitting it had no failing control. Filed as 1250-92ty with the fix
+ORDER as the headline: inner acquisitions removed FIRST, then unify. Reversed, it
+deadlocks.
+
+**WINDOWS-NEXT IS 542 BEHIND AND THAT IS NOW CHEAP TO FIX.** The full 533-commit
+integration exists complete and verified on `salvage/yolanda/20260917-920-pxg6`,
+so whoever lands it inherits the merge rather than redoing it. Two ~70-minute
+gates were lost to the mandated pre-push merge racing a moving trunk before that
+ref existed; the relay of the seam fix to linux-next removed the reason to push
+that branch at all tonight.
+
+**AND THE CLASS GUARD FOR TONIGHT'S RACE IS IN THE TREE, UNPROMOTED** —
+1251-54p3. yolanda prototyped, scored and mutation-tested it; verified here on a
+second platform before relaying. Linux GNU bash 5.3.9: fixture 5/5, and the
+mutation (comment-stripping removed from the canonical match) reds ARM 3b ALONE
+with the other four green — targeted, matching their result on MSYS-driving-WSL.
+Exit codes checked before promotion rather than at it: a refusal exits 1, and so
+does the no-writers positive control, so wiring it later will gate on something.
+It currently refuses `crates/tillandsias-headless/src/remote_projects.rs`,
+which is 1250-92ty's hazard and 1250-92ty's to clear — hence advisory tier with
+no gate-steps.d entry and no build.sh reference, both verified zero.
+
+**THE THIRD SILENCE OF THE NIGHT, AND THEY BELONG TOGETHER.** A deadlock that
+presented as a ten-minute hang with no output; a failed `sed` sabotage that
+presented as five green arms against a pristine mutant; and, earlier, a
+loop-status audit that reported every host NOT-PASTING while parsing nothing.
+None produced a red. The common form is that an ABSENCE OF A VERDICT WAS READ AS
+A GOOD VERDICT, and in each case what separated truth from silence was a COUNT
+TAKEN BEFORE THE RUN — survivors, then occurrences, then entries-matching-anchor.
+When a check's failure mode is silence, a positive measurement taken beforehand
+is the only thing that distinguishes it afterwards, because silence and success
+are the same bytes.
+
+## 2026-09-18T03:45Z macuahuitl — coordination pass (release gate in flight)
+
+**THE FREEZE IS DECLARED, AND IT IS ENFORCED RATHER THAN ANNOUNCED.**
+`scripts/release-freeze.sh set linux-next` ->
+`frozen:linux-next:by=macuahuitl:since=1789703272`. The pre-push hook honours a
+live marker (there is a fixture for exactly that), so this is a refusal and not
+a request. Code pushes are held; plan-only, docs, skills and platform syncs stay
+admitted by design, which is why this pass can still land its own records. The
+marker is cleared at the BACK-MERGE PUSH, not at the tag. Any host may clear a
+freeze any other host set — deliberate, so a coordinator dying mid-cut cannot
+leave the fleet frozen.
+
+**THE CUT IS RUNNING.** `./build.sh --ci-full --install` started 03:42Z on
+b75edd2a3 for v56.9.18.1. Bare `--ci-full` was NOT used: it exits after the
+pre-build gate and never reaches post-build or runtime (1185-9qx6, lenovinha),
+so a bare run reads as a passing release gate having skipped two phases.
+`target-guest/` was cleared first (923-ys2t, three prior reproductions): 0
+tracked files, gitignored, holding staged musl guest binaries that
+`build-guest-binaries.sh --verify` reads as an integrity mismatch rather than as
+stale staging.
+
+**THE VERSION WAS COMPUTED, NOT TYPED, AND SANITY-CHECKED.** v56.9.18.1, derived
+by running bump-version.sh in a SCRATCH LAYOUT — that script anchors VERSION to
+its own script path rather than $PWD, so copying VERSION alone into a temp dir
+and bumping there would have bumped the real checkout. Asserted afterwards that
+the third field is a day-of-month and the first is >=56, because hand-deriving
+the retired MAJOR.MINOR.YYMMDD.N scheme under epoch CalVer yields the malformed
+v56.8.260901.1 whose six-digit third field is the Store-cap violation the
+cutover existed to remove.
+
+**NOTHING TO RELAY, MEASURED THE RIGHT WAY.** osx-next 0 ahead / 38 behind and
+windows-next 0 ahead / 576 behind, each adding ZERO files when diffed against
+its OWN merge-base rather than against trunk. That is the third consecutive pass
+where a raw trunk diff would have shown dozens of "changes" that are only trunk
+having moved.
+
+**DAILY GATE STAMPED FOR 2026-09-18** with measurements rather than a ritual:
+host-updates-102-pending-not-applied, disk-205G-free, podman-df-9.864GB-images,
+launcher-v56.9.17.1, tree-VERSION-56.9.13.1, expert-lane-ok-bare-metal. The 102
+pending host updates were READ AND NOT APPLIED — agents do not change
+deployments, and that remains the operator's call.
+
+**AND THE LAUNCHER IS AHEAD OF THE TREE, WHICH IS THE COMPLAINT IN MINIATURE.**
+Installed launcher reads v56.9.17.1; tracked VERSION reads 56.9.13.1. The
+INSTALLED artifact is four days newer than the source of truth, because the
+build counter is bumped and then reverted on every platform branch (643-64bx).
+This cut is what closes that gap.
+
+# Hazards found 2026-09-18, to file in plan/issues/fleet-restart-2026-09-12.md
+
+## H1. release-freeze.sh reports `unreachable` for a refusal that is not a reachability failure
+
+`scripts/release-freeze.sh clear linux-next` returned:
+
+    refused:freeze:unreachable:could not delete refs/tillandsias/freeze/linux-next/macuahuitl/1789703272
+
+Origin was reachable throughout — `git ls-remote origin` answered in under a
+second, and the freeze ref was present. The real cause was the pre-push hook
+refusing the push because the BRANCH commits changed VERSION:
+
+    The commits being pushed CHANGE VERSION. That belongs on main…
+
+The freeze tool collapsed a specific, actionable hook refusal into a network
+verdict. A reader acting on `unreachable` checks DNS, VPN and credentials —
+none of which is the problem — and the actual remedy ("your branch carries a
+VERSION change; VERSION bumps land on main") is nowhere in the output.
+
+**Affordance it should carry** (operator directive, 2026-09-17: every error
+states why it is an error and what would make it not one): pass the push's
+stderr through, and distinguish `unreachable` (ls-remote failed) from
+`refused-by-hook` (push ran and was declined). Those need opposite responses.
+
+Cost here: one misdirected diagnosis during a release cut. The verdict is
+also the kind that reads as environmental and therefore retryable, so the
+natural next move is to retry a thing that will refuse identically forever.
+
+## H2. The VERSION-on-linux-next trap has no affordance until the push
+
+`./build.sh --ci-full --install` bumps VERSION in the worktree by design (the
+install target is the local build). On linux-next those bytes cannot be
+committed: the pre-push hook refuses VERSION changes outside main, and
+correctly — every `release: bump VERSION to …` commit in linux-next's history
+reached it by BACK-MERGE from main (verified: 1a6f9c616 is an ancestor of
+origin/main).
+
+Nothing says so until a push is attempted, and the failure arrives at the end
+of a gate rather than at the commit. I committed the bump, then had to drop
+it. The hook's message is good; it is simply delivered several minutes too
+late, and `git commit` is where it would be free.
+
+**Affordance**: a commit-msg or pre-commit check on a non-main branch whose
+staged set contains VERSION — "VERSION bumps land on main via
+release/version-bump-*; this looks like a local --install artifact, restore it
+with `git checkout -- VERSION`".
+
+## H3. A long-running.md row for a fragment-only multi_cycle packet REDS TRUNK
+
+The rule "a `multi_cycle` packet needs a `plan/long-running.md` row" is true at
+COMPACTION and false at FILING, and following it at filing time reds
+`./build.sh --check` fleet-wide.
+
+`scripts/check-long-running-view.sh` builds its `live` set with an awk pass over
+the FOLDED BASE (`^      multi_cycle: true`, six-space indent). Its fragment
+overlay only reclassifies orders already found there; it never ADDS a
+fragment-only packet. The gate is BIDIRECTIONAL —
+`violation:long-running-view:missing=<n>:stale=<n>`, exit 1 — so a row for an
+order that lives only in a fragment is counted `stale` and refuses every host's
+push.
+
+Caught before landing, not after: baseline verified `ok:long-running-view:26
+live packets listed` at 8dd482881, and only `check-long-running-view.sh` and
+`check-stranded-in-progress.sh` key on `multi_cycle` at all, so nothing demands
+the row at filing time.
+
+**Affordance**: the checker's refusal should say WHY an order can be stale —
+"this order is not in the folded base; if you just filed it as a fragment, the
+row is due at compaction, not now" — because the current text ("remove each
+stale one") tells a filer to delete a row they correctly intend to add later.
+
+## H4. Monitoring a detached job on a non-unique marker reports a false completion
+
+A land was watched with `until [ -f "$SP/land.rc" ]`. A file of that exact name
+from 08:56 the same day satisfied it INSTANTLY, and the watcher reported
+`rc=0` — for a land that had not started. The land was in fact still running
+`./build.sh --check`, and origin was unchanged.
+
+It was caught only because the verdict was checked against origin
+(`git merge-base --is-ancestor`, then a blob comparison) rather than believed.
+Had it been believed, the next step was a release tag on an unlanded tree.
+
+The discipline already existed and did not survive a context boundary: markers
+`land2.rc` … `land27.rc` were used all session; the regression to a bare
+`land.rc` happened immediately after a compaction.
+
+**Affordance**: a completion marker must carry the identity of the run that
+wrote it, so a stale one is distinguishable rather than merely old — same
+property 1252-fg9e specifies for the executor's Result. Failing that: remove the
+marker before arming a watch, and never conclude from an exit code that a push
+happened — ask the remote.
+
+## H5. The coordination STATE block's host roster is stale and contradicts the live session list
+
+The recurring pass carries "Working fleet: yoga-silverblue, macbookair-macos,
+this host; Yolanda offline apart from an unreachable forge session". Measured
+this pass: `ListAgents` shows **yolanda-windows reachable and idle** and lists
+**no yoga session at all**, while yoga's newest `loop_status.d` entry is
+2026-09-14 and it has no commit in 24h.
+
+Both halves of the roster are wrong in opposite directions, so acting on it
+would have skipped a reachable host and directed an absent one. Handled by
+asking both peers directly rather than by trusting either list — idleness is
+established by asking (and a Remote Control send reports nothing back, so
+silence is not agreement).
+
+**Affordance**: the pass should derive its roster from `ListAgents` plus recent
+trunk activity at run time, and treat the prompt's STATE block as provenance
+for what was true when written, not as the roster.
+
+## H6. Running a "safe no-op" to demonstrate compliance MANUFACTURES EVIDENCE
+
+Raised by yolanda-windows, 2026-09-18, refusing a coordinator ask — and the
+refusal is better reasoning than the ask was.
+
+The coordinator relayed a STATE-block claim that yolanda had a forge session
+looping on dirty-worktree refusals, and asked them to run
+`scripts/salvage-dirty-worktree.sh` first (order 872-c9nd). Their host had no
+forge at all: one worktree, clean; `podman` not on PATH for the entire session;
+`ListAgents` showing no forge. They declined, on the grounds that on a clean
+tree the script no-ops, and **the resulting ref on origin would read to a later
+reader as evidence that dirty work had existed there.**
+
+That is the general shape and it is worth more than the instance: an artifact
+created to demonstrate compliance is INDISTINGUISHABLE from one created by the
+condition it claims to record. "It is a no-op, run it anyway" is therefore not
+free — it costs the record its meaning. `salvage/<host>/<date>-<slug>` refs are
+specifically read as "work existed here and was rescued", so a decorative one
+corrupts exactly the signal 872-c9nd exists to preserve.
+
+**How to apply**: before asking a peer to run something defensively, ask what
+its artifact will mean to someone reading it later with no memory of why it was
+run. If the artifact asserts a condition, do not create it unless the condition
+holds. And an ask premised on an unverified claim should carry the claim's
+provenance, so the peer can refute the premise instead of executing against it.
+
+## H7. The phantom forge had NO ledger source — it came from the prompt's STATE block
+
+Chased on yolanda's request rather than left as "stale info". Result, measured:
+
+  - no line-level claim of a yolanda forge anywhere under plan/ (the `grep -l`
+    hits were "Yolanda" and "forge" co-occurring in long paragraphs — the
+    false-adjacency trap, and the file-level search is what made it look real)
+  - `tillandsias-plan query --json` filtered on claimed_by: NO yolanda claims
+  - no lease
+
+So the claim originates in the recurring coordination prompt's STATE block,
+frozen at 2026-09-17T12:00Z and authored outside the ledger. The same block
+lists yoga as working (no session in `ListAgents`, no commit in 24h, newest
+loop_status entry 2026-09-14) while calling yolanda offline — wrong in both
+directions at once.
+
+**Affordance**: the pass must derive its roster at run time from `ListAgents`
+plus recent trunk activity, and read the STATE block as provenance for what was
+true when written. A stale roster is not merely unhelpful: acting on it directs
+an absent host and skips a present one, and in this case nearly produced a
+manufactured salvage ref (H6).
+
+## H8. A comment stripper keyed to the WRONG LANGUAGE is worse than none
+
+Found by yolanda-windows 2026-09-18, in their own new ARM 6, on its first
+outing — and retracted by them before it misled anyone further.
+
+`scripts/check-seam-writers-canonical.sh` strips comments with `sed 's://.*::'`,
+which is correct for the RUST sources it scans under crates/. ARM 6 pointed the
+same check at a SHELL file, where comments begin with `#`. The stripper ran,
+removed nothing, and the check then matched this line:
+
+    # CAPTURE THEN MATCH (795-imz3). `producer | grep -q` lets grep exit on
+
+— a comment EXPLAINING the defect, reported as an instance of it. yolanda
+counted that as a third sighting of the `| grep -q` shape and relayed the count
+to the coordinator, which manufactured a phantom regression on a branch the
+coordinator could not inspect. Verified after the retraction: trunk's check
+carries ZERO non-comment `| grep -q` pipelines, and the true history is exactly
+two instances (c7e860ff1 carried it, 2b777de3e fixed it).
+
+**Why this is worse than having no stripper**: an absent stripper is a known
+blindness and a reader discounts the hits. A stripper keyed to the wrong
+comment syntax LOOKS handled, so its false positives carry the authority of a
+filtered result — and they land on precisely the lines that document the
+hazard. The failure therefore SCALES WITH DOCUMENTATION QUALITY: the better a
+codebase explains a defect, the more instances of it the guard reports. Same
+degradation curve as the `strings "$BIN" | grep -F "$VERSION"` currency probe,
+which got more wrong the better the ledger was kept (a-guard-cannot-tell-mention-from-use).
+
+**How to apply**: a comment stripper must be selected by the scanned file's
+LANGUAGE, not by the guard's home language, and a guard that scans more than
+one language needs either per-language stripping or an explicit refusal to scan
+what it cannot parse. Silent no-op stripping is the trap. Related: 881-29me and
+885-92iu, where guards fired on prose exhibiting the very error they police.
+
+**Second-order lesson, and the reason this entry exists at all**: the false
+positive was reported to a peer as a COUNT ("three instances"), and a count
+travels without its evidence. The coordinator could not inspect the branch and
+was one step from searching trunk for a reintroduction that never happened. A
+sighting relayed across hosts should carry the matched LINE, not the tally —
+`ask-what-the-matched-line-is`, arriving through a message channel instead of a
+terminal.
+
+## H9. A ref's NAME is not its CONTENT — I cited one as evidence and it carried none
+
+Caught by macbookair-macos 2026-09-18, checking a claim the coordinator relayed.
+
+The coordinator asserted that yolanda's msys mlua evidence for 902-5bf9 / 920-pxg6
+had landed via `salvage/yolanda/20260917-920-pxg6`. Verified on two hosts:
+
+    tip                                  f235929ce
+                                         "add(1251-54p3): cardinality and shape arms"
+    unique commits vs origin/linux-next  0
+    files differing from the merge-base  none
+
+The ref's NAME says 920-pxg6; its unique content is 1251-54p3's seam fixture,
+and it carries no unique content at all. "It landed" was true of the REF and
+false of the WORK. The coordinator had checked that the ref was an ancestor of
+trunk and treated ancestry-of-a-named-ref as evidence about its subject.
+
+**The real evidence was a fragment, not a branch**:
+`plan/index.d/20260917t231200z-0fcb5624-windows.yaml`, recording a forced
+rebuild (`cargo clean -p mlua-sys`, 302 files / 111.0 MiB), mlua-sys 0.6.8 +
+mlua 0.10.5 compiling, lua_runtime 7/7. Found by searching trunk's fragments
+for mlua and filtering for msys/windows WITH A POSITIVE CONTROL — the same
+search surfaces the darwin evidence, so the zeros elsewhere are real absences
+rather than a broken search.
+
+**How to apply**: ancestry proves a ref is integrated; it says nothing about
+what the ref contains. Before citing a ref as evidence for a subject, diff it
+against its merge-base and read the files — `git rev-list --count trunk..<ref>`
+of 0 means it contributes nothing, whatever it is called. Sibling of
+`a-diff-shows-difference-not-causation` and `integrated-is-proven-by-ancestry`:
+both say ancestry answers a narrower question than the one usually being asked.
+
+**Refinement worth keeping**: `git grep -c mlua <ref>` returns 26 files even
+here, because a ref with 0 commits ahead has TRUNK'S TREE. The zero is a
+property of the ref's unique content, not of its tree — so even the refutation
+has a wrong-denominator variant.
+
+## H10. A platform label that names a SHELL does not name a TOOLCHAIN
+
+yolanda's narrowing, preserved verbatim by macbookair rather than summarised,
+and it materially narrows a claim the coordinator had already broadcast.
+
+The coordinator stated that 902-5bf9's three-platform mlua precondition was
+satisfied — "linux here, darwin by macbookair, msys by yolanda". What is
+actually evidenced is linux + darwin + **windows-msvc**:
+
+  - the shell is MSYS/MINGW64, but rustc's host triple is x86_64-pc-windows-msvc
+  - cc, gcc and clang are ALL ABSENT from PATH
+  - cc-rs located cl.exe via vswhere, so vendored Lua built through
+    Visual Studio 2022, NOT MinGW gcc
+
+So "msys" names the SHELL the agent was typing in, not the toolchain that built
+the artifact. **An MSYS host WITHOUT Visual Studio is untested, and is the case
+most likely to fail** — precisely the configuration a reader would assume the
+"msys" label had covered.
+
+**How to apply**: when recording portability evidence, name the TOOLCHAIN
+(target triple + compiler actually invoked), never the shell, distro or package
+manager the operator happened to be using. A claim keyed to the label is
+narrower than it reads, and the gap is invisible to everyone downstream because
+the label sounds like the broader case. Attach the regime
+(`attach-the-regime-before-broadcasting`): here the regime is the triple, and
+omitting it converted a one-configuration result into an apparent
+three-platform green.
+
+## H11. A preflight that passes tells you only about what it checks
+
+Two consecutive land refusals on 2026-09-18, both real ledger-write defects, and
+the batch script written to catch them ran SIX checkers green and caught NEITHER:
+added-fragments-parse, all-fragments-intact, scorable-obligation-added,
+declared-closures-added, fragment-events-land, long-running-view.
+
+What the gate then refused: (1) `violation:issue-citation-line-numbers:3`
+(881-29me) — a new plan/issues document cited `<file>:<line>` three times, and
+no checker in the batch looks at citations; (2) `depends_on -> unresolved
+reference '1252-fg9e'` — `depends_on` resolves against PACKET_IDS, and the order
+token is valid YAML that names nothing. `check-added-fragments-parse` was green
+because parse-success and reference-soundness are different questions over the
+same bytes; the checker that answers the second is `tillandsias-plan check`,
+which was not in the batch.
+
+**Why this is an entry**: the batch's green READ as "safe to commit" and was a
+statement about six specific properties. The failures that fired were outside all
+six. A preflight's green is scoped to its checks; treating it as a verdict on the
+change is the same shape as a green gate that ran no tests.
+
+**How to apply**: any ledger-write preflight includes `tillandsias-plan check` and
+the citation guard; and when a preflight passes, say WHAT it checked.
+
+## H12. `depends_on` takes a packet_id; the order token is the human handle
+
+Orders (`1252-fg9e`) are what conversations, row titles and cron prompts use; the
+dependency graph is keyed on `packet_id`. Writing the order where the key belongs
+parses, passes a parse check, and silently names nothing. Read the target's id
+and paste it; never type the order.
+
+## H13. A session-scoped scratchpad is not where unlanded work may sit
+
+2026-09-18: the coordinator's session ended on token exhaustion with three
+drafts — an operator ruling fragment, two hazard entries, and the PoC scripts
+1252-fg9e's first exit criterion expects "to arrive intact" — sitting in
+/tmp/claude-1000/.../scratchpad, plus the only copy of a 40-minute gate's log.
+The directory was empty on resume. The drafts were reconstructed from the
+transcript; the gate log was not recoverable and the failing test had to be
+re-derived from persistent archives.
+
+Everything that had been LANDED survived. This is 872-c9nd one layer up: the
+refusal path was not the trap this time, the staging path was. The
+scratchpad is correct for intermediate output that is REGENERATED; it is wrong
+for anything whose loss costs a re-derivation. Draft ledger writes into the
+worktree (which is durable and is what gets landed) whenever no gate is running
+there, and when one is, copy drafts under `plan/localwork/` before the session
+can end — not after.

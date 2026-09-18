@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: remote-projects-tests-write-the-podman-seam-and-path-under-a-private-mutex-that-excludes-nothing-outside-the-file-and-unifying-it-naively-deadlocks-because-two-tests-already-hold-both-locks
+    order: 1250-92ty
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tests, env-lock, race, deadlock, headless]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/remote_projects.rs
+    title: |
+      `remote_projects` tests write TILLANDSIAS_PODMAN_BIN and PATH under a PRIVATE mutex that excludes nothing outside the file — and the obvious unification DEADLOCKS, because two tests already take the private lock and the canonical one in the same body
+    context: |
+      NAMED BY yolanda-windows 2026-09-18 while fixing 1245-wbqh, and
+      deliberately NOT bundled into that fix. Filed separately for that reason.
+      THE HAZARD: five tests in remote_projects.rs write TILLANDSIAS_PODMAN_BIN
+      and PATH while holding a PRIVATE ENV_LOCK local to the file. Six others in
+      the same file already call the canonical `crate::runtime_assets::env_lock`
+      directly. So the private lock serialises those five against each other and
+      against nothing else in the crate — textbook order-434, and the private
+      static's own doc comment describes the signature: "they passed 11/11 the
+      moment they ran alone".
+      THE OBVIOUS FIX DEADLOCKS, AND THIS IS WHY THE ROW EXISTS RATHER THAN A
+      ONE-LINE CHANGE. yolanda tried it during the 1245-wbqh work: point the
+      private lock at the canonical one. Two tests — clone_normalizes_api_url_to_
+      owner_name among them — take the module-local lock AND
+      crate::runtime_assets::env_lock IN THE SAME BODY. While those were
+      different mutexes that was two locks and harmless. Unified, it is the same
+      NON-REENTRANT mutex twice and the test blocks on itself forever.
+      IT PRESENTED AS A HANG, NOT A FAILURE. Ten minutes, no output, the suite
+      simply stopped. Nothing was reported because a deadlock produces no
+      verdict. Anyone attempting this must expect silence rather than a red.
+      THE ORDER IS THE WHOLE FIX: remove the redundant INNER acquisitions FIRST,
+      then unify, with a control. Reversed, it deadlocks; skipped, the exclusion
+      stays fictional.
+      AND IT WAS CAUGHT ONLY BECAUSE THE CHANGE WAS ISOLATED. It was committed
+      separately with a message stating plainly that it had NO FAILING CONTROL of
+      its own and that reverting left the suite green 3/3 — kept on plausibility
+      while the suite was RED 4/4 with it applied, i.e. necessary neither for the
+      failure nor the repair. The separation made it revertible in one commit
+      when it deadlocked. The finder's own verdict: "I had the evidence to drop
+      it at the 4/4-red step and chose to keep it on plausibility; that was the
+      error."
+    exit_criteria:
+      - 'the five tests that write TILLANDSIAS_PODMAN_BIN and PATH serialise against every other writer in the crate, not only against each other (pre-fix result: FAILS — a private module-local mutex excludes nothing outside the file, which is why they pass 11/11 alone)'
+      - 'the redundant INNER acquisitions are removed BEFORE any unification, proven by the suite completing rather than hanging — a naive unification deadlocks in clone_normalizes_api_url_to_owner_name and produces NO verdict at all'
+      - 'the control is a run that FAILS before and PASSES after in the full suite at default thread count, not in isolation, since isolation is where this class hides'
+      - 'NEGATIVE CONTROL: the suite must still COMPLETE — a hang is not a pass, and the failure mode of the obvious fix is silence rather than red, so a timeout must be treated as a failure and not as a slow run'
+    unscoreable: |
+      whether-this-is-currently-causing-failures: unknown and deliberately not
+      asserted. 1245-wbqh's observed failure is explained in full by the three-way
+      seam split, which is fixed. This row describes exclusion that is fictional
+      by construction, not a reproduction. Nobody should hunt a red to justify
+      fixing it, and nobody should close it on the grounds that the suite is
+      currently green — that is exactly what a race whose interleaving has not
+      occurred looks like.
+    verifiable_closure: |
+      the five tests run in the full suite at default threads, before and after,
+      with the suite COMPLETING in both cases — the before run proving the
+      exclusion gap is reachable, the after run proving the unification did not
+      reintroduce the self-deadlock.
+    events:
+      - type: filed
+        ts: "2026-09-18T01:47:05Z"
+        agent_id: "linux-macuahuitl-claude-20260918t014705z"
+        host: macuahuitl
+        summary: |-
+          Filed by the coordinator so a hazard named during someone else's fix
+          does not evaporate with the message that carried it. The finder had
+          every incentive to bundle it — they were already in the file, it looked
+          like one line — and refused, because it had no failing control of its
+          own. That restraint is the reason the deadlock cost one revert instead
+          of contaminating a verified fix.

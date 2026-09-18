@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: investigated
+      ts: "2026-09-18T08:34:17Z"
+      agent_id: linux-macuahuitl-gemini-20260918t081837z
+      host: macuahuitl
+      summary: |
+        RUBY NAMESPACE DIVERGENCE HYPOTHESIS TESTED AND REFUTED ON MACUAHUITL.
+
+        HYPOTHESIS: The in-gate failure occurs because the tillandsias-builder toolbox
+        sees a different ruby installation or different RbConfig libdir than the host,
+        causing arm 4's positive control to exit 3 or fail inside the gate while passing
+        standalone.
+
+        MEASUREMENTS:
+          Host:
+            command -v ruby -> /usr/bin/ruby
+            ruby -e 'puts RbConfig::CONFIG["libdir"]' -> /usr/lib64
+            ruby -v -> ruby 4.0.6 (2026-07-14 revision 03b6d3f889) +PRISM [x86_64-linux]
+          Toolbox (toolbox run --container tillandsias-builder bash -lc ...):
+            command -v ruby -> /usr/bin/ruby
+            ruby -e 'puts RbConfig::CONFIG["libdir"]' -> /usr/lib64
+            ruby -v -> ruby 4.0.6 (2026-07-14 revision 03b6d3f889) +PRISM [x86_64-linux]
+
+        Standalone checks:
+          ./scripts/archive-plan-packets.sh --check -> rc=0 (ok:archive-answerability:332/332, ready set unchanged at 532)
+          bash scripts/test-archiver-ruby-could-not-run.sh -> PASS 5/5
+
+        CONCLUSION:
+        The ruby namespace divergence hypothesis is eliminated on macuahuitl. The
+        leading mechanism remains stray concurrent gate contention (1141-vf9w), which
+        is now mitigated by lib-dispatch-reap and check-no-competing-gate. What remains
+        open (C2/C3) is blocked on recurrence of an in-gate refusal in the wild to capture
+        the armed out2 print. If no refusal recurs once check-no-competing-gate promotes,
+        1132-r4mt should be closed as resolved by 1141-vf9w.
