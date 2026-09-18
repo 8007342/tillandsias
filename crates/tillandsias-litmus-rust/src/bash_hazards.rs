@@ -256,10 +256,18 @@ pub fn scan(src: &[u8]) -> Vec<Finding> {
             "pipeline" => {
                 if let Some(t) = pipeline_tail(n) {
                     if is_grep_q(t, src) && in_pipefail_scope(n, &sites) {
-                        out.push(Finding { shape: Shape::PipefailGrepQ, line, text: first_line(n, src) });
+                        out.push(Finding {
+                            shape: Shape::PipefailGrepQ,
+                            line,
+                            text: first_line(n, src),
+                        });
                     }
                     if is_tail_1(t, src) {
-                        out.push(Finding { shape: Shape::TrailingTail1, line, text: first_line(n, src) });
+                        out.push(Finding {
+                            shape: Shape::TrailingTail1,
+                            line,
+                            text: first_line(n, src),
+                        });
                     }
                 }
             }
@@ -277,12 +285,20 @@ pub fn scan(src: &[u8]) -> Vec<Finding> {
                         _ => false,
                     };
                     if hit {
-                        out.push(Finding { shape: Shape::NegatedPipelineIf, line, text: first_line(cond, src) });
+                        out.push(Finding {
+                            shape: Shape::NegatedPipelineIf,
+                            line,
+                            text: first_line(cond, src),
+                        });
                     }
                 }
             }
             "command" if is_pgrep_f(n, src) => {
-                out.push(Finding { shape: Shape::PgrepFLiteral, line, text: first_line(n, src) });
+                out.push(Finding {
+                    shape: Shape::PgrepFLiteral,
+                    line,
+                    text: first_line(n, src),
+                });
             }
             _ => {}
         }
@@ -297,7 +313,10 @@ mod tests {
     use super::*;
 
     fn shapes(src: &str) -> Vec<&'static str> {
-        scan(src.as_bytes()).into_iter().map(|f| f.shape.key()).collect()
+        scan(src.as_bytes())
+            .into_iter()
+            .map(|f| f.shape.key())
+            .collect()
     }
 
     #[test]
@@ -305,7 +324,10 @@ mod tests {
         // THE NEGATIVE CONTROL this packet names: comment-blind source scans
         // are a repeat defect here (881-29me, 885-92iu, 1251-54p3's comment arm).
         let src = "#!/usr/bin/env bash\n# mentions pipefail in prose\nset -u\ncat f | grep -q x\n";
-        assert!(shapes(src).is_empty(), "comment-only pipefail must not trigger");
+        assert!(
+            shapes(src).is_empty(),
+            "comment-only pipefail must not trigger"
+        );
     }
 
     #[test]
@@ -326,7 +348,10 @@ mod tests {
     fn negation_nests_inside_the_pipeline() {
         // `!` wraps only the FIRST stage; matching an outer negated_command
         // found zero. Regression pin for bug 1 in this file's header.
-        assert_eq!(shapes("if ! a | grep -q x; then :; fi\n"), vec!["negated-pipeline-if"]);
+        assert_eq!(
+            shapes("if ! a | grep -q x; then :; fi\n"),
+            vec!["negated-pipeline-if"]
+        );
     }
 
     #[test]

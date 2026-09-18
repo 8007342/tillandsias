@@ -182,7 +182,9 @@ pub fn run_cli(args: Vec<String>) -> Result<String, String> {
             let mut files = [0usize; 4];
             let mut scanned = 0usize;
             for path in &paths {
-                let Ok(src) = std::fs::read(path) else { continue };
+                let Ok(src) = std::fs::read(path) else {
+                    continue;
+                };
                 scanned += 1;
                 let mut seen = [false; 4];
                 for f in bash_hazards::scan(&src) {
