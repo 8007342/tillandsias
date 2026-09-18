@@ -52,7 +52,8 @@ fi
 
 # find -L, not `grep -r`: plain -r does not descend into symlinked directories
 # on this fleet and exits 0 regardless, so a symlinked tree reads as clean.
-mapfile -t FILES < <(find -L "${1:-scripts}" -name '*.sh' -type f 2>/dev/null | sort)
+FILES=()
+while IFS= read -r _line; do FILES+=("$_line"); done < <(find -L "${1:-scripts}" -name '*.sh' -type f 2>/dev/null | sort)
 if [ "${#FILES[@]}" -eq 0 ]; then
     echo "advisory:bash-hazards:scanned=0"
     exit 0
