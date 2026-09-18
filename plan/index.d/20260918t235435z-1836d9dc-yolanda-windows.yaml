@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: note
+      ts: "2026-09-18T23:54:35Z"
+      agent_id: windows-yolanda-claude-20260918t235433z
+      host: yolanda-windows
+      summary: |-
+        TITLE CORRECTION, measured on yolanda 2026-09-18. THE TRANSPORT PRESERVES THE EXIT STATUS. This row's title says every rc measured through the wsl.exe channel on a Windows host is decoration, and that is TOO BROAD. An auditor acting on the title would rewrite correct code.
+
+        SIX MEASUREMENTS, yolanda, distro tillandsias-build, Git Bash locus. D is the distro name:
+
+          1  wsl.exe -d D -- bash -lc 'exit 7'  then outer echo    -> 7            OUTER, CORRECT
+          2  wsl.exe -d D -- bash -lc 'false'   then outer echo    -> 1            OUTER, CORRECT
+          3  if wsl.exe -d D -- bash -lc 'exit 3'; then ...        -> else, rc=3   OUTER, CORRECT
+          4  bash -lc 'false; echo "$?"'                           -> 0            ARG STRING, WRONG
+          5  bash -lc 'false; rc=$?; echo "$rc"'                   -> empty        ARG STRING, NEVER EVALUATED
+          6  bash -lc 'echo "$$"'                                  -> correct pid  ARG STRING, CORRECT
+
+        Arms 1-3 are the correction: the exit status of the wsl.exe PROCESS is carried faithfully to the outer shell, so both the if-then form and an outer rc capture are sound and need no conversion. Only an expression COMPUTED INSIDE the argument string is affected.
+
+        THE MECHANISM IS WIDER THAN THE QUESTION-MARK CHARACTER, which this row does not say and which will bite the next fixer:
+
+          ${a[1]} where a=(x y z)          -> empty   no question mark present
+          v=ok; echo "$v"                  -> empty
+          v=ok; set | grep "^v="           -> v=ok    THE ASSIGNMENT DID HAPPEN
+          echo "$HOME"                     -> /root   pre-existing env expands fine
+          echo "$$"                        -> correct
+
+        CONSEQUENCE FOR ANYONE TOLD TO CONVERT AN RC INTO A STDOUT TOKEN: the PIPESTATUS array is in the affected set. A token built from PIPESTATUS subscript zero in the argument string comes back EMPTY, so the obvious replacement is as broken as what it replaces, and it fails silently rather than loudly.
+
+        NOT THEORISED FURTHER, deliberately: the assignment demonstrably executes and yet same-string expansion of the assigned name returns empty, and I could not close that gap tonight. Recording what was measured rather than a cause I cannot support.
+
+        THE OPERATIONAL RULE IS UNCHANGED AND STRONGER: anything COMPUTED inside the argument string is untrustworthy; put the logic in a script file and read a token from stdout. What changes is the SCOPE OF THE AUDIT — a comment-stripped census of this tree finds no instance of the real pattern anywhere except the canary's own two deliberate ones in scripts/lib-wsl-exec.sh.
+
+        SECOND-HOST CONFIRMATION: the canary refuses identically here and on esmeraldinha. Two Windows hosts, same mechanism, so it is the MSYS argument-conversion layer and not one host's install.
+
+        STATE OF THE DELIVERABLE, checked against the tree before working: the canary and its fixture ALREADY EXIST and are on trunk at e6f675d18 (esmeraldinha, 2026-09-13) — scripts/lib-wsl-exec.sh with both known answers, scripts/test-wsl-exec-channel-carries-exit-status.sh under the exact filename the unscoreable prescribed, wired by ROUTE 1 at build.sh line 2151. Naming the route, as the unscoreable asked. The open wrap-or-refuse design question is answered in the file with reasoning. This row reads ready because expire-claims returned it after a 24h TTL, per the same-day fragment 20260918t203353z-08ab1169-linux.yaml; ready here means the claim lapsed, NOT that nothing exists.
