@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: evidence
+      ts: "2026-09-18T21:25:05Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        NVIDIA-LANE RECORD FROM LENOVINHA — criterion 6, first of two hosts. And the lane field is a LABEL, not a measurement.
+
+        THE LANE IS SERVING, VERIFIED NOT INFERRED. /api/ps reports nomic-embed-text:latest
+        size_vram=323150151 == size=323150151 — fully resident in VRAM. The container takes its
+        devices through CDI (.Config.CreateCommand = --device=nvidia.com/gpu=all),
+        TILLANDSIAS_INFERENCE_TIER=gpu-cuda, and nvidia-smi answers inside the container on driver
+        615.71.09. I measured this instead of reading lanes off my own capability row, after yoga
+        demonstrated that a row's two lane fields can each be reassuring and still not compose.
+
+        THE RECORD: ok:expert-accuracy-recorded:graded rate=100% pass=33 graded=33 total=33
+        skipped=0 stale=0 model=nomic-embed-text lane=gpu-cuda host=silverblue-ryzen7-amd+nvidia-lenovinha
+          corpus  sets=4 total=33 — the COMMITTED GLOB. Note for whoever runs this next: bare
+                  'tillandsias-plan grade' grades rung1 only, 22 cases, and is NOT comparable to
+                  the 33-case baseline. The glob over openspec/litmus-tests/groundtruth/*.yaml is
+                  the corpus this row's history is written in.
+          model   nomic-embed-text, F16, nomic-bert
+          index   generation bbbd559a0e1a9deb, corpus commit 6ac0f8d2a, 25,146 chunks (vs 23,164
+                  at my 2026-09-04 baseline; all reused this run, 0 re-embedded, so the index BUILD
+                  cost is not attributable to this lane and I am not claiming it)
+          estimated_rate_pct null, deliberately — nothing in the repo produces an estimate, and
+                  inventing one collapses the two columns this packet exists to keep apart.
+
+        ACCURACY IS UNCHANGED BY THE LANE AND SAYING SO IS THE POINT. My 2026-09-04 CPU baseline on
+        this host was ALSO 33/33, after the RETRIEVE_K=8 fix. So 100% on the NVIDIA lane is NOT an
+        improvement, and reporting it as one would be precisely the misattribution this packet
+        exists to prevent. The lane changes where the arithmetic happens, not what the model
+        retrieves: same model, same vectors, same ranking.
+
+        THE LANE FIELD IS SELF-REPORTED, AND I PROVED IT BY ACCIDENT. record-expert-accuracy.sh:217
+        reads lane=${TILLANDSIAS_EXPERT_LANE:-cpu}, an unconditional default. My first run recorded
+        lane=cpu while the runner was demonstrably resident in VRAM. I re-ran 32 seconds later with
+        the variable set and got lane=gpu-cuda. Same hardware, same resident runner, elapsed 24445ms
+        vs 24453ms — EIGHT MILLISECONDS APART. The only thing that changed was a string.
+        Consequence for this packet specifically: the accuracy series cannot distinguish lanes on
+        its own, so a cross-host model comparison that groups by lane is grouping by an assertion.
+        An accelerated host that does not set the variable silently records cpu. The default was
+        correct when written (917-n3n9 tracks making it anything but cpu) and is now actively wrong
+        here. It should be MEASURED — /api/ps size_vram vs size is one call and is authoritative.
+        Filed separately rather than edited in passing.
+
+        LANE COST, measured directly because the grader cannot isolate it: 4 embeddings via
+        /api/embed, 1654ms cold (model load) and 22ms warm. I did NOT produce an isolated CPU
+        comparison — no CPU-lane runner is configured here, and the grader's 24s is dominated by
+        plan/methodology/cheatsheet engines that embed nothing, so an end-to-end delta would not
+        have attributed to the lane anyway. Stating the gap rather than estimating across it.
+
+        CRITERION 6 IS NOT CLOSED BY THIS. One host. yoga appends their all-minilm record (23M
+        against this 137M) as the second half; their Vulkan lane is live, which macuahuitl's
+        original routing had right and yoga's own first correction had wrong. If neither all-minilm
+        nor mxbai can be pulled there, criterion 6 stays OPEN rather than yoga running nomic and
+        calling it different — two hosts on one model is not the criterion.
+
+        NOT DONE, stated rather than implied: criterion 2 — the expert running INSIDE a toolbox,
+        with a no-toolbox host failing loudly instead of falling back host-native — is untouched on
+        every host, unchanged since the 2026-09-04 note said the same.
