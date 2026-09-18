@@ -8217,3 +8217,51 @@ TAKEN BEFORE THE RUN — survivors, then occurrences, then entries-matching-anch
 When a check's failure mode is silence, a positive measurement taken beforehand
 is the only thing that distinguishes it afterwards, because silence and success
 are the same bytes.
+
+## 2026-09-18T03:45Z macuahuitl — coordination pass (release gate in flight)
+
+**THE FREEZE IS DECLARED, AND IT IS ENFORCED RATHER THAN ANNOUNCED.**
+`scripts/release-freeze.sh set linux-next` ->
+`frozen:linux-next:by=macuahuitl:since=1789703272`. The pre-push hook honours a
+live marker (there is a fixture for exactly that), so this is a refusal and not
+a request. Code pushes are held; plan-only, docs, skills and platform syncs stay
+admitted by design, which is why this pass can still land its own records. The
+marker is cleared at the BACK-MERGE PUSH, not at the tag. Any host may clear a
+freeze any other host set — deliberate, so a coordinator dying mid-cut cannot
+leave the fleet frozen.
+
+**THE CUT IS RUNNING.** `./build.sh --ci-full --install` started 03:42Z on
+b75edd2a3 for v56.9.18.1. Bare `--ci-full` was NOT used: it exits after the
+pre-build gate and never reaches post-build or runtime (1185-9qx6, lenovinha),
+so a bare run reads as a passing release gate having skipped two phases.
+`target-guest/` was cleared first (923-ys2t, three prior reproductions): 0
+tracked files, gitignored, holding staged musl guest binaries that
+`build-guest-binaries.sh --verify` reads as an integrity mismatch rather than as
+stale staging.
+
+**THE VERSION WAS COMPUTED, NOT TYPED, AND SANITY-CHECKED.** v56.9.18.1, derived
+by running bump-version.sh in a SCRATCH LAYOUT — that script anchors VERSION to
+its own script path rather than $PWD, so copying VERSION alone into a temp dir
+and bumping there would have bumped the real checkout. Asserted afterwards that
+the third field is a day-of-month and the first is >=56, because hand-deriving
+the retired MAJOR.MINOR.YYMMDD.N scheme under epoch CalVer yields the malformed
+v56.8.260901.1 whose six-digit third field is the Store-cap violation the
+cutover existed to remove.
+
+**NOTHING TO RELAY, MEASURED THE RIGHT WAY.** osx-next 0 ahead / 38 behind and
+windows-next 0 ahead / 576 behind, each adding ZERO files when diffed against
+its OWN merge-base rather than against trunk. That is the third consecutive pass
+where a raw trunk diff would have shown dozens of "changes" that are only trunk
+having moved.
+
+**DAILY GATE STAMPED FOR 2026-09-18** with measurements rather than a ritual:
+host-updates-102-pending-not-applied, disk-205G-free, podman-df-9.864GB-images,
+launcher-v56.9.17.1, tree-VERSION-56.9.13.1, expert-lane-ok-bare-metal. The 102
+pending host updates were READ AND NOT APPLIED — agents do not change
+deployments, and that remains the operator's call.
+
+**AND THE LAUNCHER IS AHEAD OF THE TREE, WHICH IS THE COMPLAINT IN MINIATURE.**
+Installed launcher reads v56.9.17.1; tracked VERSION reads 56.9.13.1. The
+INSTALLED artifact is four days newer than the source of truth, because the
+build counter is bumped and then reverted on every platform branch (643-64bx).
+This cut is what closes that gap.
