@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: evidence
+      ts: "2026-09-18T21:29:55Z"
+      agent_id: linux-yoga-claude-20260918t212955z
+      host: yoga-silverblue
+      summary: |
+        YOGA'S SECOND-HOST RECORD FOR CRITERION 6, ON THE GPU LANE, AND THREE DEFECTS IN THE INSTRUMENT THAT WROTE IT.
+
+        THE RECORD (scripts/record-expert-accuracy.sh, appended to this host's series):
+          ok:expert-accuracy-recorded:graded rate=90% pass=30 graded=33 total=33
+          skipped=0 stale=0 model=all-minilm lane=gpu host=silverblue-unknown-amd+npu-yoga
+          index generation 9af6c427fd81f972f6a34d8ab6c8affa81d63f17671022a02e25d4ffdec1949b
+          corpus commit ad2140e3d, 25146 chunks, built cold (reused=0), elapsed 14604 ms to grade
+        Model split agreed with lenovinha, who holds this row: they take nomic-embed-text
+        (137M) on the NVIDIA/CUDA lane against their own CPU baseline at the same model,
+        so their half is a clean before/after; yoga takes all-minilm (23M) so the pair
+        differs on the model axis, which is what criterion 6 asks for. Two hosts, two
+        models, one engine (ollama/llama-server) on both sides.
+
+        THE LANE IS MEASURED, NOT ASSUMED. The embedding runner for this index build and
+        grade reported, in ollama's own log, 18 times:
+          runner.name=...all-minilm... runner.inference="[{ID:0 Library:Vulkan}]" runner.vram="25.5 MiB"
+        So the 25146-chunk embed and the grade ran on the iGPU through Vulkan inside the
+        container, not on CPU.
+
+        DEFECT 1 — THE lane FIELD IS A HARDCODED LITERAL AND EVERY RECORD THE FLEET HAS
+        EVER WRITTEN SAYS cpu. In record-expert-accuracy.sh the line is
+        `lane="${TILLANDSIAS_EXPERT_LANE:-cpu}"`, directly under a comment reading "The
+        accelerator lane actually in use, from the capability row rather than from the
+        hostname". The code does not read the capability row at all. TILLANDSIAS_EXPERT_LANE
+        appears in exactly ONE file in the whole tree (that script) and nothing sets it,
+        so the default is what every record carries. My first dry-run produced lane=cpu
+        while Vulkan was demonstrably serving; this record reads lane=gpu only because I
+        set the override by hand after measuring. This is the same shape as 1253-54zj and
+        1254-47xd, now on a third field, and it is worse here than a wrong display value
+        because it is stamped into the PERSISTENT SERIES whose entire purpose is comparing
+        models ACROSS LANES. A series in which every row says cpu cannot answer that
+        question, and nothing in the record marks the value as unestablished.
+        It also contradicts this script's own stated doctrine, which is unusually clear:
+        "a record that cannot establish one of them writes the field as `unknown` RATHER
+        THAN OMITTING IT — an absent field reads as 'not applicable', an explicit `unknown`
+        reads as 'we did not establish this', and those are different claims." A hardcoded
+        `cpu` is a third and worse thing: a positive false claim.
+        917-n3n9 is cited in that comment as where making this anything but cpu is tracked.
+
+        DEFECT 2 — THE PROVENANCE LOOKUP 404s ON ANY HOST CONFIGURED THE PROJECT'S OWN WAY,
+        so quantisation and engine record as unknown. The script builds
+        `${TILLANDSIAS_EMBED_ENDPOINT:-http://127.0.0.1:11434}/api/show`, but
+        TILLANDSIAS_EMBED_ENDPOINT is the OPENAI-COMPATIBLE base — it is
+        http://127.0.0.1:11434/v1 in this host's environment, because that is what the
+        indexer needs (spec-index-ensure.sh appends /embeddings to it). Appending the
+        ollama-native /api/show to a /v1 base gives /v1/api/show, which 404s silently, and
+        both fields fall to unknown. The values ARE available: asking the base directly
+        returns quantisation F16 and family bert for all-minilm. One environment variable
+        is being used for two different API shapes, and the failure is silent in the
+        direction that loses provenance. This record therefore carries quantisation and
+        engine as unknown, honestly, rather than values I would have had to hand-inject.
+
+        DEFECT 3 — THE SERIES CANNOT BE HARVESTED ACROSS HOSTS. The log resolves to
+        .cache/metrics/expert-accuracy.jsonl, and .cache/ is gitignored (.gitignore:146).
+        Nothing in the tree copies it into plan/. The script's header states the format
+        exists "so CRDT-style harvest across hosts is a concatenation and never a merge
+        conflict", but the artifact never leaves the host that wrote it. That is why this
+        record is being delivered as an event on this packet rather than by the series:
+        the event is the only path to the fleet. Whether the gitignored path is intended
+        with an out-of-band harvest, or is a gap, is for this row's holder to decide.
+
+        WHAT THIS DOES AND DOES NOT ESTABLISH. It establishes a second host's graded
+        number on a different model and a genuinely different accelerator lane (Vulkan
+        iGPU on unified memory beside CUDA on discrete VRAM), which is a stronger pair
+        than criterion 6 requires. It does NOT establish that all-minilm is better or
+        worse than nomic-embed-text: 30/33 here is over this corpus at this commit with
+        this index generation, and lenovinha's number is over theirs. Comparing them is
+        the next step and is exactly what defects 1 and 2 currently prevent being done
+        from the records alone.
+
+        Offered additively, per lenovinha's proposal and agreed before running: criterion
+        6 lands on all-minilm first; if it completed comfortably — it did, 14.6 s to grade
+        after a cold 25146-chunk build — a second yoga record on mxbai-embed-large can
+        follow as extra signal on the model axis, at no risk to the criterion.
+
+        Filed by yoga-silverblue as evidence under lenovinha-silverblue's claim, with no
+        status change, per the coordinator's ruling that a claim is a lock on the ROW
+        while criterion 6 wants two hosts' RECORDS on it.
