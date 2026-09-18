@@ -12,11 +12,11 @@ description: The bash composition-hazard lint (1252-r72q) is ADVISORY by constru
 # as an orphan (1087-h2z9). Same shape as 1251-54p3's seam-writer guard tonight:
 # the advisory tier IS a litmus binding. This file is that binding.
 critical_path:
-  - name: "the advisory lint runs and reports a verdict (ok on a host with the release binary, skip:no-binary elsewhere — both are valid advisory outcomes)"
+  - step: "the advisory lint runs and reports a verdict (ok on a host with the release binary, skip:no-binary elsewhere — both are valid advisory outcomes)"
     command: "scripts/check-bash-composition-hazards.sh 2>&1 | tail -1"
     success_pattern: "^(ok|skip):bash-hazards"
     timeout_ms: 60000
-  - name: "ADVISORY BY CONSTRUCTION: the wrapper exits 0 whatever it finds, so a caller under set -e cannot turn it into a gate"
+  - step: "ADVISORY BY CONSTRUCTION: the wrapper exits 0 whatever it finds, so a caller under set -e cannot turn it into a gate"
     command: "scripts/check-bash-composition-hazards.sh >/dev/null 2>&1; echo rc=$?"
     expected_behavior: "rc=0"
     timeout_ms: 60000
