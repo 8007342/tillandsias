@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    packet_kind: methodology
+    order: 1260-2qgi
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [methodology, gate, agent-safety, diagnosis, instrument-defect]
+    estimated_hours: 6
+    owned_files:
+      - methodology/convergence.yaml
+      - scripts/gate-stamp.sh
+      - scripts/lib-wsl-exec.sh
+    verifiable_closure: |
+      scripts/test-status-channel-absent-is-first-class.sh prints
+      `ok:status-channel:absent-distinct-from-zero:4/4` and exits 0, where the
+      four arms are the four channels below driven with a child whose real
+      status is 1 and a child that never produced a status (killed), and the
+      consumer of each channel reports `rc=1`, `rc=absent`, and NEVER `rc=0`,
+      for the two cases respectively. PRE-FIX RESULT: FAILS — today every one
+      of the four channels reports `rc=0` for at least one of the two cases.
+      NEGATIVE CONTROL: a child that exits 0 through each channel still reports
+      `rc=0`, so the fix cannot be "report absent for everything".
+    title: |
+      a status carried by a channel is either preserved or declared absent, and absent is a first-class value the consumer must handle — five instances in one day read a substituted integer as a verdict
+    context: |
+      FIVE INSTANCES, 2026-09-18, ONE SHAPE: a status READ from something other
+      than the thing that produced it, with nothing marking the substitution.
+        1. 1256-cqsy (macneo): a backgrounded ./build.sh --check that exited 1
+           was reported `[exited with code 0]` by the wrapper.
+        2. 1155-jurn (esme, yolanda): `wsl.exe … bash -lc` drops the child's rc;
+           `false; echo $?` prints 0 on two Windows hosts. rc is decoration.
+        3. esme: `git push` whose real exit was 1 reported PUSH_RC=0 — `$?`
+           after a pipeline is the last stage's.
+        4. macbookair (via macneo): a gate KILLED at 7% produced no verdict and
+           the wrapper supplied 144, indistinguishable from a red to anyone
+           reading the wrapper. Verdicts are TERNARY: green, red, ABSENT.
+        5. macneo: a delete script printed a scripted "empty above = both
+           deleted" line while both refs were still listed — a sentence that
+           reads like a result, produced by nothing that checked.
+      THE SHARED REMEDY, which none of the child rows states: every channel that
+      carries a status must PRESERVE it or DECLARE that it cannot, and the
+      consumer must be able to tell `rc=0` from `no rc reached me`. That is the
+      fleet's source=absent discipline for missing data, applied to exit
+      status. And the rule must say what to DO on absence — re-run, or refuse
+      to push — because "treat it as unresolved" is read as "use your
+      judgement", which in practice means using the wrapper's integer.
+      Framing: macneo-macos and macbookair-macos, 2026-09-18; instances from
+      esmeraldinha and yolanda the same day.
+    next_action: >
+      Write the four-arm fixture FIRST and watch it fail on the unfixed tree,
+      arm by arm: (1) the background-task wrapper's exit line, (2) the wsl.exe
+      channel via scripts/lib-wsl-exec.sh's canary, (3) a `producer | tee`
+      pipeline's `$?`, (4) a gate killed mid-run and its stamp/verdict line.
+      Then add the rule to methodology/convergence.yaml as a MUST with the
+      three-valued verdict named, and make the two channels this tree owns
+      (the gate stamp writer and the wsl exec helper) emit `rc=absent` rather
+      than a number when the child produced none. 1256-cqsy criterion 3,
+      1155-jurn and 1259-kn83 are the child rows; do not close them from here —
+      this row closes when the rule exists and the fixture is green, they close
+      on their own channels.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-18 from five peer
+      reports the same day; the framing is macneo's and macbookair's, the
+      instances are esmeraldinha's, yolanda's, macneo's and macbookair's. None
+      of the instances is this host's; the SHAs and refusal strings live on the
+      child rows.

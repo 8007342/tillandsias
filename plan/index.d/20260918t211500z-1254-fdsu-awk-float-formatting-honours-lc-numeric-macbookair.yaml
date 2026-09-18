@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    order: 1254-fdsu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, portability, measurement]
+    estimated_hours: 2
+    owned_files:
+      - scripts/freshness-inventory.sh
+      - scripts/select-work-batch.sh
+      - scripts/hooks/pre-commit-openspec.sh
+      - scripts/refusal-calibration/measure-bands.sh
+    unscoreable: |
+      needs-a-comma-locale-host-or-an-injected-one. The defect is invisible under
+      LC_NUMERIC=C, which is every CI lane this fleet runs, so a fixture that
+      merely runs the producers proves nothing. The guard must SET a comma
+      locale (LC_NUMERIC=fr_CH.UTF-8 or de_DE.UTF-8) around the producer and
+      assert the emitted field still matches ^[0-9]+\.[0-9]+$.
+
+      WHAT THAT FIXTURE MUST ASSERT, so it is not weakened into something that
+      passes: under an injected comma locale each listed producer emits a DOT
+      decimal separator. A MUTATION ARM must show the assertion reds when the
+      locale pin is removed from the script under test — otherwise it only
+      proves that some number somewhere had a dot in it.
+    verifiable_closure: ""
+    title: |
+      awk's %.2f honours LC_NUMERIC, so on a comma-decimal host four measurement scripts emit 100,00 where every consumer's [0-9.] parser reads 100 — the number still looks like a number, nothing exits non-zero, and the published figure is silently wrong
+    context: |
+      FOUND on tlatoanis-macbook-air 2026-09-18 (LC_NUMERIC=fr_CH.UTF-8) when
+      ./build.sh --check went red at scripts/test-bench-prompt-uniqueness.sh
+      with "expected 100.00, got 100" while working an unrelated row.
+
+      THE MECHANISM, measured rather than inferred:
+        awk 'BEGIN{printf "%.2f", 100}'           -> 100,00
+        LC_ALL=C awk 'BEGIN{printf "%.2f", 100}'  -> 100.00
+
+      WHY IT IS WORSE THAN A CRASH. Every consumer in this tree parses these
+      fields with a [0-9.] character class. A comma does not fail to match — it
+      TERMINATES the class, so the value is TRUNCATED rather than rejected:
+      `prefill_tok_s=100,00` is read as 100, and `prefill_range=1512,00-2195,00`
+      as 1512-2195. The output still looks like numbers, the producer still
+      exits 0, and no gate anywhere says a word. A measurement that fails loudly
+      costs an afternoon; one that quietly drops its decimals gets cited.
+
+      WHY NOBODY HAS SEEN IT. Every CI lane and every Linux host in this fleet
+      runs LC_NUMERIC=C or en_US, where %.2f already prints a dot, so the
+      producers are correct there and the defect is invisible to them. It needs
+      an operator-configured host in a comma-decimal locale — which is what a
+      developer laptop actually is.
+
+      ALREADY FIXED, and it is the reason this packet can name the class rather
+      than guess at it: scripts/bench-inference-floor.sh now pins
+      `export LC_ALL=C` (commit accompanying this fragment), which turned
+      test-bench-prompt-uniqueness.sh from 5-passed-1-failed to
+      ok:bench-prompt-uniqueness:6 on this host.
+
+      THE FOUR BELOW WERE FOUND BY THE SAME SEARCH AND ARE UNFIXED. Each matches
+      `printf "%.[0-9]f` and none contains LC_ALL or LC_NUMERIC (verified by
+      grep on this host, count 0 for each):
+        scripts/freshness-inventory.sh
+        scripts/select-work-batch.sh
+        scripts/hooks/pre-commit-openspec.sh
+        scripts/refusal-calibration/measure-bands.sh
+      They are listed as CANDIDATES, not as confirmed defects: the grep proves
+      the exposure, not that each one's number reaches a [0-9.] parser. Whoever
+      takes this should confirm per script rather than pin all four on the
+      strength of the pattern.
+    deliverable: |
+      Each of the four scripts above either pins the numeric locale for its
+      machine-readable output, or is shown not to need it and says why in place.
+      A blanket `export LC_ALL=C` at the top is the cheap shape and is what
+      bench-inference-floor.sh chose — one pin cannot drift out of one of
+      several awk calls — but it is a real decision where a script also sorts
+      user-facing text, because LC_ALL=C changes collation too.
+
+      Plus the guard named in `unscoreable`, so the next comma-locale host does
+      not rediscover this through a red gate on an unrelated change.
+    next_action: >
+      Reproduce first; it needs no build and no host change —
+      `LC_NUMERIC=fr_CH.UTF-8 awk 'BEGIN{printf "%.2f", 100}'` prints 100,00 on
+      any host with that locale generated, and `LC_ALL=C` prints 100.00. Then
+      take the four scripts one at a time: for each, find where its %.Nf output
+      is CONSUMED and confirm the consumer parses with a [0-9.]-style class
+      before pinning, because the fix is only warranted where the truncation is
+      reachable. Read scripts/bench-inference-floor.sh's locale comment first —
+      it is the same lesson with the measurement and the two arms already
+      written out. Do NOT close this by pinning all four on the grep alone: the
+      grep establishes exposure, and this packet's own claim register says so.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-18, found while taking
+      1183-j9dk when ./build.sh --check reddened on an unrelated fixture. The
+      awk outputs above and the four grep counts were run on this host; the
+      claim that the four are defective is deliberately NOT made.
