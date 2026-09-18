@@ -3288,6 +3288,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-exec"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "tillandsias-headless"
 version = "56.9.13"
 dependencies = [
