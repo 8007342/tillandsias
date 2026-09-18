@@ -1,6 +1,6 @@
 # freshness: auditor=linux-macuahuitl-claude-20260918 date=2026-09-18 verdict=new scope=the fixture is hermetic (tempdir trees) so it does not red when 1250-92ty lands
 name: litmus:seam-writer-canonical-lock-shape
-spec: fail-loud-diagnosis
+spec: ci-release
 description: >
   Pin that scripts/check-seam-writers-canonical.sh can still tell a file that
   references the canonical seam lock from one that only mentions it in a
