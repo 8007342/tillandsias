@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-attach-retest-on-healthy-substrate
+    field: status
+    value: in_progress
+    ts: "2026-09-18T03:56:17Z"
+    host: macos
+
+events:
+  - packet_id: macos-attach-retest-on-healthy-substrate
+    event:
+      type: note
+      ts: "2026-09-18T03:56:17Z"
+      host: macos
+      summary: |-
+        claimed by macos-tlatoanis-macbook-air-claude-20260918t035617z: re-verify the 2026-08-17 scoping's three blockers against current state
