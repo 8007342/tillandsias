@@ -2,6 +2,8 @@
 //!
 //! Rust-aware source relevance checks for litmus tests.
 
+pub mod bash_hazards;
+
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -157,12 +159,74 @@ pub fn run_cli(args: Vec<String>) -> Result<String, String> {
             };
             if has_failure { Err(output) } else { Ok(output) }
         }
+        // ADVISORY TIER (1252-r72q exit criterion 4). Deliberately NOT wired
+        // into ./build.sh --check: at 545 candidate pipelines, gating on day
+        // one reds trunk for every host on a backlog nobody owns, and a guard
+        // that reds trunk gets disabled rather than obeyed. Promote only once
+        // the reported population is owned by a row.
+        "bash-hazards" => {
+            let mut paths: Vec<PathBuf> = Vec::new();
+            let mut show = false;
+            for a in &args[1..] {
+                match a.as_str() {
+                    "--show" => show = true,
+                    other if other.starts_with("--") => return Err(usage()),
+                    other => paths.push(PathBuf::from(other)),
+                }
+            }
+            if paths.is_empty() {
+                return Err(usage());
+            }
+            let mut out = String::new();
+            let mut pipelines = [0usize; 4];
+            let mut files = [0usize; 4];
+            let mut scanned = 0usize;
+            for path in &paths {
+                let Ok(src) = std::fs::read(path) else { continue };
+                scanned += 1;
+                let mut seen = [false; 4];
+                for f in bash_hazards::scan(&src) {
+                    let i = bash_hazards::Shape::all()
+                        .iter()
+                        .position(|s| *s == f.shape)
+                        .unwrap_or(0);
+                    pipelines[i] += 1;
+                    if !seen[i] {
+                        seen[i] = true;
+                        files[i] += 1;
+                    }
+                    if show {
+                        out.push_str(&format!(
+                            "{}:{}: {}: {}\n",
+                            path.display(),
+                            f.line,
+                            f.shape.key(),
+                            f.text
+                        ));
+                    }
+                }
+            }
+            out.push_str(&format!("advisory:bash-hazards:scanned={scanned}\n"));
+            for (i, s) in bash_hazards::Shape::all().iter().enumerate() {
+                out.push_str(&format!(
+                    "advisory:bash-hazards:{}:pipelines={}:files={}\n",
+                    s.key(),
+                    pipelines[i],
+                    files[i]
+                ));
+            }
+            Ok(out)
+        }
         _ => Err(usage()),
     }
 }
 
 fn usage() -> String {
-    "usage: tillandsias-litmus-rust check --litmus <path> [--json]".to_string()
+    concat!(
+        "usage: tillandsias-litmus-rust check --litmus <path> [--json]\n",
+        "       tillandsias-litmus-rust bash-hazards [--show] <script.sh>...",
+    )
+    .to_string()
 }
 
 pub fn check_litmus_file(path: &Path) -> Result<Vec<QueryResult>, String> {
