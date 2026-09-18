@@ -151,6 +151,7 @@ pub struct Command {
     envs: Vec<(OsString, OsString)>,
     env_clear: bool,
     timeout: Option<Duration>,
+    stdin: Option<Vec<u8>>,
 }
 
 impl Command {
@@ -169,6 +170,7 @@ impl Command {
             envs: Vec::new(),
             env_clear: false,
             timeout: None,
+            stdin: None,
         }
     }
 
@@ -195,6 +197,18 @@ impl Command {
         self
     }
 
+    /// Feed these bytes to the child on stdin. The replacement for `echo X | cmd`
+    /// and `cmd <<<"$x"`.
+    ///
+    /// THIS IS THE THIRD FD AND IT IS THE SAME DEADLOCK. A child that writes
+    /// past the pipe buffer on stdout while the parent is still blocked WRITING
+    /// stdin hangs exactly as the two-read case does. So the writer is joined
+    /// WITH the two readers below, never sequenced before them.
+    pub fn stdin_bytes<B: Into<Vec<u8>>>(mut self, b: B) -> Self {
+        self.stdin = Some(b.into());
+        self
+    }
+
     pub fn timeout(mut self, d: Duration) -> Self {
         self.timeout = Some(d);
         self
@@ -213,7 +227,11 @@ impl Command {
 
         let mut cmd = tokio::process::Command::new(program);
         cmd.args(rest)
-            .stdin(Stdio::null())
+            .stdin(if self.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
@@ -237,14 +255,39 @@ impl Command {
         // exists to make unconstructible.
         let mut out_pipe = child.stdout.take().expect("stdout piped above");
         let mut err_pipe = child.stderr.take().expect("stderr piped above");
+        let in_pipe = child.stdin.take();
+        let to_write = self.stdin.clone();
 
         let drain = async {
             use tokio::io::AsyncReadExt;
+            use tokio::io::AsyncWriteExt;
             let mut o = Vec::new();
             let mut e = Vec::new();
-            let (ro, re) = tokio::join!(out_pipe.read_to_end(&mut o), err_pipe.read_to_end(&mut e));
+            // THREE fds, all moving at once. The write is a peer of the reads,
+            // not a prelude to them: sequencing it first deadlocks on any child
+            // that answers before it has finished reading.
+            let feed = async {
+                if let (Some(mut w), Some(bytes)) = (in_pipe, to_write) {
+                    w.write_all(&bytes).await?;
+                    w.shutdown().await?; // EOF, or a reader waits forever
+                }
+                Ok::<(), std::io::Error>(())
+            };
+            let (ro, re, rw) = tokio::join!(
+                out_pipe.read_to_end(&mut o),
+                err_pipe.read_to_end(&mut e),
+                feed
+            );
             ro?;
             re?;
+            // A child that exits before consuming stdin gives us EPIPE here.
+            // That is NOT an error of ours -- `head -1` legitimately does it --
+            // so it is swallowed rather than turned into a spawn failure.
+            match rw {
+                Ok(()) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {}
+                Err(err) => return Err(err),
+            }
             Ok::<(Vec<u8>, Vec<u8>), std::io::Error>((o, e))
         };
 
@@ -320,4 +363,175 @@ fn completion_of(status: std::process::ExitStatus) -> Completion {
         }
     }
     Completion::Exited(status.code().unwrap_or(-1))
+}
+
+/// A sequence of commands where each stage's captured stdout becomes the next
+/// stage's stdin — the replacement for `a | b`.
+///
+/// THERE IS NO OS PIPE. Stage N runs to completion, its stdout is held in
+/// memory, and stage N+1 is started with those bytes on stdin. So there is no
+/// early-exiting consumer, nothing to SIGPIPE, and `pipefail` has no analogue
+/// to invert: the SIGPIPE class is deleted rather than avoided.
+///
+/// THE TRADE, STATED RATHER THAN HIDDEN: this buffers each intermediate in
+/// full, so peak memory is the largest intermediate rather than a 64 KiB pipe
+/// buffer, and stages do not overlap in time. For the guard-shaped work this
+/// crate exists for — run a command, inspect its output — that is the right
+/// trade. For streaming gigabytes between long-running processes it is not, and
+/// such a caller should spawn() the stages and move bytes itself.
+///
+/// EVERY STAGE'S Output IS KEPT, which is the second thing a shell pipeline
+/// cannot do: `a | b` discards a's exit status and stderr entirely unless
+/// pipefail is set, and even then it gives you one bit. Here each stage's
+/// status, stdout and stderr survive for inspection.
+#[derive(Debug, Clone)]
+pub struct Pipeline {
+    stages: Vec<Command>,
+}
+
+/// What a pipeline produced: every stage's Output, in order.
+#[derive(Debug, Clone)]
+pub struct PipelineOutput {
+    pub stages: Vec<Output>,
+}
+
+impl PipelineOutput {
+    /// The last stage's Output, which is what `a | b` would have given you.
+    pub fn last(&self) -> &Output {
+        self.stages
+            .last()
+            .expect("a pipeline has at least one stage")
+    }
+    /// Every stage exited zero. The honest form of `pipefail`, and it cannot
+    /// invert because no stage was killed by a downstream reader.
+    pub fn all_succeeded(&self) -> bool {
+        self.stages.iter().all(|s| s.completion.is_success())
+    }
+    /// The first stage that did not exit zero, for a refusal that can name it.
+    pub fn first_failure(&self) -> Option<&Output> {
+        self.stages.iter().find(|s| !s.completion.is_success())
+    }
+}
+
+impl Pipeline {
+    pub fn new(first: Command) -> Self {
+        Pipeline {
+            stages: vec![first],
+        }
+    }
+
+    /// Append a stage fed by the previous stage's stdout.
+    pub fn pipe_to(mut self, next: Command) -> Self {
+        self.stages.push(next);
+        self
+    }
+
+    /// Run every stage in order. Stops at the first stage that fails to SPAWN;
+    /// a stage that RUNS and exits non-zero does not stop the pipeline, because
+    /// deciding what a non-zero stage means is the caller's business and
+    /// swallowing it here would rebuild the thing we are replacing.
+    pub async fn run(self) -> Result<PipelineOutput, ExecError> {
+        let mut outs: Vec<Output> = Vec::with_capacity(self.stages.len());
+        let mut carry: Option<Vec<u8>> = None;
+        for stage in self.stages {
+            let stage = match carry.take() {
+                Some(bytes) => stage.stdin_bytes(bytes),
+                None => stage,
+            };
+            let out = stage.run().await?;
+            carry = Some(out.stdout.clone());
+            outs.push(out);
+        }
+        Ok(PipelineOutput { stages: outs })
+    }
+}
+
+/// A child that is still running. The reaping half of the layer.
+///
+/// `kill_on_drop` is set on every spawn, so a `Running` that goes out of scope
+/// cannot leak a process — the failure mode where a killed harness leaves an
+/// orphaned gate behind (measured twice on this host tonight) is not
+/// constructible through this type.
+#[derive(Debug)]
+pub struct Running {
+    child: tokio::process::Child,
+    run: RunId,
+    argv: Vec<OsString>,
+}
+
+impl Running {
+    pub fn run_id(&self) -> &RunId {
+        &self.run
+    }
+    pub fn argv(&self) -> &[OsString] {
+        &self.argv
+    }
+
+    /// Has it finished? Does NOT block. `None` means still running — and note
+    /// that is a third state, not a falsy "no": a caller that collapses this to
+    /// a bool loses the distinction between "finished unsuccessfully" and
+    /// "hasn't finished".
+    pub fn try_completion(&mut self) -> Result<Option<Completion>, ExecError> {
+        match self.child.try_wait() {
+            Ok(Some(status)) => Ok(Some(completion_of(status))),
+            Ok(None) => Ok(None),
+            Err(source) => Err(ExecError::Io {
+                argv: self.argv.clone(),
+                source,
+            }),
+        }
+    }
+
+    /// Wait for it, reaping the child.
+    pub async fn wait(mut self) -> Result<Completion, ExecError> {
+        let status = self.child.wait().await.map_err(|source| ExecError::Io {
+            argv: self.argv.clone(),
+            source,
+        })?;
+        Ok(completion_of(status))
+    }
+
+    /// Kill it and reap. SIGKILL, not SIGTERM: a child that ignores SIGTERM is
+    /// exactly the case a caller reaches for this in, and a polite terminate
+    /// that hangs is worse than no method at all.
+    pub async fn kill(mut self) -> Result<Completion, ExecError> {
+        let _ = self.child.start_kill();
+        self.wait().await
+    }
+}
+
+impl Command {
+    /// Start the child and return a handle WITHOUT waiting. stdout and stderr
+    /// are inherited, because a background child whose pipes nobody drains is
+    /// the deadlock this crate exists to prevent — a caller who wants captured
+    /// output should use `run()`, which drains concurrently.
+    pub async fn spawn(self) -> Result<Running, ExecError> {
+        let Some((program, rest)) = self.argv.split_first() else {
+            return Err(ExecError::EmptyArgv);
+        };
+        let mut cmd = tokio::process::Command::new(program);
+        cmd.args(rest)
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .kill_on_drop(true);
+        if let Some(d) = &self.cwd {
+            cmd.current_dir(d);
+        }
+        if self.env_clear {
+            cmd.env_clear();
+        }
+        for (k, v) in &self.envs {
+            cmd.env(k, v);
+        }
+        let child = cmd.spawn().map_err(|source| ExecError::Spawn {
+            argv: self.argv.clone(),
+            source,
+        })?;
+        Ok(Running {
+            child,
+            run: RunId::new(),
+            argv: self.argv,
+        })
+    }
 }
