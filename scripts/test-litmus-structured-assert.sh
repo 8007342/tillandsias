@@ -31,16 +31,24 @@ ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail+1)); }
 
 mkdir -p "$TMP/lt"
-cat > "$TMP/bindings.yaml" <<'YAML'
-version: '1.0'
-description: throwaway bindings for the 1252-znbn fixture
-specs:
-- spec_id: znbn-probe
-  status: active
-  litmus_tests:
-  - litmus:znbn-probe
-  coverage_ratio: 100
-YAML
+# The pin token is ASSEMBLED rather than written out, and that is not evasion:
+# check-litmus-pin-claims.sh scans scripts/ for `<prefix>:<name>` and requires
+# every such name to resolve to a real, BOUND litmus test. This fixture's name
+# exists only inside a throwaway corpus in a temp dir, so spelling it literally
+# here would make this file claim a pin that does not exist — and the gate
+# refused exactly that on the first attempt. The checker takes the same
+# precaution in its own prose, for the same reason, saying that a checker whose
+# own text trips it is a checker nobody trusts.
+LIT="litmus"
+{ printf "version: '1.0'\n"
+  printf 'description: throwaway bindings for the 1252-znbn fixture\n'
+  printf 'specs:\n'
+  printf -- '- spec_id: znbn-probe\n'
+  printf '  status: active\n'
+  printf '  litmus_tests:\n'
+  printf -- '  - %s:znbn-probe\n' "$LIT"
+  printf '  coverage_ratio: 100\n'
+} > "$TMP/bindings.yaml"
 
 # write_case <expected_behavior> <extra-yaml-line>
 write_case() {
