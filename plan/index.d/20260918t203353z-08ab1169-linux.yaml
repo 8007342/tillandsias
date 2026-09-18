@@ -1,0 +1,209 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan expire-claims (order 672-bz7u).
+status:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: ledger-fold-silently-ignores-inert-fragments
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: opencode-forge-lane-missing-order-505-control-socket
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: populate-hot-paths-fails-silent-and-traces-success
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: lane-listeners-and-publish-local-hardcode-home-src
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: build-check-and-release-flag-combination-hard-fails
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: gate-shared-ledger-parse
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+  - packet_id: the-groundtruth-grader-calls-the-frame-blind-verifier-so-a-span-that-merely-moved-is-graded-as-a-fabricated-citation
+    field: status
+    value: ready
+    ts: "2026-09-18T20:33:53Z"
+    host: linux
+
+events:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T08:23:03Z	claimant:lenovinha (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-15T19:40:01Z	claimant:linux (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-15T12:40:29Z	claimant:linux (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: ledger-fold-silently-ignores-inert-fragments
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:32Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: opencode-forge-lane-missing-order-505-control-socket
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:23Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: populate-hot-paths-fails-silent-and-traces-success
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:24Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: lane-listeners-and-publish-local-hardcode-home-src
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:26Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: build-check-and-release-flag-combination-hard-fails
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:27Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:31Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: build-guest-binaries-prints-error-and-exits-zero-inside-a-green-ci-full
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:28Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T21:36:30Z	claimant:forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-17T01:04:23Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-15T17:33:26Z	claimant:pirria (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-14T07:56:09Z	claimant:windows (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-14T22:00:00Z	claimant:yolanda (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-15T19:13:03Z	claimant:linux (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-groundtruth-grader-calls-the-frame-blind-verifier-so-a-span-that-merely-moved-is-graded-as-a-fabricated-citation
+    event:
+      type: progress
+      ts: "2026-09-18T20:33:53Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-16T22:16:00Z	claimant:unattributed(any-host-rule) (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.

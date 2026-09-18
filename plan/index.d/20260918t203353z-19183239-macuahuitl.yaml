@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    field: status
+    value: blocked
+    ts: "2026-09-18T20:33:53Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: note
+      ts: "2026-09-18T20:33:53Z"
+      host: macuahuitl
+      summary: |-
+        superseded by the operator's 2026-09-18 ruling on 1217-54vw: login validates only 'can this token list repos?', so the CWD-resolved push probe this row would fix is being DELETED under 1217-54vw; closes when that lands
