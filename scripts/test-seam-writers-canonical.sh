@@ -86,8 +86,82 @@ else
     fail "ARM 4: expected refused:seam-var-has-no-writers, got rc=$rc: $out"
 fi
 
+# ARM 5 — CARDINALITY. THE COUNT IS THE ASSERTION; do not trim this to a
+# non-emptiness check. ARM 4 asks "did I see ANYTHING?" and therefore catches
+# only TOTAL blindness. Under PARTIAL blindness one writer survives, the list is
+# non-empty, ARM 4 never fires, and the guard prints a clean `ok:` while blind to
+# the rest. Measured 2026-09-17: a `| grep -q` form of this check reported
+# `ok:seam-writers-canonical:1` on a tree with THREE writers, blind to both
+# modules the seam race actually involved. The only difference from a correct
+# run was the number.
+#
+# ONE WRITER IS DELIBERATELY LARGE. The failure this arm exists to catch is a
+# RACE — the producer streaming a file against a consumer exiting on its first
+# match — so it needs a file big enough that the producer is still writing.
+#
+# HOW MUCH BIG IS ENOUGH IS NOT PORTABLE, AND THAT IS THE POINT. The race is
+# decided by filesystem SPEED as well as size. The same 28,711-line file was
+# read fast enough to be safe on a local-filesystem Linux host and slow enough
+# to go INVISIBLE on a Windows host driving WSL over a 9P bridge (~38x penalty),
+# where the break was already under 8,081 lines. So no line count is a boundary,
+# and this arm is honest about what it is: it HAS TEETH on a slow filesystem and
+# is a cheap invariant on a fast one. ARM 6 is the portable half.
+a5="$tmp/a5/src"
+writer_file "$a5/small_a.rs" "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
+writer_file "$a5/small_b.rs" "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
+writer_file "$a5/large.rs"   "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
+# Real source lines, not short filler: filler streams far more cheaply and
+# overestimated the threshold by more than an order of magnitude when measured.
+i=0
+while [ "$i" -lt 40000 ]; do
+    echo "    let _padding_${i} = \"a moderately long source line, as real code is\";"
+    i=$((i + 1))
+done >> "$a5/large.rs"
+# RUN IT UNDER `-o pipefail`, which is the whole point. The inversion requires
+# pipefail to be in effect; invoking the check in a plain shell cannot exercise
+# it at all, and an earlier draft of this arm was green against a deliberately
+# sabotaged check for exactly that reason — it was asserting cardinality without
+# ever reaching the code path that breaks it. `bash -o pipefail` stands in for
+# the future caller who adds the option, or sources this from a stricter script.
+out="$(bash -o pipefail "$CHECK" "$a5" "$VAR" "$CANON" 2>&1)"; rc=$?
+if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "^ok:seam-writers-canonical:3$"; then
+    pass "ARM 5: all three writers counted under pipefail, the large one included"
+else
+    fail "ARM 5: expected exactly 3 writers under pipefail, got rc=$rc: $out"
+fi
+
+# ARM 6 — SHAPE, and this is the arm that has teeth on EVERY host. Because the
+# ARM 5 race is decided by filesystem speed, a guard built on `producer | grep -q`
+# cannot be validated by behaviour on any single machine: the host where it
+# silently fails is the SLOW one, which is the floor-tier machine least able to
+# notice and most likely to be trusted, since it runs identical code. What IS
+# portable is the SHAPE. `grep -q` exits on first match and SIGPIPEs the
+# producer; under `set -o pipefail` the pipeline then reports FAILURE ON A MATCH.
+# So forbid the construct in this file outright rather than waiting for a host
+# slow enough to demonstrate it (order 795-imz3, which flags `if ! <pipeline>`
+# and does NOT match the `| grep -qE ... &&` sibling that failed first here).
+#
+# FULL-LINE COMMENTS are dropped first, because the checked script's own header
+# discusses `grep -q` in prose and a guard that matched its own documentation
+# would be useless. Note the comment syntax: that file is SHELL (`#`), not Rust
+# (`//`) — the first draft of this arm reused the Rust idiom and reported a
+# false positive on a comment.
+#
+# Only WHOLE comment lines are removed, deliberately. Stripping from the first
+# `#` onward would truncate lines at a `#` inside a parameter expansion or
+# string and could HIDE a real `| grep -q` after it — a false NEGATIVE in a
+# guard, which is strictly worse than the false positive it would cure. A
+# trailing comment after real code is harmless here: the code precedes it and
+# still matches.
+shape_hits="$(grep -vE '^[[:space:]]*#' "$CHECK" | grep -cE '\|[[:space:]]*grep[[:space:]]+-[A-Za-z]*q' || true)"
+if [ "${shape_hits:-0}" -eq 0 ]; then
+    pass "ARM 6: the check contains no SIGPIPE-prone \`| grep -q\` pipeline"
+else
+    fail "ARM 6: $shape_hits pipeline(s) pipe into grep -q; capture then match instead"
+fi
+
 if [ "$fails" -eq 0 ]; then
-    echo "ok:seam-writers-canonical-fixture:5"
+    echo "ok:seam-writers-canonical-fixture:7"
     exit 0
 fi
 echo "refused:seam-writers-canonical-fixture:$fails-arm(s)-failed"
