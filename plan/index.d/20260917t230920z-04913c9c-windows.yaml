@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    field: status
+    value: in_progress
+    ts: "2026-09-17T23:09:20Z"
+    host: windows
+
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-17T23:09:20Z"
+      host: windows
+      summary: |-
+        claimed by windows-yolanda-claude-20260917 for task 4.5's MSYS half, dispatched by macuahuitl

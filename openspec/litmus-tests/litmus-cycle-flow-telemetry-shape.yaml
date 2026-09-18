@@ -46,7 +46,7 @@ critical_path:
 
   - step: "the flow: line computes a ROLLING average over the log (not the last row, not call volume)"
     # Two fixture cycles: completed 1 then 2 (avg 1.5), commits 3 then 5 (avg 4).
-    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"1\",\"batch_size\":1,\"budget\":1,\"claimed\":1,\"completed\":1,\"filed\":0,\"commits\":3,\"plan_open\":120,\"plan_total\":800}\\n{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"2\",\"batch_size\":3,\"budget\":3,\"claimed\":3,\"completed\":2,\"filed\":1,\"commits\":5,\"plan_open\":118,\"plan_total\":800}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *cycles=2*avg_completed_per_cycle=1.5*avg_commits_per_cycle=4*) echo 'ok: rolling average' ;; *) echo \"observed=$out expected cycles=2 avg_completed_per_cycle=1.5 avg_commits_per_cycle=4\"; echo 'fail: rolling average' ;; esac"
+    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"1\",\"batch_size\":1,\"budget\":1,\"claimed\":1,\"completed\":1,\"filed\":0,\"commits\":3,\"plan_open\":120,\"plan_total\":800}\\n{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"2\",\"batch_size\":3,\"budget\":3,\"claimed\":3,\"completed\":2,\"filed\":1,\"commits\":5,\"plan_open\":118,\"plan_total\":800}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *cycles=2*avg_completed_per_cycle=1.5*avg_commits_per_cycle=4*) echo 'ok: rolling average' ;; *) echo \"observed=$out expected cycles=2 avg_completed_per_cycle=1.5 avg_commits_per_cycle=4\"; echo 'fail: rolling average' ;; esac"
     # ============================================================================
     # !!! ELEVATED TIMEOUT — NOT A BUDGET. REMOVE ME. (order 1236-bmjh) !!!
     # ============================================================================
@@ -92,7 +92,7 @@ critical_path:
   - step: "overhead_ratio is total commits per total completed (the number 682-yiz7 consumes)"
     # commits 3+5=8, completed 1+2=3, ratio 8/3=2.67 (2dp). Falls as greedier
     # batches amortize the fixed per-cycle cost.
-    command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *overhead_ratio=2.67*) echo 'ok: overhead_ratio' ;; *) echo \"observed=$out expected overhead_ratio=2.67\"; echo 'fail: overhead_ratio' ;; esac"
+    command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *overhead_ratio=2.67*) echo 'ok: overhead_ratio' ;; *) echo \"observed=$out expected overhead_ratio=2.67\"; echo 'fail: overhead_ratio' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: overhead_ratio"
 
@@ -107,7 +107,7 @@ critical_path:
     expected_behavior: "ok: first-parent commits"
 
   - step: "an absent flow log reports source=absent with no fabricated numbers"
-    command: "F=$(mktemp -u); out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); case \"$out\" in *cycles=0*overhead_ratio=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
+    command: "F=$(mktemp -u); out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); case \"$out\" in *cycles=0*overhead_ratio=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: absent honest"
 
@@ -168,4 +168,4 @@ failure_modes:
 
 rollback:
   on_failure: "inspect scripts/cycle-metrics.sh --emit-flow emitter and the flow: reporting block for grammar or arithmetic drift"
-  command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'; rm -f $F"
+  command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'; rm -f $F"

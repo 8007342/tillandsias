@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-podman-seam-env-var-leaks-across-the-mutex-that-documents-its-own-exclusion-so-one-test-reads-another-tests-fake-binary-and-the-suite-fails-only-at-some-core-counts
+    event:
+      type: progress
+      ts: "2026-09-18T01:48:57Z"
+      agent_id: linux-macuahuitl-claude-20260918t014857z
+      host: macuahuitl
+      summary: |
+        RELAYED TO TRUNK, AND THE CONFIRMING EVIDENCE IS NOT THIS HOST'S.
+
+        Merged from salvage/yolanda/20260917-920-pxg6 (4d86c7343) as a SET of three, on
+        the finder's explicit instruction that partial adoption does not work:
+          e1256ec24  one canonical podman seam lock, not three  (3 files, +56/-7)
+          f86784c9b  Revert "remote_projects joins the canonical env lock"
+          6eb427b75  rehome the doc comment the seam static left behind
+        e1256ec24 ALONE DOES NOT BUILD: deleting the private static orphans its doc
+        comment and clippy's empty_line_after_doc_comments fails under -D warnings
+        (rc=101 — that is how the finder's first gate died, on lint and not on a test).
+        And without f86784c9b the deadlock rides along, hanging the suite with NO OUTPUT
+        rather than failing it.
+
+        WHAT THIS HOST'S GREEN DOES AND DOES NOT PROVE, stated because it would
+        otherwise be read as the verification. macuahuitl: 544 passed, 0 failed, rc=0,
+        suite COMPLETED in 3.23s. This host has 20 cores and never reproduced the
+        failure — four consecutive greens before the fix. So this run confirms NO
+        REGRESSION and cannot confirm the REPAIR. The confirming evidence is
+        yolanda-windows at 16 cores: five consecutive full-suite runs 544/544 green
+        against 3/3 RED immediately before, plus a full gate rc=0 at 4185s. A green from
+        a host where the test cannot fail is indistinguishable from the green it already
+        produced.
+
+        COMPLETION IS PART OF THE ASSERTION HERE, not a formality: the failure mode of
+        the wrong fix is a HANG, so "the suite finished" carries information that "the
+        suite passed" does not.
+
+        A REFINEMENT TO THIS ROW'S OWN LESSON, from the finder, and it corrects what was
+        written here earlier. "The scope of the guarantee was the bug, not its wording"
+        is a fair general form, BUT they reached it only because the comment at
+        main.rs:18127 was SPECIFIC enough to be checked against the crate. A vaguer
+        comment would have concealed the identical defect and offered nothing to
+        falsify. So the lesson is NOT that narrow guarantees are bad — precision is what
+        made this findable. It is that A CORRECTLY-SCOPED GUARANTEE NEEDS ITS SCOPE
+        RE-READ WHENEVER A SECOND WRITER APPEARS, and nothing in the process prompts
+        that re-read. Their own framing: that is the part that wants a CHECK, not a note.
+        Recorded here rather than paraphrased, because the earlier sentence on this row
+        reads as an argument against precise comments and that is the opposite of what
+        the evidence supports.

@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: progress
+      ts: "2026-09-18T01:31:50Z"
+      agent_id: linux-macuahuitl-claude-20260918t013150z
+      host: macuahuitl
+      summary: |
+        THE CONTAINER LANE — the regime the product actually uses — WAS DEAD, and the
+        host-native numbers reported earlier tonight were from the wrong regime.
+
+        WHY THAT MATTERS BEFORE THE NUMBERS DO. The earlier entry measured host-native
+        ollama. The capability matrix lists BOTH gpu/host-native/ollama and
+        gpu/container/ollama, and the product path is the container. Reporting a
+        host-native result as "the GPU lane" is the attach-the-regime failure one level
+        up, and it would have been carried into the consumer-hardware comparison as a
+        baseline nobody could reproduce.
+
+        THE CONTAINER LANE COULD NOT START AT ALL, latent since 2026-08-17:
+          crun: cannot stat `/usr/lib64/libnvidia-egl-gbm.so.1.1.3`
+        The host carries 1.1.4. The CDI spec pinned 1.1.3 and its currency check
+        compares the DRIVER version, which never moved. Filed as 1248-j6vd with the
+        second defect that hid it: dev-inference readiness probes a PORT, so with a
+        host-native engine running it reported `ok:dev-inference-ready` without starting
+        a container. Killing the host-native engine turned that into
+        `blocked:container-start-failed` immediately. Regenerating the CDI spec fixed
+        the start; the verdict then changed from `ready` to `started`, which is the only
+        observable difference between finding an endpoint and doing the work.
+
+        THE MATRIX, all with scripts/bench-accel-lane.sh, workload_suite 802-2536-v1,
+        3 reps, 40 spec-index chunks, A5000 24564 MiB / Core Ultra 7 265KF / 62 GiB:
+
+          regime              model          decode tok/s            embed ms/chunk
+          host-native gpu     qwen2.5:0.5b   487.9 / 561.1 / 513.9   7 / 7 / 7
+          container   gpu     qwen2.5:0.5b    24.9 / 467.4 / 462.8   19 / 18 / 18
+          host-native cpu     qwen2.5:0.5b    72.6 /  71.7 /  72.8   7 / 7 / 7
+          host-native gpu     qwen2.5:7b     115.8 / 117.0 / 116.8   -
+
+        THREE READINGS THAT CHANGE DESIGN DECISIONS RATHER THAN DECORATE THEM.
+
+        Containerisation costs roughly 10% of warm decode (465 vs ~500 tok/s) and that
+        is cheap. But the FIRST rep is 24.9 tok/s — a 19x cold-start penalty as the
+        model loads into the container. Mean over three reps would report ~318 and hide
+        both facts. Whoever tunes this for consumer hardware must keep per-rep numbers;
+        a cold start that costs 19x is a scheduling question, not noise.
+
+        EMBEDDING IS 2.6x SLOWER IN THE CONTAINER — 18-19 ms/chunk against 7 — and it is
+        NOT cold start: it holds across all three reps. Combined with the earlier
+        finding that embedding gets no GPU benefit at all (7 ms on both host lanes),
+        container embedding is the worst cell in this matrix and the clearest candidate
+        for running host-side or batched.
+
+        AND THE FLEET-PLAN NUMBER STANDS: 7B on this GPU at 116 tok/s beats 0.5B on this
+        CPU at 72. Consumer hardware is not a slower version of this host, it is a
+        different model class.
+
+        STATE: tillandsias-dev-inference is Up and healthy; host-native ollama is
+        stopped (the operator confirmed it is perishable and nothing depends on it).
+        The CDI spec at ~/.config/cdi/nvidia.yaml was regenerated — the previous one is
+        backed up in this cycle's scratchpad, and 1248-j6vd carries the durable fix so
+        the next host does not diagnose it by hand.

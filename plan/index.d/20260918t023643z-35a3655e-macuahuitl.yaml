@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    event:
+      type: correction
+      ts: "2026-09-18T02:36:43Z"
+      agent_id: linux-macuahuitl-claude-20260918t023643z
+      host: macuahuitl
+      summary: |
+        THE SIGPIPE INVERSION IS NOT LATENT — IT REPRODUCES, AND MY OWN CORRECTION
+        UNDERSTATED IT. Correcting a claim I made in a landed commit message.
+
+        WHAT I WROTE: that injecting `set -o pipefail` into both the pre-fix and fixed
+        versions produced the SAME verdict, so the hazard was "latent and DATA-dependent
+        as well as environment-dependent" and I was "not claiming to have fixed an active
+        inversion". Every word of that is true OF THE CORPUS I MEASURED and I stated it
+        as a property of the DEFECT. Those are different claims and I made the wrong one.
+
+        yolanda re-measured with a writer file whose canonical reference sits at the TOP
+        followed by filler, so grep exits early while sed is still writing:
+            mine      (no pipefail)  ok:seam-writers-canonical:1
+            landed    (no pipefail)  ok:seam-writers-canonical:1
+            mine-pf   (pipefail)     refused:seam-var-has-no-writers   <-- BROKEN
+            landed-pf (pipefail)     ok:seam-writers-canonical:1       <-- HOLDS
+        Threshold, same shape, pipefail on, pre-fix version:
+              1,000 lines -> ok
+             20,000 lines -> ok
+            100,000 lines -> refused:seam-var-has-no-writers
+
+        THE TRIGGER IS FILE LENGTH, which is the part worth carrying. Nobody reviews a
+        shell guard against the line count of the files it reads, and no code change that
+        grows a file would be associated with a guard silently going blind.
+
+        AND THE MARGIN IS SMALLER THAN EITHER OF US SAID. Measured on this tree:
+            crates/tillandsias-headless/src/main.rs        28,711 lines
+            crates/tillandsias-headless/src/accel_probe.rs  8,081 lines
+            crates/tillandsias-headless/src/remote_projects.rs 1,384 lines
+        The known-good datapoint is 20,000 and the known-broken one is 100,000, so the
+        threshold lies somewhere in that band — and main.rs at 28,711 is INSIDE the
+        untested region, not comfortably below it. main.rs is also one of the three
+        actual writers of TILLANDSIAS_PODMAN_BIN, so the file that would go invisible is
+        both the largest in the crate and a real subject of the check. I am not claiming
+        main.rs currently triggers it: the threshold was measured on a synthetic shape
+        (reference at the top, filler after) and main.rs's layout differs. I am claiming
+        nobody has evidence that it does not.
+
+        THE PIPELINE THAT ACTUALLY BIT IS THE ONE THE GUARD DID NOT FLAG. 795-imz3
+        matches `if ! <pipeline>` and flagged line 81. The reproduction fails at line 69
+        — the WRITER DETECTION, `| grep -qE ... && echo` — which I converted on judgement
+        because leaving an identical sibling two lines up is the transfer failure already
+        paid for twice tonight. Had I fixed only the flagged line, the landed guard would
+        still invert, and it would invert by making every writer INVISIBLE rather than by
+        over-reporting.
+
+        AND THE POSITIVE CONTROL CAUGHT A GUARD BREAKING, NOT JUST A TARGET VANISHING.
+        This is the reading worth adding to this row. ARM 4 exists so the check refuses
+        `seam-var-has-no-writers` instead of reporting `ok:0` when its target disappears.
+        Under the SIGPIPE inversion the writers list also goes empty — so without ARM 4
+        the broken guard would have printed a GREEN, reporting success precisely because
+        it had gone blind. The control was written to guard against the corpus changing
+        and it caught the INSTRUMENT changing. That is the third silence of the night and
+        the only one that announced itself, because it is the only one with a
+        before-measurement built into the check rather than performed by a person.
+
+        Live-corpus verdicts are identical across all four versions
+        (refused:...remote_projects.rs), so nothing about the landed behaviour on this
+        tree changes.
+
+        THE GENERAL RESULT, in the author's framing and better than mine: the guard was
+        the most carefully built artifact either host shipped, and it still carried a
+        latent inversion — found by a DIFFERENT guard (795-imz3), not by either of the
+        two people who reviewed it. The same is true of the seam race it was written for.
+        What caught both was a mechanism; what missed both was two people being careful.

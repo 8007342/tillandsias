@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: note
+      ts: "2026-09-17T23:55:47Z"
+      agent_id: linux-macuahuitl-claude-20260917t235547z
+      host: macuahuitl
+      summary: |
+        THE BLOCKING PRECONDITION IS SATISFIED AS OF 2026-09-17, by three hosts on the
+        same night, none of whom could see it from where they stood.
+
+        This row's criterion is mlua-vendored "verified GREEN on linux, darwin AND msys
+        BEFORE IT IS WIRED INTO --check". All three now exist, each by forced
+        compilation rather than by a cached green:
+
+          linux   macuahuitl. mlua is in-tree; the plan crate builds and 332 lib tests
+                  pass at the redb merge.
+          darwin  tlatoanis-macbook-air. `cargo clean -p mlua-sys` first, so the C build
+                  was observed rather than served: mlua-sys 0.6.8 and mlua 0.10.5
+                  COMPILED, `cargo test --lib lua_runtime` 7 passed / 0 failed.
+          msys    yolanda-windows. `cargo clean -p mlua-sys` removed 302 files / 111MiB,
+                  then 32 Lua .c sources produced lua5.4.lib + liblua5.4.a at 2,601,110
+                  bytes; lua_runtime 7 passed / 0 failed.
+
+        WITH ONE NARROWING THAT MUST TRAVEL WITH IT, and it is the msys host's own
+        finding rather than a caveat added here. Those objects are x86-64 COFF with
+        .drectve and .debug$S sections and the host triple is x86_64-pc-windows-msvc:
+        the build went through MSVC cl.exe, NOT gcc. MSYSTEM=MINGW64 names the SHELL.
+        cc, gcc and clang were all absent from that shell's PATH and it still succeeded,
+        because cc-rs resolves cl.exe via vswhere rather than PATH. So an MSYS host
+        WITHOUT Visual Studio is untested, and that is precisely the configuration most
+        likely to fail. "mlua-vendored builds on msys" is true of that host and false as
+        generalised.
+
+        WHY THIS EVENT EXISTS AT ALL. Both delivering hosts explicitly recorded that
+        their work did NOT advance this row, and both were RIGHT — neither completed it,
+        because the thing to be wired does not exist (verified independently on two
+        hosts: scripts/run-litmus-test.sh is 2390 readable lines, `grep -c "steps:"` is
+        0 and `grep -ci lua` is 0). What neither was positioned to see is that the three
+        lanes TOGETHER satisfy this row's gate. A precondition spread across three hosts
+        is invisible to each of them and visible only to whoever reads all three
+        reports. That is the coordinator's actual job and it is the first time tonight
+        it produced something neither peer could have produced.
+
+        WHAT THIS UNBLOCKS, in the operator's framing of 2026-09-17: the layers are
+        .yaml and .md documents, loaded into redb, queryable from Lua, with language
+        processors above that, and the local expert system as the top layer of sugar.
+        The store half landed the same night (964-tzmp, c363f4278,
+        crates/tillandsias-plan/src/ledger_cache.rs). This row is the QUERY half. With
+        both, a litmus obligation of the form "there MUST be a web form with a button
+        that ..." becomes checkable at runtime rather than asserted in prose: query that
+        the spec exists, that its obligations exist, and that every obligation's
+        references are sound and complete, per ./methodology. The stated purpose is to
+        stop deciding "what is next" by inference and decide it by query instead.
+
+        NOT CLAIMED HERE. Recording the unblock is not the same as taking the work, and
+        this host is mid-cycle. The next host to pick this up should read the narrowing
+        above before assuming the msys lane is as green as the count suggests.

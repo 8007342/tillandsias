@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-redb-ledger-cache-is-the-recommended-read-path-for-tests-from-now-on-and-every-test-that-gets-touched-migrates-to-it-so-its-fitness-is-learned-before-a-long-sweep-commits-to-it
+    order: 1246-ih7g
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [ledger, cache, redb, tests, migration, policy]
+    estimated_hours: 12
+    owned_files:
+      - crates/tillandsias-plan/src/ledger_cache.rs
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      OPERATOR DIRECTIVE 2026-09-17: the redb ledger cache is the RECOMMENDED read path for tests from now on — every test that gets touched for any other reason migrates to it, so its fitness is learned incrementally before any long sweep commits the rest
+    context: |
+      OPERATOR RULING, 2026-09-17, verbatim in substance: "As per the redb, yes,
+      integrate it. File ./plan ledger to make it the recommended way for future
+      tests, and we'll make any test getting updated use the cache to
+      progressively migrate towards its usage and learn its fitness and
+      optimization, if it's work it then we'll move the rest on a long sweep."
+      INTEGRATED. origin/redb-hold-964-tzmp merged to linux-next. The merge is
+      9 files / 352 insertions / 3 deletions and deletes nothing of trunk's
+      work — measured against the MERGE RESULT, not against
+      `git diff HEAD..branch`, which reports 94 files and 4971 deletions because
+      the branch predates a day of trunk movement. That diff describes what the
+      BRANCH lacks, not what a merge does, and reporting it would have looked
+      like the cache deleting the day's work.
+      WHAT LANDED, from the author's own measurements (yoga-silverblue):
+        7ms point query against a 295ms full load
+        cache rebuild 223ms
+        60 packets agreeing cache-vs-ledger
+        fingerprint invalidating in BOTH directions
+        323/323 plan-crate tests, fmt clean, clippy rc=0 zero warnings
+      THE MIGRATION POLICY THIS ROW ESTABLISHES, which is the operator's design
+      rather than an implementer's choice: nobody rewrites tests to use the
+      cache as a project. A test migrates WHEN IT IS ALREADY BEING TOUCHED for
+      some other reason. That makes the cost incremental, spreads the fitness
+      evidence across many hosts and many shapes of test, and means a bad fit
+      shows up as a handful of awkward migrations rather than as a completed
+      sweep that has to be undone. The long sweep is explicitly DEFERRED until
+      that evidence exists.
+      TWO KNOWN GAPS, from the author, recorded so nobody rediscovers them:
+      NOTHING READS THE CACHE YET except `cache-get`. Wiring real consumers is
+      unstarted and wants a measurement PER CONSUMER rather than an assumption
+      that a 42x point-query win transfers. And the cache file is 16.8MB for an
+      8.5MB ledger because packets are stored as JSON; `postcard` is already a
+      workspace dependency and would shrink it. Neither blocks the policy; both
+      belong to whoever migrates the first consumer.
+      THE HARD CONSTRAINT ANYONE EXTENDING THIS MUST READ FIRST, and it is in
+      the module docs for a reason. `Ledger::load_with_fragments` never rebuilds
+      the base, because citations carry byte-exact file:line spans. An earlier
+      fold-and-reserialize made every citation point at lines in no file on disk
+      and the 394b verifier correctly reported FABRICATED. A cache may serve
+      VALUES; it may NOT become the base a span is computed against. A migration
+      that speeds up a citation-bearing path by reading spans from the cache is
+      the one way this goes badly, and it will look like a win until a verifier
+      runs.
+    exit_criteria:
+      - 'the recommendation is written where an implementer will actually meet it — the methodology or the plan-crate module docs, not only this row — so a host migrating a test finds the guidance without having been told this order exists (pre-fix result: FAILS — the policy currently exists only as an operator sentence and this fragment)'
+      - 'at least three tests have migrated opportunistically, each recording its own before/after timing, so the fitness evidence is per-consumer rather than extrapolated from the 7ms-vs-295ms point query'
+      - 'a migrated test that reads CITATIONS is either absent by design or demonstrates that spans still resolve against the real files, since the module''s own hard constraint is that the cache may serve values and may not become the base a span is computed against'
+      - 'NEGATIVE CONTROL: a stale cache must be caught — mutate the ledger without rebuilding and confirm a migrated test fails or rebuilds rather than serving the stale answer, because a cache that cannot go stale in a test is not being exercised as a cache'
+    unscoreable: |
+      whether-the-long-sweep-is-worth-it: that is the question this row exists to
+      ANSWER rather than assume, and it cannot be scored until criterion 2's
+      evidence exists. The operator's framing is explicit that the sweep is
+      conditional -- "if it works then we'll move the rest". A closure that
+      commits to the sweep before the per-consumer measurements would convert a
+      deliberately incremental decision into a bet.
+    verifiable_closure: |
+      litmus:ledger-fragment-convergence — extended with an arm that a migrated test
+      reading through the cache agrees with the same read through the fold, and
+      an arm that a stale cache is detected rather than served.
+    events:
+      - type: filed
+        ts: "2026-09-17T23:41:18Z"
+        agent_id: "linux-macuahuitl-claude-20260917t234118z"
+        host: macuahuitl
+        summary: |-
+          Filed on the operator's explicit direction in the same message that
+          approved the integration. The policy half matters more than the merge:
+          the cache has no consumers yet, so integrating it today buys nothing
+          measurable, and the value is entirely in what the migration rule
+          learns. Recorded with both known gaps and the span constraint, because
+          the failure mode here is a migration that looks like a win right up
+          until a citation verifier runs against a reserialized base.

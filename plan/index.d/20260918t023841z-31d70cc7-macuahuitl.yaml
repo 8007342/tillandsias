@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    event:
+      type: correction
+      ts: "2026-09-18T02:38:41Z"
+      agent_id: linux-macuahuitl-claude-20260918t023841z
+      host: macuahuitl
+      summary: |
+        THE INVERSION IS HOST-DEPENDENT, NOT ONLY SIZE-DEPENDENT — and that makes the
+        case for forbidding the shape stronger than any size threshold could.
+
+        yolanda instrumented the check to PRINT the detected writers rather than infer
+        them from the verdict, and on their host the pre-fix version under pipefail loses
+        TWO OF THREE writers on the real crate: main.rs (28,711 lines) and accel_probe.rs
+        (8,081) both go invisible, leaving only remote_projects.rs (1,384). So on that
+        host the break is already below 8,081 lines, not in the 20k-100k band their
+        synthetic file suggested — filler lines are shorter and cheaper to stream than
+        real Rust, so the synthetic probe was kinder than the corpus.
+
+        MEASURED HERE, SAME METHOD, OPPOSITE RESULT:
+            pre-fix  no-pipefail   3 writers: remote_projects, accel_probe, main
+            pre-fix  pipefail      3 writers: remote_projects, accel_probe, main
+            landed   no-pipefail   3 writers
+            landed   pipefail      3 writers
+        The injection was verified on disk (line 59 reads `set -u -o pipefail`) and the
+        shell was proven to honour it with a positive control: `yes | head -1` returns
+        rc=141 under pipefail and rc=0 without. So this is not a broken instrument
+        reporting a comfortable answer.
+
+        NEITHER MEASUREMENT IS WRONG. The trigger is not file size alone, it is a RACE
+        between producer and consumer: sed streaming a file against grep exiting on its
+        first match. That race is decided by file size AND by how fast the filesystem
+        delivers bytes. yolanda's host drives WSL over a 9P bridge with a measured ~38x
+        penalty, so sed is slow and grep wins; this host reads a local filesystem, so sed
+        finishes before grep can exit, at nearly four times the file size.
+
+        WHICH IS THE ARGUMENT. A guard whose correctness depends on FILESYSTEM SPEED
+        cannot be validated on any single host, and the host where it silently fails is
+        the SLOW one — the floor-tier machine least able to notice, and the one whose
+        results a fleet is most likely to trust because it runs the same code. No
+        threshold expressed in lines is portable. That is why 795-imz3 forbids the SHAPE
+        rather than bounding the size, and this row should not record a line count as if
+        it were the boundary.
+
+        AND THE REASSURANCE I GAVE WAS WORTHLESS, which is the methodological half.
+        I compared the FINAL VERDICT across four versions, found them identical
+        (refused:...remote_projects.rs), and reported "nothing about the landed behaviour
+        changes". yolanda compared the same way and reported the same thing. It could
+        never have shown the defect: remote_projects.rs is small enough to survive the
+        SIGPIPE on either host AND it is the one current violator, so its refusal MASKS
+        the blindness entirely. The intermediate set — which files the check actually
+        saw — is the only observation that distinguishes a working guard from one running
+        on a third of its input. Comparing outputs is not comparing behaviour when the
+        output is dominated by one surviving case.
