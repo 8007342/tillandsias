@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: per-model-groundtruth-query-vectors-so-a-second-embedding-model-can-be-graded-validly-with-each-vector-set-carrying-the-model-identity-that-produced-it
+    order: "1259-dgaq"
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [experts, rag, groundtruth, embeddings, provenance]
+    estimated_hours: 6
+    owned_files:
+      - openspec/litmus-tests/groundtruth
+      - crates/tillandsias-plan
+    title: |
+      per-model groundtruth query vectors, each set carrying the model identity that produced it — without this, 917-6iwv criterion 6 is unreachable, because only one model can grade validly against a single frozen vector set
+    context: |
+      WHAT THIS UNBLOCKS. 917-6iwv criterion 6 asks for two hosts running
+      DIFFERENT embedding models with the disagreement readable. The query side of
+      the grading harness is FROZEN in committed vectors at
+      openspec/litmus-tests/groundtruth/query-vectors/, so a second model does not
+      produce a different measurement — it produces an invalid one. The criterion
+      is therefore not merely unmet but UNREACHABLE on the current harness, which
+      is recorded as a correction event on 917-6iwv. This row is option (a) from
+      that event; option (b) is to reword the criterion and needs no code.
+
+      MEASURED, NOT ASSUMED — yoga 2026-09-18, and it cost two retracted records:
+        spec-rung1, index built with mxbai-embed-large (1024-dim) -> pass=2 fail=3
+        spec-rung1, index built with nomic-embed-text   ( 768-dim) -> pass=5 fail=0
+      Same corpus, same commit, same host, minutes apart. The failures are the
+      mismatch. Full diagnosis is order 1258-u8re.
+
+      THE CONSTRAINT IS MODEL IDENTITY, NOT DIMENSION, and building this row
+      around dimension would reproduce the defect in a subtler form. The committed
+      vectors are a BARE LIST of 768 floats — no model id, no declared dimension,
+      no provenance. 768 is the standard BERT-base hidden size, shared by
+      bge-base, gte-base, e5-base and mpnet. An index built with any other 768-dim
+      model would pass a dimension check and remain semantically incommensurable,
+      producing plausible varied retrieval rather than an obvious constant. So
+      each vector set must NAME the model that produced it, and the grader must
+      compare that name to the index's `.model` marker.
+
+      THE COST, RAISED BY lenovinha BEFORE ANYONE PAID IT. These are COMMITTED
+      artifacts. Per-model vectors means the corpus grows a dimension — N query
+      sets instead of one — and something must keep each set in sync with the
+      model that produced it and with the questions they encode. That is the same
+      provenance problem as 1257-jxu9 one layer up: a stored artifact whose
+      validity depends on a fact about how it was produced, where nothing checks
+      the two still agree. A regeneration path that a host can run, and a check
+      that refuses a set whose recorded model is absent from the fleet, are part
+      of this row rather than follow-ups.
+
+      SCOPE DISCIPLINE. This row does NOT argue that the frozen query side should
+      be abandoned. Committed vectors make the suite network-free and
+      deterministic and let it grade on a host with no embedding endpoint, which
+      is a real property worth keeping. The goal is N frozen sets that each
+      declare their model, not live embedding at grade time.
+    exit_criteria:
+      - 'EACH VECTOR SET NAMES ITS MODEL: every query-vectors artifact records the model id and dimension that produced it, and the grader REFUSES when that name differs from the serving index''s .model marker. PRE-FIX FAILS — today each file is a bare 768-float array with no model, no dimension and no provenance, so the grader cannot tell nomic-embed-text vectors from any other 768-dim model''s'
+      - 'A SECOND MODEL GRADES VALIDLY: with a vector set regenerated for a second embedding model, spec-rung1 passes 5/5 against an index built with THAT model, on a host that is not the one that generated the vectors. PRE-FIX FAILS — measured, a non-nomic index scores 2/5 with two unrelated queries returning identical ordered chunk lists'
+      - 'THE SAME-DIMENSION TRAP IS CLOSED, and this is the criterion a dimension-based fix would skip: an index built with a DIFFERENT 768-dim model than the vectors'' own must REFUSE, not grade. A fixture that only exercises a differing dimension leaves the harder variant open, since that one yields plausible varied retrieval rather than a detectable constant'
+      - 'REGENERATION IS RUNNABLE AND ITS OUTPUT IS DETERMINISTIC ENOUGH TO REVIEW: a documented command regenerates a vector set for a named model, and re-running it on an unchanged corpus and model produces byte-identical files, so a diff on these artifacts means the questions or the model changed and not that someone re-ran a script'
+      - 'NEGATIVE CONTROL — THE EXISTING SET KEEPS WORKING UNCHANGED: nomic-embed-text against the current vectors continues to grade spec-rung1 at 5/5 with no regeneration required. A change that obliges every host to regenerate before grading has replaced a narrow gap with a fleet-wide chore'
+    unscoreable: |
+      how-many-models-the-corpus-should-carry: two is enough to make criterion 6
+      reachable and every additional set is committed weight that must be kept in
+      sync. Whether the fleet wants a set per model it runs, or exactly two to
+      satisfy the criterion, is a judgement about maintenance cost that cannot be
+      settled by measurement here and belongs to whoever owns the groundtruth
+      corpus. This row requires the MECHANISM to be per-model and correct; it does
+      not mandate a count.
+    verifiable_closure: |
+      a second model's vector set committed beside the existing one, each naming
+      its model and dimension; spec-rung1 at 5/5 under both models against their
+      own indexes; a refusal when the index's model differs from the vector set's
+      including the same-dimension case; and the existing nomic path unchanged and
+      still 5/5 without regeneration.
+    events:
+      - type: filed
+        ts: "2026-09-18T22:52:03Z"
+        agent_id: "linux-yoga-claude-20260918t225203z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga at lenovinha's request after yoga's two criterion-6
+          records were retracted. Both hosts verified the mechanism independently
+          — yoga measured the vector dimension and the two grades, lenovinha
+          checked their own serving index rather than accept yoga's claim that
+          theirs was the only valid record. The same-dimension-different-model
+          trap and the sync cost were raised before any code was written, so they
+          are criteria here rather than discoveries later.
