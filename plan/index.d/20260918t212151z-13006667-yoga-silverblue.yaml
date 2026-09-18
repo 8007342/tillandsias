@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enumerate-npus-writes-usable-false-and-engine-missing-as-literals-at-its-push-site-so-no-host-side-toolkit-can-ever-flip-an-npu-row-and-the-derivation-gpu-engine-already-performs-is-absent-on-the-npu-side
+    field: context
+    value: |-
+      THERE ARE TWO GATES BETWEEN THE FLEET AND A USABLE NPU AND THIS ROW IS
+      ONLY THE FIRST. (1) The probe does not DERIVE the NPU verdict — it writes
+      it — which is this row. (2) Nothing in the engines list declares npu in
+      its supported_device_classes, so even a correct derivation reads false
+      until an NPU lane ships — that is a separate, larger question and is named
+      in unscoreable rather than scoped in here. Neither gate is hardware.
+
+      HOW IT WAS FOUND. yoga was asked to re-probe after the 2026-09-18 NPU
+      toolkit layering and compare field-by-field against trunk's row, on the
+      framing that orders 543 and 546 would unblock IF the row flipped usable.
+      It did not flip. Every field is byte-identical to the pre-layering row:
+      device_class npu, vendor AMD XDNA, device_node /dev/accel/accel0, driver
+      amdxdna, fw_version 1.1.2.64, usable false, unusable_reason
+      engine-missing. Raw document filed the same day as the capabilities
+      fragment for host yoga (probe_identity 56.9.13+c4d11b5d7fdb1f11,
+      hardware_fingerprint hw2-e94acbd479cb8b80, enumeration_gaps empty).
+
+      THE HOST SIDE WAS NOT THE PROBLEM AND THE RE-PROBE PROVES IT: amdxdna
+      loaded with amd_pmf and gpu_sched bound to it, /dev/accel/accel0 present
+      crw-rw---- root:render, node re-created the same day. Driver, node and
+      firmware are all present and sane.
+
+      THE EXHIBIT. In enumerate_npus() in accel_probe.rs, the DeviceRecord push
+      site is preceded by the marker comment:
+
+        // PROBE-3: usable: false with unusable_reason: "engine-missing"
+
+      and the record is constructed with usable:false and
+      unusable_reason:Some("engine-missing".to_string()) written as literal
+      values. They are not read from the device, not read from the engines
+      list, and not read from any host state. enumerate_npus() has exactly ONE
+      push site and returns its vector unmodified; no site in the file sets an
+      NPU record usable (every usable=false mutation in the file is test code
+      over gpu records). So the comparison could not have come out any other
+      way, on any host, after any layering — "the re-probe flips usable" was
+      never a satisfiable condition.
+
+      THE WORD IS RIGHT AND ONLY THE PROVENANCE IS WRONG. The doc comment on
+      gpu_engine() draws the distinction this row depends on: none means there
+      is no hardware (buy hardware); engine-missing means the hardware is here
+      and we ship nothing that can drive it (ship a lane). That comment cites
+      the NPU record as the REFERENCE CASE for the distinction — the NPU is
+      held up as the example of getting it right, while in fact it reaches the
+      right word by writing it down rather than by deciding it. On yoga today
+      the literal happens to be true. Nothing makes it stay true.
+
+      THE WORKED EXAMPLE ALREADY EXISTS, one function away. gpu_engine()
+      consults the engines list, looks for an engine whose
+      supported_device_classes contains the class, and falls to engine-missing
+      only when none claims it. Order 793-qr4t exists PRECISELY because
+      accel_envelope never read the engines list for the GPU and a host with a
+      usable RTX A5000 therefore reported schedulable:none. That is the same
+      defect, already diagnosed and already fixed, on the other device class.
+      The NPU side still does not read the engines list at all.
+
+      WHAT THIS CHANGES FOR ROUTING. 543 depends on order 542 (the component
+      registry) and on this row, and the two are different subjects with
+      different blast radius: 542 declares capability-gated components, this one
+      corrects a probe derivation. 546 cascades through 543. A reader who sees
+      only 542 will conclude the NPU is one packet away from usable. It is not.
+
+
+      [2026-09-18T21:21:51Z yoga-silverblue] SEE ALSO order 1254-47xd, filed 2026-09-18 from yoga. Same shape as this row on a different field — there the probe PROVES a container placed a model on the GPU (render_nodes proof=placed) and still records the container lane unverified, so a live GPU lane reads as present-unscheduled. This row is the NPU half (a verdict written as a literal); 1254-47xd is the GPU-lane half (a verdict derived from one input while a stronger input sits unused in the same document). A reader of either should read the other.
+    ts: "2026-09-18T21:21:51Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: enumerate-npus-writes-usable-false-and-engine-missing-as-literals-at-its-push-site-so-no-host-side-toolkit-can-ever-flip-an-npu-row-and-the-derivation-gpu-engine-already-performs-is-absent-on-the-npu-side
+    event:
+      type: note
+      ts: "2026-09-18T21:21:51Z"
+      host: yoga-silverblue
+      summary: |-
+        cross-reference to the sibling finding, per coordinator request; pointer appended rather than context edited because fragments are immutable

@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-hand-written-ledger-fragment-can-lose-shell-expanded-words-from-its-prose-and-still-pass-schema-validation-so-a-negative-control-can-land-asserting-nothing
+    order: "1256-t3w8"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [guard, ledger, fragments, static-analysis, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts
+    title: |
+      a hand-written packets: fragment can lose backtick-quoted words to shell expansion and still return ok:yaml-loads, so a negative control can land asserting nothing — the capabilities channel has a generator preventing this and packets: does not
+    context: |
+      MEASURED ON YOGA 2026-09-18 WHILE FILING A ROW, AND CAUGHT BY ACCIDENT.
+      Writing a packets: fragment with an UNQUOTED heredoc ran the backticks in
+      the prose as commands. This exit criterion:
+
+        NEGATIVE CONTROL: a host with NO NPU hardware still reads `none`, never
+        `engine-missing` — the derivation must not promote absence into
+        present-but-undriveable
+
+      landed in the file as:
+
+        NEGATIVE CONTROL: a host with NO NPU hardware still reads , never  — the
+        derivation must not promote absence into present-but-undriveable
+
+      Both load-bearing words deleted. The criterion no longer names either
+      value, so it asserts nothing and cannot fail. `tillandsias-plan
+      validate-yaml` returned `ok:yaml-loads` on it. Schema-valid, well-formed,
+      meaningless — and a reviewer reading the landed fragment would have seen a
+      NEGATIVE CONTROL heading over a sentence that controls nothing. I found it
+      only because I grepped the file for my own `@@` placeholders afterwards,
+      which is not a method.
+
+      THE REMEDY FOR THIS IS ALREADY IN THE LEDGER, IT WAS FOLLOWED, AND IT
+      FAILED. The precedent is the 2026-09-03 event on packet
+      readme-release-ledger-wiring, which says verbatim: "I used backticks inside
+      a double-quoted shell argument and the shell ran the contents as a command.
+      That is the third time this session a backtick or quote in prose has been
+      eaten by the shell. When writing an event whose text contains code, write
+      it without backticks or feed it from a heredoc; do not rely on catching it
+      afterwards." I DID feed it from a heredoc. An unquoted heredoc expands
+      backticks, dollar signs and backslashes exactly as a double-quoted string
+      does, so the prescribed fix reproduces the defect it was written to prevent.
+      That event was already counting instance three; this is four.
+
+      A REMEDY THAT WAS WRITTEN DOWN, FOLLOWED, AND STILL FAILED IS A STRONGER
+      ARGUMENT FOR A MECHANICAL GUARD THAN THE ORIGINAL INCIDENT WAS. The note
+      cannot be improved into working — "use a heredoc" is not wrong so much as
+      underspecified, and the reader who follows it precisely still loses words.
+
+      THE ASYMMETRY THAT MAKES THIS FILEABLE: the capabilities: channel is
+      generator-produced and its own header says why — "never hand-assembled (the
+      unquoted-heredoc incident on this packet is why this generator exists)".
+      So one fragment channel is protected by a generator and the packets:
+      channel, which carries every exit criterion the project scores itself
+      against, is hand-written with nothing checking it. The guard belongs on the
+      channel that has no generator.
+
+      IT IS CHEAP BECAUSE THE DAMAGE HAS A SHAPE. A token eaten by the shell
+      leaves a detectable hole: a comma or a word like "never" or "reads"
+      adjacent to doubled whitespace or to another comma where a word used to be.
+      That is a grep, not a parser.
+    exit_criteria:
+      - 'RUN AGAINST THE REAL GUTTED DRAFT: the check refuses the exact text this defect produced — "still reads , never  —" — and names the file and line. PRE-FIX RESULT: nothing refuses it and tillandsias-plan validate-yaml returns ok:yaml-loads, so the criterion lands asserting nothing'
+      - 'NEGATIVE CONTROL, AND IT MUST BE A REAL SENTENCE: a criterion that legitimately contains ", never" with real words on BOTH sides must PASS. Prose in this ledger routinely reads "X, never Y"; a check that refuses the pattern rather than the hole makes every such row unfileable and will be disabled rather than obeyed'
+      - 'THE POPULATION IS THE HAND-WRITTEN CHANNEL: the check runs over plan/index.d/ packets: fragments, and a run over the capabilities: channel is not a substitute — that channel has a generator and is not where the exposure is. State the population in the script so a later reader cannot mistake a narrow green for a wide one'
+      - 'THE SCRIPT CARRIES THE CAUSE, NOT JUST THE SYMPTOM: it states in its own text that an UNQUOTED heredoc expands identically to a double-quoted string, and that the ledger''s own recorded remedy (readme-release-ledger-wiring, 2026-09-03) is incomplete for that reason — otherwise the next reader follows the note again and loses the next set of words'
+    unscoreable: |
+      whether-a-grep-can-catch-every-shape: it catches the hole this defect
+      leaves, which is a word deleted from between punctuation. It will not catch
+      a substitution that produces plausible TEXT rather than an absence — a
+      backticked command that succeeds and prints something would be silently
+      wrong in a way no shape-check can see. That case is rarer and strictly
+      harder, and pretending this row closes it would be the same
+      confident-half-answer the row is about. Named here so a later instance of
+      the harder shape is evidence for a parser rather than a failure of this
+      guard.
+    verifiable_closure: |
+      the check committed with two arms as a fixture: the real gutted text
+      ("still reads , never  —") REFUSED with file and line, and a legitimate
+      ", never" sentence with real words on both sides PASSING — plus the
+      pre-fix demonstration that validate-yaml returns ok:yaml-loads on the
+      gutted criterion.
+    events:
+      - type: filed
+        ts: "2026-09-18T21:21:29Z"
+        agent_id: "linux-yoga-claude-20260918t212129z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga after the defect happened to me while filing another
+          row on 2026-09-18. The fragment was rewritten with a quoted heredoc
+          before it landed, so no gutted criterion reached the ledger — this row
+          exists because the catch was luck, not method.
