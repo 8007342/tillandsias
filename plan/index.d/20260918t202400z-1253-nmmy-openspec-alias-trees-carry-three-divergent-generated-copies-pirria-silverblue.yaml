@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-four-agent-tool-alias-trees-each-carry-their-own-copy-of-eleven-openspec-skills-in-three-different-generated-versions-and-gemini-has-none-of-them
+    order: 1253-nmmy
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, openspec, tree-shape, duplication, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - .claude/skills
+      - .codex/skills
+      - .github/skills
+      - .opencode/skills
+      - .gemini/skills
+    title: |
+      the four agent-tool alias trees each carry their OWN copy of the 11 `openspec-*` skills, in THREE different generated versions, and `.gemini/` has none of them — so "which openspec workflow runs" depends on which agent tool you opened
+    context: |
+      FOUND BY pirria-silverblue 2026-09-18 while landing 1238-u84w, and found
+      the hard way: the fix for 1238-u84w is to replace each `<tool>/skills`
+      directory-of-symlinks with a single directory symlink to `skills/`. That
+      `rm -rf` deleted 44 REAL FILES that looked like symlinks. Caught before
+      commit by diffing the staged deletions against HEAD's file modes; the
+      tree was `git reset` and only `.gemini/` — the one tree with no real
+      content — was converted.
+      THE CENSUS, measured:
+        .gemini/skills    16 symlinks to skills/,  0 real openspec dirs
+        .claude/skills    16 symlinks to skills/, 11 real openspec dirs
+        .codex/skills     16 symlinks to skills/, 11 real openspec dirs
+        .github/skills    16 symlinks to skills/, 11 real openspec dirs
+        .opencode/skills  16 symlinks to skills/, 11 real openspec dirs
+      THE COPIES HAVE ALREADY DIVERGED — three distinct contents per skill, all
+      11 skills, e.g. openspec-propose/SKILL.md:
+        .claude    md5 208ee96e  11285 bytes  openspec generatedBy 1.11.0
+        .codex     md5 0753f4a4   4646 bytes  openspec generatedBy 1.3.1
+        .github    md5 0753f4a4   4646 bytes  openspec generatedBy 1.3.1
+        .opencode  md5 96285aad  14011 bytes  a third variant
+      SOME of the difference is legitimately per-tool: `.claude` carries
+      `allowed-tools: Bash(openspec:*)`, codex/github name the command
+      `/opsx:apply`. That part is generator output and should differ.
+      THE PART THAT IS A BUG is the VERSION SKEW. `.claude` is on openspec
+      1.11.0 and codex/github are pinned eight minor versions back at 1.3.1.
+      The 1.11.0 copy carries a **planning boundary** paragraph the 1.3.1 copy
+      does not have at all: "This workflow creates planning artifacts only …
+      Do not edit project code … Wait for a new user request after the
+      artifacts are presented". So an agent running the openspec propose
+      workflow under codex or the GitHub surface is operating WITHOUT a
+      behavioural guardrail that the Claude surface has. That is not cosmetic
+      skew; it is a different contract per tool, with no marker saying so.
+      AND `.gemini/` HAS NO OPENSPEC SKILLS AT ALL — a gemini agent asked to
+      run an openspec workflow finds nothing and, per 1238-u84w, a search for
+      it returns a silent zero.
+      WHY THIS IS NOT PART OF 1238-u84w: that order is about a search that lies.
+      This one is about four generated copies with no owner and no regeneration
+      story. Collapsing them requires deciding which variant wins and how
+      openspec regenerates per tool — a decision, not effort, and not pirria's
+      to take unilaterally. 1238-u84w is BLOCKED on this row for four of its
+      five trees.
+    exit_criteria:
+      - 'the 11 openspec skills are regenerated from ONE openspec version across all four trees, and the version is recorded somewhere a gate can read — pre-fix evidence: generatedBy 1.11.0 in .claude vs 1.3.1 in .codex/.github, three distinct md5s per skill'
+      - 'the 1.11.0 "Planning boundary" paragraph is present on every surface that ships an openspec propose workflow, or its absence is a recorded decision with a reason — today codex and the GitHub surface silently lack it'
+      - '`.gemini/` either gains the openspec skills or a recorded decision says why gemini does not get them; "nobody noticed" is not that decision'
+      - 'a check refuses when the four copies of any one openspec skill disagree on generator version, so this cannot silently re-diverge — the current state took an unrelated order to discover'
+      - 'once the four trees hold no unique content, 1238-u84w`s directory-level symlink is applied to them too and its four exit criteria re-measured per tree (present-string found, absent-string still zero, both greps)'
+    unscoreable: |
+      decision-not-taken: which openspec version the fleet standardises on, and
+      whether per-tool generated variants stay committed at all, is an owner
+      call. The measurement is complete and reproducible from the md5s above.
+    events:
+      - type: filed
+        ts: "2026-09-18T20:24:00Z"
+        agent_id: "linux-pirria-claude-20260918t202400z"
+        host: pirria-silverblue
+        summary: |-
+          Split out of 1238-u84w rather than folded into it. The two orders fail
+          differently: 1238 is a search that reports success while seeing
+          nothing, this is four copies of a workflow contract that disagree with
+          each other while all reporting themselves as the openspec skills. The
+          `rm -rf` that would have destroyed 44 files is recorded in
+          cheatsheets/tooling/recursive-grep-symlinks.md with the mode-diff
+          guard that caught it, so the next host does not rediscover it by
+          losing the files.
