@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -2224,6 +2224,59 @@ fn vault_selinux_label_opt(debug: bool) -> Option<String> {
         Err(_) => false,
     };
     if !enforcing_or_permissive {
+        // ASK IN THE RIGHT NAMESPACE (release gate, 2026-09-18).
+        //
+        // `getenforce` describes the namespace it RUNS IN; the container we are
+        // about to launch is labelled by the HOST's policy. Those differ, and
+        // the release gate runs inside the `tillandsias-builder` toolbox:
+        //
+        //     host                        getenforce -> Enforcing, /sys/fs/selinux/enforce = 1
+        //     inside tillandsias-builder  getenforce -> Disabled,  selinuxfs NOT mounted
+        //
+        // So on an Enforcing host the probe concluded "SELinux is off", returned
+        // None, and podman applied its DEFAULT container_t — the one outcome the
+        // fallback below exists to avoid. Measured on the failed container:
+        // SecurityOpt was [no-new-privileges] with NO label, ProcessLabel
+        // container_t:s0:c317,c827, and vault exited 1 on boot with
+        //
+        //     AVC denied { read } comm="vault" name="_seal-config"
+        //       scontext=system_u:system_r:container_t:s0:c317,c827
+        //       tcontext=unconfined_u:object_r:cache_home_t:s0
+        //
+        // which is exactly root cause (1) of
+        // plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md
+        // arriving through a path that issue's fix does not cover.
+        //
+        // DISCRIMINATED, not assumed. On ~/.cache/tillandsias/vault-data, which
+        // is drwxr-xr-x so UNIX permits any uid to list it:
+        //     podman default label   -> DENIED
+        //     --security-opt label=disable -> LIST OK
+        // (An earlier comparison used --userns=keep-id and the image's default
+        // user; both arms then failed on UNIX perms on the 0700 core/ dir, so it
+        // could not discriminate the label at all. Probe a path where the
+        // confounder is neutral.)
+        //
+        // A CONTAINER WITHOUT selinuxfs CANNOT SEE THE HOST'S STATE, so its
+        // "Disabled" is not evidence about the host. Treat it as UNKNOWN and pick
+        // the option correct in BOTH regimes: label=disable is a no-op when
+        // SELinux really is off, and is the documented fleet default when it is
+        // on (spec:podman-container-spec lists it as a standard hardening
+        // default). None is the only choice that can fail, so it must require
+        // POSITIVE evidence — an unmounted selinuxfs inside a container is not
+        // that.
+        let containerized =
+            Path::new("/run/.containerenv").exists() || Path::new("/.dockerenv").exists();
+        let selinuxfs_visible = Path::new("/sys/fs/selinux/enforce").exists();
+        if containerized && !selinuxfs_visible {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] getenforce reports not-enforcing but selinuxfs is not \
+                     mounted in this container — the HOST's state is unknown from here; using \
+                     label=disable, which is correct whether or not the host enforces"
+                );
+            }
+            return Some("label=disable".to_string());
+        }
         return None;
     }
 
