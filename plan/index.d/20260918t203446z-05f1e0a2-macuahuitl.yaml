@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-18T20:34:46Z"
+      agent_id: linux-macuahuitl-fable51-20260918t203445z
+      host: macuahuitl
+      summary: |
+        EXIT-CODE CLAIM CORRECTED (pirria measured, macuahuitl confirmed with a proper control, 2026-09-18). The packet's "exits 0" is mis-scoped. GNU grep 3.12 and ugrep 7.8.4 identical: word present ONLY under a symlinked dir -> -r exit=1 hits=0, -R exit=0 hits=2; word present in REAL dirs and under symlinks -> -r exit=0 hits=11, -R hits=16. Every exit-0 observation came from the second, contaminated shape (eleven real openspec-* dirs live among the .claude/skills symlinks), which is the MORE dangerous variant: undercount with a green status. It is POSIX -r semantics, so exit criterion 4's grep-identity census partitions no host. Remedy is tree-shaped (one directory symlink, followed when named), as pirria landed for .gemini/; the other four trees are blocked on 1253-nmmy.

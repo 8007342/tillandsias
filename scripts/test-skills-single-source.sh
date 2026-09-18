@@ -110,4 +110,32 @@ out="$(run)"
     || fail "case 5: a link materialized as a directory must still pass, got '$out'"
 echo "ok: case 5 — committed shape wins over what the filesystem materialized"
 
-echo "PASS: skills single source of truth (5/5)"
+# --- case 6: the whole skills tree as ONE directory symlink (1238-u84w) ------
+# 51db2c14c collapsed .gemini/skills to a single directory symlink so a plain
+# `grep -r` would reach it. git then tracks one entry and NOTHING beneath it, so
+# the per-skill probe found every canonical skill "missing" and turned the trunk
+# gate red for every host. The shape is legitimate -- it is the strongest form
+# of single-source -- so it must pass.
+git rm -q --cached .harnessB/skills/alpha >/dev/null 2>&1 || true
+git rm -q --cached .harnessB/skills/beta  >/dev/null 2>&1 || true
+rm -rf .harnessB/skills
+blob=$(printf '../skills' | git hash-object -w --stdin)
+git update-index --add --cacheinfo "120000,$blob,.harnessB/skills"
+out="$(run)"
+[ "$out" = "ok:skills-single-source:2:2" ] \
+    || fail "case 6: a whole-tree directory symlink must pass, got '$out'"
+echo "ok: case 6 — a runtime linked as ONE directory symlink passes"
+
+# MUTANT, because a pass that cannot fail is not evidence: the discriminator is
+# the tracked PATH. If it degraded to "exactly one tracked symlink", case 4's
+# shape -- one surviving per-skill link, the rest missing -- would silently pass.
+git rm -q --cached .harnessB/skills >/dev/null
+link .harnessB alpha
+out="$(run)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 6 mutant: one per-skill link is NOT a whole-tree link"
+[ "$out" = "violation:missing-from-runtime:.harnessB/skills/beta" ] \
+    || fail "case 6 mutant: expected the missing skill named, got '$out'"
+echo "ok: case 6 mutant — a lone per-skill link is still held to Direction 2"
+
+echo "PASS: skills single source of truth (7/7)"

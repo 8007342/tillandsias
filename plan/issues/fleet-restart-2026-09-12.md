@@ -8579,3 +8579,30 @@ for anything whose loss costs a re-derivation. Draft ledger writes into the
 worktree (which is durable and is what gets landed) whenever no gate is running
 there, and when one is, copy drafts under `plan/localwork/` before the session
 can end — not after.
+
+## H14. The relay check asks about the platform branch; salvaged work never reaches it
+
+Three consecutive coordination passes on 2026-09-18 answered "is `origin/osx-next`
+an ancestor of `origin/linux-next`?" with YES and reported "nothing to relay" —
+correctly, about what was on `origin/osx-next`. Meanwhile six of macbookair's
+commits (the 1197-y6g6 closure, the 920-pxg6 correction of the coordinator's own
+misnamed-ref error, 774-b529, 1238-b825) had NEVER been pushed to osx-next. They
+existed on origin only because the fleet restart's salvage lane wrote them to
+`origin/salvage/tlatoanis-macbook-air/20260918-restart-20260918-075018`.
+
+Ancestry of the platform branch is the right question about the wrong
+denominator: it cannot see work that never arrived on the platform branch. The
+relay discipline (compare trees, not counts; ancestry settles it) was applied
+correctly and was blind by construction. The salvage lane caught the work; the
+coordination check did not, and would not have on any number of further passes.
+
+Found only because a peer reported its local HEAD in a message and the
+coordinator checked THAT sha against trunk instead of the branch tip. yolanda's
+held fragments (87ddd3a2d) are the same shape and, as of this entry, are on no
+ref origin knows — macbookair's restart produced a salvage ref, yolanda's did not.
+
+**Affordance**: the pass adds one enumeration — `refs/remotes/origin/salvage/*`
+newer than the previous pass — and treats each as a relay candidate exactly as
+it treats a platform branch: read the rows, diff by content, merge-tree dry-run,
+one land. A salvage ref is by definition work that exists nowhere else; a pass
+that never lists them will report "nothing to relay" over the top of it forever.

@@ -72,6 +72,27 @@ for d in $RUNTIMES; do
 $(git ls-files -s "$d/skills" | awk '$1!="120000"{print $4}' | sed "s|^$d/skills/||" | cut -d/ -f1 | sort -u)
 EOF
 
+    # A WHOLLY-LINKED RUNTIME TREE SATISFIES DIRECTION 2 BY CONSTRUCTION.
+    # 51db2c14c (1238-u84w) collapsed .gemini/skills from per-skill symlinks to
+    # a SINGLE directory symlink, so a plain `grep -r` would reach it. git then
+    # tracks ONE entry -- the link itself -- and has no entries for paths
+    # beneath it, so the per-skill probe below can never match and reported
+    # EVERY canonical skill missing. That turned the trunk gate red for every
+    # host on 2026-09-18.
+    # The directory link is the STRONGEST form of the property this check
+    # exists to enforce: one source, zero copies, nothing that can drift. It is
+    # a pass, not an exemption.
+    # The discriminator is the tracked PATH, not the entry count. "exactly one
+    # tracked symlink" ALSO describes a runtime with per-skill links that is
+    # missing all but one -- which is case 4 of this check's own test, the
+    # negative control for the other drift direction. Only a tracked entry whose
+    # path IS "$d/skills" means the whole tree is one link.
+    _ds_path="$(git ls-files "$d/skills" | head -1)"
+    _ds_mode="$(git ls-files -s "$d/skills" | cut -d" " -f1 | head -1)"
+    if [ "$_ds_path" = "$d/skills" ] && [ "$_ds_mode" = "120000" ]; then
+        continue
+    fi
+
     # Direction 2: a canonical skill this runtime cannot see.
     for s in $canonical; do
         git ls-files -s "$d/skills/$s" | grep -q '^120000' && continue
