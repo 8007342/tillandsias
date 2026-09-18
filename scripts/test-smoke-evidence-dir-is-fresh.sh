@@ -80,8 +80,17 @@ fi
 # ── STEP 4: NEGATIVE CONTROL — the evidence is PRESERVED, not deleted ─────────
 # A fix that satisfied step 3 with `rm -rf` would pass it and destroy the
 # previous run. That is why this step exists.
-found="$(find target/smoke-e2e -name '03-init-exit.txt' -path '*_archived-*' | wc -l)"
-if [ "$found" -eq 1 ] && grep -q 'init_exit=0' "$(find target/smoke-e2e -name '03-init-exit.txt' -path '*_archived-*' | head -1)"; then
+# NO PIPELINE IN A VERDICT (order 792-ksr8). This step read
+#   grep -q PAT "$(find ... | head -1)"
+# until the gate refused it: an unbounded producer feeding an early-exiting
+# consumer under pipefail means SIGPIPE can decide the result, so a MATCH can
+# surface as a failure. That defect inside THIS fixture would have been
+# especially quiet — a fixture about instruments that report success while
+# seeing nothing, whose own verdict is decided by something other than what it
+# measures. Read the matches into an array; no pipe, nothing to signal.
+mapfile -t archived < <(find target/smoke-e2e -name '03-init-exit.txt' -path '*_archived-*')
+found=${#archived[@]}
+if [ "$found" -eq 1 ] && grep -q 'init_exit=0' "${archived[0]}"; then
     step "NEGATIVE CONTROL: archived copy preserved with its content" PASS
 else
     step "NEGATIVE CONTROL: archived copy preserved with its content" FAIL
@@ -102,8 +111,11 @@ fi
 echo "init_exit=1" > target/smoke-e2e/03-init-exit.txt
 sleep 1
 archive_and_init
-depth="$(find target/smoke-e2e -name '_archived-*' -path '*_archived-*/_archived-*' | wc -l)"
-copies="$(find target/smoke-e2e -name '03-init-exit.txt' | wc -l)"
+# Same rule as above: read into arrays rather than piping into a counter.
+mapfile -t nested < <(find target/smoke-e2e -name '_archived-*' -path '*_archived-*/_archived-*')
+mapfile -t all_copies < <(find target/smoke-e2e -name '03-init-exit.txt')
+depth=${#nested[@]}
+copies=${#all_copies[@]}
 if [ "$depth" -eq 0 ] && [ "$copies" -eq 2 ]; then
     step "repeated runs archive side by side, both preserved" PASS
 else
