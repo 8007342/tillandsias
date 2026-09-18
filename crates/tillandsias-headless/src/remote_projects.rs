@@ -927,27 +927,11 @@ mod tests {
     ///
     /// The lock is poison-tolerant: a panicking test must not convert one
     /// failure into a cascade of misleading ones in its siblings.
-    /// ORDER 434 AGAIN, AND THIS FILE WAS SERIALISING AGAINST ITSELF. This
-    /// helper used to own a PRIVATE `ENV_LOCK`, while six tests in this very
-    /// module already took `crate::runtime_assets::env_lock()` directly. Two
-    /// independent mutexes serialise nothing, so the five tests below ran
-    /// concurrently with every env-mutating test in the rest of the crate —
-    /// including the fake-podman fixtures in main.rs, which write the SAME
-    /// `TILLANDSIAS_PODMAN_BIN` seam this module's mocks write.
-    ///
-    /// The observed failure was `delegated_result_fake_podman_covers_fresh_
-    /// status_and_exact_timeout_reap`: green 3/3 alone, red 3/3 in the full
-    /// suite on a 16-core host, and green at `--test-threads=1`. It failed at
-    /// a DIFFERENT assert between runs (the exit-37 wrapper arm, then the
-    /// removal/reap arm) because the arm reached depends on when the foreign
-    /// write lands — one root cause that reads as two bugs if the transcripts
-    /// are compared without this note. A 20-core host did not reproduce it at
-    /// all, so core count changes the interleaving, not the defect.
-    ///
-    /// Delegating is the whole fix: it is the same thing main.rs's `env_lock`
-    /// does, for the same reason its comment gives.
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        crate::runtime_assets::env_lock()
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
     use tempfile::tempdir;
 
