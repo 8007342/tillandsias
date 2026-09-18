@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1252-r72q, spec:fail-loud-diagnosis
+# @trace order:1252-r72q, spec:ci-release
 #
 # check-bash-composition-hazards.sh — ADVISORY report of the four measured
 # bash composition hazards, over a tree-sitter-bash parse.

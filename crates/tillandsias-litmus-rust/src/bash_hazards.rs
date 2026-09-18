@@ -1,4 +1,4 @@
-// @trace order:1252-r72q, spec:fail-loud-diagnosis
+// @trace order:1252-r72q, spec:ci-release
 //
 // bash_hazards.rs — a tree-sitter-bash lint for the four MEASURED composition
 // hazards, ADVISORY TIER.
