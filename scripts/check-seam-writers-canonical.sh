@@ -66,7 +66,15 @@ writers=$(grep -rln --include=*.rs -E "(set_var|remove_var)\(\"$VAR\"" "$CRATE" 
   | while read -r f; do
       # Strip // comments before confirming: a doc comment naming the var is
       # not a writer of it.
-      sed 's://.*::' "$f" | grep -qE "(set_var|remove_var)\(\"$VAR\"" && echo "$f"
+      # CAPTURE THEN MATCH (795-imz3). `producer | grep -q` lets grep exit on
+      # the first hit, SIGPIPE the producer, and under `set -o pipefail` report
+      # FAILURE ON A MATCH — which inverts the test. This script sets only
+      # `set -u` today, so the pipeline form worked by the ABSENCE of pipefail;
+      # adding it later, or sourcing this from a caller that has it, would have
+      # silently made every writer invisible. Counting into a variable first
+      # removes the dependency on that ambient option entirely.
+      _hits="$(sed 's://.*::' "$f" | grep -cE "(set_var|remove_var)\(\"$VAR\"" || true)"
+      [ "${_hits:-0}" -gt 0 ] && echo "$f"
     done)
 
 if [ -z "$writers" ]; then
@@ -78,7 +86,12 @@ rc=0
 n=0
 for f in $writers; do
     n=$((n + 1))
-    if ! sed 's://.*::' "$f" | grep -q "$CANON"; then
+    # Same capture-then-match as above, and here the inversion would be worse:
+    # under pipefail a file that DOES reference the canonical lock would report
+    # failure on the match and be refused as uncanonical — the guard accusing
+    # exactly the files that are correct.
+    _canon="$(sed 's://.*::' "$f" | grep -c "$CANON" || true)"
+    if [ "${_canon:-0}" -eq 0 ]; then
         echo "refused:seam-writer-uncanonical:$f"
         rc=1
     fi
