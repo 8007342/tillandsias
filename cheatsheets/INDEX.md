@@ -27,6 +27,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 ## architecture
 
 - authorship-blindness.md               — Three distinct mechanisms, measured on this fleet on 2026-08-25/26, each found [bundled, partial-verify]
+- cpu-only-model-tier-ladder.md         — short of. **On a GPU host that is VRAM. On a CPU-only host it is RAM, and until [bundled, partial-verify]
 - diagnostic-attribution.md             — A missing signal leaves a reader searching. A *misattributed* one leaves them [bundled, partial-verify]
 - enclave-service-catalog-research.md   — designing or reviewing the enclave service catalog milestone — [bundled, partial-verify]
 - event-driven-basics.md                — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
@@ -188,6 +189,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - request-rate-limiting.md [DRAFT]          — Understanding request debouncing and rate limiting in browser isolation. [bundled, partial-verify]
 - runtime-limitations.md                    — The forge lacks a tool you need, or a baked tool behaves unexpectedly due to th… [bundled, partial-verify]
 - runtime-logging.md                        — implementing or reviewing Tillandsias logging behavior, tracing layers, redacti… [bundled, partial-verify]
+- silverblue-updates.md [DRAFT]             — GNOME Software or `rpm-ostree upgrade --check` reports an update is **ready and [bundled, partial-verify]
 - socket-container-health.md [DRAFT]        — Implementing health supervision in Tillandsias enclave (proxy, git, inference, … [bundled, partial-verify]
 - socket-container-orchestration.md [DRAFT] — Orchestrating Tillandsias enclave startup (proxy → git → inference → forge) wit… [bundled, partial-verify]
 - socket-enclave-diagnostics.md [DRAFT]     — Debugging enclave startup failures, health check timeouts, orchestration hangs,… [bundled, partial-verify]
@@ -235,6 +237,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - podman-testing.md                — You are deciding how to test code that shells out to Podman, or you want to spl… [bundled, partial-verify]
 - pytest.md                        — testing Python — discovery, fixtures, parametrize. [pull-on-demand: stub]
 - selenium.md                      — cross-browser end-to-end web testing with broad language SDK support (Python, J… [pull-on-demand: stub]
+
+## tooling
+
+- recursive-grep-symlinks.md       — you are about to assert a UNIVERSAL NEGATIVE ("nothing in this tree [bundled, partial-verify]
 
 ## utils
 
