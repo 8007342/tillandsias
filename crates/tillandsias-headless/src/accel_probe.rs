@@ -5320,14 +5320,27 @@ mod tests {
     /// live-daemon read — or, under the CI tripwire, a panic. Every test
     /// that walks run_probe MUST hold this guard.
     fn podman_seam() -> PodmanSeamGuard {
-        static SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let lock = SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // CANONICAL lock, not a private one. A module-local mutex here
+        // serialised this module against itself and against nothing else,
+        // while main.rs's fake-podman fixtures wrote the same var under a
+        // different mutex.
+        let lock = crate::runtime_assets::podman_seam_lock();
+        // ALSO the env lock, seam-then-env, because this write is an env
+        // mutation like any other: `remote_projects` repoints the same var
+        // holding only `env_lock`, so the seam lock alone excludes main.rs's
+        // fixtures and NOT that module. Both guards, or the gap just moves.
+        let env = crate::runtime_assets::env_lock();
         let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
-        PodmanSeamGuard { _lock: lock, prev }
+        PodmanSeamGuard {
+            _lock: lock,
+            _env: env,
+            prev,
+        }
     }
     struct PodmanSeamGuard {
         _lock: std::sync::MutexGuard<'static, ()>,
+        _env: std::sync::MutexGuard<'static, ()>,
         prev: Option<std::ffi::OsString>,
     }
     impl Drop for PodmanSeamGuard {
