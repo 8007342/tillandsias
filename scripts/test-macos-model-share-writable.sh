@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:vm-recipe-provisioning
+# @trace spec:inference-container
 #
 # test-macos-model-share-writable.sh — order 1183-j9dk.
 #
