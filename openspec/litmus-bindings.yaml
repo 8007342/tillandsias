@@ -156,6 +156,7 @@ specs:
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
   - litmus:seam-writer-canonical-lock-shape
+  - litmus:bash-composition-hazards-advisory-shape
   # 1137-da83. scripts/test-*.sh is not globbed by build.sh, so a fixture runs
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
