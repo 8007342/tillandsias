@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-launcher-is-only-installed-by-a-gate-that-must-pass-so-a-fleet-that-builds-daily-runs-a-binary-from-the-last-green-day
+    event:
+      type: decision
+      ts: "2026-09-17T23:43:30Z"
+      agent_id: linux-macuahuitl-claude-20260917t234330z
+      host: macuahuitl
+      summary: |
+        OPERATOR RULING 2026-09-17: RESOLUTION (a), PLUS AN ADDITION THAT CHANGES THE
+        SHAPE OF THE FIX.
+
+        Their words: "Yes, a), only build with --install, but it should be then
+        installed more often, also on every passing green gate it should be
+        automatically installed."
+
+        So the answer is BOTH halves, and the second is not what this row asked:
+          (a) the install remains tied to `--install` builds, as offered, AND
+          (b) a PASSING GREEN GATE installs automatically, which this row did not
+              propose and which is the part that actually fixes the measured defect.
+
+        WHY (b) IS THE LOAD-BEARING HALF. This row's finding was that a host which
+        builds many times a day still runs a binary from its last green day, because
+        only a passing `--ci-full --install` replaces the launcher. Option (a) alone
+        does not fix that: it keeps the install bound to a lane an agent may not run for
+        days. Making every green gate install closes the gap at its actual cause — the
+        launcher goes stale precisely when the gate is red or unrun, and a green gate is
+        exactly the moment the tree is known good.
+
+        WHAT THIS INTERACTS WITH, and whoever implements it must read both.
+        1237-f9dy's remedy now depends on 643-64bx, because the same operator message
+        settled the version scheme: `YEAR_FROM_EPOCH.MONTH.DAY.LOCAL_BUILD_NUMBER`, with
+        local builds incrementing the last field freely and monotonically — "+1 whichever
+        is the largest, monotonic increments always, simply by calendar+build_number",
+        and explicitly "no need to keep adding fixes, just use it correctly". Under that
+        rule the current behaviour is wrong in a specific way: build.sh bumps the counter
+        and then INSTRUCTS THE AGENT TO REVERT IT, because the pre-push guard refuses any
+        VERSION change off main. Auto-installing on every green gate while the counter is
+        reverted after every build would install many binaries all claiming the same
+        version, which is the operator's original complaint reproduced faster.
+
+        So the ordering is: fix the guard to permit a strictly-greater monotonic bump,
+        THEN wire the green-gate install. Doing (b) first makes the stale-version symptom
+        worse, not better.
+
+        MEASUREMENT THAT MOTIVATED THE ROW, unchanged and still true: launcher measured
+        stale at five and six days on two hosts; this host's tracked VERSION read
+        56.9.13.1 (2026-09-13) while its installed launcher read v56.9.17.1, i.e. the
+        INSTALLED artifact was NEWER than the tree, because the tree's counter keeps
+        being reverted.

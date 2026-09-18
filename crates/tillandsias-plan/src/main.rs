@@ -3570,6 +3570,36 @@ fn main() {
         return;
     }
 
+    // ORDER 964-tzmp — the derived redb cache's surface, dispatched EARLY.
+    //
+    // BEFORE `Ledger::load_with_fragments`, deliberately. A cache whose reader
+    // pays the load it exists to avoid measures nothing: dispatched with the
+    // ordinary arms these cost 294 ms, which is the load, not the lookup.
+    // `capabilities` sits here for the same reason and costs 2 ms.
+    if args[0] == "cache-rebuild" {
+        let fragments = tillandsias_plan::fragments::load_all(&index);
+        let raw = std::fs::read_to_string(&index).unwrap_or_default();
+        let base: serde_yaml::Value = serde_yaml::from_str(&raw).unwrap_or_default();
+        let folded = tillandsias_plan::fragments::fold(&base, &fragments);
+        tillandsias_plan::ledger_cache::rebuild(&index, &folded);
+        println!("ok:cache-rebuild");
+        return;
+    }
+    if args[0] == "cache-get" {
+        let Some(id) = args.get(1) else { usage() };
+        match tillandsias_plan::ledger_cache::get_packet(&index, id) {
+            Some(p) => println!(
+                "hit:{}:{}",
+                id,
+                p.get("status")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("?")
+            ),
+            None => println!("miss:{id}"),
+        }
+        return;
+    }
+
     if args[0] == "capabilities" {
         for token in capability_tokens() {
             emit(token);

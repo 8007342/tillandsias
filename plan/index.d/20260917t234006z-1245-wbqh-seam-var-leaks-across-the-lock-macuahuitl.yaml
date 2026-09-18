@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-podman-seam-env-var-leaks-across-the-mutex-that-documents-its-own-exclusion-so-one-test-reads-another-tests-fake-binary-and-the-suite-fails-only-at-some-core-counts
+    order: 1245-wbqh
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [tests, race, seam, env-lock, headless, host-specific]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      `TILLANDSIAS_PODMAN_BIN` leaks across the mutex whose own comment says every writer serializes on it, so one test reads another's fake binary — deterministic at 16 cores, absent at 20, and it reds the gate for the only host that can reproduce it
+    context: |
+      FOUND BY yolanda-windows 2026-09-17 while gating the windows-next
+      integration. Filed here because a peer dispatch does not authorise minting
+      a packet and they correctly declined to invent one; the diagnosis below is
+      theirs and is quoted rather than paraphrased.
+      THE FAILURE:
+        tests::delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap
+        543 passed / 1 failed, -p tillandsias-headless --bin tillandsias, rc=1
+      IT IS NOT THE LANDING HOST'S CHANGE, established by diff rather than by a
+      stash test: `git diff --name-only origin/linux-next..HEAD -- crates/`
+      returns ZERO files on their branch. Their four commits touch three plan
+      fragments and one tasks.md. The Rust tree at their HEAD is byte-identical
+      to trunk's, which makes a pristine re-run uninformative BY CONSTRUCTION —
+      they said so rather than running it for appearances. The test itself dates
+      to 541737e6f, 2026-07-23.
+      THE MECHANISM, named rather than guessed. The wrapper reported
+      `exit 1 (transcript said: INDETERMINATE ... no recognisable agent events)`
+      where the fake podman's codex arm exits 37 WITH events. Exit 1 and no
+      output is `/bin/false`, which is exactly what `podman_false_seam()` writes
+      into TILLANDSIAS_PODMAN_BIN. So during this test the seam var held another
+      test's value. The invariant is stated in the source in as many words —
+      "EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
+      THIS mutex" — and the observed behaviour contradicts it. First place to
+      look, their suggestion and a good one: both locks recover from poisoning
+      via `unwrap_or_else(|e| e.into_inner())`, so a panic inside the seam drops
+      the exclusion the NEXT test is relying on. Poison recovery is how a lock
+      stops excluding while still looking like a lock.
+      THE DETAIL THAT PREVENTS TWO BUGS BEING FILED. Their first gate run failed
+      at a DIFFERENT assert (the removal/reap, `podman rm ... No such file or
+      directory`) than their two reruns (the exit-37 wrapper assert). Same root
+      cause, different arm reached. Anyone comparing those two transcripts would
+      otherwise read them as two defects; a racing env var is what this looks
+      like.
+      IT IS CORE-COUNT DEPENDENT AND THAT IS MEASURED, NOT SUPPOSED.
+        yolanda-windows, nproc=16:  fails 2/2 in the full suite, passes 3/3 in isolation
+        macuahuitl,      nproc=20:  544 passed / 0 failed, four consecutive full-suite runs
+      Four runs rather than one, deliberately: against a KNOWN interleaving race
+      a single green is weak evidence and would have been the wrong thing to
+      report. Four is not proof of absence either and is not offered as one. The
+      reading is that the exposing interleaving does not occur at 20 cores,
+      which is what the finder predicted before either of us measured it.
+      WHO OWNS IT, AND WHY IT IS NOT THE USUAL ANSWER. pickup_role is windows
+      because the host that REPRODUCES must own it: a fix verified on a host
+      where the test cannot fail is unverifiable by construction — a green there
+      is indistinguishable from the green already obtained. This inverts the
+      normal preference for routing Linux-shaped work to a Linux host.
+    exit_criteria:
+      - 'the failing test passes in the FULL SUITE on a host where it currently fails, run at that host''s own core count, with the pre-fix failure demonstrated as still deterministic immediately beforehand (pre-fix result: FAILS 2/2 on nproc=16; isolation is where this hides, so an isolated pass is not evidence)'
+      - 'the mechanism is named in the fix: which writer escaped the mutex, and whether poison recovery via unwrap_or_else(|e| e.into_inner()) is what dropped the exclusion — a fix that makes the symptom go away without naming the escape is recorded as unexplained rather than as closed'
+      - 'NEGATIVE CONTROL: the seam still works — a test that legitimately sets TILLANDSIAS_PODMAN_BIN still sees its own value, so the fix does not achieve isolation by disabling the seam it is protecting'
+      - 'the core-count dependence is stated in whatever guard or comment results, since a host that cannot reproduce will otherwise read its own green as evidence the defect is gone'
+    unscoreable: |
+      whether-20-cores-is-genuinely-immune: four consecutive greens on nproc=20
+      bound the rate but do not establish absence for an interleaving race. If a
+      20-core host ever sees it, the core-count framing above is wrong and the
+      cause is narrower or broader than stated. Do not let the four greens
+      harden into "Linux is unaffected".
+    verifiable_closure: |
+      the failing test, run in the full suite on the reproducing host, failing
+      before the change and passing after, with both runs recorded.
+    events:
+      - type: filed
+        ts: "2026-09-17T23:40:06Z"
+        agent_id: "linux-macuahuitl-claude-20260917t234006z"
+        host: macuahuitl
+        summary: |-
+          Filed by the coordinator so the finder is not blocked waiting on an
+          operator ask for a packet id, with their diagnosis quoted rather than
+          restated. They asked to have this routed deliberately rather than
+          widening their own scope into trunk's test infrastructure on the way
+          past, which is the right instinct and is honoured: it is routed to
+          them because they are the only host that can verify a repair, not
+          because they found it.

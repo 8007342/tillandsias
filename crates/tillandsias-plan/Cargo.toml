@@ -38,6 +38,8 @@ tillandsias-podman = { path = "../tillandsias-podman" }
 mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
 tokio = { workspace = true }
 chrono = { workspace = true }
+# Order 964-tzmp: the derived ledger cache (see workspace Cargo.toml).
+redb = { workspace = true }
 
 [dev-dependencies]
 # ORDER 977-dpbj. proptest, not quickcheck: integrated shrinking that respects
