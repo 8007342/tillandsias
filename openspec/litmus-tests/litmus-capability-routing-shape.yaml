@@ -34,8 +34,28 @@ preconditions:
 
 critical_path:
   - step: "the eight-case routing fixture passes end to end"
+    # BUDGET RAISED 120s -> 300s, 2026-09-16, MEASURED NOT GUESSED. The fixture
+    # is CORRECT and simply slower than its old budget: timed twice on
+    # macuahuitl (20 cores, 58 GB free) at 150s and 151s, rc=0,
+    # "PASS: capability routing (8/8)" both times. Near-zero variance, so this
+    # was not a flaky step tipping over — it could never have passed 120s here.
+    #
+    # WHY IT STAYED INVISIBLE, which is the part worth keeping: `./build.sh
+    # --check` runs NO litmus at all (748-tkjx — _run_litmus_phase is called
+    # only under FLAG_CI_FULL), so this arm executes only in a full-tier run.
+    # macuahuitl had NEVER completed one (check-release-tier-freshness answered
+    # `never:release-tier`) until the release-tier exercise on 2026-09-16, which
+    # is when it surfaced — as a cut blocker, at the moment a release was
+    # wanted. A release-tier-only arm with too tight a budget is invisible until
+    # exactly the worst time to find it.
+    #
+    # 300s is not arbitrary: it is the fleet's DOMINANT budget, used by 85 of
+    # the litmus steps in this tree. 120s was under half the norm. The headroom
+    # matters because this fixture runs against the LIVE LEDGER through the
+    # routing seams, so its cost tracks ledger growth — and a floor-tier host
+    # will be far slower than the 150s measured here (see 1187-iij8).
     command: "bash scripts/test-capability-routing.sh 2>&1 | tail -1 | grep -qx 'PASS: capability routing (8/8)' && echo 'ok: fixture 8/8'"
-    timeout_ms: 120000
+    timeout_ms: 300000
     expected_behavior: "ok: fixture 8/8"
 
   - step: "the binary serves the routing roster projection"

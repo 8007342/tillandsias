@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-salvage-audit-defaulted-to-the-smaller-stranding-surface-and-skipped-the-one-the-land-tool-tells-blocked-hosts-to-use
+    order: 1227-fegu
+    status: completed
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [coordination, salvage, git, instrument, fleet]
+    estimated_hours: 1
+    owned_files:
+      - scripts/salvage-audit.sh
+    evidence_refs: 1408b4cd192a96bdf586de8d6bf24cc85987bdce
+    title: |
+      The salvage audit defaulted to refs/heads/salvage/* alone — the smaller surface — and skipped refs/heads/work/*, which is the namespace the land tool tells a blocked host to use
+    context: |
+      1226-jb8y shipped the audit yesterday with PATTERN="refs/heads/salvage/*"
+      as its default. MEASURED 2026-09-16: that is the SMALLER HALF — 12 salvage
+      refs against 24 work refs — and work/ is where
+      scripts/land-on-platform-branch.sh's OWN REFUSAL TEXT instructs a host to
+      push a gated tree when its gate cannot win the race against trunk. So the
+      namespace a stranded host is INSTRUCTED to use was precisely the one the
+      audit built to find stranded work did not look at.
+      IT COST SOMETHING BEFORE IT WAS FOUND. Pointing the audit at work/ for the
+      first time, in coordination pass 48, surfaced
+      plan/index.d/20260905t185305z-013bda76-lenovinha.yaml on work/1069-c9w6 —
+      a note event ABSENT FROM TRUNK since 2026-09-05, eleven days. It was
+      relayed that pass. Nobody had queried that namespace because the tool's
+      default said it did not need querying.
+      THIS IS THE AUDIT'S OWN FALSE NEGATIVE, ONE LEVEL UP, AND THE SECOND OF
+      ITS KIND. 1226-jb8y also shipped with a for-each-ref prefix-versus-glob
+      bug that matched ZERO refs and printed skipped:no-refs — indistinguishable
+      from "nothing is stranded". Both were caught by RUNNING the instrument
+      against the real fleet rather than by a green fixture, which is 970-7fqk's
+      lesson from the same day.
+    exit_criteria:
+      - 'the default audits BOTH refs/heads/salvage/* and refs/heads/work/*, and the audited ref count accounts for both (pre-fix result: FAILS — default covered 12 of 36 refs and missed the eleven-day-old stranded event entirely)'
+      - '--pattern still narrows to a single namespace, so the wider default costs no ability to scope'
+      - 'the fixture asserts NAMING and AUDITING separately, because a header that names both surfaces over a one-surface sweep is decoration'
+    unscoreable: |
+      pinned-by-a-gate-fixture-not-a-litmus: the obligation IS verifiable and IS
+      enforced — scripts/test-salvage-audit.sh ARM 1b asserts, in two halves,
+      that the default header NAMES both stranding surfaces and that the
+      verdict's ref count ACCOUNTS for salvage+work counted independently from
+      for-each-ref. It runs on every ./build.sh --check, wired beside the
+      must-ship, ledger-distillation and fleet-activity fixtures, and it was
+      11/11 at the evidence commit with coverage moving 12 -> 36 refs.
+      What it is NOT is a `litmus:<test>`: this fixture has no litmus binding,
+      and naming one that nothing defines would be refused by 885-92iu and would
+      be a worse record than saying so. Stated here rather than pinned falsely,
+      per the same guard's own guidance. Binding it to a litmus is a reasonable
+      follow-up and is deliberately not claimed in this row.
+    events:
+      - type: filed
+        ts: "2026-09-16T20:00:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t200000z"
+        host: macuahuitl
+        summary: |-
+          Filed and closed in one cycle by the author of the defect. The gap was
+          found by the coordination pass that first pointed the audit at work/
+          and immediately found eleven-day-old stranded work there.

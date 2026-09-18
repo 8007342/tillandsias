@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: progress
+      ts: "2026-09-17T12:01:41Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t120140z
+      host: macos
+      summary: |-
+        CRITERION 3 DELIVERED. The projection was run, its rows were READ rather than counted, and three DISTINCT classes of packet were established as genuinely un-surfaced by minimax — with a reachability control, and with one hypothesis of mine refuted along the way.
+
+        THE CONTROL FIRST, because the claim is a negative: 20 seeds x budget 6 through scripts/select-work-batch.sh offered 14 DISTINCT packets in total, and not one of the forgotten top-12 appeared. Positive control on the comparison itself (intersecting the selector's own output with a subset of it) returns 2, so the intersection is capable of finding overlap and the empty result is a real zero rather than a broken pipe.
+
+        CLASS 1 — AN EPIC HEAD THAT IS REAL WORK. socket-audit-master (order 151), rank 1 in the projection. Filed as 1239-cges. Every value used as a release_target was enumerated: 14 epic heads, 13 of them kind: milestone and therefore correctly unclaimable, and THIS ONE kind: audit+refactor, status ready. 31 packets name it as their release_target and it is the highest-residual epic on the frontier (16.813, p=0.362; chosen 11 of 20 seeds). The selector ranks EPICS and offers their CHILDREN, membership being release_target — a head defines an epic rather than belonging to one, so it is structurally absent from the mechanism, not unlucky.
+
+        CLASS 2 — A RANK-4 EPIC. forge-local-experts-milestone (score 7.595) holds npu-device-passthrough (481), llama-server-engine-parity-smoke (482c), llama-server-vulkan-image-variant (482b), llama-server-shared-tier-model-table (482d), host-native-sidecar-endpoints (483), inference-policy-router/status-pin (484e). MEASURED: chosen in 0 of 20 seeds.
+
+        CLASS 3 — AN EPIC BELOW THE FRONTIER WIDTH. web-share-release-milestone does not appear in the printed frontier at all (width=8) and holds visual-chess-harness-publish-e2e (375), catalog-multi-service-compose (376), cloudflare-login-implementation (377), warp-tunnel-ephemeral-public-serve (378), one-prompt-public-share-flow (379). MEASURED: chosen in 0 of 20 seeds.
+
+        Across those 20 seeds the selector chose exactly THREE epics — socket-audit-master 11, architecture-audit-epic 5, fail-loud-diagnosis-milestone 4. Classes 2 and 3 are therefore starved by DESIGN, not by defect: the skill documents score-weighted entropy over the top-3 epics, and this packet's own context predicted it ("triaging strictly by points starves the tail — some things never get done"). The projection reaching them is the design working, and only class 1 is a defect worth filing.
+
+        A HYPOTHESIS OF MINE WAS REFUTED MID-MEASUREMENT AND THE ROW SHOULD SAY SO. I first proposed these rows were unreachable because they were UNGROUPED (the triage line reports ungrouped=64, and the epic tier cannot reach a packet with no release_target). Reading the fold refuted it: 11 of the 12 DO carry a release_target. Only socket-audit-master does not. Had I filed on the first reading, the row would have named the wrong mechanism for eleven of its twelve examples.
+
+        The cause of that near-miss is worth recording too: I inferred "ungrouped" from `tillandsias-plan status <order>` printing three fields, having earlier seen `answer` print six for a packet that does have a release_target. Two commands, two output shapes, and I read the shape as data. `status` prints three fields for 718-jqt5 as well, which is what exposed it. The fold is the authority; a command's rendering is not.

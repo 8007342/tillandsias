@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: progress
+      ts: "2026-09-16T15:39:02Z"
+      agent_id: linux-yoga-claude-20260916t153526z
+      host: linux
+      summary: |
+        CRITERION 1 IS MET. TEN consecutive default parallel runs at one commit, every one `ok. 544 passed; 0 failed`, identical (empty) failure set. I verified all ten produced a RESULT LINE rather than counting ten silences — that distinction is the whole reason this harness prints NO RESULT LINE when a run does not execute.
+
+        CRITERION 2 IS MET: the shared state is REMOVED, not serialised. No #[serial] was added, no mutex widened, and two tests no longer write HOME at all.
+
+        THE THIRD CONTENTION, AND WHY THE READER WAS THE WRONG TARGET. write_forge_gitconfig resolved its directory by calling cache_root() — XDG_CACHE_HOME falling back to HOME. Five tests in this file set HOME purely to redirect that write, each under env_lock(). THE VICTIM NEVER TOOK THAT LOCK: forge_credential_quarantine_mounts_present reaches the function through two builders and holds only the podman seam lock. A LOCK PROTECTS ONLY THE PARTICIPANTS WHO TAKE IT, so the writers serialised among themselves while an unlocked reader raced them.
+
+        Adding env_lock() to the victim would have been exactly the per-test mutex criterion 2 forbids. And threading the root down to the reader would have been LAST PASS'S MISTAKE AGAIN: the two builders that call write_forge_gitconfig are themselves reachable from many tests, so a read placed there is a read a test can still reach. The fix had to be at the WRITERS.
+
+        WHAT LANDED: write_forge_gitconfig takes its root as a parameter; the two production builders pass cache_root(); the eight direct test callers pass their own directory; and the two tests that set HOME solely for the redirect no longer touch it.
+
+        A FALSE SAFETY COMMENT WAS PART OF WHY THIS LASTED. Directly above one of those unsafe blocks stood "SAFETY: single-threaded test, no concurrent env reads". That is false — cargo runs this suite CONCURRENTLY IN ONE PROCESS, which is the defect the whole row is about. A false justification sitting on the exact unsafe it licenses is harder to doubt than no justification at all.
+
+        AN ERROR OF MINE IN THIS PASS, measured and corrected: I first passed the bare tempdir as the root, assuming the HOME write existed ONLY for the redirect. IT ALSO CARRIED THE LAYOUT — the test asserts the config lands under <HOME>/.cache/tillandsias/forge-gitconfig — so write_forge_gitconfig_produces_valid_config_with_origin_redirect went from intermittent to failing in EVERY run. The remedy was already in core and is the precedent's own shape: cache_root_from(None, Some(tmp)) computes exactly what HOME=tmp would produce, injectably. Reading "this global is only used for X" as complete is the same class as reading a relocated call as a removal.
+
+        AND I NEARLY RECORDED A STALE NUMBER AS THE RESULT. The stability run measuring the BROKEN intermediate state reported "9 stable, 1 differing" after I had already fixed it. Had I taken it, I would have published a real, well-formed measurement of a tree that no longer existed.
+
+        CRITERION 3 IS NOT ATTEMPTED AND I AM NOT CLAIMING IT. It requires dropping --test-threads=1 from the gate, five green ./build.sh --check runs, and inverting litmus:build-ci-dispatch-shape's serial arm in the same commit. THIS ROW'S EVIDENCE COVERS THE HEADLESS BIN SUITE ONLY. The gate runs the WHOLE WORKSPACE, and nothing here measures whether another crate contends; dropping the pin on this evidence would be exactly the over-reach 1003-444f's ratchet punishes, since a ratchet fed a non-deterministic set reports new-red on a coin flip. The next step is a workspace-level parallel measurement, not a gate edit.
+
+        The pin therefore stays, and the serial gate is green at 544 passed with fmt and clippy clean.

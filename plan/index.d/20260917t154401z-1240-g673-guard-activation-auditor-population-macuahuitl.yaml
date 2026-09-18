@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-guard-activation-auditor-reports-ok-over-a-population-of-12-of-78-gate-steps-because-it-enumerates-only-check-scripts-so-a-test-fixture-is-unwired-and-wired-indistinguishably
+    order: 1240-g673
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [gate, guard-activation, fixtures, instrument, gate-steps]
+    estimated_hours: 3
+    owned_files:
+      - scripts/audit-guard-activation.sh
+      - scripts/gate-steps.d
+    title: |
+      scripts/audit-guard-activation.sh answers "verdict=ok, orphan=0" over a population of 12 of 78 gate steps — it enumerates check-*.sh only, so a test-*.sh fixture reads identically whether it is wired or not, and the auditor cannot see its own binding
+    context: |
+      FOUND ON macuahuitl 2026-09-17 while trying to prove that a newly written
+      fixture was actually wired into the gate (1231-cbie). The auditor was asked
+      twice, in two different wiring states, and gave the same answer both times.
+      MEASURED, both states, same host, minutes apart:
+        fixture wired INLINE in build.sh      -> 0 matches, verdict=ok, orphan=0
+        fixture wired as a .step in gate-steps.d -> 0 matches, verdict=ok, orphan=0
+        fixture not wired at all (before both)   -> would be the same three bytes
+      That is the shape where a broken instrument and a clean result print the
+      same output. The auditor is not wrong about what it measures; it is silent
+      about what it does not measure, and silence reads as a pass.
+      THE POPULATION, COUNTED RATHER THAN ASSUMED. The auditor says
+      population=134 total=134 active=134 orphan=0, and its own comment at
+      scripts/audit-guard-activation.sh:59 states the rule plainly: "The
+      population here is check-*.sh". Counting the gate-step bindings in
+      scripts/gate-steps.d three ways rather than two (a two-way compare over a
+      three-way world is how a specific falsehood gets reported):
+        test-*.sh bound   63
+        check-*.sh bound  12
+        neither            2   (verify-version-monotonic.sh, audit-guard-activation.sh)
+        total             77   (pre-existing, excluding the step filed the same day)
+      So 12 of 77 gate-step bindings fall inside the auditor's population and 65
+      do not. The 134 it reports is the count of check-*.sh guards repo-wide, not
+      a count of what is wired.
+      THE AUDITOR CANNOT SEE ITS OWN BINDING. scripts/gate-steps.d/190-1087-h2z9.step
+      binds scripts/audit-guard-activation.sh, and that binding is in the bucket
+      the auditor's own population excludes. If that step file were deleted
+      tomorrow the auditor would keep printing orphan=0 about everything except
+      itself.
+      THE GAP IS PREDICTED IN THE FILE ITSELF, which is why this is a transfer
+      failure and not a discovery. The comment at :52-62 records that order
+      1072-b7eq moved eleven gate steps out of build.sh into .step files, that
+      "those bindings are real activation", that the migration's own note
+      predicted "the fixture is now one indirection further from every name-based
+      scan" — and that "the surface list was never extended to follow it".
+      scripts/gate-steps.d WAS then added to the SURFACE list, which is where a
+      binding is looked FOR. It was never added to the POPULATION, which is what
+      gets looked for. Adding the surface without the population fixes the
+      check-*.sh case (one such binding existed, 2026-09-06) and leaves the 63
+      test-*.sh cases exactly where they were.
+      WHY IT MATTERS MORE THAN AN ORPHAN COUNT. "Activation is proved by what
+      ran" is the fleet's standing rule precisely because an unwired fixture
+      cannot block a land, and it passes standalone forever. The auditor is the
+      artifact that rule points at when a gate log is not to hand. Pointing at an
+      instrument whose population excludes 84% of gate bindings converts a
+      discipline into a ritual: the next host asks, gets ok, and lands.
+      NOT A ONE-LINE FIX, which is why this is filed rather than done. Extending
+      the population to test-*.sh makes every unbound fixture in scripts/ an
+      orphan at once, and openspec/litmus-tests/unbound-grandfathered.txt exists
+      because that population was already known to be large. The remedy has to
+      decide what an unbound test-*.sh MEANS — many are invoked by a litmus spec
+      or by another fixture, not by build.sh — before it can report one as a
+      defect. Bolting on the wider population without that decision produces a
+      red gate on day one and a grandfather list on day two, which is the
+      instrument this row is complaining about wearing a different hat.
+    exit_criteria:
+      - 'the auditor enumerates every scripts/gate-steps.d/*.step binding regardless of the bound script''s filename prefix, and reports a .step whose STEP_SCRIPT names a file that no longer exists (pre-fix result: FAILS — a .step binding test-*.sh is absent from the population entirely, so deleting the script is invisible to it)'
+      - 'the auditor''s own binding (scripts/gate-steps.d/190-1087-h2z9.step -> scripts/audit-guard-activation.sh) is inside the population it reports, proven by removing that .step in a scratch tree and observing the verdict change'
+      - 'the verdict line states the population it covered and the population it did NOT, so a caller can tell "nothing is orphaned" from "nothing in scope was examined" — a bare orphan=0 over an unstated denominator is the defect being fixed, not the fix'
+      - 'NEGATIVE CONTROL: a test-*.sh fixture that is deliberately invoked by a litmus spec rather than by the gate is NOT reported as an orphan, so widening the population does not convert the existing unbound-grandfathered population into a red gate'
+    unscoreable: |
+      what-an-unbound-test-fixture-means: the criterion above can be met
+      mechanically, but the JUDGEMENT it rests on — which invocation paths count
+      as activation (build.sh, a .step, a litmus spec's bound test, another
+      fixture, a skill runbook) — is a contract decision, not a measurement, and
+      openspec/litmus-tests/unbound-grandfathered.txt is the evidence that the
+      fleet has deferred it before. Scoring this row as closed without that
+      decision recorded would ratify whichever answer the implementer happened to
+      pick.
+    verifiable_closure: |
+      litmus:gate-step-prefix-allocation — extended with an arm that a .step file
+      whose STEP_SCRIPT names a missing script is reported by the activation
+      auditor, for a binding whose script name begins with test- as well as one
+      beginning with check-.
+    events:
+      - type: filed
+        ts: "2026-09-17T15:44:01Z"
+        agent_id: "linux-macuahuitl-claude-20260917t154401z"
+        host: macuahuitl
+        summary: |-
+          Filed from the inside of the failure rather than from a review: the
+          cycle needed to know whether a new fixture was wired, asked the
+          instrument the fleet rule names, and got an answer that was identical
+          in the wired and unwired states. The count was taken three ways rather
+          than two because the first two-way split left two files unaccounted for
+          — and one of those two turned out to be the auditor's own binding.
+          Not claimed. The mechanical half is small and the contract half (what
+          counts as activation for a test-*.sh fixture) is the part that has been
+          deferred before, so this should be picked up by a host with the room to
+          settle that, not folded into a drain.

@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-attestation-update-carries-no-code-by-construction-yet-demands-a-full-gate-that-cannot-verify-what-it-attests
+    order: 1228-xc6c
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [push-lane, attestation, macos, coordination, gate-cost]
+    estimated_hours: 3
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      `plan/attestations/` is outside the plan-only lane, so an attestation update — which carries no code by construction — demands a full gate that is structurally incapable of verifying what it attests
+    context: |
+      REPORTED BY macbookair-macos 2026-09-16 and verified here. The outgoing
+      diff for a re-attestation is exactly ONE file,
+      plan/attestations/macos-only-sources.macos.json, and the pre-push hook
+      answers: "plan-only lane: not applicable — outside plan/index.d/,
+      plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and
+      plan/mo-full-attestations.d/ ... full gate required".
+      TWO SIBLING DIRECTORIES ARE IN THE LANE AND THIS ONE IS NOT.
+      plan/mo-full-attestations.d/ is admitted, validated by
+      check-mo-full-attestations.sh which accepts the whole ledger. So the lane
+      already understands an attestation-shaped record; it simply does not know
+      about this path.
+      THE "MODIFIED FILE" OBJECTION DOES NOT HOLD, checked in the hook rather
+      than assumed: the lane ALREADY accepts modifications for two categories —
+      "sweep records qualify as new (A) or appended (M) only" and "issue
+      captures qualify as new (A) or corrected (M) only". An attestation is
+      REPLACED in place rather than appended, which is a third shape, but
+      in-place modification is not categorically excluded and the lane's
+      existing grammar checks are the precedent for validating one.
+      THE DECISIVE ARGUMENT IS THAT THE GATE CANNOT VERIFY THE CLAIM. This file
+      attests that seven `#[cfg(target_os = "macos")]` modules were exercised
+      natively. Per 739-6r6n a Linux or Windows build NEVER PARSES THEM — it
+      compiles stubs. So demanding ./build.sh --check before accepting the
+      attestation demands a gate that is structurally incapable of checking the
+      thing being asserted, on a host that by definition is not the one that
+      verified it. The gate's cost is real and its relevance here is zero.
+      AND THE LOOP IS SELF-DEFEATING WHILE 1224-zpek STANDS, which is
+      macbookair's framing and is the reason this is worth a row rather than a
+      note. A live tray reds their gate, so every macOS land goes to a salvage
+      ref for a coordinator to relay. Each relay of macOS SOURCES un-attests the
+      file — correctly, since the attestation covers bytes. Re-attesting is only
+      possible WITH THE TRAY UP (cargo test --bins never builds the
+      tray-blocked integration test). The resulting attestation update then
+      needs a full gate the tray-up host cannot pass, so it goes to ANOTHER
+      salvage ref, for another relay. MEASURED: this cycle ran that loop twice
+      in ninety minutes.
+      NOT ARGUING THE LANE SHOULD BE LOOSER IN GENERAL. The lane exists because
+      a gate that is minutes long gets bypassed, and widening it carelessly is
+      how a code path sneaks in. The narrow claim is that ONE directory whose
+      contents cannot contain code, and whose subject the gate cannot read, is
+      currently paying the full price.
+    exit_criteria:
+      - 'a re-attestation whose outgoing diff is only plan/attestations/*.json pushes without a full gate, OR the refusal explains why that directory must pay one (pre-fix result: FAILS — verified, the hook names five directories and this is not among them)'
+      - 'whatever admits it VALIDATES the file, as check-mo-full-attestations.sh does for its sibling: a lane that accepts unparsed JSON into an attestation path is worse than the gate it replaces'
+      - 'NEGATIVE CONTROL: a push mixing plan/attestations/ with any code path still demands the full gate, so this cannot become a side door'
+      - 'the in-place REPLACE shape is handled explicitly, since the two existing modified-file precedents are append and correct rather than replace'
+    unscoreable: |
+      admission-shape-not-chosen: whether plan/attestations/ joins the lane with
+      a grammar validator, gets a narrower lane of its own, or stays out with a
+      better-explained refusal is a decision about how much the push lane is
+      willing to admit without a gate. The cost is measured and the loop is
+      reproducible; the remedy is not chosen, and a careless widening here is
+      exactly the risk the lane exists to prevent.
+    events:
+      - type: filed
+        ts: "2026-09-16T21:00:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t210000z"
+        host: macuahuitl
+        summary: |-
+          Filed at macbookair's suggestion after they hit the loop twice. They
+          identified both sub-questions — whether the directory joins the lane,
+          and whether the lane takes a modified file — and the second turned out
+          already answered in the hook.

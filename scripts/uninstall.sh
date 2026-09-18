@@ -252,10 +252,48 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # have uninstalled from. Verified live on tlatoanis-macbook-air 2026-08-30:
 # pid alive 12m after a "complete" uninstall with its bundle deleted.
 # Same two-stage stop as the installer, and the same tolerance of absence.
-if pgrep -f tillandsias-tray >/dev/null 2>&1; then
-    pkill -TERM -f tillandsias-tray 2>/dev/null || true
-    sleep 1
-    pkill -KILL -f tillandsias-tray 2>/dev/null || true
+#
+# ── ORDER 1231-cbie: THE GUARD THIS HEADING ALREADY CLAIMED ──────────────────
+#
+# This block sat at COLUMN 0 under a "macOS desktop cleanup" heading, four lines
+# after an unconditional LINUX cleanup block — so the heading read as scope and
+# was not one. It ran on EVERY platform, and uninstall.sh is a SHIPPED RELEASE
+# ARTIFACT (release.yml installs it and asserts it is present), so the reach was
+# every machine that installs a release and later uninstalls.
+#
+# WHY THAT MATTERED ON LINUX SPECIFICALLY: there is no `tillandsias-tray`
+# process here. The launcher is `tillandsias`. So every match `-f` could produce
+# on a Linux host was a FALSE one — an editor, a grep, a CI shell, or the agent
+# command running the uninstall — and the ladder then sent it SIGTERM and
+# SIGKILL. scripts/e2e-preflight.sh condemns this exact form by name, with a
+# measurement: its own first draft "reported PRESENT against its own invoking
+# shell". That warning never travelled the two files to here.
+#
+# THE MATCHER IS NOW `-x`, MEASURED ON DARWIN 2026-09-17 (1231-cbie, second
+# half). `-f` matches a COMMAND LINE, so it killed anything merely mentioning
+# the string; `-x` matches the EXECUTABLE NAME exactly.
+#
+# The three facts a Linux host could not establish, each measured here:
+#   1. CFBundleExecutable is `tillandsias-tray` and CFBundleName is
+#      `Tillandsias`, so they DIFFER — a matcher keyed on the bundle name
+#      would have matched nothing at all.
+#   2. `tillandsias-tray` is exactly 16 characters, historically MAXCOMLEN on
+#      BSD, so `-x` was not obviously safe. It is: `ps -o comm=` reports the
+#      full path untruncated and `pgrep -x tillandsias-tray` matches it.
+#   3. The collateral damage is real and `-x` removes it. With a live decoy
+#      named `tillandsias-tray` and an innocent `tail -f .../tillandsias-tray.log`
+#      running alongside, `pgrep -f` returned BOTH pids and `pgrep -x` returned
+#      only the decoy. Under the old form that `tail` got SIGTERM then SIGKILL.
+#
+# THE TWO-STAGE STOP IS DELIBERATELY KEPT, not collapsed: a tray was observed
+# alive 12m after a "complete" uninstall, and the sweeps fixture pins the
+# stop's existence for that reason. Only the matcher narrowed.
+if [[ "$IS_MACOS" == true ]]; then
+    if pgrep -x tillandsias-tray >/dev/null 2>&1; then
+        pkill -TERM -x tillandsias-tray 2>/dev/null || true
+        sleep 1
+        pkill -KILL -x tillandsias-tray 2>/dev/null || true
+    fi
 fi
 
 # BOTH candidate install dirs, in the installer's own precedence order.

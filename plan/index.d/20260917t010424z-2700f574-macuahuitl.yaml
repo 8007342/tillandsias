@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: note
+      ts: "2026-09-17T01:04:24Z"
+      agent_id: linux-macuahuitl-claude-20260917t010423z
+      host: macuahuitl
+      summary: |
+        Handed to yoga-silverblue by the coordinator, who reported idle with a clean
+        tree and no claims after landing tonight's four fixes. Routed here rather than
+        taken on macuahuitl per the operator's 2026-09-14 ruling on interchangeable
+        Linux work, and because this host is the one running release gates.
+
+        WHY THIS ROW NOW: it is the cut's only remaining blocker. ci-full on 5c13d81e7
+        returned 361 PASS / 6 FAIL; one was a real assertion (fixed the same night) and
+        FIVE were budget kills of correct steps whose producers exit zero —
+        cycle-metrics.sh at 29,908 ms against budgets of 10,000-20,000 ms, and
+        select-work-batch.sh at 14,883 ms against 15,000 ms, which is 117 ms of headroom
+        on a twenty-core host. See 1233-jqp4 for all five with their budgets.
+
+        AND THE COST IS THIS ROW'S SUBJECT, measured on macuahuitl 2026-09-17:
+          tillandsias-plan grade over the committed groundtruth glob   18,291 ms
+          the same grade with the spec index unavailable               18,512 ms
+          cycle-metrics.sh total                                       29,908 ms
+        So the grade is 61% of it, the spec index is NOT the cost, and what remains is
+        the ledger fold this row exists to do once. 1233-jqp4 originally blamed the
+        telemetry log; that premise was falsified (cutting it to 17% returned 4% of the
+        time) and corrected on the row before anyone acted on it.
+
+        The parent measurement is already recorded here: ~108 ledger-loading invocations
+        per warm --check, ~59 s on the N150, ~26% of the warm gate. This adds the
+        release-blocking consequence it did not previously have — five gate steps that
+        red on the busiest host first, monotonic in fleet activity, no floor.
+
+        Carry the row's own METHOD WARNING: a PATH shim measures zero, because
+        plan-binary-probe.sh prefers ./target/release/tillandsias-plan and consults PATH
+        only as a fallback (721-nyev). Instrument the probe's resolution, not PATH.

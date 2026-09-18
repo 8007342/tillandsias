@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: progress
+      ts: "2026-09-17T21:52:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t215203z
+      host: macos
+      summary: |
+        TASK 4.5 DARWIN HALF: SATISFIED BY FRESH EVIDENCE GENERATED TODAY, so the fleet decision the next_action asks for is not needed for this half. No re-run of the 2026-08-28 report was required, and no ruling about whether a three-week-old log line counts.
+
+        THE NEXT_ACTION FRAMED THIS AS "decide as a fleet whether the darwin 2026-08-28 report's '[lua-expert] runtime initialized' answers the darwin half before re-running it". Both options were weaker than what is available: this host builds crates/tillandsias-plan constantly, and that crate is where the mlua dependency lives, so current Darwin evidence is one command away rather than a judgement about a stale artifact.
+
+        MEASURED 2026-09-17 on tlatoanis-macbook-air:
+          uname          Darwin 25.6.0 arm64
+          cc             Apple clang version 21.0.0 (clang-2100.3.34.2)
+          mlua features  vendored, lua54, send, serialize  (crates/tillandsias-plan/Cargo.toml)
+
+          cargo clean -p mlua-sys && cargo build -p tillandsias-plan --lib
+            -> Compiling mlua-sys v0.6.8
+            -> Compiling mlua v0.10.5
+            -> rc=0, 0 errors
+
+        THE CLEAN IS THE POINT, not decoration. `vendored` builds Lua from C source, so the criterion is really about a working C toolchain on this platform. A cached artifact would have produced an identical green while compiling nothing, which is the stale-artifact trap this fleet has paid for repeatedly. Cleaning mlua-sys specifically forces the C build to happen and be observed.
+
+        AND THE RUNTIME DOES MORE THAN LINK. cargo test -p tillandsias-plan --lib lua_runtime -> 7 passed, 0 failed:
+          lua_runtime_loads_init_script            the runtime initializes AND executes Lua
+          lua_runtime_blocks_os_execute            the sandbox holds
+          lua_runtime_blocks_debug_library         the sandbox holds
+          collect_survives_a_nil_answer_response
+          latency_tier_classification / latency_tier_budgets / every_servable_tier_is_reachable_from_classification
+        That is strictly stronger than the 2026-08-28 report's "[lua-expert] runtime initialized" line, which shows initialization only. These show script execution and that the deliberately-small-stdlib property actually holds on Darwin.
+
+        SCOPE, STATED SO IT IS NOT OVERREAD: this is the DARWIN half of task 4.5 only. Status returns to ready.
+          - The MSYS half is untouched and still needs a Windows host. windows-next was 0 ahead / 510 behind as of macuahuitl's 2026-09-17 report, so that lane is not currently producing evidence.
+          - 902-5bf9's own portability criterion is a DIFFERENT obligation and stays open. Its wording is "verified GREEN on linux, darwin AND msys before it is wired into --check", and the thing to be wired does not exist yet: `grep -c "steps:" scripts/run-litmus-test.sh` returns 0. The Cargo.toml comment says as much — mlua was landed for 920-pxg6 and "687eb6d57 originally miscited 902-5bf9, whose mlua-portability exit criterion is still open". So citing 902-5bf9's criterion as the standard for 920-pxg6's task 4.5 conflates two obligations: one is "does mlua-vendored build here", which is now answered, and the other is "is the steps form green on three platforms before wiring", which cannot be answered until the form exists.
+          - OpenSpec sync/archive, the other item in the next_action, is untouched.
+
+        I DID NOT TAKE THE SELECTOR'S WORD ON DEPENDENCIES, per macuahuitl's warning that it offered 804-deux as "deps clear" while that row's next_action opens "(a) IS BLOCKED ON 1183-j9dk". Nothing here rests on a deps-clear claim; the evidence is a build and a test run on this host.

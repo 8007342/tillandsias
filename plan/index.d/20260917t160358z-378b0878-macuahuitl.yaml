@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: progress
+      ts: "2026-09-17T16:03:58Z"
+      agent_id: linux-macuahuitl-claude-20260917t160358z
+      host: macuahuitl
+      summary: |
+        A WIRED GATE STEP WILL REFUSE THE REMAINING FIX, AND ITS REFUSAL MESSAGE IS
+        FALSE. Recorded here rather than left in a peer message, because the message
+        lives in one host's transcript and this is what the NEXT host needs.
+
+        scripts/test-uninstall-sweeps-both-app-dirs.sh is wired into the gate (build.sh
+        runs it directly, not through a .step file). One of its arms asserts TEXTUALLY
+        that the uninstall block must contain the literal string `pkill -TERM -f
+        tillandsias-tray`, failing with `block-does-not-stop-the-running-tray`.
+
+        The moment the Darwin matcher is narrowed — `pgrep -x`, a pidfile, launchctl,
+        or the lsof arm e2e-preflight uses — that grep misses and the gate refuses. The
+        refusal says the block does not stop the running tray. That is NOT what
+        happened: the block still stops the tray, by a different matcher. The fixture
+        pins the IMPLEMENTATION, and the implementation it pins is the exact string this
+        packet exists to remove. A reader who trusts the refusal will "fix" a correct
+        change back into the defect.
+
+        This is the pin-the-symptom-as-a-contract shape, and it is worth naming because
+        the fixture is otherwise well reasoned. Its comment explains why the assertion is
+        textual and never behavioural: a fixture that ran the real matcher would SIGKILL
+        a developer's live tray. That reasoning is correct and must be preserved. It is
+        the LITERAL that is wrong, not the textual approach. Preferred remedy: assert the
+        PROPERTY — some stop precedes the bundle deletion — rather than one spelling. If
+        it stays textual it must accept whatever form lands, with the reason written in
+        place, because the next person to narrow a matcher hits this again.
+
+        HOW IT WAS FOUND, because the finding method transfers further than the finding.
+        macbookair searched `git grep "pkill -f"` and got ZERO — the signal flag sits
+        between the command and the flag, so the live form is `pkill -TERM -f` and a
+        pattern four characters too literal made "zero" indistinguishable from "already
+        fixed". Measured here: `pkill -f` matches 1 file under scripts/, `pkill -[A-Z]+
+        -f` matches 6. The literal pattern missed five of six. No GUARD in the tree is
+        blind that way — the ones that scan for this include the signal — so the defect
+        was in a search, not in the checks.
+
+        AND THE SHARPER HALF, macbookair's, which is about controls rather than
+        patterns: their control for that search was `bin/bash\|bin/sh`, which also
+        returned zero — not because the instrument was broken but because these scripts
+        use `#!/usr/bin/env bash`. A control that asserts something untrue validates
+        nothing and produces the same artifact a working control produces. Their rule,
+        adopted here: pick controls true BY CONSTRUCTION (the file exists, the line count
+        is non-zero) rather than true by assumption about the corpus.
+
+        STALE LINE NUMBERS IN THIS ROW'S OWN CONTEXT. The context cites uninstall.sh:255
+        and :259 for the ladder. The guard commit added a comment block above them and
+        they are now :282 and :284. Same two sites, not a second pair. The base fragment
+        is immutable, so the correction lives here.

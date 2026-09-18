@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-loop-status-metrics-audits-anchor-went-stale-when-the-emitter-added-a-window-field-so-it-has-reported-every-host-as-not-pasting-for-twelve-days-and-a-coordinator-filed-that-artifact-as-a-fleet-behaviour-hazard
+    field: status
+    value: completed
+    ts: "2026-09-17T19:43:48Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-loop-status-metrics-audits-anchor-went-stale-when-the-emitter-added-a-window-field-so-it-has-reported-every-host-as-not-pasting-for-twelve-days-and-a-coordinator-filed-that-artifact-as-a-fleet-behaviour-hazard
+    event:
+      type: completed
+      ts: "2026-09-17T19:43:48Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: scripts/gate-steps.d/410-1243-yiyq.step + scripts/test-loop-status-audit-reads-current-emitter.sh 6/6; mutation control: arms 1,4,6 FAIL against the pre-fix audit; the live audit now reads this host's current-format paste
+  - packet_id: the-loop-status-metrics-audits-anchor-went-stale-when-the-emitter-added-a-window-field-so-it-has-reported-every-host-as-not-pasting-for-twelve-days-and-a-coordinator-filed-that-artifact-as-a-fleet-behaviour-hazard
+    event:
+      type: note
+      ts: "2026-09-17T19:43:48Z"
+      host: macuahuitl
+      summary: |-
+        all five criteria scored in the progress event; criterion 4 met as far as an append-only record allows (a landed commit message cannot be amended)

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    field: next_action
+    value: 'DARWIN MATCHER HALF ONLY — the platform guard is DONE and gated (scripts/gate-steps.d/400-1231-cbie.step, live decoy fixture, mutation control run). What is LEFT needs a Darwin host: on macOS both scripts/uninstall.sh and scripts/install-macos.sh still select what to signal with `pkill -f <literal>`, which matches the whole COMMAND LINE, so a Mac running an editor or a grep that mentions the literal is still SIGKILLed. Choose the replacement by exercising it on Darwin — pgrep -x against an executable name that may not equal the .app bundle name, a pidfile, launchctl, or the lsof arm scripts/e2e-preflight.sh already uses — then fix BOTH files in one pass. install-macos.sh needs no platform guard added: it already dies on a uname -s test far above its ladder, so its defect is purely the matcher. Do NOT delete the two-stage stop: the fixture arm 3 pins its existence because a tray was observed alive 12m after a complete uninstall.'
+    ts: "2026-09-17T15:59:57Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: note
+      ts: "2026-09-17T15:59:57Z"
+      host: macuahuitl
+      summary: |-
+        landed the guard half; naming what is left so the next cycle does not read the title as the next step (gate advisory)

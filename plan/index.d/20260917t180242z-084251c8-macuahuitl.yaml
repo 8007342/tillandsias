@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-workspace-test-step-tops-skippable-on-two-hosts-with-zero-failures-in-seven-days-which-is-both-the-case-for-memoising-it-and-the-reason-skipping-it-would-remove-the-only-regression-detector
+    event:
+      type: correction
+      ts: "2026-09-17T18:02:42Z"
+      agent_id: linux-macuahuitl-claude-20260917t180242z
+      host: macuahuitl
+      summary: |
+        CORRECTION TO THIS ROW'S CONTEXT — one paragraph of it is false, and the
+        finding it supports is unaffected.
+
+        WHAT IS WRONG. The context says two-host evidence had been unavailable because
+        "the practice had stopped" and cites 23 of 23 stems reading NOT-PASTING with the
+        newest paste dated 2026-09-05. That is an INSTRUMENT ARTIFACT, not a behaviour.
+        scripts/loop-status-metrics-audit.sh anchors on the literal
+        `skippable: candidates=`, and scripts/cycle-metrics.sh now emits
+        `skippable: window=7d candidates=`. The interposed `window=7d ` breaks the
+        match. Measured with a positive control: 8 entries since 2026-09-06 carry the
+        block in the new form, and ZERO entries in that window match the audit's own
+        anchor — so the anchor has matched nothing since the format changed, and every
+        NOT-PASTING verdict in that window carries no information. Filed as 1243-yiyq.
+
+        The sentence "the instrument was healthy the whole time (rows=23 stems=23, no
+        dropped stem)" is the worst part of what I wrote, because it is true and was
+        offered as reassurance. That check certifies ENUMERATION, not comprehension.
+
+        WHAT IS UNAFFECTED, stated precisely so this correction is not read as a
+        retraction of the packet. The two readings themselves were taken by hand from
+        the two hosts' own pasted blocks, not from the audit. Both numbers stand:
+          macuahuitl              runs=127 avg_ms=88768  fail_pct=0 saved_ms_upper=11184819
+          tlatoanis-macbook-air   runs=58  avg_ms=187344 fail_pct=0 saved_ms_upper=10678656
+        The same step tops skippable on both hosts; the second-ranked step matches too;
+        the memoisation-not-a-skip framing stands; saved_ms_upper is still an
+        unfalsifiable bound because the timing schema still records no input identity.
+        The trigger condition the coordination skill requires was genuinely met.
+
+        WHAT CHANGES IN THE STORY, honestly: the two-host comparison may have been
+        available EARLIER than 2026-09-17 and I could not see it, rather than becoming
+        available that day. I do not know how much earlier and am not guessing — the
+        8 invisible entries are this host's own, and whether other hosts' entries carry
+        the block is exactly the question the broken audit exists to answer and cannot.
+
+        WHY THIS IS APPENDED RATHER THAN EDITED. The fragment is immutable and its
+        context is the field a reader reaches first. An append-only record cannot have
+        its wrong claim removed, so the correction has to travel as its own event and be
+        findable from the same row. See also the same correction appended to
+        plan/issues/fleet-restart-2026-09-12.md, where I recorded the same false claim
+        as a fleet hazard.

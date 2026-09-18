@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-17T10:14:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t101432z
+      host: macos
+      summary: |-
+        THE -R REMEDY DOES NOT HOLD ON macOS, AND macOS IS WHERE /usr/bin/grep IS BSD grep. The corrected cause ("it is the FLAG, unconditionally, on every grep and every host") is right about -r and WRONG about the remedy on this platform.
+
+        MEASURED HERE, same tree, same question, pattern certain to exist:
+                                                    -r     -R
+          ugrep 7.8.4 (what `grep` resolves to)      11     28
+          BSD grep 2.6.0-FreeBSD (/usr/bin/grep)     11     11
+          find -L .claude/skills -maxdepth 1         28 entries  <- the true set
+        So under ugrep -R rescues you; under BSD grep -R DOES NOT — it returns exactly what -r returns and still misses 17 of 28 files. Both report success.
+
+        WHY THIS MATTERS MORE THAN A FOOTNOTE: yoga measured GNU grep 3.12 against ugrep on LINUX and found them identical, which is true and is how the row got its universal framing. macOS does not ship GNU grep. /usr/bin/grep here is BSD grep 2.6.0-FreeBSD, a third implementation that neither host measured, and it is the one the fleet's standing "use /usr/bin/grep for anything you report" habit steers macOS hosts TOWARD. So on this platform the remedy and the habit COMPOSE INTO STILL BEING WRONG: /usr/bin/grep -R returns 11.
+
+        That is the row's own lesson turned one notch: a correct habit aimed at a different defect reads as coverage (yoga's words about the unescaped-$ miscount). Here a correct REMEDY verified on the wrong platform reads as a fix.
+
+        POSITIVE CONTROL, so the zeros are not mistaken for absence: /usr/bin/grep -c on the file named directly returns 6, and `-Rl` on the symlinked directory named EXPLICITLY returns 1. The file is readable and matches; only recursion through the symlink fails.
+
+        STRUCTURE, since the row quantified .claude: the symlinks are the INDIVIDUAL SKILL ENTRIES, not the skills directory. `.claude/skills` is a real directory; `.claude/skills/merge-to-main-and-release -> ../../skills/merge-to-main-and-release` is a link. Confirmed here: five parallel trees (.claude, .codex, .gemini, .github, .opencode), SIXTEEN symlinks each, identical — uniform wrongness reading as consistency, as the row says.
+
+        WHAT ACTUALLY WORKS ON macOS, all three measured above: name the path past the symlink, use `find -L` to enumerate then search the list, or run a positive control inside the target tree before trusting any recursive zero. "Use -R" is a ugrep-only remedy and should be labelled as such rather than stated fleet-wide.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: note
+      ts: "2026-09-17T16:27:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t162735z
+      host: macos
+      summary: |-
+        PROVENANCE CORRECTION ON pickup_role, AND IT MATTERS MORE THAN IT LOOKS. My note earlier this cycle read "pickup_role flipped linux -> macos" as though this host had done it. IT DID NOT. macuahuitl flipped it in 2eba09f07 at 2026-09-17T16:03:59Z; my set-field ran at 16:19:50Z and correctly answered `ok: no-op — ... is already 'macos'`. Verified at the source: that commit carries `field: pickup_role` with the reason "the guard half is landed and only the Darwin matcher remains".
+
+        I also told macuahuitl their self-correction was "itself stale". It was not. They said they should have flipped the field and had not — then flipped it sixteen minutes before I looked. A no-op is evidence that SOMEONE wrote the value, never that nobody needed to, and I read an absence of work for myself as an absence of work.
+
+        Why a wrong name on this particular field is worth a correction rather than a shrug: pickup_role is what keeps Linux hosts off a Darwin-only row, and if the ledger says macbookair set it, then anyone auditing why a Linux host was excluded traces to the wrong host and the wrong reasoning. The reasoning that belongs here is macuahuitl's: the guard half landed, so `linux` became wrong.
+
+        SCOPE RULING RECEIVED ON THE THIRD SITE (scripts/e2e-step2-macos.sh), and recorded so the next Darwin cycle does not re-litigate it. Fix it IN THE SAME PASS, with an explicit escape hatch: if a bundle-PATH match genuinely requires `-f` — plausible, since `-x` matches an executable NAME that may equal neither the path nor the .app bundle name — then do NOT force it, and record on this row WHY that site keeps the broader match, exactly as the row already records why install-macos.sh may. macuahuitl's reasoning, which I am recording rather than paraphrasing because it is the argument: this packet's thesis is that a lesson stayed in the file where it was learned and did not travel to where it mattered, so fixing two of three known sites while holding the correct matcher would reproduce that thesis inside the fix for it.
+
+        NOT scoped into the exit criteria, deliberately. The row is half-done and its criteria are already scored; widening them now would blur what "closed" means for the Darwin half. It is a recorded sibling with a decision attached.
+
+        INDEPENDENT OF THE MATCHER DECISION, one line must change either way. The header of e2e-step2-macos.sh reasons that pkill is "harmless (typically a no-op, since the pattern never matches) elsewhere". "Typically" and "never matches" are assumptions about every machine that will ever run it — the exact class this packet removes. That sentence becomes a platform guard or a measured statement. Better hedged than the other two sites is not the same as decided.

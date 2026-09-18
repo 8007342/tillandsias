@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    event:
+      type: note
+      ts: "2026-09-17T01:01:44Z"
+      agent_id: linux-macuahuitl-claude-20260917t010144z
+      host: macuahuitl
+      summary: |
+        PREMISE CORRECTED BEFORE ANYONE ACTS ON IT. The row named the TIMING LOG as the
+        growing corpus. That is WRONG, and the obvious remedy it implies — rotate
+        .cache/metrics/tillandsias-timing.jsonl — buys nothing. Measured
+        non-destructively (full log copied aside, truncated, restored):
+
+          115,860 records  ->  29,908 ms
+           40,000 records  ->  28,927 ms
+           20,000 records  ->  28,622 ms
+
+        Cutting the corpus to 17% of its size returned 4% of the time. The timing log is
+        not where the 30 seconds goes, and a host that rotated it would find the gate
+        still red and conclude the measurement was wrong rather than the premise.
+
+        WHERE THE TIME ACTUALLY GOES, same host, same conditions:
+          tillandsias-plan grade over the committed groundtruth glob   18,291 ms
+          the same grade with the spec index made unavailable          18,512 ms
+        So the grade is 61% of cycle-metrics.sh on its own, and it is NOT the spec
+        index — removing the index changes nothing. What remains is the PLAN LEDGER:
+        the grader folds plan/index.yaml plus its fragments, and that is the corpus that
+        grows with every packet the fleet files.
+
+        THE ROW'S CLAIM SURVIVES AND ITS SUBJECT CHANGES. Budgets calibrated against a
+        corpus that only grows, monotonic in fleet activity, no floor, reaching the
+        fastest host eventually — all of that still holds. The corpus is the LEDGER, not
+        the telemetry log. That distinction decides the remedy completely: telemetry is
+        a rotatable cache and the ledger is the product, append-only by design, so
+        "bound the corpus" is not available here and the fix has to be on the reader.
+
+        AND THE REMEDY IS ALREADY A FILED ROW: 964-tzmp `gate-shared-ledger-parse`,
+        p1, ready, unleased, 6h estimated, whose title is "One warm --check makes ~108
+        ledger-loading tillandsias-plan invocations (~59s on the N150, ~26% of the warm
+        gate) — parse the ledger ONCE per gate and let the checks consume the fold", and
+        whose deliverable is already written: a per-gate folded snapshot or a warm
+        plan-binary server, with invocation count and per-step wall measured before and
+        after on macuahuitl and on a floor host, and verdict behaviour unchanged on a
+        deliberately-broken tree.
+
+        So this row should not spawn a design. It should point at 964-tzmp, contribute
+        these five budget kills as the release-blocking consequence that row did not yet
+        have, and stop. The capability is one axis over and already specified — the
+        fifth time tonight that has been the answer.

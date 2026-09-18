@@ -720,3 +720,177 @@ looked"* will eventually be read as the former.
   order — a rustfmt difference between hosts, not a logic change. Took trunk's
   on merge. Worth knowing before the next relay: my fmt and macuahuitl's
   (1.9.0-stable, 48a229ceae) disagree on import ordering.
+
+- 2026-09-17 — Operator ruling on guest VM memory, filed 1235-kjdf and gated
+  green: 8 GiB ceiling regardless of host RAM, 4 GiB of guest on an 8 GiB host.
+  Implemented as two constants (`GUEST_MAX_MEMORY_BYTES`,
+  `HOST_RESERVED_MEMORY_BYTES`) so both of the operator's numbers fall out of
+  the existing derivation in `guest_sizing` rather than being special-cased.
+  It partially reverses 978-juw4 and the constant's doc comment says so; the
+  reserve was revalued rather than deleted, so that order's structure — reserve
+  authoritative, no lower clamp, loud refusal on a too-small host — survives.
+- 2026-09-17 — Ephemerality asked for by the ruling turned out to need NO code,
+  and I verified that rather than asserting it: `guest_sizing` has exactly one
+  production call site, inside `VzRuntime::start`, feeding the boot spec's
+  `setMemorySize`; `VzBootConfig` has no serde derive and its `defaults()` is
+  reached only from tests. Nothing about RAM is persisted, so latest-config-wins
+  already holds by construction.
+- 2026-09-17 — I put a clippy hard error on trunk (`useless_format`, via
+  macuahuitl's 690-w94k relay) and it was red for every macOS build for hours.
+  Filed 1235-rfub. The lesson is not "run clippy" but WHERE the blindness is:
+  the relaying Linux gate compiles stubs for the cfg-gated tray modules, and my
+  own two checks were blind in the same direction — `--bins` runs no lints,
+  `zigbuild --target x86_64-unknown-linux-musl` compiles the other side. On a
+  cfg-gated crate, lint natively with `--all-targets` before any relay.
+- 2026-09-17 — Land lost the mandated-merge race and I stopped at two attempts
+  BY ARITHMETIC rather than by feel: trunk's median inter-commit interval
+  measured 177 s against a multi-minute gate, matching macneo's ~3 min vs
+  ~17 min figure. Took the relay ref the land script names. Measuring the
+  branch being pushed would have said "quiet, spend the gate" — the ref that
+  matters is the one the refusal names.
+
+- 2026-09-17 — Filed 1238-b825 after the operator found a CalVer build stamping
+  a date four days stale (`56.9.13.1` built on 2026-09-17). The encoding makes
+  the date load-bearing: `bump-version.sh` documents
+  `<years_since_epoch>.<month>.<day>.<build>`, so 56 = 2026 and the version
+  literally names 2026-09-13.
+- 2026-09-17 — I then published a FALSE universal negative in that row — "NO
+  release path invokes bump-version.sh" — and put it in a message telling
+  macuahuitl to check before cutting. The release runbook invokes it twice.
+  Corrected at e756a912c; the released artifact was always fine and the row is
+  not a cut blocker.
+- 2026-09-17 — THE CAUSE IS AN INSTRUMENT DEFECT AND IT IS INVISIBLE: `grep`
+  here wraps ugrep 7.8.4, whose `-r` does not follow symlinks, and the
+  `.claude/skills/` directories ARE symlinks. `grep -rln ... .claude/skills/`
+  returns 0 hits with EXIT CODE 0 — it reports success having descended into
+  nothing. `-R` finds it. There is no error to suppress or un-suppress, so
+  re-running "more carefully" changes nothing. Use `-R` for anything crossing
+  `.claude/`, and run a positive control inside the target tree before trusting
+  a recursive negative.
+- 2026-09-17 — Second time in one evening I matched a PATTERN and concluded
+  about a THING: earlier the `pgrep` for a live tray matched a `--github-login`
+  one-shot sharing the binary path, voiding a 1224-zpek measurement I had
+  already called decisive. Both were caught by someone checking, not by me.
+
+- 2026-09-17 — 718-jqt5 criterion 2 landed (2c194550c). The real work was not
+  the routing but making criterion 1's projection REACHABLE: it lived in
+  main.rs's CLI arm while `answer_question` lives in the library, so "route
+  through it" was unimplementable until it moved to
+  `crates/tillandsias-plan/src/forgotten.rs`. Extracted, not reimplemented —
+  a second copy would pass criterion 4's same-set control the day it was
+  written and drift after.
+- 2026-09-17 — Held the extraction down on purpose: the arm used
+  `query_packets` with only the status filter, so moving all 107 lines would
+  have dragged in role/claimability rulings this projection never consults.
+  Equivalence proven BY BYTES (417 rows identical at a fixed epoch) with a
+  control, not by reading the diff.
+- 2026-09-17 — My classifier was wrong and the test caught it: fixed phrases
+  missed "which packets IS NOBODY working on" because the auxiliary moves
+  ahead of the subject. Enumerating word orders loses; co-occurrence does not.
+  Unstaged falsification, 2/1 red then 3/0 green.
+- 2026-09-17 — Ran `cargo clippy -p <crate> --all-targets -- -D warnings`
+  natively BEFORE landing, which is the rule last night's trunk-red cost me.
+  It caught dead originals I had moved without deleting, and an imprecise span
+  cut that stranded a test plus the rationale explaining why the projection
+  takes no seed — criterion 4's actual substance. Moved it rather than
+  deleting it.
+
+- 2026-09-17 — 718-jqt5 criterion 3 delivered, and the projection earned its
+  keep on its first real run: `socket-audit-master` (order 151) is the ONLY
+  epic head of fourteen that is not `kind: milestone`. It is ready,
+  `audit+refactor`, has 31 children naming it, heads the highest-residual epic
+  — and the selector structurally cannot offer it, because membership is
+  `release_target` and a head belongs to no epic. Filed 1239-cges.
+- 2026-09-17 — Measured the negative rather than asserting it: 20 seeds x
+  budget 6 offered 14 distinct packets, zero overlap with the forgotten
+  top-12, plus a positive control proving the intersection can find overlap.
+  The selector chose exactly three epics across all 20 seeds.
+- 2026-09-17 — MY FIRST MECHANISM WAS WRONG AND THE FOLD CAUGHT IT. I proposed
+  the rows were unreachable because they were UNGROUPED; 11 of 12 in fact carry
+  a release_target. I had inferred "ungrouped" from `status` printing three
+  fields, after seeing `answer` print six — two commands, two output shapes,
+  and I read the shape as data. Third time in two days I concluded from a
+  tool's rendering rather than from the data it renders.
+- 2026-09-17 — Classes 2 and 3 (rank-4 epic, below-frontier epic; 0 of 20
+  seeds each) are starved BY DESIGN — top-3 entropy is documented — so only
+  class 1 was filed. A measured gap is not automatically a defect.
+
+- 2026-09-17 — 718-jqt5 CLOSED completed with evidence: criteria 1-4 delivered
+  across three cycles (crit 1 yoga; crit 2 2c194550c; crit 3 e90fe9e25 plus
+  1239-cges; crit 4 e123565fe). The closing gate refused `completed` until an
+  `--evidence` ref was supplied, which is 650-dq6u doing exactly its job.
+- 2026-09-17 — Criterion 4 corrected a measurement I had carried myself: the
+  module comment said "461 of 461 ready packets carry NO events" (2026-09-06);
+  re-measured 505 rows, 139 eventless, 366 EVENTED. I moved that comment into
+  the library verbatim the day before without re-running it.
+- 2026-09-17 — The worry it raised was refuted by measuring rather than
+  assuming: a uniform clock shift does NOT reorder the list, because age_days
+  derives from a shared `now`, so every age moves together. Pinned against the
+  live ledger across 40 days, falsified with a cmp-proven mutation.
+- 2026-09-17 — Land lost the mandated-merge race once, then succeeded on the
+  retry. The retry was ARITHMETIC, not preference: trunk moved 4 times in the
+  hour (~900s) against a ~500s gate, so the land script's own criterion
+  favoured one more gate — the mirror of the 177s case where it favoured the
+  relay ref. Second attempt landed via `ok:land-adopts-valid-stamp`, the path
+  I wrongly called unreachable on this host two days running.
+- 2026-09-17 — Accepted 1231-cbie's Darwin half. Verification found a THIRD
+  production site (`e2e-step2-macos.sh`, full-bundle-path match, narrower blast
+  radius) and confirmed a wired gate step pins the exact literal the packet
+  removes, failing with a message that blames a property which still holds.
+
+- 2026-09-17 — 1231-cbie CLOSED completed (9f864f9e2). The Darwin half: matcher
+  narrowed `-f` -> `-x` across seven sites in two files plus a third under
+  macuahuitl's scope ruling. Three facts a Linux host could not establish:
+  CFBundleExecutable (`tillandsias-tray`) DIFFERS from CFBundleName
+  (`Tillandsias`); the 16-char name does not truncate under `pgrep -x`; and a
+  live `tail -f .../tillandsias-tray.log` is matched by `-f` and spared by `-x`.
+- 2026-09-17 — THREE GAPS IN MY OWN WORK, each found by reading criteria rather
+  than trusting a green. (a) The criteria asked for a FIXTURE; I had proven the
+  behaviour interactively and nearly closed on that. (b) The fixture's first
+  draft truncated the extracted block, eval died on a syntax error, `|| true`
+  swallowed it, and ARM 1 PASSED WITH NOTHING EXECUTED — the negative control
+  caught it. (c) Criterion 2 names "the uninstall OR INSTALL path" and my
+  fixture touched only the uninstaller.
+- 2026-09-17 — Falsifications made DISCRIMINATING, not just red/green: mutating
+  only install-macos.sh turned ARM 3 red while ARM 1 stayed green. An arm that
+  fires on the wrong file's defect teaches nothing about what it tests.
+- 2026-09-17 — TWO fixtures pinned the literal, not the one macuahuitl warned
+  of; ARM 3 of their own newly-landed guard did too, reporting "the tray stop
+  was removed" about a stop still present. Both now assert the property.
+- 2026-09-17 — Third zsh word-splitting bite of the day, this time inside the
+  829-dkuc mutation proof itself: `set -- $pair` does not split in zsh, so `cmp`
+  compared two empty names and reported "changed" unconditionally. The proof
+  that a mutation applied was itself vacuous. Redone with explicit names and a
+  control on cmp.
+- 2026-09-17 — Left UNMEASURED rather than asserted: install-macos.sh's
+  graceful quit names `tillandsias-tray` while CFBundleName is `Tillandsias`.
+  Probing with no tray running returned rc=0 for both names — inconclusive, so
+  it is not claimed broken.
+
+- 2026-09-18 — 920-pxg6 task 4.5 darwin half delivered with FRESH evidence
+  rather than a fleet ruling on a three-week-old log line: `cargo clean -p
+  mlua-sys` then rebuild (mlua-sys 0.6.8 + mlua 0.10.5, rc=0) plus lua_runtime
+  7/7 on Darwin 25.6.0 / Apple clang 21. The clean is the load-bearing part —
+  `vendored` builds Lua from C source, and a cached artifact greens without
+  compiling anything.
+- 2026-09-18 — Found a conflation in that row: task 4.5 cites 902-5bf9's
+  criterion, but 902-5bf9's is "green on three platforms BEFORE IT IS WIRED
+  INTO --check" and the thing to be wired does not exist (`steps:` → 0 hits in
+  run-litmus-test.sh). Two obligations, one citation. macuahuitl re-verified
+  with a second grep and a positive control before recording it.
+- 2026-09-18 — I put a point-in-time branch count ("510 behind") into an
+  IMMUTABLE row. Re-measured 532; macuahuitl had said 528; their four readings
+  today were 493/510/515/528. The defect was not the wrong number but a moving
+  measurement written as a bare fact in an append-only artifact. Either stamp
+  it with when-and-how, or state the PROPERTY it was evidence for.
+- 2026-09-18 — 781-hseq re-measured a month-old orphan claim and confirmed it
+  with a method the original lacked: it searched the MODULE PATH
+  `tillandsias_logging::query`, which cannot see consumption through the crate
+  root re-export (`pub use query::{AggregationOp, Filter, JsonFilter, Query,
+  QueryExecutor, parse}` in the logging crate's lib). Enumerated the class (module path, brace import,
+  each re-exported symbol, qualified paths) and ran a positive control showing
+  the crate IS consumed (BudgetEnforcer, CardinalityAnalyzer) so the zeros are
+  about query specifically, not a dead crate or a broken search.
+- 2026-09-18 — Left 781-hseq's DECISION to its owner. Wiring adds a product
+  surface; tombstoning deletes 747 spec-traced lines. Neither should happen
+  because a cycle selected an unowned p3.

@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: progress
+      ts: "2026-09-17T15:43:29Z"
+      agent_id: linux-macuahuitl-claude-20260917t154329z
+      host: macuahuitl
+      summary: |
+        GUARD HALF LANDED; MATCHER HALF STILL OPEN — the row stays ready on purpose.
+
+        WHAT IS LEFT, first, because that is what the next host needs. On DARWIN both
+        scripts still select the process to signal by `pkill -f <literal>`, which matches
+        the whole COMMAND LINE. A Mac running an editor, a grep or an agent shell whose
+        argv carries the literal is still a match, and still gets SIGTERM then SIGKILL.
+        Choosing the replacement — `pgrep -x` against an executable name that may not
+        equal the .app bundle name, a pidfile, launchctl, or the lsof arm
+        scripts/e2e-preflight.sh already uses — must be exercised ON a Darwin host.
+        macbookair-macos is the capability; it was offline 2026-09-16. Nothing in this
+        cycle narrowed the matcher, and no Linux fixture can decide it.
+
+        WHAT LANDED. scripts/uninstall.sh's two-stage tray stop is now wrapped in
+        `if [[ "$IS_MACOS" == true ]]`. The block used to begin at COLUMN 0 with the
+        nearest guard six sections away, under a heading that read as scope and was not.
+
+        HOW IT IS HELD. scripts/test-uninstall-tray-stop-is-macos-only.sh, 3 arms, wired
+        as scripts/gate-steps.d/400-1231-cbie.step. The teeth are a LIVE DECOY: a real
+        process whose argv carries the literal must survive a Linux uninstall. Source
+        shape was rejected as the check — a guard that reads the file cannot tell a
+        platform test from a comment about one, and would go green the moment the
+        condition moved into a helper. MUTATION CONTROL RUN, not assumed: with the fix
+        reverted, arm 1 FAILS with "the decoy was KILLED by a Linux uninstall"; restored,
+        3/3.
+
+        Arms 2 and 3 exist because arm 1 alone cannot tell a fix from a deletion. Arm 2
+        is a positive control under a forced Darwin identity, observing IS_MACOS=true via
+        bash -x, so a pass caused by a broken platform probe is distinguishable from a
+        pass caused by the guard. Arm 3 asserts the two-stage stop still EXISTS for
+        Darwin — deleting it would satisfy arm 1 forever and strip macOS of the stop the
+        row's own context says is load-bearing (a pid alive 12m after a complete
+        uninstall, observed on tlatoanis-macbook-air 2026-08-30).
+
+        EXIT CRITERIA, scored one by one rather than in aggregate:
+          1 MET. Both platform arms driven through TILLANDSIAS_UNINSTALL_FAKE_UNAME;
+            pre-fix FAILS as the criterion requires.
+          2 HALF. The Linux decoy survives. The Darwin-side selector is untouched in
+            both files, so the criterion as written is NOT met.
+          3 MET structurally: arm 3 pins the Darwin stop as present, guarded not deleted.
+          4 NOT MET. A genuinely running tray being stopped on macOS needs Darwin.
+          5 MET, via the criterion's own second branch — the row records why the
+            INSTALLER may keep the broader match. Measured here rather than assumed:
+            scripts/install-macos.sh:78 is a hard `[[ "$(uname -s)" == "Darwin" ]] || die`,
+            63 lines ABOVE the ladder at :141-150. So the installer cannot reach its kill
+            ladder off-Darwin at all; the cross-platform blast radius that made this row
+            p1 never existed there. What remains in install-macos.sh is the SAME Darwin
+            matcher half as uninstall.sh, and it should be fixed in the same pass as its
+            sibling rather than tracked apart.
+
+        WHERE THE STEP LIVES, and why not the fast-refusal lane. MEASURED on macuahuitl
+        2026-09-17: 1.55s / 1.55s / 1.53s over three runs. The fast lane's admission rule
+        is "median under a second, decidable from the working tree alone", and this cost
+        is structural — the decoy must be RUNNING while the uninstall runs, so the settle
+        interval cannot come out without the teeth coming out with it. It was written
+        inline in build.sh first and moved; the inline form was also the sixth instance
+        of the merge-collision shape order 1072-b7eq converted the region away from.
+        build.sh is byte-identical to its previous commit as a result.
+
+        AN INSTRUMENT GAP FOUND WHILE PROVING THIS, worth its own row. Activation could
+        not be confirmed by asking scripts/audit-guard-activation.sh: its population is
+        `check-*.sh` by construction (its own comment at :59 says so), so a `test-*.sh`
+        fixture is invisible to it whether it is wired inline or as a .step. It printed
+        0 matches and verdict=ok in BOTH states, which is the shape where a broken
+        instrument and a clean result print the same bytes. Most of the 77 files in
+        scripts/gate-steps.d bind test-*.sh scripts and no orphan detector enumerates
+        them. Activation here is therefore proved by what RAN — the gate log carries the
+        step's STEP_DESC — and not by an auditor's silence.

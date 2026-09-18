@@ -1,0 +1,51 @@
+# Gate step 1231-cbie — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. scripts/uninstall.sh stopped the macOS tray with
+# `pkill -TERM -f <tray literal>` then `pkill -KILL -f` the same, at column 0
+# under a "macOS desktop cleanup" heading — no platform test anywhere on the
+# path. uninstall.sh is a SHIPPED RELEASE ARTIFACT, so the reach was every
+# machine that installs a release and later uninstalls it, not just this
+# checkout. `-f` matches the whole COMMAND LINE, so on a Linux or Windows host
+# the ladder SIGKILLed anything that merely MENTIONED the literal: an editor
+# holding the file open, a grep for it, another agent's shell.
+#
+# WHY A LIVE DECOY AND NOT A SOURCE-SHAPE CHECK. Reading uninstall.sh for an
+# `if [[ $IS_MACOS ]]` around the ladder is the mention-versus-use trap
+# (a-guard-cannot-tell-mention-from-use): the guard would pass on a file that
+# merely DISCUSSES the platform test, and it would go green the moment someone
+# reorganises the condition into a helper. So arm 1 starts a real process whose
+# argv carries the literal, runs a real Linux uninstall, and asserts the decoy
+# is STILL ALIVE afterwards. Pre-fix that arm FAILS ("the decoy was KILLED by a
+# Linux uninstall") — the mutation control was run, not assumed.
+#
+# THE OTHER TWO ARMS EXIST BECAUSE ARM 1 ALONE CANNOT TELL A FIX FROM A
+# DELETION. Arm 2 is a positive control: under a forced Darwin identity the
+# guarded branch is REACHED (`IS_MACOS=true` observed via `bash -x`), so a
+# fixture that passes because the platform probe broke is distinguishable from
+# one that passes because the guard works. Arm 3 asserts the two-stage stop
+# still EXISTS for Darwin — deleting the ladder outright would satisfy arm 1
+# forever and silently strip macOS's uninstall of its tray stop.
+#
+# WHAT THIS DOES NOT COVER, and it is half the order — NOW COVERED ELSEWHERE.
+# This step proves only that the blast radius is confined to Darwin. The matcher
+# itself was narrowed from `-f` to `-x` on 2026-09-17 after a Darwin host
+# measured it, and the bystander-safety half is guarded by the sibling step
+# 401-1231-cbie-matcher (scripts/test-uninstall-matcher-spares-bystanders.sh).
+# Keep the two separate: this one runs anywhere, that one can only run on Darwin
+# and skips when a live tray is present.
+#
+# NOT IN THE FAST-REFUSAL LANE, deliberately. MEASURED here 2026-09-17:
+# 1.55s / 1.55s / 1.53s over three runs. That lane's admission rule is "median
+# under a second, decidable from the working tree alone", and this fixture's
+# cost is structural — the decoy must actually be RUNNING while the uninstall
+# runs, so the settle interval cannot be removed without removing the teeth.
+# Its fast-lane sibling check-order-citations-resolve.sh (1234-zade) measures
+# 0.05s and correctly stays there.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the uninstaller's tray stop cannot fire off-Darwin (1231-cbie)"
+STEP_SCRIPT="scripts/test-uninstall-tray-stop-is-macos-only.sh"
+STEP_ERROR="a Linux uninstall killed a process that merely MENTIONED the tray literal (1231-cbie) — uninstall.sh is a shipped artifact; see which arm failed above"
+STEP_OK="Uninstaller tray-stop platform confinement passed"

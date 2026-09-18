@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-ghost-trace-guard-validates-spec-references-and-ignores-order-references-so-a-fabricated-order-citation-passes-every-gate
+    order: 1234-zade
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [gate, traceability, citation, ledger, ghost-trace]
+    estimated_hours: 3
+    owned_files:
+      - scripts/validate-traces.sh
+    title: |
+      the ghost-trace guard validates `spec:` references and does not look at `order:` at all, so a fabricated order citation passes every gate — ten landed in one night
+    context: |
+      MEASURED 2026-09-17, after yoga-silverblue self-reported it and I verified
+      the gap rather than the instances.
+      THE INSTANCES, on the landed tree: `1232-wire3` appears SEVEN times in
+      crates/tillandsias-plan (answer.rs and groundtruth.rs), bare `ORDER 1233`
+      once in crates/tillandsias-headless/src/main.rs, and `ORDER 1234` twice
+      more in an unlanded commit. `tillandsias-plan status` on each:
+        1233         NOT FILED
+        1234         NOT FILED
+        1232-wire3   NOT FILED
+        1232-av4p    EXISTS — a row about an unreachable forge session's claims
+      So a reader following `1232-wire3` lands on a packet about forge salvage
+      and finds nothing about citation frames. A bare `1233` reads as malformed
+      and gets questioned; an INVENTED SUFFIX on a real order reads as a
+      legitimate sub-designation and does not. The second is the dangerous form.
+      THE GAP, checked at the source rather than inferred: `grep -c order
+      scripts/validate-traces.sh` is ZERO. The validator's own header says it
+      detects "ghost traces, orphaned specs, and format violations" — for
+      SPECS. The documented annotation form carries both
+      (`# @trace order:859-4jny, spec:ci-release`, land-on-platform-branch.sh),
+      and 216 distinct `@trace order:` citations exist across .sh and .rs in
+      this tree. Not one of them is validated against the ledger by anything.
+      THE CAPABILITY IS ONE AXIS OVER AND UNBUILT, which is this fleet's
+      recurring shape: the ghost-trace CONCEPT exists, is implemented, and is
+      wired into the gate — for the other half of the same annotation. Order
+      uniqueness is checked (`plan-order` asserts no two FILED packets share an
+      id) and order EXISTENCE is not, so the guard answers "are the filed rows
+      distinct" and never "does this citation point at a row".
+      WHY IT MATTERS MORE THAN IT LOOKS. An order citation is how a reader gets
+      from code to the reasoning behind it. A citation that resolves to nothing
+      wastes a lookup; a citation that resolves to the WRONG row actively
+      misleads, and the ledger is append-only so the wrong pointer is permanent.
+      This is the same class as 881-29me (a line citation that no longer points
+      where it claims) and 885-92iu (a closure pinning a litmus nothing
+      defines) — both of which ARE gated. Orders are the one citation kind with
+      no resolver.
+      NOT ARGUING FOR A HARD GATE ON EVERY CITATION IMMEDIATELY. 216 existing
+      citations have never been checked and some will not resolve for legitimate
+      reasons (archived packets, orders that predate the id scheme). The first
+      run should report rather than refuse, exactly as the stale-ready-rows pass
+      does, and the ratchet should start from whatever that first count is.
+    exit_criteria:
+      - 'an ADDED `@trace order:<id>` or `ORDER <id>` citation whose id is not a filed packet is reported by name (pre-fix result: FAILS — ten fabricated citations across two landed commits and one unlanded one passed ./build.sh --check and a full ci-full, and grep -c order scripts/validate-traces.sh is 0)'
+      - 'an invented SUFFIX on a real order (`1232-wire3` where `1232-av4p` exists) is caught, not merely a bare number — the suffixed form is the one that reads as legitimate'
+      - 'the 216 pre-existing citations are COUNTED and reported on the first run rather than refused, and the ratchet starts from that count so the guard can land without a sweep'
+      - 'NEGATIVE CONTROL: a citation to an ARCHIVED packet still resolves — an order does not stop existing when its row is archived, and treating that as a ghost would make the guard wrong on the oldest and best-traced code'
+    verifiable_closure: |
+      litmus:spec-traceability-shape — extended with three arms: an added
+      citation to an order that is not filed is named; an added citation to an
+      invented SUFFIX on a real order is named; and a citation to an ARCHIVED
+      packet still resolves. That litmus is pinned because it EXISTS and already
+      owns the traceability annotation; the obvious-sounding ghost-trace-ratchet
+      name has no litmus behind it, which I checked before filing rather than
+      letting 885-92iu tell me at the gate — the same mistake this row is about,
+      one citation kind over.
+    events:
+      - type: filed
+        ts: "2026-09-17T00:55:00Z"
+        agent_id: "linux-macuahuitl-claude-20260917t005500z"
+        host: macuahuitl
+        summary: |-
+          yoga-silverblue self-reported the ten citations after I questioned one
+          bare `1233` in a commit subject, and named the sharper half themselves:
+          the bare form is the tell, an invented suffix on a real order is not.
+          They are correcting the citations by appending rather than amending,
+          so that a fabricated order citation passing every gate stays visible.
+          This row is the gap, not the instances.

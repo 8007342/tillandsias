@@ -38,7 +38,7 @@
 #
 # ── VERDICTS (stdout, last line) ─────────────────────────────────────────────
 #   ok:salvage-audit:<refs>r:<with>w:<files>f:branch=<b>   audited; <with> refs hold something
-#   skipped:salvage-audit:no-refs:<pattern>                nothing matched
+#   skipped:salvage-audit:no-refs:<patterns>               nothing matched
 #   fail:salvage-audit:unknown-argument:<arg>              nothing was examined
 #   fail:salvage-audit:missing-value:<flag>                nothing was examined
 #   fail:salvage-audit:bad-branch:<ref>                    nothing was examined
@@ -47,13 +47,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
 BRANCH="origin/linux-next"
-PATTERN="refs/heads/salvage/*"
 REMOTE="origin"
+# BOTH STRANDING SURFACES BY DEFAULT (order 1227-fegu). The first version audited
+# only salvage/*, and MEASURED 2026-09-16 that is the SMALLER half: 12 salvage
+# refs against 24 work refs. Worse, work/ is where the land tool's own refusal
+# text TELLS a blocked host to put a gated tree when it cannot win the race —
+# so the namespace a stranded host is instructed to use was the one this audit
+# did not look at. It found an eleven-day-old lenovinha ledger event there the
+# first time anyone pointed it at work/.
+PATTERNS="refs/heads/salvage/* refs/heads/work/*"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --branch)  [ $# -ge 2 ] || { echo "  --branch needs a value; nothing was examined" >&2; echo "fail:salvage-audit:missing-value:--branch"; exit 0; }; BRANCH="$2"; shift 2 ;;
-        --pattern) [ $# -ge 2 ] || { echo "  --pattern needs a value; nothing was examined" >&2; echo "fail:salvage-audit:missing-value:--pattern"; exit 0; }; PATTERN="$2"; shift 2 ;;
+        --pattern) [ $# -ge 2 ] || { echo "  --pattern needs a value; nothing was examined" >&2; echo "fail:salvage-audit:missing-value:--pattern"; exit 0; }; PATTERNS="$2"; shift 2 ;;
         --remote)  [ $# -ge 2 ] || { echo "  --remote needs a value; nothing was examined" >&2; echo "fail:salvage-audit:missing-value:--remote"; exit 0; }; REMOTE="$2"; shift 2 ;;
         -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" >&2; exit 0 ;;
         *) echo "  nothing was examined. usage: $(basename "${BASH_SOURCE[0]}") [--branch <ref>] [--pattern <glob>] [--remote <name>]" >&2
@@ -70,24 +77,29 @@ git rev-parse --verify "$BRANCH" >/dev/null 2>&1 || {
 # Fetch the refs into remote-tracking names so blob lookups work offline of the
 # remote. A fetch failure is NOT fatal: locally-known refs are still auditable,
 # and saying so beats refusing.
-git fetch -q "$REMOTE" "+${PATTERN}:refs/remotes/${REMOTE}/${PATTERN#refs/heads/}" 2>/dev/null || \
-    echo "  note: could not fetch $PATTERN from $REMOTE; auditing locally-known refs only" >&2
-
-# for-each-ref takes a PREFIX, not a shell glob: a trailing `/*` matches nothing
-# here and returns an empty list, which would read as "nothing is stranded" —
-# the exact false-negative this script exists to prevent, in its own lookup.
-local_pat="refs/remotes/${REMOTE}/${PATTERN#refs/heads/}"
-local_pat="${local_pat%/\*}"
-refs="$(git for-each-ref --format='%(refname)' "$local_pat" 2>/dev/null)"
+refs=""
+for _pat in $PATTERNS; do
+    git fetch -q "$REMOTE" "+${_pat}:refs/remotes/${REMOTE}/${_pat#refs/heads/}" 2>/dev/null || \
+        echo "  note: could not fetch $_pat from $REMOTE; auditing locally-known refs only" >&2
+    # for-each-ref takes a PREFIX, not a shell glob: a trailing `/*` matches
+    # nothing here and returns an empty list, which would read as "nothing is
+    # stranded" — the exact false-negative this script exists to prevent, in its
+    # own lookup. Arm 1 of the fixture pins it.
+    _local="refs/remotes/${REMOTE}/${_pat#refs/heads/}"
+    _local="${_local%/\*}"
+    _found="$(git for-each-ref --format='%(refname)' "$_local" 2>/dev/null)"
+    [ -n "$_found" ] && refs="${refs}${_found}"$'\n'
+done
+refs="$(printf '%s' "$refs" | grep -v '^$' || true)"
 if [ -z "$refs" ]; then
-    echo "  no refs matched $PATTERN. That is a fact about the PATTERN, not a claim" >&2
+    echo "  no refs matched: $PATTERNS. That is a fact about the PATTERNS, not a claim" >&2
     echo "  that nothing is stranded." >&2
-    echo "skipped:salvage-audit:no-refs:$PATTERN"; exit 0
+    echo "skipped:salvage-audit:no-refs:$PATTERNS"; exit 0
 fi
 
 nrefs=0; nwith=0; nfiles=0
 branch_short="${BRANCH##*/}"
-printf 'salvage-audit: branch=%s pattern=%s\n' "$BRANCH" "$PATTERN" >&2
+printf 'salvage-audit: branch=%s patterns=%s\n' "$BRANCH" "$PATTERNS" >&2
 printf '  ANCESTRY IS NOT USED as the integration test: a ref relayed by cherry-pick\n' >&2
 printf '  is never an ancestor, yet its work is fully present. Content decides.\n' >&2
 

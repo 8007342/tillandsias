@@ -1809,15 +1809,19 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                     id: selected[0].1.id.clone(),
                     engine: format!("{} (captured envelope)", selected[0].1.engine),
                     failures: vec![format!("input is not an answer envelope: {e}")],
+                    // A malformed envelope has no citations to be stale ABOUT.
+                    stale: Vec::new(),
                 });
                 report(&outcomes, &[], &sets, started);
                 return 1;
             }
         };
+        let found = groundtruth::grade_envelope_audited(&envelope, &selected[0].1.expect, &root);
         outcomes.push(groundtruth::Outcome {
             id: selected[0].1.id.clone(),
             engine: format!("{} (captured envelope)", selected[0].1.engine),
-            failures: groundtruth::grade_envelope(&envelope, &selected[0].1.expect, &root),
+            failures: found.failures,
+            stale: found.stale,
         });
     } else {
         // One harness PER RESOLVED CORPUS, cached: a set that declares its own
@@ -1900,10 +1904,15 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 }
             };
             let grade_root = harnesses[slot].1.clone();
+            // ORDER 1229-2862: the AUDITED form, which separates a frame-stale
+            // citation from a genuine failure. `grade_envelope` folds the two
+            // back together and is kept for callers that have no third outcome.
+            let found = groundtruth::grade_envelope_audited(&envelope, &case.expect, &grade_root);
             outcomes.push(groundtruth::Outcome {
                 id: case.id.clone(),
                 engine: case.engine.clone(),
-                failures: groundtruth::grade_envelope(&envelope, &case.expect, &grade_root),
+                failures: found.failures,
+                stale: found.stale,
             });
         }
     }
@@ -1921,15 +1930,34 @@ fn report(
     started: std::time::Instant,
 ) -> usize {
     let mut failed = 0;
+    let mut stale = 0;
     for o in outcomes {
         if o.passed() {
             println!("PASS  {}  [{}]", o.id, o.engine);
+            continue;
+        }
+        // ORDER 1229-2862. STALE is checked BEFORE fail and is defined as "no
+        // genuine failure", so a case carrying both grades FAIL and its stale
+        // citations are printed underneath it. A stale index must never become
+        // somewhere a real regression can sit quietly.
+        if o.is_stale() {
+            stale += 1;
+            println!(
+                "STALE {}  [{}]  NOT VALID in this checkout: the index is behind the code",
+                o.id, o.engine
+            );
+            for sv in &o.stale {
+                println!("        - {sv}");
+            }
             continue;
         }
         failed += 1;
         println!("FAIL  {}  [{}]", o.id, o.engine);
         for f in &o.failures {
             println!("        - {f}");
+        }
+        for sv in &o.stale {
+            println!("        - (also stale) {sv}");
         }
     }
     // ORDER 888-miiy. A SKIPPED case is printed per-case and counted in the
@@ -1943,16 +1971,36 @@ fn report(
     let mut engines: Vec<&str> = skipped.iter().map(|(_, e, _)| e.as_str()).collect();
     engines.sort_unstable();
     engines.dedup();
+    // ORDER 1229-2862. Stale engines are named in the summary for the same
+    // reason skipped ones are: a condition that shrinks what a run CERTIFIES
+    // must be legible from the one machine-readable line, not only from the
+    // per-case output a consumer may be tailing away.
+    let mut stale_engines: Vec<&str> = outcomes
+        .iter()
+        .filter(|o| o.is_stale())
+        .map(|o| o.engine.as_str())
+        .collect();
+    stale_engines.sort_unstable();
+    stale_engines.dedup();
     // `total` counts every case the set DECLARED, so pass+fail+skipped == total
     // and a skip cannot quietly shrink the denominator. A shrinking bar is a
     // lowered bar (the same rule the committed-set step already enforces).
+    // `total` still counts every case the set DECLARED, so
+    // pass+fail+stale+skipped == total. A stale case may no more shrink the
+    // denominator than a skipped one may (1229-2862 keeping 888-miiy's rule).
     println!(
-        "groundtruth-result: sets={} total={} pass={} fail={} skipped={}{} elapsed_ms={}",
+        "groundtruth-result: sets={} total={} pass={} fail={} stale={} skipped={}{}{} elapsed_ms={}",
         sets.len(),
         outcomes.len() + skipped.len(),
-        outcomes.len() - failed,
+        outcomes.len() - failed - stale,
         failed,
+        stale,
         skipped.len(),
+        if stale_engines.is_empty() {
+            String::new()
+        } else {
+            format!(" stale_engines={}", stale_engines.join(","))
+        },
         if engines.is_empty() {
             String::new()
         } else {
@@ -1960,6 +2008,13 @@ fn report(
         },
         started.elapsed().as_millis()
     );
+    if stale > 0 {
+        eprintln!(
+            "WARNING: {} case(s) cite spans that are SOUND at the index's own commit but stale in this checkout (engines: {}). The index is behind the code; scripts/spec-index-ensure.sh republishes one. This run does not certify those cases.",
+            stale,
+            stale_engines.join(",")
+        );
+    }
     if !skipped.is_empty() {
         eprintln!(
             "WARNING: {} case(s) were NOT GRADED on this host (engines: {}). This run does not certify those engines; it certifies the {} case(s) it could grade.",
@@ -5945,111 +6000,14 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 i += 1;
             }
 
-            // Dependents, counted over EVERY ready packet — the same edge set
-            // blocking-counts uses, for the same reason it does not fold into
-            // select-rows.
-            let mut dependents: std::collections::BTreeMap<String, usize> =
-                std::collections::BTreeMap::new();
-            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
-                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
-                    for d in deps {
-                        let key = match d {
-                            serde_yaml::Value::String(s) => s.clone(),
-                            serde_yaml::Value::Number(n) => n.to_string(),
-                            _ => continue,
-                        };
-                        *dependents.entry(key).or_insert(0) += 1;
-                    }
-                }
-            }
-
-            // (age_days, order_num, blocking, order, packet_id, leased)
-            let mut rows: Vec<ForgottenRow> = Vec::new();
-            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
-                let id = ledger.id_of(p).to_string();
-                let order = p
-                    .get("order")
-                    .map(|o| match o {
-                        serde_yaml::Value::Number(n) => n.to_string(),
-                        serde_yaml::Value::String(s) => s.clone(),
-                        _ => "?".to_string(),
-                    })
-                    .unwrap_or_else(|| "?".to_string());
-
-                // MILESTONES ARE CONTAINERS, NOT FORGOTTEN WORK. A milestone
-                // holds criteria and is never claimed for implementation
-                // (ambitious_milestone_reduction.milestone_packet_semantics);
-                // its children are. MEASURED: 15 ready milestones would
-                // otherwise sit in this list, and every one of them is a row a
-                // reader must learn to skip. Excluded here rather than left for
-                // the caller, because a projection whose top rows are all
-                // un-actionable teaches people to stop reading it.
-                if p.get("kind").and_then(serde_yaml::Value::as_str) == Some("milestone") {
-                    continue;
-                }
-
-                let mut newest: Option<i64> = None;
-                let mut leased = false;
-                if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
-                    for ev in evs {
-                        if let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str)
-                            && let Some(e) = answer::iso8601_to_epoch(ts)
-                            && newest.is_none_or(|cur| e > cur)
-                        {
-                            newest = Some(e);
-                        }
-                        let ty = ev.get("type").and_then(serde_yaml::Value::as_str);
-                        if ty == Some("claim") {
-                            leased = true;
-                        }
-                        // The claim CONVENTION is a note whose summary says so
-                        // (943-unii): a `claim` type is the audit record, and
-                        // plenty of real claims are notes. Both count as "someone
-                        // has had hands on this".
-                        if let Some(sum) = ev.get("summary").and_then(serde_yaml::Value::as_str)
-                            && sum.contains("claimed for cycle")
-                        {
-                            leased = true;
-                        }
-                    }
-                }
-                // MEASURED 2026-09-06: 461 of 461 ready packets carry NO events
-                // at all, so "age since last event" is undefined for essentially
-                // the whole ledger and cannot rank anything on its own. That is
-                // a finding about the ledger, not a gap in the query — most
-                // packets are declared and never touched again until claimed.
-                //
-                // The ORDER TOKEN carries the missing signal. next-order mints
-                // monotonically (581-k3f9), so a lower order number is a packet
-                // filed longer ago; order 491 predates 1085 by construction.
-                // Eventless packets are therefore ranked oldest-first by order,
-                // which surfaces the genuinely ancient ones instead of the
-                // alphabetically unlucky.
-                let age_days = newest.map(|e| (now - e) / 86_400);
-                let order_num: i64 = order
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect::<String>()
-                    .parse()
-                    .unwrap_or(i64::MAX);
-                let blocking = dependents.get(&id).copied().unwrap_or(0);
-                // --min-age-days filters on a MEASURED age; an eventless
-                // packet has no age to compare, and dropping it would hide the
-                // most-forgotten rows behind a flag meant to narrow the list.
-                if let Some(a) = age_days
-                    && a < min_age_days
-                {
-                    continue;
-                }
-                rows.push((age_days, order_num, blocking, order, id, leased));
-            }
-
-            // TOTAL ORDER, so the same ledger yields the same list on every host
-            // and every run (criterion 4's negative control depends on it):
-            // most-neglected first, then fewest dependents, then packet_id as
-            // the tiebreak — never insertion order, which is fragment-order and
-            // therefore host-dependent.
-            forgotten_sort(&mut rows);
+            // ORDER 718-jqt5 criterion 2. The projection MOVED to
+            // `tillandsias_plan::forgotten` so the library — and therefore
+            // `answer_question` — can reach it. This arm keeps the flag
+            // parsing and the formatting; the computation is shared, so the
+            // CLI and the story-shaped query surface cannot drift apart.
+            // That shared definition IS criterion 4's negative control: a
+            // second copy would pass the control the day it was written.
+            let rows = tillandsias_plan::forgotten::forgotten_rows(&ledger, now, min_age_days);
 
             let mut shown = 0usize;
             for (age_days, _order_num, blocking, order, id, leased) in &rows {
@@ -8041,45 +7999,6 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
     log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
 }
 
-/// ORDER 718-jqt5. One `forgotten` row: (age_days, order_num, blocking,
-/// order, packet_id, leased).
-type ForgottenRow = (Option<i64>, i64, usize, String, String, bool);
-
-/// The TOTAL ORDER for `forgotten`, split out so it can be tested without a
-/// ledger — the same reason `child_env_with_home` and `expire_claim_candidates`
-/// are split out.
-///
-/// Determinism is the point, and it is stronger than the packet's criterion
-/// asked for. 718-jqt5's negative control says "the same seed yields the same
-/// set". This projection takes NO seed: the order is total, so the same ledger
-/// yields the same list on every host and every run, and reproducibility does
-/// not depend on remembering to record a seed. A seed belongs to the SAMPLING
-/// layer above this (which epics to spread across), not to the projection.
-///
-/// The rules, in order:
-///   1. eventless packets first — nothing has ever happened to them;
-///   2. within those, LOWEST ORDER first: `next-order` mints monotonically
-///      (581-k3f9), so a lower number was filed longer ago;
-///   3. within evented packets, GREATEST age first;
-///   4. then fewest dependents, because a leaf is what a residual-maximising
-///      selector never reaches;
-///   5. then packet_id — never insertion order, which is fragment order and
-///      therefore differs between hosts.
-fn forgotten_sort(rows: &mut [ForgottenRow]) {
-    rows.sort_by(|a, b| {
-        let bucket = |r: &ForgottenRow| if r.0.is_none() { 0u8 } else { 1u8 };
-        bucket(a)
-            .cmp(&bucket(b))
-            .then_with(|| match (a.0, b.0) {
-                (None, None) => a.1.cmp(&b.1),
-                (Some(x), Some(y)) => y.cmp(&x),
-                _ => std::cmp::Ordering::Equal,
-            })
-            .then(a.2.cmp(&b.2))
-            .then(a.4.cmp(&b.4))
-    });
-}
-
 /// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
 /// the policy is unit-testable without a filesystem: given the folded ledger
 /// and a cutoff timestamp, partition every `in_progress` packet into
@@ -8637,107 +8556,6 @@ mod tests {
         assert!(!role_satisfies("linuxfoo", "linux"));
         assert!(!role_satisfies("linux", "linuxfoo"));
         assert!(role_satisfies("linux", "linux-foo"));
-    }
-
-    use super::{ForgottenRow, forgotten_sort};
-
-    fn row(age: Option<i64>, order: i64, blocking: usize, id: &str) -> ForgottenRow {
-        (
-            age,
-            order,
-            blocking,
-            order.to_string(),
-            id.to_string(),
-            false,
-        )
-    }
-
-    /// ORDER 718-jqt5 criterion 1. Eventless packets come FIRST — nothing has
-    /// ever happened to them — and within that bucket the LOWEST order wins,
-    /// because next-order mints monotonically so a lower number was filed
-    /// longer ago (581-k3f9).
-    #[test]
-    fn forgotten_puts_eventless_packets_first_oldest_order_first() {
-        let mut rows = vec![
-            row(Some(3), 900, 0, "recent-event"),
-            row(None, 1085, 0, "new-and-untouched"),
-            row(None, 151, 0, "ancient-and-untouched"),
-        ];
-        forgotten_sort(&mut rows);
-        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
-        assert_eq!(
-            ids,
-            vec!["ancient-and-untouched", "new-and-untouched", "recent-event"]
-        );
-    }
-
-    /// Among packets that DO have events, the stalest ranks first. Without this
-    /// the bucket rule above could be satisfied by ignoring age entirely.
-    #[test]
-    fn forgotten_ranks_evented_packets_by_descending_age() {
-        let mut rows = vec![
-            row(Some(2), 100, 0, "fresh"),
-            row(Some(90), 900, 0, "stale"),
-            row(Some(30), 500, 0, "middling"),
-        ];
-        forgotten_sort(&mut rows);
-        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
-        assert_eq!(ids, vec!["stale", "middling", "fresh"]);
-    }
-
-    /// A LEAF is what a residual-maximising selector never reaches: the epic
-    /// score weights `blocking` at 1.5, so a packet nothing depends on barely
-    /// moves its epic and is never the reason one wins. Fewest dependents
-    /// first, at equal age.
-    #[test]
-    fn forgotten_prefers_the_leaf_at_equal_age() {
-        let mut rows = vec![
-            row(None, 200, 7, "blocks-many"),
-            row(None, 200, 0, "blocks-nothing"),
-        ];
-        forgotten_sort(&mut rows);
-        assert_eq!(rows[0].4, "blocks-nothing");
-    }
-
-    /// THE NEGATIVE CONTROL 718-jqt5 ASKS FOR, and it is stronger than the
-    /// criterion. The criterion says "the same seed yields the same set"; this
-    /// projection takes no seed, so the order is total and the same input
-    /// yields the same output regardless of how it arrived. Shuffling the input
-    /// must change nothing — which is what rules out insertion order (fragment
-    /// order, and therefore host-dependent) leaking into the ranking.
-    #[test]
-    fn forgotten_is_reproducible_without_a_seed() {
-        let build = || {
-            vec![
-                row(None, 500, 1, "e"),
-                row(Some(10), 100, 0, "a"),
-                row(None, 200, 0, "c"),
-                row(Some(10), 900, 0, "b"),
-                row(None, 200, 3, "d"),
-            ]
-        };
-        let mut first = build();
-        forgotten_sort(&mut first);
-
-        let mut shuffled = build();
-        shuffled.reverse();
-        forgotten_sort(&mut shuffled);
-        assert_eq!(first, shuffled, "input order must not reach the ranking");
-
-        let mut rotated = build();
-        rotated.rotate_left(3);
-        forgotten_sort(&mut rotated);
-        assert_eq!(first, rotated);
-    }
-
-    /// Equal age AND equal blocking must still be a total order, or two hosts
-    /// can print the same set in different sequences and a batch stops being
-    /// replayable.
-    #[test]
-    fn forgotten_breaks_full_ties_on_packet_id() {
-        let mut rows = vec![row(None, 300, 0, "zeta"), row(None, 300, 0, "alpha")];
-        forgotten_sort(&mut rows);
-        assert_eq!(rows[0].4, "alpha");
     }
 
     use super::*;

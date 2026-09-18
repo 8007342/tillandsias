@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forgotten-now-epoch-set-in-the-past-silently-drops-every-evented-row-so-the-reproducibility-handle-changes-the-population-it-was-added-to-pin
+    order: 1241-nwxy
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [plan, instrument, triage]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/forgotten.rs
+    title: |
+      `forgotten --now-epoch <past>` silently drops every evented row, so the flag added to make the projection reproducible changes the population instead of pinning it
+    context: |
+      FOUND BY A PEER'S FAILED REPRODUCTION, 2026-09-17, which is the best way
+      for this to be found and nearly ended the other way.
+
+      718-jqt5 criterion 4 landed a reproducibility handle: the answer
+      surface states the epoch it ranked at, and its headline promises
+      `forgotten --now-epoch <that>` reproduces the exact set. It does. But
+      the flag is a FOOTGUN AT ANY OTHER VALUE, and the headline now invites
+      people to pass it.
+
+      MEASURED on tlatoanis-macbook-air:
+        --now-epoch 1700000000  ->  139 rows, 139 eventless,   0 evented
+        --now-epoch 1758000000  ->  139 rows, 139 eventless,   0 evented
+        --now-epoch 1789662517  ->  506 rows, 139 eventless, 367 evented   (real clock)
+      Two epochs 1.8 years apart give byte-identical output, which reads like
+      strong evidence of determinism and is in fact evidence that both
+      discarded the same 367 rows.
+
+      THE MECHANISM, and it is one line. `age_days = (now - event) / 86_400`,
+      then `if let Some(a) = age_days && a < min_age_days { continue }`. With
+      `now` set BEFORE an event, that row's age is NEGATIVE, so it fails
+      `a < 0` and is dropped. Every event newer than the supplied epoch
+      vanishes. `--min-age-days` is documented as narrowing the list by age;
+      nothing says a past `--now-epoch` empties it of evented rows.
+
+      WHAT IT COST BEFORE IT WAS FOUND: macuahuitl measured 139 rows with ONE
+      evented and correctly concluded that `now` orders ~1 row in 139, against
+      my comment saying it orders 367 of 506. They offered it as a challenge
+      with the commands attached rather than as a verdict. Reproducing those
+      commands on this host gave their numbers exactly — and reproducing them
+      at the REAL clock gave mine. Both measurements were honest; the flag
+      silently changed which population was being counted. Had they asserted
+      it, or had I deferred to a careful peer, a CORRECT comment would have
+      been amended to a wrong one on the strength of a real measurement.
+
+      A SECOND HYPOTHESIS WAS ALSO REFUTED, and is recorded so it is not
+      re-derived: the divergence is NOT lease filtering. `leased` is computed
+      and stored in the row but is never used as a filter — 65 leased rows are
+      present in the output at the real clock.
+
+      NOT A DETERMINISM DEFECT. Same epoch, two runs, byte-identical; the
+      clock-invariance property 718-jqt5 pinned holds. This is about a flag
+      that silently redefines the population when pointed backwards.
+    exit_criteria:
+      - 'a past --now-epoch either keeps evented rows or refuses, rather than silently dropping them (pre-fix result: FAILS — epochs 1.8 years apart both return 139 rows and 0 evented, against 367 at the real clock)'
+      - 'the negative-age case is distinguished from the narrowing --min-age-days case, since one is a filter the caller asked for and the other is an artifact of the clock'
+      - 'the reproducibility handle the answer surface advertises is safe at values other than the one it printed, because the headline invites callers to pass it'
+    unscoreable: |
+      pinned-by-unit-tests-not-a-litmus: forgotten_rows is a pure function of
+      (ledger, now, min_age_days), so the obligation is verifiable in-crate.
+      Filed with the three-epoch measurement, the one-line mechanism, and the
+      refuted lease hypothesis so the next reader inherits the eliminations.

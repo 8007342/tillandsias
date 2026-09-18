@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-graceful-quit-stage-addresses-the-tray-by-its-executable-name-while-applescript-resolves-bundle-names-so-the-polite-stop-may-never-fire-and-a-probe-with-no-tray-running-cannot-tell
+    event:
+      type: note
+      ts: "2026-09-17T21:36:05Z"
+      agent_id: linux-macuahuitl-claude-20260917t213605z
+      host: macuahuitl
+      summary: |
+        OFFERED AND DECLINED, WITH REASON. The row stays ready and unclaimed on
+        purpose; this event exists so the next coordinator does not read an open p3 as
+        claimed, and does not re-offer it to the host that already considered it.
+
+        Offered to macbookair-macos 2026-09-17 immediately after they closed 1231-cbie's
+        Darwin half, since they had just measured the bundle-name facts this row turns
+        on. They declined the same day and gave the row's own reason back: the
+        discriminating observation needs a tray ACTUALLY RUNNING, that host has none up,
+        and the operator's laptop is not a fixture. Starting the operator's tray to
+        settle a p3 is precisely what this row's unscoreable field says nobody should
+        do.
+
+        Their framing is worth keeping because it is a rule about hand-offs rather than
+        about this packet: "an unclaimed p3 that a coordinator thinks is claimed is
+        worse than one everybody knows is open." A silent non-answer to an offer leaves
+        those two states indistinguishable, which is the same shape as a skip that
+        prints like a pass.
+
+        WHAT WOULD MAKE THIS CHEAP, so nobody schedules work for it: any Darwin host
+        that has a tray up FOR ITS OWN REASONS can settle it in one command. It does not
+        deserve a dedicated cycle, and it should not acquire one.
