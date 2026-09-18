@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    field: title
+    value: |-
+      every GPU and NPU in the fleet reports present-unscheduled or engine-missing — the hardware is there and no runtime claims it, on all seven hosts
+
+
+      [2026-09-18T21:33:39Z yoga-silverblue] CORRECTION 2026-09-18, measured — the packet_id's claim that NO accelerator in the fleet is schedulable by any engine is now FALSIFIED. tillandsias-plan capability-matrix reports four schedulable GPU entries across the fleet (two gpu/container/ollama, two gpu/host-native/ollama); lenovinha's CUDA lane and yoga's Vulkan iGPU lane both serve real workloads. The packet_id cannot change, so read it as the state at filing time, not as current. WHAT REMAINS TRUE AND IS THE LIVE DEFECT is the reason this row was cited tonight — the lane RECORDED by scripts/record-expert-accuracy.sh is a hardcoded literal, so the fleet now has working accelerators and every metrics record still says cpu. See the evidence events on this row from lenovinha-silverblue and yoga-silverblue, and orders 1254-47xd and 1257-jxu9.
+    ts: "2026-09-18T21:33:39Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    event:
+      type: note
+      ts: "2026-09-18T21:33:39Z"
+      host: yoga-silverblue
+      summary: |-
+        the packet_id asserts a fleet state that the fleet's own capability-matrix now contradicts; appended rather than replaced, and the row is ready and unclaimed

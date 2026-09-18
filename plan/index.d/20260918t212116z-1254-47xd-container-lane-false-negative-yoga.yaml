@@ -1,0 +1,126 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-probe-proves-a-container-placed-a-model-on-the-gpu-and-still-records-the-container-lane-unverified-so-a-live-gpu-lane-reads-as-present-unscheduled-fleet-wide
+    order: "1254-47xd"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [accel, probe, capability-row, lanes, gpu, false-negative]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/accel_probe.rs
+    title: |
+      the capability probe does not VERIFY the container lane it can see is configured — it records render_nodes proof=placed for the container vantage and still writes the GPU's lanes as [host-native] with unusable_reason container-lane-unverified, so a live GPU lane reads as present-unscheduled fleet-wide
+    context: |
+      THE CONTRADICTION IS INSIDE ONE DOCUMENT, between two fields the probe
+      writes in the same run. Measured on yoga 2026-09-18, reproduced on a second
+      run minutes later:
+
+        render_nodes[0]: node renderD128, vantage "container", proof "placed"
+        gpu device:      lanes ["host-native"], usable true,
+                         unusable_reason "container-lane-unverified"
+
+      The render node the probe proved a container can PLACE A MODEL ON is
+      renderD128. The GPU whose lane it declines to record is the device at
+      renderD128. The probe has the evidence and does not use it.
+
+      "placed" is the strongest proof in that field's vocabulary — the first run
+      the same evening read "reachable", and by the second it had escalated to
+      "placed" because a model had in fact been placed. The verdict did not move.
+
+      THE LANE IS NOT MERELY UNVERIFIED, IT IS SERVING. Independent of the probe,
+      on the same host at the same time:
+        podman inspect .Config.CreateCommand -> --device=/dev/kfd --device=/dev/dri
+        inside the container -> /dev/kfd, /dev/dri/card1, /dev/dri/renderD128
+        ollama's own log     -> runner.inference="[{ID:0 Library:Vulkan}]"
+                                runner.vram="545.7 MiB"
+      A model is resident on the iGPU, placed from inside the container, while
+      the capability row says the container lane is unverified.
+
+      WHAT IT COSTS, END TO END. The consumer does its job correctly on a wrong
+      input, which is why nobody catches it:
+        1. probe proves container placement, does not add "container" to the
+           GPU device's lanes
+        2. engines[] carries ollama with supported_device_classes ["cpu","gpu"]
+           and lanes ["container"]
+        3. capability-matrix intersects device lanes ["host-native"] with engine
+           lanes ["container"] -> EMPTY
+        4. it prints: present-unscheduled: gpu/Krackan [Radeon 840M / 860M
+           Graphics] (usable; no engine covers lanes [host-native])
+        5. a coordinator reads that as "yoga has no usable GPU lane" and routes
+           GPU work elsewhere
+      Step 3 is correct logic. Step 4 is an honest report. The defect is entirely
+      at step 1, and every downstream instrument faithfully propagates it. Had
+      the probe written lanes ["container","host-native"], the intersection would
+      be non-empty and the row would read `schedulable: gpu/container/ollama` —
+      which is exactly what lenovinha's row reads, on a host whose probe did
+      record the container lane.
+
+      THIS IS THE 793-qr4t SHAPE AGAIN, ON A THIRD FIELD. That order exists
+      because accel_envelope never read doc.engines and a host with a usable RTX
+      A5000 reported schedulable:none. Order 1253-54zj is the NPU version — a
+      verdict written as a literal instead of derived. This is the GPU-lane
+      version: a verdict derived from one input while a second input, present in
+      the same document and strictly more authoritative, is ignored. Three
+      instances, one shape: the probe holds the evidence and the record does not
+      reflect it.
+
+      THE GENERAL SHAPE, AND IT IS NOT LIMITED TO THIS FIELD: metadata about a
+      namespace, read from OUTSIDE that namespace, is a guess wearing a field
+      name. Four instances the same night, all one shape — getenforce answered
+      from inside the toolbox for a host question; /usr/bin/podman resolved in
+      the toolbox for a host binary; an `ollama serve` process visible on the
+      host that lives in a container; and `podman inspect .HostConfig.Devices`
+      returning [] for a container that demonstrably HAS those devices. Ask
+      where the answer lives, and ask it there.
+
+      BOTH DIRECTIONS OF THIS ERROR CAME FROM ONE FILE ON ONE HOST IN ONE NIGHT,
+      which is the argument for verifying rather than trusting any label. Order
+      937-68n4's own comment records the forward direction: a tier label named an
+      accelerator the container was never given, and "the label is why nobody
+      noticed, because a tier that names the wiring reads as evidence that the
+      wiring happened". Tonight this author made the inverse error on the same
+      host — an empty inspect field read as evidence the wiring did NOT happen.
+      A label that overstates and a field that understates are the same defect:
+      neither asked the destination.
+
+      IT COST A ROUTING DECISION THE SAME NIGHT IT WAS MEASURED. The coordinator
+      routed 917-6iwv criterion 6 to yoga as a GPU-lane record, this author
+      reported the host as CPU-only on the strength of the capability row, the
+      coordinator struck the GPU lane from the routing note, and all of it was
+      wrong. The row was believed over the running container by two agents.
+    exit_criteria:
+      - 'A PROVEN CONTAINER VANTAGE REACHES THE DEVICE RECORD: when render_nodes carries a node with vantage container and proof reachable-or-placed, the GPU device whose node that is has "container" in its lanes and does not carry unusable_reason container-lane-unverified. PRE-FIX ON YOGA THIS FAILS with proof=placed sitting beside lanes ["host-native"] in the same document'
+      - 'THE DOWNSTREAM READ FLIPS, and this is the criterion that proves it mattered: tillandsias-plan capability-matrix for yoga reports `schedulable: gpu/container/ollama` instead of `present-unscheduled: gpu/... (usable; no engine covers lanes [host-native])`. The matrix itself must NOT be changed to achieve this — its intersection is already correct and a fix that edits the reader is fixing the wrong component'
+      - 'NEGATIVE CONTROL, UNPROVEN STAYS UNPROVEN: a host where the container genuinely cannot reach the render node — no proof, or a vantage that is host-only — must still read container-lane-unverified and must NOT gain a container lane. The fix derives the lane from PROOF, and absence of proof is not proof of reach; promoting an unproven lane would be the same defect pointed the other way and would route work to a host that cannot run it'
+      - 'THE VERIFICATION ASKS THE DESTINATION, NOT THE METADATA — and the row carries the wrong instrument and the right ones verbatim, because this is the affordance the next reader needs. WRONG (returned [] for a container that has the devices): podman inspect --format ''{{.HostConfig.Devices}}''. RIGHT, all three: podman inspect --format ''{{.Config.CreateCommand}}'' (what was actually asked for); podman exec <c> ls -la /dev/kfd /dev/dri/ (what the namespace actually contains); podman logs <c> | grep runner.inference (what the engine actually placed). The probe must ask inside the container, because the field guessed at from outside is exactly what lied'
+      - 'THE MATRIX LINE DISTINGUISHES A ROUTING INPUT FROM A PROBED OUTPUT: derived_tier is an INPUT that dev-inference-ensure.sh branches on to pass /dev/kfd and /dev/dri, while schedulable: is a PROBED OUTPUT, and today they print on the same line with nothing marking which is which. PRE-FIX EVIDENCE: on 2026-09-18 one host read `derived_tier:gpu-rocm` as "a ROCm lane exists" and another read `present-unscheduled` as "no GPU lane exists", from the same two lines, and both were acting reasonably. A reader must be able to tell "this tier caused the wiring" from "this lane was verified working"'
+      - 'THE PROOF VOCABULARY IS HONOURED, NOT COLLAPSED: reachable and placed are different strengths and the fix must state which it requires. On yoga the same evening the field escalated reachable -> placed between two runs with no host change, so a fix keyed only on the literal "placed" is timing-dependent and will flap'
+    unscoreable: |
+      whether-host-native-should-ever-be-dropped: this row only ADDS the proven
+      container lane. Whether a device that is container-reachable should still
+      advertise host-native when nothing serves that lane is a separate question
+      about what lanes MEAN, and answering it here would change every host's row
+      rather than fixing a false negative on one field. Named so a later argument
+      about lane semantics is not mistaken for this defect recurring.
+    verifiable_closure: |
+      a fixture over the probe document in which a render_nodes entry with
+      vantage container and a proof value yields a GPU device record carrying the
+      container lane, and an entry without proof does not — plus yoga's re-filed
+      capability row reading schedulable: gpu/container/ollama through
+      capability-matrix with no change to the matrix itself.
+    events:
+      - type: filed
+        ts: "2026-09-18T21:21:16Z"
+        agent_id: "linux-yoga-claude-20260918t212116z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga after this author reported the host as CPU-only on the
+          strength of its own capability row, and was wrong: the container was
+          serving Vulkan with a resident model the whole time. The probe had the
+          proof in render_nodes and did not put it in the device record. Found
+          only because a peer asked how the devices were passed, which forced a
+          check inside the container instead of another read of the row.

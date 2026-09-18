@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    field: notes
+    value: |-
+      lenovinha-silverblue
+
+      [2026-09-18T21:26:10Z lenovinha-silverblue] CRITERION 2 IS MISDESCRIBED AND THE IMPLEMENTATION SATISFIES IT BY A DIFFERENT SHAPE.
+
+      It asks the lint to name "the | grep -c pipeline that inverted under pipefail". Both
+      halves are wrong against the commits this row itself cites:
+        - at pre-fix c7e860ff1 the pipeline is `if ! sed 's://.*::' "$f" | grep -q "$CANON"`
+          at line 81 -- grep -q, NOT grep -c.
+        - it never inverted. 2b777de3e's own message MEASURED that the script sets only
+          set -u, so the hazard is latent and data-dependent; both versions produce the same
+          verdict on that corpus.
+      So it is caught as hazard shape 3 (negated-pipeline if), not shape 1. ARM 1 pins the
+      naming at c7e860ff1 AND the silence at 2b777de3e -- a before without an after is not
+      evidence. The criterion is satisfiable as written in intent; only its description of
+      the target needed correcting.
+
+      THE COUNTS ANSWER THIS ROW'S unscoreable QUESTION. 195 counted FILES, not pipelines,
+      so it was never an upper bound on the same quantity:
+          shape                   bound(files)  true files  true pipelines
+          pipefail + grep -q           195          166          545
+          trailing tail -1              65           52          161
+          negated-pipeline if           27           15           22
+          pgrep/pkill -f literal         7            3            4
+      MOSTLY REAL at 166/195 (85%) -- but the actionable population is 545 PIPELINES, which
+      makes this row's advisory-before-gating arithmetic STRONGER than it assumed. The
+      negated shape is the reverse: 27 -> 15, grep's `if !` over-counting a shape 795-imz3
+      has largely cleaned up already.
+
+      THE PARSER CORRECTS grep IN BOTH DIRECTIONS, which is the test of whether it earned
+      its dependency. Against grep's 24 line matches for the negated shape: 7 are grep FALSE
+      POSITIVES (a herestring <<<, or a | inside a quoted regex -- not pipelines at all) and
+      5 are MULTI-LINE pipelines grep cannot see because the | is on the next line.
+
+      AND THE LINT'S OWN LAUNCHER SHIPPED HAZARD SHAPE 1. The binary probe in
+      check-bash-composition-hazards.sh was first written as
+      `"$cand" bash-hazards 2>&1 | grep -q 'bash-hazards'` under the set -o pipefail three
+      lines above it: grep -q exits on the first match, SIGPIPEs the producer, and the
+      pipeline reports failure ON A MATCH. It printed skip:no-binary with a working binary
+      present -- written by the author of this lint, in the same hour they measured 545
+      instances of the shape. Recorded rather than quietly fixed; this is the strongest
+      available argument for 1252-fg9e, since knowing the hazard cold did not prevent
+      constructing one.
+
+      next_action: nothing is left to BUILD. What is left is the DECISION this advisory
+      exists to inform -- 545 pipelines across 166 files is the backlog, and promoting this
+      out of advisory into ./build.sh --check requires a row to OWN that population first.
+      Do not wire it in before then. Separately unowned and untriaged by anyone: the 161
+      trailing tail -1 pipelines.
+    ts: "2026-09-18T21:26:10Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: a-tree-sitter-bash-lint-for-the-four-measured-composition-hazards-vendored-so-it-travels-with-the-build-because-shellcheck-is-absent-on-this-host-and-inside-the-builder-toolbox
+    event:
+      type: note
+      ts: "2026-09-18T21:26:10Z"
+      host: lenovinha-silverblue
+      summary: |-
+        REPAIR: the earlier filing put the value after the flags, so notes became the literal string lenovinha-silverblue

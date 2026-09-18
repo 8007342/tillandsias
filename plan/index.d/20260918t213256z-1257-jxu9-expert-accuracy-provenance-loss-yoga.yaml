@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-expert-accuracy-recorder-loses-provenance-two-silent-ways-an-ollama-native-show-path-appended-to-an-openai-base-and-a-series-written-under-gitignored-cache
+    order: "1257-jxu9"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [metrics, provenance, experts, endpoint, harvest]
+    estimated_hours: 3
+    owned_files:
+      - scripts/record-expert-accuracy.sh
+      - scripts/metrics-log-path.sh
+    title: |
+      record-expert-accuracy.sh loses provenance two silent ways — it appends the ollama-native /api/show to the OPENAI-COMPATIBLE endpoint so quantisation and engine record as unknown on any correctly-configured host, and it writes the series under gitignored .cache/ so the cross-host harvest its own header promises never happens
+    context: |
+      BOTH FAILURES ARE SILENT AND BOTH LOSE PROVENANCE, IN THE ONE TOOL WHOSE
+      STATED JOB IS PROVENANCE. This script's own header argues the case better
+      than this row can — "An accuracy number without the model that produced it
+      is unusable for the comparison it exists to enable. Worse, it is actively
+      misleading across hosts" — and then two mechanical faults strip exactly
+      that. Measured on yoga 2026-09-18 while producing the second host's record
+      for 917-6iwv criterion 6; neither was noticed until the record was read
+      back field by field.
+
+      FAULT 1 — ONE ENVIRONMENT VARIABLE, TWO API SHAPES.
+      The script resolves
+        endpoint="${TILLANDSIAS_EMBED_ENDPOINT:-http://127.0.0.1:11434}"
+      and then asks "${endpoint%/}/api/show" for the served model's details.
+      But TILLANDSIAS_EMBED_ENDPOINT is the OPENAI-COMPATIBLE base, because
+      scripts/spec-index-ensure.sh appends /embeddings to it. On this host the
+      environment carries
+        TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:11434/v1
+      which is CORRECT for the indexer and makes this script request
+      http://127.0.0.1:11434/v1/api/show — a 404. curl succeeds, the body is an
+      error page, jq extracts nothing, and both fields fall to their defaults.
+      The landed record therefore reads
+        "model":{"id":"all-minilm","quantisation":"unknown","engine":"unknown","lane":"gpu"}
+      THE VALUES WERE AVAILABLE THE WHOLE TIME. Asking the ollama-native base
+      directly, same host, same moment:
+        curl -sS http://127.0.0.1:11434/api/show -d '{"name":"all-minilm"}'
+          -> details.quantization_level = F16
+          -> details.family             = bert
+      So the host could establish both and the record says it could not. A host
+      configured the project's own way is exactly the host that loses this.
+
+      FAULT 2 — THE SERIES NEVER LEAVES THE HOST THAT WROTE IT.
+      metrics_default_log resolves the log to
+        <repo>/.cache/metrics/expert-accuracy.jsonl
+      and .cache/ is gitignored (.gitignore line 146). Nothing in the tree copies
+      it into plan/ or any other harvested path. Meanwhile the header states the
+      format exists so that "CRDT-style harvest across hosts is a concatenation
+      and never a merge conflict" — a promise about a file that no other host can
+      ever read. The JSONL shape is right and the location defeats it.
+      THE PRACTICAL PROOF: yoga's criterion-6 record had to be delivered as an
+      EVENT on 917-6iwv, because the event channel is the only path to the fleet.
+      If the series were harvestable the event would have been a courtesy; as
+      things stand it is the entire delivery mechanism, and the series it was
+      supposed to join has one row on one host.
+
+      WHY THEY BELONG IN ONE ROW. They are the same defect twice — a provenance
+      tool failing quietly in the direction that loses provenance — and a fix for
+      either alone leaves the series unusable for its purpose. Establishing
+      quantisation and engine on a host whose records nobody else can read buys
+      nothing; harvesting records fleet-wide whose model fields all read unknown
+      buys nothing either. 917-6iwv exists to answer "which model is actually good
+      at which task"; that question needs both halves.
+
+      NOT IN SCOPE, ALREADY OWNED ELSEWHERE: the `lane` field being a hardcoded
+      `cpu` literal is 917-n3n9, filed by lenovinha and citing 1254-47xd, and
+      independently reproduced from yoga. It is the third provenance field on the
+      same record and it is deliberately not re-filed here.
+    exit_criteria:
+      - 'THE SHOW LOOKUP ASKS AN ENDPOINT THAT ANSWERS: on a host whose TILLANDSIAS_EMBED_ENDPOINT ends in /v1, the record carries the real quantisation and engine. PRE-FIX FAILS, measured on yoga 2026-09-18 — env is http://127.0.0.1:11434/v1, the script requests /v1/api/show, and the landed record reads quantisation "unknown" engine "unknown" while the same host answers F16 and bert when the ollama-native base is asked directly'
+      - 'NEGATIVE CONTROL — THE SCRIPT MUST NOT GUESS: on a host where the endpoint genuinely cannot say, the fields must still record `unknown` and must NOT be inferred from the model tag, the filename, or a default. This is the script''s own doctrine and the fix must preserve it verbatim — "an absent field reads as not applicable, an explicit unknown reads as we did not establish this, and those are different claims". The author of this row recorded unknown by hand rather than injecting the F16/bert they had already measured, precisely so the landed record would not assert something the instrument did not establish'
+      - 'THE ENDPOINT''S SHAPE IS NAMED, NOT ASSUMED: whatever the fix (deriving the native base from the /v1 base, a second variable, or asking a path that exists on both), the script states in its own text WHICH API SHAPE each variable denotes. The defect is not a typo, it is one name serving two contracts, and a fix that silently strips /v1 will break the first host that points the variable at a non-ollama gateway'
+      - 'THE SERIES IS HARVESTABLE, AND THIS IS DEMONSTRATED ACROSS TWO HOSTS RATHER THAN ARGUED: a record written on one host is readable on another by the normal pull, with no out-of-band copy. PRE-FIX FAILS — the log resolves under .cache/, .gitignore:146 ignores .cache/, nothing copies it, and yoga''s own criterion-6 record had to travel as an event on 917-6iwv instead'
+      - 'CONCATENATION STILL HOLDS AFTER THE MOVE: whatever path replaces .cache/, two hosts appending on the same day must merge as a concatenation and not a conflict — that property is the reason the format is JSONL and it must survive relocation, so the fixture appends from two host identities and merges without resolution'
+    unscoreable: |
+      whether-the-gitignored-path-was-deliberate: it is possible the .cache/
+      location assumes an out-of-band harvest by an operator rather than being an
+      oversight. Nothing in the tree records such a mechanism and the header's own
+      words point the other way, but the original author is not available to this
+      row and the question is not settled by measurement. If an out-of-band
+      harvest does exist, this row narrows to documenting it, and the first exit
+      criterion about cross-host readability is then satisfied by naming that
+      mechanism rather than by moving the file.
+    verifiable_closure: |
+      a record written on a host whose endpoint ends in /v1 that carries real
+      quantisation and engine values; a record on an endpoint that cannot answer
+      that still carries unknown for both; and the same record read back on a
+      second host after a normal pull, with two hosts' same-day appends merging
+      by concatenation.
+    events:
+      - type: filed
+        ts: "2026-09-18T21:32:56Z"
+        agent_id: "linux-yoga-claude-20260918t213256z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga after using the instrument to produce the second host's
+          criterion-6 record for 917-6iwv. Neither fault announced itself: the
+          record looked complete, and only reading it field by field against what
+          the host could actually answer showed two of them were unknown when the
+          values existed, and that the file they landed in is one no other host
+          can read. Coordinator asked for both as a single row; the lane literal
+          on the same record is 917-n3n9 and is not re-filed here.

@@ -8606,3 +8606,27 @@ newer than the previous pass — and treats each as a relay candidate exactly as
 it treats a platform branch: read the rows, diff by content, merge-tree dry-run,
 one land. A salvage ref is by definition work that exists nowhere else; a pass
 that never lists them will report "nothing to relay" over the top of it forever.
+
+## H13 — CORRECTED the same night: gitignored-in-checkout is durable AND gate-visible
+
+H13 above says "draft ledger writes into the worktree ... copy drafts under
+`plan/localwork/`". Followed literally, that advice reddened the fleet-unblocking
+land: `scripts/check-no-python-scripts.sh` walks the WORKING TREE, not the
+index, and refused on `python3 -` heredocs inside
+`plan/localwork/drafts/post-build-fixes.sh` — an untracked, gitignored draft.
+The gate log from the previous `--ci-full` run, parked in the same place,
+mentioned python too and would have been next.
+
+**The two properties are different.** Gitignored keeps a file out of commits.
+It does not keep it out of any check that enumerates files on disk — and the
+harness has several (no-python, no-tracked-binaries walks the index, but
+citation and dialect checks walk paths). A draft that must survive a session
+AND must not be seen by the gate belongs on durable disk OUTSIDE the checkout:
+`~/claudia/drafts-<host>/` here, never `/tmp` (H13's original point stands —
+tmpfs dies with the session).
+
+**How to apply**: scratch that is regenerated → the scratchpad; scratch that
+must survive → outside the checkout on real disk; nothing that is not meant to
+land goes under the repo root at all, ignored or not. And a draft script that
+edits the tree may use whatever it likes, but the RESULT it writes into the
+tree is what the gate reads.

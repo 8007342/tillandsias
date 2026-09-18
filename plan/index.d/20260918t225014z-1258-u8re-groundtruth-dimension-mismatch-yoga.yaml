@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-groundtruth-grader-compares-committed-768-dim-query-vectors-against-an-index-of-any-dimension-and-reports-degenerate-retrieval-as-ordinary-case-failures
+    order: "1258-u8re"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [experts, rag, grading, groundtruth, embeddings, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan
+      - openspec/litmus-tests/groundtruth
+    title: |
+      the groundtruth grader compares committed 768-dim query vectors against an index built with ANY embedding model and grades the result — a dimension mismatch degrades retrieval to a constant and is reported as three ordinary case failures, never as a configuration error
+    context: |
+      MEASURED ON YOGA 2026-09-18, AND IT INVALIDATED A RECORD THAT HAD ALREADY
+      BEEN FILED. This row exists because the harness produced a plausible,
+      well-formed, fully-provenanced number that measured nothing.
+
+      THE SETUP. spec.answer cases grade against CALLER-SUPPLIED query vectors
+      committed under openspec/litmus-tests/groundtruth/query-vectors/. All four
+      are 768-dimensional — nomic-embed-text. The corpus index, by contrast, is
+      built from whatever TILLANDSIAS_EMBED_MODEL names. Nothing checks that the
+      two agree.
+
+      WHAT HAPPENS WHEN THEY DO NOT. Grading 768-dim queries against a 384-dim
+      (all-minilm) or 1024-dim (mxbai-embed-large) index does not error. It
+      returns a CONSTANT. Two unrelated questions came back with the same chunks
+      in the same order:
+        spec-inference-tier-cdi-fallback -> accel-capability-probe/spec.md:1-1, :2-3, :4-11, :12-29, +4 more
+        spec-podman-reset-what-survives  -> accel-capability-probe/spec.md:1-1, :2-3, :4-11, :12-29, +4 more
+      The grader then reports three ordinary case failures. Nothing says the
+      index and the queries are incommensurable.
+
+      THE CONTROL, SAME HOST, SAME CORPUS, SAME COMMIT, MINUTES APART:
+        spec-rung1, mxbai index  (1024 vs 768) -> pass=2 fail=3
+        spec-rung1, nomic index  ( 768 vs 768) -> pass=5 fail=0
+      So the three failures ARE the mismatch, exactly and repeatably.
+
+      WHY THE SURVIVORS ARE THE MOST INSTRUCTIVE PART. The two cases that passed
+      under a broken index are the two STRUCTURAL ones — "refuses when the answer
+      uses no retrieved chunk" and "still cites when the answer does use a chunk".
+      They assert the SHAPE of the response and pass whatever comes back. Of five
+      retrieval cases, the only survivors of a dead retriever were the two that
+      never depended on retrieval. A suite can look 40% healthy while its subject
+      is entirely inert.
+
+      HOW IT REACHED A FILED RECORD. Two yoga records were produced for 917-6iwv
+      criterion 6, all-minilm and mxbai-embed-large, and both scored EXACTLY
+      30/33 — same pass, same fail, same cases, from models 15x apart in
+      parameter count. That impossibility is what prompted the check;
+      `podman logs` during the grade showed ONLY qwen2.5:0.5b and ZERO embedding
+      requests, because the query side is frozen in committed vectors and the
+      index could not be used. Both records were retracted on 917-6iwv.
+      HAD THE TWO MODELS SCORED SLIGHTLY DIFFERENTLY, nothing would have prompted
+      the check and the artifact would have stood as a cross-host model
+      comparison. The defect was caught by a coincidence, which is not a method.
+
+      A PREMISE TWO HOSTS ACCEPTED IS FALSE HERE, AND IT IS FALSE FOR A REASON
+      WORTH WRITING DOWN SO NOBODY RE-DERIVES IT. Both hosts agreed, when
+      choosing models for 917-6iwv criterion 6, that "the model that actually
+      decides the number is the EMBED model". For this harness that is wrong —
+      not because the embed model is unimportant, but because THE QUERY SIDE IS
+      FROZEN in committed vectors. With the queries fixed at one model's
+      dimension, changing the embed model cannot change the measurement; it can
+      only break it. The correct reading is the inverse of the premise: holding
+      the embed model fixed is what keeps the harness valid, and lenovinha's
+      record is sound precisely because it kept nomic-embed-text. Any future
+      per-model retrieval comparison needs regenerated query vectors per model,
+      which is a different packet.
+
+      THIS IS NOT 1257-jxu9. That row is about provenance FIELDS being lost
+      (quantisation and engine recorded unknown, series unharvestable). This one
+      is the inverse and worse: every provenance field is filled in correctly —
+      model id, index generation, corpus commit, chunk count — while the
+      MEASUREMENT they describe is invalid. A record here is not incomplete, it
+      is confidently wrong.
+    exit_criteria:
+      - 'A DIMENSION MISMATCH REFUSES RATHER THAN GRADES: when the index generation''s embedding dimension differs from the committed query vectors'', the grader exits with a named configuration refusal identifying BOTH dimensions and BOTH models, and grades nothing. PRE-FIX FAILS, measured on yoga 2026-09-18 — a 1024-dim index against 768-dim queries returned pass=2 fail=3 with no mention of dimensions anywhere in the output'
+      - 'NEGATIVE CONTROL, THE MATCHING CASE MUST STILL GRADE: a 768-dim index against the committed 768-dim vectors continues to report pass=5 fail=0 on spec-rung1. A refusal that fires on the working configuration has replaced a wrong number with a broken harness'
+      - 'THE STRUCTURAL CASES MUST NOT BE THE PROOF: the fixture asserts on a case that genuinely depends on retrieval, not on spec-refuses-when-the-answer-uses-no-retrieved-chunk or spec-still-cites-when-the-answer-does-use-a-chunk. Those two PASS against a dead retriever — measured — so a fixture built from them would be green on the pre-fix defect'
+      - 'DEGENERATE RETRIEVAL IS DETECTABLE ON ITS OWN TERMS: two distinct queries returning an identical ordered chunk list is reported, since that is the observable signature here and it is cheaper than a dimension check to keep honest. PRE-FIX EVIDENCE is the two verbatim citation lists above, identical for an inference-tier question and a podman-reset question'
+      - 'THE COMMITTED VECTORS DECLARE THEIR PROVENANCE: each query-vectors/*.json records the model and dimension that produced it, so a reader can see what the frozen side assumes rather than counting floats to find out. Today the dimension is discoverable only by measuring the array length'
+    unscoreable: |
+      whether-the-query-side-should-be-frozen-at-all: committed vectors make the
+      harness network-free and deterministic, which is a real property worth
+      keeping, and they are why grading works on a host with no embedding
+      endpoint. The alternative — embedding queries live with the same model as
+      the index — makes the model axis measurable but reintroduces an endpoint
+      dependency into a suite that currently has none. This row does not settle
+      that; it only requires that the two sides cannot silently disagree. If the
+      fleet later wants per-model retrieval comparisons, that is a different
+      packet and it needs regenerated vectors per model.
+    verifiable_closure: |
+      a fixture that builds or names an index whose dimension differs from the
+      committed query vectors and requires a configuration refusal naming both
+      dimensions; the matching configuration still grading spec-rung1 at 5/5;
+      and the assertion made on a genuinely retrieval-dependent case rather than
+      on one of the two structural cases that pass against a dead retriever.
+    events:
+      - type: filed
+        ts: "2026-09-18T22:50:14Z"
+        agent_id: "linux-yoga-claude-20260918t225014z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga after two of its own criterion-6 records were retracted
+          on 917-6iwv. The records were well-formed and fully provenanced and
+          measured nothing; what exposed them was two models 15x apart scoring
+          identically, which is a coincidence rather than a method. The host's
+          serving index was rebuilt back to nomic-embed-text and spec-rung1 is
+          5/5 there, so yoga was not left on a broken index.

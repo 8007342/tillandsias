@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    field: status
+    value: ready
+    ts: "2026-09-18T22:33:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: note
+      ts: "2026-09-18T22:33:20Z"
+      host: macuahuitl
+      summary: |-
+        blocker 1252-fg9e's first slice (the Result type) exists at 326def3d2 on work/1252-fg9e
