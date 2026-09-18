@@ -225,9 +225,48 @@ download cache.
    both are invisible if this step silently proceeds.
 3. **Record sibling heads** (`main`, `linux-next`, `windows-next`, `osx-next`)
    per multi-host discipline.
-4. **Create a findings log dir** the smoke will append to:
+4. **ARCHIVE THE PREVIOUS RUN'S EVIDENCE, THEN create the findings log dir**
+   (order 1189-7yvu). `mkdir -p` on its own is what let a run inherit every
+   file from every previous run:
    ```bash
-   mkdir -p target/smoke-e2e
+   SMOKE_EVIDENCE_DIR=target/smoke-e2e
+   SMOKE_RUN_START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   # MOVE ASIDE, NEVER DELETE — prior evidence is worth keeping, and a step
+   # that deletes it makes the previous run unreconstructable.
+   if [ -d "$SMOKE_EVIDENCE_DIR" ] && [ -n "$(ls -A "$SMOKE_EVIDENCE_DIR" 2>/dev/null)" ]; then
+       SMOKE_ARCHIVE="$SMOKE_EVIDENCE_DIR/_archived-$(date -u +%Y%m%dt%H%M%Sz)"
+       mkdir -p "$SMOKE_ARCHIVE"
+       # Move every entry except the archive dirs themselves.
+       for _e in "$SMOKE_EVIDENCE_DIR"/*; do
+           case "$_e" in *"/_archived-"*) continue ;; esac
+           [ -e "$_e" ] && mv "$_e" "$SMOKE_ARCHIVE"/
+       done
+       printf 'archived_to=%s\n' "$SMOKE_ARCHIVE"
+   fi
+   mkdir -p "$SMOKE_EVIDENCE_DIR"
+   printf 'run_start=%s\n' "$SMOKE_RUN_START" | tee "$SMOKE_EVIDENCE_DIR/00-run-start.txt"
+   ```
+   **WHY THIS IS NOT HOUSEKEEPING.** In-block assertions capture their status
+   in the same shell and are unaffected. Every OUT-OF-BAND read is affected:
+   the §5 report, an orchestrator polling for completion, a human scanning the
+   directory. A step that never reaches its write leaves the PREVIOUS run's
+   file under the exact name those readers open, so a stale PASS is
+   indistinguishable from a fresh one BY NAME.
+
+   MEASURED on pirria 2026-09-14: `03-init-exit.txt` containing `init_exit=0`,
+   dated 2026-09-13 01:24, was present and being read as this run's result
+   while this run's `--init` was still building the proxy image. Fourteen files
+   from the 2026-09-12/13 runs were present at start and had to be archived by
+   hand.
+
+   **CHECK EVIDENCE AGAINST `run_start`, not against its existence.** Any file
+   in the directory older than `00-run-start.txt` is a leak from an incomplete
+   archive, not a result:
+   ```bash
+   find "$SMOKE_EVIDENCE_DIR" -maxdepth 1 -type f \
+        ! -newer "$SMOKE_EVIDENCE_DIR/00-run-start.txt" \
+        ! -name 00-run-start.txt -print
+   # any output here is stale evidence that survived the archive step
    ```
 5. **Source the timing helpers, and keep them sourced for every block below**
    (order 1013-qv7c). Each smoke step emits ONE duration record so the
@@ -963,6 +1002,69 @@ instead of a single point.
 > part of the record, not scope creep — the 727-kmks assertion shape, arriving
 > at the one step that never had it.
 
+### 4a-cold — `opencode_exit=0` IS NOT THE PASS CONDITION ON A POST-RESET HOST
+
+**Read this before you read `LANE_RC`.** Order 1190-swen; coordinator ruling
+2026-09-14, option (a).
+
+§2 reset the substrate, so Vault is **cold** and holds no GitHub token. The
+in-forge lane therefore reaches the Credential Channel Guard and **hard-stops
+there, deterministically, before any committable work**. That is not a
+degraded run. On a post-reset host it is the *only* correct outcome, and it is
+what §4 exercises: enclave bring-up, and the guard. Nothing past them.
+
+The failure this replaces is a reader — human or orchestrator — seeing
+`opencode_exit=0` and concluding the forge did a cycle's worth of work. It did
+not. It could not have.
+
+**ASSERT THE GUARD LINE, NEVER THE EXIT CODE:**
+
+```bash
+# PASS on a cold (post-§2-reset) host: the lane came up and stopped AT the guard.
+if grep -qE 'blocked:upstream-(no-credential|auth-unpublished)' target/smoke-e2e/04-opencode.log; then
+    echo "cold-host PASS: lane reached the credential guard and stopped there"
+else
+    echo "FINDING: no credential-guard stop in the lane log on a post-reset host."
+    echo "  A cold Vault holds no token, so the guard MUST have refused."
+    echo "  Either the guard was skipped, or this room was not clean."
+fi | tee target/smoke-e2e/04a-cold-host-outcome.txt
+
+# NEGATIVE CONTROL — exit 0 WITHOUT the guard line FAILS the assertion.
+# This is the whole point: the two are independent, and only the second is evidence.
+grep -qE 'blocked:upstream-(no-credential|auth-unpublished)' target/smoke-e2e/04-opencode.log   || echo "negative control fired: opencode_exit=${LANE_RC} is NOT a pass on its own"
+```
+
+Then confirm the lane left nothing behind, which is the other half of "stopped
+before committable work":
+
+```bash
+{
+  echo "git_status_empty=$([ -z "$(git status --porcelain)" ] && echo yes || echo no)"
+  echo "head_matches_origin=$([ "$(git rev-parse HEAD)" = "$(git rev-parse origin/linux-next)" ] && echo yes || echo no)"
+  echo "mo_full_marker_present=$(grep -qE '^MO-FULL: ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
+} | tee target/smoke-e2e/04a-cold-host-residue.txt
+```
+
+Expected on a cold host: `yes`, `yes`, **`no`**. The ABSENT marker is correct
+and loud — a lane that stopped at the guard has not completed its exit contract
+and must not claim it did.
+
+MEASURED on pirria 2026-09-14 (`04-opencode.log:848-862`): the guard answered
+`blocked:upstream-no-credential` (exit 1); the mirror published
+`refs/tillandsias/upstream-auth/no-credential`, fresh; the in-forge agent
+claimed nothing, drained nothing, filed nothing, committed nothing, left
+`git status` empty and `HEAD == origin/linux-next`, and emitted no `MO-FULL:`
+marker — correctly refusing to commit from a container about to be destroyed.
+The HOST could push at that same moment
+(`00-credential-channel.txt` = `ok:gh-keyring-push-verified`). **The asymmetry
+is the design, not a defect**, and the in-forge handling is not what needed
+fixing — the runbook's pass condition was.
+
+**Option (b) — issue a scoped token after §3 — was DECLINED** by the
+coordinator, and the reason generalises: it would test a different machine than
+the one this smoke exists to prove. **A clean room that holds a credential is
+not a clean room.**
+
 This launches the full enclave + the OpenCode agent inside the forge, which runs
 [[forge-continuous-enhancement]] against the `tillandsias` checkout. Two streams
 of findings come out of this step:
@@ -1052,6 +1154,48 @@ is by design, so their ABSENCE here is the pass, not a finding.
 > what the LAST rule above exists to prevent. The block above is what that run
 > used instead, after the fact.
 
+## 5 — File the findings report
+
+> **This heading did not exist until order 1189-7yvu/1190-swen.** Five places
+> in this runbook say "see §5" or "the §5 report" (§0.2b, §3, §3b, §4, §4a-cold)
+> and a reader following any of them found no §5 — the section was here,
+> unnumbered, after §4c. A cross-reference to a section that cannot be located
+> is the cheapest kind of broken instrument.
+
+**The report MUST open with these three lines**, before any packet:
+
+```markdown
+- run_start: <the `run_start=` value from target/smoke-e2e/00-run-start.txt>
+- evidence_dir: target/smoke-e2e   (previous runs archived under _archived-<ts>/)
+- forge_lane_outcome: <see below — required whenever §4 ran>
+```
+
+`run_start` is what makes every other file in the evidence directory checkable
+(order 1189-7yvu). Without it a reader cannot tell this run's `03-init-exit.txt`
+from a previous run's, because they have the same name — and on pirria
+2026-09-14 a 2026-09-13 `init_exit=0` was read as that run's result while its
+`--init` was still building the proxy image.
+
+`forge_lane_outcome` must say, **in words a reader cannot mistake for a
+completed cycle** (order 1190-swen), which of these happened:
+
+- `cold-host guard stop (EXPECTED PASS)` — the lane brought the enclave up and
+  stopped at the Credential Channel Guard with
+  `blocked:upstream-no-credential`. Nothing was claimed, drained, filed or
+  committed; the tree is pristine; **no `MO-FULL:` marker was emitted, and its
+  absence is correct.** On a post-§2-reset host this is the expected outcome,
+  not a partial one. Say so explicitly — do NOT write "forge run clean", which
+  reads as a cycle's worth of work.
+- `completed cycle` — only legitimate if the lane got past the guard, which on
+  a properly cold host it cannot. If you are writing this after a §2 reset,
+  something held a credential and **the room was not clean** — that is a
+  finding, not a pass.
+- `supervisor lost` — see §4a; containers up and no kernel oom-kill means the
+  run is unfinished, not red.
+
+**Never report the forge lane from `opencode_exit` alone.** Exit 0 and a
+guard-stop are the same number.
+
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated, **host-qualified** smoke report:
 
@@ -1112,9 +1256,13 @@ Rules for good findings:
 - **Redact secrets.** Never paste tokens or unredacted push URLs into a packet.
 - **De-duplicate.** Before filing, grep `plan/issues/` for an existing packet on
   the same symptom; if found, append an `events:` note instead of a new packet.
-- **No silent passes.** If the smoke ran clean end-to-end, still write a one-line
-  PASS entry to the report (release tag + "init clean, forge run clean") so the
-  convergence record shows the release was exercised.
+- **No silent passes.** If the smoke ran clean end-to-end, still write a
+  one-line PASS entry to the report (release tag + "init clean") so the
+  convergence record shows the release was exercised. **Do not write "forge run
+  clean"** — state the `forge_lane_outcome` from the top of this section
+  instead. On a post-reset host the honest line is "init clean; forge lane
+  stopped at the credential guard as expected", and the old wording is exactly
+  the sentence order 1190-swen exists to remove.
 - **Cite the release's ledger row and account for its claims** (order 380). The
   report carries a short `## Ledger claims` section listing each claim from the
   row read in §0.2b under exactly one of three headings:

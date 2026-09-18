@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    field: next_action
+    value: |-
+      RUNBOOK CHANGE LANDED on linux-next. FIXTURE WRITTEN AND GREEN BUT NOT LANDED —
+      it lives in `scripts/`, which the release freeze holds, so it is parked on the
+      branch named below. THAT PARKED FILE IS THE ONLY THING LEFT.
+
+      WHAT LANDED (skills/smoke-curl-install-and-test-e2e/SKILL.md, freeze-exempt):
+        §4a-cold — a new subsection, placed before §4a so it is read BEFORE `LANE_RC`
+        — states the coordinator's option-(a) ruling as the lane's pass condition on a
+        post-reset host: the lane brings the enclave up and stops at the Credential
+        Channel Guard, asserted from the guard line, never from exit 0. It carries the
+        assertion, the explicit NEGATIVE CONTROL (exit 0 without the guard line fails),
+        and a residue check (`git status` empty, HEAD == origin/linux-next, and NO
+        `MO-FULL:` marker — the absence being correct and loud).
+        §5 — which DID NOT EXIST; five "see §5" references pointed at nothing — now
+        exists and requires a `forge_lane_outcome` field with three named values:
+        `cold-host guard stop (EXPECTED PASS)`, `completed cycle` (which on a properly
+        cold host is itself a finding — the room was not clean), or `supervisor lost`.
+        The old PASS wording "init clean, forge run clean" is REMOVED from the rules
+        list; that sentence is the one this order exists to delete, because it reads
+        as a cycle's worth of work.
+
+      WHAT IS PARKED, and where:
+        branch `work/1189-7yvu-1190-swen` (pushed to origin), one commit, two files:
+          scripts/test-smoke-forge-lane-cold-host-outcome.sh   (this order, 7 steps)
+          scripts/test-smoke-evidence-dir-is-fresh.sh          (1189-7yvu, 6 steps)
+        Both are green on pirria and need NO toolchain — hermetic bash under mktemp,
+        no forge launched, no podman touched. Relay onto linux-next when the freeze on
+        `scripts/` lifts; nothing else is outstanding.
+
+      VERIFIABLE CLOSURE, now that the fixture exists (replacing this row's
+      `unscoreable`): `bash scripts/test-smoke-forge-lane-cold-host-outcome.sh` prints
+      `ok:smoke-forge-lane-cold-host-outcome:7 step(s)` and exits 0. Its steps:
+        1. the runbook carries §4a-cold, the guard regex and `forge_lane_outcome`;
+        2. the string "init clean, forge run clean" is GONE from the runbook — if it
+           returns, this fails rather than passing quietly;
+        3. a real cold-host lane log reads as PASS;
+        4. NEGATIVE CONTROL: exit 0 WITHOUT the guard line is a FINDING. This is the
+           whole packet — the two signals are independent and only the second is
+           evidence;
+        5. the verdict is INDEPENDENT OF THE EXIT CODE, asserted separately, because
+           a rule that quietly consulted the exit code would still pass step 4 while
+           contradicting the runbook's own sentence that exit 0 and a guard-stop are
+           the same number;
+        6. a cold-host lane emits NO `MO-FULL:` marker;
+        7. a warm-room lane (credential present, marker emitted) is reported as a
+           FINDING, not a pass.
+
+      WHAT A DISTRUSTFUL STRANGER SHOULD RE-CHECK:
+      - The guard regex lives in TWO places — the runbook block and the fixture's
+        `GUARD_RE`. The fixture asserts the runbook still contains it (step 1), but
+        if the guard's verdict token ever changes, both must change together.
+      - NOT RUN AGAINST A LIVE FORGE. The lane logs are synthesised from the measured
+        2026-09-14 excerpt (04-opencode.log:848-862); no forge was launched this
+        cycle and no release tag existed to smoke. The first real post-reset smoke
+        after this lands should confirm §4a-cold's assertion fires on genuine output
+        and that `04a-cold-host-residue.txt` reads yes/yes/no.
+      - The ruling itself is the coordinator's, dated 2026-09-14, and option (b) — a
+        scoped token after §3 — was DECLINED. If anyone proposes issuing a credential
+        to make §4 "go further", that is a re-litigation of a decided question: a
+        clean room that holds a credential is not a clean room.
+    ts: "2026-09-18T20:26:35Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    event:
+      type: note
+      ts: "2026-09-18T20:26:35Z"
+      host: pirria-silverblue
+      summary: |-
+        runbook landed; fixture green and parked on work/1189-7yvu-1190-swen pending the scripts/ freeze

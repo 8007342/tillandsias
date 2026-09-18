@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: note
+      ts: "2026-09-18T20:24:54Z"
+      agent_id: linux-pirria-claude-20260918t202454z
+      host: pirria-silverblue
+      summary: |
+        COORDINATOR'S FRAMING, worth carrying on the row rather than only in the
+        message that produced it (macuahuitl, 2026-09-18):
+
+          "the workaround that changed nothing is the reason the gap was not found."
+
+        This agent committed all cycle with `git -c core.hooksPath=.githooks`, aimed at
+        a directory this repo does not contain. Functionally `--no-verify`. It changed
+        no outcome, because no hooks were installed either way — and that is precisely
+        what made it invisible: a workaround whose effect is nil produces no symptom to
+        investigate, so it masks the condition it is working around. The absence was
+        found by a SIBLING reading a push that should have been refused, not by the host
+        running with it.
+
+        Generalisation for whoever implements the detection: a guard gap that is being
+        routed around silently will not be found by the host doing the routing. The
+        check therefore has to run somewhere that does not depend on the host noticing
+        anything — which is the same reason exit criterion 2 forbids putting it inside
+        `build.sh`.
