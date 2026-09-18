@@ -19,6 +19,33 @@
 //! implementing one — that phantom claim is what the 920-pxg6 audit
 //! removed.)
 //!
+//! WHAT CONTAINMENT IS, AND WHAT IT IS NOT (order 1252-hsrz).
+//!
+//! CONTAINMENT IS EXACTLY TWO THINGS:
+//!   1. the small audited verb set on the `expert` table — enumerable at
+//!      runtime via `expert.verbs()` in `lua_predicate`, and pinned by a test,
+//!      so widening it is a visible diff rather than an accident; and
+//!   2. the forge's existing CONTAINER BOUNDARY.
+//!
+//! Nothing else may be asserted, here or in any spec that cites this file.
+//!
+//! SELINUX IS NOT RELIED UPON AND MUST NOT BE CITED AS CONTAINMENT. The
+//! SELinux policies in this project are PROSE: not enforced, not scoped, and
+//! not required anywhere. A spec that requires SELinux which nothing enforces
+//! is the same prose-versus-enforceability defect the litmus corpus already
+//! carries, one layer down. Claiming SELinux containment here would recreate
+//! precisely the phantom that the 920-pxg6 audit removed from THIS FILE — so
+//! if you are reading this looking for that guarantee, it does not exist and
+//! adding the sentence back does not create it.
+//!
+//! PROVENANCE IS A SEPARATE, UNSOLVED PROBLEM. `lua/` is trusted code in the
+//! checkout. Once a forge agent authors a predicate for uncommitted work, the
+//! boundary moves from "code we shipped" to "code an agent just wrote", and
+//! "we are the only ones manipulating it" stops being the safeguard. Bounding
+//! blast radius by the verb set is the mitigation that exists; SIGNING or
+//! ATTESTING predicate provenance is NOT implemented and is not implied by
+//! any row that cites this file.
+//!
 //! Division of labor after 920-pxg6: Lua owns TIER CLASSIFICATION, VARIANT
 //! TRIMMING, and COLLECTION DEDUP — deterministic data-in/data-out scripts.
 //! Rust owns everything with consequences: dispatch, endpoints, retrieval,

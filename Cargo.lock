@@ -3460,6 +3460,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tillandsias-exec",
  "tillandsias-podman",
  "tokio",
 ]
