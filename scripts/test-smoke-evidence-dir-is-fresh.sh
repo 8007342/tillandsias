@@ -88,7 +88,15 @@ fi
 # especially quiet — a fixture about instruments that report success while
 # seeing nothing, whose own verdict is decided by something other than what it
 # measures. Read the matches into an array; no pipe, nothing to signal.
-mapfile -t archived < <(find target/smoke-e2e -name '03-init-exit.txt' -path '*_archived-*')
+# AND BASH 3.2 CLEAN (order 761-g36m). The first fix used `mapfile`, which the
+# dialect gate refused: mapfile/readarray do not exist in bash 3.2, which is
+# what macOS ships — and this fixture pins a runbook that RUNS on macOS, so it
+# would have errored there and reported a violation against a healthy tree.
+# A `while read` loop over process substitution is bash-3.2 clean AND has no
+# early-exiting consumer, so it satisfies 792-ksr8 and 761-g36m at once.
+archived=()
+while IFS= read -r _p; do archived+=("$_p"); done \
+    < <(find target/smoke-e2e -name '03-init-exit.txt' -path '*_archived-*')
 found=${#archived[@]}
 if [ "$found" -eq 1 ] && grep -q 'init_exit=0' "${archived[0]}"; then
     step "NEGATIVE CONTROL: archived copy preserved with its content" PASS
@@ -111,9 +119,13 @@ fi
 echo "init_exit=1" > target/smoke-e2e/03-init-exit.txt
 sleep 1
 archive_and_init
-# Same rule as above: read into arrays rather than piping into a counter.
-mapfile -t nested < <(find target/smoke-e2e -name '_archived-*' -path '*_archived-*/_archived-*')
-mapfile -t all_copies < <(find target/smoke-e2e -name '03-init-exit.txt')
+# Same two rules as above: no pipeline in a verdict, no bash-4 builtin.
+nested=()
+while IFS= read -r _p; do nested+=("$_p"); done \
+    < <(find target/smoke-e2e -name '_archived-*' -path '*_archived-*/_archived-*')
+all_copies=()
+while IFS= read -r _p; do all_copies+=("$_p"); done \
+    < <(find target/smoke-e2e -name '03-init-exit.txt')
 depth=${#nested[@]}
 copies=${#all_copies[@]}
 if [ "$depth" -eq 0 ] && [ "$copies" -eq 2 ]; then

@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-evidence-dir-is-never-cleared-between-runs-so-a-previous-runs-exit-file-reads-as-this-runs-result-to-every-out-of-band-read
+    event:
+      type: note
+      ts: "2026-09-18T21:59:50Z"
+      agent_id: linux-pirria-claude-20260918t215950z
+      host: pirria-silverblue
+      summary: |
+        SECOND GATE REFUSAL ON THE SAME FIXTURE — the fix for the first one introduced
+        the second, and the pair is the useful record.
+
+          blocked:bash4-unguarded:2        (order 761-g36m)
+          UNEXEMPTED bash-4 builtin: mapfile/readarray do not exist in bash 3.2
+
+        The 792-ksr8 remedy I reached for was `mapfile -t archived < <(find ...)`. It
+        removes the pipeline correctly and is bash-4-only, and **macOS ships bash
+        3.2** — so the fixture would have errored on both Macs and reported a violation
+        against a healthy tree. That is 1055-6yp8's exact shape, in a fixture pinning a
+        runbook that RUNS ON macOS.
+
+        The form that satisfies both constraints at once, and is what landed:
+
+          archived=()
+          while IFS= read -r _p; do archived+=("$_p"); done \
+              < <(find target/smoke-e2e -name '03-init-exit.txt' -path '*_archived-*')
+          found=${#archived[@]}
+
+        Process substitution is bash-3.2 clean, and a `while read` loop consumes its
+        whole input, so there is no early-exiting consumer for SIGPIPE to decide.
+        Verified after: `ok:bash-dialect-clean`, and
+        `ok:smoke-evidence-dir-is-fresh:6 step(s)` rc=0.
+
+        WHAT THIS SEQUENCE IS ACTUALLY EVIDENCE OF, and it belongs on this row because
+        this row is about a stale file reading as a fresh result: **I ran this fixture
+        green four times before the gate refused it twice.** On the tree where it was
+        written, on the merged tree, after the freeze lifted, and after the SIGPIPE
+        fix — every one of those runs printed `ok:...:6 step(s)` while the defects were
+        present, because a fixture reports whether its own assertions passed and cannot
+        report whether it is a sound instrument. Running a fixture proves it says PASS.
+        The gate is what asks whether the PASS means anything. A fixture author who
+        stops at "it goes green" has measured the thing they wrote, not the thing they
+        needed.
+
+        COVERAGE CHECKED, per the runbook's own step: `scripts/litmus-covering-specs.sh
+        --changed` answers `ok:litmus-coverage:0-spec(s)` for this change — no existing
+        litmus spec binds these paths, so there is no suite to go red behind a green
+        gate here. Recorded because an unchecked assumption of coverage is what 921-vtf4
+        and 1256-f7td are both about; "0 specs" is a measurement, not a shrug.
