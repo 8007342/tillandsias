@@ -1196,7 +1196,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # --no-fail-fast (order 829-g4xf): without it cargo stops at the first
     # failing binary, so this pass reported 1 failure where there were 8 and
     # more than half the workspace never ran.
-    if run_rust_test_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    #
+    # SEAT THE PODMAN SEAM (880-tdwn / 1022-y7kc, applied here 2026-09-18).
+    # run_rust_test_on_host ARMS TILLANDSIAS_PODMAN_REFUSE_REAL=1, so an
+    # unseated test that resolves podman PANICS at the tripwire instead of
+    # reaching the real binary. The identical seat has guarded the headless
+    # target ~36 lines below since 1022-y7kc measured 13 tests there that
+    # "never seat a fake podman themselves and only ever passed on a seat
+    # leaked by a parallel neighbour" — and that lesson was never carried to
+    # THIS invocation, which runs every other lib target in the workspace.
+    #
+    # It came due in the 2026-09-18 release gate: tillandsias-plan's
+    # groundtruth::tests::the_spec_engine_stamps_the_index_frame_not_the_readers_head
+    # was the whole red (331 passed / 1 failed) on an otherwise green ci-full
+    # with litmus at 368/0. MEASURED, not assumed: armed+unseated it fails
+    # standalone in 0.01s (so it is DETERMINISTIC, not the intermittent it was
+    # first filed as); armed+seated it passes in 0.01s; and the full
+    # `--workspace --lib` under this seat went 332 passed / 0 failed with no
+    # other verdict in the run changing.
+    #
+    # /bin/false is the same deterministic "not running" podman that
+    # podman_false_seam() chooses, and a test that seats itself still
+    # overrides it. The seat can only convert a tripwire panic into a
+    # not-running resolution — it cannot hand anything the real binary,
+    # because REFUSE_REAL already forbids that.
+    #
+    # NOT closed by this: a neighbour that REMOVES the seam mid-flight rather
+    # than restoring it still races, which is what --test-threads=1 shuts on
+    # the headless target. The durable closure is the seam-writer guard
+    # (scripts/check-seam-writers-canonical.sh) going gating once 1250-92ty
+    # lands; this seat removes the deterministic failure, not the race.
+    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
