@@ -95,12 +95,18 @@ trap 'rm -f "$OUT"' EXIT
 # difference is the one flag this fixture claims is load-bearing.
 "$TRAY" --exec-guest '
 M=/root/.cache/tillandsias/models
-IMG=localhost/tillandsias-inference:latest
+# 1087-h2z9: resolve the CONCRETE version tag rather than depend on a mutable
+# one. A fixture pinned to a floating tag measures whatever happens to carry
+# that tag today, which is the opposite of what a regression guard is for; the
+# sha256- tags are skipped because the version tag is the one a reader can match
+# against a release.
+IMG="$(podman images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null \
+       | awk -F: '\''$0 ~ /tillandsias-inference/ && $NF != "latest" && $NF !~ /^sha256-/ { print; exit }'\'')"
 # verbatim from build_inference_run_args, minus the parts that need the enclave
 PFLAGS="--cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --pids-limit=1024"
 MUTATED="--cap-drop=ALL --security-opt=no-new-privileges --userns=keep-id --pids-limit=1024"
 
-podman image exists "$IMG" || { echo "ARM0:no-inference-image"; exit 0; }
+[ -n "$IMG" ] && podman image exists "$IMG" || { echo "ARM0:no-version-tagged-inference-image"; exit 0; }
 mountpoint -q "$M" || { echo "ARM0:model-cache-not-mounted"; exit 0; }
 
 probe() {
