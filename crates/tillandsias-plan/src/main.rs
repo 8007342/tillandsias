@@ -5830,6 +5830,52 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 println!("ok:declared-closures:{checked} checked");
             }
         }
+        // ORDER 1261-bn7v. THE FOLDED VALUE OF ONE LONG-FORM FIELD, which
+        // until now could not be read back at all.
+        //
+        // WHY IT HAD TO BE ADDED RATHER THAN COMPOSED. `query --json --limit 0`
+        // does not carry long-form fields: measured across all 1058 rows, the
+        // count carrying next_action, notes, context, verifiable_closure,
+        // unscoreable or provenance is ZERO for each. Its projection is
+        // capability_tags, desired_release, kind, lease, order, packet_id,
+        // pickup_role, priority, release_target, status and title (plus
+        // deliverable and depends_on where present), which is why it can print
+        // `depends_on` and not `next_action`.
+        //
+        // WHAT IT IS FOR. 1261-bn7v: `set-field --append`'s drops-lines guard
+        // compares against the fold THE WRITING HOST HOLDS, so an append
+        // written against a base that lacks a peer's newer append passes the
+        // guard and, because LWW is per FIELD, deletes the peer's lines with no
+        // conflict and no marker. The plan lane can only refuse that if it can
+        // fold ORIGIN's copy of the field and diff it line-wise — and the
+        // binary resolves its ledger from the CWD, so the lane can
+        // `git archive origin/linux-next plan/` into a temp dir and run this
+        // there. That cwd behaviour was discriminated, not assumed: an
+        // extracted tree at an older commit reports a different status than the
+        // live repo from the same binary.
+        //
+        // Prints the folded value on stdout and nothing else, so a caller can
+        // diff it directly. An UNSET field exits 3 and prints nothing, which a
+        // caller must distinguish from "empty" — the ternary this milestone
+        // keeps paying for (1260-2qgi).
+        "field-get" => {
+            let (Some(reference), Some(field)) = (args.get(1), args.get(2)) else {
+                usage()
+            };
+            match ledger.resolve(reference) {
+                Some(p) => match tillandsias_plan::str_field(p, field) {
+                    Some(v) => println!("{v}"),
+                    None => {
+                        eprintln!("unset:field-get:{reference}.{field}");
+                        std::process::exit(3);
+                    }
+                },
+                None => {
+                    eprintln!("error: {}", unresolved_reason(&ledger, reference));
+                    std::process::exit(1);
+                }
+            }
+        }
         "status" => {
             let Some(reference) = args.get(1) else {
                 usage()
