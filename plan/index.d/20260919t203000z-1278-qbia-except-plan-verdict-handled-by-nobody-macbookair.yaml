@@ -1,0 +1,128 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-stamp-emits-an-except-plan-verdict-the-pre-push-hook-has-no-arm-for-so-it-takes-the-warn-and-continue-fallback-and-skips-the-scope-check-the-fresh-path-enforces
+    order: 1278-qbia
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, developer-loop, status-channel]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    unscoreable: ""
+    verifiable_closure: |
+      A fixture drives BOTH verdicts through the hook's stamp branch and
+      asserts the OUTPUT, not the internals:
+
+        given verify -> ok:gate-fresh            and a stamp declaring no usable
+                                                 scope, the hook REFUSES with its
+                                                 `the gate stamp does not declare
+                                                 a usable scope (...)` line
+        given verify -> ok:gate-fresh-except-plan and the SAME stamp, the hook
+                                                 refuses with the SAME line
+
+      PRE-FIX RESULT: FAILS. The second case PASSES today with only a yellow
+      `⚠ gate-stamp returned 'ok:gate-fresh-except-plan' — not blocking on it`,
+      because the verdict has no arm and falls to the warn-and-continue
+      catch-all. Measured by grep on this host 2026-09-19:
+      `grep -c "gate-fresh-except-plan" scripts/hooks/pre-push-local-gate.sh`
+      returns 0, while scripts/gate-stamp.sh:985 emits it.
+
+      The fixture must drive the HOOK, not re-implement its case statement: a
+      test that greps for an arm would pass the moment someone adds an arm that
+      does the wrong thing.
+    title: |
+      scripts/gate-stamp.sh emits ok:gate-fresh-except-plan and scripts/hooks/pre-push-local-gate.sh has no case arm for it, so that verdict takes the deliberate warn-and-continue fallback and bypasses enforce_stamp_scope, which the ok:gate-fresh arm applies
+    context: |
+      FOUND on tlatoanis-macbook-air 2026-09-19 while trying to establish why a
+      push had been refused. The refusal turned out to be unrelated; this was
+      found on the way and is unconnected to it.
+
+      THE PRODUCER. scripts/gate-stamp.sh:985 emits `ok:gate-fresh-except-plan`
+      when the recorded plan digest differs but the code digest does not. The
+      block above it states the intent plainly: "This verdict says the CODE is
+      still vouched for and only the ledger moved, so build.sh runs the two
+      ledger guards (~1-2s) and nothing else."
+
+      THE CONSUMER DOES NOT KNOW THE STRING. In
+      scripts/hooks/pre-push-local-gate.sh the stamp branch is a case over the
+      verify verdict with exactly these arms:
+
+        ok:gate-fresh)                                   -> enforce_stamp_scope
+        stale:legacy-stamp-format)                       -> plan lane, else refuse
+        stale:never-run|stale:tree-changed-since-gate)   -> refuse
+        *)                                               -> warn, do not block
+
+      `grep -c "gate-fresh-except-plan"` over that file returns 0. So the
+      verdict lands in `*)`.
+
+      THE FALLBACK IS DELIBERATE AND ITS COMMENT IS CORRECT ON ITS OWN TERMS:
+      "Unknown verdict: warn, do not block. A stamp bug must not strand a push
+      — the preflight above already ran, and blocking on a state we cannot
+      classify would be a worse failure than allowing it." That reasoning is
+      about verdicts the hook CANNOT classify. This verdict is one the system
+      produces ON PURPOSE, so it is being handled by a policy written for
+      unknown states.
+
+      THE ASYMMETRY, WHICH IS THE DEFECT. The `ok:gate-fresh` arm calls
+      enforce_stamp_scope, which refuses when the stamp "does not declare a
+      usable scope". The catch-all calls nothing. So a stamp that is fresh
+      except for the ledger SKIPS a check that the same stamp would face if the
+      ledger had not moved. Two stamps differing only in whether a plan fragment
+      arrived are treated differently by a check that has nothing to do with
+      plan fragments.
+
+      I HAVE NOT MEASURED HARM AND DO NOT CLAIM ANY. I did not construct a
+      stamp with an unusable scope and push it, and I am not asserting that such
+      a stamp is reachable in practice. What is established is the asymmetry and
+      its cause, both by reading the two files and by the grep above. Whether it
+      is exploitable, or merely untidy, is the first thing the taker should
+      settle — and it is why this is p2 and not p1.
+
+      FAMILY: 1260-2qgi. A status is emitted by one component and handled by
+      nobody, and the fallback silently supplies a different meaning — here
+      "unclassifiable, allow" standing in for "classified, and the code is
+      vouched for". The instrument is not lying; the consumer is answering a
+      question the producer did not ask.
+    deliverable: |
+      The hook handles `ok:gate-fresh-except-plan` explicitly, applying the same
+      scope enforcement the `ok:gate-fresh` arm applies. The two verdicts differ
+      in what they say about the LEDGER; they say the same thing about the code
+      and the scope, so they must not diverge on a scope check.
+
+      NOT IN SCOPE, and it must not be quietly folded in: do NOT remove or
+      narrow the warn-and-continue catch-all. Its reasoning holds for genuinely
+      unknown verdicts, and a future producer verdict should still not strand a
+      push. The fix is to stop routing a KNOWN verdict through it.
+
+      Worth checking in the same pass, since the same shape may exist elsewhere:
+      the other consumers of this verdict string are scripts/gate-stamp.sh,
+      build.sh, scripts/test-gate-fast-refusals.sh,
+      scripts/check-plan-binary-probe-usage.sh and
+      scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh. Whether
+      each handles it or falls through is not established here.
+    next_action: >
+      Reproduce the asymmetry before changing anything, and do it against the
+      HOOK rather than by reading it: construct a stamp whose verify returns
+      ok:gate-fresh-except-plan and whose scope is unusable, run the hook, and
+      observe that it warns and proceeds; then make verify return ok:gate-fresh
+      for a stamp with the same unusable scope and observe the refusal. That
+      pair IS the fixture named in verifiable_closure, so write it as the
+      fixture rather than as a throwaway. THEN settle the question this row
+      deliberately leaves open — whether a stamp with an unusable scope is
+      reachable at all in normal operation — because the answer decides whether
+      this is a hole or an inconsistency, and the row is filed as the latter.
+      Do NOT touch the catch-all itself: its comment is right about the case it
+      was written for.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-19 at the coordinator's request.
+      The two file excerpts, the four case arms and the grep counts were read on
+      this host at the revision merged from origin/osx-next f06eeb854. No harm
+      was measured and none is claimed; the row asserts an asymmetry and its
+      cause. Found while investigating an unrelated push refusal which this does
+      NOT explain — a prior draft of this finding wrongly concluded the missing
+      arm caused a refusal, and that was corrected by reading the catch-all,
+      which warns rather than blocks.
