@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-skills-single-source-guard-asserts-link-shape-over-a-population-that-can-silently-shrink-so-a-runtime-that-does-not-exist-passes-and-deleting-the-tree-it-protects-reads-as-green
+    field: context
+    value: |-
+      THE WIDENING THAT LANDED FOR THE 2026-09-18 TRUNK-RED INCIDENT FIXED THE
+      MECHANISM-VERSUS-OUTPUT COLLISION AND DELIBERATELY LEFT THESE. This row is
+      the designed-out scope, not a missed case: the author scoped the population
+      assertion out ON PURPOSE mid-incident, on the grounds that refusing a host
+      which legitimately lacks a runtime is a blast-radius change and discovering
+      that while trunk is red for every host turns a one-commit incident into a
+      three-commit one. They said so rather than letting a 7/7 mutant imply
+      coverage it did not have. That judgement was right and is recorded here so
+      nobody re-reads it as an oversight.
+
+      HOLE A — THE POPULATION CAN SHRINK TO NOTHING AND THE VERDICT STAYS ok.
+      The runtime loop skips any runtime whose skills path is untracked, and the
+      verdict REPORTS the count without PINNING it, so no reader can tell
+      ok:5:16 from ok:1:16. Measured on two hosts, same script, only the runtime
+      list differing:
+        yoga:      SKILLS_CHECK_RUNTIMES=".claude .opencode .codex .github"
+                   -> ok:skills-single-source:4:16   rc=0   (on a tree whose
+                      default run REFUSED with violation:missing-from-runtime)
+        lenovinha: SKILLS_CHECK_RUNTIMES=".claude .nonexistent-runtime"
+                   -> ok:skills-single-source:1:16   rc=0
+      THE SECOND MEASUREMENT IS THE ONE THAT MATTERS and it is lenovinha's, not
+      mine. Mine removes a REAL runtime from the list, which leaves the reading
+      "well, the path was tracked once" available. Theirs names a runtime that
+      DOES NOT EXIST AT ALL and the guard accepts it. The guard cannot
+      distinguish a runtime vanishing from a runtime being fine, which means
+      deleting .gemini/skills outright would have made the 2026-09-18 tree green
+      — the guard would have applauded the deletion of the thing it exists to
+      protect. That is the vacuous-green shape this milestone is about.
+
+      HOLES B, C AND D — THE GUARD READS GIT MODES AND NEVER RESOLVES A TARGET.
+      All three pass a shape-only test and all three collapse into one criterion:
+        B  an unresolved target: a link to a stale or divergent tree satisfies
+           "is a symlink". This is the alias-tree divergence defect arriving
+           through the front door of the fix meant to prevent it.
+        C  a DANGLING link: tracked, target absent, every canonical skill
+           "reachable" purely because nothing looked.
+        D  an ABSOLUTE target: resolves on the author's host and nowhere else,
+           including inside the builder toolbox where the gate actually runs —
+           the nastiest of the three for exactly that reason.
+
+      AND A SECOND GUARD ASSERTING THE OLD MECHANISM, IN A TIER THE GATE DOES
+      NOT EXECUTE. scripts/check-skill-canonicalization.sh still encodes the
+      per-skill-symlink mechanism the 2026-09-18 widening replaced. It is NOT an
+      orphan — that was this author's first claim and it was wrong, from a grep
+      whose population was scripts/ and build.sh and therefore could not see the
+      answer. It is bound, through the litmus lane:
+        openspec/litmus-tests/litmus-skills-canonical-and-mcp-first-shape.yaml
+      with real arms that run the script and assert
+      `^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$`.
+
+      THE PROBLEM IS THE TIER, AND IT IS WORSE THAN AN ORPHAN WOULD BE.
+      `./build.sh --check` validates litmus METADATA without EXECUTING litmus
+      tests. Measured on two hosts independently, from real gate logs rather than
+      by reading build.sh — which matters, because build.sh mentions litmus
+      enough times that a reader who greps the SOURCE will wrongly conclude the
+      tests run:
+        yoga gate log:      63 litmus mentions, 0 executions of
+                            skills-canonical-and-mcp-first, 0 `ok:skills-canonical:`
+        lenovinha gate log: 63 / 0, same split
+      The 63 are metadata validators — ok:litmus-pin-claims, ok:litmus-yaml-parses,
+      ok:litmus-step-model, ok:litmus-grep-escapes, ok:litmus-line-windows,
+      ok:litmus-covering-specs-fixture — plus parked-block reports.
+
+      THE CONTRADICTION IS NO LONGER PREDICTED — IT IS LIVE ON TRUNK. Measured
+      on origin/linux-next@6ac0f8d2a, the two guards disagree about the same
+      tree, at the same moment:
+        scripts/check-skills-single-source.sh  -> ok:skills-single-source:5:16   rc=0
+        scripts/check-skill-canonicalization.sh -> violation:harness-exclusive-skill:17 offender(s)  rc=1
+      The gated guard is GREEN and the litmus-bound guard is RED, on trunk, now.
+      The 17 offenders are 16 canonical skills reported as "real directory;
+      hand-written skills belong in skills/ and are reached by symlink" — the
+      canonicalization guard resolving THROUGH the .gemini directory symlink and
+      seeing real directories where it expects per-skill links — plus
+      `.gemini/skills/HARNESS-SCOPED.txt` flagged as "regular file, not a symlink
+      in the index", which is the guard objecting to the declaration file that
+      exists to grant it exemptions.
+
+      So the two guards contradict each other ACROSS TIERS: a directory-symlink
+      layout passes `--check` under the widened Direction 2 and REDS THE LITMUS
+      SUITE later, somewhere else, for somebody else. `--ci-full` runs the litmus
+      lane; `--check` does not. That is the
+      green-gate-silent-about-another-tier shape: the change is green through
+      gate, hand-off and cross-platform compile, and red where the other tier
+      runs. Decide it explicitly — re-aim canonicalization at the output
+      invariant, or retire it — but do not leave two guards asserting opposite
+      layouts in two tiers that never meet.
+
+
+      [2026-09-19T02:29:53Z yoga-silverblue] FAMILY MEMBER 2026-09-19 — THE DISAGREEMENT WAS IN THE CHECKER, NOT THE SUBJECT. This row is about a guard whose POPULATION can silently shrink while its verdict stays ok. The same defect has now appeared three times in one night in the verifiers themselves, which is worth recording here because a guard and the check that validates a guard fail the same way. (1) yoga reported scripts/check-skill-canonicalization.sh as an orphan after grepping scripts/ and build.sh only — the binding lives in openspec/litmus-tests/ and the population could not contain the answer, so the zero read as absence. (2) yoga verified the 45-step assert_exit migration with a checker that counted EVERY expected_behavior line, while the migrator had required a command and no success_pattern; the two populations disagreed, the checker reported a mismatch, and the migration was correct all along. The instinct was to chase it as a migration bug. (3) macuahuitl hit the same shape the same evening with a head-capped grep. IN ALL THREE THE SUBJECT WAS FINE AND THE CHECKER WAS WRONG, and in all three the checker's output was well-formed and confident. THE PRACTICAL RULE, which is this row's own population criterion pointed at the verifier rather than at the guard — when a checker disagrees with the thing it checks, suspect the checker's population FIRST, and make it state what it searched in the same breath as what it found. Write zero hits across <paths>, never zero hits, because the first is falsifiable by a reader and the second is not. And give the checker the SAME population as the producer it verifies, by construction rather than by care; the 45-step verification only agreed once the checker was handed the migrator's own selection rule.
+    ts: "2026-09-19T02:29:53Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: the-skills-single-source-guard-asserts-link-shape-over-a-population-that-can-silently-shrink-so-a-runtime-that-does-not-exist-passes-and-deleting-the-tree-it-protects-reads-as-green
+    event:
+      type: note
+      ts: "2026-09-19T02:29:53Z"
+      host: yoga-silverblue
+      summary: |-
+        three instances in one night of a verifier whose population differed from its subject's; belongs beside this row's population criterion
