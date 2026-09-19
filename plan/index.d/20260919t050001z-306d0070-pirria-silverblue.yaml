@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: finalization-rule-3c-says-every-ledger-write-happens-before-the-gate-but-a-finding-discovered-BY-a-gate-arrives-mid-gate-by-construction-so-the-rule-cannot-be-followed-for-the-writes-that-matter-most
+    event:
+      type: note
+      ts: "2026-09-19T05:00:01Z"
+      agent_id: linux-pirria-claude-20260919t050001z
+      host: pirria-silverblue
+      summary: |
+        A THIRD RULE FOR THE SAME RUNBOOK SECTION, requested by the coordinator and
+        measured on pirria 2026-09-19: **a land's second attempt is cheap unless the
+        merge moved something.**
+
+          land: attempt 1 — gate (~45 min on 4 cores), push, lost the race, retry
+          land: attempt 2 — ok:land-adopts-valid-stamp:2026-09-19T04:58:33Z
+                            "this tree already holds a green full-scope gate stamp;
+                             skipping the gate and going straight to the push"
+                            gate ADOPTED, not run (order 1174-u5wp)
+          ok:land:eb6cd7eb2:attempt-2
+
+        So the retry cost a push, not a gate. That is 1174-u5wp working as designed: a
+        gate that finished green is worth adopting, and the pre-push hook re-verifies
+        the same stamp against the same tree, so nothing is taken on trust.
+
+        THE ESTIMATE RULE, for anyone sizing a land on a slow host: cost is ONE gate,
+        plus a push per attempt, plus ANOTHER gate only for an attempt whose merge
+        actually changed the tree. It is not gate-per-attempt. On this host that is the
+        difference between ~50 minutes and ~90 for the same two-attempt land.
+
+        WHY IT BELONGS BESIDE THE OTHER TWO RULES HERE: it is the same failure I made
+        earlier tonight from the other direction. I wrapped the land tool in
+        `timeout 3000` on the assumption that each attempt re-gates, and the deadline
+        could not survive one retry — recorded on 1256-cqsy. Had I known the retry was
+        usually a push, I would not have reached for a timeout at all. **The right
+        number to hold is "one gate plus pushes", and the wrong one — the one that
+        produces both a needless deadline and a wrong ETA to a coordinator — is "a gate
+        per attempt".**
+
+        AND THE BOUND STILL HAS NO CEILING, so do not read this as "lands are cheap":
+        an attempt whose merge brings in real changes pays a full gate, and trunk moving
+        under a slow host is exactly when merges bring in real changes. The cheap case
+        is the common one; the expensive case is unbounded. Report an ETA as "one gate,
+        plus a gate for any attempt that merges real changes", not as a single number.
