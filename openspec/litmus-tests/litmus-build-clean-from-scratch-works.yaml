@@ -46,6 +46,8 @@ critical_path:
     command: "tillandsias --init --test 2>&1 | head -20"
     timeout_ms: 30000
     expected_behavior: "launches without error, init completes successfully"
+    assert_exit: 0
+    assert_output_nonempty: true
 
   - step: "verify tray can display (test --help)"
     command: "tillandsias --help 2>&1 | head -10"

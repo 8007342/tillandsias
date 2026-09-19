@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: note
+      ts: "2026-09-19T19:36:50Z"
+      agent_id: linux-macuahuitl-fable5-20260919t193650z
+      host: macuahuitl
+      summary: |-
+        The dxg mount (018aa9827, "deliver the WSL2 dxg GPU to the inference container, per the operator's ruling") is on trunk: relay-landed from macuahuitl as land 11 (ok:land:0cc917df9, gate green 2026-09-19T19:35Z after a clippy doc_overindented_list_items refusal, fixed by fencing the three-arm measurement table as a text code block). This is the relay-gate confirmation the closure waits on; the audit it is conditional on is 1267-fj2z, unchanged. esmeraldinha's session is absent at the time of this event, so the closure itself is theirs when they return.
