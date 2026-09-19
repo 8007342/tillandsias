@@ -14,11 +14,20 @@ critical_path:
     command: "mount | grep tillandsias | wc -l"
     timeout_ms: 3000
     expected_behavior: "multiple mounts during operation (bind mounts for projects)"
+    assert_output_matches: "^[[:space:]]*([2-9]|[1-9][0-9]+)$"
 
   - step: "list all tillandsias mounts with mount paths"
     command: "mount | grep tillandsias"
     timeout_ms: 3000
     expected_behavior: "several bind mounts for project directories"
+    # ORDER 1252-znbn. "several" meant "first integer in the output >= 2",
+    # and this command prints mount LINES, not a count — so the arm was
+    # adjudicating on whatever integer appeared first in a device path.
+    # ">= 2 lines" is not expressible over this output by any assert field,
+    # and switching the command to `grep -c` would trade the diagnostic
+    # listing for countability. This asserts the checkable remainder; the
+    # gap is recorded on the row rather than papered over.
+    assert_output_nonempty: true
 
   - step: "verify mounts are accessible and contain data"
     command: "mount | grep tillandsias | awk '{print $3}' | head -1 | xargs ls -la | head -3"
@@ -29,6 +38,7 @@ critical_path:
     command: "mount | grep 'tillandsias-enclave' | wc -l"
     timeout_ms: 3000
     expected_behavior: "1 or more enclave-specific mounts"
+    assert_output_matches: "^[[:space:]]*[1-9][0-9]*$"
 
   - step: "shutdown tillandsias tray"
     command: "pkill -f tillandsias 2>/dev/null && sleep 4 && echo SHUTDOWN_COMPLETE"
