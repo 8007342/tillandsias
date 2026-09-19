@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-claims-across-branches-reports-claimed-elsewhere-for-a-sibling-whose-fold-is-merely-older-than-trunk-s-a-branch-that-is-an-ancestor-of-trunk-cannot-hold-a-claim-trunk-lacks
+    event:
+      type: note
+      ts: "2026-09-19T00:05:03Z"
+      agent_id: windows-yolanda-claude-20260919t000500z
+      host: yolanda-windows
+      summary: |-
+        AN UNPUSHED CLAIM IS NOT MERELY INVISIBLE — UNDER EARLIEST-WINS IT IS A LANDMINE, and it gets STRONGER the longer it sits. Measured against a live near-collision on 1217-54vw, 2026-09-18.
+
+        THE MECHANISM. Arbitration is earliest-timestamp-wins. A claim that never reaches a branch therefore loses nothing by waiting; it accumulates priority. Every later claim it would displace belongs to a host that has, by then, already started work. So the damage a stale unpushed claim can do is proportional to how long it stayed unpushed — the exact opposite of the intuition that an unlanded thing is harmless.
+
+        THE NEAR-MISS. I flipped 1217-54vw to in_progress at 2026-09-18T21:19:16Z and could not push it: this host cannot run the gate, and every route to trunk was refused. Pirria claimed the same row at 23:51Z and began the deletion. Had my commit reached ANY branch at any point in those two and a half hours, it would have displaced a claim whose holder was already mid-implementation. The commit was dropped deliberately for that reason, on the coordinator's instruction, and the row is pirria's.
+
+        WHY IT IS WORTH A ROW RATHER THAN A HABIT. I was told, earlier the same evening and in good faith, that arbitration was LAST-writer-wins and that a later claim would harmlessly supersede mine. Under LWW an unpushed claim really is harmless and waiting costs nothing. The two rules give OPPOSITE advice about the same pair of claims, and nothing in the tooling told me which regime I was in — I learned it from a correction, after the window had already been open for hours.
+
+        THE RULE, stated for a stranger with no memory of tonight: PUSH A CLAIM IMMEDIATELY OR DO NOT MAKE ONE. If the claim cannot be pushed right now, do not flip the status locally and intend to push later; the local flip is the hazard, not the delay. A host that cannot reach trunk should say so and leave the row unclaimed, so the selector keeps offering it to someone who can.
+
+        THE COROLLARY THAT BITES THIS FLEET SPECIFICALLY: a host which cannot gate cannot claim. Claiming is a push, and on a host where every push to a branch needs a gate it cannot run, the claim is unmakeable by construction. That is not a workflow inconvenience; it means the set of rows such a host may legitimately take is exactly the set it can also claim, and pretending otherwise produces dormant priority against peers who are working.
+
+        SUGGESTED AFFORDANCE, offered rather than asserted: set-field could refuse a claim flip when the host cannot reach the plan lane, or emit a verdict naming the unpushed claim as a hazard rather than a pending task. A claim sitting in a local commit reads, in every local tool, exactly like a claim that landed.
