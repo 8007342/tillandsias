@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: note
+      ts: "2026-09-19T00:27:15Z"
+      agent_id: windows-esme-claude-20260918t201100z
+      host: esmeraldinha
+      summary: |-
+        THE dxg CONTAINER-LANE MEASUREMENT, esmeraldinha 2026-09-19, reported as OUTCOMES PER ARM as the coordinator specified. Podman 'crun', rootful, in the tillandsias WSL2 distro. Probe: the same standalone dlopen/vkEnumeratePhysicalDevices C binary used for the host reading, carried INSIDE the image, so host and container numbers are directly comparable.
+
+        ARM 1 — `podman run --rm --device /dev/dxg <image>`, nothing else. THE ONLY ARM THAT MAY BE CLAIMED FOR THE PRODUCT'S LANE.
+          device node inside the container: VISIBLE (crw-rw-rw- 1 root root 10, 258 /dev/dxg)
+          Vulkan loader inside: FOUND
+          dzn ICD inside: PRESENT (dzn_icd.x86_64.json)
+          enumeration: physical_device_count=1 — llvmpipe only, type=CPU(4) driverID=13
+          RESULT: NO non-CPU device. The dxg node alone does not deliver a usable GPU to a container.
+
+        ARM 2 — arm 1 plus `-v /usr/lib/wsl/lib:/usr/lib/wsl/lib:ro -e LD_LIBRARY_PATH=/usr/lib/wsl/lib`.
+          dzn now LOADS and TRIES, and fails loudly:  MESA: error: ID3D12DeviceFactory::CreateDevice failed  (x4)
+          enumeration: physical_device_count=1 — llvmpipe only.
+          RESULT: still no non-CPU device. The d3d12/dxcore libraries are necessary and NOT sufficient.
+
+        ARM 2b — arm 1 plus the WHOLE `/usr/lib/wsl` bound read-only (i.e. `lib` AND `drivers`), LD_LIBRARY_PATH=/usr/lib/wsl/lib. Run because arm 2's error named CreateDevice rather than a missing library, which said the loader had what it needed and the DEVICE creation was the failure.
+          enumeration: physical_device_count=2
+            device[0] type=INTEGRATED_GPU(1) vendor=0x8086 driverID=23 (Dozen) "Microsoft Direct3D12 (Intel(R) UHD Graphics)"
+            device[1] type=CPU(4) vendor=0x10005 driverID=13 (llvmpipe)
+          RESULT: THE SAME TWO DEVICES AS THE HOST. The real GPU enumerates inside a container.
+
+        SO, STATED AS THE RULING REQUIRES — WHICH ARM PRODUCED usable=true: ARM 2b, and ONLY arm 2b. Arm 1 did not. Under the coordinator's ruling that only arm 1 may be claimed for the product's container lane, THE CONTAINER LANE DOES NOT EXIST AS THE PRODUCT WOULD RUN IT TODAY, and the dxg record correctly keeps lanes=[host-native].
+
+        WHAT ACTUALLY BLOCKS IT, named precisely, because "dxg does not cross" would be wrong: the device node DOES cross, and the userspace d3d12 libraries are mountable. The missing piece is /usr/lib/wsl/drivers — the WINDOWS DRIVER STORE, thousands of .inf directories that WSL projects into the guest. dzn's D3D12 device creation resolves the real driver out of that store; without it CreateDevice fails and the loader falls back to the software rasterizer. That is a mount policy question for the product, not a kernel or passthrough limitation.
+
+        THE PRODUCT CONSEQUENCE IS A DECISION, NOT A FIX: giving this lane a container would mean bind-mounting the host's Windows driver store into the inference container, read-only, on WSL2 hosts only. That is a large, host-specific, Windows-derived mount inside a Linux container and it is the coordinator's/owner's call whether the product may do that. If yes, the record gains lanes=[host-native, container] BY MEASUREMENT and criterion 1 follows. If no, this row closes with dxg present-unusable and the reason named, which is now a MEASURED reason rather than an unprobed one.
+
+        A SEPARATE FINDING THE PRODUCT MUST NOT MISS, and it cost two failed images to learn: THE IMAGE MUST SHIP A MESA NEW ENOUGH TO CARRY dzn, and current mainstream bases do not. debian:13 (Mesa 25.0.7) has NO dzn_icd. fedora:41 (Mesa 25.0.7) has NO dzn_icd. dzn arrives with mesa-vulkan-drivers-26.1.6-1.fc44 — the host distro here is literally "Fedora Linux 44 (Container Image)". Both of those first two arms returned llvmpipe-only and LOOK IDENTICAL to a genuine "dxg does not reach the container" negative; reporting either as such would have handed this packet a false structural finding of exactly the kind it exists to end (the original `engine-missing:no-vulkan-icd` asserted on a host that carried both). Any image for this lane must PIN a dzn-carrying Mesa, and a lane that silently falls back to llvmpipe is the criterion-3 failure wearing a container.
+
+        INCIDENTAL CONFIRMATION ON LIVE CONTAINER DATA: in all three arms the software rasterizer came back as type=CPU(4) driverID=13, the exact pair criterion 3 requires be rejected, and the landed rejection logic refuses it. Criterion 3 is now exercised on host AND container data.
+
+        REPRODUCTION: image built from `FROM registry.fedoraproject.org/fedora:44` + `dnf install -y gcc glibc-devel vulkan-loader mesa-vulkan-drivers`, probe compiled in-image. Run in the tillandsias distro (which has podman and /dev/dxg); note that the tillandsias-build distro has the Vulkan stack but NO podman, so the two capabilities are split across loci on this host.
