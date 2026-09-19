@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-tool-materialization-s-arms-step-pipes-the-fixture-through-tail-1-so-a-red-prints-only-tool-materialize-fail-and-the-failing-arm-and-its-regime-are-discarded
+    order: 1269-gfdi
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, gate, diagnosis, instrument-defect]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-tool-materialization.yaml
+      - scripts/test-tool-materialize.sh
+    verifiable_closure: |
+      scripts/test-tool-materialize-litmus-surfaces-arm.sh prints
+      `ok:tool-materialize-litmus:arm-surfaced:2/2` and exits 0, where arm 1:
+      with scripts/test-tool-materialize.sh driven so that exactly one arm is
+      red (a fixture-honoured env that forces the >4x margin arm to fail is
+      acceptable), the litmus step "all materialization arms pass" captures
+      output that names the failing arm (`FAIL: ARM <n>: …` or the arm's own
+      `fail:` line) AND still ends in the verdict token; and arm 2: run under load
+      (a parallel cargo build on the host) or with /tmp near its usrquota, the
+      margin arm either passes with its measured numbers or prints a named
+      `skip:tool-materialize-margin:<regime>` — never a bare red. PRE-FIX
+      RESULT: FAILS on both — measured 2026-09-19T05:15Z on macuahuitl inside
+      the pre-build suite on 720e148bc: the step's captured output was the
+      single line `tool-materialize: FAIL`, and the same fixture standalone in
+      the same toolbox seconds later printed `ok:tool-materialize:all` with
+      the margin arm at 1929ms vs 20473ms — the arm that reds under load has
+      no regime line, and the step's `| tail -1` threw away whichever arm it
+      was.
+    title: |
+      litmus:tool-materialization's arms step pipes the fixture through `tail -1`, so a red prints only `tool-materialize: FAIL` and the failing arm and its regime are discarded
+    context: |
+      The dont-tail-1-a-guard shape (fixtures print reasoning and remedy before
+      the verdict; the idiom keeps the verdict and discards the reason), inside
+      a release-tier litmus whose 900s budget makes the discarded line the only
+      thing a reader will ever get. Candidates for the red itself, neither
+      confirmed because the line that would decide was discarded: the >4x
+      margin arm under a loaded host (the gate was running cargo test in
+      parallel), or the fixture's extraction into /tmp/tool-materialize.XXXX
+      hitting the tmpfs usrquota during concurrent extraction. Standalone the
+      fixture is green with a 10x margin, which is why this is a p2 and not a
+      broken fixture: it is a fixture whose red is unreadable.
+    next_action: >
+      Change the step's command to capture the whole fixture output and match
+      the verdict with a success_pattern on the `ok:tool-materialize:all`
+      token; then give the margin arm a regime guard (load average or a
+      concurrent-cargo probe, and a free-space probe on the extraction dir)
+      that turns a red under those conditions into a named skip with the
+      measured numbers. Re-run inside a pre-build suite, not standalone —
+      standalone was already green.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-19 from the
+      v56.9.19.1 cut's pre-build suite; this host's measurement, regime named.
