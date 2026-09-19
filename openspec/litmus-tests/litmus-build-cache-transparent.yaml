@@ -20,7 +20,8 @@ critical_path:
   - step: "perform cached build with --install"
     command: "./build.sh --install"
     timeout_ms: 120000
-    expected_behavior: "builds quickly using cached forge image, installs AppImage to ~/.local/bin/tillandsias"
+    expected_behavior: "installs the AppImage to ~/.local/bin/tillandsias from the cached forge image"
+    assert_exit: 0
 
   - step: "capture version from cached build"
     command: "tillandsias --version"
@@ -35,7 +36,8 @@ critical_path:
   - step: "perform clean build with cargo clean"
     command: "./build.sh --clean --install"
     timeout_ms: 600000
-    expected_behavior: "forces full rebuild, slower than cached path (~10 minutes), exit 0"
+    expected_behavior: "forces a full rebuild rather than reusing the cached forge image"
+    assert_exit: 0
 
   - step: "capture version from clean build"
     command: "tillandsias --version"

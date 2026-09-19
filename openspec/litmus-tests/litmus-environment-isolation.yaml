@@ -49,6 +49,7 @@ critical_path:
     command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; p=$(podman run --rm --entrypoint /usr/bin/which \"$FORGE_IMAGE\" cargo); case \"$p\" in */cargo) echo \"ok: cargo at $p\" ;; *) echo \"FAIL: cargo not resolvable ($p)\"; exit 1 ;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: cargo at"
+    assert_output_contains: "ok: cargo at"
 
 observability:
   traces:

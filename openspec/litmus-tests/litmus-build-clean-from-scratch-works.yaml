@@ -20,7 +20,8 @@ critical_path:
   - step: "execute clean build with --install flag"
     command: "./build.sh --clean --install"
     timeout_ms: 600000
-    expected_behavior: "forces cargo clean, full Ubuntu build, slow but complete (~10 min), exit 0"
+    expected_behavior: "forces a cargo clean, then a complete Ubuntu build"
+    assert_exit: 0
 
   - step: "verify AppImage installed to ~/.local/bin/"
     command: "test -f ~/.local/bin/tillandsias && echo 'PASS: AppImage exists'"

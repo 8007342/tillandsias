@@ -14,11 +14,13 @@ critical_path:
     command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-ca-*' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 files"
+    assert_output_matches: "^[[:space:]]*0$"
 
   - step: "verify CA files exist during proxy operation"
     command: "podman exec tillandsias-proxy-* find /tmp -maxdepth 1 -name 'tillandsias-ca-*' 2>/dev/null | wc -l"
     timeout_ms: 5000
     expected_behavior: "1 or more CA files"
+    assert_output_matches: "^[[:space:]]*[1-9][0-9]*$"
 
   - step: "verify CA file is readable in proxy"
     command: "podman exec tillandsias-proxy-* ls -lah /tmp/tillandsias-ca-* 2>/dev/null | head -1"
@@ -29,6 +31,7 @@ critical_path:
     command: "podman exec tillandsias-proxy-* stat -c '%s' /tmp/tillandsias-ca-* 2>/dev/null | head -1"
     timeout_ms: 3000
     expected_behavior: "size > 0 bytes"
+    assert_output_matches: "^[[:space:]]*[1-9][0-9]*$"
 
   - step: "shutdown tillandsias tray"
     command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
@@ -42,6 +45,7 @@ critical_path:
     command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-ca-*' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 files"
+    assert_output_matches: "^[[:space:]]*0$"
 
 gating_points:
   - signal: "CA certs cleaned on shutdown"

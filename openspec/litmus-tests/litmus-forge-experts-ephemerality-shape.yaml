@@ -182,6 +182,7 @@ critical_path:
     command: "line=$(grep -m1 'cache_dir=\"${FORGE_EXPERTS_CACHE_DIR:-' images/default/lib-common.sh); test -n \"$line\" || { echo 'REGRESSION: artifact-cache assignment absent from ensure_forge_experts'; exit 1; }; d=$(unset FORGE_EXPERTS_CACHE_DIR; TILLANDSIAS_PROJECT_CACHE=/PC; eval \"$line\"; printf '%s' \"$cache_dir\"); s=$(unset FORGE_EXPERTS_CACHE_DIR; TILLANDSIAS_PROJECT_CACHE=/PC; eval \"$line\"; eval \"$(grep -m1 'cache_stamp=' images/default/lib-common.sh)\"; printf '%s' \"$cache_stamp\"); o=$(FORGE_EXPERTS_CACHE_DIR=/OVR; eval \"$line\"; printf '%s' \"$cache_dir\"); case \"$d\" in /PC/cargo/*) : ;; *) echo \"REGRESSION: artifact cache resolves to $d — outside the cargo carve-out subtree\"; exit 1 ;; esac; case \"$s\" in \"$d\"/*) : ;; *) echo \"REGRESSION: cache stamp $s escapes the artifact cache dir\"; exit 1 ;; esac; test \"$o\" = /OVR || { echo \"BROKEN CONTROL: FORGE_EXPERTS_CACHE_DIR override did not take ($o) — the eval is not executing the real assignment\"; exit 1; }; echo 'ok: artifact-cache-under-cargo-carve-out'"
     timeout_ms: 5000
     expected_behavior: "ok: artifact-cache-under-cargo-carve-out"
+    assert_output_contains: "ok: artifact-cache-under-cargo-carve-out"
 
   - step: "CARVE-OUT STAYS NARROW: the cache volume is a build cache, never the serving surface"
     # cargo's target dir does live on the persistent volume — that is the
