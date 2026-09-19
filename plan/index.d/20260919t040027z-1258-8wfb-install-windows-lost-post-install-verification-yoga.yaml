@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    order: "1258-8wfb"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, installer, litmus, regression, powershell]
+    estimated_hours: 3
+    owned_files:
+      - scripts/install-windows.ps1
+      - openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml
+    title: |
+      scripts/install-windows.ps1 no longer verifies the binary it installs — the post-install --diagnose --json check, the "install bits broken" throw and the build_commit/os_version/wsl_version surfacing were removed on 2026-06-23, and the litmus guarding them has reported PASS ever since
+    context: |
+      A GUARD STOPPED GUARDING THREE MONTHS AGO AND SAID NOTHING. This is not a
+      test that is missing; it is a test that RUNS, PASSES, and asserts nothing.
+
+      THE SUBJECT. litmus-windows-tray-diagnose-cli-surface.yaml has a step
+      "install-windows.ps1 contains the post-install --version + --diagnose
+      sanity checks AND surfaces OS + WSL versions", whose command is a chain of
+      SEVEN `grep -F ... &&`. Run against trunk today, conjunct by conjunct:
+        rc=0  'cmd.exe'
+        rc=1  '--diagnose --json'      ABSENT
+        rc=0  '--version'
+        rc=1  'install bits broken'    ABSENT
+        rc=1  'build_commit'           ABSENT
+        rc=1  'os_version'             ABSENT
+        rc=1  'wsl_version'            ABSENT
+      Literal counts in the file confirm it — cmd.exe 1, --version 3, and ZERO
+      for the other five. Five of seven fail.
+
+      WHY IT IS GREEN. The step's expected_behavior is "grep succeeds", which
+      selects the interpreter arm in run-litmus-test.sh requiring NON-EMPTY
+      OUTPUT and IGNORING THE EXIT CODE. The first grep matches, prints a line,
+      and the step passes while the chain is broken from the second conjunct
+      onward. The adjudication rule the sentence selects is not the rule its
+      author meant — order 1252-znbn is that defect in general; this row is the
+      damage it hid.
+
+      IT IS A REGRESSION, NOT UNFINISHED WORK. From git log -S on the file:
+        d7bfcdd9f  2026-05-28  ADDED the post-install `--diagnose --json` check,
+                               including the throw "tillandsias-tray --diagnose
+                               --json hard-failed (exit 1); install bits broken"
+        567009f68  2026-05-30  ADDED the --version preflight and the
+                               build_commit surfacing
+        6cdaa8ac2  2026-06-23  REMOVED all of it
+      6cdaa8ac2 is "feat: bar-raises A/B/C + Windows curl installer +
+      all-platform --init parity" — a commit that rewrote the Windows installer
+      and dropped its post-install verification on the way past.
+
+      WHAT THE INSTALLER NO LONGER DOES, stated without judgement about whether
+      it should: it does not invoke the installed binary's `--diagnose --json`
+      to confirm the install is sound, does not throw on a failed verification,
+      and does not surface build_commit, os_version or wsl_version to the
+      operator running the install.
+
+      HOW IT WAS FOUND, because the method transfers. The 24 litmus steps whose
+      adjudication is NON-EMPTY OUTPUT were being migrated per-step rather than
+      swept, so each command was asked what it actually does. Seventeen are
+      grep-only and safe to execute; they were run and compared under today's
+      rule (non-empty) against the honest rule (exit 0 AND non-empty). Sixteen
+      agree. One disagrees, and the disagreement is this row. The other seven
+      call podman, `tillandsias --init` or `pkill` and were NOT run, because
+      taking side effects to complete a survey is not a measurement anyone
+      should trust.
+    exit_criteria:
+      - 'THE STEP MIGRATES AND PASSES: litmus-windows-tray-diagnose-cli-surface''s install-windows.ps1 step declares assert_exit: 0 like every other step in that file, and the litmus is GREEN. PRE-FIX THIS FAILS — five of seven conjuncts return rc=1 against trunk today, and the step is only green because the arm ignores the exit code'
+      - 'THE INSTALLER VERIFIES WHAT IT INSTALLED, or the row records a decision not to: either scripts/install-windows.ps1 regains the post-install --diagnose --json invocation with its failure throw, or an owner states in the row why the 2026-06-23 removal was correct and the litmus step is rewritten to assert what the installer NOW does. Both close this row; silently deleting the step does not'
+      - 'THE OPERATOR-FACING SURFACE IS DECIDED EXPLICITLY: build_commit, os_version and wsl_version were surfaced to whoever ran the install and are not. Whether that returns is part of the same decision, and the row names all three rather than letting --diagnose come back without them'
+      - 'NEGATIVE CONTROL — THE STEP MUST BE ABLE TO FAIL AGAIN: with the installer fixed and the step migrated, deleting any ONE of the seven literals from install-windows.ps1 must red the step. A chain that passes on its first conjunct is what produced three months of false green, and a migration that does not restore the ability to fail has moved the prose without restoring the teeth'
+    unscoreable: |
+      whether-the-2026-06-23-removal-was-deliberate: the commit rewrote the
+      Windows installer wholesale and the verification disappeared inside that
+      rewrite. Nothing in the diff or its message says the check was being
+      dropped on purpose, and its author is not available to this row. So it
+      cannot be settled here whether this is an accident to reverse or a
+      decision to document. The row is written so that EITHER answer closes it,
+      because the defect being filed is that the guard could not tell the
+      difference for three months — not that the installer must be restored.
+    verifiable_closure: |
+      the seven-conjunct chain passing against scripts/install-windows.ps1 with
+      the step declaring assert_exit: 0, plus a demonstration that removing one
+      literal reds it. Or, if the removal is ratified, the step rewritten to the
+      installer's current contract with the same demonstration.
+    events:
+      - type: filed
+        ts: "2026-09-19T04:00:27Z"
+        agent_id: "linux-yoga-claude-20260919t040027z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga while migrating the 1252-znbn non-empty-output steps.
+          The step is deliberately NOT migrated in that slice and carries a
+          comment naming this order, the five failing conjuncts and the three
+          commits — migrating it would hand a release tier a red it cannot fix,
+          on a PowerShell file, from a defect 1252-znbn did not cause. The guard
+          stays weak and VISIBLE until this closes.
