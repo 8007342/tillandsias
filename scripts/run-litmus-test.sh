@@ -1370,6 +1370,17 @@ run_litmus_test_file() {
                 # opened by `- step:` and all 2514 of their names are
                 # double-quoted, so this refusal cannot redden the corpus.
                 malformed_items+=("${BASH_REMATCH[1]}|${line}")
+                # ORDER 1274-cbk7. A NEW LIST ITEM STARTS A NEW MAPPING IN YAML,
+                # whatever key opens it — so the duplicate-key seen-set resets
+                # here too, not only on `- step:`. Without this reset the
+                # duplicate detector fires on the very file the arm above
+                # describes: a `- name:` item MERGES into the previous step in
+                # this parser, so its command:/timeout_ms:/expected_behavior:
+                # look like repeats of the predecessor's keys — while a YAML
+                # loader, which sees two separate items, accepts the file. That
+                # is a FALSE duplicate report on valid YAML, and the 1252-znbn
+                # item-opener fixture caught it.
+                step_seen_keys=()
             elif [[ "$line" =~ ^[[:space:]]*command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between

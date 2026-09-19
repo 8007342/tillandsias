@@ -164,6 +164,49 @@ else
     bad "ARM 7: --parse-only does not say which question it answers"
 fi
 
+# ---------------------------------------------------------------- ARM 8
+# REGRESSION, AND THIS ARM EXISTS BECAUSE THE FIRST VERSION OF THIS FIX WAS
+# WRONG. A critical_path item opened by `- name:` MERGES into the previous step
+# in this parser (that is 1252-znbn's defect), so the merged item's command:,
+# timeout_ms: and expected_behavior: look like repeats of the predecessor's
+# keys — while a YAML loader, which sees two separate list items, ACCEPTS the
+# file. The detector keyed on the `step:` key rather than the list-item
+# boundary and reported a duplicate on valid YAML. The corpus control (ARM 6)
+# did not catch it because no corpus file has that shape; the 1252-znbn
+# item-opener fixture did, in the gate.
+#
+# A duplicated-key refusal on THIS file would be a false red. The file must be
+# refused for the reason it is actually broken — the merged item — not this one.
+{
+    printf '%s\n' "name: ${LIT}:cbk7-merged"
+    printf '%s\n' "spec: spec-traceability"
+    printf '%s\n' "phase: pre-build"
+    printf '%s\n' "severity: high"
+    printf '%s\n' "size: instant"
+    printf '%s\n' "description: >"
+    printf '%s\n' "  merged-item probe"
+    printf '%s\n' "critical_path:"
+    printf '%s\n' '  - step: "first item"'
+    printf '%s\n' '    command: "echo one"'
+    printf '%s\n' "    timeout_ms: 3000"
+    printf '%s\n' '    expected_behavior: "one"'
+    printf '%s\n' '  - name: "second item, opened by the WRONG key"'
+    printf '%s\n' '    command: "echo two"'
+    printf '%s\n' "    timeout_ms: 3000"
+    printf '%s\n' '    expected_behavior: "two"'
+} > "$TMP/merged.yaml"
+
+"$READER" validate-yaml "$TMP/merged.yaml" >/dev/null 2>&1
+rc_merged_yaml=$?
+out="$(scripts/run-litmus-test.sh --parse-only "$TMP/merged.yaml" 2>&1)"
+if [ "$rc_merged_yaml" -eq 0 ] && ! printf '%s' "$out" | grep -Fq 'duplicated mapping key'; then
+    ok "ARM 8: a merged '- name:' item is NOT reported as a duplicated key — a YAML loader accepts that file, so a duplicate refusal there is a false red"
+elif [ "$rc_merged_yaml" -ne 0 ]; then
+    bad "ARM 8: premise gone — the loader now rejects the merged-item probe (rc=$rc_merged_yaml), so this arm no longer tests a false positive"
+else
+    bad "ARM 8: FALSE POSITIVE — duplicate-key refusal fired on a file a YAML loader accepts"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     printf 'ok:%s-parse-only-duplicate-key:%d/%d\n' "$LIT" "$pass" "$((pass + fail))"
