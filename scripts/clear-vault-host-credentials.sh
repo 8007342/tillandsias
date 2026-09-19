@@ -107,15 +107,37 @@ done
 _vd="$CACHE_DIR/vault-data"
 if [ -e "$_vd" ]; then
     if [ "$DRY_RUN" = "1" ]; then _did="$_did dir:vault-data"; _say "would remove vault-data/"
-    elif rm -rf "$_vd" 2>/dev/null; then _did="$_did dir:vault-data"; _say "removed vault-data/"
-    else _failed="$_failed dir:vault-data"; _say "WARNING: could not remove vault-data/ (it is written from inside a container under a subuid; a rootless rm may be refused)"; fi
+    elif rm -rf "$_vd" 2>/dev/null && [ ! -e "$_vd" ]; then _did="$_did dir:vault-data"; _say "removed vault-data/"
+    # ORDER 1284-jf86. The directory is written from INSIDE A CONTAINER UNDER A
+    # SUBUID (measured on pirria: 524388:lapto, subdirectories mode 700), so a
+    # rootless `rm` as the invoking uid is refused on every subdirectory. This
+    # script anticipated that and warned; warning is not clearing, and §2 of the
+    # curl-install smoke is the only thing that ever noticed, via its own
+    # `test ! -e`. Measured twice on 2026-09-19, byte-identical, on a directory
+    # the SAME RUN's install had created minutes earlier — so it is the product
+    # writing under a subuid, not inherited state with odd ownership.
+    #
+    # `podman unshare` runs in the user namespace where that subuid maps to
+    # root, which is the one context able to remove what the product wrote.
+    # Tried only AFTER the plain rm, so a host whose directory is owned by the
+    # invoking user never needs a container runtime for this.
+    elif command -v podman >/dev/null 2>&1 && podman unshare rm -rf "$_vd" 2>/dev/null && [ ! -e "$_vd" ]; then
+        _did="$_did dir:vault-data"; _say "removed vault-data/ (via podman unshare — subuid-owned)"
+    else _failed="$_failed dir:vault-data"; _say "WARNING: could not remove vault-data/ (it is written from inside a container under a subuid; a rootless rm may be refused, and podman unshare did not resolve it)"; fi
 else
     _say "vault-data/ already absent"
 fi
 
 if [ -n "$_failed" ]; then
     echo "warn:clear-vault-credentials:partial (cleared:${_did:-none} failed:$_failed) — the room is NOT cold; a partial clear is the state that looks clean and is not"
-    exit 0
+    # ORDER 1284-jf86, the exit-code half. This printed the sentence "the room
+    # is NOT cold" and then exited 0, so a caller branching on the status was
+    # told the opposite of what the text said — a verdict channel contradicting
+    # its own prose. Every caller that trusted `clear_exit=0` certified a room
+    # it had not cleared. DRY_RUN keeps exit 0: a dry run that "fails" to remove
+    # anything has not failed at anything.
+    [ "$DRY_RUN" = "1" ] && exit 0
+    exit 1
 fi
 echo "ok:clear-vault-credentials:${_did:-nothing-to-clear} (preserved:$_kept)"
 exit 0
