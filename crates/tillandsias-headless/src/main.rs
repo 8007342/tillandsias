@@ -18731,7 +18731,9 @@ mod tests {
         // A `:rw` here would silently widen an approved surface, so it is
         // asserted rather than assumed.
         assert!(
-            !args.iter().any(|a| a.starts_with("/usr/lib/wsl:") && !a.ends_with(":ro")),
+            !args
+                .iter()
+                .any(|a| a.starts_with("/usr/lib/wsl:") && !a.ends_with(":ro")),
             "the WSL tree must never be mounted writable: {args:?}"
         );
 
