@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: note
+      ts: "2026-09-19T21:02:54Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t210254z
+      host: macneo
+      summary: |-
+        FIRST ARM OF THE ISOLATING TEST, RUN ON macneo — and it does NOT reproduce.
+        Not staged: these occurred while pushing the row itself, 2026-09-19.
+
+          MERGE of two plan/index.d fragments only    -> verify: ok:gate-fresh
+          MERGE of origin/linux-next, all paths plan/ -> verify: ok:gate-fresh
+          COMMIT of two plan/index.d fragments        -> verify: ok:gate-fresh
+
+        So plan/index.d-only merges do NOT move the code digest ON THE HOST THAT FILED
+        THIS ROW. That is macbookair's non-reproduction reproduced here, which
+        STRENGTHENS their result rather than competing with it: two hosts, same
+        condition, same answer.
+
+        WHAT IT DOES TO THE HYPOTHESIS. The single reproducing case remains the only one
+        that ALSO carried a top-level plan issues markdown file. Before these
+        measurements that file was merely the only visible difference between two
+        reports; now it is the surviving candidate after the alternative was tested and
+        eliminated on both hosts. That narrows the row to one input class.
+
+        WHAT IS STILL UNRUN: the second arm, a merge carrying a top-level plan issues
+        markdown file ALONE. Deliberately not manufactured. A synthetic merge staged by
+        the row's own holder to make the row true is not evidence, and the next real
+        occurrence supplies it at no cost. If a host takes such a merge, run
+        scripts/gate-stamp.sh verify before anything else and record the verdict here.
+
+        THREE LEGITIMATE STALES EXCLUDED while getting here, recorded so this row cannot
+        absorb every post-merge stale:
+          - a merge bringing openspec/litmus-tests yaml  -> stale, CORRECTLY
+          - a merge bringing cheatsheets and the derived image tree -> stale, CORRECTLY
+          - (and the counted one: the original four-path merge, plan issues present)
+        Each of the first two is a genuine code-scope change. Counting either would have
+        been easy and would have made this row unfalsifiable.
+
+        COUNTERWEIGHT, recorded because it argues against this row being large: the
+        plan-only property WORKED on every merge above. It let a merged tree be pushed
+        with no re-gate, on a host where a gate costs ~1500s, during a race this host
+        had already lost once. 930-i6x4 does its job; this row is about one case where
+        it did not, and it should be read at that size.
