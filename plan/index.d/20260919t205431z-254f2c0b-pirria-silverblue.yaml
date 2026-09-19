@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    event:
+      type: note
+      ts: "2026-09-19T20:54:31Z"
+      agent_id: linux-pirria-claude-20260919t205431z
+      host: pirria-silverblue
+      summary: |
+        SIXTH INSTANCE IN ONE DAY, and the first CAUSED BY THE SMOKE'S OWN DESTRUCTIVE
+        STEP — pirria, 2026-09-19, during the v56.9.19.1 curl-install smoke.
+
+        THE REFUSAL, verbatim:
+
+          plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+            resolved: <scratchpad>/cargo-target/release/tillandsias-plan
+            via:      validator-surface hash — validate-yaml/check --strict-fragments/the
+                      fragment checkers' own sources changed since this binary was built
+                      (1152-y3bv); a change elsewhere in the crate or in the workspace
+                      Cargo.lock would NOT have triggered this
+            newer:    scripts
+            REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh
+
+        WHAT MAKES THIS INSTANCE DIFFERENT FROM THE OTHER FIVE: the staleness was
+        manufactured by the procedure being run. §2 of the smoke is
+        `podman system reset --force`, which destroyed the `tillandsias-builder` toolbox
+        this host builds in — pirria has no Rust toolchain, so that toolbox WAS its
+        compiler. The smoke then completed, and the report it exists to produce could
+        not be pushed, because pushing it needs a current plan binary and the thing that
+        builds one had just been deleted by §2. **The destructive step and the reporting
+        step have a dependency nobody declared.**
+
+        Recovered by building in `localhost/tillandsias-forge:v56.9.19.1` (the image the
+        smoke had just rebuilt), `--userns=keep-id`, scratch CARGO_HOME, 1m30s.
+
+        AND THE REBUILD ALONE WAS NOT ENOUGH, which is the part worth carrying: after a
+        successful `cargo build --release -p tillandsias-plan` the lane STILL refused
+        with the identical line. The stamp beside the binary
+        (`<path>.validator-surface-sha256`) is a separate artifact and
+        `scripts/check-plan-binary-current.sh` is what mints it. A reader who takes
+        "rebuild it" as the whole remedy rebuilds, retries, gets the same refusal, and
+        has no new information. The refusal DOES print both halves — that is the only
+        reason this cost ninety seconds instead of a 45-minute full gate — which is an
+        argument for the affordance-carrying refusal shape (1247-amcu) rather than
+        against this guard.
+
+        FOR THE FLOOR TIER SPECIFICALLY: any toolchain-less host that runs a
+        curl-install smoke will hit this, every time, because §2 deletes its build
+        environment by design. The remedy is not host-specific care; either the smoke
+        declares that its reporting step needs a binary built AFTER §2, or the plan
+        binary is resolved from somewhere the reset does not reach.
+
+        METHOD NOTE on attribution: the coordinator's dispatch specified
+        `--agent "$(scripts/agent-identity.sh id fable5)"`. I used `id claude`, because
+        this event was produced by a claude agent on pirria and the agent_id field
+        records WHO observed it, not who asked for it. Recording the substitution rather
+        than silently making it.

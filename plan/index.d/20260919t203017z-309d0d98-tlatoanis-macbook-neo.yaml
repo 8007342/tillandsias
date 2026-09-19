@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    field: next_action
+    value: |-
+      NOT GENERALISED: one measured REPRODUCTION (macneo — four plan-only committed paths, both untracked enumerations empty, code digest moved, verify -> stale:tree-changed-since-gate) and one measured NON-REPRODUCTION (macbookair — three plan/index.d fragments merged onto a stamped tree, HEAD f06eeb854 vs stamp for 976f16bbf, verify -> ok:gate-fresh). Two macOS hosts, opposite results. DO NOT collect further refusals; ISOLATE WHAT DIFFERS.
+      FIRST HYPOTHESIS TO TEST, and it is a hypothesis, not a finding — the only input class present in the reproducing tree and absent from the non-reproducing one is a TOP-LEVEL plan/issues/*.md file. compute() excludes plan/index.d/*.yaml with one pattern but excludes plan/issues/*.md only at top level, through a nested case on the prefix-stripped path (a subdirectory file deliberately still forces a full gate). macneo's file is top level and by reading should have been excluded.
+      CHEAPEST DISCRIMINATING TEST, one host, two rounds: stamp a tree, merge a commit adding ONLY plan/index.d fragments, verify; then stamp again, merge a commit adding ONLY a top-level plan/issues/*.md, verify. Second stales and first does not -> the plan/issues arm is the mechanism. Neither stales -> the difference is elsewhere in the two trees and this hypothesis is dead, which is also a result.
+      DO NOT COUNT EVERY POST-MERGE STALE AS AN INSTANCE. A merge bringing non-plan paths (e.g. openspec/litmus-tests/*.yaml) stales the stamp CORRECTLY and is not this defect; macneo hit one such merge and excluded it deliberately. Counting those would make this row unfalsifiable.
+      SEPARATE ROW, do not fold it here: macbookair found that scripts/hooks/pre-push-local-gate.sh has NO arm for ok:gate-fresh-except-plan, so the warn-and-continue catch-all admits that push without enforce_stamp_scope. That is the CONSUMER side of the same branch and they are filing it; this row's subject is the producer.
+      ALSO RECORDED: the gate-stamp memoization fixture's seven arms are all memoization-REFUSAL cases and none exercises the across-a-merge property, which is why the single-file property can hold while this case does not — that is criterion 2's justification, measured rather than assumed. That fixture run was KILLED at line 236 by a 300s timeout (it invokes build.sh --check internally), so seven green arms is a PARTIAL result, not a pass.
+    ts: "2026-09-19T20:30:17Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: note
+      ts: "2026-09-19T20:30:17Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        attach the non-reproduction; name the isolating test

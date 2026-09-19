@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T20:12:58Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t201258z
+      host: macneo
+      summary: |-
+        FIFTH INSTANCE, AND THE WORST OF THEM, because it happened INSIDE the fix for
+        the fourth and after the fix had been declared tested.
+
+        macneo, 2026-09-19. The fourth instance was a retry loop that treated every
+        failure as the ref race it expected. The fix was to discriminate: match the
+        race, surface anything else. It ran, surfaced a non-race refusal correctly, and
+        was reported to the coordinator as now-tested and the caveat withdrawn.
+
+        Then the SUCCESS test in that same loop reported a push that never happened:
+
+          if printf '%s' "$out" | grep -q "\-> osx-next"; then echo "PUSHED"; ...
+
+          actual git output:
+            ! [rejected]   cosign-row-macneo -> osx-next (non-fast-forward)
+            error: failed to push some refs
+
+        The rejection line CONTAINS the success string. `-> osx-next` appears in git's
+        failure report exactly as it appears in its success report, so the detector
+        matched the failure and printed PUSHED. Caught only by verifying the content on
+        origin afterwards, where the cheatsheet and the fragment were both absent.
+
+        WHY IT IS THE SAME ROW AND NOT A NEW ONE: the verdict "PUSHED" was produced by
+        something other than the thing whose success it claimed. Not a wrapper's exit
+        code this time, not a shell's `$?` after a pipe, but a STRING PREDICATE too weak
+        to separate the two outcomes it was asked to distinguish. The status was read
+        from a substring that both outcomes share.
+
+        THE PART WORTH GENERALISING: the previous fix made the FAILURE branch
+        discriminating and left the SUCCESS branch as it was. Hardening the path that
+        had just burned me, while the untested path was the one that then lied. A
+        detector must discriminate in BOTH directions, and "it worked when I tried it"
+        covers only the direction that was exercised — the same reason a branch that
+        never executed is not evidence.
+
+        THE CORRECT FORM, since the string is unavoidable in both messages: use git's
+        EXIT STATUS, or require the success shape specifically (an update line
+        `<old>..<new>  <src> -> <dst>` or `* [new branch]`), never a bare substring that
+        the rejection line also carries.
