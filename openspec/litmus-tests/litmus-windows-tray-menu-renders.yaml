@@ -29,36 +29,42 @@ critical_path:
     command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) echo OK ;; *) echo \"SKIP: not Windows\"; exit 77 ;; esac'"
     timeout_ms: 3000
     expected_behavior: "succeeds on Windows; exits 77 (skip) elsewhere"
+    assert_exit: 0
 
   - step: "spawn tillandsias-tray.exe in the background"
     phase: runtime
     command: "powershell.exe -NoProfile -Command \"Start-Process -FilePath '$env:LOCALAPPDATA\\tillandsias\\tillandsias-tray.exe' -ArgumentList '--vm-backend','stub' -PassThru | Select-Object -ExpandProperty Id | Out-File /tmp/litmus-win-tray-pid\""
     timeout_ms: 10000
     expected_behavior: "succeeds; PID written to /tmp/litmus-win-tray-pid"
+    assert_exit: 0
 
   - step: "verify NotifyIcon registered (Shell_NotifyIcon_GetRect or UI Automation probe)"
     phase: runtime
     command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/litmus/win-probe-notify-icon.ps1 -ProcessName tillandsias-tray -TimeoutSec 10"
     timeout_ms: 15000
     expected_behavior: "succeeds; script prints 'NotifyIcon: present' and exits 0"
+    assert_exit: 0
 
   - step: "open menu and capture items via UI Automation"
     phase: runtime
     command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/litmus/win-probe-menu-items.ps1 -ProcessName tillandsias-tray -OutFile /tmp/litmus-win-menu.json"
     timeout_ms: 15000
     expected_behavior: "succeeds; /tmp/litmus-win-menu.json contains a JSON array of menu items"
+    assert_exit: 0
 
   - step: "assert parity contract: status_text, projects, agents (claude/codex/opencode), observatorium, opencode-web, github-login"
     phase: runtime
     command: "cargo run --quiet -p tillandsias-policy -- assert-menu-items /tmp/litmus-win-menu.json status_text projects agents.claude agents.codex agents.opencode observatorium opencode_web github_login"
     timeout_ms: 5000
     expected_behavior: "succeeds; prints OK"
+    assert_exit: 0
 
   - step: "shut down tray cleanly"
     phase: post-run
     command: "powershell.exe -NoProfile -Command \"Stop-Process -Id (Get-Content /tmp/litmus-win-tray-pid) -Force\""
     timeout_ms: 5000
     expected_behavior: "succeeds"
+    assert_exit: 0
 
 observability:
   traces:

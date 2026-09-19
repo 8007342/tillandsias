@@ -16,12 +16,14 @@ critical_path:
     command: "bash -lc 'FORGE_IMG=$(podman images --format \"{{.Repository}}:{{.Tag}}\" | grep -E \"^localhost/tillandsias-forge:v\" | head -1) && [ -n \"$FORGE_IMG\" ] && podman run --rm --entrypoint /bin/sh \"$FORGE_IMG\" -c \"command -v claude codex opencode bash\"'"
     timeout_ms: 15000
     expected_behavior: "succeeds"
+    assert_exit: 0
 
   - step: "no raw 'podman run' shell-outs outside the idiomatic layer"
     phase: pre-build
     command: "bash -lc '! grep -RIn \"Command::new(\\\"podman\\\")\" crates/tillandsias-headless/src/ scripts/tillandsias-podman scripts/build-image.sh build.sh 2>/dev/null | grep -v \"tillandsias-podman\" | grep -v \"allowed-bootstrap\" && echo OK'"
     timeout_ms: 5000
     expected_behavior: "succeeds"
+    assert_exit: 0
 
 observability:
   traces:

@@ -26,36 +26,42 @@ critical_path:
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example send-control -- --kind LaunchForge --project litmus-shutdown --agent bash 2>&1 | grep -qE \"launch.*ok|forge.*started\"'"
     timeout_ms: 30000
     expected_behavior: "succeeds; forge container 'tillandsias-litmus-shutdown-forge' running in VM"
+    assert_exit: 0
 
   - step: "verify forge is running"
     phase: runtime
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- podman ps --format \"{{.Names}}\" | grep -qE \"tillandsias-litmus-shutdown-.*forge\"'"
     timeout_ms: 10000
     expected_behavior: "succeeds (forge container visible)"
+    assert_exit: 0
 
   - step: "issue VmShutdownRequest and measure drain time"
     phase: runtime
     command: "bash -lc 'T0=$(date +%s%N); cargo run -p tillandsias-host-shell --example send-control -- --kind VmShutdownRequest --drain-timeout-ms 10000; T1=$(date +%s%N); echo \"WALL_NS=$((T1-T0))\" | tee /tmp/litmus-shutdown-timing.log'"
     timeout_ms: 35000
     expected_behavior: "succeeds; WALL_NS < 30_000_000_000 (30s); connection closes (no reply expected)"
+    assert_exit: 0
 
   - step: "verify forge container is gone within 10s of shutdown signal"
     phase: runtime
     command: "bash -lc 'WALL_NS=$(grep -oE \"[0-9]+\" /tmp/litmus-shutdown-timing.log | head -1); [[ $WALL_NS -le 30000000000 ]] && echo \"OK: wall=${WALL_NS}ns\" || (echo \"FAIL: wall=${WALL_NS}ns > 30s\"; exit 1)'"
     timeout_ms: 5000
     expected_behavior: "succeeds (30s wall budget honoured)"
+    assert_exit: 0
 
   - step: "verify the VM is stopped"
     phase: runtime
     command: "bash -lc 'sleep 1; (wsl --list --running --quiet 2>/dev/null | grep -qv tillandsias) || (! cargo run -p tillandsias-host-shell --example vm-status 2>&1 | grep -qE \"phase=Ready\") && echo \"VM stopped\"'"
     timeout_ms: 10000
     expected_behavior: "succeeds (VM is no longer in Ready phase)"
+    assert_exit: 0
 
   - step: "verify per-container vault tokens were revoked (from audit log)"
     phase: post-shutdown
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example replay-audit-log -- --last-shutdown 2>&1 | grep -qE \"token.revoke.*policy=git-mirror-policy\"'"
     timeout_ms: 10000
     expected_behavior: "succeeds (audit log confirms revocations)"
+    assert_exit: 0
 
 observability:
   traces:
