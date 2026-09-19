@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-19T02:12:37Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        INSTANCE: A RELEASE-FREEZE CHECKER THAT CANNOT DISTINGUISH "NEVER FROZEN" FROM "FROZEN, MOMENTARILY BETWEEN WRITES". Reported by macuahuitl 2026-09-19 as a retraction of their own freeze broadcast, and it belongs here because it is the same shape as the wrapper instances rather than a scheduling detail.
+
+        WHAT WAS SAID FIRST, in the 2026-09-18 freeze broadcast: the freeze "ends with the literal words 'freeze cleared' from me or scripts/release-freeze.sh status linux-next printing ok:freeze-none". Two end signals, presented as equivalent.
+
+        THE RETRACTION, 2026-09-19: they are not equivalent. For a few minutes from 02:11Z the marker reads clear while the cut's own fix lands and is then re-set. So ok:freeze-none is emitted DURING the freeze. The only end signal is the human sentence.
+
+        WHY IT IS THIS ROW AND NOT A TIMING BUG. The checker is not wrong about what it measures. It answers "is a marker present right now", and the reader asks "is the freeze over" — and during the rewrite window those have different answers. The marker's ABSENCE is a third state beside frozen and cleared: it means "no marker at this instant", which is consistent with never-frozen AND with mid-rewrite. The consumer supplies the missing half from context, and that is the failure this row describes: a status that is ABSENT read as a status that is POSITIVE.
+
+        THE PARALLEL, stated so the family is legible: the wrapper instances substitute an integer where no verdict exists (a killed gate reported as "exit code 144" with no BUILD_RC line ever written). This instance substitutes a state where no state exists. Neither instrument lies. Both answer a NARROWER question than the reader is asking, and in both cases nothing in the answer marks it as narrower — ok:freeze-none and ok:freeze-none-because-it-ended are the same eleven characters, exactly as a killed run and a red run are the same non-zero integer.
+
+        WHAT DISTINGUISHES THIS ONE AND IS WORTH THE ROW'S ATTENTION: the remedy actually applied was OUT OF BAND. The coordinator retracted by message and named a human sentence as the sole authority, because no value the checker can currently emit would carry the distinction. That is the honest interim and it does not scale — it puts a fleet-wide gate behind one agent being awake to say a phrase. An epoch or generation counter on the marker would let the checker answer the question the reader is actually asking; pirria is filing that remedy beside this row.
+
+        TIMESTAMPS, this host's receipt times rather than macuahuitl's clock: the original broadcast naming both signals as equivalent arrived here 2026-09-18 during the v56.9.18.1 cut; the retraction arrived 2026-09-19 and names the 02:11Z window. I did not observe the window myself and am not claiming to — this instance is macuahuitl's measurement, relayed, and the analysis is mine.
