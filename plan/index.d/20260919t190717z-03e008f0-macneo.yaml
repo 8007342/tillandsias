@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    event:
+      type: note
+      ts: "2026-09-19T19:07:17Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t190717z
+      host: macneo
+      summary: |-
+        FOURTH INSTANCE, and the first on macOS. macneo, 2026-09-19, pushing two plan
+        fragments through the plan-only lane.
+
+        THE REFUSAL, which is the family behaving correctly:
+          plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+            resolved: ./target/release/tillandsias-plan
+            via:      validator-surface hash — the fragment checkers' own sources changed
+                      since this binary was built (1152-y3bv)
+            newer:    crates/tillandsias-plan/tests/lua_predicate_classes.rs
+            REMEDY:   cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh
+        The binary had been resolved by existence and used all evening — every ledger
+        check, every fragment validation in this session's earlier pushes ran through
+        it — and nothing refused it until a merge moved the validator surface under it.
+        The surface-hash check is what caught it; an mtime or existence test would not
+        have, since the binary was neither missing nor old relative to the crate.
+
+        WHAT IS NEW HERE AND IS NOT THE PRODUCT'S FAULT — THE AGENT MADE IT INVISIBLE
+        FOR FIVE ATTEMPTS. The previous push on this host had genuinely lost a ref race
+        (osx-next moved twice mid-flight), so the agent wrapped this push in a bounded
+        retry loop that fetched, merged and re-pushed, testing only whether the output
+        contained a success string. Five iterations, all "rejected, retrying". osx-next
+        never moved: the refusal was the STALE verdict above, printed in full, five
+        times, and discarded five times because the loop only ever asked "did it
+        succeed?" and never "why not?".
+        So the diagnostic worked perfectly and reached a reader who had pre-decided what
+        failure meant. A retry loop written for the LAST failure treats every subsequent
+        failure as that one — it is a scripted verdict in control-flow form, the same
+        shape as an echo that reads like a result regardless of the result. The
+        remedy is not "retry less"; it is that a retry loop must match the failure it
+        retries and surface anything else immediately, rather than treating non-success
+        as one undifferentiated class.
+
+        COST: five wasted pushes and a wrong hypothesis reported to the coordinator
+        (a ref race) before the real message was read. The named remedy then worked
+        first time — rebuild, then merge origin/linux-next when the gate asked for it.
