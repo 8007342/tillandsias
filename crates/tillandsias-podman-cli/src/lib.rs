@@ -518,6 +518,17 @@ async fn execute_raw_podman(client: &PodmanClient, argv: Vec<String>) -> Result<
     let Some(head) = argv.first().map(String::as_str) else {
         return Err("raw podman argv is empty".to_string());
     };
+    // A `run` WITHOUT `--detach` is an attached session: production runs it
+    // through the client's attached method (stdio inherited, no façade budget,
+    // the child's own status). The bounded, stdout-captured `execute` below is
+    // right for every other verb and for a detached `run`, and wrong for this
+    // one — under the litmus runtime every `podman` call is delegated here, and
+    // the bounded path killed the meta-orchestration e2e forge at the Container
+    // budget (300s) on the v56.9.19.1 release gate (2026-09-19) while the
+    // launcher's own caps were 600s and 1500s. Mirror the seam, do not bound it.
+    if head == "run" && !raw_run_is_detached(&argv[1..]) {
+        return raw_run_attached(client, &argv[1..]).await;
+    }
     let operation = match head {
         "run" | "create" | "start" | "stop" | "kill" | "rm" | "remove" | "exec" | "ps"
         | "inspect" | "container" => OperationKind::Container,
@@ -555,6 +566,63 @@ async fn raw(
         .await
         .map(|output| output.stdout)
         .map_err(|err| err.to_string())
+}
+
+/// Does this `podman run …` argv (the part after `run`) ask for `--detach`?
+///
+/// Recognises `-d`, `--detach`, `--detach=true`, and a short-flag cluster that
+/// carries `d` (`-dit`). `--detach=false` is NOT detached. Anything else — an
+/// attached, foreground session — is what production launches through the
+/// client's attached method, and what the raw shim must mirror.
+fn raw_run_is_detached(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        if arg == "-d" || arg == "--detach" || arg == "--detach=true" {
+            return true;
+        }
+        if let Some(value) = arg.strip_prefix("--detach=") {
+            return value != "false";
+        }
+        // A short-flag cluster such as `-dit`; never a long flag, never a value.
+        arg.len() > 2
+            && arg.starts_with('-')
+            && !arg.starts_with("--")
+            && arg[1..].chars().all(|c| c.is_ascii_alphabetic())
+            && arg.contains('d')
+    })
+}
+
+/// The `--name` a `podman run …` argv carries, for the launch-event stream.
+fn container_name_from_run_args(args: &[String]) -> Option<String> {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--name" {
+            return iter.next().cloned();
+        }
+        if let Some(value) = arg.strip_prefix("--name=") {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// The attached `run`: production semantics through the client, and the
+/// child's REAL exit status carried out of this process whole. stdio was
+/// inherited, so there is nothing to print; a signal-terminated child has no
+/// exit status, and that absence is declared rather than replaced with a number
+/// (1260-2qgi).
+async fn raw_run_attached(client: &PodmanClient, args: &[String]) -> Result<String, String> {
+    let name = container_name_from_run_args(args).unwrap_or_else(|| "raw".to_string());
+    let debug_enabled = std::env::var_os("TILLANDSIAS_DEBUG").is_some();
+    let status = client
+        .run_container_attached_status("raw", &name, args, debug_enabled)
+        .await?;
+    match status.code() {
+        Some(0) => Ok(String::new()),
+        Some(code) => std::process::exit(code),
+        None => Err(format!(
+            "attached container {name} was terminated by a signal: no exit status to carry (status=absent)"
+        )),
+    }
 }
 
 fn bool_gate(found: bool, noun: &str, name: &str) -> Result<String, String> {
@@ -964,5 +1032,75 @@ mod tests {
                 ]),
             )]
         );
+    }
+}
+
+#[cfg(test)]
+mod raw_run_attached_tests {
+    use super::{container_name_from_run_args, raw_run_is_detached};
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|part| part.to_string()).collect()
+    }
+
+    // The forge launch the litmus runtime delegates through the shim: no
+    // --detach anywhere, so it is ATTACHED and must not take the bounded path.
+    // Pre-fix, execute_raw_podman classified it as OperationKind::Container and
+    // the Container budget killed the session at 300s (v56.9.19.1 gate).
+    #[test]
+    fn a_foreground_run_is_attached() {
+        let args = argv(&[
+            "--rm",
+            "--name",
+            "tillandsias-tillandsias-forge",
+            "--hostname",
+            "forge-tillandsias",
+            "--network",
+            "tillandsias-enclave",
+            "-it",
+            "localhost/tillandsias-forge:v56.9.19.1",
+        ]);
+        assert!(!raw_run_is_detached(&args), "no detach flag: attached");
+        assert_eq!(
+            container_name_from_run_args(&args).as_deref(),
+            Some("tillandsias-tillandsias-forge")
+        );
+    }
+
+    #[test]
+    fn every_detach_spelling_is_detached() {
+        for detach in ["-d", "--detach", "--detach=true", "-dit", "-di"] {
+            let args = argv(&["--rm", detach, "--name=x", "img"]);
+            assert!(raw_run_is_detached(&args), "{detach} must read as detached");
+        }
+    }
+
+    #[test]
+    fn detach_false_and_unrelated_short_flags_are_not_detached() {
+        assert!(!raw_run_is_detached(&argv(&[
+            "--rm",
+            "--detach=false",
+            "img"
+        ])));
+        assert!(!raw_run_is_detached(&argv(&["--rm", "-it", "img"])));
+        // A VALUE that happens to contain a 'd' is not a flag cluster.
+        assert!(!raw_run_is_detached(&argv(&["--name", "daemon", "img"])));
+        // A long flag containing 'd' is not a short cluster either.
+        assert!(!raw_run_is_detached(&argv(&[
+            "--device", "/dev/dxg", "img"
+        ])));
+    }
+
+    #[test]
+    fn container_name_reads_both_spellings_and_absence() {
+        assert_eq!(
+            container_name_from_run_args(&argv(&["--name=forge-a", "img"])).as_deref(),
+            Some("forge-a")
+        );
+        assert_eq!(
+            container_name_from_run_args(&argv(&["--rm", "--name", "forge-b", "img"])).as_deref(),
+            Some("forge-b")
+        );
+        assert_eq!(container_name_from_run_args(&argv(&["--rm", "img"])), None);
     }
 }
