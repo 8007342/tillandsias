@@ -86,6 +86,22 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: promotion smoke hint"
 
+  # ORDER 1280-58kq. This spec already asserts that the installer HONORS a
+  # release-base override; it did not assert that the installer SAYS SO. It did
+  # not: under a pinned TILLANDSIAS_RELEASE_BASE the macOS installer announced
+  # "channel: stable" and "resolving latest release", a resolution path it never
+  # took — measured on macneo in the v56.9.19.1 and v56.9.19.2 curl-install
+  # smokes, both pinned to a base whose release GitHub reports isPrerelease=true,
+  # which /releases/latest/download cannot serve at all. The installs were
+  # correct; only the announcement was not.
+  #
+  # BOUND HERE because an unbound fixture runs in no suite and is as inert as a
+  # missing one (885-92iu): the guard existed and the gate never called it.
+  - step: "install-macos.sh announces a pinned base as a pin, not as a channel it did not resolve (1280-58kq)"
+    command: "bash scripts/test-install-macos-announces-its-pin.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: install-macos-announces-its-pin 6/6 (1280-58kq)"
+
 observability:
   traces:
     - "@trace spec:ci-release"
