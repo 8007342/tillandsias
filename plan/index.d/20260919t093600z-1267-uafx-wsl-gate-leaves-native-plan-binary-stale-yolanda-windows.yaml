@@ -1,0 +1,157 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    order: 1267-uafx
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [windows, portability, probe, fail-loud, false-negative]
+    estimated_hours: 3
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/check-plan-binary-current.sh
+      - build.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a
+      NEGATIVE CONTROL THAT DOES NOT YET EXIST — nothing in the tree asserts
+      that the hook declines to recommend an unrunnable candidate, so any
+      litmus named now resolves to nothing and 885-92iu refuses the row.
+      Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh — point
+      the hook's remedy logic at a deliberately unrunnable candidate that is
+      NEWER by mtime than the runnable one, and assert the printed remedy does
+      NOT name it. The positive arm asserts that a genuinely fresher RUNNABLE
+      candidate still is named, so the fix cannot be "never recommend
+      anything". Build the unrunnable candidate in the fixture rather than
+      depending on a real ELF being present, so the arm runs on every host;
+      a Linux host has no .exe to contrast with and would otherwise skip.
+
+      WIRE IT IN THE SAME COMMIT THAT WRITES IT, and name which route: an
+      _run bash line in build.sh, or BOTH an
+      openspec/litmus-tests/litmus-<name>.yaml definition AND an
+      openspec/litmus-bindings.yaml registry entry. scripts/test-*.sh is not
+      globbed by build.sh, so an unwired fixture is a file rather than a gate
+      (1068-cxmf).
+
+      THE GATE HALF IS SEPARATELY SCORABLE and should get its own pin when it
+      lands: after ./build.sh --check on a Windows host, the binary the probe
+      resolves must not be stale. That one is pinnable today against the
+      existing check-plan-binary-current.sh and does not need this exit.
+    title: |
+      the WSL gate refreshes the Linux ELF and never the .exe, so the plan-only lane refuses a Windows host as STALE after EVERY gate until a separate native build nothing asks for — and the hook's remedy then names the fresher ELF BY MTIME WITHOUT RUNNING IT, which is the 704-zcgi mistake inside the guard that enforces it
+    context: |
+      MEASURED ON YOLANDA 2026-09-19, between a green gate and a landed push.
+      The gate passed, the stamp was recorded, and the push was still refused
+      three times. Two defects stacked, plus a third that hid the first.
+
+      DEFECT 1 — THE TWO LOCI DRIFT APART BY CONSTRUCTION. ./build.sh --check
+      re-execs inside the tillandsias-build WSL2 distro and builds the LINUX
+      ELF at target/release/tillandsias-plan. It never builds the native
+      target/release/tillandsias-plan.exe. On Windows,
+      scripts/plan-binary-probe.sh must resolve the .exe, and is right to:
+      the ELF is the artifact this host cannot execute. So every gate advances
+      one locus and leaves the other behind, and the plan-only lane then reads
+      the .exe as older than freshly merged sources:
+
+        plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+        newer: crates/tillandsias-plan/tests/lua_predicate_classes.rs
+
+      The remedy is a native cargo build --release -p tillandsias-plan —
+      1m14s here — and NOTHING TELLS THE HOST TO RUN IT. A Windows host is
+      therefore structurally unable to satisfy the plan-only lane immediately
+      after gating, which is exactly when it is trying to push.
+
+      DEFECT 2 — THE REMEDY LINE RECOMMENDS AN UNRUNNABLE BINARY, chosen by
+      mtime, never executed. Verbatim from the hook:
+
+        A FRESHER build of this binary exists but was not used:
+                  ./target/release/tillandsias-plan
+        REMEDY: TILLANDSIAS_PLAN_BIN=./target/release/tillandsias-plan git push ...
+
+      Measured on the same host in the same minute:
+
+        file target/release/tillandsias-plan
+          -> ELF 64-bit LSB pie executable, x86-64, ... for GNU/Linux 3.2.0
+        running it
+          -> cannot execute binary file: Exec format error
+
+      ORDER 704-zcgi EXISTS BECAUSE THREE SCRIPTS INDEPENDENTLY MADE THIS
+      MISTAKE ON THIS EXACT FILESYSTEM — a bare -x test on
+      target/release/tillandsias-plan, first match wins, on a shared
+      Windows/WSL checkout where a WSL build leaves a Linux ELF beside the
+      usable .exe. Its rule is recorded in plan-binary-probe.sh's own header:
+      an executable BIT is a claim; RUNNING the binary is evidence. The hook's
+      remedy weakens that to an mtime comparison and prints it as instruction.
+      Following it hands the lane a binary that cannot run at all, which is
+      worse than the stale one it replaces — and it is printed BY the guard
+      whose purpose is to enforce the opposite.
+
+      DEFECT 3 — check-plan-binary-current.sh REPORTS ok: WITHOUT MINTING,
+      which is what made defects 1 and 2 cost three pushes instead of one. The
+      first run printed only:
+
+        ok:plan-binary-write-is-opt-in+role-satisfies:...exe arms=16/0 copies=0
+
+      and the next push failed with a byte-identical refusal. After the native
+      rebuild the same script printed an ADDITIONAL line:
+
+        stamped:plan-binary-validator-surface:...exe.validator-surface-sha256
+
+      and only then did the lane accept. The ok: line reports a DIFFERENT ARM
+      and is silent about the one the caller invoked the script for. A caller
+      who reads ok: as "the stamp is minted" is reading a true statement about
+      the wrong subject. This is the fourth instance of that family in one
+      night on this host and is appended to 1260-2qgi in its own right.
+
+      LOCUS NOTE, and why 1258-tpkz is cited: that row records that
+      test-plan-binary-locus-native asserts probe ORDERING while an inherited
+      TILLANDSIAS_PLAN_BIN override short-circuits the probe by design, so the
+      fixture reds a healthy tree on exactly the hosts that must set it. The
+      hook's remedy TELLS a Windows host to set that very override. Fixing
+      this row by telling hosts to export TILLANDSIAS_PLAN_BIN would therefore
+      red 1258-tpkz's fixture on every host that complied. The two rows must
+      be read together and the override is not the way out.
+    deliverable: |
+      A Windows host that has just gated can push through the plan-only lane
+      without a separate undocumented build, and no guard ever recommends a
+      binary it did not execute.
+
+        * THE GATE REFRESHES BOTH LOCI. ./build.sh --check on a Windows host
+          builds the native .exe as well as the in-distro ELF, or states
+          plainly that it did not and names the one command that does. A gate
+          that leaves the host unable to push is not finished.
+        * THE REMEDY LINE NAMES ONLY A BINARY THAT RAN. Before the hook
+          suggests any path, it must EXECUTE that candidate and confirm it
+          answers — the same run-don't-stat move resolve_plan_binary already
+          implements. If no runnable candidate is fresher, say so and name the
+          build command instead of offering an unrunnable one. Reuse
+          plan-binary-probe.sh rather than re-deriving the choice; a fourth
+          independent copy of this decision is how the first three went wrong.
+        * check-plan-binary-current.sh REPORTS ON THE ARM IT WAS CALLED FOR.
+          A run that mints nothing must not lead with ok:. Either print
+          stamped: or say skip:no-stamp-minted:<why> — silence about the
+          requested subject, under a green line about another, is the defect.
+        * NEGATIVE CONTROL: a fixture that points the remedy logic at a
+          deliberately unrunnable candidate and asserts the hook does NOT
+          recommend it. Without that arm, this regresses the moment someone
+          reaches for mtime again, which the record shows is four times so far.
+    next_action: >
+      Reproduce first, because it takes one command on any Windows host and
+      the reproduction is the whole diagnosis: run ./build.sh --check, then
+      immediately attempt a plan-only push, and read the refusal. Then decide
+      the gate half (build both loci, or refuse to finish silently) before
+      touching the remedy half — the remedy line only matters on hosts the
+      gate has already stranded, so fixing the gate shrinks this row to the
+      run-don't-stat correction plus its negative control.
+    provenance: |
+      Found by yolanda-windows 2026-09-19 while trying to land a single plan
+      fragment after the memory cap restored this host's ability to gate. The
+      gate was green and the push still failed three times; each refusal was
+      correct and none of them named the cause in a form a Windows host could
+      act on. Filed at macuahuitl's direction as one row covering the gate
+      half and the remedy half, since neither is useful alone.
