@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-19T19:16:59Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t191659z
+      host: macneo
+      summary: |-
+        CAUSE FOUND AND INDEPENDENTLY CONFIRMED: THE ABSENCE IS DELIBERATE BY DISPATCH.
+        Traced by macuahuitl-fedora from build.sh; every claim below re-verified from
+        macneo against the same file before being recorded.
+
+          build.sh:1651  `if [[ "$FLAG_CHECK" == true ]]; then`   <- opens the --check gate
+          build.sh:4472  `fi`                                      <- closes it
+          build.sh:3138  the archiver step                         <- 1651 < 3138 < 4472, INSIDE
+          FLAG_CHECK is assigned in exactly TWO places: 369 (`FLAG_CHECK=false`,
+          the default) and 390 (`--check) FLAG_CHECK=true ;;`). Nothing else sets it.
+
+        So the entire --check gate — fmt, clippy, cargo test, the bash-dialect check,
+        guard activation, every shell fixture, the archiver, the ghost-trace ratchet —
+        lives in one top-level block entered ONLY by `--check`. `--ci-full` sets
+        FLAG_CI_FULL and runs its own block (1376-1650): the pre-build litmus gate via
+        local-ci.sh, the build, the install, the post-build smoke, the runtime residual.
+        It never re-enters the check body.
+
+        ONE PRECISION on the coordinator's report, checked rather than accepted: they
+        said a grep of the --ci-full span for FLAG_CHECK/--check found "nothing". It
+        finds THREE, all at 1428, 1559 and 1645, and all of the same harmless form —
+        `if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN..." == "falsefalse..." ]]`
+        — i.e. default-dispatch guards that read the flag only to test that NO flag was
+        passed. None re-enters the check body, so the conclusion stands unchanged; the
+        "nothing" was imprecise and the substance was right.
+
+        THE ROW'S HONEST SENTENCE, which replaces the alarm in the previous entry:
+        A RELEASE VERDICT SAYS NOTHING ABOUT THE ARCHIVER BY DESIGN. The two tiers
+        COMPOSE rather than nest. The archiver's coverage for any shipped tree is the
+        --check stamp on THAT tree, not the release gate: the land tool runs --check,
+        and the pre-push hook refuses a tree whose stamp is stale ("the tree changed
+        since ./build.sh --check last passed" — a refusal both macneo and macuahuitl
+        were handed today, so the enforcement is live, not theoretical). A reader who
+        wants archiver health for a shipped tag asks whether that tag's tree carried a
+        valid --check stamp, which the land tool guarantees for anything it pushed.
+
+        RETRACTION OF THE ALARM IN THE PRIOR ENTRY. That entry said "the release gate's
+        green says nothing about the archiver, and any reader inferring archiver health
+        from a shipped release would be inferring it from a step that never ran." The
+        first half is TRUE AND BY DESIGN; the second half framed a deliberate
+        composition as a hole, and is withdrawn. The observation was worth making — an
+        absent step IS the third state and was worth separating from a non-reproducer —
+        but the conclusion outran the evidence, which showed only that the step was not
+        in that log. It could not distinguish "not run because the tier delegates it"
+        from "not run because something is wrong", and this entry records that it is the
+        former. Both hosts declined to guess at the time; the guess would have been
+        wrong in the alarming direction.
