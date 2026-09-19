@@ -90,12 +90,28 @@ if [[ -n "${TILLANDSIAS_VERSION:-}" ]]; then
     say "pinned to v${VERSION}"
 else
     BASE="$RELEASE_BASE_LATEST"
-    say "channel: $CHANNEL"
-    if [[ "$CHANNEL" == "unstable" ]]; then
-        say "  !! UNSTABLE channel — newest daily build, NOT promoted to stable."
-        say "     Expect breakage. Re-run without --channel for the stable build."
+    if [[ -n "${TILLANDSIAS_RELEASE_BASE:-}" ]]; then
+        # ORDER 1280-58kq. TILLANDSIAS_RELEASE_BASE overrides CHANNEL_BASE above,
+        # so announcing the CHANNEL here describes a resolution that did not
+        # happen. Measured on macneo: both the v56.9.19.1 and v56.9.19.2 smokes
+        # logged "channel: stable" then "resolving latest release" while pinned
+        # to a base whose release GitHub reports as a PRERELEASE — and the stable
+        # channel (/releases/latest/download) cannot serve one. The install was
+        # correct in both; only these lines were not.
+        #
+        # The TILLANDSIAS_VERSION arm one branch up already announces its own pin
+        # ("pinned to v<version>"), so this is a missing case rather than a
+        # missing idea: every path that bypasses channel resolution should say
+        # which path it took instead.
+        say "channel: pinned ${TILLANDSIAS_RELEASE_BASE}"
+    else
+        say "channel: $CHANNEL"
+        if [[ "$CHANNEL" == "unstable" ]]; then
+            say "  !! UNSTABLE channel — newest daily build, NOT promoted to stable."
+            say "     Expect breakage. Re-run without --channel for the stable build."
+        fi
+        say "resolving latest release"
     fi
-    say "resolving latest release"
 fi
 
 # ── temp workspace ───────────────────────────────────────────────────────

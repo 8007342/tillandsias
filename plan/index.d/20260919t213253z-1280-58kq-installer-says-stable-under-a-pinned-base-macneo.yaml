@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    order: 1280-58kq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, install, release, observability]
+    estimated_hours: 1
+    owned_files:
+      - scripts/install-macos.sh
+    title: |
+      install-macos.sh prints "channel: stable" and "resolving latest release" while installing a PINNED PRERELEASE from TILLANDSIAS_RELEASE_BASE, so the installer's own log describes a resolution path it did not take
+    context: |
+      FOUND BY macneo-macos during the v56.9.19.1 curl-install smoke and
+      reproduced verbatim on v56.9.19.2. Filed as a row at the coordinator's
+      direction; it was a Work Packet section in
+      plan/issues/smoke-e2e-findings-v56.9.19.1-2026-09-19-macos-macneo.md.
+
+      MEASURED, both smokes, first two lines of the install log:
+        channel: stable
+        resolving latest release
+      while the installer was pinned by TILLANDSIAS_RELEASE_BASE to the
+      v56.9.19.2 release base, and `gh release view v56.9.19.2 --json
+      isPrerelease` returns TRUE. The stable channel by GitHub semantics is
+      /releases/latest/download, which does not serve a prerelease at all, so
+      the log states something that could not have happened.
+
+      THE INSTALL ITSELF IS CORRECT. The pinned base was honoured, the right
+      asset downloaded, its SHA256 verified against the published
+      SHA256SUMS-macos, and the installed binary asserted at the exact tag on
+      two surfaces. ONLY THE TWO LOG LINES ARE WRONG. This is an observability
+      defect, not an install defect, and the row should not be read as
+      questioning the artefact.
+
+      THE MECHANISM, read from the script. CHANNEL_BASE is derived from
+      $CHANNEL, then RELEASE_BASE_LATEST takes TILLANDSIAS_RELEASE_BASE in
+      preference to it. The version-resolution block has two arms: a
+      TILLANDSIAS_VERSION pin, which honestly says "pinned to v<version>", and
+      an else arm which sets BASE from RELEASE_BASE_LATEST and then
+      unconditionally says "channel: $CHANNEL" and "resolving latest release".
+      So the RELEASE_BASE override silently takes effect while the messages
+      continue to describe the channel path. The script already has the right
+      vocabulary one arm over — the VERSION pin announces itself — so this is a
+      missing case, not a missing concept.
+
+      SCOPE, checked rather than assumed: scripts/install.sh (Linux) prints
+      neither line, so this is macOS-only and no Linux row is needed.
+
+      WHY IT IS WORTH A ROW RATHER THAN A SHRUG: the lines are the first two an
+      operator or an agent reads when an install misbehaves. A future
+      investigation into a wrong artefact would begin by reading "channel:
+      stable" and concluding the stable channel served it — which is exactly
+      the family of 1260-2qgi, a message that reads like a report of what
+      happened, produced by something that did not observe it.
+    exit_criteria:
+      - 'with TILLANDSIAS_RELEASE_BASE set, install-macos.sh prints a line naming the pin (e.g. "channel: pinned <base>") and NEVER prints "resolving latest release" — PRE-FIX RESULT: FAILS; the first two lines of both macneo install logs, for v56.9.19.1 and v56.9.19.2, read "channel: stable" then "resolving latest release" under a pinned prerelease base'
+      - 'with TILLANDSIAS_RELEASE_BASE unset, the output is unchanged from today ("channel: stable" and "resolving latest release"), so a real operator sees no difference — PRE-FIX RESULT: passes today and must still pass after, i.e. this is the regression guard, not a change'
+      - 'the unstable-channel warning block is unaffected in both cases'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable includes the fixture
+      that would score it, so no litmus name exists to pin and 885-92iu would
+      refuse one that does not. Intended filename
+      scripts/test-install-macos-announces-its-pin.sh, written in the same
+      commit as the fix (1136-n8sh). Its shape is fixed by the two criteria:
+      run the resolution block with TILLANDSIAS_RELEASE_BASE set and assert the
+      pinned line and the ABSENCE of "resolving latest release"; run it unset
+      and assert today's two lines exactly; MUTANT — revert the branch and prove
+      the first arm fails.
+    events:
+      - type: filed
+        ts: "2026-09-19T21:32:53Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260919t213253z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Split out of the v56.9.19.1 macOS smoke report at the coordinator's
+          direction. The install was PASS in both smokes; only the log lines are
+          wrong, and the row says so in those terms.

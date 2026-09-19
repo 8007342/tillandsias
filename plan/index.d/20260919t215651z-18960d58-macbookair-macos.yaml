@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-bsd-date-the-timing-clock-has-one-second-resolution-so-a-real-sub-second-measurement-emits-the-same-zero-the-script-already-treats-as-no-measurement
+    field: status
+    value: completed
+    ts: "2026-09-19T21:56:51Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: on-bsd-date-the-timing-clock-has-one-second-resolution-so-a-real-sub-second-measurement-emits-the-same-zero-the-script-already-treats-as-no-measurement
+    event:
+      type: completed
+      ts: "2026-09-19T21:56:51Z"
+      host: macbookair-macos
+      summary: |-
+        status 'completed' with evidence_refs: dd27a9e82 (on origin/linux-next, verified by ancestry and by the file resolving on trunk): scripts/timing-log.sh sources milliseconds from date, then perl, then whole seconds, with timing_clock_resolution reporting the winning arm; scripts/test-timing-clock-resolution.sh -> ok:timing-clock-resolution:4 on tlatoanis-macbook-air 2026-09-19. Gate BUILD_RC=0 at 14:40:21 (1187s). MUTATION-VERIFIED rather than asserted: with the millisecond sources disabled, arm 1 reds with duration_ms:0 — macneo's exact reported symptom — while arm 2 (multi-second, 2000ms) and arm 3 (the _t0=0 skip) still pass. Pre-fix on this host: timing_now_ms returned 1789850675000, trailing 000.

@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: install-macos-launches-the-tray-and-provisions-a-vm-during-the-install-so-section-1-of-the-smoke-is-not-a-download-test-and-the-hazard-is-documented-for-linux-only
+    event:
+      type: note
+      ts: "2026-09-19T21:58:48Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t215848z
+      host: macneo
+      summary: |-
+        PRE-FIX EVIDENCE, MEASURED BY ACCIDENT ON THE FILING HOST, 2026-09-19: AN
+        INSTALL THAT DIES PARTWAY LEAVES THE HOST WITH NO APPLICATION AND NO BACKUP.
+
+        The finder ran the real installer piped through `head -6`, to read its first
+        lines while verifying an unrelated fix. head closed the pipe, SIGPIPE killed the
+        installer mid-swap, and /Applications was left with NEITHER Tillandsias.app NOR
+        Tillandsias.app.bak. The host had no installed application until it was
+        re-installed from the published v56.9.19.2.
+
+        WHY IT BELONGS ON THIS ROW. The swap is not atomic and the ordering is
+        destructive-first: the installer removes any existing BACKUP, then moves the
+        LIVE app aside to become the new backup, then extracts. Interrupted between the
+        second and third step — by a signal, a network failure at the download, a full
+        disk, or a laptop closing — the previous install is already gone and the new one
+        does not exist. The window is small but it is unguarded, and nothing warns that
+        an install puts the working copy at risk.
+
+        This sharpens the row beyond "§1 is not a download test". It is not only that
+        the install does MORE than download; it is that a FAILED install can leave the
+        host with LESS than it started with. An operator re-running an installer to
+        repair a bad install is in exactly the state where a second failure costs them
+        the working one they still had.
+
+        NOT ARGUED FROM READING: measured. `ls -d /Applications/Tillandsias.app*`
+        returned no matches; the app was verified absent and then restored by a full
+        re-install, confirmed at `tillandsias-tray 56.9.19.2`.
+
+        SUGGESTED SHAPE, not a decision: extract to a temporary sibling and swap in
+        place only after extraction succeeds, keeping the previous app until then — so
+        the destructive step happens last and an interruption leaves the working install
+        untouched. That is a different question from whether the installer should
+        provision a VM, which is criterion 2 of this row; both live in the same
+        "install-macos.sh does more, and riskier, than its name suggests" family.
+
+        HONESTLY ATTRIBUTED: the interruption was the finder's own careless command, not
+        a fault of the installer. What the accident measured is the installer's
+        behaviour UNDER interruption, which is a real property and was not previously
+        recorded anywhere.
