@@ -34,6 +34,8 @@ critical_path:
     command: "pkill -f tillandsias 2>/dev/null && sleep 4 && echo SHUTDOWN_COMPLETE"
     timeout_ms: 10000
     expected_behavior: "shutdown command succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
 
   - step: "wait for container cleanup"
     command: "sleep 2"
