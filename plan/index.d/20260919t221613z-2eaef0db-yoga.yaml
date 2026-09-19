@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    event:
+      type: evidence
+      ts: "2026-09-19T22:16:13Z"
+      agent_id: linux-yoga-claude-20260919t221613z
+      host: yoga
+      summary: |-
+        A CONTROL OVER REAL DATA IS BLIND TO A DEFECT REAL DATA DOES NOT CONTAIN. That
+        is the case for cross-fixture gating in one sentence, and this row produced it
+        the expensive way — by shipping the defect and being caught by someone else's
+        fixture.
+
+        WHAT HAPPENED. The duplicate-key detector added for this row keyed on the
+        `step:` key instead of the LIST-ITEM boundary. A critical_path item opened by
+        `- name:` MERGES into the previous step in this parser — that is 1252-znbn's
+        defect — so the merged item's command:, timeout_ms: and expected_behavior:
+        arrive while the predecessor's seen-key set is still live and look like
+        repeats. A YAML loader sees TWO list items and ACCEPTS the file. So the
+        detector reported a duplicated mapping key on VALID YAML: a false red, in the
+        slice whose criterion 2 is specifically "a refusal that also fires on valid
+        input has replaced a false green with a false red".
+
+        WHAT CAUGHT IT: litmus:item-opener-refused went 2/4 inside ./build.sh --check.
+        Not my fixture. It belongs to 1252-znbn, was written for a different defect
+        months of context away from this one, and it is the only thing in the tree that
+        builds a merged-item file.
+
+        WHY MY OWN CONTROL COULD NOT. ARM 6 of this row's fixture compares the REAL
+        corpus with and without the detector — 424 parseable either way. That is a good
+        control and it is blind here by construction: no corpus file has the
+        merged-item shape, because a merged-item file is malformed and the corpus is
+        not. The only place that shape exists is inside a fixture's temp dir. A control
+        drawn from production data can only falsify defects production data can
+        express.
+
+        THE GENERALISATION, since this is the second time tonight the same shape
+        appeared: a guard's blind spot is the set of inputs its own evidence cannot
+        contain. For ARM 6 that was malformed files; for check-order-citations-
+        resolve.sh (1283-tpd5) it was a quoted `order:` scalar, and THAT guard's own
+        fixture contains zero quoted cases, which is why nine packets accumulated
+        uncitable. In both cases the fixture was correct, ran, passed, and could not
+        have failed.
+
+        FIXED at eaaaca5ec: the seen-key set resets on any `- <key>:` opener, because
+        in YAML a new mapping starts at the list item and not at the `step:` key. ARM 8
+        added — a merged `- name:` probe must be accepted by the YAML loader AND must
+        not draw a duplicate refusal, with the loader's acceptance asserted FIRST so a
+        future reader that started rejecting that shape reports a broken premise rather
+        than passing vacuously.

@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-quoted-order-scalar-is-invisible-to-every-grep-based-ledger-reader-so-nine-filed-packets-could-not-be-cited-and-the-guards-own-fixture-could-never-have-caught-it
+    order: 1283-tpd5
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [guard, ledger, yaml, parse, fail-loud]
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-order-citations-resolve.sh
+      - scripts/test-order-citations-resolve.sh
+      - scripts/test-append-event-archived-refusal.sh
+    title: |
+      a quoted `order: "1274-cbk7"` is the same value as `order: 1274-cbk7` to YAML and to the plan CLI, but every grep-based ledger reader keys on the UNQUOTED SPELLING — nine filed packets were uncitable, and the guard's own fixture could never have caught it
+    context: |
+      FOUND BY A CONTRADICTION, not by review. The gate refused a slice with
+      "unresolvable order citation: 1274-cbk7 — No packet carries that order"
+      while `tillandsias-plan answer 1274-cbk7` returned the packet. Both
+      cannot be right, and the disagreement is the whole finding: one reader
+      parses YAML, the other greps it.
+
+      MEASURED ON yoga 2026-09-19 at the tip of linux-next. NINE filed packets
+      declare a quoted order and were invisible to
+      scripts/check-order-citations-resolve.sh, whose pattern permitted no
+      quotes (`order: [0-9]{3,4}-[a-z0-9]{4}`):
+        1254-47xd 1255-rvr7 1256-t3w8 1257-jxu9 1258-8wfb
+        1258-u8re 1259-dgaq 1266-75tr 1274-cbk7
+      All nine are real, resolvable packets. Any @trace citing one failed the
+      gate as an INVENTED order — which is precisely the failure that guard
+      exists to catch, produced by the guard itself against legitimate work.
+      923 other declarations are unquoted, so the quoting began recently; all
+      nine sit in the 1254+ range.
+
+      ALREADY FIXED, ADDITIVELY, in the 1274-cbk7 slice: the pattern now
+      tolerates an optional quote. The change was measured rather than
+      asserted — known-order set 1415 -> 1424, NOTHING removed, exactly those
+      nine added, so a citation can only move unresolvable -> resolvable and
+      the widening cannot redden a passing tree. That closes the symptom. This
+      row is the two halves it does not close.
+
+      HALF ONE — WHAT BEGAN QUOTING THE FIELD. Unknown. It is not cosmetic:
+      whatever writes it will keep writing it, so every grep-based reader
+      written from now on inherits the trap. The choice is between making the
+      writer stop and making every reader tolerate both, and that is a design
+      question rather than a patch.
+
+      HALF TWO — WHICH OTHER READERS SHARE THE BLIND SPOT. Two more scripts
+      carry the same quote-less pattern and were found by scanning for it:
+        scripts/test-order-citations-resolve.sh     order: [0-9]{3,4}-[a-z0-9]{4}
+        scripts/test-append-event-archived-refusal.sh  order: [0-9]+-[a-z0-9]+
+      THE FIRST OF THOSE IS THE GUARD'S OWN FIXTURE, and it contains ZERO
+      quoted-order cases — measured, `grep -c 'order: "'` returns 0. It builds
+      its probe ledger with the unquoted spelling only, so it could never have
+      caught the defect in the thing it guards. That is why nine packets
+      accumulated unnoticed. A fixture only tests the world it builds.
+
+      THE ORDER-UNIQUENESS GATE IS NOT AFFECTED — measured first, at the
+      coordinator's instruction, because a uniqueness gate blind to a spelling
+      would let two packets hold one order, which is far worse than an
+      uncitable packet. crates/tillandsias-plan/src/lib.rs:1126 builds its
+      order_claims map from `p.get("order")` on a PARSED document, so the YAML
+      loader has already stripped the quotes and both spellings collapse to
+      one key. Confirmed behaviourally: `tillandsias-plan answer` resolves all
+      nine quoted orders. The blind spot is confined to readers that grep.
+    exit_criteria:
+      - 'A FIXTURE LEDGER CARRYING THE SAME ORDER TWICE — once quoted, once unquoted — is REFUSED by the order-uniqueness gate as a duplicate, and an @trace citing that order RESOLVES against either spelling. PRE-FIX RESULTS, measured on yoga 2026-09-19: the citation gate FAILS on the quoted declaration (that is the nine-packet defect); the uniqueness gate ALREADY PASSES this, because it reads parsed YAML rather than grepping — so its arm is a regression guard, not a fix, and must be written as one'
+      - 'the guard''s own fixture exercises a QUOTED declaration (pre-fix result: `grep -c ''order: "'' scripts/test-order-citations-resolve.sh` returns 0 — it builds its probe ledger unquoted only, which is why the defect survived nine packets). A fixture that cannot express the defect is the thing being fixed here, not the guard'
+      - 'every reader that extracts an order from the ledger by grep is ENUMERATED, and each one either tolerates both spellings or is shown not to need to. The two found so far are named in context; the criterion is the enumeration, not those two'
+      - 'the WRITER question is answered with a name: what emits `order: "…"`, and whether it should stop. Recording that it is unknown is not closure — an unfixed writer means every future grep-based reader inherits this'
+    unscoreable: |
+      whether grep-based ledger readers should exist at all: the citation guard
+      greps deliberately, so it can run on a host with no YAML reader and so it
+      does not depend on the plan binary being current, and both reasons are
+      good. Replacing them with parsed reads trades one failure mode for
+      another (a stale binary silently answering for a tree it was not built
+      from). This row does not settle that; it makes the existing readers
+      correct for both spellings and names who writes them.
+    verifiable_closure: |
+      a fixture ledger in which one order is declared twice, once quoted and
+      once unquoted: the uniqueness gate refuses it as a duplicate and the
+      citation gate resolves a trace citing it, with the pre-fix result of each
+      arm recorded; plus an enumeration of grep-based order readers and a named
+      answer to what writes the quoted form.
+    events:
+      - type: filed
+        ts: "2026-09-19T22:15:49Z"
+        agent_id: "linux-yoga-claude-20260919t221549z"
+        host: yoga
+        summary: |-
+          Filed from yoga at the coordinator's routing, from evidence produced
+          while landing 1274-cbk7. The uniqueness-gate measurement was taken
+          BEFORE filing, on instruction, and it came back clean — that gate
+          parses rather than greps. The symptom is already fixed additively in
+          the 1274-cbk7 slice; what is filed here is the unfixed writer and the
+          unenumerated readers, including the guard's own fixture, which
+          contains no quoted case and so could never have caught this.
