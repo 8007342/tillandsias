@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: failed-to-spawn-build-process-program-not-found-names-neither-the-program-nor-the-path-it-searched-so-eight-identical-lines-told-the-operator-nothing
+    order: 1277-g5k9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [diagnosis, fail-loud, podman, operator-facing, instrument-defect]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    verifiable_closure: |
+      scripts/test-spawn-failure-names-program.sh prints
+      `ok:spawn-failure-names-program:2/2` and exits 0, where arm 1: when the image-build spawn fails because the executable is absent, the
+      failure line names the program and where it looked, of the form
+      `FAILED <image>: cannot spawn 'podman' — not found on PATH (<first three PATH entries>…)`,
+      and the summary line after the loop names the ONE missing program once
+      instead of listing eight images. PRE-FIX RESULT: FAILS — the operator's
+      transcript on esme 2026-09-19 (v56.9.19.2) carries eight identical
+      `Failed to spawn build process: program not found` lines and a summary
+      naming eight images and no program. NEGATIVE CONTROL: a build that
+      spawns and then fails still reports the build's own stderr, unchanged.
+    title: |
+      "Failed to spawn build process: program not found" names neither the program nor the PATH it searched, so eight identical lines told the operator nothing
+    context: |
+      1260-2qgi family: a message that reads like a diagnosis, produced by
+      something that had the answer (the io::Error carries NotFound and the
+      command carried the program name) and printed neither. Eight images
+      failed for one cause and the output made it look like eight causes. The
+      sibling row fixes the lane that should never have been entered on
+      Windows; this row fixes the line so the next platform without podman on
+      PATH reads as "podman is not here", which is one command away from the
+      remedy on every platform.
+    next_action: >
+      At the spawn site, map io::ErrorKind::NotFound to a message carrying the
+      program name and the PATH that was searched (or "PATH unset"); collapse
+      the per-image loop's repeated identical spawn failures into one summary
+      line naming the program. Unit test on the error mapping with a bogus
+      program name; the operator's transcript is the pre-fix line.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-19 from the
+      operator's pasted transcript on esme; not reproduced here.

@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    order: 1276-2hc6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, headless, fail-loud, diagnosis, operator-facing]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    verifiable_closure: |
+      litmus:windows-headless-init-refuses-host-lane (Windows tier) passes: on a Windows host, `tillandsias.exe --init` (the headless launcher
+      shipped inside tillandsias-windows-x64.zip beside the tray) exits
+      non-zero BEFORE any image build with exactly one stderr line of the form
+      `refused:windows-host-lane:podman runs inside the WSL2 guest; run tillandsias-tray.exe --provision-once`,
+      and `--init --debug` prints the same line and no `BUILD <image>` lines.
+      PRE-FIX RESULT: FAILS — measured by the operator on esme 2026-09-19 with
+      version 56.9.19.2: `--init runtime lane: desktop-user-session`, then
+      eight `BUILD <image> (DigestMissing)` / `FAILED <image>: Failed to spawn
+      build process: program not found` pairs (proxy, git, vault, inference,
+      router, chromium-core, chromium-framework, web; forge-base and forge
+      also attempted), ending `Error: Failed to build 8 required image(s)`.
+      NEGATIVE CONTROL: on Linux, `--init` still selects its lane and builds.
+    title: |
+      the Windows headless launcher accepts --init natively, selects the desktop-user-session lane, and fails eight image builds with "program not found" instead of refusing and naming the tray
+    context: |
+      The operator, installing the daily by hand on esme, unzipped the Windows
+      release, found tillandsias.exe beside tillandsias-tray.exe, and ran the
+      one whose name matches the project. It ran the host lane as if podman
+      were native, and every image build died on a missing program it did not
+      name (the sibling row). The supported Windows path is the tray, which
+      provisions the WSL2 distro and runs podman inside it; nothing in the
+      binary's output said so. A launcher that exists on a platform where its
+      lane cannot work must refuse on arrival with the working command in the
+      refusal, the same way the forge entrypoint refuses without credentials
+      (exit 2 with the reason) rather than failing eight times downstream.
+    next_action: >
+      Add the Windows arm at lane selection in the headless main: when the
+      target is Windows (cfg) or the host kind resolves to a Windows host,
+      refuse --init/--debug --init with the one-line message above before
+      touching images; keep --version and --diagnose working. Fixture: the
+      Windows tier's litmus asserts the refusal line and the absence of any
+      BUILD line; pre-fix red is the operator's transcript in this row.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-19 from the
+      operator's pasted transcript on esme (Windows, manual install of
+      v56.9.19.2); the operator ran it, the coordinator did not.
