@@ -3555,17 +3555,34 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // word. Claiming it structural would be a second false cause
                 // in the packet that exists to remove the first one.
                 unusable_reason: match &verdict {
-                    // KEPT UNDER 48 CHARACTERS DELIBERATELY. `slug()` caps
-                    // every envelope value at 48 and says nothing when it
-                    // cuts: the first spelling of this token was
-                    // `…:dxg-not-probed-in-container`, 52 characters, and it
+                    // MEASURED 2026-09-19, so this is no longer `unverified`.
+                    // It said `container-lane-unverified:dxg-unprobed` until
+                    // the container lane was actually probed on esmeraldinha,
+                    // three arms:
+                    //   --device /dev/dxg alone                -> llvmpipe ONLY
+                    //   + /usr/lib/wsl/lib bound               -> dzn loads, then
+                    //        ID3D12DeviceFactory::CreateDevice failed; llvmpipe only
+                    //   + ALL of /usr/lib/wsl (incl. drivers/) -> the host's two
+                    //        devices, Dozen driverID=23 beside llvmpipe
+                    //
+                    // So the node DOES cross and the d3d12 libraries are
+                    // mountable; what is absent is the projected WINDOWS DRIVER
+                    // STORE that dzn resolves the real D3D12 device out of.
+                    // Naming it that way matters: "dxg does not reach the
+                    // container" would be false, and would read as a
+                    // passthrough limitation when it is a mount policy the
+                    // product could choose to change.
+                    //
+                    // KEPT UNDER 48 CHARACTERS DELIBERATELY (43). `slug()` caps
+                    // every envelope value at 48 and says nothing when it cuts:
+                    // an earlier spelling of this token was 52 characters and
                     // rendered as `container-lane-unverified_dxg-not-probed-in-cont`
                     // — a token that is not the token, with no marker that it
                     // had been shortened. Same failure the `nvidia_model_name`
                     // comment above records for a name truncated mid-UUID, and
                     // the same remedy: shorten the input, do not raise the cap.
                     Wsl2VulkanVerdict::Usable { .. } => {
-                        Some("container-lane-unverified:dxg-unprobed".to_string())
+                        Some("container-lane-absent:dxg-needs-wsl-drivers".to_string())
                     }
                     Wsl2VulkanVerdict::Unusable { reason } => Some(reason.clone()),
                 },
