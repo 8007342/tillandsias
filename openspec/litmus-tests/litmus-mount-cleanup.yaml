@@ -46,11 +46,13 @@ critical_path:
     command: "mount | grep tillandsias | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 mounts"
+    assert_output_matches: "^[[:space:]]*0$"
 
   - step: "verify no leftover enclave mounts"
     command: "mount | grep 'tillandsias-enclave' | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 mounts"
+    assert_output_matches: "^[[:space:]]*0$"
 
 gating_points:
   - signal: "all bind mounts cleaned on shutdown"

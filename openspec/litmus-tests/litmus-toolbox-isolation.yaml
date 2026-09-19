@@ -35,6 +35,7 @@ critical_path:
     command: "grep -i 'host cargo\\|/usr/bin/cargo\\|system compiler' /tmp/cached_build.log | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 matches (no host tool usage)"
+    assert_output_matches: "^[[:space:]]*0$"
 
   - step: "perform clean build and verify toolbox used"
     command: "./build.sh --clean --install 2>&1 | tee /tmp/clean_build.log"
@@ -50,6 +51,7 @@ critical_path:
     command: "grep -i 'host cargo\\|/usr/bin/cargo\\|system compiler' /tmp/clean_build.log | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 matches (no host tool usage)"
+    assert_output_matches: "^[[:space:]]*0$"
 
   - step: "confirm cargo inside toolbox is different from host"
     command: "if command -v cargo &>/dev/null; then HOST_CARGO=$(which cargo); echo \"Host cargo: $HOST_CARGO\"; else echo 'No host cargo (expected)'; fi"
