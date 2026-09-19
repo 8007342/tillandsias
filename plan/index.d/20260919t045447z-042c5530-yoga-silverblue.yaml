@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-litmus-steps-run-pkill-f-tillandsias-inside-a-runner-whose-own-command-line-contains-that-string-so-the-step-can-kill-the-process-executing-it
+    field: context
+    value: |-
+      THE TWO STEPS, verbatim on trunk:
+        litmus-ca-ephemeral.yaml:34
+          command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
+        litmus-mount-cleanup.yaml:34
+          command: "pkill -f tillandsias 2>/dev/null && sleep 4 && echo SHUTDOWN_COMPLETE"
+
+      WHY THIS IS A SELF-MATCH. `pkill -f` matches against the FULL COMMAND LINE
+      of every process. run-litmus-test.sh executes each step as
+        bash -c 'source "$LITMUS_STDLIB"; <the step command>'
+      from a checkout at /var/home/<user>/claudia/tillandsias, so the executing
+      shell's own command line contains the string `tillandsias` several times
+      over — in the path, in the stdlib path, and in the command text itself.
+      The pattern matches the matcher.
+
+      THE FAILURE IS NOT THEORETICAL ON THIS FLEET. The same shape has cost
+      exit-144s here before: a sweep whose own command line carried the literal
+      it swept for killed the shell issuing it while the intended target
+      survived. `pkill -f` cannot distinguish "the process I mean" from "the
+      process asking".
+
+      WHAT MAKES IT WORSE THAN A WEDGE. If the step kills its own runner, the
+      harness does not report "the step killed me". It reports a dead step —
+      a non-zero exit or a timeout — which reads as an ordinary test failure
+      against whatever the step was nominally checking. A reader debugging
+      litmus-mount-cleanup would look at mount cleanup. Nothing in the output
+      names the actual mechanism.
+
+      AND THE STEPS ARE CURRENTLY GREEN FOR AN UNRELATED REASON, which is why
+      this has not bitten yet and why it should not be left. Their
+      expected_behavior is "shutdown command succeeds", which selects the
+      interpreter arm requiring NON-EMPTY OUTPUT and IGNORING THE EXIT CODE
+      (1252-znbn). `echo SHUTDOWN_COMPLETE` prints, so the step passes
+      regardless of what pkill did or did not kill — including, potentially,
+      nothing. The assertion cannot see the hazard.
+
+      NOT TOUCHED DELIBERATELY. These two were excluded from 1252-znbn's
+      per-step migration, along with five others calling podman or
+      `tillandsias --init`, because executing them to survey their behaviour
+      would take side effects on a live host. A measurement that kills processes
+      to find out whether it kills processes is not a measurement.
+
+      THE REMEDY PATH IS 1252-fg9e, not a patch here. That order builds an
+      idiomatic command executor whose argv is assembled callee-side, which
+      deletes `pkill -f` self-match as a CLASS rather than fixing two instances —
+      its own context names exactly this defect among the ten it removes by
+      construction. Two instances patched by hand would leave the shape
+      available to the next author.
+
+
+      [2026-09-19T04:54:47Z yoga-silverblue] MEASURED AFTER FILING, 2026-09-19, yoga and lenovinha — THE CORPUS ALREADY CONTAINS THE MITIGATION AND APPLIES IT FOUR TIMES. There are SIX executable pkill -f sites in openspec/litmus-tests. Four bracket a character so the pattern cannot match the matcher — pkill -f 'expert-serv[e] --port 21436' and pkill -f 'openai-stu[b] --port 21438' among them — and TWO do not. The two are litmus-ca-ephemeral line 34 and litmus-mount-cleanup line 34, which are exactly this row's pair. Verified independently on both hosts. So this is not a hazard nobody noticed; it is one the same corpus fixes deliberately elsewhere and misses here. THE SHAPE TO COPY IS NOT BRACKETING ALONE. litmus-expert-serve-endpoint-shape line 86 does kill of the pid read from a pidfile the step itself wrote, and only then the bracketed pattern as a backstop. That is strictly better, because it does not depend on the pattern being unmatched by the matcher, it depends on knowing which process was meant. Bracketing is the fallback for when the pidfile is gone. A remedy that rewrites all six sites identically would replace a considered pattern with a uniform one and the diff would look like consistency. THE FLEET ALREADY DECIDED THIS ON 2026-09-04 AND THE DECISION REACHED NOTHING. plan/index.yaml carries an esme-windows entry from that date diagnosing the identical mechanism — pgrep -f matching its own sh -c wrapper, so a gate that died silently looked identical to one still running, caught on an idle host where the command printed two matches, both itself. Its recorded fixes are ranked: bracket a character, or PREFERRED for the method the fleet copies because it is harder to get subtly wrong, use an artifact-based liveness signal that needs no self-exclusion. It ends a check that cannot fail is not a check. Two weeks later the reach of that ruling is ZERO — the one corpus hit for its vocabulary sits under order 831-ezea, a different defect, where a second author independently produced the same words without finding the entry. The reach problem is filed separately as order 1d12771bf's row and is not restated here. INCIDENCE, NARROWED. Three occurrences on 2026-09-18 across two hosts, ALL IN AD-HOC INTERACTIVE USE and none in a committed call site — two on lenovinha while cleaning up after documenting this hazard, one on yoga which killed a running fifty-minute gate inside a command its author was calling a verification. All three were by people holding the demonstration. That retires the question of whether the shape ever fires in practice. It does NOT establish that either of these two steps has ever self-killed, and that remains unknowable while their expected_behavior selects the non-empty-output arm, which cannot separate killed-the-right-thing from killed-its-own-runner from killed-nothing. Note also that order 1252-fg9e's executor would not have prevented any of the three, since it removes the shape from committed call sites and none of the three was one.
+    ts: "2026-09-19T04:54:47Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: two-litmus-steps-run-pkill-f-tillandsias-inside-a-runner-whose-own-command-line-contains-that-string-so-the-step-can-kill-the-process-executing-it
+    event:
+      type: note
+      ts: "2026-09-19T04:54:47Z"
+      host: yoga-silverblue
+      summary: |-
+        the corpus already fixes this four times; the fleet ruled on it 2026-09-04 and the ruling reached zero; incidence narrowed to ad-hoc use
