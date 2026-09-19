@@ -36,6 +36,18 @@ not the remedy, not a guard, not a check:
 
 scripts/local-ci.sh:1722 — `# litmus scar at the bottom of this file: a check that cannot fail.` <!-- cite-ok: the line number IS the finding: this is the sole occurrence of the 2026-09-04 principle anywhere outside the ledger, and the point is that there is exactly one and it is a comment. Locate it by the stable string "a check that cannot fail"; the number will drift, which is expected and does not affect the claim. -->
 
+**And that one hit is not a reference to the decision.** Verified: the comment
+sits under `ORDER 831-ezea` — a *different* order, about `tee` discarding a
+checker's exit code — and uses "a check that cannot fail" as a **description of
+the defect class it had just hit in its own file**. The surrounding region cites
+no order token from 2026-09-04, no esme, no self-exclusion. It is a **second
+person arriving at the same words by the same route and also not finding the
+entry.**
+
+So the corrected count is not "reached one place". It is **reached zero**. The
+phrase is *discoverable* by anyone who hits the shape — which is exactly not the
+same as being *reachable* from the shape.
+
 It did **not** reach:
 
 - the two litmus steps carrying the defect (`litmus-ca-ephemeral.yaml:34`,
@@ -84,6 +96,28 @@ to the decision about it.
 - NEGATIVE CONTROL: the four already-bracketed sites keep working unchanged. A
   sweep that rewrites all six identically has replaced a considered pattern with
   a uniform one.
+
+## The counterexample, encountered while filing this row
+
+This row is NOT "recording does not work". A working instance refused this very
+document, twice, while it was being written.
+
+`check-issue-citation-convention` rejected a bare `scripts/local-ci.sh:1722` citation <!-- cite-ok: quoting the refused citation verbatim IS the example; the guard refused this very sentence on a third pass, which is the point being made. -->
+— the convention wants symbols, because 6 of 6 citations in one audit
+(881-29me) had drifted to unrelated code. The sanctioned escape is a
+`<!-- cite-ok: why -->` marker; it was supplied in a block *underneath* the
+citation and refused again, because the marker must end the citation's **own
+line**. Both refusals named the remedy.
+
+That is the difference the claim turns on. **881-29me points from the call site
+back to its decision** — the guard sits where the mistake is made and says so at
+the moment of making it. The 2026-09-04 entry points nowhere; nothing at a
+`pkill -f` call site mentions it.
+
+So the narrow claim is: *recording works when something at the call site points
+back, and does not otherwise.* A ledger entry with a memorable principle and a
+ranked remedy is not a control. A guard that refuses you twice and tells you how
+to comply is.
 
 ## What this row does not claim
 
