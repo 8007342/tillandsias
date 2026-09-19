@@ -176,6 +176,53 @@ case "$out4" in
 esac
 _result "arm4-names-the-offending-entry" "yes" "$named"
 
+# ---- ARM 5: a WHOLE-TREE directory symlink (1238-u84w, the two-check rule) --
+# 51db2c14c collapsed .gemini/skills to ONE directory symlink -> ../skills.
+# `[ -d ]` follows it, so the per-entry glob enumerated the CANONICAL skills and
+# reported all 17 as "a real directory where a symlink belongs". The gate stayed
+# green because ./build.sh --check does not EXECUTE litmus (measured: 63 litmus
+# mentions, 0 executions in a --check log), so only the litmus lane went red --
+# which is why this check and check-skills-single-source.sh must widen together.
+R5="$WORK/dirlink"
+build_repo "$R5"
+git -C "$R5" rm -q --cached .claude/skills/hello-world >/dev/null 2>&1
+rm -rf "$R5/.claude/skills"
+blob5="$(printf '../skills' | git -C "$R5" hash-object -w --stdin)"
+git -C "$R5" update-index --add --cacheinfo "120000,$blob5,.claude/skills"
+# Materialise it the way a symlink-capable checkout would, so the glob really
+# does walk through into the canonical tree.
+ln -s ../skills "$R5/.claude/skills" 2>/dev/null || cp -r "$R5/skills" "$R5/.claude/skills"
+git -C "$R5" commit -qm dirlink >/dev/null 2>&1
+out5="$(bash "$R5/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+case "$out5" in
+    ok:skills-canonical:*) verdict5=ok ;;
+    violation:*)           verdict5="violation:$out5" ;;
+    *)                     verdict5="unparsable:$out5" ;;
+esac
+_result "arm5-whole-tree-directory-symlink-passes" "ok" "$verdict5"
+
+# ---- ARM 5 MUTANT: the discriminator is the PATH, not the entry count -------
+# "exactly one tracked symlink" ALSO describes a runtime with per-skill links
+# that is missing all but one -- a real violation. A widening keyed on the count
+# would pass this and swallow the defect, so the mutant pins that it does not.
+R6="$WORK/dirlink-mutant"
+build_repo "$R6"
+mkdir -p "$R6/skills/second-skill"
+printf 'another canonical skill
+' > "$R6/skills/second-skill/SKILL.md"
+mkdir -p "$R6/.claude/skills/second-skill"
+printf 'hand-written copy, not a link
+' > "$R6/.claude/skills/second-skill/SKILL.md"
+git -C "$R6" add skills/second-skill .claude/skills/second-skill >/dev/null 2>&1
+git -C "$R6" commit -qm mutant >/dev/null 2>&1
+out6="$(bash "$R6/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+case "$out6" in
+    violation:harness-exclusive-skill:*) verdict6=violation ;;
+    ok:*)                                verdict6=ok ;;
+    *)                                   verdict6="unparsable:$out6" ;;
+esac
+_result "arm5-mutant-a-real-copy-beside-one-link-still-reds" "violation" "$verdict6"
+
 echo "PASS: $pass  FAIL: $fail"
 if [ "$fail" -gt 0 ]; then
     echo "violation:skill-canonicalization-remedy:$fail arm(s) failed"

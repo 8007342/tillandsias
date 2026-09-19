@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-plan-binary-locus-native-asserts-probe-ORDERING-but-an-inherited-tillandsias-plan-bin-override-short-circuits-the-probe-by-design-so-the-fixture-reds-a-healthy-tree-on-exactly-the-hosts-that-must-set-it
+    field: next_action
+    value: |-
+      ROUTED TO esme (coordinator, 2026-09-18): esme is the host that hits this NEXT
+      and should confirm it before anyone fixes it.
+
+      WHY esme SPECIFICALLY: esme is the fleet's other floor-tier control unit — no
+      accelerated GPU or NPU, and no Rust toolchain. A host with no cargo cannot
+      resolve a plan binary any other way, so it MUST export TILLANDSIAS_PLAN_BIN to
+      have an instrument at all. That is the configuration `ok:cycle-preflight:existing`
+      (order 1004-ws5q) was added to bless. The fleet blesses the host class, then
+      hands it a fixture that reds `./build.sh --check` when it does the one thing
+      that makes it able to work. esme meets this on its first full gate.
+
+      WHAT IS LEFT:
+
+      1. esme REPRODUCES IT, both directions, and reports the two verdict lines. One
+         command each, no toolchain needed:
+           TILLANDSIAS_PLAN_BIN=<resolved binary> bash scripts/test-plan-binary-locus-native.sh
+             expect: plan-binary-locus-native: 2 passed, 1 failed     rc=1
+           env -u TILLANDSIAS_PLAN_BIN              bash scripts/test-plan-binary-locus-native.sh
+             expect: plan-binary-locus-native: 3 passed, 0 failed     rc=0
+         If esme does NOT reproduce it, say so loudly: the trigger would be narrower
+         than "the variable is set" and this row's premise would be wrong.
+
+      2. THE FIX, once confirmed: clear the override for the ORDERING arms only. Do
+         NOT clear it globally. `resolve_plan_binary` honouring an explicit override
+         on existence alone is CORRECT and deliberate (704-zcgi: "an EXPLICIT
+         override is the caller naming the binary, not a candidate to be judged" —
+         probing it once turned `stale-plan-binary` into `no-plan-binary` and the
+         corpus caught it immediately). The override behaviour is not what changes.
+
+      3. THE NEGATIVE CONTROL THAT STOPS A LAZY FIX: clearing the override must not
+         be implemented as SKIPPING arm 3. The fixture already asserts `CONTROL: the
+         pre-fix order picks the .exe on this same tree — arm 1 has teeth`; that
+         control must survive, and arm 3 must still FAIL when the probe genuinely
+         mis-orders. A fix that buys green by not looking is an instance of the very
+         defect this row reports.
+
+      4. EXIT CRITERION 4 IS OPEN AND IS NOT esme's ALONE: nobody has asked whether
+         other fixtures resolve the plan binary while asserting about resolution.
+         This was found by tripping over it, which is not a search.
+
+      5. THE REAL CLOSURE: a host with no Rust toolchain must be able to complete
+         `./build.sh --check` green. Today it cannot.
+
+      COST, MEASURED: it red a full gate on pirria at ~minute 35 of a ~44-minute run
+      on 4 cores, on a tree whose actual changes were fine.
+
+      PROVENANCE: the contamination was pirria's own — the variable was exported in
+      the shell that launched the gate — and re-running under `env -u` was the
+      correct immediate move. The row exists because the next toolchain-less host
+      exports it for the same unavoidable reason and nothing warns them.
+    ts: "2026-09-18T23:52:24Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: test-plan-binary-locus-native-asserts-probe-ORDERING-but-an-inherited-tillandsias-plan-bin-override-short-circuits-the-probe-by-design-so-the-fixture-reds-a-healthy-tree-on-exactly-the-hosts-that-must-set-it
+    event:
+      type: note
+      ts: "2026-09-18T23:52:24Z"
+      host: pirria-silverblue
+      summary: |-
+        routed to esme by the coordinator as the host that hits this next

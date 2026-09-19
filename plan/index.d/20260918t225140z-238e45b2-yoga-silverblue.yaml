@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-groundtruth-grader-compares-committed-768-dim-query-vectors-against-an-index-of-any-dimension-and-reports-degenerate-retrieval-as-ordinary-case-failures
+    field: context
+    value: |-
+      MEASURED ON YOGA 2026-09-18, AND IT INVALIDATED A RECORD THAT HAD ALREADY
+      BEEN FILED. This row exists because the harness produced a plausible,
+      well-formed, fully-provenanced number that measured nothing.
+
+      THE SETUP. spec.answer cases grade against CALLER-SUPPLIED query vectors
+      committed under openspec/litmus-tests/groundtruth/query-vectors/. All four
+      are 768-dimensional — nomic-embed-text. The corpus index, by contrast, is
+      built from whatever TILLANDSIAS_EMBED_MODEL names. Nothing checks that the
+      two agree.
+
+      WHAT HAPPENS WHEN THEY DO NOT. Grading 768-dim queries against a 384-dim
+      (all-minilm) or 1024-dim (mxbai-embed-large) index does not error. It
+      returns a CONSTANT. Two unrelated questions came back with the same chunks
+      in the same order:
+        spec-inference-tier-cdi-fallback -> accel-capability-probe/spec.md:1-1, :2-3, :4-11, :12-29, +4 more
+        spec-podman-reset-what-survives  -> accel-capability-probe/spec.md:1-1, :2-3, :4-11, :12-29, +4 more
+      The grader then reports three ordinary case failures. Nothing says the
+      index and the queries are incommensurable.
+
+      THE CONTROL, SAME HOST, SAME CORPUS, SAME COMMIT, MINUTES APART:
+        spec-rung1, mxbai index  (1024 vs 768) -> pass=2 fail=3
+        spec-rung1, nomic index  ( 768 vs 768) -> pass=5 fail=0
+      So the three failures ARE the mismatch, exactly and repeatably.
+
+      WHY THE SURVIVORS ARE THE MOST INSTRUCTIVE PART. The two cases that passed
+      under a broken index are the two STRUCTURAL ones — "refuses when the answer
+      uses no retrieved chunk" and "still cites when the answer does use a chunk".
+      They assert the SHAPE of the response and pass whatever comes back. Of five
+      retrieval cases, the only survivors of a dead retriever were the two that
+      never depended on retrieval. A suite can look 40% healthy while its subject
+      is entirely inert.
+
+      HOW IT REACHED A FILED RECORD. Two yoga records were produced for 917-6iwv
+      criterion 6, all-minilm and mxbai-embed-large, and both scored EXACTLY
+      30/33 — same pass, same fail, same cases, from models 15x apart in
+      parameter count. That impossibility is what prompted the check;
+      `podman logs` during the grade showed ONLY qwen2.5:0.5b and ZERO embedding
+      requests, because the query side is frozen in committed vectors and the
+      index could not be used. Both records were retracted on 917-6iwv.
+      HAD THE TWO MODELS SCORED SLIGHTLY DIFFERENTLY, nothing would have prompted
+      the check and the artifact would have stood as a cross-host model
+      comparison. The defect was caught by a coincidence, which is not a method.
+
+      A PREMISE TWO HOSTS ACCEPTED IS FALSE HERE, AND IT IS FALSE FOR A REASON
+      WORTH WRITING DOWN SO NOBODY RE-DERIVES IT. Both hosts agreed, when
+      choosing models for 917-6iwv criterion 6, that "the model that actually
+      decides the number is the EMBED model". For this harness that is wrong —
+      not because the embed model is unimportant, but because THE QUERY SIDE IS
+      FROZEN in committed vectors. With the queries fixed at one model's
+      dimension, changing the embed model cannot change the measurement; it can
+      only break it. The correct reading is the inverse of the premise: holding
+      the embed model fixed is what keeps the harness valid, and lenovinha's
+      record is sound precisely because it kept nomic-embed-text. Any future
+      per-model retrieval comparison needs regenerated query vectors per model,
+      which is a different packet.
+
+      THIS IS NOT 1257-jxu9. That row is about provenance FIELDS being lost
+      (quantisation and engine recorded unknown, series unharvestable). This one
+      is the inverse and worse: every provenance field is filled in correctly —
+      model id, index generation, corpus commit, chunk count — while the
+      MEASUREMENT they describe is invalid. A record here is not incomplete, it
+      is confidently wrong.
+
+
+      [2026-09-18T22:51:40Z yoga-silverblue] REFINEMENT 2026-09-18, measured after filing — A DIMENSION CHECK IS NECESSARY BUT NOT SUFFICIENT, so exit criterion 1 as written would close this row while leaving a worse variant open. The committed query vectors are a BARE LIST of 768 floats with no model id, no declared dimension and no provenance of any kind. 768 is the standard BERT-base hidden size, shared by bge-base, gte-base, e5-base and mpnet among others. So an index built with any OTHER 768-dim model would pass a dimension check and still be semantically incommensurable, because the committed queries live in nomic-embed-text's embedding space and nothing records that. That failure is STRICTLY HARDER to catch than the one this row was filed for — it produces plausible, varied, non-constant retrieval rather than the identical-chunk-list signature, so the degenerate-retrieval detector in criterion 4 would not fire either. The fix therefore has to key on MODEL IDENTITY carried by the vectors, not on their length; criterion 5 already asks the vectors to declare their provenance and is, on this reading, the load-bearing one rather than a convenience.
+    ts: "2026-09-18T22:51:40Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: the-groundtruth-grader-compares-committed-768-dim-query-vectors-against-an-index-of-any-dimension-and-reports-degenerate-retrieval-as-ordinary-case-failures
+    event:
+      type: note
+      ts: "2026-09-18T22:51:40Z"
+      host: yoga-silverblue
+      summary: |-
+        a dimension check would close the row and leave the same-dimension different-model case open; refinement appended rather than the row re-filed

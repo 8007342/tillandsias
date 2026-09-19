@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: selinux-from-audit-to-enforcement-starting-with-the-forge-container-because-the-policy-sources-already-exist-unloaded-while-one-spec-mandates-label-disable-as-a-security-default-and-another-spec-asserts-guarantees-that-cannot-hold-under-it
+    event:
+      type: note
+      ts: "2026-09-18T21:09:43Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        PHASE 4 EVIDENCE — one label=disable classified KEPT-with-reason, with a control behind it, not an opinion. SUBJECT: the tillandsias-inference container's --security-opt=label=disable in build_inference_run_args (crates/tillandsias-headless/src/main.rs). DISPOSITION: KEPT. THE ONE SENTENCE: the flag is load-bearing on macOS because Virtualization.framework virtiofs cannot persist security xattrs, so a file created in the model-cache share reads back with no inheritable label and confined container_t is denied — only mount-level context labelling could ever let the flag be dropped, and that is its own packet, not this one. EVIDENCE: ef9c850bd, scripts/test-macos-model-share-writable.sh -> ok:macos-model-share-writable:3 on tlatoanis-macbook-air 2026-09-18 against a live VZ guest with an EMPTY model cache. Its arm 2 is the control that makes this a classification rather than a preference: the product's exact flag set creates .tools-probe/ollama two levels deep and writes a file inside it; remove ONLY label=disable and the identical command FAILS; and the fixture reds ITSELF if that mutation arm ever passes. Arm 0 is source-level and runs on every host including Linux, so the day someone deletes the flag the gate says so rather than macOS inference dying quietly from a clean cache. WHAT RULES OUT THE ALTERNATIVES, measured rather than assumed, so nobody re-opens this as a permissions question: a container running as ROOT (--user 0:0) is denied one level into the share while guest-root succeeds at any depth; chmod 0777 does not help; chown inside the share returns 0 and does NOT apply. A uid that IS 0 cannot be denied by DAC, so uid, mode and ownership are excluded together and labelling is what remains. TWO WARNINGS FOR PHASE 4's OTHER ENTRIES. (1) ':z'/':Z' on a bind are NOT a substitute remedy here — both were measured and both FAIL, because relabelling writes xattrs this filesystem cannot keep. (2) ':Z' is ACTIVELY HARMFUL on a SHARED bind, not merely ineffective: it stamped a per-container MCS category (s0:c911,c996) onto the shared directory, the category OUTLIVED the container, and every later container was then denied — including the single-level case that had been working. Anyone reaching for :Z 'for tidiness' while retiring a label=disable will convert a working host into a broken one with no error naming the cause.

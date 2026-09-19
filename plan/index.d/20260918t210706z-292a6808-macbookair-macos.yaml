@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    event:
+      type: progress
+      ts: "2026-09-18T21:07:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        DELIVERABLE MET ON THE PRODUCT'S OWN PATH, and the packet's ownership mechanism is DISPROVEN. Empty cache (removed and recreated, 0 entries verified in-guest), default context-less mount, build_inference_run_args' exact flags, real entrypoint, no --entrypoint override: engine self-installs and .tools/{ollama,lib,.engine-set} appears, ollama listens on :11434. A FALSE GREEN WAS CAUGHT FIRST and discarded — 'rm -rf CACHE/*' matches no dotfiles under zsh, so that run measured a POPULATED cache and printed a healthy startup with no self-install line at all; a populated cache cannot fail this test. MECHANISM: container-ROOT (--user 0:0) is denied one level down while guest-root succeeds at any depth; chmod 0777 does not help; chown returns 0 without applying. A uid that IS 0 cannot be denied by DAC, so ownership is not the variable. It is SELinux labelling — macOS virtiofs cannot persist security xattrs, the mount ROOT alone carries container_file_t (which is exactly why a SINGLE-level probe reports green on a broken host), and --security-opt label=disable flips it green with everything else held fixed. The product survives only because it already ships that flag: load-bearing, and nothing said so. ':z' and ':Z' were measured and BOTH FAIL; ':Z' additionally stamped a per-container MCS category onto the SHARED directory that outlived the container and then denied every later container, including the case that had been working. GUARD: scripts/test-macos-model-share-writable.sh -> ok:macos-model-share-writable:3. Arm 0 is source-level and runs on every host (reds if the flag leaves the run-args); arms 1/2 are live on macOS and differ only in that flag; the fixture reds ITSELF if the mutation arm passes, and refuses on a non-empty cache — a guard that already fired here on residue a killed probe left. NO CODE SHIPPED, DELIBERATELY: I built and verified a mount-level context= hardening in vz.rs (contexted mount passes, plain mount reds, two-arm control) and then REVERTED it — the product never meets that cause, and shipping it against this row would have recorded a fix for the wrong reason; it belongs in its own packet as the thing that would let label=disable be dropped. OPEN, provenance only: run-args are byte-identical at v56.9.13.1 and the only entrypoint commit since is fail-loud-only, so what changed since 2026-09-14 is unnamed. Do not re-derive the ownership story to answer it.

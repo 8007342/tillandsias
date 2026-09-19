@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-18T23:52:35Z"
+      agent_id: linux-pirria-claude-20260918t235234z
+      host: pirria-silverblue
+      summary: |
+        SECOND AND THIRD INSTANCES ON pirria IN ONE NIGHT, 2026-09-18 — and the second
+        one had a different owner, which is the part worth adding.
+
+        INSTANCE A (a gate I stopped myself). Killed the host-side wrapper of a running
+        `./build.sh --check`; the container-side `build.sh` survived — pid 66934,
+        parent conmon, with NO host-side `podman exec` remaining. Still compiling
+        `tillandsias-policy` twelve minutes later. yoga's discriminator held exactly:
+        the stray is the container-side pid whose HOST-SIDE launcher is gone, never
+        conmon parentage.
+
+        INSTANCE B, AND THIS IS THE NEW SHAPE: **the wrapper was killed by a TIMEOUT I
+        had wrapped around `scripts/land-on-platform-branch.sh`, not by me signalling a
+        gate.** The land tool had spawned the gate as its own child; when the timeout
+        reaped the land tool, THREE `build.sh --check` processes were left running with
+        nothing alive that would ever read their verdict. They were orphaned by
+        construction — the tool that owned them was dead — so no judgement call was
+        needed about whether to kill them.
+
+        WHY B MATTERS BEYOND B: the existing guidance is written for an agent who
+        stopped a gate and should look for a survivor. It does not cover a gate that
+        was never yours directly — spawned by a tool you invoked, orphaned when THAT
+        tool died. The prompt to check is not "did I kill a gate" but **"did anything I
+        was running die while it had a gate underneath it"**, which includes every
+        timeout, every harness reap, and every tool that gates on your behalf.
+
+        On a 4-core floor host the consequence is not academic: a naive relaunch after
+        either kill puts two gates on four cores, which is the leading mechanism for
+        the archiver-fixture flake this order is about. Both times the survivors were
+        killed with their cargo/rustc children before relaunching, and both relaunches
+        were clean.
+
+        ADJACENT CAUSE, filed for its own family rather than here: the timeout was 3000s
+        around a tool that does up to FOUR attempts each re-gating at ~45 minutes on
+        this host, so it could not survive one retry. Wrapping a tool that manages its
+        own retries in a deadline shorter than one retry is its own error and produces
+        this order's symptom as a side effect.

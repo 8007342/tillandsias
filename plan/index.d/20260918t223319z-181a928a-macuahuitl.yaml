@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: npu-inference-container
+    event:
+      type: note
+      ts: "2026-09-18T22:33:19Z"
+      agent_id: linux-macuahuitl-fable51-20260918t223319z
+      host: macuahuitl
+      summary: |
+        DEPENDENCY, RECORDED AS AN EVENT BECAUSE depends_on IS A LIST (1184-tj2q: set-field writes scalars only; the row's owner amends the declaration). yoga-silverblue, 2026-09-18, packet 1253-54zj: enumerate_npus hardcodes usable:false / engine-missing at its push site, so no host-side toolkit can ever flip an NPU row and the derivation the GPU engine already performs is absent for NPUs. 543 (npu-inference-container) cannot be built on a probe that reports every NPU unusable by literal; it depends on 1253-54zj in addition to optional-component-registry. Whoever picks 543 adds packet 1253-54zj to depends_on in the declaration.
