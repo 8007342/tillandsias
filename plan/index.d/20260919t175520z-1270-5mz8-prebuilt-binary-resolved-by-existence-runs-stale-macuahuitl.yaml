@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    packet_kind: methodology
+    order: 1270-5mz8
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [methodology, gate, build, instrument-defect, agent-safety, multi-host]
+    estimated_hours: 6
+    owned_files:
+      - scripts/tillandsias-podman
+      - build.sh
+      - scripts/check-plan-binary-current.sh
+      - methodology/convergence.yaml
+    verifiable_closure: |
+      scripts/test-prebuilt-resolver-refuses-stale.sh prints
+      `ok:prebuilt-resolver:stale-refused:2/2` and exits 0, where (1) with
+      `target/debug/tillandsias-podman-cli` present, executable, and OLDER than
+      the newest source under crates/tillandsias-podman-cli and
+      crates/tillandsias-podman, `scripts/tillandsias-podman` with any
+      subcommand prints
+      `refused:podman-cli-stale:<path>:rebuild=cargo build -p tillandsias-podman-cli`
+      on stderr and exits non-zero WITHOUT executing the binary (the fixture's
+      stale binary is a script that writes a marker file; the marker must be
+      absent); (2) with the binary newer than its sources it is executed.
+      Third criterion: a `./build.sh --ci-full` gate log carries one line
+      stating that tillandsias-podman-cli was rebuilt (or resolved fresh) BEFORE
+      the litmus runtime shim was minted. PRE-FIX RESULT: FAILS on (1) and
+      (3) — measured 2026-09-19 on macuahuitl: the resolver's profile loop
+      (`PODMAN_CLI_BIN` from release-then-debug by `-x` alone) picked a
+      2026-09-15T04:42 host-side debug build carrying no trace of 77490d6ff,
+      the toolbox gate's cargo never rebuilt that path, and release gates #3
+      and #4 ran the forge lane through pre-fix code: #3 passed only because a
+      short full-mode cycle finished inside the old 300s budget, #4 was killed
+      at 300s with the fix "on trunk". NEGATIVE CONTROL: arm 2 must still run a
+      fresh prebuilt, so the fix cannot be "always cargo run".
+    title: |
+      a prebuilt binary resolved by existence runs stale until something refuses it — three instances in two days, and the podman shim ran the release gate's forge lane on four-day-old code
+    context: |
+      THREE INSTANCES, 2026-09-18/19, ONE SHAPE: a resolver prefers a prebuilt
+      binary because it EXISTS, and nothing compares it to what it was built
+      from.
+        1. The plan binary on lenovinha: its validator-surface stamp went stale
+           after an incremental rebuild and every plan write was refused; the
+           remedy (scripts/check-plan-binary-current.sh) existed and nothing in
+           the refusal named it (1152-y3bv class).
+        2. The plan binary on esme: built 2026-09-14, five days stale for the
+           whole session, so the plan-only lane — whose own header says a
+           checkout that never gated can push its claim — refused on exactly
+           the host it exists to spare, composing with 1259-kn83 and 1258-tpkz.
+        3. tillandsias-podman-cli on macuahuitl: the litmus runtime shim
+           routes EVERY podman call through scripts/tillandsias-podman, which
+           picked the four-day-old debug build; the release gate measured the
+           forge lane on code the tree no longer contained (the closure above).
+      Mirror row: 1154-6big (esme) is a probe that cannot SEE a debug binary;
+      this is a resolver that cannot see a STALE one. The shared remedy, stated
+      once: every resolver that prefers a prebuilt compares it to its sources
+      (mtime or a validator-surface hash, as the plan binary already does) and
+      REFUSES with the rebuild command, never runs stale silently; and a floor
+      host's binary must be refreshable by a documented, toolchain-free path,
+      or the refusal strands the host (instance 2).
+    next_action: >
+      Write the two-arm fixture first and watch arm 1 execute the stale marker
+      script on the unfixed tree. Then: the shim compares the resolved binary's
+      mtime against the newest file under the two crates (a hash is better if a
+      validator surface exists for it) and refuses with the rebuild command;
+      build.sh's ci-full path rebuilds the crate before minting the runtime
+      shim and logs that it did; the refusal text on the plan binary's stale
+      path names scripts/check-plan-binary-current.sh. Add the rule to
+      methodology/convergence.yaml as a MUST. Instances 1 and 2 close on their
+      own rows if they have them; this row closes on the fixture and the rule.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-19. Instance 3 is
+      this host's measurement (release gates #3 and #4 of the v56.9.19.1 cut);
+      instances 1 and 2 are lenovinha's and esmeraldinha's reports of
+      2026-09-18/19, relayed with their own framing.
