@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: set-field-append-s-drops-lines-guard-compares-against-the-local-fold-so-an-append-written-against-a-fold-that-lacks-a-peer-s-newer-append-silently-deletes-the-peer-s-lines-with-no-conflict-and-no-marker
+    event:
+      type: evidence
+      ts: "2026-09-18T23:56:57Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        PRE-FIX FAILS, REPRODUCED BEFORE TOUCHING CODE as this row's next_action demands.
+        Two clones of a scratch bare remote, the real tillandsias-plan binary:
+
+          23:53:45Z  host-a  set-field 900-test next_action "L1 ..." --append   -> ok:, pushed
+          23:53:48Z  host-b  set-field 900-test next_action "L2 ..." --append   -> ok:
+                     host-b had NEVER fetched, so its fold did not carry L1.
+                     git merge origin/main: CLEAN. No conflict. No marker. Pushed.
+
+        BOTH fragments reach the remote:
+          20260918t235345z-0b07997f-host-a.yaml   value = BASE + L1
+          20260918t235348z-0a05e943-host-b.yaml   value = BASE + L2   (no L1)
+        LWW is per FIELD, and host-b's timestamp is the later of the two by three
+        seconds, so the folded next_action is host-b's value and L1 IS GONE. The
+        1151-td46 drop guard passed on host-b because it compares against the fold
+        host-b HELD, in which L1 had never existed — blind by construction, exactly as
+        this row states.
+
+        Nothing anywhere said no. set-field printed ok: twice, git merged clean, and the
+        push was admitted.
+
+        INSTRUMENT SURVEY for the fix, measured rather than assumed:
+
+        1. THE binary RESOLVES ITS LEDGER FROM THE CWD, not from its own path. So the
+           `git archive origin/linux-next plan/ | tar -x -C tmp` approach WORKS and the
+           lane can fold origin's copy without a second checkout. Discriminated rather
+           than guessed: an extracted tree at 3e0f2ed02 (trunk before this row was
+           claimed) reports 1261-bn7v `ready` while the live repo reports `in_progress`,
+           from the same binary. Had it resolved from its own path both would have said
+           in_progress and the test would have proven nothing.
+
+        2. `query --json --limit 0` DOES NOT EMIT LONG-FORM FIELDS, so it cannot serve
+           as the origin-fold primitive. Measured across all 1058 rows: the count of
+           rows carrying next_action, notes, context, verifiable_closure, unscoreable or
+           provenance is ZERO for every one of those fields. The projection is
+           capability_tags, desired_release, kind, lease, order, packet_id, pickup_role,
+           priority, release_target, status, title (plus deliverable and depends_on
+           where present). It printed depends_on for 543 because depends_on IS in the
+           projection; a long-form field is not.
+
+        SIZE CHANGE, NOTED BEFORE BUILDING as instructed. This therefore needs a new
+        primitive that prints one packet's folded long-form field, which makes the row a
+        crates/tillandsias-plan/src change and not a lane-only one.
+        crates/tillandsias-plan/src is already on this row's owned_files, so it is in
+        scope, but the estimate of 5 hours was written for a lane-only fix and should be
+        read as low.
+
+        next_action for whoever builds it: add the folded-field primitive first and pin
+        it with its own test, THEN wire the lane to `git archive` origin's plan/ tree and
+        compare line-wise. The refusal must name the dropped line AND the fragment on
+        origin that carries it, so the remedy is "fetch, re-read, rebuild" and not a
+        guess — this row's own next_action says so and it is the part most likely to be
+        dropped under time pressure.

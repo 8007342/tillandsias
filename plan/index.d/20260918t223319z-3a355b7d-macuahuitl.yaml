@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    field: next_action
+    value: |-
+      BLOCKED ON A DECISION, NOT ON EFFORT — DO NOT CLAIM THIS TO IMPLEMENT IT. The costing is COMPLETE (yoga-silverblue, 2026-09-16, method 875deddee, outcome f9ba5e590). What is left is a choice about what the guard should PROMISE, and it belongs to the operator, not to an implementer holding a keyboard. THE CHOICE: (A) per-project credential — covers the guarantee, NOT its consumers: three of five have no project to key on, so it needs a fallback GLOBAL credential (the exact object this row is about) or a second credential design. (B) check at use — covers the push path, because exactly one consumer WRITES and it knows its repository while the other four read and need no push authorisation at all; but it MOVES THE OPERATOR-VISIBLE FAILURE TO PUSH TIME, which is the 803-49re shape 759-vceg exists to prevent. The check still happens; what changes is WHEN THE OPERATOR LEARNS. B has the smaller blast radius and better coverage and that was deliberately NOT converted into a recommendation (R2). THE MISMATCH IS EXERCISED, NOT LATENT — measured, contradicting the method's own published prior. STILL UNMEASURED: the seeded token's actual scope; reading it sends the operator's identity outward and is theirs to authorise. It is NOT load-bearing — the findings are facts about what the code does with the credential whatever scope it carries. WHEN THE DECISION IS RECORDED, the implementation work is ordinary and this row becomes claimable normally.
+
+      [2026-09-18T22:33:19Z macuahuitl] SUPERSEDED 2026-09-18 (coordinator, macuahuitl-fedora): the 'BLOCKED ON A DECISION — DO NOT CLAIM THIS TO IMPLEMENT IT' line above is stale. The operator's ruling is recorded on this packet as a decision event (commit 49bdf7369, on origin): a read-only token is a supported scenario, the login probe was an incorrect interpretation of the requirement, and there is zero need for a local checkout. The packet is a DELETION of the 759-vceg push probe and its three structure-pinning tests, with the forge-launch push test filed as a minted row the kept helpers cite. Re-routed to pirria-silverblue.
+    ts: "2026-09-18T22:33:19Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-18T22:33:19Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-18 supersedes the blocked-on-decision line; pointer only, the decision event already exists (49bdf7369)

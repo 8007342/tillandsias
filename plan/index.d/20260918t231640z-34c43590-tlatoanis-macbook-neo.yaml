@@ -1,0 +1,244 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    field: context
+    value: |-
+      FIRST FILED UNDER A COLLIDING ORDER BY MISTAKE (1255-s4im, which is
+      pirria's token for the hookless-floor-host row) and SUPERSEDED BY THIS
+      FRAGMENT under a minted order. The earlier fragment reached a plan-only
+      ref and never trunk, so no fold ever carried two packets on one order;
+      the collision stayed latent. Recorded here rather than silently dropped
+      because the near-miss is the same family as the row itself: a token that
+      LOOKS like a citation and is actually a claim on someone else's order.
+      FOUND BY macneo-macos 2026-09-18 while syncing osx-next, and the cost was
+      a full wrong hypothesis reported to the coordinator before the correction.
+      THE OBSERVATION, measured: the captured output of a backgrounded
+      `timeout 3000 ./build.sh --check` ends with these two lines, in the
+      order shown:
+        EXIT=1
+        [exited with code 0]
+      The first is the gate's own status, echoed deliberately. The second is the
+      WRAPPER's status — the shell that ran it, which succeeded at running a
+      command that failed. They sit one line apart and the misleading one is
+      LAST, which is exactly where a reader looks.
+      WHAT IT COST. Reading the wrapper line, the gate was called green. The
+      gate had in fact refused on
+      `violation:missing-from-runtime:.gemini/skills/advance-work-from-plan`
+      (631-wpkd) and therefore never reached "Writing the gate stamp...". The
+      next push was refused with "the tree changed since ./build.sh --check
+      last passed", which is TRUE and honest, but it was reported upstream as a
+      stamp invalidated by a merge race. The real cause was a red gate that
+      wrote no stamp at all. A green-looking gate turns the stamp mechanism's
+      correct refusal into evidence for a bug that does not exist.
+      WHY THE STAMP FILE DOES NOT RESCUE IT. `.git/tillandsias-gate-stamp`
+      existed and was recent (13:37), because an EARLIER gate on this host had
+      genuinely passed. A stamp from a previous run is byte-indistinguishable
+      from a fresh one except by mtime, so "the stamp exists" reads as
+      confirmation. Only comparing the stamp's mtime against the run's start
+      time separates them, and nothing prompts the reader to do that.
+      WHY THIS IS 1255-s4im's NEIGHBOURHOOD AND NOT A DUPLICATE: 1255-s4im is a
+      checkout with no hooks installed, i.e. a check that never ran and said
+      nothing. This is a check that DID run, DID fail, and whose failure was
+      overwritten by a second instrument's success. Same family — an agent
+      concluding from the wrong instrument — different mechanism, and the
+      remedies differ: 1255-s4im wants hooks present, this wants the child's
+      status to be the one that survives.
+      NOT A CLAIM ABOUT ANY ONE HARNESS. Any wrapper that reports its own
+      status for a child — a backgrounded runner, a `cmd | tail`, a `timeout`
+      whose status is swallowed by a pipeline — has this shape. `./build.sh`
+      cannot control its callers, but it CAN make its own verdict
+      unmissable and last.
+
+
+      [2026-09-18T22:32:42Z tlatoanis-macbook-neo] SECOND REGIME — CONFIRMED ON macbookair-macos 2026-09-18, independently and
+      unprompted by the fixture, reported by that host in its own words.
+
+      That host writes the gate's status into its log the same way (`./build.sh
+      --check > log 2>&1; echo "BUILD_RC=$?" >> log`), so it holds the pair for the
+      same run:
+        run 3  harness notification: "completed (exit code 0)"  gate's own: BUILD_RC=1  (ghost-trace ratchet refused the stamp)
+        run 4  harness notification: "completed (exit code 0)"  gate's own: BUILD_RC=1  (hook-phase-instrumentation red)
+      Two for two on non-zero runs, on a different host and a different macOS than
+      the filing regime. Raw pairs and exact timestamps are held in that session's
+      logs and are available on request; they are NOT reproduced here, so this entry
+      records the claim and its source rather than the primary evidence.
+
+      WHY IT WENT UNNOTICED THERE, which sharpens the row: that host had been
+      treating the harness notification as a COMPLETION signal only and reading the
+      verdict from the log — the right habit for the wrong reason. The discrepancy
+      was never noticed AS a discrepancy. So the defect does not need a careless
+      reader to bite; it needs only a reader who has no reason to compare the two
+      numbers, because nothing presents them as claims about the same thing.
+
+      THE STALE-GREEN STAMP, OBSERVED LIVE rather than reasoned about. On that host,
+      mid-cycle, .git/tillandsias-gate-stamp read 15:30 — a GREEN stamp from a run
+      taken BEFORE it merged origin/linux-next, while a later gate was still running
+      against the merged tree. So a green stamp for a tree that no longer existed sat
+      on disk, byte-indistinguishable from a fresh one, during a window in which a
+      wrapper-reported 0 would have looked like permission to push. The pre-push
+      manifest check would PROBABLY have caught the push. "Probably" is not a gate.
+      This is exit criterion 2 observed in the wild on a second host.
+
+      BOTH HOSTS HAVE ADOPTED THE SAME INTERIM RULE, which is the workaround this row
+      exists to make unnecessary: before any push, check the gate's OWN status line
+      AND that the stamp's mtime is newer than the run's start. Both, not either.
+
+      [2026-09-18T22:33:22Z tlatoanis-macbook-neo] PRIMARIES FOR THE SECOND REGIME, supplied by macbookair-macos and recorded
+      here in place of the paraphrase above. Same host, 2026-09-18, repo on
+      osx-next; gate status captured as `./build.sh --check > LOG 2>&1; echo
+      "BUILD_RC=$?" >> LOG`, i.e. the gate's own exit status taken in the same
+      shell, not a wrapper's.
+
+        PAIR 1
+          gate log          check3.log  mtime 2026-09-18T14:51:24  6373 lines  BUILD_RC=1
+          harness task id   bymgnlt6h   output file mtime 14:51
+          harness text      "Background command \"Third gate run\" completed (exit code 0)"
+          actual red        ghost-trace ratchet: NEW ghost trace spec:vm-recipe-provisioning
+                            — gate stamp NOT recorded
+
+        PAIR 2
+          gate log          check4.log  mtime 2026-09-18T15:11:49  6633 lines  BUILD_RC=1
+          harness task id   b6qzsx1ww   output file mtime 15:11
+          harness text      "Background command \"Commit the hook fix and run the
+                            fourth gate\" completed (exit code 0)"
+          actual red        test-hook-phase-instrumentation.sh — "the table has no
+                            usable numbers" (phase table printed 0,02x)
+
+        CONTROL — THE WRAPPER IS NOT ALWAYS WRONG. check5.log mtime 15:30:13,
+        BUILD_RC=0, and the harness ALSO reported exit code 0. This is the load-
+        bearing observation, not the disagreements: a wrapper that were always wrong
+        would be harmless, because the first surprise would train the reader off it.
+        One that agrees on every green and diverges only on red is the hazard —
+        it earns trust on the majority case and spends it on the minority case,
+        which is the one that matters.
+
+        TIMING, which explains why nothing invites the comparison: the notification
+        and the gate's own line are at most one minute apart and describe the SAME
+        run. Two numbers about one event, presented as if they were about different
+        things.
+
+        STALE STAMP — exit criterion 2, primary. At 15:32, with the merged tree
+        checked out and a later gate running against it, .git/tillandsias-gate-stamp
+        read 15:02: run 5's green, for the PRE-MERGE tree. Nothing on disk
+        distinguished it from a fresh stamp.
+
+      PROVENANCE, stated so the row does not overclaim: the harness texts are quoted
+      from that host's session transcript; the file mtimes, line counts and BUILD_RC
+      lines are on disk there and the full logs can be produced if this row needs
+      them. They have not been inspected from the filing host. What IS first-hand
+      here is the filing host's own instance, recorded above.
+
+      [2026-09-18T22:53:41Z tlatoanis-macbook-neo] THIRD INSTANCE, SAME FAMILY — A DELETION GATED ON THE DELETER'S TREE.
+      Observed on macneo 2026-09-18 while cleaning up this row's own superseded ref.
+
+        $ git push origin --delete plan-only/1255-s4im-macneo
+        plan-only lane: not applicable — refs/heads/plan-only/1255-s4im-macneo is
+        being deleted (full gate required)
+        ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+
+      A ref deletion carries NO CONTENT. It removes a ref whose content is already
+      on trunk. Yet it demands a full gate stamp from the deleting host, i.e. it is
+      gated on a working tree that has nothing to do with the operation. The
+      consequence is circular: a host that filed through the plan-only lane BECAUSE
+      it could not gate cannot then delete its own plan-only ref, for the same
+      reason it used the lane. The lane admits the write and refuses the cleanup
+      from the identical host state. Same shape as the known trap where a work/<order>
+      hand-off requires a stamp and is therefore unreachable from the red-trunk state
+      it exists to rescue — a cleanup path unreachable from the state that generates
+      the things needing cleanup.
+
+      NOT ASSERTED: whether the full gate on a deletion is deliberate (a deletion is
+      destructive and a stamp proves a live, gating host) or incidental (the dispatch
+      simply has no deletion case). The refusal text says "full gate required"
+      without saying why, which is the part a reader cannot resolve from the output.
+      Someone who knows the intent should say which it is before this is "fixed".
+
+      FOURTH INSTANCE, AND THE CLEANEST — THE SELF-REPORT AS INSTRUMENT.
+      In the same command the filing agent wrote, BEFORE knowing the outcome:
+        echo "(empty above = both deleted)"
+      The deletion was refused and both refs were still listed, directly above that
+      line, which then asserted they were gone. The echo was a verdict scripted in
+      advance and printed unconditionally: it described what the command was INTENDED
+      to do, not what it did, and nothing in the output marked the difference.
+
+      This is the row's own thesis with the wrapper removed. There was no harness and
+      no exit code — just a sentence that reads like a result, emitted regardless of
+      the result, one line from the evidence contradicting it. The agent caught it
+      while writing the report and flagged it rather than quietly deleting the line.
+      It belongs on the row because it shows the failure does not require a wrapper
+      at all: it requires only that a confident-sounding statement be produced by
+      something other than the check it claims to summarise.
+
+      [2026-09-18T22:55:25Z tlatoanis-macbook-neo] THIRD REGIME, AND A NEW VARIANT — A NUMBER FOR A RUN THAT PRODUCED NO VERDICT.
+      Reported first-hand by macbookair-macos, 2026-09-18.
+
+      That host KILLED a gate deliberately, on the coordinator's word, 489 lines into
+      a run of roughly 6650. Outcome:
+        harness         task b1dchttub, killed 15:54:30, reported "failed with exit code 144"
+        gate's own line BUILD_RC never written at all — the run did not reach it
+
+      So the wrapper reported a NUMBER for a run that produced NO VERDICT. 144 is
+      128+16, i.e. a signal, but a reader who trusts the wrapper cannot tell from it
+      whether the gate went red or was killed — both arrive as a non-zero integer in
+      the same field. The gate's own line is unambiguous precisely because it is
+      ABSENT: no line, no verdict, nothing to misread.
+
+      THIS IS THE SHARPER FORM OF THE ROW. The earlier instances were a wrapper
+      DISAGREEING with a verdict that existed. This one is a wrapper SUPPLYING a
+      verdict where none exists. The first is a wrong answer; the second is an
+      answer to a question that was never resolved, which is worse, because a wrong
+      answer can be contradicted by evidence while a fabricated one has no
+      counterpart to check against. It is the same shape as a partial record that
+      cannot say it is partial: the instrument's silence is the honest signal, and
+      the wrapper overwrites the silence with a number.
+
+      CONSEQUENCE FOR EXIT CRITERION 1, stated so it is not lost: a terminal verdict
+      line is necessary but NOT sufficient. If the gate is killed the line never
+      prints, and a consumer must read that absence as "no verdict" rather than
+      falling back to the wrapper's integer. The criterion should be read as
+      requiring that consumers treat a MISSING verdict line as unresolved — never as
+      a licence to consult the wrapper's number instead. Absence of the line is a
+      third state alongside green and red, and it is the state a killed, crashed or
+      timed-out gate produces.
+
+      [2026-09-18T23:16:40Z tlatoanis-macbook-neo] FIFTH INSTANCE — A CARRY-FORWARD THAT WOULD HAVE RE-LANDED A DELETED FILE.
+      macneo, 2026-09-18, while landing this row's own fragments.
+
+      The superseded 1255-s4im fragment had just been DELETED from origin by the
+      coordinator. Yet `git log --name-only origin/osx-next..HEAD` still lists it,
+      because the filing host's range ADDS the file and then REMOVES it. A range
+      reports every path it touches, not the net effect of touching them. So a
+      carry-forward built by asking "which of my files are not on the target?" would
+      have answered "this one" and re-landed the collision that had just been
+      removed — correctly, by its own logic, from a question that was subtly the
+      wrong one.
+
+      Same family as the rest of this row. The range listing is an instrument, and
+      its output reads like an answer to "what is missing over there" when it is
+      actually an answer to "what did my commits touch". Nothing marks the
+      difference. The file was excluded deliberately; the exclusion came from
+      knowing the fragment's history, not from the listing.
+
+      It also names the discipline that avoided it, which generalises beyond this
+      row: cut a FRESH branch at the target ref and copy forward only the files
+      intended, rather than pushing a history whose net effect is nil. The same move
+      kept the push genuinely plan-only, since the branch history contained an
+      images/ commit whose content was already byte-identical on trunk — a range
+      whose net effect is nothing still contains the commit, and a lane that inspects
+      the range will see it.
+    ts: "2026-09-18T23:16:40Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-18T23:16:40Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        fifth instance: a range listing read as a missing-file answer

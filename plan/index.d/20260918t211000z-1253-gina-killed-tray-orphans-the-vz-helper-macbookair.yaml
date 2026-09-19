@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    order: 1253-gina
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, runtime, fail-loud, vm-layer]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-macos-tray/src/main.rs
+    unscoreable: |
+      needs-a-macos-host-with-a-provisionable-guest. The reproduce is one SIGKILL
+      against a live `--exec-guest`, which no Linux CI lane can stage: the
+      orphan is a Virtualization.framework XPC child, and the framework is the
+      thing under test.
+
+      WHAT A FIXTURE MUST ASSERT, so it is not weakened into something that
+      passes: after a tray process is SIGKILLed mid-`--exec-guest`, no
+      `com.apple.Virtualization.VirtualMachine` process holds the image
+      directory's nvram.bin, AND a second `--exec-guest` succeeds. A MUTATION
+      ARM must show the assertion reds when the orphan is left alive — without
+      it the fixture only proves that a VM started twice on a quiet host.
+    verifiable_closure: ""
+    title: |
+      SIGKILLing the macOS tray mid-run leaves the Virtualization.framework XPC child alive holding nvram.bin, and every later start dies as "The boot loader is invalid" — an error that names neither the orphan nor the lock
+    context: |
+      MEASURED TWICE on tlatoanis-macbook-air 2026-09-18 while working 1183-j9dk,
+      both times by accident, which is the point: it is reached by an ordinary
+      timeout, not by anything exotic.
+
+      WHAT HAPPENS. A `--exec-guest` run is killed (a `timeout` firing, a
+      harness moving a long call to the background, an operator's Ctrl-C). The
+      tray process dies. The VM does NOT: the framework's XPC child outlives it
+      and keeps running the guest.
+
+        $ lsof "~/Library/Application Support/tillandsias/nvram.bin"
+        com.apple 22546 tlatoani  3u  REG  ... nvram.bin
+        com.apple 22546 tlatoani  6u  REG  ... rootfs.img
+
+      Every subsequent start then fails, immediately and identically:
+
+        {"error":"start: VM start failed: Invalid virtual machine configuration.
+                  The boot loader is invalid."}
+
+      WHY THE MESSAGE IS THE DEFECT, not just the orphan. "The boot loader is
+      invalid" describes a malformed EFI configuration — a corrupt nvram.bin, a
+      missing kernel, a bad image. It sends the reader at the disk. The actual
+      state is a HEALTHY image held open by a process the reader does not know
+      exists, and the remedy is `kill`, not reprovision. The gap between those
+      two readings is the whole cost: the obvious response to "boot loader is
+      invalid" is `--reset-guest`, which DESTROYS the guest disk and the in-VM
+      vault to fix a problem that a SIGTERM to one pid would have cleared.
+      A destructive remedy suggested by a misleading diagnosis is worse than no
+      diagnosis.
+
+      MEASURED, so the mechanism is not inferred: with pid 22546 killed, the
+      identical `--exec-guest` command that had just failed succeeded on the
+      next attempt, with no change to nvram.bin, rootfs.img or any config. The
+      second occurrence (pid 23586) reproduced and cleared the same way.
+    deliverable: |
+      Two halves, independently closable, cheapest first.
+
+        1. SAY WHAT IS ACTUALLY WRONG. Before reporting a start failure, check
+           whether another process holds the image directory's nvram.bin, and
+           if one does, name it — pid, and the fact that it is a live VM from a
+           previous run — instead of relaying the framework's boot-loader
+           string. Explicitly steer AWAY from --reset-guest in that branch.
+
+        2. DO NOT LEAK THE CHILD. The tray should not be able to exit leaving a
+           running guest it no longer controls. Whether that is a signal
+           handler that stops the VM, or an adoption path that reattaches to an
+           already-running helper on the next start, is a real design decision
+           rather than a detail: reattaching is strictly better for the user
+           (the guest stays warm) and strictly harder (the control wire must be
+           re-established). A SIGKILL cannot be handled at all, so half 1 is
+           required regardless of what half 2 chooses.
+    next_action: >
+      Reproduce first; it is two commands on a macOS host with a provisioned
+      guest and needs no build. Start a long `--exec-guest` (anything that
+      outlives the timeout, e.g. `timeout 20 dist/Tillandsias.app/Contents/MacOS/tillandsias-tray
+      --exec-guest 'sleep 600'`), let the timeout kill it, then run any second
+      `--exec-guest` — expect "The boot loader is invalid". Confirm the cause
+      rather than assuming it: `lsof` the image directory's nvram.bin and expect
+      a live `com.apple.Virtualization.VirtualMachine` holding it, then kill
+      that pid and watch the identical command succeed. Then take half 1 of the
+      deliverable, which is the half that stops a reader from reaching for
+      --reset-guest. DO NOT close this by documenting the workaround: the
+      failing message is the defect.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-18, encountered twice while
+      taking 1183-j9dk on this host against dist/Tillandsias.app 56.9.13.1.
+      Both the failing error string and the lsof output are quoted verbatim
+      from this host, and the causal claim rests on the kill-then-retry pair
+      rather than on the correlation alone.

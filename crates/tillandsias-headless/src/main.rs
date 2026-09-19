@@ -3729,6 +3729,11 @@ pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResoluti
 /// The two cases are different diagnoses and an operator needs them apart: no
 /// origin at all means "you are in the wrong directory"; a non-GitHub origin
 /// means "you are in a checkout, but not of a GitHub repository".
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_login_probe_subject(cwd_display: &str, origin: Option<&str>) -> String {
     match origin {
         Some(url) => format!(
@@ -3755,6 +3760,11 @@ fn github_login_probe_subject(cwd_display: &str, origin: Option<&str>) -> String
 /// forensics, two hosts' worth of discarded eliminations, and finally the
 /// operator running two arms by hand to discover that cwd was the only
 /// variable. The probe knew which directory it consulted and never said.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_login_no_upstream_refusal(subject: &str) -> String {
     format!(
         "no GitHub upstream is configured for this checkout, so push permission \
@@ -9719,6 +9729,11 @@ fn select_github_login_input_mode(
 /// Accepts the two shapes an operator's origin actually takes — `https://` and
 /// `git@host:` — and refuses anything that is not a GitHub repository path,
 /// because a probe against the wrong repo answers a question nobody asked.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
     let trimmed = origin.trim();
     // The prefixes an operator's origin actually takes. Anything else is not a
@@ -9775,6 +9790,11 @@ fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
 /// push arrives at [`github_push_authorization_verdict`] as a value to
 /// classify rather than as a command failure indistinguishable from podman
 /// being unable to run at all.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Vec<String> {
     let script = format!(
         r#"set -u
@@ -9826,6 +9846,11 @@ fi
 /// [`github_push_authorization_probe_args`] for why that field had to be
 /// retired; the consequence here is that the ONLY accepting arm is a push
 /// negotiation the server completed.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Result<(), String> {
     let answer = probe_stdout.trim();
     // ORDER 1106-k2df. Only a completed push negotiation seeds. `true` — the
@@ -9917,6 +9942,11 @@ fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Re
 
 /// ORDER 759-vceg, message retained by 1106-k2df. A token that authenticates
 /// and is refused by `git-receive-pack`.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_cannot_push_message(owner_repo: &str) -> String {
     format!(
         "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
@@ -9941,6 +9971,11 @@ fn github_push_authorization_cannot_push_message(owner_repo: &str) -> String {
 /// healthy host cannot manufacture — and three hosts hit it on 2026-09-06. No
 /// scope edit helps; only a re-login does. Discriminated ahead of the generic
 /// refusal, which still owns the cases where the scope advice IS right.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_revoked_message(owner_repo: &str, answer: &str) -> String {
     format!(
         "the GitHub credential is REVOKED or invalid: the push-permission probe on \
@@ -10204,95 +10239,6 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                 "containerized {provider_name} authentication verification failed after login: {e}"
             )
         })?;
-    }
-
-    // ORDER 759-vceg. AUTHENTICATION IS NOT AUTHORIZATION, and until here
-    // only authentication had been checked. `gh auth status` above proves
-    // the token is a valid identity; it says nothing about whether that
-    // identity may PUSH to the repository this installation exists to push
-    // to. A fine-grained PAT missing Contents:write passes everything above
-    // and is denied at push time — the 2026-08-15 incident, surfacing hours
-    // after the credential was seeded.
-    //
-    // The probe runs in the SAME ephemeral container as the login itself,
-    // so the token still never reaches host disk, argv, or env.
-    //
-    // WHEN THERE IS NO UPSTREAM TO CHECK AGAINST, say so out loud rather
-    // than skipping quietly. A silent skip is indistinguishable from a
-    // passed check by anyone reading the output, which is the same
-    // ambiguity this packet exists to remove.
-    // ORDER 1215-xazj, criterion 4. Resolve ONCE into named values so the
-    // output can state the probe's subject. `current_dir()` rather than
-    // `Path::new(".")`: identical to git and to the .git/config fallback, but
-    // an absolute path is reportable and "." tells an operator nothing about
-    // WHICH directory the login process was actually in — which is the exact
-    // fact that took three hosts a day to establish.
-    let probe_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let probe_origin = read_host_project_origin_url(&probe_cwd);
-    let probe_cwd_display = probe_cwd.display().to_string();
-    match probe_origin
-        .as_deref()
-        .and_then(github_owner_repo_from_origin)
-    {
-        Some(owner_repo) => {
-            // Stated BEFORE the probe runs, not after: if the probe hangs or
-            // the container cannot start, the operator still learns what it
-            // was about to check. A subject printed only on success is absent
-            // from every run where it would have helped.
-            println!(
-                "checking push permission on {owner_repo} \
-                 (resolved from {probe_cwd_display})"
-            );
-            let mut probe = podman_command();
-            probe.args(github_push_authorization_probe_args(
-                &container,
-                &owner_repo,
-            ));
-            let probe_out = podman_command_output(probe, debug).map_err(|e| {
-                format!(
-                    "could not check push permission on {owner_repo}: {e}\n\n\
-                         Nothing was written to Vault. The probe script reports its own \
-                         outcome on stdout and exits 0 even when the push is denied \
-                         (order 1106-k2df), so reaching here means the login container \
-                         could not be run at all — not that the token was refused."
-                )
-            })?;
-            github_push_authorization_verdict(&owner_repo, &probe_out)?;
-            info!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                operation = "github_push_authorization_verified",
-                "token has push permission on {owner_repo}; proceeding to Vault write"
-            );
-        }
-        // ORDER 759-vceg, SECOND DEFECT. This arm printed the NOTE below and
-        // FELL THROUGH to the Vault write — no return, no refusal. The
-        // asymmetry is the defect: Some(owner_repo) probes and refuses on an
-        // answer it cannot parse, while None — STRICTLY LESS INFORMED, because
-        // no repository was probed at all — was waved through.
-        //
-        // That inverted the function's own principle. The verdict's doc states
-        // that "I could not tell" resolving to "seed it anyway" reproduces the
-        // original defect: a credential accepted with no evidence it works. The
-        // Some path honours it; the None path contradicted it, and the printed
-        // NOTE made the state look handled.
-        //
-        // MEASURED CONSEQUENCE, on the operator's own machine: they ran
-        // --github-login as root from /root on esmeraldinha, saw this NOTE, and
-        // the login reported success. The token was seeded unverified and the
-        // push stayed 403.
-        //
-        // REFUSES rather than probing the account's scopes, deliberately. The
-        // packet's deliverable offers either; refusing is the one that cannot
-        // be wrong in the dangerous direction, and running the login from a
-        // checkout with an upstream is a smaller ask than a second probe path
-        // whose own failure modes nobody has measured.
-        None => {
-            return Err(github_login_no_upstream_refusal(
-                &github_login_probe_subject(&probe_cwd_display, probe_origin.as_deref()),
-            ));
-        }
     }
 
     info!(
@@ -25114,136 +25060,6 @@ esac
         assert!(
             script.contains("gh auth git-credential"),
             "the credential must come from the container's own gh session: {script}"
-        );
-    }
-
-    /// ORDER 759-vceg, SECOND DEFECT. THE NO-UPSTREAM ARM MUST REFUSE, NOT
-    /// PRINT AND CONTINUE.
-    ///
-    /// `Some(owner_repo)` probes and propagates its refusal with `?`. `None` —
-    /// STRICTLY LESS INFORMED, because no repository was probed at all —
-    /// printed a NOTE with `eprintln!` and fell through to the Vault write. The
-    /// stricter case was guarded and the least-informed case was not, and the
-    /// printed NOTE made the state look handled.
-    ///
-    /// MEASURED, not hypothetical: the operator ran `--github-login` as root
-    /// from /root on esmeraldinha, saw that NOTE, and the login reported
-    /// success. The token was seeded unverified and the push stayed 403.
-    ///
-    /// Asserted on the arm's own body, the same way
-    /// `the_push_authorization_gate_runs_before_the_vault_write` above asserts
-    /// its ordering property — and weaker than executing the path for the same
-    /// reason recorded there: the arm sits downstream of vault bootstrap and a
-    /// full container preflight, so a stubbed podman dies long before it.
-    ///
-    /// THE SCOPE CONTROL IS THE SECOND HALF. Finding "return Err" somewhere in
-    /// a 900-line function proves nothing, so the window is narrowed to the
-    /// None arm itself and checked to be the arm rather than its neighbours.
-    #[test]
-    fn the_no_upstream_arm_refuses_instead_of_seeding_unverified() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
-
-        let none_at = body
-            .find("        None => {")
-            .expect("run_provider_login must still have a no-upstream arm");
-        let arm = &body[none_at..];
-        let arm_end = arm
-            .find("\n        }")
-            .expect("the None arm must be delimited");
-        let arm = &arm[..arm_end];
-
-        // SCOPE CONTROL: this really is the no-upstream arm and not some other
-        // `None =>` that drifted above it.
-        //
-        // ORDER 1211-34v6 moved the refusal TEXT out of this arm and into
-        // github_login_no_upstream_refusal() so it could be pinned by a unit
-        // test instead of a source scan. The anchor follows the thing that
-        // moved. It is exactly as specific as the string it replaces — that
-        // helper is called from this arm and nowhere else — so the control is
-        // not weakened, and a `None =>` drifting above this one still fails it.
-        assert!(
-            arm.contains("github_login_no_upstream_refusal"),
-            "the window is not the no-upstream arm; the assertion below would \
-             prove nothing about it: {arm}"
-        );
-
-        assert!(
-            arm.contains("return Err("),
-            "the no-upstream arm must REFUSE. Printing a note and continuing \
-             seeds a credential with no evidence it can push — the exact state \
-             759-vceg exists to prevent, and it shipped once: {arm}"
-        );
-        assert!(
-            !arm.contains("eprintln!"),
-            "a NOTE printed beside a fall-through is what made this look \
-             handled; the refusal must be the arm's only outcome: {arm}"
-        );
-    }
-
-    /// ORDER 759-vceg. THE GATE MUST SIT BETWEEN AUTHENTICATION AND
-    /// PERSISTENCE, and that is an ORDERING property no unit test on the pure
-    /// verdict can see.
-    ///
-    /// The decision functions are covered and mutation-tested elsewhere in this
-    /// file. What they cannot show is that `run_provider_login` actually calls
-    /// them, and calls them BEFORE writing the token to Vault. Move the vault
-    /// write above the probe and every one of those tests still passes while
-    /// the defect returns in full: a token that cannot push, seeded anyway.
-    ///
-    /// Asserted on the function's own body, the same way
-    /// `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` asserts its
-    /// architectural invariant. This is weaker than executing the path and is
-    /// not pretending otherwise — see the packet's event for why executing it
-    /// hermetically is not cheap: the gate sits downstream of vault bootstrap
-    /// and a full container preflight, so a stubbed podman dies at vault
-    /// preflight long before reaching it.
-    #[test]
-    fn the_push_authorization_gate_runs_before_the_vault_write() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
-
-        let verdict_at = body.find("github_push_authorization_verdict").expect(
-            "run_provider_login must CALL the push-authorization verdict — \
-                     a decision function nothing invokes is the 759-vceg defect itself",
-        );
-        let probe_at = body
-            .find("github_push_authorization_probe_args")
-            .expect("run_provider_login must build the in-container probe");
-        let vault_write_at = body
-            .find("vault-cli.sh write-stdin")
-            .expect("run_provider_login must still contain the vault write");
-
-        assert!(
-            probe_at < verdict_at,
-            "the probe must run before its verdict is judged"
-        );
-        assert!(
-            verdict_at < vault_write_at,
-            "the push-authorization verdict must be reached BEFORE the token is \
-             written to Vault. Persisting first and checking after re-creates the \
-             exact defect: a token that authenticates, cannot push, and is seeded \
-             anyway — surfacing hours later at the first push (759-vceg)."
-        );
-    }
-
-    /// NEGATIVE CONTROL for the ordering test above: the window it inspects must
-    /// actually be `run_provider_login`'s body and not the whole file, or the
-    /// assertion would hold no matter where those calls lived.
-    #[test]
-    fn the_login_source_window_is_scoped_to_one_function() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
-        assert!(
-            body.len() < source.len() / 4,
-            "the window is not scoped to a function: {} of {} bytes",
-            body.len(),
-            source.len()
-        );
-        assert!(
-            !body.contains("fn github_push_authorization_verdict"),
-            "the window has swallowed the helper DEFINITIONS, so finding their \
-             names inside it would prove nothing about the call site"
         );
     }
 

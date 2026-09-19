@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: note
+      ts: "2026-09-18T23:48:31Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        A claim written by a binary that predates the ledger it folds is the
+        stale-artifact shape one layer up — the same thing RunId exists to make
+        unrepresentable in 1252-fg9e.
+
+        MEASURED on this row's own claim: the first attempt was run from a detached
+        worktree (so the gated tree would not move under an in-flight slice) whose base
+        had advanced to d0bd1a21a, and the lane refused it:
+            plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+        That refusal is the plan-binary-probe rule working, not an obstacle. I rebuilt
+        the binary and redid the claim from the main checkout rather than routing around
+        it.

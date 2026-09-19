@@ -1060,47 +1060,9 @@ impl PodmanClient {
         args: &[String],
         debug_enabled: bool,
     ) -> Result<(), String> {
-        emit_launch_event(
-            debug_enabled,
-            stage,
-            container_name,
-            "starting",
-            Some("attached=true"),
-        );
-
-        let mut full_args = vec!["run".to_string()];
-        full_args.extend_from_slice(args);
-        let mut cmd = crate::podman_cmd();
-        cmd.args(&full_args)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-        // User-visible --debug log; honors TILLANDSIAS_DEBUG or the per-launch
-        // debug_enabled flag passed in by the caller.
-        crate::log_podman_invocation_with_flag(
-            &format!("run-attached:{stage}"),
-            cmd.as_std(),
-            debug_enabled,
-        );
-        let status = cmd.status().await.map_err(|err| {
-            let message = format!(
-                "stage '{stage}' could not spawn attached container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
-                redact_argv(&full_args).join(" ")
-            );
-            crate::log_podman_failure(
-                &format!("run-attached:{stage}"),
-                "spawn-error",
-                &err.to_string(),
-            );
-            emit_launch_event(
-                debug_enabled,
-                stage,
-                container_name,
-                "failed",
-                Some(summary_line(&message)),
-            );
-            message
-        })?;
+        let status = self
+            .run_container_attached_status(stage, container_name, args, debug_enabled)
+            .await?;
 
         if status.success() {
             emit_launch_event(
@@ -1131,6 +1093,73 @@ impl PodmanClient {
             Some(summary_line(&detail)),
         );
         Err(detail)
+    }
+
+    /// Run an attached container and hand back its REAL exit status.
+    ///
+    /// This is the spawn-and-wait half of
+    /// [`Self::run_container_attached_observed`]: stdio inherited, no façade
+    /// budget, the child's own status returned untouched. It exists as its own
+    /// method because the delegating shim (`tillandsias-podman-cli raw run …`,
+    /// which the litmus runtime routes EVERY `podman` call through) must give a
+    /// `run` without `--detach` the production attached semantics rather than
+    /// the bounded, stdout-captured `execute`. MEASURED on the v56.9.19.1
+    /// release gate, 2026-09-19: the meta-orchestration e2e forge was killed by
+    /// the shim at the Container budget (300s) — a budget no production launch
+    /// applies to an attached session — while the launcher's own caps are 600s
+    /// (smoke) and 1500s liveness-extended (full). The shim diverged from the
+    /// seam it exists to mirror. Spawn failures remain errors; a non-zero
+    /// status is returned, not converted, so the caller can carry it whole
+    /// (1260-2qgi: a status is preserved or declared absent, never substituted).
+    /// @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream
+    pub async fn run_container_attached_status(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        debug_enabled: bool,
+    ) -> Result<std::process::ExitStatus, String> {
+        emit_launch_event(
+            debug_enabled,
+            stage,
+            container_name,
+            "starting",
+            Some("attached=true"),
+        );
+
+        let mut full_args = vec!["run".to_string()];
+        full_args.extend_from_slice(args);
+        let mut cmd = crate::podman_cmd();
+        cmd.args(&full_args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        // User-visible --debug log; honors TILLANDSIAS_DEBUG or the per-launch
+        // debug_enabled flag passed in by the caller.
+        crate::log_podman_invocation_with_flag(
+            &format!("run-attached:{stage}"),
+            cmd.as_std(),
+            debug_enabled,
+        );
+        cmd.status().await.map_err(|err| {
+            let message = format!(
+                "stage '{stage}' could not spawn attached container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
+                redact_argv(&full_args).join(" ")
+            );
+            crate::log_podman_failure(
+                &format!("run-attached:{stage}"),
+                "spawn-error",
+                &err.to_string(),
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(summary_line(&message)),
+            );
+            message
+        })
     }
 
     /// Run a non-interactive container with fresh stdout capture.

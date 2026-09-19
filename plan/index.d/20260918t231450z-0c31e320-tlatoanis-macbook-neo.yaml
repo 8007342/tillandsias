@@ -1,0 +1,128 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    field: context
+    value: |-
+      FOUND on tlatoanis-macbook-air 2026-09-18 (LC_NUMERIC=fr_CH.UTF-8) when
+      ./build.sh --check went red at scripts/test-bench-prompt-uniqueness.sh
+      with "expected 100.00, got 100" while working an unrelated row.
+
+      THE MECHANISM, measured rather than inferred:
+        awk 'BEGIN{printf "%.2f", 100}'           -> 100,00
+        LC_ALL=C awk 'BEGIN{printf "%.2f", 100}'  -> 100.00
+
+      WHY IT IS WORSE THAN A CRASH. Every consumer in this tree parses these
+      fields with a [0-9.] character class. A comma does not fail to match — it
+      TERMINATES the class, so the value is TRUNCATED rather than rejected:
+      `prefill_tok_s=100,00` is read as 100, and `prefill_range=1512,00-2195,00`
+      as 1512-2195. The output still looks like numbers, the producer still
+      exits 0, and no gate anywhere says a word. A measurement that fails loudly
+      costs an afternoon; one that quietly drops its decimals gets cited.
+
+      WHY NOBODY HAS SEEN IT. Every CI lane and every Linux host in this fleet
+      runs LC_NUMERIC=C or en_US, where %.2f already prints a dot, so the
+      producers are correct there and the defect is invisible to them. It needs
+      an operator-configured host in a comma-decimal locale — which is what a
+      developer laptop actually is.
+
+      ALREADY FIXED, and it is the reason this packet can name the class rather
+      than guess at it: scripts/bench-inference-floor.sh now pins
+      `export LC_ALL=C` (commit accompanying this fragment), which turned
+      test-bench-prompt-uniqueness.sh from 5-passed-1-failed to
+      ok:bench-prompt-uniqueness:6 on this host.
+
+      THE FOUR BELOW WERE FOUND BY THE SAME SEARCH AND ARE UNFIXED. Each matches
+      `printf "%.[0-9]f` and none contains LC_ALL or LC_NUMERIC (verified by
+      grep on this host, count 0 for each):
+        scripts/freshness-inventory.sh
+        scripts/select-work-batch.sh
+        scripts/hooks/pre-commit-openspec.sh
+        scripts/refusal-calibration/measure-bands.sh
+      They are listed as CANDIDATES, not as confirmed defects: the grep proves
+      the exposure, not that each one's number reaches a [0-9.] parser. Whoever
+      takes this should confirm per script rather than pin all four on the
+      strength of the pattern.
+
+
+      [2026-09-18T23:14:50Z tlatoanis-macbook-neo] SECOND-REGIME MEASUREMENT — macneo (Tlatoanis-MacBook-Neo), four outcomes, no verdict.
+
+      ENVIRONMENT
+        awk        /usr/bin/awk, "awk version 20200816", what(1): PROGRAM:awk PROJECT:awk-40
+        macOS      27.0 (build 26A428), arm64
+        locale     LANG=en_US.UTF-8, LC_NUMERIC="en_US.UTF-8", LC_ALL unset
+        fr_CH.UTF-8 IS installed here (locale -a lists fr_CH, fr_CH.UTF-8,
+                   fr_CH.ISO8859-1, fr_CH.ISO8859-15), so the decisive arm really ran
+                   rather than being skipped.
+
+      ARM A — awk 'BEGIN{printf "%.2f\n", 100}'
+        default (en_US.UTF-8)   100.00
+        LC_ALL=C                100.00
+        LC_ALL=fr_CH.UTF-8      100,00     <-- comma
+
+      ARM B — printf '3.5\n3,5\n' | sort -k1,1nr
+        default (en_US.UTF-8)   3,5 then 3.5
+        LC_ALL=C                3.5 then 3,5
+        LC_ALL=fr_CH.UTF-8      3,5 then 3.5
+        i.e. sort's numeric order INVERTS between C and fr_CH.UTF-8, and this host's
+        en_US default agrees with fr_CH, not with C, on which line sorts first.
+
+      ARM C — the consequence, measured rather than assumed, piping each awk result
+      through a [0-9.] consumer (grep -o '[0-9.]*' | head -1):
+        LC_ALL=C           awk=100.00  ->  100.00
+        LC_ALL=fr_CH.UTF-8 awk=100,00  ->  100
+        LC_ALL=C           awk=99.50   ->  99.50
+        LC_ALL=fr_CH.UTF-8 awk=99,50   ->  99
+        The 99,50 case is the sharp one: truncation does not produce an obviously
+        broken value, it produces 99 — a plausible number that is wrong by half a
+        point and carries no marker that anything was dropped.
+
+      OUTCOME vs macbookair: SAME ANSWER, different regime. A regime attached, not a
+      finding. macOS 27.0 / awk-40 on arm64 reproduces BSD awk honouring LC_NUMERIC
+      for %.2f and the [0-9.] truncation that follows.
+
+      NOT ASSERTED HERE: whether any Tillandsias consumer actually runs under a comma
+      locale in practice. This measured the mechanism, not its live exposure.
+
+      ARM D — GROUPING vs DECIMAL POINT: ARM B's en_US result has a DIFFERENT
+      mechanism than fr_CH's, as macuahuitl suspected. Outcomes first.
+
+        printf '3,500\n4\n' | sort -k1,1nr
+          default (en_US.UTF-8)   3,500 then 4      <-- 3,500 sorts ABOVE 4
+          LC_ALL=C                4 then 3,500
+          LC_ALL=fr_CH.UTF-8      4 then 3,500
+
+        The separators that explain it, read from locale(1) rather than assumed:
+          en_US.UTF-8   decimal_point=[.]  thousands_sep=[,]
+          C             decimal_point=[.]  thousands_sep=[]
+          fr_CH.UTF-8   decimal_point=[,]  thousands_sep=[ ]   (space, not comma)
+
+        ARM D2 pins the magnitude directly instead of inferring it from an ordering.
+        Sorting 3501, 3500, 4, 3, "3,500" descending:
+          en_US.UTF-8   3501  3,500  3500  4  3      -> "3,500" == 3500  (grouping)
+          C             3501  3500  4  3  3,500      -> "3,500" == 3     (stops at comma)
+          fr_CH.UTF-8   3501  3500  4  3,500  3      -> "3,500" == 3.5   (decimal comma)
+
+        ONE STRING, THREE VALUES: 3500, 3, and 3.5. So C-regime reasoning is wrong on
+        the en_US default too, but for the opposite reason than on fr_CH — en_US
+        reads a comma as GROUPING and inflates the number by a factor of 1000, while
+        fr_CH reads it as a DECIMAL POINT and shrinks it. A fix that only anticipates
+        the decimal-comma case would still be wrong on the fleet's most common locale.
+        This also explains ARM B without appeal to coincidence: en_US put 3,5 first
+        because it read it as 35, fr_CH put it first because it read it as 3.5 and the
+        other line as 3, and C put 3.5 first because it read 3,5 as 3.
+    ts: "2026-09-18T23:14:50Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    event:
+      type: note
+      ts: "2026-09-18T23:14:50Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        second-regime measurement: arms A-D2, incl. grouping vs decimal point

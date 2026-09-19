@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: at-forge-launch-test-whether-this-forge-can-push-to-this-repository-and-report-the-answer-as-a-capability-with-its-affordance-because-a-read-only-token-is-a-supported-scenario-and-not-an-error
+    order: 1264-s4id
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: credential-lifecycle-audit-milestone
+    pickup_role: any
+    capability_tags: [forge, credentials, github, fail-loud, affordance]
+    estimated_hours: 6
+    depends_on:
+      - the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      at FORGE LAUNCH, test "can this forge push to THIS repository?" and report the answer as a CAPABILITY with its affordance — `move away from main`, or `this token is read only for this repo` — because a read-only token is a supported scenario, not an error
+    context: |
+      MINTED BY 1217-54vw's deletion, and it must exist BEFORE that deletion
+      lands. This is the other half of the operator's 2026-09-18 ruling
+      (recorded as a decision event on 1217-54vw in 49bdf7369, on origin).
+      THE RULING, in the operator's words:
+        "when we login with a token we validate the token with 'can this token
+        list repos?', and so far that's all the credential we need. When the
+        forge launches we'll test there: 'can this forge push to this repo?'
+        then the affordance error would be 'move away from <main>' for per
+        repo-hook errors, or 'this token is read only for this repo' validated
+        then, from a live forge, at runtime, at forge launch. If the token is
+        read only for that container the agent might still perform useful
+        inference for the user, like running local containers, building
+        locally, serving locally compute heavy websites, educational content,
+        etc. A READ-ONLY TOKEN IS NOT AN ERROR, but a suported scenario."
+      WHY LOGIN IS THE WRONG PLACE AND FORGE LAUNCH IS THE RIGHT ONE: at login
+      there is no repository. `ProviderLoginConfig` carries no project identity
+      at all, the credential lands at one global `secret/github/token`, and the
+      tray logs in where no checkout exists. The 759-vceg probe answered the
+      push question anyway by resolving a repository from the process CWD —
+      one repository, guarding a credential used for all of them. At forge
+      launch there is EXACTLY ONE repository and the forge knows which. The
+      question becomes answerable for the first time.
+      THE LARGEST CHANGE IS NOT THE MOVE, IT IS THE SHAPE: the present guard is
+      BINARY, so read-only collapses into failure and a user who wanted local
+      containers, local builds or locally served content is stopped for a
+      permission they were never going to use. This converts a GATE into a
+      CAPABILITY REPORT. Three outcomes, not two: can push; cannot push to this
+      branch (affordance: move away from `main`); cannot push to this repo at
+      all (affordance: the token is read-only here, and here is what still
+      works).
+      WHAT 1217-54vw HANDS THIS ROW. Its deletion removes the login-time probe
+      and its three structure-pinning tests, and keeps five helpers under
+      `#[allow(dead_code)]` naming THIS ORDER as caller-to-be. Those helpers
+      are the reusable parts of the probe — the owner/repo derivation, the
+      subject statement, the outcome classification — and they are kept rather
+      than deleted precisely so this row has them. If this row is abandoned,
+      those five helpers must be deleted too; a permanent `#[allow(dead_code)]`
+      citing a row nobody picked up is dead code wearing a citation.
+      THE NEGATIVE CONTROL IS INHERITED AND BINDING — 1217-54vw's criterion 2,
+      preserved verbatim in the ruling: "narrowing the claim must not widen the
+      admission. A token that genuinely cannot push must be TOLD SO at forge
+      launch, with the affordance; read-only becomes a supported branch, not
+      the failure branch." A capability report that silently tolerates a token
+      which cannot push has not implemented this row, it has removed a check.
+      MEASUREMENT THAT MAKES THIS OBVIOUSLY RIGHT, from yoga's M1 consumer
+      census on 1217-54vw: three of five consumers have no repository to key
+      on. Login needs no repository because most of what uses the credential
+      has none.
+    exit_criteria:
+      - 'at forge launch the forge tests whether it can push to the repository it was launched for, and the result is REPORTED — pre-fix state: the question is asked at login, about a repository resolved from the process CWD, which on the tray is wherever the tray happened to start'
+      - 'READ-ONLY IS A SUPPORTED OUTCOME, not a failure: a forge with a read-only token still launches and still does the work that needs no push — local containers, local builds, locally served content — and says what it cannot do. A run that refuses to start on a read-only token has failed this criterion'
+      - 'NEGATIVE CONTROL (inherited from 1217-54vw criterion 2, binding): a token that genuinely cannot push is TOLD SO, loudly, with its affordance. Narrowing the claim must not widen the admission — verify by launching with a token that cannot push and asserting the report says so, not merely that the launch succeeded'
+      - 'the affordance is SPECIFIC per the ruling: a per-repo-hook refusal says "move away from <branch>", a read-only token says "this token is read only for this repo". A generic "push failed" does not satisfy this — the ruling names both messages explicitly'
+      - 'the five helpers 1217-54vw kept under #[allow(dead_code)] are CALLED by this row, and the allow attributes are removed in the same commit — otherwise the deletion left permanent dead code citing a row that never arrived'
+      - 'the test runs from a LIVE FORGE at runtime, as the ruling says, not from the host at launch-prep time — the distinction is the whole point: the forge is where the one repository and the one container identity exist'
+    unscoreable: |
+      not-yet-designed: where in the launch sequence the probe runs, whether its
+      result is cached for the forge's lifetime, and how the report reaches the
+      user (startup context, a status surface, or a refusal-shaped affordance
+      on first push) are open. The ruling fixes WHAT is asked and WHERE; it does
+      not fix the plumbing.
+    events:
+      - type: filed
+        ts: "2026-09-19T00:05:00Z"
+        agent_id: "linux-pirria-claude-20260919t000500z"
+        host: pirria-silverblue
+        summary: |-
+          Minted before 1217-54vw's deletion so the kept helpers cite a real
+          order rather than a promise. Filed by the host doing that deletion, at
+          the coordinator's instruction, on the operator's ruling — which is on
+          origin as a decision event and was read from there, not from the
+          relay. The row exists to stop the deletion from being a subtraction:
+          the push question is not being dropped, it is being moved to the only
+          place it can be answered.

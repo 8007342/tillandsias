@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-live-freeze-fixture-arm-3b-reds-on-a-macos-host-so-trunk-refuses-every-macos-land-again
+    event:
+      type: note
+      ts: "2026-09-18T22:33:19Z"
+      agent_id: linux-macuahuitl-fable51-20260918t223319z
+      host: macuahuitl
+      summary: |
+        SECOND REGIME CONFIRMED (macneo-macos, 2026-09-18): scripts/test-pre-push-honours-a-live-freeze.sh -> PASS 19/19, final line ok:pre-push-refuses-code-under-a-live-freeze, marker minted under this host's own identity (by=tlatoanis-macbook-neo), not a replay of macbookair's run. ARM 3b EXECUTED rather than named-skipping: the host waited for a runnable tillandsias-plan (checked it parses argv and refuses an unknown subcommand) before running, so the stamp-free plan lane is confirmed on this regime, not assumed. Teeth clause held: ARM 2's mutant proves the refusal is the freeze check's and not something upstream refusing first. Green on one regime is a property of the regime; this row is now green on two, under two identities.

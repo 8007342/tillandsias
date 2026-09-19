@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: correction
+      ts: "2026-09-18T22:49:55Z"
+      agent_id: linux-yoga-claude-20260918t224955z
+      host: yoga-silverblue
+      summary: |
+        CORRECTION — RETRACTING YOGA'S CRITERION-6 RECORD. The 30/33 recorded above at
+        2026-09-18T21:29:55Z is NOT a measurement of all-minilm. It is the signature of a
+        silent embedding-dimension mismatch. Do not use it as a second host's model
+        record, and do not compare it to lenovinha's number.
+
+        HOW IT SURFACED. The additive mxbai-embed-large run returned 30/33 — identical
+        pass, fail and case set to all-minilm, from a model 15x larger. Two models that
+        far apart producing the same score is not a result, so the grade was checked for
+        what it had actually exercised:
+
+          podman logs during the grade -> ONLY qwen2.5:0.5b, 27 runners, ZERO embedding
+          requests. The embed model was never called.
+
+        THE MECHANISM. spec.answer grades against CALLER-SUPPLIED query vectors committed
+        at openspec/litmus-tests/groundtruth/query-vectors/*.json. All four are
+        768-dimensional, which is nomic-embed-text. Both yoga runs graded those 768-dim
+        queries against an index built with a different model — all-minilm at 384 dims,
+        mxbai-embed-large at 1024. The query side of this harness is FROZEN, so changing
+        the embed model does not change the measurement, it breaks it.
+
+        THE BREAKAGE IS DEGENERATE, NOT NOISY, which is why it read as an ordinary
+        failure. Under the mxbai index, two unrelated questions returned the SAME chunks
+        in the SAME order:
+          spec-inference-tier-cdi-fallback -> accel-capability-probe/spec.md:1-1, :2-3, :4-11, :12-29, +4 more
+          spec-podman-reset-what-survives  -> accel-capability-probe/spec.md:1-1, :2-3, :4-11, :12-29, +4 more
+        Retrieval was returning a constant, and the harness reported three ordinary case
+        failures rather than a configuration error.
+
+        THE CONTROL, RUN ON THIS HOST MINUTES APART, SAME CORPUS AND COMMIT:
+          spec-rung1 under mxbai  (1024-dim index vs 768-dim queries) -> pass=2 fail=3
+          spec-rung1 under nomic  (768-dim index, MATCHING)           -> pass=5 fail=0
+        The three failures ARE the mismatch, and they are exactly the three failures
+        inside the retracted 30/33. The two cases that survived the mismatch are the two
+        structural ones — "refuses when the answer uses no retrieved chunk" and "still
+        cites when the answer does use a chunk" — which assert SHAPE and pass whatever
+        comes back. Of five retrieval cases, the only survivors were the two that never
+        depended on retrieval.
+
+        SO WHAT THE RETRACTED RECORD ACTUALLY CONTAINED: 28 non-retrieval cases passing,
+        plus 2 structural cases passing, with the 3 genuine retrieval cases failing
+        because retrieval was broken. all-minilm and mxbai were indistinguishable there
+        because NEITHER was exercised. The model id in both records is provenance for an
+        index that could not be used.
+
+        THE PREMISE THIS ROW'S MODEL SPLIT RESTED ON IS WRONG. "The model that actually
+        decides the number is the EMBED model" does not hold for this harness as
+        configured. lenovinha's record is unaffected and correct precisely because it
+        kept nomic-embed-text, which matches the committed vectors — the right choice for
+        a reason neither host knew at the time.
+
+        CRITERION 6 STATUS AS OF THIS EVENT: ONE valid host record, not two. Recording it
+        as open rather than letting it close on an artifact. A fabricated difference is
+        worse than an open row, which both hosts agreed in advance and which is the exact
+        case that then arrived, by a route neither anticipated.
+
+        WHAT WOULD MAKE A SECOND RECORD VALID: regenerate the committed query vectors
+        with the second host's embed model and grade against a matching index, or keep
+        the embed model fixed fleet-wide and vary something the harness can actually
+        measure. Deciding which is this row's holder's call, not yoga's.
+
+        HOST STATE: yoga's serving index has been rebuilt back to nomic-embed-text
+        (25154 chunks) and spec-rung1 is 5/5 here. The host was not left on a broken
+        index.
+
+        The underlying defect — the grader does not verify that the index's embedding
+        dimension matches the committed query vectors, and grades instead of refusing —
+        is filed separately so it is not lost in this correction.

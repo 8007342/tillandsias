@@ -156,7 +156,6 @@ fn apply_status_text_main_thread(
 /// Best-effort: spawn osascript detached, log any error, never
 /// block. The chip text remains the authoritative failure surface;
 /// the notification is purely a "look here" nudge.
-// parity-surface: notification.provisioning-failed
 /// Spawn a fire-and-forget helper AND REAP IT (order 690-w94k).
 ///
 /// THE BELIEF THIS REPLACES, quoted from the call site it replaced: "Detached —
@@ -194,6 +193,7 @@ fn spawn_and_reap(mut command: std::process::Command, what: &'static str) {
     }
 }
 
+// parity-surface: notification.provisioning-failed
 fn notify_provisioning_failed(reason: &str) {
     // AppleScript single-quote-escape so a `'` in the reason doesn't
     // terminate the literal. Then wrap the whole call in another

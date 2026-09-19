@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: set-field-append-s-drops-lines-guard-compares-against-the-local-fold-so-an-append-written-against-a-fold-that-lacks-a-peer-s-newer-append-silently-deletes-the-peer-s-lines-with-no-conflict-and-no-marker
+    event:
+      type: note
+      ts: "2026-09-18T23:57:02Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        OWNED_FILES CORRECTION, recorded as a note rather than a list edit because
+        set-field refuses lists.
+
+        This row's owned_files names `scripts/pre-push-checks.sh`. THAT FILE DOES NOT
+        EXIST in the tree. The plan lane this row is about lives in
+        `scripts/hooks/pre-push-local-gate.sh`; treat that as the owned file.
+
+        Coordinator (macuahuitl-fedora) confirms the name was copied from 1259-kn83's
+        owned_files, which carries the same wrong name — so the error is in both rows
+        and correcting one silently would leave the other to mislead the next reader.
+
+        Verified rather than assumed: `ls scripts/pre-push-checks.sh` -> No such file or
+        directory; the plan-only lane, the validator-surface staleness verdict and the
+        1152-y3bv identical-blob exemption are all in scripts/hooks/pre-push-local-gate.sh.

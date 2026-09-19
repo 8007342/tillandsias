@@ -1,0 +1,112 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-pre-push-plan-lane-refuses-a-path-deleted-identically-on-both-sides-so-a-platform-branch-cannot-fast-forward-to-a-tree-it-already-equals
+    order: 1260-4a59
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [multi-host, developer-loop, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    unscoreable: |
+      scorable-immediately-once-written, and the fixture needs no slow host:
+      the whole defect is expressible from two commits in a scratch repo.
+
+      WHAT THE FIXTURE MUST ASSERT: given a push range in which a path is
+      ABSENT from both the pushed tree and origin/linux-next, the plan-only
+      lane ADMITS the push. A MUTATION ARM must show it REFUSES when the path
+      is absent from trunk but PRESENT in the pushed tree — that is the case
+      1152-y3bv's comment is describing, it is the protection this row narrows
+      around, and without the arm the fix is indistinguishable from deleting
+      the check.
+    verifiable_closure: ""
+    title: |
+      1152-y3bv exempts a non-plan path whose pushed blob equals trunk's, but a path DELETED identically on both sides has no blob on either, so it falls through to refusal — and a platform branch whose range crosses a mass deletion cannot push even when its tree is byte-identical to trunk
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-18, immediately after land 4
+      relayed this host's work onto trunk.
+
+        git checkout osx-next && git merge --ff-only origin/linux-next  -> d48baf071
+        git rev-parse HEAD == git rev-parse origin/linux-next           -> IDENTICAL
+        git diff --name-only origin/linux-next                          -> EMPTY
+        git status --porcelain                                          -> EMPTY
+        git push origin osx-next                                        -> REFUSED
+
+        plan-only lane: not applicable — '.gemini/skills/advance-work-from-plan'
+        is outside plan/index.d/ ... and differs from origin/linux-next
+        (full gate required)
+
+      THE MECHANISM. The push range was b67015a96..d48baf071 — the branch's
+      stale tip to trunk — and it CONTAINS that path because the directory
+      symlink conversion deleted the per-skill entries. scripts/hooks/pre-push-local-gate.sh
+      then applies the 1152-y3bv exemption, which asks whether trunk's blob for
+      the path equals the pushed blob:
+
+        git rev-parse origin/linux-next:.gemini/skills/advance-work-from-plan -> [empty]
+        git rev-parse d48baf071:.gemini/skills/advance-work-from-plan         -> [empty]
+        git rev-parse b67015a96:.gemini/skills/advance-work-from-plan         -> 75ae78d2d
+
+      Absent on trunk, absent in the pushed tree: the two AGREE. But the
+      exemption fires only when trunk HAS a blob, so an agreeing DELETION falls
+      through to the refusal.
+
+      THE COMMENT SAYS SO OUTRIGHT, which is why this is a gap rather than a
+      bug in the ordinary sense: "A path that DIFFERS from trunk — including
+      one that does not exist on trunk at all — still refuses exactly as
+      before." That sentence is CORRECT for a path the pusher invented and
+      WRONG for a path the pusher deleted exactly as trunk did. 1152-y3bv
+      closed the identical-blob case; the identical-absence case was never
+      considered because nothing had yet deleted a tracked tree wholesale.
+
+      SCOPE, STATED SO IT IS NOT OVERREAD. This bites a branch whose RANGE
+      crosses such a deletion. Once the branch is level with trunk the range is
+      short again and the lane admits ordinary fragment pushes — verified on
+      this host the same night: after a coordinator-side fast-forward, plan-only
+      pushes from osx-next worked normally. So it is not "every push forever";
+      it is "a platform branch cannot catch up by itself", which is worse in a
+      different way, because catching up is exactly what a stale branch must do.
+
+      COMPOSES WITH 1259-kn83. The remedy the hook offers is "run the full
+      gate", which on a tree that IS trunk is ~20 minutes to re-verify what
+      trunk already verified — and the result then loses 1259-kn83's race.
+      Neither row alone explains why this host could not move its own branch.
+    deliverable: |
+      An agreeing ABSENCE counts as agreement, beside the existing
+      identical-blob branch: if the path resolves to no blob in EITHER the
+      pushed commit or origin/linux-next, it is dropped from this push's
+      obligations exactly as an identical blob is.
+
+      This narrows nothing the lane protects. A path present in neither tree
+      carries no content, so there is nothing ungated for the pushing host to
+      vouch for. The protection that must survive untouched is the case where
+      the path is absent from trunk and PRESENT in the push — a file this host
+      is introducing, which still requires the gate.
+
+      Update the comment in the same commit. The sentence quoted in `context`
+      is load-bearing and now wrong; leaving it would send the next reader to
+      the same conclusion that produced the gap.
+    next_action: >
+      Reproduce it in a scratch repo before touching the hook — it needs no
+      macOS host and no slow gate. Make a trunk ref and a branch ref that both
+      delete the same tracked file, leave the branch's stale tip behind that
+      deletion, and push through the lane; expect the refusal even though the
+      two trees agree. Then read scripts/hooks/pre-push-local-gate.sh around
+      the 1152-y3bv block (the `git rev-parse --verify --quiet` pair) and add
+      the absent-on-both branch beside the identical-blob one. Write the
+      mutation arm named in `unscoreable` IN THE SAME COMMIT: absent-on-trunk
+      but present-in-push must still refuse. DO NOT widen this to "drop any
+      path the lane cannot resolve" — an unresolvable path is not the same
+      claim as an absent one, and that widening would admit exactly what the
+      rule exists to catch.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-19. Every command, output and
+      SHA above was run on this host; the refusal string is quoted verbatim.
+      Filed LATE and that is worth recording: this host reported the defect to
+      the coordinator as "filed as 1260-4a59" when it had only minted the order
+      number, so the id did not resolve for the host routed to fix it, and they
+      correctly refused to work against it. The diagnosis was sound; the claim
+      that it had been written was not checked before it was made.

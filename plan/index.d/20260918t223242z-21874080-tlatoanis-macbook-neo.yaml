@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    field: context
+    value: |-
+      FIRST FILED UNDER A COLLIDING ORDER BY MISTAKE (1255-s4im, which is
+      pirria's token for the hookless-floor-host row) and SUPERSEDED BY THIS
+      FRAGMENT under a minted order. The earlier fragment reached a plan-only
+      ref and never trunk, so no fold ever carried two packets on one order;
+      the collision stayed latent. Recorded here rather than silently dropped
+      because the near-miss is the same family as the row itself: a token that
+      LOOKS like a citation and is actually a claim on someone else's order.
+      FOUND BY macneo-macos 2026-09-18 while syncing osx-next, and the cost was
+      a full wrong hypothesis reported to the coordinator before the correction.
+      THE OBSERVATION, measured: the captured output of a backgrounded
+      `timeout 3000 ./build.sh --check` ends with these two lines, in the
+      order shown:
+        EXIT=1
+        [exited with code 0]
+      The first is the gate's own status, echoed deliberately. The second is the
+      WRAPPER's status — the shell that ran it, which succeeded at running a
+      command that failed. They sit one line apart and the misleading one is
+      LAST, which is exactly where a reader looks.
+      WHAT IT COST. Reading the wrapper line, the gate was called green. The
+      gate had in fact refused on
+      `violation:missing-from-runtime:.gemini/skills/advance-work-from-plan`
+      (631-wpkd) and therefore never reached "Writing the gate stamp...". The
+      next push was refused with "the tree changed since ./build.sh --check
+      last passed", which is TRUE and honest, but it was reported upstream as a
+      stamp invalidated by a merge race. The real cause was a red gate that
+      wrote no stamp at all. A green-looking gate turns the stamp mechanism's
+      correct refusal into evidence for a bug that does not exist.
+      WHY THE STAMP FILE DOES NOT RESCUE IT. `.git/tillandsias-gate-stamp`
+      existed and was recent (13:37), because an EARLIER gate on this host had
+      genuinely passed. A stamp from a previous run is byte-indistinguishable
+      from a fresh one except by mtime, so "the stamp exists" reads as
+      confirmation. Only comparing the stamp's mtime against the run's start
+      time separates them, and nothing prompts the reader to do that.
+      WHY THIS IS 1255-s4im's NEIGHBOURHOOD AND NOT A DUPLICATE: 1255-s4im is a
+      checkout with no hooks installed, i.e. a check that never ran and said
+      nothing. This is a check that DID run, DID fail, and whose failure was
+      overwritten by a second instrument's success. Same family — an agent
+      concluding from the wrong instrument — different mechanism, and the
+      remedies differ: 1255-s4im wants hooks present, this wants the child's
+      status to be the one that survives.
+      NOT A CLAIM ABOUT ANY ONE HARNESS. Any wrapper that reports its own
+      status for a child — a backgrounded runner, a `cmd | tail`, a `timeout`
+      whose status is swallowed by a pipeline — has this shape. `./build.sh`
+      cannot control its callers, but it CAN make its own verdict
+      unmissable and last.
+
+
+      [2026-09-18T22:32:42Z tlatoanis-macbook-neo] SECOND REGIME — CONFIRMED ON macbookair-macos 2026-09-18, independently and
+      unprompted by the fixture, reported by that host in its own words.
+
+      That host writes the gate's status into its log the same way (`./build.sh
+      --check > log 2>&1; echo "BUILD_RC=$?" >> log`), so it holds the pair for the
+      same run:
+        run 3  harness notification: "completed (exit code 0)"  gate's own: BUILD_RC=1  (ghost-trace ratchet refused the stamp)
+        run 4  harness notification: "completed (exit code 0)"  gate's own: BUILD_RC=1  (hook-phase-instrumentation red)
+      Two for two on non-zero runs, on a different host and a different macOS than
+      the filing regime. Raw pairs and exact timestamps are held in that session's
+      logs and are available on request; they are NOT reproduced here, so this entry
+      records the claim and its source rather than the primary evidence.
+
+      WHY IT WENT UNNOTICED THERE, which sharpens the row: that host had been
+      treating the harness notification as a COMPLETION signal only and reading the
+      verdict from the log — the right habit for the wrong reason. The discrepancy
+      was never noticed AS a discrepancy. So the defect does not need a careless
+      reader to bite; it needs only a reader who has no reason to compare the two
+      numbers, because nothing presents them as claims about the same thing.
+
+      THE STALE-GREEN STAMP, OBSERVED LIVE rather than reasoned about. On that host,
+      mid-cycle, .git/tillandsias-gate-stamp read 15:30 — a GREEN stamp from a run
+      taken BEFORE it merged origin/linux-next, while a later gate was still running
+      against the merged tree. So a green stamp for a tree that no longer existed sat
+      on disk, byte-indistinguishable from a fresh one, during a window in which a
+      wrapper-reported 0 would have looked like permission to push. The pre-push
+      manifest check would PROBABLY have caught the push. "Probably" is not a gate.
+      This is exit criterion 2 observed in the wild on a second host.
+
+      BOTH HOSTS HAVE ADOPTED THE SAME INTERIM RULE, which is the workaround this row
+      exists to make unnecessary: before any push, check the gate's OWN status line
+      AND that the stamp's mtime is newer than the run's start. Both, not either.
+    ts: "2026-09-18T22:32:42Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-18T22:32:42Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        second regime confirmed on macbookair-macos; stale-green stamp observed live
