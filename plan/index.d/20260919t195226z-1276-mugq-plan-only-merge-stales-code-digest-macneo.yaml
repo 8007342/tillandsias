@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    order: 1276-mugq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, gate, convergence, multi-host]
+    estimated_hours: 4
+    owned_files:
+      - scripts/gate-stamp.sh
+    title: |
+      a merge that commits ONLY stamp-excluded plan paths moves the CODE digest, so gate-stamp verify answers stale:tree-changed-since-gate instead of ok:gate-fresh-except-plan and 930-i6x4's fast lane does not hold across a merge
+    context: |
+      FOUND BY macneo-macos 2026-09-19 while landing a cheatsheet. Measured at
+      the coordinator's direction, who set the decision rule this row follows:
+      if the untracked enumerations are empty, the excluded paths really did
+      move the digest and it is a defect in the exclusion logic.
+
+      THE SEQUENCE, each step measured:
+        1. ./build.sh --check -> GATE_RC=0; "Gate stamp recorded" present in
+           THIS run's log; stamp mtime 4s old; gate-stamp.sh verify ->
+           ok:gate-fresh. Green three independent ways.
+        2. push refused: blocked:linux-next-not-merged:osx-next (correct).
+        3. git merge origin/linux-next. Net tree change against the merge
+           commit's FIRST PARENT: exactly FOUR paths, all plan/ —
+             plan/index.d/20260919t193528z-3053e416-yoga.yaml
+             plan/index.d/20260919t194003z-2275a780-pirria-silverblue.yaml
+             plan/index.d/20260919t194500z-1275-ngrc-pirria-silverblue.yaml
+             plan/issues/smoke-e2e-findings-v56.9.19.1-2026-09-19-linux-pirria.md
+           All four are excluded by compute()'s own case statement:
+           plan/index.d/*.yaml outright, and plan/issues/*.md at TOP LEVEL,
+           which all of these are.
+        4. gate-stamp.sh verify -> stale:tree-changed-since-gate.
+           recorded digest 0d66a53759a9...  computed f52dd6977cf0...
+
+      CONFOUNDS ELIMINATED, each by reading the script rather than assuming:
+        - SCOPE: compute() contains ZERO references to scope_spec, which is set
+          only inside the write) branch. So comparing a bare compute to a stamp
+          recorded with "scope full" is apples to apples. This was the holder's
+          own stated doubt and it did not survive checking.
+        - UNTRACKED ARTEFACTS: "git status --porcelain --untracked-files=all"
+          and "git ls-files --others --exclude-standard" BOTH return ZERO lines
+          on the tree where verify says stale. Nothing appeared in the worktree;
+          the tree is byte-identical to HEAD.
+        - HEAD/INDEX: compute() "deliberately ignores HEAD and the index" by its
+          own comment, precisely so committing does not stale a stamp, so the
+          merge commit itself cannot be the cause.
+        - PATH-LIST FOLDING: an excluded path hits the loop's skip BEFORE
+          entering the paths array, so neither its name nor a content digest
+          reaches the hash. Adding such files cannot change the fold.
+        - MODE DRIFT: a staged mode change prints stale:worktree-mode-drift, a
+          different verdict, not the one observed.
+
+      WHY IT MATTERS BEYOND ONE PUSH. 930-i6x4 exists so a ledger fragment does
+      not cost a full gate — its own comment says refusing the memo outright
+      "would re-impose the cost 930-i6x4 removed — a full gate for every
+      fragment" — and the verify branch that should fire here returns
+      ok:gate-fresh-except-plan with EXIT 0, so build.sh runs two ledger guards
+      and nothing else. That branch is unreachable once the CODE digest moved.
+      Compounded by pull_merge_cadence.pre_push_gate, which requires EVERY
+      non-linux-next branch to merge origin/linux-next before EVERY push: a
+      platform host then pays a full gate for other hosts' plan traffic, on a
+      tree whose code did not change. A gate here is ~1500s warm, so a
+      four-file plan-only merge cost 25 minutes. This is a candidate mechanism
+      for the standing "every merge stales the gate stamp so the push loop may
+      not converge" packets.
+
+      NOT ESTABLISHED, stated so this is not read as a diagnosis: WHICH path or
+      step moves the digest. Every candidate the holder could name was
+      eliminated above, but elimination is not identification. A gate was
+      running concurrently during the post-hoc measurements — the tree stayed
+      byte-clean throughout and both untracked enumerations were empty WITH it
+      running — so a concurrent-gate artefact is not fully excluded either.
+      Flagged rather than dismissed.
+    exit_criteria:
+      - 'a merge whose committed diff touches ONLY stamp-excluded plan paths leaves gate-stamp.sh verify answering ok:gate-fresh or ok:gate-fresh-except-plan, never stale:tree-changed-since-gate — PRE-FIX RESULT: verify answers stale:tree-changed-since-gate after a merge of exactly four such paths, recorded 0d66a53759a9 vs computed f52dd6977cf0, with both untracked enumerations empty'
+      - 'the fixture owning the property (1127-waxf, whose plan-digest subcommand is exposed so that compute must NOT see a plan fragment) is extended to exercise it ACROSS A MERGE rather than a single fragment write, since the single-file property evidently holds while the merge case does not'
+      - 'when verify does answer stale, it NAMES at least one path whose content moved — PRE-FIX RESULT: the verdict names none, which is why this needed a script read rather than a log read to investigate; a stale verdict that cannot say what moved is indistinguishable from this defect by its consumer'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable includes extending
+      1127-waxf's fixture to the merge case, so the litmus that would score it
+      does not exist in that form yet and 885-92iu would refuse a name nothing
+      defines. Intended target scripts/test-gate-stamp-memoization.sh, extended
+      in the same commit as the fix (1136-n8sh).
+    events:
+      - type: filed
+        ts: "2026-09-19T19:52:05Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260919t195205z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Filed after the coordinator's decision rule was satisfied: both
+          untracked enumerations empty on the tree where verify says stale.
+          Every confound the holder could name was eliminated by reading
+          gate-stamp.sh, none by assumption.
