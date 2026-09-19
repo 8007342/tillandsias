@@ -1396,6 +1396,22 @@ attempt_plan_only_lane() {
         LANE_NOTES+=("scripts/check-no-base64-script-injection.sh absent — skipped")
     fi
 
+    # ORDER 1261-bn7v. A long-form field whose OUTGOING fold drops a line
+    # ORIGIN's fold carries is a silent deletion of another host's writing.
+    # set-field's own guard (1151-td46) cannot catch it: that guard compares
+    # against the fold the WRITING HOST HOLDS, and a peer's append this host has
+    # not fetched is invisible to it. The lane already fetches, so the lane is
+    # where the comparison can be made.
+    if [[ -f scripts/check-append-vs-origin-fold.sh ]]; then
+        if ! out="$(bash scripts/check-append-vs-origin-fold.sh 2>&1)"; then
+            echo "plan-only lane: validation FAILED — this push drops a line origin's fold carries (1261-bn7v):" >&2
+            echo "$out" | head -12 | sed 's/^/  /' >&2
+            return 1
+        fi
+    else
+        LANE_NOTES+=("scripts/check-append-vs-origin-fold.sh absent — skipped")
+    fi
+
     # ── Accept ────────────────────────────────────────────────────────────────
     echo "" >&2
     echo "plan-only lane: outgoing diff adds only new plan fragment files / append-only attestation-ledger records — accepting without the build stamp" >&2

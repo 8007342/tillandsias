@@ -111,6 +111,15 @@ surfaces=(
   # and the row exists because nothing in that path could read the ledger. Same
   # false-accusation class as the four above — wired, running, reported orphan.
   scripts/release-preflight.sh
+  # ORDER 1261-bn7v, a SIXTH door onto the same class: a guard invoked from the
+  # PRE-PUSH HOOK's plan-only lane. check-append-vs-origin-fold.sh is called
+  # from attempt_plan_only_lane, and that placement is forced rather than
+  # chosen — the check needs a FETCHED origin to fold against, and the lane is
+  # the only surface that has already fetched. It is also the only surface that
+  # sees a plan-only push at all: such a push never reaches a gate, a land or a
+  # cut, so none of the five doors above could ever run it. Wired and running,
+  # reported orphan=1, exactly as the five before it.
+  scripts/hooks/pre-push-local-gate.sh
   # check-engine-cpu-dispatch.sh (861-n7f5) is invoked at
   # scripts/bench-inference-floor.sh:324 via a $(dirname)-relative path — a
   # live production caller this list could not see, reported orphan=1 and
