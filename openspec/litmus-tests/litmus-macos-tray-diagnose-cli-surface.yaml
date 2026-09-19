@@ -81,7 +81,6 @@ critical_path:
     assert_exit: 0
     assert_output_nonempty: true
     assert_output_contains: "fn exit_code_separates_healthy_converging_and_degraded"
-    assert_output_contains: "fn exit_code_separates_healthy_converging_and_degraded"
     timeout_ms: 3000
 
   - step: "NEGATIVE CONTROL: the pre-735-2g5i two-state test name is gone — a half-rename (both names present) or a revert to the exit-2-only contract must FAIL here"
