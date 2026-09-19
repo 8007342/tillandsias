@@ -1,0 +1,127 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-four-agent-tool-alias-trees-each-carry-their-own-copy-of-eleven-openspec-skills-in-three-different-generated-versions-and-gemini-has-none-of-them
+    field: next_action
+    value: |-
+      ANALYSIS AND DECISION, pirria-silverblue 2026-09-19. Plan text only; the tree
+      change is held until the coordinator clears the freeze.
+
+      WHAT THESE FILES ARE — the question the row was filed without answering. They
+      are BUILD OUTPUT, not hand-maintained content. `scripts/check-opsx-generated-dirt.sh:6`
+      states it: "the forge image's installed @fission-ai/openspec CLI regenerates
+      the 22 paths at forge launch". Nobody edits them; a forge does, on the way up,
+      with whatever CLI version is baked into the image it booted from.
+
+      THE THREE VERSIONS ARE THREE REGENERATION DATES, NOT THREE DESIGNS. From git:
+
+        .opencode  1.13.0  2026-09-12  chore(opsx): sync generated openspec commands and skills
+        .claude    1.11.0  2026-09-02  chore(opsx): sync generated openspec commands and skills
+        .codex     1.3.1   2026-05-22  feat(runtime): launcher terminal litmus, dynamic IPAM, rust
+        .github    1.3.1   2026-05-22  (same commit)
+        .gemini    —       —           has no openspec skills at all
+
+      `.codex` and `.github` were written once, four months ago, by a commit that was
+      not an opsx sync at all, and have never been regenerated. That is the whole
+      explanation for their staleness: **regeneration only ever touches the locus the
+      forge launched in**, and `check-opsx-generated-dirt.sh:32` names exactly two
+      loci — `.opencode/` or `.claude/`. Those are precisely the two trees that are
+      current. No forge has ever launched in a `.codex` or `.github` locus, so nothing
+      has ever updated them. `.gemini` was never seeded.
+
+      HOW MUCH OF THE DIVERGENCE IS REAL. Measured two ways:
+
+        1. SAME VERSION, DIFFERENT HARNESS: `.codex` vs `.github`, both 1.3.1 —
+           **11 of 11 files byte-identical.** The CLI emits the same bytes for two
+           different harnesses. There is no per-harness content difference between
+           those two at all.
+
+        2. DIFFERENT VERSION, DIFFERENT HARNESS: `.claude` 1.11.0 vs `.opencode`
+           1.13.0 — two distinct kinds of difference in one diff:
+             - VERSION DRIFT, the bulk of it: 1.13.0 adds a whole "Load project
+               context" section (`openspec context --json`, the `no_openspec_root`
+               stop, the config.yaml/config.yml precedence rule). Nothing to do with
+               the harness; it is a CLI upgrade.
+             - A HARNESS-SHAPED TOKEN, small and pervasive: `/opsx:apply` versus
+               `/opsx-apply`. Counted across all 11 skills per tree:
+                 .claude 33 `/opsx:`   .codex 27 `/opsx:`   .github 27 `/opsx:`
+                 .opencode 0 `/opsx:`, 33 `/opsx-`
+
+      AN HONEST UNKNOWN, STATED RATHER THAN GUESSED. The `/opsx-` spelling appears
+      ONLY in 1.13.0, and 1.13.0 exists ONLY in `.opencode`. So the data cannot
+      distinguish "opencode gets a different command token" from "1.13.0 changed the
+      token for everyone". Both readings fit every byte on disk. Whoever implements
+      this must resolve it by running the CURRENT CLI for a non-opencode harness and
+      looking, not by reasoning from this tree — and the answer changes the layout
+      decision, which is why it is called out rather than assumed.
+
+      A CORRECTION TO MY OWN EARLIER REPORTING, because I overstated the safety gap
+      when filing this row and in messages to two hosts. The "Planning boundary"
+      paragraph — "This workflow creates planning artifacts only ... Do not edit
+      project code ... Wait for a new user request" — is present in **1 of 11** skills
+      in `.claude` and `.opencode` (openspec-propose), and **0 of 11** in `.codex` and
+      `.github`. I implied the newer copies carried it broadly. They do not. The gap
+      is real and it is ONE skill, not eleven: an agent running the openspec PROPOSE
+      workflow under codex or the GitHub surface lacks a planning-boundary guardrail
+      that the claude and opencode surfaces have. Narrower than I said, and still
+      worth fixing, and I would rather the row carried the smaller true number.
+
+      THE DECISION, and the reasoning that forces it.
+
+        REJECTED — one canonical tree plus symlinks into it. This was the shape the
+        coordinator offered first and it is wrong on the evidence: if the `/opsx-`
+        token IS harness-specific, a single shared copy cannot carry both spellings,
+        and a reader of the wrong one is told to type a command their harness does not
+        have. It also re-creates 1238-u84w's problem — `grep -r` does not descend into
+        symlinked directories — for the four trees that would become symlinks, which
+        is the defect this family of rows exists to remove.
+
+        REJECTED — stop committing them; regenerate at forge launch only. Clean, and
+        it strands every non-forge agent: a Claude Code session on a bare host reads
+        `.claude/skills/` from the checkout and would find nothing. The forge is not
+        the only consumer.
+
+        CHOSEN — **one tracked copy per harness, with a drift check that asserts they
+        were all generated by the SAME CLI version.** The copies stay; what changes is
+        that their version skew becomes detectable. Concretely: a check reads
+        `metadata.generatedBy` from every `*/skills/openspec-*/SKILL.md` and refuses
+        when they disagree, naming each tree and its version. That is a ~20-line
+        script and it turns a four-month silent drift into a loud one.
+
+        WHY THIS AND NOT THE TIDIER OPTION: the duplication is not the defect. Four
+        copies that agree are harmless — they are generated output, regenerated
+        wholesale, never merged by hand. The defect is that **nothing notices when
+        they stop agreeing**, which is the fleet's standing complaint about every
+        instrument in this milestone. Deduplicating would remove the symptom and leave
+        the class of bug intact for the next generated tree; pinning the version
+        removes the class.
+
+      WHAT THE IMPLEMENTER MUST ALSO DECIDE, and it is not mine to take:
+        - Regeneration only reaches the launched locus, so a check that DEMANDS
+          agreement will red the trunk until someone regenerates `.codex`, `.github`
+          and seeds `.gemini`. Either the regeneration step covers all five loci, or
+          the check must name the un-regenerated trees as a known exemption with an
+          expiry. A check that cannot be satisfied is not a check.
+        - `.gemini` has zero openspec skills. Either it gains them or a recorded
+          decision says gemini does not get openspec workflows. "Nobody noticed" is
+          not that decision, and it has been four months.
+
+      NEXT ACTION FOR WHOEVER PICKS THIS UP: run the current openspec CLI for a
+      non-opencode harness and settle the `/opsx-` question FIRST. Everything above
+      holds either way, but the shape of the drift check — whether it compares whole
+      files or only `generatedBy` — depends on that answer.
+    ts: "2026-09-19T00:33:30Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: the-four-agent-tool-alias-trees-each-carry-their-own-copy-of-eleven-openspec-skills-in-three-different-generated-versions-and-gemini-has-none-of-them
+    event:
+      type: note
+      ts: "2026-09-19T00:33:30Z"
+      host: pirria-silverblue
+      summary: |-
+        analysis and decision landed; tree change held until the freeze clears
