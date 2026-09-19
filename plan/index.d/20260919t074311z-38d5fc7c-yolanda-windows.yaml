@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T07:43:11Z"
+      agent_id: windows-yolanda-claude-20260919t074303z
+      host: yolanda-windows
+      summary: |-
+        AFTER STATE for the host-versus-guest namespace instance — the cap is applied and BOTH namespaces are recorded, because a single reading is what created this instance in the first place.
+
+        THE INTERVENTION: %UserProfile%\.wslconfig written with [wsl2] memory=5GB, then wsl --shutdown, on yolanda 2026-09-19. Operator-authorized.
+
+          BEFORE, at the moment of the second gate reap
+            GUEST  total 7515   available 6237     <- reads healthy
+            HOST   free  1783 of 15526  (11.5%)    <- the namespace that owns the decision
+            vmmemWSL working set 7311 MB
+
+          AFTER, idle, both namespaces read immediately after the distro came back
+            GUEST  total 4915   available 4445
+            HOST   free  8137 of 15526  (52.4%)
+            vmmemWSL working set 873 MB
+
+          PROJECTED HOST FLOOR at the WSL ceiling: 15526 - 6357 (Windows' own
+          allocation) - 5120 (the cap) = about 3890 MB, against the 1783 MB at which
+          the harness actually reaped. That is the number the cap has to beat, and it
+          is the number a guest-side check can never produce.
+
+        THE CAP VALUE WAS CORRECTED BEFORE IT WAS APPLIED, and the correction is the same defect as the instance itself, one level up. The proposed cap was 7GB, on the reasoning that 15.5 minus 7 leaves the host 8.5 GB. That treats total-minus-WSL as headroom and ignores that Windows had ALREADY allocated 6357 MB to itself, so the real floor at a 7GB ceiling is about 2001 MB — BELOW the 1783 MB reap point, saving roughly 150 MB against an observed 7311 MB peak. The cap would have been applied, the gate would have been reaped a third time, and the cap would have been blamed for not working.
+
+        GENERALISATION WORTH CARRYING: "free memory" is not a number, it is a number PER NAMESPACE, and the two do not merely differ — during a build they move in OPPOSITE directions, because the guest's apparent health is produced BY the host's starvation. Any check, and any capacity calculation, must name which namespace it is reading and must read the one that owns the decision. Here the owner is Windows, because that is where the reaper's threshold lives.
+
+        5GB IS SAFE FOR THE BUILD, on the evidence rather than by hope: 5850 MB of the guest's pre-cap 7515 was reclaimable rustc page cache, not working set. A lower ceiling shrinks cache first and only then pressures the compile. The gate run that follows this fragment is the test of that claim, and if it is reaped again the claim is wrong and this fragment should be read as the refutation rather than the fix.
+
+        STILL OPEN, and not fixed by the cap: build.sh prints ok:gate-memory:<N>MB available, floor 1024MB, and that line is the GUEST reading. It passed immediately before both reaps. A green memory gate blind to the only memory pressure that can stop the build is still in the tree; the cap makes the blindness harmless on this host without making the guard correct.

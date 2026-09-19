@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-19T09:36:26Z"
+      agent_id: windows-yolanda-claude-20260919t093625z
+      host: yolanda-windows
+      summary: |-
+        FOURTH INSTANCE, AND IT IS A DIFFERENT SHAPE FROM THE OTHER THREE: A TRUE STATEMENT ABOUT THE WRONG SUBJECT. Measured on yolanda 2026-09-19. Filed here because absence-checking cannot catch it — nothing is absent.
+
+        THE INSTANCE. scripts/check-plan-binary-current.sh, invoked to mint the validator-surface stamp the plan-only lane demands, printed exactly one line:
+
+          ok:plan-binary-write-is-opt-in+role-satisfies:...tillandsias-plan.exe arms=16/0 copies=0 path=<none-on-PATH>
+
+        I read that as "the stamp is minted" and pushed. The push failed with a byte-identical refusal. After an unrelated fix the same script printed an ADDITIONAL line:
+
+          stamped:plan-binary-validator-surface:...exe.validator-surface-sha256
+          ok:plan-binary-write-is-opt-in+role-satisfies:... (unchanged)
+
+        and only then did the lane accept. The ok: line was TRUE BOTH TIMES. It reports the write-is-opt-in-and-role-satisfies arm, which was satisfied before and after. It is simply not the arm the caller came for, and the script is SILENT about that arm when it does nothing.
+
+        WHY THIS IS NOT THE THIRD VALUE. The ternary's could-not-evaluate covers a status that does not exist: the consumer checks its input, finds nothing, and can refuse. Here the consumer receives a well-formed, green, accurate verdict. There is nothing missing to detect. A consumer that validated its input perfectly would still be wrong, because the defect is in the MAPPING from question to answer, not in the answer's integrity.
+
+        The other three instances of tonight all had a detectable tell for a sufficiently paranoid consumer:
+          a refusal exiting 0            -> the text disagreed with the status
+          a guest-side memory check      -> a second reading existed and differed
+          $? through the wsl hop         -> empty, or a value that failed a known-answer canary
+        This one has none. Both readings are internally consistent and both are correct.
+
+        THE DISCRIMINATOR IS CARDINALITY AND SUBJECT, NOT TRUTH. What distinguishes the minting run from the non-minting run is the PRESENCE OF A SECOND LINE naming the requested subject. So the consumer's rule cannot be "did it say ok" — it must be "did it say anything about the thing I asked for". That is the run-don't-stat move applied to verdicts: do not accept that a green line means your question was answered; look for the token that names your subject.
+
+        PROPOSED RULE FOR THIS ROW, offered as the fourth value rather than a widening of the third: A VERDICT MUST NAME ITS SUBJECT, AND A PRODUCER THAT DID NOT ACT ON THE REQUESTED SUBJECT MUST SAY SO EXPLICITLY. Concretely for this family:
+
+          stamped:<subject>:<detail>        the requested action happened
+          skip:no-stamp-minted:<why>        it did not, and here is why
+          ok:<other-arm>:...                a different arm, never a substitute for either
+
+        The failure mode is a producer whose green line is about arm A while the caller invoked it for arm B, and whose silence on B is indistinguishable from success at B. Absence of a token is only detectable if the consumer knows which token to expect — so the closure for this shape is that the PRODUCER emits a subject-named verdict unconditionally, not that the consumer becomes more careful.
+
+        CROSS-REFERENCE: filed in full as defect 3 of 1267-uafx, which covers the Windows-locus defects this hid. macuahuitl to cross-cite from the stale-binary family parent after the cut — that family is precisely where this shape hides, because a staleness check has many arms and only one of them is the one you asked about.
+
+        COST HERE: three pushes instead of one, and I told my operator the loop was broken when it was not. The wrong report is the real damage; the extra pushes were cheap.

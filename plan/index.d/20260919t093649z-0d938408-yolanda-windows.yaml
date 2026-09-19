@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: note
+      ts: "2026-09-19T09:36:49Z"
+      agent_id: windows-yolanda-claude-20260919t093648z
+      host: yolanda-windows
+      summary: |-
+        CLOSING EVIDENCE. This row closes on a FINDING, not on a commit, because the commit it appears to ask for would rewrite correct code.
+
+        THE DELIVERABLE ALREADY EXISTS AND IS ON TRUNK, landed at e6f675d18 by esmeraldinha 2026-09-13, verified an ancestor of origin/linux-next:
+          - scripts/lib-wsl-exec.sh — the canary, wsl_exec_transport_ok <distro> [--quiet]. Sends BOTH known answers the deliverable names (false expects 1, exit 7 expects 7), skips loudly off Windows as skip:wsl-exec-transport:no-wsl-on-this-host, and its refusal names the remedy, the inside-a-file exception, and both negative results so nobody re-spends the hour on MSYS_NO_PATHCONV or MSYS2_ARG_CONV_EXCL.
+          - scripts/test-wsl-exec-channel-carries-exit-status.sh — the fixture, under the exact filename the unscoreable prescribed.
+          - WIRED BY ROUTE 1, build.sh:2151, an _run bash line. NAMING THE ROUTE as the unscoreable required: route 1 taken, route 2 skipped, so there is deliberately no litmus-tests yaml and no bindings entry. That is not a dangling pin.
+          - The open wrap-or-refuse design question is ANSWERED IN THE FILE with reasoning: it reports on the transport and deliberately does not wrap, route or retry, because settling that question as a side effect of writing the check would be the wrong way to settle it.
+
+        WHY THE ROW STILL READ ready: expire-claims returned it after a 24h TTL, recorded in 20260918t203353z-08ab1169-linux.yaml. ready here meant the claim lapsed, not that nothing existed. A dispatch read it as empty and asked for a canary that was already in the tree.
+
+        SECOND-HOST CONFIRMATION, yolanda 2026-09-18, distro tillandsias-build:
+          refused:wsl-exec-transport:drops-exit-status:tillandsias-build
+            sent 'false; echo $?'      -> got 0  (expected 1)
+            sent '( exit 7 ); echo $?' -> got 0  (expected 7)
+        Identical to esmeraldinha. Two Windows hosts, same mechanism, so it is the MSYS argument-conversion layer and not one host's install.
+
+        THE TITLE IS WRONG AND THE AUDIT IS NEARLY EMPTY — this is the finding that closes the row.
+
+        THE TRANSPORT PRESERVES THE EXIT STATUS. Measured, D is the distro:
+          wsl.exe -d D -- bash -lc 'exit 7'  then outer read   -> 7            CORRECT
+          wsl.exe -d D -- bash -lc 'false'   then outer read   -> 1            CORRECT
+          if wsl.exe -d D -- bash -lc 'exit 3'; then ...       -> else, rc=3   CORRECT
+        So the if-then form and an OUTER rc capture are both sound and need no conversion. "every rc measured through it on a windows host is decoration" is too broad, and an auditor acting on the title would rewrite working code.
+
+        ONLY AN EXPRESSION COMPUTED INSIDE THE ARGUMENT STRING IS UNSAFE, and the mangling is wider than the question mark:
+          bash -lc 'false; echo "$?"'            -> 0        wrong
+          bash -lc 'false; rc=$?; echo "$rc"'    -> empty    never evaluated
+          ${a[1]} where a=(x y z)                -> empty    no question mark present
+          v=ok; echo "$v"                        -> empty
+          v=ok; set | grep "^v="                 -> v=ok     THE ASSIGNMENT DID HAPPEN
+          echo "$HOME"                           -> /root    pre-existing env fine
+          echo "$$"                              -> correct inner pid
+        PIPESTATUS is therefore in the affected set, so the obvious rc-to-stdout-token conversion is as broken as what it replaces and fails silently.
+
+        THE CENSUS, comment-stripped so a comment mentioning the defect is not counted as an instance: across scripts/ and build.sh there is NO instance of the real pattern anywhere in the tree except the canary's own two deliberate ones in scripts/lib-wsl-exec.sh. There is nothing to convert. The conversion half of this row is a no-op on the current tree.
+
+        NOT THEORISED FURTHER, deliberately: the assignment demonstrably executes yet same-string expansion of the assigned name returns empty, and I could not close that gap without more time than the finding is worth. Recording what was measured rather than a cause I cannot support.
+
+        WHAT A FUTURE PICKUP SHOULD DO, since the audit is empty today: re-run the census when new wsl.exe callers appear, and treat the canary as the instrument. The operational rule is unchanged and stronger than the title: anything COMPUTED inside the argument string is untrustworthy; put the logic in a script FILE and read a token from stdout. Do NOT ban bash -lc through wsl.exe — the form is correct for anything reporting through stdout, which is most of what the fleet measures.
+
+        TITLE CORRECTION IS RECORDED but the packet_id is immutable, so the id keeps the overbroad claim. Anyone reading the id alone will overestimate the blast radius; this event is the correction.
