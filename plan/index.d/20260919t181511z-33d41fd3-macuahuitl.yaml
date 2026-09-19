@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    event:
+      type: note
+      ts: "2026-09-19T18:15:11Z"
+      agent_id: linux-macuahuitl-fable5-20260919t181511z
+      host: macuahuitl
+      summary: |-
+        Ownership cross-cite (coordinator ruling 2026-09-19, agreed with yolanda-windows): this row owns the FAMILY rule (a resolver that prefers a prebuilt compares it to its sources and refuses with the rebuild command), the podman-cli shim closure, and build.sh rebuilding the crate before the runtime shim is minted. 1267-uafx owns the plan-binary locus on Windows end to end, including its defect 3 (check-plan-binary-current.sh printing ok: while minting nothing; reproduced twice on yolanda tonight: one push refused STALE with only the ok: line, a rebuild then printed the stamped: line as well). The next_action clause here about the plan binary's refusal text naming that script is 1267-uafx's, not this row's. Numeric prefix 1270 is shared with 1270-wiki by concurrent allocation, which methodology/distributed-work.yaml `the_prefix_is_not_authoritative` calls normal; cite the full token.
