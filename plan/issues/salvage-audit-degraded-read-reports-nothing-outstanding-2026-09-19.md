@@ -141,3 +141,38 @@ defect below was briefly argued for as "the last candidate standing". That is
 not safe reasoning here, and it is now visibly unsafe — the standing depended on
 an elimination that later failed. The degraded-read finding stands on its own
 reproduction, and on nothing else.
+
+## The general form: validation catches shapes, not facts
+
+Observed by yoga-silverblue, reproduced on lenovinha-silverblue:
+
+```
+--branch refs/remotes/origin/definitely-absent-9999
+  -> fail:salvage-audit:bad-branch:refs/remotes/origin/definitely-absent-9999
+
+--branch 0000000000000000000000000000000000000000
+  -> ok:salvage-audit:70r:0w:0f:branch=0000000000000000000000000000000000000000
+```
+
+**The audit fails LOUDLY on a malformed input and QUIETLY on an absent one.**
+
+The difference is not severity — an absent SHA is the *worse* input, because it
+produces a confident verdict about a world that was never examined. The
+difference is that one is **unparseable** and the other is merely **untrue**.
+Validation catches shapes; it does not catch facts.
+
+Every confident-wrong result in this row's investigation was a **well-formed
+answer to a question whose premise had quietly stopped holding**:
+
+| the answer | the premise that had stopped holding |
+|---|---|
+| `ok:` over a partial namespace | the fetch succeeded |
+| a label count off a truncated capture | the audit finished |
+| a baseline resolved by `@{...}` | the reflog is shared |
+| a conclusion from an empty capture | the capture contained a verdict |
+
+Each was syntactically impeccable. None was checked against its premise, and in
+every case the tooling had the evidence — the note on stderr, the missing verdict
+line, the reflog's locality, the empty string — and nothing asked.
+
+That is the class this row belongs to, and it is larger than the audit.
