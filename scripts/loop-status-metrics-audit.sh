@@ -77,6 +77,28 @@ stems="$(printf '%s\n' "$entries" | sed -E 's#.*/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}
 n_stems="$(printf '%s\n' "$stems" | grep -c .)"
 
 rows=0
+# ORDER 1243-yiyq - THE ANCHOR MUST TOLERATE INTERPOSED FIELDS.
+#
+# This began `skippable: candidates=`. cycle-metrics.sh later started emitting
+# `skippable: window=7d candidates=...`, and ONE interposed field silently broke
+# every match. MEASURED 2026-09-17 with a positive control: 8 entries since
+# 2026-09-06 carried the block in the new form and ZERO entries in that window
+# matched the old anchor - so it had matched NOTHING for twelve days while this
+# script reported every host NOT-PASTING. A coordinator read that as fleet
+# BEHAVIOUR, filed it as a hazard, put it in a landed commit and a packet's
+# context, and told a peer, who changed what they did because of it.
+#
+# `([a-z_]+=[^ ]+ )*` absorbs any number of key=value fields between the label
+# and `candidates=`, so the next field added to the emitter does not repeat this.
+# Deliberately NOT `.*`: that would let prose ABOUT a skippable line satisfy the
+# anchor, which is defect 2 in the header above and was already paid for once.
+SHAPE='skippable: ([a-z_]+=[^ ]+ )*candidates=[0-9]+ floor_ms=[0-9]+ min_runs=[0-9]+ top3=[^`|·]*'
+
+# How many stems produced a readable line. Zero across a non-empty corpus is NOT
+# 'no host is pasting' - it is 'this script can no longer read anything', and the
+# two demand opposite responses (chase the hosts vs fix the parser).
+matched=0
+
 for h in $stems; do
     rows=$((rows + 1))
     if printf '%s' "$h" | grep -qE "$buckets"; then
@@ -87,9 +109,9 @@ for h in $stems; do
     # Reverse LEXICAL sort on a UTC-stamped name: newest first, no clock, no mtime.
     f="$(printf '%s\n' "$entries" | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | sort -r | head -1)"
     [ -n "$f" ] || { echo "$h NO-ENTRY"; continue; }
-    SHAPE='skippable: candidates=[0-9]+ floor_ms=[0-9]+ min_runs=[0-9]+ top3=[^`|·]*'
     line="$(grep -oE "$SHAPE" "$f" | head -1)"
     if [ -n "$line" ]; then
+          matched=$((matched + 1))
         echo "$h $line"
         continue
     fi
@@ -108,5 +130,19 @@ for h in $stems; do
 done
 # The two MUST be equal. A dropped stem under-counts the two-or-more-hosts
 # trigger that decides whether a step gets a memoisation packet.
+# ORDER 1243-yiyq. A corpus WITH entries and ZERO readable lines is a
+# format-drift signal, not a fleet-behaviour finding. Its own verdict and its
+# own exit code, so a reader cannot mistake it for the other claim: 'no host is
+# pasting' sends you to the hosts, 'I cannot read any host' sends you here.
+if [ "$matched" -eq 0 ] && [ "$rows" -gt 0 ]; then
+    echo "rows=$rows stems=$n_stems"
+    echo "violation:anchor-matches-nothing:$rows stem(s) enumerated, 0 readable metrics lines" >&2
+    echo "  The anchor matched NOTHING across the whole corpus. Far more likely" >&2
+    echo "  FORMAT DRIFT in scripts/cycle-metrics.sh than every host stopping at" >&2
+    echo "  once. Compare a recent entry's skippable: line against SHAPE in this" >&2
+    echo "  file before concluding anything about hosts, and do NOT route plain" >&2
+    echo "  asks on the strength of this run." >&2
+    exit 3
+fi
 echo "rows=$rows stems=$n_stems"
 [ "$rows" = "$n_stems" ] || { echo "violation:dropped-stem:rows=$rows stems=$n_stems" >&2; exit 1; }

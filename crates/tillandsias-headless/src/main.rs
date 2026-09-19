@@ -3699,6 +3699,100 @@ pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResoluti
     }
 }
 
+/// ORDER 1211-34v6. The refusal an operator reads when the login cannot resolve
+/// a repository — lifted out of the call site so it can be pinned by a test.
+///
+/// It used to end "or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again". That
+/// advice is INERT for this path: the resolver above reads `git config` and
+/// .git-pointer files and never consults the environment, so an operator
+/// following it got the identical refusal and learned nothing. The variable is
+/// real — the cloud lanes read it — which is exactly what made the wrong advice
+/// plausible.
+///
+/// Replacing it with SILENCE would have been worse: a refusal with no way
+/// forward. So the text now carries the remedy that was measured to work (the
+/// CLI lane from inside a checkout) and says plainly that the tray lane cannot
+/// satisfy it, because the tray runs in the guest at /root with no checkout —
+/// which is 759-vceg's CWD dependency, filed separately by yolanda.
+/// ORDER 1215-xazj, criterion 4. Build the one-line statement of WHAT THE
+/// PROBE EXAMINED, from the directory it resolved and whatever origin it found
+/// there.
+///
+/// EXTRACTED SO IT CAN BE FALSIFIED. It first lived inline at the call site,
+/// and a mutation collapsing its two arms back together — the very conflation
+/// this row exists to remove — left the unit tests GREEN, because those tests
+/// hand the refusal builder a subject string of their own making and therefore
+/// cannot see a CALLER that builds the wrong one. A test that supplies its
+/// subject's input can only check formatting; one that supplies the DECISION's
+/// input can check the decision.
+///
+/// The two cases are different diagnoses and an operator needs them apart: no
+/// origin at all means "you are in the wrong directory"; a non-GitHub origin
+/// means "you are in a checkout, but not of a GitHub repository".
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
+fn github_login_probe_subject(cwd_display: &str, origin: Option<&str>) -> String {
+    match origin {
+        Some(url) => format!(
+            "WHAT WAS CHECKED: {cwd_display} has origin {url}, which is not a GitHub \
+             repository, so there is no GitHub repo to verify push permission against."
+        ),
+        None => format!(
+            "WHAT WAS CHECKED: {cwd_display} — no git origin was found there. That \
+             directory is this login process's working directory, and it is the ONLY \
+             thing consulted."
+        ),
+    }
+}
+
+/// ORDER 1215-xazj, criterion 4. `subject` states WHAT THE PROBE LOOKED AT:
+/// the directory it resolved from, and whether that directory had no origin at
+/// all or an origin that is not a GitHub repository. Those are DIFFERENT
+/// FACTS and this arm conflated them — both produced the identical
+/// "no GitHub upstream is configured", so an operator with, say, a GitLab
+/// origin read a message about absence.
+///
+/// WHY IT IS WORTH A PARAMETER. The whole cost of 1215-xazj was three hosts
+/// inferring this probe's subject from the process CWD: a session of guest
+/// forensics, two hosts' worth of discarded eliminations, and finally the
+/// operator running two arms by hand to discover that cwd was the only
+/// variable. The probe knew which directory it consulted and never said.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
+fn github_login_no_upstream_refusal(subject: &str) -> String {
+    format!(
+        "no GitHub upstream is configured for this checkout, so push permission \
+                 cannot be verified against a repository.\n\
+                 \n\
+                 {subject}\n\
+                 \n\
+                 Nothing was written to Vault. Seeding on authentication alone is the \
+                 state order 759-vceg exists to prevent: the token looks accepted here \
+                 and fails at the first push, which is how a release looked healthy and \
+                 broke the operator forty minutes later (803-49re).\n\
+                 \n\
+                 Run this login from the CLI, with your shell in a checkout whose \
+                 `origin` points at the target repository. The repository is resolved \
+                 from this process's CWD by `git config --get remote.origin.url` with a \
+                 .git-pointer fallback, so the checkout must be where the command runs.\n\
+                 \n\
+                 THE TRAY'S LOGIN CANNOT SATISFY THIS: it runs inside the guest, whose \
+                 CWD is /root and which holds no checkout, so it reaches this refusal \
+                 every time regardless of your token (order 1211-34v6).\n\
+                 \n\
+                 Setting TILLANDSIAS_PROJECT_REMOTE_URL does NOT help here. That \
+                 variable is real and the cloud lanes read it, but the resolver this \
+                 check uses never consults the environment — earlier text advertised it \
+                 and sent operators in a circle (order 1211-34v6, order 759-vceg)."
+    )
+}
+
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
@@ -7336,9 +7430,14 @@ fn build_opencode_forge_args(
     // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
     // pre-injected config and skips redundant writes.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) =
-        write_forge_gitconfig(project_name, mirror_id, host_checkout, resolved_remote_url)
-    {
+    if let Some(gitconfig_path) = write_forge_gitconfig(
+        project_name,
+        mirror_id,
+        host_checkout,
+        resolved_remote_url,
+        // ORDER 1021-hf9e: production resolves the root; tests pass their own.
+        &tillandsias_core::cache_root::cache_root(),
+    ) {
         args.extend([
             "--mount".into(),
             format!(
@@ -9630,6 +9729,11 @@ fn select_github_login_input_mode(
 /// Accepts the two shapes an operator's origin actually takes — `https://` and
 /// `git@host:` — and refuses anything that is not a GitHub repository path,
 /// because a probe against the wrong repo answers a question nobody asked.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
     let trimmed = origin.trim();
     // The prefixes an operator's origin actually takes. Anything else is not a
@@ -9686,6 +9790,11 @@ fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
 /// push arrives at [`github_push_authorization_verdict`] as a value to
 /// classify rather than as a command failure indistinguishable from podman
 /// being unable to run at all.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Vec<String> {
     let script = format!(
         r#"set -u
@@ -9737,6 +9846,11 @@ fi
 /// [`github_push_authorization_probe_args`] for why that field had to be
 /// retired; the consequence here is that the ONLY accepting arm is a push
 /// negotiation the server completed.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Result<(), String> {
     let answer = probe_stdout.trim();
     // ORDER 1106-k2df. Only a completed push negotiation seeds. `true` — the
@@ -9828,6 +9942,11 @@ fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Re
 
 /// ORDER 759-vceg, message retained by 1106-k2df. A token that authenticates
 /// and is refused by `git-receive-pack`.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_cannot_push_message(owner_repo: &str) -> String {
     format!(
         "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
@@ -9852,6 +9971,11 @@ fn github_push_authorization_cannot_push_message(owner_repo: &str) -> String {
 /// healthy host cannot manufacture — and three hosts hit it on 2026-09-06. No
 /// scope edit helps; only a re-login does. Discriminated ahead of the generic
 /// refusal, which still owns the cases where the scope advice IS right.
+#[allow(dead_code)] // ORDER 1264-s4id: caller-to-be. Kept by 1217-54vw's deletion of the
+// login-time push probe (operator ruling 2026-09-18: login validates "can this token list
+// repos?"; the push question moves to forge launch). 1264-s4id calls these and removes this
+// attribute in the same commit. If 1264-s4id is abandoned, DELETE these seven rather than
+// leaving a permanent allow citing a row nobody picked up.
 fn github_push_authorization_revoked_message(owner_repo: &str, answer: &str) -> String {
     format!(
         "the GitHub credential is REVOKED or invalid: the push-permission probe on \
@@ -10115,89 +10239,6 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                 "containerized {provider_name} authentication verification failed after login: {e}"
             )
         })?;
-    }
-
-    // ORDER 759-vceg. AUTHENTICATION IS NOT AUTHORIZATION, and until here
-    // only authentication had been checked. `gh auth status` above proves
-    // the token is a valid identity; it says nothing about whether that
-    // identity may PUSH to the repository this installation exists to push
-    // to. A fine-grained PAT missing Contents:write passes everything above
-    // and is denied at push time — the 2026-08-15 incident, surfacing hours
-    // after the credential was seeded.
-    //
-    // The probe runs in the SAME ephemeral container as the login itself,
-    // so the token still never reaches host disk, argv, or env.
-    //
-    // WHEN THERE IS NO UPSTREAM TO CHECK AGAINST, say so out loud rather
-    // than skipping quietly. A silent skip is indistinguishable from a
-    // passed check by anyone reading the output, which is the same
-    // ambiguity this packet exists to remove.
-    match read_host_project_origin_url(Path::new("."))
-        .as_deref()
-        .and_then(github_owner_repo_from_origin)
-    {
-        Some(owner_repo) => {
-            let mut probe = podman_command();
-            probe.args(github_push_authorization_probe_args(
-                &container,
-                &owner_repo,
-            ));
-            let probe_out = podman_command_output(probe, debug).map_err(|e| {
-                format!(
-                    "could not check push permission on {owner_repo}: {e}\n\n\
-                         Nothing was written to Vault. The probe script reports its own \
-                         outcome on stdout and exits 0 even when the push is denied \
-                         (order 1106-k2df), so reaching here means the login container \
-                         could not be run at all — not that the token was refused."
-                )
-            })?;
-            github_push_authorization_verdict(&owner_repo, &probe_out)?;
-            info!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                operation = "github_push_authorization_verified",
-                "token has push permission on {owner_repo}; proceeding to Vault write"
-            );
-        }
-        // ORDER 759-vceg, SECOND DEFECT. This arm printed the NOTE below and
-        // FELL THROUGH to the Vault write — no return, no refusal. The
-        // asymmetry is the defect: Some(owner_repo) probes and refuses on an
-        // answer it cannot parse, while None — STRICTLY LESS INFORMED, because
-        // no repository was probed at all — was waved through.
-        //
-        // That inverted the function's own principle. The verdict's doc states
-        // that "I could not tell" resolving to "seed it anyway" reproduces the
-        // original defect: a credential accepted with no evidence it works. The
-        // Some path honours it; the None path contradicted it, and the printed
-        // NOTE made the state look handled.
-        //
-        // MEASURED CONSEQUENCE, on the operator's own machine: they ran
-        // --github-login as root from /root on esmeraldinha, saw this NOTE, and
-        // the login reported success. The token was seeded unverified and the
-        // push stayed 403.
-        //
-        // REFUSES rather than probing the account's scopes, deliberately. The
-        // packet's deliverable offers either; refusing is the one that cannot
-        // be wrong in the dangerous direction, and running the login from a
-        // checkout with an upstream is a smaller ask than a second probe path
-        // whose own failure modes nobody has measured.
-        None => {
-            return Err(
-                "no GitHub upstream is configured for this checkout, so push permission \
-                 cannot be verified against a repository.\n\
-                 \n\
-                 Nothing was written to Vault. Seeding on authentication alone is the \
-                 state order 759-vceg exists to prevent: the token looks accepted here \
-                 and fails at the first push, which is how a release looked healthy and \
-                 broke the operator forty minutes later (803-49re).\n\
-                 \n\
-                 Run this login from a checkout whose `origin` points at the target \
-                 repository, or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again \
-                 (order 759-vceg)."
-                    .to_string(),
-            );
-        }
     }
 
     info!(
@@ -10851,9 +10892,26 @@ pub(crate) fn write_forge_gitconfig(
     mirror_id: Option<&str>,
     host_checkout: Option<&Path>,
     resolved_remote_url: Option<&str>,
+    // ORDER 1021-hf9e. PASSED IN, so a test needs no process-global write to
+    // redirect where this lands. It used to call cache_root() here, which reads
+    // XDG_CACHE_HOME falling back to HOME — and the tests that wanted to
+    // redirect it did so by SETTING HOME, under env_lock().
+    //
+    // THE VICTIM NEVER TOOK THAT LOCK. forge_credential_quarantine_mounts_present
+    // reaches this function through two builders and holds only the podman seam
+    // lock, so it raced the HOME writers: a lock protects only the participants
+    // who take it. When HOME pointed at another test's tempdir — or one already
+    // dropped — create_dir_all below failed, `.ok()?` turned that into None AT
+    // THE POINT IT HAPPENED, the gitconfig mount silently vanished, and an
+    // assertion several frames away failed in a test that did nothing wrong.
+    //
+    // Same remedy as tillandsias-core's ca_path, which was itself about HOME:
+    // remove the shared state at its SOURCE rather than serialise the readers.
+    // tillandsias_core::cache_root::cache_root_from is the injectable form that
+    // precedent already established.
+    cache_root: &Path,
 ) -> Option<PathBuf> {
-    // Order 815-gdjk: XDG-first via the shared resolver.
-    let forge_git_dir = tillandsias_core::cache_root::cache_root().join("forge-gitconfig");
+    let forge_git_dir = cache_root.join("forge-gitconfig");
     std::fs::create_dir_all(&forge_git_dir).ok()?;
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
@@ -14759,6 +14817,13 @@ fn forge_spec_index_volume(project_name: &str) -> String {
     format!("tillandsias-spec-index-{project_name}")
 }
 
+// Same rationale the sibling builder below records: all arguments are distinct,
+// named forge-launch inputs, and bundling them into a struct would add
+// indirection without clarifying the call sites. ORDER 1021-hf9e added
+// `host_mount`, which crosses clippy's threshold — taking the value as an
+// argument is the point of that order, since reading it from the process env
+// inside the builder is exactly the shared state being removed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
@@ -14767,6 +14832,9 @@ pub(crate) fn build_forge_agent_run_args(
     version: &str,
     mode: ForgeAgentMode,
     debug: bool,
+    // ORDER 1021-hf9e: explicit, so a test exercising either lane needs no
+    // process-global write. Production callers pass forge_uses_host_mount().
+    host_mount: bool,
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
@@ -14783,6 +14851,7 @@ pub(crate) fn build_forge_agent_run_args(
         debug,
         None,
         None,
+        host_mount,
     )
 }
 
@@ -14806,6 +14875,22 @@ fn build_forge_agent_run_args_with_vault(
     debug: bool,
     vault_secret: Option<&str>,
     prompt: Option<&str>,
+    // ORDER 1021-hf9e. PASSED IN, never read from the process env here. This
+    // used to call forge_uses_host_mount() inside the builder, so a test that
+    // exercised the opt-in host-mount lane had to SET THE PROCESS-GLOBAL
+    // TILLANDSIAS_FORGE_HOST_MOUNT — and cargo runs this suite's tests
+    // concurrently in ONE process, so an unrelated test building args at the
+    // same moment saw the other test's value.
+    //
+    // MEASURED on yoga 2026-09-16, four default parallel runs at one commit:
+    // three clean and one failing `forge_agent_run_args_export_debug_when_requested`
+    // on `assertion failed: !has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1")`
+    // — an assertion about a lane that test never enabled.
+    //
+    // Same remedy as tillandsias-core's ca_path: REMOVE the shared state rather
+    // than serialise around it. A #[serial] or a wider env_lock() would hide the
+    // race and leave the global readable by anything else in the process.
+    host_mount: bool,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
@@ -14851,7 +14936,6 @@ fn build_forge_agent_run_args_with_vault(
     // Order 437: clone-only by default. The host-checkout bind mount at
     // /home/forge/src/<project> is the OPT-IN legacy shared-mount path; without
     // it the entrypoint's clone_project_from_mirror clones a fresh tree there.
-    let host_mount = forge_uses_host_mount();
     let spec = if host_mount {
         // Order 465 residual: never silent — announce the reduced isolation.
         warn_forge_host_mount_isolation_reduced();
@@ -15112,9 +15196,14 @@ fn build_forge_agent_run_args_with_vault(
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
     // outside the project workspace, and bind-mounted read-only.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) =
-        write_forge_gitconfig(project_name, mirror_id, host_checkout, resolved_remote_url)
-    {
+    if let Some(gitconfig_path) = write_forge_gitconfig(
+        project_name,
+        mirror_id,
+        host_checkout,
+        resolved_remote_url,
+        // ORDER 1021-hf9e: production resolves the root; tests pass their own.
+        &tillandsias_core::cache_root::cache_root(),
+    ) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
             "/home/forge/.gitconfig",
@@ -15228,6 +15317,11 @@ fn build_forge_agent_run_args_with_vault(
 
 /// Build the full host-terminal command for an interactive tray launch.
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
+// ORDER 1021-hf9e, second pass. Same reason the sibling builders carry this:
+// `host_mount` crosses clippy's threshold, and taking it as an argument is the
+// entire point — reading it from the process env in here is the shared state
+// being removed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_forge_agent_run_argv(
     project_path: &Path,
     project_name: &str,
@@ -15236,6 +15330,12 @@ pub(crate) fn build_forge_agent_run_argv(
     version: &str,
     mode: ForgeAgentMode,
     debug: bool,
+    // ORDER 1021-hf9e. The FIRST pass moved the env read out of the two arg
+    // builders and into THIS function's body, which left it still inside a
+    // function eight tests call — so forge_credential_quarantine_mounts_present
+    // kept failing in 2 of 10 parallel runs. Moving a global read one level up
+    // is not removing it. It is now the caller's to resolve.
+    host_mount: bool,
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
@@ -15270,6 +15370,7 @@ pub(crate) fn build_forge_agent_run_argv(
         version,
         mode,
         debug,
+        host_mount,
     ));
     argv
 }
@@ -15453,6 +15554,8 @@ fn run_forge_agent_cli_mode(
         debug,
         provider_vault_secret,
         prompt,
+        // ORDER 1021-hf9e: read the process env HERE, in the production lane.
+        forge_uses_host_mount(),
     );
 
     let rt = podman_runtime()?;
@@ -15599,6 +15702,9 @@ pub(crate) fn launch_forge_agent(
             VERSION.trim(),
             mode,
             debug,
+            // ORDER 1021-hf9e: the process env is read HERE, in the production
+            // launcher, and nowhere a test can reach concurrently.
+            forge_uses_host_mount(),
         )
     };
 
@@ -17954,23 +18060,6 @@ mod tests {
     /// secondary failures that bury the defect which caused them.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
-    /// lifetime, on its own dedicated mutex, restoring on drop. The forge
-    /// arg-builder family reaches `vault_bootstrap::container_running` (via
-    /// `read_provider_api_key`), which resolves podman — bare resolution in a
-    /// parallel test run is the race that stopped the live enclave. /bin/false
-    /// makes the vault probe a deterministic "not running" (the no-vault
-    /// builder path these hermetic tests mean to exercise anyway).
-    ///
-    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
-    /// env_guard, consistently — a consistent order cannot deadlock.
-    /// EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
-    /// THIS mutex, taken before env_lock/env_guard — the fake-podman tests
-    /// hold it via `podman_seam_lock()` while their TestEnvRestore manages
-    /// the value. A writer outside the lock reintroduces the mid-test
-    /// var-drop this exists to end.
-    static PODMAN_SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     /// ORDER 1119-w2rj. `set_current_dir` is PROCESS-GLOBAL and Rust runs tests
     /// as threads in one process, so a test that moves the CWD races every other
     /// test that touches a relative path. Serialised the same way ENV_LOCK
@@ -17978,8 +18067,26 @@ mod tests {
     /// directory must hold this and restore the original before releasing it.
     static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// ORDER 880-tdwn: pin the podman seam to /bin/false for a test's
+    /// lifetime, restoring on drop. The forge arg-builder family reaches
+    /// `vault_bootstrap::container_running` (via `read_provider_api_key`),
+    /// which resolves podman — bare resolution in a parallel test run is the
+    /// race that stopped the live enclave. /bin/false makes the vault probe a
+    /// deterministic "not running" (the no-vault builder path these hermetic
+    /// tests mean to exercise anyway).
+    ///
+    /// EVERY writer of TILLANDSIAS_PODMAN_BIN ANYWHERE IN THIS CRATE
+    /// serialises on the canonical `runtime_assets::podman_seam_lock`, which
+    /// this delegates to. It used to be a private `PODMAN_SEAM_LOCK` static
+    /// living in this tests mod — which is exactly why the invariant could say
+    /// "every writer in this tests mod" and be TRUE AS WRITTEN while
+    /// `accel_probe` repointed the same var under a mutex of its own. The
+    /// scope of the guarantee was the bug, not its wording.
+    ///
+    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
+    /// env_guard, consistently — a consistent order cannot deadlock.
     fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
-        PODMAN_SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+        crate::runtime_assets::podman_seam_lock()
     }
 
     fn podman_false_seam() -> PodmanFalseSeam {
@@ -18227,6 +18334,33 @@ mod tests {
     /// mount changed — goes red here.
     #[test]
     fn nix_cache_launch_args_parity_is_two_sided() {
+        // ORDER 1235-b5sf. THIS TEST READS $HOME TWICE AND COMPARES THE RESULTS.
+        //
+        // Once below, to build `script_args` from the shell script's variable
+        // table, and again inside `build_nix_cache_run_args` (:5503), which
+        // derives the same paths for the Rust side. Two reads of a
+        // process-global that a neighbouring test mutates — so a writer landing
+        // between them makes the two sides disagree about a value neither side
+        // is testing, and the parity assertion fails on a difference it did not
+        // introduce.
+        //
+        // MEASURED on yoga 2026-09-16 BEFORE this line existed: 16 failures in
+        // 30 runs against `nvidia_cdi_available_honors_user_config_dir`, whose
+        // temp HOME (`/tmp/tilland-cdi-<pid>`) appeared in the Rust side of the
+        // diff while the real HOME appeared in the script side. It also reded a
+        // land gate on this host, having passed the attempt 20 minutes earlier.
+        //
+        // `env_lock()` IS THE RIGHT LOCK AND `env_guard()` IS NOT ENOUGH. There
+        // are two distinct mutexes here: ENV_LOCK (:18115, reached by
+        // env_guard, 7 call sites) and the canonical crate-wide lock (:20001,
+        // delegating to runtime_assets::env_lock, whose own comment says "two
+        // independent locks serialise nothing" — order 434 unified them once
+        // already). Every one of the 7 env_guard callers ALSO takes env_lock,
+        // so the canonical lock is the one every HOME writer in this binary
+        // holds, and taking it is what makes a READER safe. Taking env_guard
+        // instead would serialise this against seven writers and leave it
+        // racing the rest.
+        let _env = env_lock();
         let script_path = concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../scripts/nix-cache-service.sh"
@@ -20106,6 +20240,7 @@ mod tests {
             "1.2.3",
             ForgeAgentMode::Maintenance,
             true,
+            false,
         );
 
         assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
@@ -20520,6 +20655,7 @@ mod tests {
                 "1.2.3",
                 mode,
                 false,
+                false,
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -20595,6 +20731,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
+            false,
             false,
         );
 
@@ -20693,6 +20830,7 @@ mod tests {
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            false,
         );
 
         let mut found_ssh = false;
@@ -20771,6 +20909,7 @@ mod tests {
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            false,
         );
         let joined = argv.join(" ");
         assert!(
@@ -20804,6 +20943,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
+            false,
             false,
         );
         let joined = argv.join(" ");
@@ -20861,6 +21001,7 @@ mod tests {
             "0.2.260518",
             ForgeAgentMode::Claude,
             true,
+            false,
         );
         eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
         for (i, a) in argv.iter().enumerate() {
@@ -22869,6 +23010,7 @@ mod tests {
             false,
             None,
             Some("delegated codex"),
+            false,
         );
         for (lane, args) in [("opencode", opencode), ("codex", codex)] {
             assert!(
@@ -22980,6 +23122,7 @@ mod tests {
             false,
             None,
             None,
+            false,
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23019,6 +23162,7 @@ mod tests {
             false,
             None,
             None,
+            false,
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23119,6 +23263,7 @@ mod tests {
             false,
             None,
             None,
+            false,
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -24334,6 +24479,7 @@ esac
             "1.2.3",
             ForgeAgentMode::Codex,
             false,
+            false,
         );
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
@@ -24369,6 +24515,7 @@ esac
                 false,
                 Some("provider-forge-lease"),
                 None,
+                false,
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -24395,6 +24542,7 @@ esac
                 false,
                 Some("must-not-mount"),
                 None,
+                false,
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
@@ -24425,6 +24573,7 @@ esac
             false,
             Some("codex-forge-lease"),
             Some(prompt),
+            false,
         );
         assert!(
             has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
@@ -24449,6 +24598,7 @@ esac
             false,
             Some("codex-forge-lease"),
             None,
+            false,
         );
         assert!(
             has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
@@ -24519,8 +24669,9 @@ esac
             (ForgeAgentMode::Antigravity, "antigravity"),
             (ForgeAgentMode::Maintenance, "terminal"),
         ] {
-            let args =
-                build_forge_agent_run_args(&project, "alpha", None, &certs, "1.2.3", mode, false);
+            let args = build_forge_agent_run_args(
+                &project, "alpha", None, &certs, "1.2.3", mode, false, false,
+            );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
                 has_arg(&args, &identity),
@@ -24580,6 +24731,7 @@ esac
             "1.2.3",
             ForgeAgentMode::Codex,
             true,
+            false,
         );
 
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
@@ -24620,6 +24772,7 @@ esac
                 &PathBuf::from("/tmp/ca"),
                 "1.2.3",
                 mode,
+                false,
                 false,
             );
             assert!(
@@ -24910,129 +25063,6 @@ esac
         );
     }
 
-    /// ORDER 759-vceg, SECOND DEFECT. THE NO-UPSTREAM ARM MUST REFUSE, NOT
-    /// PRINT AND CONTINUE.
-    ///
-    /// `Some(owner_repo)` probes and propagates its refusal with `?`. `None` —
-    /// STRICTLY LESS INFORMED, because no repository was probed at all —
-    /// printed a NOTE with `eprintln!` and fell through to the Vault write. The
-    /// stricter case was guarded and the least-informed case was not, and the
-    /// printed NOTE made the state look handled.
-    ///
-    /// MEASURED, not hypothetical: the operator ran `--github-login` as root
-    /// from /root on esmeraldinha, saw that NOTE, and the login reported
-    /// success. The token was seeded unverified and the push stayed 403.
-    ///
-    /// Asserted on the arm's own body, the same way
-    /// `the_push_authorization_gate_runs_before_the_vault_write` above asserts
-    /// its ordering property — and weaker than executing the path for the same
-    /// reason recorded there: the arm sits downstream of vault bootstrap and a
-    /// full container preflight, so a stubbed podman dies long before it.
-    ///
-    /// THE SCOPE CONTROL IS THE SECOND HALF. Finding "return Err" somewhere in
-    /// a 900-line function proves nothing, so the window is narrowed to the
-    /// None arm itself and checked to be the arm rather than its neighbours.
-    #[test]
-    fn the_no_upstream_arm_refuses_instead_of_seeding_unverified() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
-
-        let none_at = body
-            .find("        None => {")
-            .expect("run_provider_login must still have a no-upstream arm");
-        let arm = &body[none_at..];
-        let arm_end = arm
-            .find("\n        }")
-            .expect("the None arm must be delimited");
-        let arm = &arm[..arm_end];
-
-        // SCOPE CONTROL: this really is the no-upstream arm and not some other
-        // `None =>` that drifted above it.
-        assert!(
-            arm.contains("no GitHub upstream is configured"),
-            "the window is not the no-upstream arm; the assertion below would \
-             prove nothing about it: {arm}"
-        );
-
-        assert!(
-            arm.contains("return Err("),
-            "the no-upstream arm must REFUSE. Printing a note and continuing \
-             seeds a credential with no evidence it can push — the exact state \
-             759-vceg exists to prevent, and it shipped once: {arm}"
-        );
-        assert!(
-            !arm.contains("eprintln!"),
-            "a NOTE printed beside a fall-through is what made this look \
-             handled; the refusal must be the arm's only outcome: {arm}"
-        );
-    }
-
-    /// ORDER 759-vceg. THE GATE MUST SIT BETWEEN AUTHENTICATION AND
-    /// PERSISTENCE, and that is an ORDERING property no unit test on the pure
-    /// verdict can see.
-    ///
-    /// The decision functions are covered and mutation-tested elsewhere in this
-    /// file. What they cannot show is that `run_provider_login` actually calls
-    /// them, and calls them BEFORE writing the token to Vault. Move the vault
-    /// write above the probe and every one of those tests still passes while
-    /// the defect returns in full: a token that cannot push, seeded anyway.
-    ///
-    /// Asserted on the function's own body, the same way
-    /// `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` asserts its
-    /// architectural invariant. This is weaker than executing the path and is
-    /// not pretending otherwise — see the packet's event for why executing it
-    /// hermetically is not cheap: the gate sits downstream of vault bootstrap
-    /// and a full container preflight, so a stubbed podman dies at vault
-    /// preflight long before reaching it.
-    #[test]
-    fn the_push_authorization_gate_runs_before_the_vault_write() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
-
-        let verdict_at = body.find("github_push_authorization_verdict").expect(
-            "run_provider_login must CALL the push-authorization verdict — \
-                     a decision function nothing invokes is the 759-vceg defect itself",
-        );
-        let probe_at = body
-            .find("github_push_authorization_probe_args")
-            .expect("run_provider_login must build the in-container probe");
-        let vault_write_at = body
-            .find("vault-cli.sh write-stdin")
-            .expect("run_provider_login must still contain the vault write");
-
-        assert!(
-            probe_at < verdict_at,
-            "the probe must run before its verdict is judged"
-        );
-        assert!(
-            verdict_at < vault_write_at,
-            "the push-authorization verdict must be reached BEFORE the token is \
-             written to Vault. Persisting first and checking after re-creates the \
-             exact defect: a token that authenticates, cannot push, and is seeded \
-             anyway — surfacing hours later at the first push (759-vceg)."
-        );
-    }
-
-    /// NEGATIVE CONTROL for the ordering test above: the window it inspects must
-    /// actually be `run_provider_login`'s body and not the whole file, or the
-    /// assertion would hold no matter where those calls lived.
-    #[test]
-    fn the_login_source_window_is_scoped_to_one_function() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
-        assert!(
-            body.len() < source.len() / 4,
-            "the window is not scoped to a function: {} of {} bytes",
-            body.len(),
-            source.len()
-        );
-        assert!(
-            !body.contains("fn github_push_authorization_verdict"),
-            "the window has swallowed the helper DEFINITIONS, so finding their \
-             names inside it would prove nothing about the call site"
-        );
-    }
-
     /// The NEGATIVE CONTROL for the test above, and the reason it cannot simply
     /// assert "always set TERM": a prompt-driven Codex run deliberately does NOT
     /// claim a TTY, because podman refuses with "input device is not a TTY" when
@@ -25054,7 +25084,8 @@ esac
             ForgeAgentMode::Codex,
             false,
             None,                 // vault_secret
-            Some("do the thing"), // prompt — this is the arg that matters
+            Some("do the thing"), // prompt — this is the arg that matters,
+            false,
         );
         assert!(
             !has_arg(&args, "--tty"),
@@ -25189,8 +25220,14 @@ esac
         std::fs::create_dir_all(cache.parent().unwrap()).expect("mkdir cache dir");
         std::fs::write(&cache, "ssh-ed25519 AAAATESTCAKEY host-ca\n").expect("write cache");
 
-        let path = write_forge_gitconfig("laneproj", Some("abc123mid"), Some(&proj), None)
-            .expect("config written");
+        let path = write_forge_gitconfig(
+            "laneproj",
+            Some("abc123mid"),
+            Some(&proj),
+            None,
+            temp.path(),
+        )
+        .expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
 
         assert!(
@@ -25271,8 +25308,8 @@ esac
             .current_dir(&proj)
             .status();
 
-        let path =
-            write_forge_gitconfig("noca", Some("abc123mid"), Some(&proj), None).expect("config");
+        let path = write_forge_gitconfig("noca", Some("abc123mid"), Some(&proj), None, temp.path())
+            .expect("config");
         let text = std::fs::read_to_string(&path).expect("read");
         assert!(
             text.contains("SSH push lane ENABLED but NOT wired"),
@@ -25374,8 +25411,8 @@ esac
             return; // no git binary on this host; the resolver test covers the rest
         }
 
-        let path =
-            write_forge_gitconfig("local-only", None, Some(&proj), None).expect("config written");
+        let path = write_forge_gitconfig("local-only", None, Some(&proj), None, temp.path())
+            .expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
         assert!(
             !text.contains("[url "),
@@ -25437,12 +25474,22 @@ esac
             String::from_utf8_lossy(&status.stderr)
         );
 
-        // Store original HOME so we can restore it.
-        let orig_home = std::env::var("HOME").ok();
-        // SAFETY: single-threaded test, no concurrent env reads.
-        unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
+        // ORDER 1021-hf9e: THIS TEST NO LONGER TOUCHES HOME. It used to set the
+        // process-global purely to redirect where write_forge_gitconfig writes;
+        // that destination is now a parameter, so the redirect needs no global.
+        //
+        // The comment that stood here said "SAFETY: single-threaded test, no
+        // concurrent env reads". That was FALSE and is part of why this lasted:
+        // cargo runs this suite's tests CONCURRENTLY IN ONE PROCESS, so the
+        // write was visible to every other test in flight.
 
-        let result = write_forge_gitconfig("test-project", None, Some(&project_path), None);
+        let result = write_forge_gitconfig(
+            "test-project",
+            None,
+            Some(&project_path),
+            None,
+            &tillandsias_core::cache_root::cache_root_from(None, Some(tmp.path().to_path_buf())),
+        );
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let config_path = result.unwrap();
 
@@ -25487,13 +25534,6 @@ esac
             config_path.ends_with("test-project.config"),
             "config filename should end with project name"
         );
-
-        // Restore original HOME.
-        // SAFETY: single-threaded test, no concurrent env reads.
-        match orig_home {
-            Some(h) => unsafe { std::env::set_var("HOME", h) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
     }
 
     #[test]
@@ -25525,11 +25565,22 @@ esac
             .expect("git remote add");
         assert!(status.status.success(), "git remote add failed");
 
-        let orig_home = std::env::var("HOME").ok();
-        // SAFETY: single-threaded test, no concurrent env reads.
-        unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
+        // ORDER 1021-hf9e: THIS TEST NO LONGER TOUCHES HOME. It used to set the
+        // process-global purely to redirect where write_forge_gitconfig writes;
+        // that destination is now a parameter, so the redirect needs no global.
+        //
+        // The comment that stood here said "SAFETY: single-threaded test, no
+        // concurrent env reads". That was FALSE and is part of why this lasted:
+        // cargo runs this suite's tests CONCURRENTLY IN ONE PROCESS, so the
+        // write was visible to every other test in flight.
 
-        let result = write_forge_gitconfig("ssh-test", None, Some(&project_path), None);
+        let result = write_forge_gitconfig(
+            "ssh-test",
+            None,
+            Some(&project_path),
+            None,
+            &tillandsias_core::cache_root::cache_root_from(None, Some(tmp.path().to_path_buf())),
+        );
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let contents =
             std::fs::read_to_string(result.as_ref().unwrap()).expect("read forge gitconfig");
@@ -25546,10 +25597,6 @@ esac
         );
 
         // SAFETY: single-threaded test, no concurrent env reads.
-        match orig_home {
-            Some(h) => unsafe { std::env::set_var("HOME", h) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
     }
 
     // Pins the git-less-host fallback for the mirror insteadOf injection
@@ -25557,6 +25604,102 @@ esac
     // the Command::new("git") path returns None and the wire lane lost its
     // push channel). The parser must read a plain clone's config without
     // shelling out.
+    /// ORDER 1211-34v6. The refusal must not advertise a remedy that does
+    /// nothing, and must not go silent either.
+    ///
+    /// The old text told a stuck operator to set TILLANDSIAS_PROJECT_REMOTE_URL.
+    /// The resolver this check uses reads `git config` and .git-pointer files
+    /// and never consults the environment, so that advice returned the operator
+    /// to the same refusal — measured on yolanda's Windows host 2026-09-15,
+    /// where every tray login reached this arm regardless of the token.
+    ///
+    /// This asserts three things, and the third is why the test exists: the
+    /// working remedy is NAMED, the tray's inability to satisfy it is STATED
+    /// (otherwise an operator retries the lane that cannot work), and the env
+    /// var is never offered as a fix. The var may still be MENTIONED — the text
+    /// explains why it does not help — so the assertion is about the advice,
+    /// not about the string's presence.
+    #[test]
+    fn github_login_refusal_names_a_remedy_that_works() {
+        let msg = github_login_no_upstream_refusal(
+            "WHAT WAS CHECKED: /probe/dir — no git origin was found there.",
+        );
+        assert!(
+            msg.contains("from the CLI") && msg.contains("checkout"),
+            "the refusal must name the CLI-from-a-checkout lane: {msg}"
+        );
+        assert!(
+            msg.contains("TRAY'S LOGIN CANNOT SATISFY THIS"),
+            "the refusal must say the tray lane cannot satisfy it, or an operator retries it forever: {msg}"
+        );
+        assert!(
+            msg.contains("does NOT help"),
+            "if TILLANDSIAS_PROJECT_REMOTE_URL is mentioned it must be marked inert, never offered: {msg}"
+        );
+        assert!(
+            !msg.contains("or set TILLANDSIAS_PROJECT_REMOTE_URL"),
+            "the inert remedy must not return: {msg}"
+        );
+    }
+
+    /// ORDER 1215-xazj, criterion 4: the refusal STATES ITS SUBJECT.
+    ///
+    /// REGIME: pure string assertion over the refusal builder. No host state,
+    /// no filesystem, no wall clock, and deliberately no absolute timestamp —
+    /// the text is a function of its argument only.
+    ///
+    /// WHY THIS IS A SEPARATE TEST from the remedy pin above: that one asserts
+    /// the refusal names a way FORWARD. This one asserts it names what it
+    /// LOOKED AT. A refusal can do the first perfectly and still leave an
+    /// operator unable to tell which directory was consulted, which is exactly
+    /// what happened — three hosts spent a day establishing that the process
+    /// CWD was the only variable, a fact the probe held the whole time.
+    #[test]
+    fn github_login_refusal_states_the_subject_it_examined() {
+        let absent = github_login_no_upstream_refusal(
+            "WHAT WAS CHECKED: /var/home/x/src/p — no git origin was found there.",
+        );
+        assert!(
+            absent.contains("/var/home/x/src/p"),
+            "the refusal must name the directory it resolved from: {absent}"
+        );
+        assert!(
+            absent.contains("no git origin was found"),
+            "the refusal must say what it found there: {absent}"
+        );
+
+        // THE DECISION, not the formatting. These call the SUBJECT BUILDER with
+        // the inputs the call site gives it, so a caller that collapses the two
+        // cases is visible here. Asserting over subjects the test itself wrote
+        // could only check interpolation — measured: a mutation collapsing the
+        // two arms left that version of this test green.
+        let no_origin = github_login_probe_subject("/var/home/x/src/p", None);
+        let foreign_origin =
+            github_login_probe_subject("/var/home/x/src/p", Some("https://gitlab.example/x.git"));
+        assert!(
+            no_origin.contains("no git origin was found"),
+            "an absent origin must say so: {no_origin}"
+        );
+        assert!(
+            foreign_origin.contains("gitlab.example") && foreign_origin.contains("not a GitHub"),
+            "a non-GitHub origin must be quoted back and named as such: {foreign_origin}"
+        );
+        assert!(
+            !foreign_origin.contains("no git origin was found"),
+            "a checkout WITH an origin must never be reported as absence: {foreign_origin}"
+        );
+        assert_ne!(
+            no_origin, foreign_origin,
+            "an absent origin and a non-GitHub origin are different diagnoses and must not \
+             produce the identical subject line"
+        );
+        // And both must survive into the refusal an operator actually reads.
+        assert!(
+            github_login_no_upstream_refusal(&foreign_origin).contains("gitlab.example"),
+            "the subject must reach the refusal text, not stop at the builder"
+        );
+    }
+
     #[test]
     fn parse_gitdir_origin_url_reads_plain_clone_config() {
         let tmp = tempfile::tempdir().expect("temp dir");
@@ -25708,6 +25851,10 @@ esac
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            // ORDER 1021-hf9e: host_mount, passed EXPLICITLY. This test is about
+            // the opt-in host-mount lane, and it used to say so by setting a
+            // process-global that every concurrently-running test could read.
+            true,
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
@@ -25784,6 +25931,8 @@ esac
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
+            // ORDER 1021-hf9e: host_mount — this whole test exercises the opt-in lane.
+            true,
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
@@ -26031,7 +26180,12 @@ esac
     #[test]
     fn hot_src_tmpfs_is_clone_only_never_over_the_host_mount() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let window = source_window(source, "let host_mount = forge_uses_host_mount();");
+        // ORDER 1021-hf9e: the env read moved OUT of the builder and into the
+        // production call sites, so the builder now receives `host_mount` as a
+        // parameter. Anchor on the builder's own signature instead; the
+        // property this test pins — clone-only never binds over the host mount —
+        // lives in the builder, not at the call site that resolved the flag.
+        let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
 
         let call = window
             .find("forge_hot_src_tmpfs(project_name)")
@@ -26421,7 +26575,7 @@ esac
         std::env::set_current_dir(temp.path()).expect("enter temp cwd");
         // The cloud lane resolved this; it is what the forge must be told.
         let resolved = "https://github.com/example/REAL-CLOUD-REPO.git";
-        let written = write_forge_gitconfig("strayproj", None, None, Some(resolved));
+        let written = write_forge_gitconfig("strayproj", None, None, Some(resolved), temp.path());
         std::env::set_current_dir(&original).expect("restore cwd");
 
         let path = written.expect("config written");
@@ -26445,8 +26599,13 @@ esac
         // nothing.
         let original = std::env::current_dir().expect("cwd");
         std::env::set_current_dir(temp.path()).expect("enter temp cwd");
-        let prefix_shaped =
-            write_forge_gitconfig("strayproj", None, Some(Path::new("strayproj")), None);
+        let prefix_shaped = write_forge_gitconfig(
+            "strayproj",
+            None,
+            Some(Path::new("strayproj")),
+            None,
+            temp.path(),
+        );
         std::env::set_current_dir(&original).expect("restore cwd");
         let control_text =
             std::fs::read_to_string(prefix_shaped.expect("control config")).expect("read control");
@@ -26464,7 +26623,10 @@ esac
     /// decoy planted here has to be ignored without any CWD gymnastics.
     #[test]
     fn cloud_mode_gitconfig_with_no_resolved_origin_states_the_cloud_reason() {
-        let path = write_forge_gitconfig("nocloudorigin", None, None, None)
+        // ORDER 1021-hf9e: its own root, so this test writes nowhere another
+        // test can redirect and needs no process-global of its own.
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = write_forge_gitconfig("nocloudorigin", None, None, None, temp.path())
             .expect("config written even with no redirect");
         let text = std::fs::read_to_string(&path).expect("read config");
         assert!(
@@ -27972,6 +28134,7 @@ esac
             false,
             None,
             None,
+            false,
         );
 
         let args_str = args.join(" ");

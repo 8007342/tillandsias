@@ -1,0 +1,63 @@
+# Gate step 1252-znbn — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. run-litmus-test.sh opens a critical_path item ONLY on
+# `- step: "..."`. An item opened by any other key — `- name:`, measured on
+# macuahuitl 2026-09-18 — matches no branch, falls through the parser's elif
+# chain, and its `command:`/`timeout_ms:`/`expected_behavior:` keys OVERWRITE
+# the step already in progress. The item merges BACKWARDS into its predecessor,
+# later keys win, and a two-item file yields one unlabelled step that can never
+# pass. `- step:` with an unquoted name falls through identically.
+#
+# WHY NOTHING CAUGHT IT. Every observable said fine. The YAML is well-formed,
+# so ./build.sh --check's metadata validator passes the file. The runner prints
+# a step count that silently omits the merged item and exits 0. MEASURED on the
+# pre-fix runner against a two-item file:
+#
+#     ok:litmus-parseable:<file>:1 step(s)      rc=0
+#
+# Two items in, one step out, green. A step that was LOST and a step that was
+# NEVER WRITTEN produce identical output, so no reader downstream — human or
+# gate — can tell them apart. That is why this needs a guard and not a
+# convention about how to write YAML.
+#
+# THE TEETH ARE ARMS 1 AND 3. Arm 1 pins the refusal and requires it to NAME the
+# offending key, because "parse error" alone sends the author looking at their
+# YAML syntax, which is valid. Arm 3 is the mutation control and it was RUN, not
+# assumed: it neuters the collection line, reruns the same two-item file, and
+# requires the pre-fix `1 step(s)` / exit 0 to come back. Arms 2 and 4 are
+# regression guards — the unquoted-name case, and a valid two-item file still
+# parsing as exactly 2 steps.
+#
+# ARM 4 ASSERTS THE COUNT, NOT THE EXIT CODE, deliberately. The defect being
+# guarded produces a GREEN exit with a wrong count, so an arm checking only rc
+# would pass against the very bug it exists to catch.
+#
+# ARM 3 FAILS LOUDLY WHEN IT CANNOT MUTATE rather than skipping. Its first
+# version used `sed 's|...|...|'` on a line that itself contains `|`; the
+# substitution silently did nothing and the arm reported that it had proved
+# nothing. A mutation arm that cannot mutate must refuse, or it is a green light
+# for a guard that was never exercised.
+#
+# SAFE BY MEASUREMENT, NOT BY ASSUMPTION. Across openspec/litmus-tests: 435
+# files, 2514 critical_path items, ALL opened by `- step:` and ALL with
+# double-quoted names — so the refusal cannot redden the existing corpus. The
+# whole corpus was then run through `--parse-only` on the pre-fix and post-fix
+# runners and the verdict lines are BYTE-IDENTICAL, all 423 ok files and every
+# step count, with the same 12 pre-existing failures (9 no-parseable-steps,
+# 3 command-not-extractable) unchanged. This step adds a refusal for a shape the
+# corpus does not currently contain.
+#
+# COST, MEASURED HERE 2026-09-18: 0.24 / 0.25 / 0.24 s. It is parse-only — no
+# compile, no container, no network. That median is inside the fast-refusal
+# lane's admission rule (under one second, order 1009-gccx) and this step would
+# be a reasonable candidate to move there, where it would refuse before any
+# compile rather than after; it is placed in the ordinary lane here only because
+# moving it is a separate change to a different file.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking a litmus critical_path item cannot merge into its predecessor (1252-znbn)"
+STEP_SCRIPT="scripts/test-litmus-item-opener-refused.sh"
+STEP_ERROR="a critical_path item opened by a key other than 'step:' merges backwards into the previous step and the file silently loses a step (1252-znbn) — read which arm failed above; arm 3 failing means the guard itself is no longer exercised"
+STEP_OK="Litmus critical_path items cannot merge silently"

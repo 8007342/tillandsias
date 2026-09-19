@@ -121,6 +121,37 @@ refuse() {
     for line in "$@"; do echo "  $line" >&2; done
     echo "" >&2
     echo "  Push CI no longer exists. This hook is the trunk's only gate." >&2
+    # ORDER 1177-k4jq — NAME THE SANCTIONED UNGATED LANE, because until now the
+    # ONLY escape this refusal offered was the one the skill forbids.
+    #
+    # MEASURED on lenovinha 2026-09-14: two land attempts SIGKILLed for memory,
+    # the coordinator directed a relay, and `git push origin
+    # HEAD:refs/heads/work/1159-g96c` was refused for a stale stamp -- staled by
+    # the back-merge that same coordinator had just instructed. So the host was
+    # told to hand off, and the hand-off it was told to use demanded the very
+    # gate it had just been killed running. The escape hatch was unreachable
+    # from the state it exists for.
+    #
+    # THE LANE ALREADY EXISTED AND NOTHING POINTED AT IT. `salvage/` refs are
+    # exempt from this hook BY DESIGN (872-c9nd, section 0 below), and
+    # salvage-dirty-worktree.sh has covered the clean-but-stranded commit since
+    # 1146-8j7i. What was missing was a sentence here. A tool whose name
+    # describes its original case will not be found by someone in its extended
+    # case.
+    #
+    # THIS IS NOT A BYPASS, and the distinction is the whole point: a salvage
+    # ref moves nothing on trunk and is marked ungated by its own grammar, so
+    # the relaying host gates it on arrival. The exemption moves WHERE the gate
+    # runs, never WHETHER it runs. `--no-verify` would push an ungated tree to a
+    # branch that IS trunk with nothing marking it ungated, which is what the
+    # stamp exists to prevent -- so it stays last, and stays described as the
+    # override it is.
+    echo "  Cannot gate here at all (memory, credentials, a killed gate)? Hand the" >&2
+    echo "  work off UNGATED instead of overriding:" >&2
+    echo "    scripts/salvage-dirty-worktree.sh <slug>" >&2
+    echo "  pushes the commit to salvage/<host>/<date>-<slug>, which this hook exempts" >&2
+    echo "  by design (872-c9nd); the relaying host gates it there (1177-k4jq)." >&2
+    echo "  The work/<order> lane is the GATED hand-off and demands the stamp." >&2
     echo "  To override anyway: git push --no-verify" >&2
     echo "" >&2
     exit 1
@@ -153,13 +184,31 @@ refuse() {
 # 2026-08-24 retrospective checked; that is what "unusable safety net" looks
 # like from the outside: nothing fails, nothing is saved.
 _all_salvage=1
+_all_marker=1
 _any_ref=0
 _salvage_delete=""
 while read -r _l _ls _remote_ref _rs; do
     [[ -z "${_remote_ref:-}" ]] && continue
     _any_ref=1
     case "$_remote_ref" in
+        refs/tillandsias/*)
+            # COORDINATION MARKER REFS (order 1176-9vqn). refs/tillandsias/* is
+            # the namespace this fleet already uses for out-of-band signals the
+            # credential mirror publishes, and now for the release-freeze
+            # marker. They are not branches: no gate reads them, no release
+            # ships them, and the freeze marker points at a commit the remote
+            # already has, so setting one uploads nothing.
+            #
+            # THIS EXEMPTION IS LOad-BEARING, not a convenience. Without it the
+            # freeze tool's own push is gated by this hook, so declaring a
+            # freeze would require a green gate on the declaring host — which is
+            # exactly the host in the middle of a cut, and exactly the state
+            # where the stamp is busy. A freeze that cannot be declared without
+            # passing the gate it exists to protect is not a mechanism.
+            _all_salvage=0
+            ;;
         refs/heads/salvage/*)
+            _all_marker=0
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
             # deletions through with the same enthusiasm as rescues: during
             # 874-s8vf's bring-up a salvage ref was deleted with one command
@@ -172,9 +221,13 @@ while read -r _l _ls _remote_ref _rs; do
                 _salvage_delete="$_remote_ref"
             fi
             ;;
-        *) _all_salvage=0 ;;
+        *) _all_salvage=0; _all_marker=0 ;;
     esac
 done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
+    echo "${GRN}✓ local gate: coordination marker ref under refs/tillandsias/ — exempt by design (1176-9vqn); it is not a branch, no gate reads it and no release ships it${RST}" >&2
+    exit 0
+fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
     if [[ -n "$_salvage_delete" && "${TILLANDSIAS_SALVAGE_DELETE_OK:-0}" != "1" ]]; then
         refuse "deleting salvage ref $_salvage_delete — a salvage ref may be the ONLY copy of rescued work (874-w2gc)" \
@@ -294,6 +347,152 @@ _lane_scoped_diff() { # remote_sha local_sha -> "<status>\t<path>" lines
         git diff --name-status --no-renames "${c}^" "$c" -- 2>/dev/null
     done < <(git log --first-parent --no-merges --format=%H "${remote_sha}..${local_sha}" 2>/dev/null) \
         | LC_ALL=C sort -u
+}
+
+# ── ORDER 1152-y3bv: THE VALIDATOR SURFACE, NOT THE WHOLE CRATE ─────────────
+#
+# 1129-4su6's staleness check (plan_binary_is_stale, scripts/plan-binary-probe.sh)
+# compares the resolved plan binary's mtime against the WHOLE
+# crates/tillandsias-plan tree AND Cargo.lock — the whole workspace lock file,
+# fifteen sibling crates' dependency bumps included. esme measured 2026-09-14:
+# ANY Cargo.lock change anywhere in the workspace re-arms it, three ~2m22s
+# `cargo build --release -p tillandsias-plan` rebuilds in one cycle on a floor
+# host, none of which touched a byte this lane's own validation reads.
+#
+# What this lane actually RUNS is validate-yaml, yaml-type and `check
+# --strict-fragments` (plus the fragment checkers they shell out to). Their
+# implementation is found LIVE, not hardcoded, so a future split of main.rs
+# keeps naming the right file(s):
+#   grep -ln 'validate-yaml\|strict-fragments\|declared-closures-check\|closure-evidence-check' crates/tillandsias-plan/src/*.rs
+# Today that returns exactly crates/tillandsias-plan/src/main.rs.
+# crates/tillandsias-plan/Cargo.toml is included beside it because a
+# dependency version bump can change parsing/validation behaviour without
+# moving a single .rs byte.
+#
+# CARGO.LOCK IS SCOPED, NOT INCLUDED WHOLE: only the [[package]] stanzas for
+# this crate's DIRECT dependencies (read from crates/tillandsias-plan/Cargo.toml
+# by a human on 2026-09-14, not derived at check time — deriving the name list
+# from Cargo.toml would itself be a parse this bash gate would have to trust).
+# Scoping the FULL transitive closure was considered and rejected as
+# intractable here: it needs Cargo.lock's own dependency graph, which is the
+# parser this lane does not have and the reason 1129-4su6 hashed the whole
+# file in the first place. If Cargo.toml's [dependencies] table ever grows a
+# new entry, this list goes stale in the SAFE direction (a dependency quietly
+# not watched, same as today's total absence of lock-scoping) — never the
+# unsafe one (an unrelated crate's bump cannot look like ours moved).
+#
+# WHY THIS IS A DUPLICATE, NOT A SHARED FUNCTION. 1152-y3bv's owned-files list
+# is this file, scripts/check-plan-binary-current.sh and this packet's
+# fixture — no shared library file is in scope, and plan-binary-probe.sh
+# belongs to a different packet's concurrent edit. So the same computation is
+# defined here (the READER, consulted at push time) and in
+# scripts/check-plan-binary-current.sh (the WRITER, which mints the stamp
+# once it has independently confirmed — via the OLD, broader mtime check —
+# that the binary is current). scripts/test-plan-only-lane-structural.sh pins
+# that the two copies agree on the same input, so a drift between them fails
+# loudly instead of silently mis-scoring one side.
+_validator_surface_files() {
+    grep -ln 'validate-yaml\|strict-fragments\|declared-closures-check\|closure-evidence-check' \
+        crates/tillandsias-plan/src/*.rs 2>/dev/null
+    if [[ -f crates/tillandsias-plan/Cargo.toml ]]; then
+        echo crates/tillandsias-plan/Cargo.toml
+    fi
+}
+
+# Direct-dependency stanzas of Cargo.lock, one crate's [[package]] block at a
+# time — never the whole file. See the header comment above for why the list
+# is a literal rather than derived.
+_validator_surface_lock_stanzas() {
+    [[ -f Cargo.lock ]] || return 0
+    local _dep
+    for _dep in serde serde_yaml serde_json tillandsias-podman mlua tokio chrono; do
+        awk -v want="$_dep" '
+            /^\[\[package\]\]/ {
+                if (keep) printf "%s", blk
+                blk = $0 "\n"; keep = 0
+                next
+            }
+            { blk = blk $0 "\n" }
+            $0 == "name = \"" want "\"" { keep = 1 }
+            END { if (keep) printf "%s", blk }
+        ' Cargo.lock 2>/dev/null
+    done
+}
+
+# sha256sum (coreutils) or shasum -a 256 (stock macOS) — same portable
+# dispatch as scripts/gate-stamp.sh:147-160, duplicated for the reason in the
+# header comment above rather than sourced.
+_validator_surface_hash() {
+    local -a _sha_cmd=() _files=()
+    local _f
+    if command -v sha256sum >/dev/null 2>&1; then
+        _sha_cmd=(sha256sum)
+    elif command -v shasum >/dev/null 2>&1; then
+        _sha_cmd=(shasum -a 256)
+    else
+        return 1
+    fi
+    while IFS= read -r _f; do
+        [[ -n "$_f" ]] && _files+=("$_f")
+    done < <(_validator_surface_files)
+    [[ ${#_files[@]} -gt 0 ]] || return 1
+    {
+        for _f in ${_files[@]+"${_files[@]}"}; do
+            printf '%s\n' "$_f"
+            cat "$_f" 2>/dev/null
+            printf '\000'
+        done
+        _validator_surface_lock_stanzas
+    } | "${_sha_cmd[@]}" 2>/dev/null | cut -d' ' -f1
+}
+
+_validator_surface_stamp_path() { # $1 = binary path -> stamp file beside it
+    printf '%s.validator-surface-sha256\n' "$1"
+}
+
+# 0 = fresh (recorded stamp matches current sources)
+# 1 = stale (recorded stamp differs — the validator's own sources moved)
+# 2 = unknown (no stamp minted yet, or the hash could not be computed here)
+_validator_surface_verdict() { # $1 = binary path
+    local _bin="$1" _stamp _cur _stored
+    _stamp="$(_validator_surface_stamp_path "$_bin")"
+    [[ -f "$_stamp" ]] || return 2
+    _cur="$(_validator_surface_hash)" || return 2
+    [[ -n "$_cur" ]] || return 2
+    _stored="$(cat "$_stamp" 2>/dev/null)"
+    [[ -n "$_stored" ]] || return 2
+    [[ "$_stored" == "$_cur" ]] && return 0
+    return 1
+}
+
+# Wraps the verdict above with the pre-1152-y3bv mtime fallback, in the SAME
+# boolean sense plan_binary_is_stale uses (0 = stale, so this composes as
+# `... && _lane_staleness_check "$plan_bin"; then` exactly where the old
+# predicate sat). Sets _LANE_STALE_VIA so the refusal can say which path
+# judged it, which is the whole point: a change elsewhere in the crate or
+# workspace lock must reach the mtime fallback only when no surface stamp
+# exists yet — never override an actual surface-hash verdict.
+_lane_staleness_check() { # $1 = binary path
+    local _bin="$1" _rc
+    _validator_surface_verdict "$_bin"; _rc=$?
+    case $_rc in
+        0)
+            _LANE_STALE_VIA="validator-surface hash — unchanged since this binary was built (1152-y3bv)"
+            return 1
+            ;;
+        1)
+            _LANE_STALE_VIA="validator-surface hash — validate-yaml/check --strict-fragments/the fragment checkers' own sources changed since this binary was built (1152-y3bv); a change elsewhere in the crate or in the workspace Cargo.lock would NOT have triggered this"
+            return 0
+            ;;
+        *)
+            if plan_binary_is_stale "$_bin"; then
+                _LANE_STALE_VIA="mtime fallback — no validator-surface stamp recorded for this binary yet; run scripts/check-plan-binary-current.sh (or the full gate) once to mint one, and an unrelated crate/lock change stops re-arming this check (1152-y3bv)"
+                return 0
+            fi
+            _LANE_STALE_VIA="mtime fallback (fresh) — no validator-surface stamp recorded for this binary yet (1152-y3bv)"
+            return 1
+            ;;
+    esac
 }
 
 attempt_plan_only_lane() {
@@ -568,7 +767,60 @@ attempt_plan_only_lane() {
                     bases+=("")
                     ;;
                 *)
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/ (full gate required)" >&2
+                    # ORDER 1152-y3bv. A non-plan path is not automatically
+                    # this push's problem: the mandated pre-push merge of
+                    # origin/linux-next (methodology pull_merge_cadence) can
+                    # leave a non-plan path in the scoped outgoing diff whose
+                    # CONTENT is exactly what trunk already carries and gates.
+                    # Measured on macneo 2026-09-13: a one-line ledger claim
+                    # push was refused here purely because such a path showed
+                    # up in the diff, with nothing in it for this host to
+                    # vouch for that trunk had not already vouched for.
+                    #
+                    # So: a non-plan path whose PUSHED BLOB is byte-identical
+                    # to origin/linux-next's blob for that same path is
+                    # trunk's content, already gated there, and is DROPPED
+                    # from this push's obligations rather than refused. A
+                    # path that DIFFERS from trunk still refuses exactly as
+                    # before; this narrows what counts against the lane, and
+                    # never widens what the lane will accept once counted.
+                    #
+                    # THE CLAUSE "including one that does not exist on trunk at
+                    # all" WAS WRONG AND IS CORRECTED HERE. It conflated two
+                    # cases that are not alike: a path absent on trunk but
+                    # PRESENT in the push is new content nothing has gated and
+                    # must refuse, while a path absent on trunk AND absent in
+                    # the push is the two sides agreeing and must not. The
+                    # sentence as written described the bug as if it were the
+                    # design.
+                    #
+                    # AN AGREEING DELETION IS ALSO "DIFFERS FROM NOTHING".
+                    # The guard below originally required the path to EXIST on
+                    # trunk, so a path absent on BOTH sides — deleted on trunk
+                    # and deleted in this push, i.e. the two agree perfectly —
+                    # left _1152_trunk_blob empty, skipped the whole block, and
+                    # was refused. A tree byte-identical to trunk could not be
+                    # pushed, which blocks every platform branch'"'"'s
+                    # fast-forward.
+                    # ABSENT-ON-BOTH IS AGREEMENT and is dropped. Absent on
+                    # trunk but PRESENT in the push is NOT agreement and still
+                    # refuses — that is new content nothing has gated, and the
+                    # mutation arm in the test pins it.
+                    _1152_trunk_blob=""
+                    _1152_trunk_blob="$(git rev-parse --verify --quiet "refs/remotes/origin/linux-next:${path}" 2>/dev/null)" || true
+                    _1152_push_blob=""
+                    _1152_push_blob="$(git rev-parse --verify --quiet "${local_sha}:${path}" 2>/dev/null)" || true
+                    if [[ -z "$_1152_trunk_blob" && -z "$_1152_push_blob" ]]; then
+                        echo "plan-only lane: '$path' differs from nothing — absent on origin/linux-next AND absent in this push (an agreeing deletion); dropped from this push's obligations (1152-y3bv)" >&2
+                        continue
+                    fi
+                    if [[ -n "$_1152_trunk_blob" ]]; then
+                        if [[ -n "$_1152_push_blob" && "$_1152_trunk_blob" == "$_1152_push_blob" ]]; then
+                            echo "plan-only lane: '$path' differs from nothing — byte-identical to origin/linux-next, already gated there; dropped from this push's obligations (1152-y3bv)" >&2
+                            continue
+                        fi
+                    fi
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
                     return 1
                     ;;
             esac
@@ -699,7 +951,15 @@ attempt_plan_only_lane() {
     # resolving somewhere other than where the operator thinks is exactly how
     # the .exe stayed stale forever in plan-binary-probe.sh's own comments.
     # Refuse and name.
-    if [[ $needs_yaml -eq 1 && $have_plan -eq 1 ]] && plan_binary_is_stale "$plan_bin"; then
+    #
+    # ORDER 1152-y3bv NARROWS THE QUESTION ABOVE, and _lane_staleness_check
+    # (defined beside _validator_surface_* above) is where that narrowing
+    # lives: it tries the validator-surface stamp first and falls back to
+    # this exact plan_binary_is_stale predicate ONLY when no stamp has been
+    # minted for this binary yet — so a host that has never run
+    # scripts/check-plan-binary-current.sh sees no change here at all, and
+    # one that has stops re-arming on an unrelated crate or Cargo.lock change.
+    if [[ $needs_yaml -eq 1 && $have_plan -eq 1 ]] && _lane_staleness_check "$plan_bin"; then
         local _newer _fresher _ctd
         # ONE newer file, the newest — not a list. At 06:00 the unaffordable
         # thing is a question whose answer needs another tool, and a list is a
@@ -755,6 +1015,7 @@ attempt_plan_only_lane() {
         done
         echo "plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)" >&2
         echo "  resolved: $plan_bin" >&2
+        echo "  via:      ${_LANE_STALE_VIA:-mtime}" >&2
         [[ -n "$_newer" ]] && echo "  newer:    $_newer" >&2
         echo "  This lane validates the bytes you are pushing with the resolved binary, so a" >&2
         echo "  stale one can accept a fragment shape the current rules refuse (1129-4su6)." >&2
@@ -773,10 +1034,16 @@ attempt_plan_only_lane() {
                 echo "  quiet this message." >&2
             fi
         elif [[ -f scripts/with-wsl2-builder.sh ]] && grep -qi microsoft /proc/version 2>/dev/null; then
-            echo "  REMEDY: bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan" >&2
+            echo "  REMEDY: bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh" >&2
         else
-            echo "  REMEDY: cargo build --release -p tillandsias-plan" >&2
+            echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh" >&2
         fi
+        # ORDER 1152-y3bv: the second command above is not decoration. It
+        # rebuilds the ONE crate this lane needs and, being mtime-fresh right
+        # after that build, re-mints the validator-surface stamp in the same
+        # breath — so the NEXT plan-only push on this host does not pay a
+        # cargo build for a change that never touched validate-yaml,
+        # check --strict-fragments or the fragment checkers.
         return 1
     fi
 
@@ -1154,6 +1421,22 @@ attempt_plan_only_lane() {
         LANE_NOTES+=("scripts/check-no-base64-script-injection.sh absent — skipped")
     fi
 
+    # ORDER 1261-bn7v. A long-form field whose OUTGOING fold drops a line
+    # ORIGIN's fold carries is a silent deletion of another host's writing.
+    # set-field's own guard (1151-td46) cannot catch it: that guard compares
+    # against the fold the WRITING HOST HOLDS, and a peer's append this host has
+    # not fetched is invisible to it. The lane already fetches, so the lane is
+    # where the comparison can be made.
+    if [[ -f scripts/check-append-vs-origin-fold.sh ]]; then
+        if ! out="$(bash scripts/check-append-vs-origin-fold.sh 2>&1)"; then
+            echo "plan-only lane: validation FAILED — this push drops a line origin's fold carries (1261-bn7v):" >&2
+            echo "$out" | head -12 | sed 's/^/  /' >&2
+            return 1
+        fi
+    else
+        LANE_NOTES+=("scripts/check-append-vs-origin-fold.sh absent — skipped")
+    fi
+
     # ── Accept ────────────────────────────────────────────────────────────────
     echo "" >&2
     echo "plan-only lane: outgoing diff adds only new plan fragment files / append-only attestation-ledger records — accepting without the build stamp" >&2
@@ -1338,12 +1621,41 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                         | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt "'"$_gs"'" ] && printf "%s\n" "{}"' 2>/dev/null \
                         | head -12)"
                 fi
+                # ORDER 970-7fqk — NAME THE CAUSE ON THE AXIS THE DECISION USES.
+                # The staleness verdict is made on CONTENT (gate-stamp.sh
+                # compute hashes path+kind+mode+bytes). The list above is MTIME.
+                # They answer different questions, and both wrong directions
+                # were observed on 2026-09-02: an identical rewrite named as the
+                # cause, and a genuine digest-mover absent from the list. One
+                # host spent ~25 minutes and three extra gates concluding the
+                # CHECK was mtime-based, which it never was — the message taught
+                # a false mechanism and they designed against it.
+                _movers="$(bash "$REPO_ROOT/scripts/gate-stamp.sh" movers 2>/dev/null)"
+                _movers_rc=$?
+                if [[ "$_movers_rc" -eq 0 && -n "$_movers" ]]; then
+                    _mn="$(printf '%s\n' "$_movers" | wc -l | tr -d ' ')"
+                    _cause="CONTENT DIFFERS FROM THE STAMPED TREE (${_mn} path(s)) — THIS IS THE CAUSE:
+$(printf '%s\n' "$_movers" | head -12 | sed 's/^/  /')"
+                elif [[ "$_movers_rc" -eq 2 ]]; then
+                    # UNAVAILABLE IS NOT CLEAN. A stamp written before this order
+                    # carries no manifest, and saying nothing here would let the
+                    # mtime list below read as the cause again.
+                    _cause="CONTENT MOVERS COULD NOT BE COMPUTED: this stamp predates the
+  per-path manifest (970-7fqk), so the paths below are an MTIME signal only and
+  may name files that are not the cause. Re-running the gate writes a manifest."
+                else
+                    _cause="CONTENT DIFFERS FROM THE STAMPED TREE: no path's content differs,
+  so the digest moved for a reason the manifest cannot show — a mode change, a
+  symlink target, or a path set change. The mtime signal below is a hint only."
+                fi
                 if [[ -n "$_changed" ]]; then
                     _n="$(printf '%s\n' "$_changed" | wc -l | tr -d ' ')"
                     refuse "the tree changed since ./build.sh --check last passed" \
                            "The gate validated a different tree than the one you are pushing." \
                            "" \
-                           "CHANGED SINCE THE GATE RAN (${_n} path(s), newest-first by mtime):" \
+                           "$_cause" \
+                           "" \
+                           "RECENTLY WRITTEN (${_n} path(s) by mtime) — A LIVE-WRITER HINT, NOT THE CAUSE:" \
                            "$(printf '  %s\n' $_changed)" \
                            "" \
                            "IF ONE OF THOSE IS A BACKGROUND JOB STILL WRITING, re-running the" \
@@ -1373,6 +1685,122 @@ if [[ -f scripts/gate-stamp.sh ]]; then
             ;;
     esac
 fi
+
+# ── 2b. A live freeze on the target branch holds CODE pushes (order 1176-9vqn) ─
+#
+# A release freeze used to be announced in ledger prose and enforced by NOTHING.
+# MEASURED on yolanda during the v56.9.13.1 cut: a merge carrying a claim event
+# that itself read "code held until the all-clear" was followed by a 2476 s gate
+# and a push, and every check here passed, because none of them was about a
+# freeze. That push was harmless only because it went to windows-next, a branch
+# the release gate does not read. The same sequence aimed at linux-next would
+# have pushed code into the frozen branch with every check green, and the only
+# thing standing between those outcomes was which branch the host happened to be
+# on. Nothing in the system knew either way — not the hook, not the land tool,
+# not the person.
+#
+# THE WINDOW IS THE MECHANISM, which is why a discipline rule cannot cover this.
+# `./build.sh --check` runs 41 minutes on yolanda and longer on the floor. A
+# freeze declared at any point inside that window is invisible to a land that
+# checked before it started, and the land pushes on completion without
+# re-asking. So the check has to happen AT the push, against origin — a local
+# file is only as fresh as the last fetch, which reintroduces the same window
+# one layer down.
+#
+# PLAN-ONLY PUSHES ARE EXEMPT, DELIBERATELY: the plan lane is how coordination
+# keeps moving during a cut, and every host used it under the last freeze. The
+# exempt set below is the declared cut-freeze policy — hold crates/ and
+# scripts/ landings; plan, docs and skills are exempt — not the plan-only
+# lane's narrower path set.
+#
+# THE FETCH-FAILURE TRADE, decided here rather than inherited (the filing row
+# left it open on purpose): THIS FAILS OPEN, loudly. The check queries the SAME
+# remote the push is about to contact, seconds before it does, so if the query
+# cannot reach origin the push will not reach it either — failing closed adds no
+# protection in the case it exists to protect against, while making every
+# genuinely offline push impossible. The residual exposure is the narrow window
+# where ls-remote fails transiently but the push then succeeds; that is bounded
+# and recoverable (the cut re-gates), and strictly smaller than stranding work
+# on a host that cannot push at all, which is the failure that cost four hours
+# in 872-c9nd. The warning names the check so a host that sees it knows the
+# freeze was not consulted.
+_freeze_t() { # bounded, so a hung network cannot hang every push
+    local s="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then timeout "$s" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$s" "$@"
+    else "$@"; fi
+}
+
+_freeze_path_is_exempt() { # <path> -> 0 when a freeze does not hold it
+    case "$1" in
+        plan/*|docs/*|skills/*|cheatsheets/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+enforce_release_freeze() {
+    local remote="$1"
+    local local_ref local_sha remote_ref remote_sha branch p carries_code rc markers ref rest who when now age
+    [[ -n "$REFS" ]] || return 0
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -n "$local_ref" ]] || continue
+        [[ "$local_sha" =~ ^0+$ ]] && continue
+        case "$remote_ref" in refs/heads/*) branch="${remote_ref#refs/heads/}" ;; *) continue ;; esac
+        # Only trunk-shaped names can carry a marker; the ref name encodes
+        # host and epoch after the branch, so a slash would be ambiguous.
+        case "$branch" in */*) continue ;; esac
+
+        # Does this ref carry anything the freeze holds? A push with no usable
+        # base cannot be classified, and is treated as code — conservative, and
+        # it only matters when the branch is frozen at all.
+        carries_code=1
+        if [[ ! "$remote_sha" =~ ^0+$ ]] && git cat-file -e "$remote_sha" 2>/dev/null; then
+            carries_code=0
+            while IFS= read -r p; do
+                [[ -n "$p" ]] || continue
+                if ! _freeze_path_is_exempt "$p"; then carries_code=1; break; fi
+            done < <(git diff --name-only --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
+        fi
+        [[ "$carries_code" -eq 1 ]] || continue
+
+        rc=0
+        markers="$(_freeze_t 10 git ls-remote "$remote" "refs/tillandsias/freeze/$branch/*" 2>/dev/null)" || rc=$?
+        if [[ "$rc" -ne 0 ]]; then
+            echo "${YLW}⚠ release-freeze check could not reach '$remote' (rc=$rc) — NOT blocking on it${RST}" >&2
+            echo "  The push below talks to the same remote; if it succeeds, the freeze was never consulted (1176-9vqn)." >&2
+            continue
+        fi
+        [[ -n "$markers" ]] || continue
+
+        ref="$(printf '%s\n' "$markers" | head -1 | cut -f2)"
+        rest="${ref#refs/tillandsias/freeze/$branch/}"
+        who="${rest%%/*}"; when="${rest##*/}"
+        now="$(date -u +%s)"
+        case "$when" in ''|*[!0-9]*) age="unknown" ;; *) age="$((now - when))s" ;; esac
+        refuse "'$branch' is FROZEN and this push carries code (order 1176-9vqn)" \
+               "marker: $ref" \
+               "  on:    $remote" \
+               "  by:    $who" \
+               "  since: $when (age ${age})" \
+               "" \
+               "A cut is in progress and the release gate reads this branch. Plan-only" \
+               "pushes are exempt and still work — that is how coordination keeps moving" \
+               "during a cut; split the ledger records out and push those now." \
+               "" \
+               "The freeze clears itself at the cut's back-merge push. To read it:" \
+               "  scripts/release-freeze.sh status $branch" \
+               "If you are the coordinator and the cut is done:" \
+               "  scripts/release-freeze.sh clear $branch"
+    done <<EOF
+$REFS
+EOF
+}
+
+_freeze_remote="origin"
+if [[ -n "${1:-}" ]] && git remote 2>/dev/null | grep -qxF -- "$1"; then
+    _freeze_remote="$1"
+fi
+enforce_release_freeze "$_freeze_remote"
 
 # ORDER 1069-5sp4, SECOND HALF — A VALID STAMP CANNOT VOUCH FOR PLAN FRAGMENTS,
 # BECAUSE IT DELIBERATELY DOES NOT HASH THEM.

@@ -1118,6 +1118,28 @@ _run() {
     local _run_t0 _run_rc=0 _run_dt
     _run_t0="$(_now_ms)"
     (cd "$SCRIPT_DIR" && "$@") || _run_rc=$?
+    # ORDER 1176-fn2p — A CHILD THAT DIED ON A SIGNAL IS ASKED ABOUT, ONCE.
+    #
+    # 128+N is a signal death, and 137 (SIGKILL) is what the OOM killer leaves.
+    # The victim writes nothing, so without this the phase simply stops and the
+    # reader is left with a truncated log. Consulting the kernel here costs
+    # nothing on the normal path: this branch is unreachable unless a child has
+    # already died on a signal.
+    #
+    # IT CANNOT LAUNDER AN ORDINARY FAILURE (1176-fn2p's second negative
+    # control): a clippy error exits 101 and never reaches this branch, and even
+    # here the verdict comes from the kernel's own record, not from the rc.
+    if [ "$_run_rc" -ge 128 ]; then
+        local _oom_out _oom_rc
+        _oom_out="$(bash "$SCRIPT_DIR/scripts/check-oom-postmortem.sh" --since -30min 2>&1)"; _oom_rc=$?
+        case "$_oom_rc" in
+            1) _error "refused:gate:oom-killed — a child died on signal $(( _run_rc - 128 )) and the kernel records an OOM kill (1176-fn2p)"
+               printf '%s\n' "$_oom_out" >&2 ;;
+            0) _warn "a child died on signal $(( _run_rc - 128 )) and the kernel records NO OOM kill — this is not a memory kill (1176-fn2p)" ;;
+            *) _warn "a child died on signal $(( _run_rc - 128 )); the OOM record could not be read, so the cause is UNDETERMINED, not cleared (1176-fn2p)"
+               printf '%s\n' "$_oom_out" >&2 ;;
+        esac
+    fi
     _run_dt=$(( $(_now_ms) - _run_t0 ))
     [[ "$_run_dt" -ge 0 ]] || _run_dt=0
     _PHASE_WORK_MS=$(( _PHASE_WORK_MS + _run_dt ))
@@ -1149,6 +1171,29 @@ _run_litmus_phase() {
         --compact \
         "${phase_args[@]}" \
         "$@" 2>&1 | tee "$log_file"
+}
+
+# ORDER 1185-9qx6. Record a phase THIS script ran into the check-log index, as
+# part of the run id exported at the top of the ci-full dispatch, so
+# check-release-tier-freshness.sh can see a full tier was exercised.
+#
+# BEST-EFFORT BY CONSTRUCTION: a missing jq or an unwritable target/ costs a
+# record and never the gate that earned it. The inverse — failing a green
+# ci-full because its bookkeeping failed — would make the guard's own fix a
+# reason to bypass the tier, which is the shape 758-jw6v warns about.
+_record_ci_phase() {
+    local phase="$1" check_id="$2" status="$3" log="${4:-}"
+    [[ -n "${TILLANDSIAS_CI_RUN_ID:-}" ]] || return 0
+    [[ -x "$SCRIPT_DIR/scripts/record-ci-phase-result.sh" ]] || return 0
+    local out
+    if out="$("$SCRIPT_DIR/scripts/record-ci-phase-result.sh" \
+        "$TILLANDSIAS_CI_RUN_ID" "$phase" "$check_id" "$status" "$log" 2>&1)"; then
+        _info "$out"
+    else
+        _warn "Could not record the $phase phase in the check-log index: $out"
+        _warn "  The phase's own result above stands; only the release-tier freshness record is missing."
+    fi
+    return 0
 }
 
 # Record that a gate passed against THIS tree, for the pre-push hook to verify.
@@ -1343,6 +1388,19 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
         CI_ARG_LIST+=(--strict-all)
     fi
     if [[ "$FLAG_CI_FULL" == true ]]; then
+        # ORDER 1185-9qx6 — NAME THIS RUN, so the phases that run OUTSIDE
+        # local-ci.sh can be recorded as part of it. The pre-build gate below is
+        # the only phase local-ci.sh (the sole writer of
+        # target/convergence/check-logs.jsonl) sees; the post-build status smoke
+        # and the runtime residual litmus run from this script through
+        # run-litmus-test.sh and wrote no record at all. That is why
+        # check-release-tier-freshness.sh read `never:release-tier` after a GREEN
+        # ci-full on macuahuitl 2026-09-14 — every one of the index's 245 entries
+        # was ci_phase pre-build, so the FULL-tier run its 1174-6r4k rule requires
+        # could never come from the run it guards. Each phase records its own real
+        # status below; nothing here claims a phase that did not run.
+        TILLANDSIAS_CI_RUN_ID="${TILLANDSIAS_CI_RUN_ID:-local-ci-$(date -u +%Y%m%dT%H%M%SZ)}"
+        export TILLANDSIAS_CI_RUN_ID
         _step "Running full CI/CD validation (pre-build gate)..."
         _prepare_ci_full_install_inputs
         CI_ARGS=(--phase pre-build)
@@ -1444,7 +1502,13 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         if TILLANDSIAS_STATUS_CHECK_BIN="$INSTALL_BIN" \
             _run_litmus_phase post-build e2e /tmp/litmus-post-build.log; then
             _info "Post-build status smoke passed"
+            _record_ci_phase post-build post-build-status-smoke pass /tmp/litmus-post-build.log
         else
+            # RECORD THE RED BEFORE EXITING. The guard has a red channel
+            # (`red:release-tier:`) and it can only ever fire if a failing phase
+            # leaves a record; exiting silently would make every non-green tier
+            # run indistinguishable from one that never happened.
+            _record_ci_phase post-build post-build-status-smoke fail /tmp/litmus-post-build.log
             _error "Post-build status smoke failed"
             exit 1
         fi
@@ -1457,13 +1521,21 @@ if [[ "$FLAG_INSTALL" == true ]]; then
             if _run_litmus_phase runtime e2e /tmp/litmus-runtime.log; then
                 printf 'PASS\n' >"$RUNTIME_STATUS_FILE"
                 _info "Runtime residual litmus passed"
+                _record_ci_phase runtime runtime-residual-litmus pass /tmp/litmus-runtime.log
             else
                 printf 'FAIL\n' >"$RUNTIME_STATUS_FILE"
+                _record_ci_phase runtime runtime-residual-litmus fail /tmp/litmus-runtime.log
                 _error "Runtime residual litmus failed"
                 exit 1
             fi
         else
             printf 'SKIP\n' >"$RUNTIME_STATUS_FILE"
+            # A skipped runtime phase is recorded as skipped, not omitted. The
+            # run still covered the tier's shape (the reader's coverage rule
+            # counts the phase), and the verdict line it prints says `skip`, so a
+            # reader can tell "runtime was not exercised on this host" from
+            # "runtime passed" — which dropping the record would hide.
+            _record_ci_phase runtime runtime-residual-litmus skipped /tmp/litmus-runtime.log
             if [[ -f "$RUNTIME_STATUS_FILE" ]] && grep -q '^SKIP$' "$RUNTIME_STATUS_FILE"; then
                 _warn "Runtime residual litmus skipped (host Podman runtime unhealthy)"
             fi
@@ -1676,6 +1748,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
                     exit 1
                 fi
                 _info "Plan ledger check passed"
+                # ORDER 1142-85zx. plan/issues/*.md joined the fast lane, so the
+                # guard whose SUBJECT is that directory has to run here for the
+                # same reason the two above do: the exclusion and the guard cover
+                # the same paths in opposite directions, and a lane that skips
+                # the guard is how a change reaches trunk unvalidated.
+                #
+                # Measured on yoga: 11ms. This arm exists to be cheap, and a
+                # guard that costs a hundredth of a second is not the thing that
+                # makes it expensive — the whole memoised-plan arm is seconds.
+                if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+                    _error "a plan/issues record does not cite its subject as the convention requires (1142-85zx) — see the verdict above"
+                    exit 1
+                fi
+                _info "Issue citation convention check passed"
                 trap - EXIT
                 timing_emit build-check-memoized-plan check "$_CHECK_T0" 0 || true
                 exit 0
@@ -1747,6 +1833,45 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
+    # ORDER 1176-fn2p — CAN THIS HOST START THE EXPENSIVE PHASES AT ALL?
+    #
+    # A gate SIGKILLed for memory writes nothing: the log ends mid-line and a
+    # reader cannot tell an OOM from a hang, which need opposite responses (wait
+    # longer versus stop and hand off). Measured on lenovinha 2026-09-14: two
+    # land attempts killed in clippy strict+listen-vsock, no verdict, LAND_EXIT
+    # never set, and the 1047-h88p job cap ALREADY at its floor of one job --
+    # there is no rung below one, so the cap had nothing left to say.
+    #
+    # THIS IS A LEGIBILITY FLOOR, NOT A CAPACITY PREDICTOR, and the distinction
+    # is what keeps it from becoming a second cliff (1176-fn2p's first negative
+    # control). The default is 1 GiB available against yoga's measured 11-12 GiB
+    # at rest on a host that completes this gate routinely, so no host that
+    # would have finished is refused here. It catches the START state; the OOM
+    # post-mortem in _run catches the RUN state, which is the kind lenovinha hit.
+    #
+    # NOT A REFUSAL ON could-not-run. A host with no readable MemAvailable
+    # (darwin, a stripped container) gets exit 3 and is waved past with a note:
+    # refusing a gate because a probe could not read a file would be a capacity
+    # claim from an instrument that never looked (965-sxec).
+    # set -e-SAFE CAPTURE (macbookair, 2026-09-14, the 1175-wuwr class one day
+    # later): this file runs under `set -euo pipefail`, and a bare
+    # `_mem_out="$(…)"` whose probe exits 3 (darwin, a stripped container: no
+    # /proc/meminfo) ABORTED THE GATE at this line — the case below, written
+    # to wave exactly that host past, never ran, and every macOS land died at
+    # "Fast refusals…" with a 606-byte log that read as a killed child.
+    # `cmd || rc=$?` is the only capture that survives errexit; the consumer
+    # fixture drives this block under set -e with a stub exiting 3 and
+    # asserts the gate PROCEEDS.
+    _mem_rc=0
+    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" 2>&1)" || _mem_rc=$?
+    case "$_mem_rc" in
+        0) _info "${_mem_out%%$'\n'*}" ;;
+        1) _error "${_mem_out%%$'\n'*}"
+           printf '%s\n' "$_mem_out" >&2
+           exit 1 ;;
+        *) _warn "${_mem_out%%$'\n'*} — the memory floor could not be evaluated here; the gate proceeds unguarded by it (1176-fn2p)" ;;
+    esac
+
     # ORDER 1141-vf9w — is another gate already using this checkout?
     #
     # ADVISORY BY DEFAULT, and deliberately so. A cancelled gate could outlive
@@ -1770,7 +1895,38 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # competitor. Without --host-side the check now says so and stops. On a host
     # that does NOT re-exec, this is the host side, and wiring the assertion
     # here is the follow-up rather than a silent widening.
-    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
+    #
+    # ORDER 1221-vkbj: it now SAYS WHICH SILENCE, and this caller reads the code.
+    #
+    # The context is decided on TILLANDSIAS_WRAPPER_TOKEN, not on container
+    # markers. The markers are the enumeration this check already inverted away
+    # from — yolanda measured a WSL distro with TOOLBOX_PATH, container,
+    # /run/.toolboxenv, /run/.containerenv and /.dockerenv ALL absent while
+    # genuinely inside a dispatch, so a marker sweep answers "undispatched"
+    # there and lies. The token is a positive fact about OUR wrapper, which is
+    # the only dispatch this check has an opinion about: with-tillandsias-builder.sh
+    # exports it into the dispatched process, so its presence here means a
+    # tillandsias wrapper ran, and its absence means none did.
+    #
+    # Still advisory, still no --host-side from here: see the long note in
+    # check-no-competing-gate.sh about why asserting from an undispatched gate
+    # would manufacture a vacuous clean.
+    if [ -n "${TILLANDSIAS_WRAPPER_TOKEN:-}" ]; then
+        _cg_ctx=dispatched
+    else
+        _cg_ctx=undispatched
+    fi
+    _cg_rc=0
+    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" \
+        --caller-context "$_cg_ctx" 2>&1 || _cg_rc=$?
+    case "$_cg_rc" in
+        0) : ;;                       # answered clean, or advisory-downgraded
+        1) echo "  advisory: a competing gate was reported above (1141-vf9w)" ;;
+        2) echo "  CALLER CONTRACT BUG at this call site (1150-q462): the competing-gate check refused the way it was invoked. This is NOT a substrate limit and will not fix itself — read the line above and fix build.sh." ;;
+        3) : ;;                       # cannot answer here; the cause line says which
+        *) echo "  UNKNOWN competing-gate exit code $_cg_rc — the four-code grammar (1150-q462) has grown a fifth and this consumer does not know it. Do not read silence as clean." ;;
+    esac
+    unset _cg_ctx _cg_rc
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
@@ -1794,6 +1950,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
         _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
+        exit 1
+    fi
+
+    # ORDER 1234-zade. `@trace order:<id>` had no resolver: validate-traces.sh
+    # detects ghost traces for `spec:` and never looks at `order:`, though the
+    # documented annotation carries both. Order UNIQUENESS was gated among filed
+    # packets and order EXISTENCE was not, so ten fabricated citations landed in
+    # one night and every gate passed them.
+    #
+    # BELONGS IN THE FAST LANE, unlike its closure-guard sibling: this reads the
+    # ledger FILES directly rather than resolving a built tillandsias-plan, so it
+    # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
+    # tree. It refuses with `blocked:` if the ledger read yields nothing, which
+    # is the difference between a clean tree and a broken instrument.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
+        _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
         exit 1
     fi
 
@@ -1975,6 +2147,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "YAML reader available and its verdicts stay distinct"
 
+    _step "Checking the wsl.exe transport can carry an exit status (1155-jurn)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-wsl-exec-channel-carries-exit-status.sh" 2>&1; then
+        _error "the exit-status canary is wrong: a check that probes the local shell cannot see a transport that drops the status written in the argument string"
+        exit 1
+    fi
+    _info "Exit-status canary sound"
+
 
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
@@ -2049,6 +2228,85 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "pre-push empty-ref-list fixture passed"
+
+    # ORDER 1194-davi. The advisory itself runs from the LAND path (a land that
+    # adopts a valid stamp skips this gate entirely, 1174-u5wp), but its fixture
+    # belongs in BOTH gates. Wired here as well as in local-ci.sh deliberately:
+    # at 0.15s hermetic it is far too cheap to justify a declared divergence,
+    # and 1087-h2z9's ratchet is for differences worth keeping, not for ones
+    # nobody measured.
+    _step "Checking the cross-platform unrunnable-arm advisory (1194-davi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-unrunnable-platform-arms.sh" 2>&1; then
+        _error "the cross-platform arm advisory regressed — an author can again break an arm their gate cannot run, with no signal"
+        exit 1
+    fi
+    _info "cross-platform unrunnable-arm advisory fixture passed"
+
+    # ORDER 1218-25z3. The advisory runs from the RELEASE path
+    # (release-preflight.sh), not from this gate; its fixture belongs in both
+    # gates, where fixtures run. Hermetic apart from two real-history arms that
+    # read this repo's own log, and those skip rather than fail when a tag is
+    # absent from a shallow clone.
+    _step "Checking the must-ship-next release advisory (1218-25z3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-must-ship-rows.sh" 2>&1; then
+        _error "the must-ship advisory regressed — a row required in the next cut can again be missed with nothing reporting it"
+        exit 1
+    fi
+    _info "must-ship-next release advisory fixture passed"
+
+    # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
+    # on the same axis the staleness decision uses, and keeps the mtime list as
+    # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps
+    # in a throwaway repo, never this checkout.
+    _step "Checking the stale-stamp refusal names content movers (970-7fqk)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-names-content-movers.sh" 2>&1; then
+        _error "the stale-stamp refusal regressed — it can again name files that are not the cause and omit the one that is"
+        exit 1
+    fi
+    _info "stale-stamp content-mover fixture passed"
+
+    # Sibling advisory, same surface and same strength (order 914-nkc4). The
+    # README release-ledger distillation policy was documented in two places
+    # with its destination line already present, and NOTHING RAN IT — measured
+    # at 19 rows against its own ~10 threshold, with no row ever distilled. The
+    # fixture's teeth are HISTORICAL REFS: the live table sits AT threshold, so
+    # a run against HEAD can only print ok:, and a check that only ever prints
+    # ok: on a healthy tree cannot be told from a broken one.
+    _step "Checking the release-ledger distillation advisory (914-nkc4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-distillation-advisory.sh" 2>&1; then
+        _error "the ledger-distillation advisory regressed — the release ledger can again outgrow its own policy with nothing reporting it"
+        exit 1
+    fi
+    _info "release-ledger distillation advisory fixture passed"
+
+    # Order 1223-wzc4. The coordination pass re-derives "which host is active"
+    # every time, and the corrected recipe lived in drill prose — where it was
+    # retyped WRONG two passes after being written down, stripping the email
+    # domain that is the only part naming the host. This fixture pins the three
+    # corrections that kept getting lost: count by email, derive the host from
+    # the domain (BOTH conventions, including <Host>.local), and bucket an
+    # address that names no host instead of rendering it as one.
+    _step "Checking the fleet-activity read (1223-wzc4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-fleet-activity.sh" 2>&1; then
+        _error "the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
+        exit 1
+    fi
+    _info "fleet-activity read fixture passed"
+
+    # Order 1226-jb8y. 872-c9nd's salvage net saved macbookair's finished work
+    # when its gate could not pass — and the work sat on origin for hours
+    # because nobody queried the refs. Making that query routine then produced
+    # two confidently WRONG answers in opposite directions before a right one:
+    # ancestry is not integration, three-dot overcounts, two-dot overcounts far
+    # worse, and "differs" is not "outstanding". The fixture's first arm pins
+    # the false negative the script itself shipped with — a ref lookup that
+    # silently finds nothing reads exactly like "nothing is stranded".
+    _step "Checking the salvage audit (1226-jb8y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-salvage-audit.sh" 2>&1; then
+        _error "the salvage audit regressed — stranded work can again read as landed, or a stale snapshot as outstanding"
+        exit 1
+    fi
+    _info "salvage audit fixture passed"
 
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
@@ -2571,8 +2829,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # buys determinism at negative cost on this host, and the interference is
     # filed separately — serial execution is a mitigation, not a cure, and the
     # shared state is still there for anyone who runs the suite by hand.
+    # ORDER 1021-hf9e CLOSES THE ABOVE. The shared process-global state those
+    # suites carried is REMOVED, not serialised: host_mount and the gitconfig
+    # cache root are parameters now, and the tests that used to redirect them by
+    # writing HOME no longer touch it. MEASURED on yoga 2026-09-16 at one commit:
+    #   headless bin suite, TEN consecutive default parallel runs -> 544 passed,
+    #     identical (empty) failure set every time
+    #   cargo test --workspace, FIVE consecutive default parallel runs -> 74
+    #     result lines, zero failures, identical sets
+    # So the set is a function of the tree again and the pin is no longer load-
+    # bearing for determinism.
+    #
+    # THE SPEED ARGUMENT ABOVE INVERTS TOO, and for the same reason: serial was
+    # faster only because the contention cost more than the threads won. With
+    # the contention gone the bin suite runs 1.9s parallel against 4.7s serial.
+    #
+    # WHAT THIS EVIDENCE DOES NOT COVER: it is one host. A platform whose tests
+    # carry their own process-global state would still contend, and the failure
+    # would land on the ratchet as new-red. If that happens, restoring
+    # `-- --test-threads=1` here is a one-line mitigation and the real defect is
+    # the shared state on that host, not this line.
     _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
-        -- --test-threads=1 2>&1 |
+        2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"
@@ -3558,8 +3836,54 @@ if [[ "$FLAG_CHECK" == true ]]; then
         # notably exit 1, the genuine content failure — still takes the
         # refusal branch below. A step that nominates nothing behaves exactly
         # as it did before.
+        # ORDER 1204-3s2s — A STEP MUST NOT WRITE INTO THE SHARED METRICS PATH.
+        #
+        # A fixture that runs the litmus runner from a scratch dir is not in a
+        # git checkout, so metrics_default_log correctly falls back to /tmp —
+        # and the fallback uses the SAME BASENAME as production, so the records
+        # land in /tmp/tillandsias-timing.jsonl carrying the real host name.
+        # cycle-metrics.sh then sees two timing logs and refuses (1096-p3tn,
+        # correctly: a runs= from either half is a partition presenting as a
+        # total), the refusal emits nothing, every arm driving it observes
+        # zeros, pre-build fails, ci-full never reaches post-build, and
+        # check-release-tier-freshness.sh answers never:release-tier forever.
+        # One missing env export makes the whole release tier unmeasurable on
+        # the host that runs it.
+        #
+        # WHY THIS IS BEHAVIOURAL AND NOT A GREP. 1096-p3tn fixed this BY HAND
+        # in eleven fixtures and wrote the convention in their comments; six of
+        # sixteen did not have it and nothing enforced it, so the next fixture
+        # reintroduced it the same day without any way to know. A static scan
+        # for the export would be the ritual line the row's own negative control
+        # forbids: a fixture that produces NO timing output should not have to
+        # declare one. Observing the path is the check that distinguishes them,
+        # and it costs nothing here because the steps already run.
+        #
+        # It also catches writers a name-based scan cannot see — a step that
+        # reaches the runner indirectly, or code nobody has written yet.
+        _metrics_shared_before=""
+        if [ -f /tmp/tillandsias-timing.jsonl ]; then
+            _metrics_shared_before="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+        fi
+
         _step_rc=0
         _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1 || _step_rc=$?
+
+        if [ -f /tmp/tillandsias-timing.jsonl ]; then
+            _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+            if [ "${_metrics_shared_after:-0}" -gt "${_metrics_shared_before:-0}" ]; then
+                _error "gate step ${STEP_SCRIPT##*/} wrote $(( _metrics_shared_after - ${_metrics_shared_before:-0} )) record(s) into /tmp/tillandsias-timing.jsonl (1204-3s2s)"
+                _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
+                _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
+                _error "  refuse to publish any number, every arm driving it reads zero, and"
+                _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
+                _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
+                _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
+                _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
+                exit 1
+            fi
+        fi
+
         if [ "$_step_rc" -ne 0 ] \
            && [ -n "$STEP_SKIP_EXIT" ] \
            && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then

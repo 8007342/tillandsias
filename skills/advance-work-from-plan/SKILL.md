@@ -294,6 +294,21 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     -   **Clippy / idiomatic-podman hardening**.
     -   **Version-aware release ordering** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `version_aware_release_planning`). Releases are sequential numbered bundles (v0.3 → v0.4 → …), stability-gated not time-gated; "release X" is the CalVer Minor. Every open packet should carry `desired_release: vX.Y` (its ship-bucket, distinct from the milestone `release_target`). After the milestone preference, prefer packets targeting the **ACTIVE release** (`v0.5`; see `plan/loop_status.md`) over later-release ones — concentrate effort on shipping the current bundle. Cross-platform deps are gated by release order (dependent's `desired_release` >= its upstream's). A packet that must slip to a later release: file a `progress` note proposing the slip; the coordinator ratifies. Unmarked open packets default to the active release.
     -   **Filing a new packet? Mint its order, never pick one**: run `tillandsias-plan next-order` (→ `581-k3f9`). Computing "the next free order" from the ledger reads a snapshot that is stale the moment another host commits, so concurrent filers collide deterministically — twice on 2026-07-31, with six collisions still at HEAD. The minted token is PERMANENT: never renumber it, because order tokens leak into code comments, `@trace order:` headers, and commit messages, and a pushed commit message cannot be corrected. A prefix shared by two packets is normal, not a defect. Cite `packet_id` in anything durable. Canonical: `methodology/distributed-work.yaml` → `order_id_allocation`.
+
+        **READ THE `filed since` LINE next-order PRINTS ON STDERR BEFORE YOU
+        WRITE THE FRAGMENT (1163-3krg).** Minting is already a read of the
+        current fold — the next prefix is one above the highest order present —
+        so the tool has necessarily observed every row filed since you last
+        looked, and it now says so instead of handing the answer back as a bare
+        number. MEASURED 2026-09-13: lenovinha filed and claimed 1158-y3ad at
+        15:49Z, the coordinator filed 1160-nvzs — the same defect — at 16:05Z,
+        and next-order minted 1160 BECAUSE 1158 and 1159 were in that fold. The
+        tool that filed the duplicate had already read the answer. stdout is
+        unchanged (`order: $(tillandsias-plan next-order)` still composes); the
+        report is on stderr, and `--since <order>` sets the baseline explicitly
+        when the default — the highest order THIS WORKSTATION filed — is not
+        what you mean. A duplicate is filed by not looking, not by choosing the
+        wrong number.
     -   **In-forge self-service** (canonical: `methodology/distributed-work.yaml` → `in_forge_agent_self_service`): if you are running INSIDE the forge and hit a missing tool/capability/fix, unblock your FUTURE launches by filing in the SHARED CHECKOUT (the forge is rebuilt from sources each launch): a capability/tool proposal → `plan/forge-improvements/proposals/<date>-<slug>.md`; a forge bug → a `plan/issues/` packet `capability_tags: [forge, …]` `owner_host: linux|any`. If the packet is `forge`-tagged/`any` and fits the forge budget, just do it. Always shaped + verifiable + pushed (a finding that dies with the container is lost).
     -   **A LARGE packet is ELIGIBLE — size is not a skip reason** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `large_packet_is_eligible_work`). Do NOT scan a queue of big packets, judge them all "too large", and reach for an old, small, near-obsolete task instead — that inverts the queue's value order and churns work that later specs will supersede. Rank by VALUE and RELEVANCE, never by smallness: a large, fresh, release-targeted packet OUTRANKS a small, stale one. When you claim a packet you cannot finish this cycle, end in ONE of three valid outcomes, each a complete successful cycle: **(a) partial slice** — smallest vertical slice under a verifiable constraint + a `progress` event with `partial_artifact_refs` and an updated `next_action`; **(b) split** — decompose into smaller `ready` child packets at ownership/dependency/evidence boundaries (`split_into`), the shaping commit IS the cycle's output (this generalizes the forge-only order-264 split rule to every host); **(c) audit-dispose** — if it is stale/superseded, retire it (obsolete/tombstone) per the freshness class. A near-obsolete-looking packet is a signal to AUDIT it, not to implement it as busywork.
 4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
@@ -314,12 +329,27 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     git add plan/index.d/
     git commit -m "claim(<packet-id>): <host>"   # the fragment and NOTHING else
     git push origin <active-branch>
+    # ON A PLATFORM BRANCH (osx-next, windows-next) THIS IS NOT YET A CLAIM —
+    # nobody on trunk can see it until the relay. Push the fragment to trunk
+    # too (1153-j2nm); no build stamp is needed, the plan-only lane takes it:
+    scripts/push-plan-fragments-to-trunk.sh        # -> ok:fragments-on-trunk:<sha>:<n>
     ```
+
+    `push-plan-fragments-to-trunk.sh` builds one commit parented on
+    `origin/linux-next` carrying only the NEW fragment files (temporary index
+    and plumbing — your worktree, index and branch are untouched) and pushes
+    it to `refs/heads/linux-next` through this checkout's own pre-push hook.
+    Your platform branch keeps its copy; the relay merges the identical file
+    clean. `refused:fragments-to-trunk:trunk-fold:…` means a fragment names a
+    packet trunk has never seen (you filed it on this branch): run it without
+    arguments so the filing rides along. The control, from any trunk checkout:
+    `tillandsias-plan next <role> | grep -c <packet-id>` → 0.
 
     **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
     HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
     branch. It reaches a trunk host only when the coordinator relays that branch
-    into `linux-next`. Measured on tlatoanis-macbook-air 2026-09-05:
+    into `linux-next` — unless it was pushed to trunk with the helper above,
+    which is why that line is not optional. Measured on tlatoanis-macbook-air 2026-09-05:
 
     | | |
     |---|---|
@@ -454,10 +484,36 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     conceded, because lenovinha had landed and measured. That reading is the
     ruling, not a courtesy.
 
-4.  **Release on exit, unconditionally.**
+4.  **Release on exit — a CLAIM is released unconditionally, a ROW is closed.**
 
-    Completed work moves to its terminal status (§7.2). Work you did NOT finish
-    goes back to `ready` **in the same cycle you abandon it**:
+    These are two different operations on the same field and the difference is
+    the whole of this step. FINISHED work moves to its TERMINAL status (§7.2).
+    Only work you did NOT finish goes back to `ready`, **in the same cycle you
+    abandon it**.
+
+    **PUT FIRST THE BLOCK WHOSE MIS-COPY FAILS LOUD** — that is why the
+    terminal form is above the release form, and it is a SAFETY property rather
+    than a style choice, so do not reorder these on frequency. Copying `ready`
+    onto finished work is SILENT: the row advertises completed work to the whole
+    fleet and nothing objects. Copying `completed` onto unfinished work is
+    REFUSED by 650-dq6u, which wants a SHA and a named check result and cannot
+    be satisfied by fabrication. Frequency argues the other way and frequency is
+    the trap: MEASURED on macbookair 2026-09-15 and reproduced independently on
+    macuahuitl over all 76 `host: macos` fragments, cycle-end writes run `ready`
+    12 to `completed` 3, because a host draining multi-slice packets mostly ends
+    unfinished. A future editor who finds that ratio and helpfully reverses
+    these two blocks would be right about the frequency and wrong about the
+    risk.
+
+    FINISHED — the row is closed, and the gate will not let you fake it:
+
+    ```bash
+    tillandsias-plan set-field <packet-id> status completed \
+        --evidence "<sha> + <named check and its result>" \
+        --reason "closed at cycle end: <what the evidence shows>"
+    ```
+
+    UNFINISHED — the claim is released, and the row stays open honestly:
 
     ```bash
     tillandsias-plan set-field <packet-id> status ready \
@@ -469,6 +525,30 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     **Claiming is only safe because releasing is unconditional.** A cycle that
     claims and then exits without either completing or releasing has taken work
     away from the fleet and given nothing back.
+
+    **BUT `ready` IS NOT THE RELEASE VALUE — IT IS THE UNFINISHED VALUE.**
+    MEASURED on macbookair 2026-09-15: this step's heading read "Release on
+    exit, unconditionally", they applied it literally to work that was finished
+    AND LANDED, and flipped 1201-t6ms from `in_progress` back to `ready`. The
+    qualifier was already in the body — it is the sentence above — but the
+    IMPERATIVE IS WHAT GETS APPLIED, and "unconditionally" is exactly the word
+    that makes a reader skip the distinction underneath it. The row then
+    advertised finished work to the whole fleet through `plan_next` until the
+    coordinator's stale-ready sweep surfaced it (`stale-candidate:1201-t6ms`).
+    That is the mirror of the 641-e2qa stranding this step exists to prevent:
+    one hides finished work as unfinished, the other offers it as available,
+    and both cost a host a cycle. Ask which of the two states you are in before
+    you write the field, and note that a row with claimable work REMAINING is
+    correctly `ready` and correctly claimed-and-released at once — those are
+    not in tension.
+
+    **A RULE WRITTEN FROM ONE FAILURE MODE READS AS ABSOLUTE ABOUT THE OTHER**
+    (macbookair, 2026-09-15). That is why "unconditionally" was written here by
+    someone who was also being careful: this step was built from 641-e2qa, saw
+    only the stranding direction, and stated its remedy without a boundary.
+    What is being corrected is not carelessness — it is a structure that
+    DEFEATS care, which is the only kind of correction worth making to a rule
+    that careful people were already following.
 
 5.  **The reaper is a backstop for a dead host, not your return path.**
 
@@ -550,6 +630,43 @@ cargo test -p <crate-you-touched>      # targeted, fast
 ```
 
 Hard rules:
+- **Detach any gate longer than a couple of minutes from the harness, and
+  never launch one by hand inside a WSL distro.** The harness reaps its own
+  `run_in_background` waiters under memory pressure: on macuahuitl two
+  polling loops were killed mid-`./build.sh --check` with "the system is
+  running low on memory" while `free` showed 53 GiB — the `setsid nohup` job
+  survived both, a Monitor task on the same log survived. Launch it detached
+  from a script FILE and watch the log with Monitor, never a background shell.
+  **THE DETACH FORM IS PLATFORM-SPECIFIC — `setsid` DOES NOT EXIST ON macOS**
+  (macneo, 2026-09-15, where the prescribed line failed outright on both Macs
+  in the fleet):
+
+  ```bash
+  # linux
+  setsid nohup <script-file> < /dev/null > log 2>&1 &
+  # macos — no setsid; disown detaches from the job table
+  nohup <script-file> < /dev/null > log 2>&1 & disown
+  ```
+
+  Both load-bearing details are unchanged on either platform: a script FILE
+  rather than an inline command (an inline one re-exposes the sibling-match
+  trap, where a pgrep/kill pattern carried in the same command matches itself),
+  and a terminal `rc=` line for the Monitor to watch. This recipe was written
+  from Linux measurements and prescribed fleet-wide for weeks before a Mac ran
+  it — a remedy measured on one regime is a property of that regime until a
+  second one executes it. On Windows invoke from Git Bash so `with-wsl2-builder.sh`
+  re-execs and exports its ext4 `CARGO_TARGET_DIR`; esme launched inside the
+  distro to dodge the reaper, compiled against `./target` on drvfs for
+  4050 s, and published a false ERROR and a tier ratio that were both the
+  bypass (drill: plan/issues/fleet-restart-2026-09-12.md, The agent harness kills its own background waiters under memory pressure during a gate).
+- **Poll the detached gate log's mtime, not only for a verdict token.**
+  macbookair reported a dead land as "slow" twice before adopting this: a
+  hung gate never prints `ok:` or `refused:`, so "still gating" and "dead"
+  are indistinguishable to a watcher that greps only for those. Watch the log
+  under Monitor and report STALL when it goes five minutes without
+  advancing. Before relaunching, look for a surviving process — killing the
+  host-side wrapper reaps only the wrapper, and the container-side
+  `build.sh` outlives it (drill: plan/issues/fleet-restart-2026-09-12.md, Watch a gate for a stall, not only for a verdict).
 - **Never bypass the idiomatic-podman layer.** The test `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` enforces routing through `PodmanClient` — no direct `Command::new("podman")` in production launch paths.
 - **Develop THROUGH the idiomatic layers — no ssh/root/side channels into the guest.** The control wire / `--diagnose` / ExecOneShot / PTY-attach (+`TILLANDSIAS_PTY_DEBUG` tee) surfaces are the ONLY sanctioned guest access, for forensics and debugging exactly as for runtime. A task the layer cannot do is a product gap: file a packet extending the layer instead of side-stepping. Root exec anywhere in guest/forge is a finding, not a tool. Canonical: `methodology/multi-host-development.yaml` `idiomatic_layers_for_agents` (The Tlatoāni, 2026-07-10, order 271).
 - **Container security flags are non-negotiable**: `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`.
@@ -566,6 +683,13 @@ Hard rules:
   635. A count whose denominator depends on flags nobody states is not
   falsifiable; "635 passed under tray,listen-vsock" is. Use the gate's set, and
   write the set next to the number in every claim.
+
+- **`cargo test -p <crate> <filter>` takes a substring, not a regex.** `"a|b"`
+  matches neither `a` nor `b`: a falsification pass on macbookair (2026-09-12)
+  selected ZERO tests with a regex-shaped filter and still printed `test
+  result: ok`. Quote the selection beside every targeted-test claim — read the
+  `N passed; M filtered out` line, or list the tests first — so a zero cannot
+  hide behind a green (drill: plan/issues/fleet-restart-2026-09-12.md, First autonomous-drain stories).
 
 - **`./build.sh --check` runs no litmus (748-tkjx); run the bound spec before
   landing on any surface a litmus covers.** On 2026-09-04 lenovinha ran the
@@ -798,28 +922,51 @@ status `ready`. The packet closes only when every agent named in
     REWRITES your commit, so a SHA captured before it is the pre-rebase local
     one and never exists upstream. `ok:land:<sha>` is the only SHA that exists.
 
+    **Never read a land or gate verdict through a pipe.** The shape above —
+    `landed="$(scripts/land-on-platform-branch.sh | sed -n '…')"` — reports
+    `sed`'s exit status, not the land script's. Three false claims in one
+    hour on two Windows hosts came from exactly this shape (2026-09-12):
+    yolanda read `land-on-platform-branch.sh | tail -25` as exit 0 and told
+    two parties the land tool reports success over a refused gate. It had
+    exited 3 and named its gate log, and esme was about to file a row
+    against the tool for the bug its own header exists to prevent. Capture
+    first, then parse:
+
     ```bash
-    landed="$(scripts/land-on-platform-branch.sh | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
+    land_out="$(scripts/land-on-platform-branch.sh 2>&1)"; land_rc=$?
+    landed="$(printf '%s\n' "$land_out" | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
+    [ "$land_rc" -eq 0 ] && [ -n "$landed" ] || { echo "land refused (rc=$land_rc): $land_out"; exit 1; }
     tillandsias-plan set-field <packet-id> status completed \
       --evidence "$landed" \
       --reason "<what shipped, validation log paths>"
     ```
 
+    `${PIPESTATUS[0]}` is not wrong, it is fragile: any intervening command
+    resets the array, and `a=$?` is the command everyone writes beside it.
+    Pinned by `litmus:land-verdict-through-a-pipe` (drill: plan/issues/fleet-restart-2026-09-12.md, What the pipe-verdict fixture found — extends the coordinator's rule entry below, which named this fixture as its follow-up).
+
     Then commit and push the ledger fragment (step 3), which takes the
     plan-only lane. **This inverts the old step 2/step 4 order for the CODE
     commit only** — every other ledger write keeps the 3c ordering.
 
-    **Choose a `scripts/gate-steps.d/NNN-*.step` prefix AFTER the integrate,
-    never before.** The landing script fetches and integrates sibling hosts'
-    work as part of landing, so a slot that was free when you wrote the file
-    can be taken by the time the gate runs — the gate then refuses with `FAIL:
-    two .step files share a numeric prefix`, and a whole gate is spent learning
-    it. yoga picked 205 on 2026-09-12 against an incoming `205-1137-dzzu.step`
-    and paid a full `--check` for it. Recovery is cheap once the shape is
-    known: `git mv` to the next free slot, `--amend`, confirm with
-    `scripts/test-gate-step-append-no-conflict.sh`, re-land. Same class as the
-    SHA rule above — read the tree the operation LEAVES, not the one it
-    started from.
+    **A `scripts/gate-steps.d/NNN-*.step` prefix is ALLOCATED BY THE LAND
+    TOOL, not chosen by you (1162-qbrx).** Pick the slot you mean between its
+    neighbours and land with `scripts/land-on-platform-branch.sh`: after its
+    own integrate and before the gate it runs
+    `scripts/allocate-gate-step-prefix.sh --base origin/<branch> --commit`,
+    which moves a step THIS push adds — and only that — to the smallest free
+    integer below the next occupied prefix when the integrate brought in a
+    sibling's step with the same number, and commits the rename
+    (`gate-step-prefix: 280-<order>.step -> 281-<order>.step (280 taken by
+    …)`). The old advice, "choose the prefix after the integrate", cannot
+    close this race because the window is the gate itself: MEASURED
+    2026-09-13, lenovinha's 280 followed it exactly and still collided
+    against yoga's 900-z3kv landing mid-gate (215, 255 and 280 that night,
+    each a full re-gate; yoga's 205 the day before). Hand-rolled push? Run
+    the allocator yourself after your merge, before your gate. A
+    `refused:gate-step-prefix:no-gap` means every integer up to the next
+    occupied prefix is taken — renumber by hand so the step keeps its place.
+    Existing steps are never renumbered.
 
     ORDER 1024-c3h3. This step used to run before the landing, and the evidence
     refs were systematically wrong for every host that followed it: lenovinha
@@ -922,11 +1069,17 @@ A successful invocation MUST NOT exit with local-only work:
   |---|---|
   | `ok:salvaged:<ref>:<sha>` | the copy is on origin; it survives a re-clone |
   | `ok:salvaged-local:<ref>:<sha>` | the copy is in THIS repo only — the push failed. It survives a re-clone **only if someone pushes that ref**. Say so in your report and push it when the credential works: `git push origin <ref>` |
-  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one |
+  | `ok:salvage-not-needed` | **the dangerous one.** The script protects a DIRTY worktree, not an unpushed COMMIT: a clean tree with a finished unpushed commit and a red gate returns this, rc 0, with NOTHING preserved — exactly the state the salvage rationale above was written for. A first push of a `work/<order>` ref needs the full gate; `pre-push-local-gate.sh` instead exempts a push in which EVERY ref is `refs/heads/salvage/*`, so `git push origin HEAD:refs/heads/salvage/<host>/<yyyymmdd>-<order>` lands the commit ungated. Verify by `git merge-base --is-ancestor <sha> <remote-ref>` and by content on the remote, never by the push's exit code |
+  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one. A dangling symlink in the tree produces this rather than a skip |
 
   The middle row exists because the salvage used to push the commit straight
   to origin and create no local ref, so a failed push left nothing at all — on
   exactly the hosts most likely to strand work, the ones that cannot push.
+
+  yolanda measured the fourth row on 2026-09-12: clean tree, finished
+  unpushed commit, red gate — `ok:salvage-not-needed`, rc 0, nothing
+  preserved, which is exactly the state this rationale was written for
+  (drill: plan/issues/fleet-restart-2026-09-12.md, The salvage script covers the dirty tree, not the unpushed commit).
 
   **It cannot touch the worktree.** The script works through a temporary index
   and git plumbing only, so it is safe to run on dirt you have just been

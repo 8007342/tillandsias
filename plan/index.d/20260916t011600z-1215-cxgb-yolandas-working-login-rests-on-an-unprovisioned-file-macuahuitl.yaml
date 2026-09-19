@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: yolanda-windows-working-github-login-rests-on-a-hand-written-git-config-nothing-provisions-inside-a-guest-the-tray-reprovisions-on-its-own
+    order: 1215-cxgb
+    status: ready
+    kind: decision
+    priority: p1
+    desired_release: v0.5
+    release_target: credential-lifecycle-audit-milestone
+    pickup_role: operator
+    capability_tags: [credentials, github, login, windows, wsl, durability, operator-decision]
+    estimated_hours: 1
+    owned_files: []
+    title: |
+      DECISION WITH A CLOCK: yolanda-windows' working GitHub login depends on a hand-written .git/config that nothing provisions, inside a guest the tray reprovisions on its own
+    context: |
+      FILED BY THE COORDINATOR so the clock is in the ledger rather than only in
+      prose. yolanda-windows filed the finding UNCLAIMED and said why: the host
+      at risk already holds one unlanded defect, and its work cadence is the
+      operator's to set in batches. yoga-silverblue identified it as the one
+      finding from that night with a deadline attached. This row exists to put
+      the decision in front of the person who makes it; the diagnosis is
+      plan/issues/yolanda-github-login-works-on-unprovisioned-state-that-will-vanish-2026-09-15-yolanda-windows.md.
+      THE STATE. yolanda-windows can authenticate to GitHub as of
+      2026-09-15T22:31Z. That capability depends on
+      /home/forge/src/tillandsias/.git/config inside the WSL guest — a file
+      HAND-WRITTEN BY AN AGENT, which nothing in the product creates, restores or
+      knows about, in a guest that ships no git to create one.
+      THE CLOCK. The tray reprovisions the guest ON ITS OWN when a control-wire
+      handshake fails. It did exactly that on 2026-09-12:
+        06:21:39 ERROR control wire unreachable after this run rewrote the guest
+                 wiring — discarding the guest and reprovisioning
+        06:21:40 INFO  damaged distro unregistered distro="tillandsias"
+      When that happens again the file goes with the guest, and the host returns
+      to the 759-vceg refusal with no record anywhere of why login used to work.
+      WHY THIS IS WORSE THAN THE DEFECT IT WORKS AROUND. The original state was
+      honest: login failed loudly with an accurate message naming its own cause.
+      The current state is a well-formed success that is not durable, and the
+      next failure will present as a NEW defect with a signature identical to one
+      already diagnosed three weeks earlier under a different symptom.
+      SCOPE, so this is not read wider than its evidence. At risk: this host's
+      ability to OBTAIN a credential through the supported flow. NOT at risk: the
+      credential already in Vault at secret/github/token, which survives
+      independently of the checkout and of this file. The failure is deferred, and
+      how deferred depends on an unresolved question on the 1025-a896 axis — a
+      device-flow gho_ token is subject to the ten-token pool, a fine-grained PAT
+      is not. That uncertainty is itself part of the clock.
+      THE THREE OPTIONS, none chosen, recorded verbatim from the finding so that
+      nobody reaches for the tempting one without seeing it was considered:
+        1. Leave it and accept the clock, with the record so the next failure is
+           recognised in minutes instead of rediscovered.
+        2. Provision it — have the guest bootstrap write that .git/config. Cheap,
+           but it makes an accidental workaround into a supported surface, which
+           is the wrong thing to do to a workaround for a defect that should be
+           fixed properly. The filer flags this as the tempting option and
+           probably wrong.
+        3. Remove it and restore the honest failure. Defensible — a host that
+           fails loudly beats one that works by accident — but it costs the
+           operator their working login for no benefit until the real fix lands.
+      THE REAL FIX IS 1215-xazj, and once that lands this file stops mattering and
+      should be deleted rather than maintained. This row is about what to do in
+      the meantime, which is a question about one operator's workstation and so
+      is not a coordinator call.
+    exit_criteria:
+      - 'the operator records which of the three options holds for yolanda-windows until 1215-xazj lands, as an event on this row'
+      - 'if option 1 is chosen, this row stays open and is the record the next failure is matched against — so the choice must be written down rather than left implicit (pre-decision result: FAILS, nothing in the tray, the logs or the refusal says the login works because of an unmanaged file)'
+      - 'if 1215-xazj lands first, this row closes by citing it and the hand-written file is removed rather than left behind'
+    unscoreable: |
+      operator-decision-not-a-measurement: the three options differ in what they
+      cost the operator's own workstation, not in what any test would report.
+      Nothing here is scoreable until the choice is made.
+    events:
+      - type: filed
+        ts: "2026-09-16T01:16:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t011600z"
+        host: macuahuitl
+        summary: |-
+          Coordinator-filed as an operator-role row because the finding's own
+          ownership section says the choice belongs to whoever sets this host's
+          cadence. Routing it to a working host would hand a peer a decision
+          about the operator's workstation, which a peer cannot make.

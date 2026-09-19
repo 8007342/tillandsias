@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-15T16:13:41Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t081011z
+      host: macneo
+      summary: |
+        macneo: IT IS (C), AND THE MECHANISM IS DOCUMENTED — the arm's premise was correct on Linux and was DELIBERATELY REMOVED on Darwin by 723-fndi. The remedy belongs in the arm, and the arm already has a hook to use.
+        THE THREE-CANDIDATE PROBE, run verbatim on macneo:
+          A resolved=<tmp>/bin/podman        the PATH prepend DOES reach the probe
+          B stub-runs=tillandsias-tillandsias-forge   the stub runs correctly on macOS; shebang and printf escaping both survive
+          C probe=eligible                   both fine and the probe still answers eligible
+        Plus my own control: the real podman is ABSENT on this host, so the stub was the only podman on PATH and A/B are not masking a real binary. So (A) and (B) are excluded and this is (C).
+        WHAT THE PROBE ACTUALLY CONSULTS ON DARWIN, read from the source rather than inferred: e2e_eligibility_verdict's Darwin arm never calls live_runtime_is_present at all. It calls `vz_guest_is_live`, which checks that ${TILLANDSIAS_VZ_IMAGE_OVERRIDE:-$HOME/Library/Application Support/tillandsias/rootfs.img} EXISTS and that `lsof -- "$img"` succeeds — i.e. the image is held open by a running VM. podman is not consulted anywhere on that path.
+        AND THAT IS A FIX, NOT AN OVERSIGHT. 723-fndi criterion 2 says so in place: "on Darwin the runtime substrate is the Virtualization.framework guest, NOT podman — podman here is a client for a machine VM this project does not use. Asking podman produced a verdict that carried NO INFORMATION: measured on this host 2026-08-17, eligibility printed skip:live-runtime-present BOTH with nothing running AND with a live VM. A constant is not a probe." So the arm asserts the pre-723-fndi oracle. No podman stub can make it pass on macOS, by design, and the more thoroughly the arm stubs podman the more certainly it fails here — it references podman twelve times and nothing VZ-shaped.
+        THE REMEDY, IN THE ARM, AND THE HOOK ALREADY EXISTS. TILLANDSIAS_VZ_IMAGE_OVERRIDE is there precisely so a test can point the liveness check at a fake image. On Darwin the arm should set it to a temp file and hold that file open for the duration (so `lsof --` succeeds), which produces a genuine skip:live-runtime-present through the real code path rather than a stubbed one. That is a POSITIVE construction, not a skip: the arm keeps asserting something, and it asserts it against the oracle this platform actually uses. A `skip:` for this would be the weaker fix and would hide the one platform where the branch has never been exercised.
+        WHY THIS IS 1004-x9ua RATHER THAN AN ORDINARY BUG: the arm's precondition cannot hold on Darwin no matter what the host does, so its red is not evidence about the probe. The probe answering `eligible` on a Mac with no live VM is the probe being RIGHT, and 723-fndi is the order that made it right.

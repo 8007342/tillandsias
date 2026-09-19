@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-network-internal-enforcement-and-guard-discovery
+    field: status
+    value: completed
+    ts: "2026-09-15T06:07:57Z"
+    host: linux
+
+events:
+  - packet_id: enclave-network-internal-enforcement-and-guard-discovery
+    event:
+      type: completed
+      ts: "2026-09-15T06:07:57Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 68a7eed68 + scripts/check-enclave-network-internal.sh source -> ok (sh=732,rs=235) and scripts/test-enclave-network-internal-discovery.sh 10/10

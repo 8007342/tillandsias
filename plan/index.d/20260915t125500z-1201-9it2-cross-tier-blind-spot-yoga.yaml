@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at macbookair's hand-off: 1194-davi keeps its PLATFORM scope by
+# macuahuitl's ruling, so the cross-TIER case wants its own row, and the
+# evidence for it is a regression of mine that the tier caught days late.
+packets:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    order: 1201-9it2
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [ci, litmus, release, fail-loud, cadence]
+    estimated_hours: 3
+    parent_order: 890-27mv
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a pre-land notice naming the arms a change touches that the author's gate will not execute. Future guard; the claimer writes it in the same commit and moves this text into verifiable_closure: a change editing crates/tillandsias-control-wire/src/lib.rs's WIRE_VERSION is told, before landing, that litmus:guest-container-metrics-wire-shape asserts on it and that ./build.sh --check does not run it; NEGATIVE CONTROL 1: a change touching nothing tier-scoped produces SILENCE, because a notice that fires always is a notice nobody reads; NEGATIVE CONTROL 2: the notice is ADVISORY and does not refuse the land, since refusing a Linux land over an arm the host cannot afford to run trades this gap for a worse one; pre-fix result: FAILS — nothing warns, measured by 4fc7be930 landing green with a red in it."
+    owned_files:
+      - openspec/litmus-tests/litmus-guest-container-metrics-wire-shape.yaml
+    title: |
+      1194-davi's blind spot has a same-host twin: a litmus pin in the quick tier is never executed by ./build.sh --check, so a change can pass its gate, a work-branch hand-off and a peer's compile check and still land a release-blocking red that nobody sees until someone runs the release tier
+    context: |
+      MEASURED ON YOGA 2026-09-15, and the evidence is my own regression rather
+      than a constructed case.
+
+      THE SEQUENCE:
+        - 4fc7be930 (order 890-y72v) bumped WIRE_VERSION 3 -> 4 by adding a
+          field to DeliverCredentialsReply.
+        - litmus:guest-container-metrics-wire-shape step 2/7 pins that constant
+          to a literal FROM ANOTHER SPEC's side (observability-metrics),
+          asserting no bump rode along with that packet's additive variants.
+        - ./build.sh --check does not execute the quick litmus tier
+          (890-27mv). The land gated green. The pre-push hook passed. A
+          work/890-y72v hand-off was compiled on macOS by macbookair and
+          reported green, correctly and narrowly.
+        - The red surfaced only when this host ran the full release tier for
+          the first time in its life, days later, under 890-27mv.
+
+      THE PIN WORKED. THE CADENCE DID NOT. That distinction is the whole row:
+      the guard existed, was correct, and was pointed at exactly the right
+      constant — and it could not fire because nothing ran it between the
+      change and the release.
+
+      WHY IT IS NOT 1194-davi. That row is the cross-PLATFORM case: an arm
+      scoped to macos runs on no Linux gate. macuahuitl ruled it keeps that
+      scope, because widening it would hand it an inventory it cannot derive.
+      This is the same STRUCTURE on ONE host with one platform: the arm is not
+      platform-scoped, it is TIER-scoped, and the author's gate skips the tier.
+      A host cannot infer either gap from the change it is making.
+
+      macbookair's own words on their part in it, worth keeping because they
+      are the subtle half: "a correctly-scoped green still adds to a picture
+      that overclaims, if nobody states what the picture is missing". Their
+      compile check was honestly narrow — "the types line up at all seven
+      sites, not macOS verified" — and it still contributed to a felt sense of
+      coverage, because it sat beside two green gates and the aggregate read as
+      safety.
+
+      SCALE, from the same run: the first full-tier run on this host produced
+      THIRTEEN red litmus tests on a machine that had completed attested cycles
+      daily for weeks. Most are not this class — several are budget misses
+      (1187-iij8, 1192-xv4n) and several need containers that were not up — but
+      the wire pin is, and one is enough to establish that a change can land
+      green with a release blocker inside it.
+    next_action: |
+      Build the notice, not a new gate. The cheap version is a map from
+      changed paths to the litmus arms asserting on them, emitted by the land
+      tool BEFORE the push, naming the arm and the tier that would run it.
+      Both negative controls in unscoreable are load-bearing: silence when
+      nothing tier-scoped is touched, and advisory-not-refusing on the
+      authoring host. Cite 1194-davi as the platform twin and 890-27mv as the
+      cadence half; this row is neither, it is the notice.

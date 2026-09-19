@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    field: status
+    value: in_progress
+    ts: "2026-09-14T15:40:54Z"
+    host: macuahuitl
+
+events:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    event:
+      type: progress
+      ts: "2026-09-14T15:40:54Z"
+      host: macuahuitl
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: meta cycle 2026-09-14T15:09Z on macuahuitl (delivered 15:39Z)
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    event:
+      type: note
+      ts: "2026-09-14T15:40:54Z"
+      host: macuahuitl
+      summary: |-
+        claimed before the work: option (1) — the land tool allocates a colliding gate-step prefix after its own integrate, before the gate; allocation as its own script with a hermetic fixture

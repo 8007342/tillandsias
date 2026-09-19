@@ -95,7 +95,7 @@ critical_path:
     # The container's /dev/shm is its own tmpfs. If the state dir were ever
     # repointed at a bind-mounted or --ipc=host path, expert state would appear
     # on the host and outlive every forge.
-    command: "n=$(find /dev/shm -maxdepth 3 -name 'tillandsias-experts*' -o -maxdepth 3 -name 'plan-source-hash' 2>/dev/null | wc -l); test \"$n\" = 0 && echo 'ok: host-tmpfs-clean' || { echo \"REGRESSION: expert state present on the HOST tmpfs after teardown\"; exit 1; }"
+    command: "n=$(find /dev/shm -maxdepth 3 -name 'tillandsias-experts*' -o -maxdepth 3 -name 'plan-source-hash' 2>/dev/null | wc -l | tr -d ' '); test \"$n\" = 0 && echo 'ok: host-tmpfs-clean' || { echo \"REGRESSION: expert state present on the HOST tmpfs after teardown\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: host-tmpfs-clean"
 

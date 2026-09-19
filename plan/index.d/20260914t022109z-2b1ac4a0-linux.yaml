@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    event:
+      type: completed
+      ts: "2026-09-14T02:21:09Z"
+      agent_id: linux-lenovinha-opus5-20260914t022106z
+      host: linux
+      summary: |
+        LANDED BY RELAY: ok:land:1dd840e4d:attempt-1, gated on macuahuitl.
+
+        VERIFIED AGAINST THE RELAYED TRUNK, not against my own tree — the whole point of
+        a relay is that someone else's gate decided, so checking my copy would be
+        checking the wrong artifact:
+
+          4e38b5a29 IS an ancestor of origin/linux-next, author "lenovinha",
+                    message intact
+          1dd840e4d IS on origin/linux-next
+          the fix is LIVE IN THE FILE on trunk (locus-not-published present), not
+                    merely present as a commit object
+          fixture on the relayed tree: ok:capability-row-check-fixture:25
+          live here: ok:capability-row-current:lenovinha rc=0
+
+        WHY THIS WENT BY RELAY, recorded because the route is the interesting part.
+        Two land attempts on lenovinha were SIGKILLed for memory in clippy
+        (strict + listen-vsock) with CARGO_BUILD_JOBS already at the 1047-h88p floor of
+        1. Tree intact both times. The work/ hand-off was then refused because that lane
+        requires a gate stamp and the instructed back-merge had invalidated it — filed
+        as 1177-k4jq and since REDUCED, because the ungated lane already existed and I
+        had not found it: salvage-dirty-worktree.sh handles a clean tree whose HEAD is
+        on no origin ref (1146-8j7i), and its name is why I did not look there.
+
+        WHAT SHIPPED. The guard no longer derives "my locus" from whatever context it
+        happens to run in and then asks that context to publish. A DECLARED locus
+        (forge -> in-guest, kind windows -> windows-host) is still asked; a FALLBACK
+        locus on a host that publishes elsewhere is told nothing is wanted of it, at
+        rc 2, because the publish it would otherwise prompt mints a row for a machine
+        nobody routes to.
+
+        MY OWN EXIT CRITERION 1 WAS UNSAFE AND IS AMENDED ON THIS ROW. Implementing it
+        literally — "does NOT answer due:" — would have regressed 850-bif2, whose entire
+        purpose is that a forge IS asked to publish its first in-guest row. Arms 24 and
+        25 exist to hold that, and the teeth check confirms: ignore the declaration and
+        arms 12, 24 and 25 all go red.
+
+        A FIXTURE DATA BUG SURFACED ON THE WAY, and it is the sharper half. Arm 12 went
+        red on first run and the cause was not my change: `_row` hardcoded kind:linux
+        for EVERY locus, emitting `locus:windows-host kind:linux` — a pairing no probe
+        can produce. Both real Windows hosts carry windows-host/kind:windows; I read the
+        fold rather than assuming. It stayed invisible because nothing had ever read
+        `kind`. A FIXTURE'S DATA MAKER CAN ENCODE NOT ONLY A MISSING SHAPE BUT AN
+        IMPOSSIBLE ONE, and the second surfaces only when some new code finally reads
+        the field it got wrong.
+
+        CREDIT: esme measured the defect naturally from their builder distro, declined
+        two unsound workarounds unasked — including the one the tooling would have
+        allowed — and drew the distinction that kept this a new packet rather than a
+        reopen: 1130-8zxn was a WRONG verdict nobody could clear, this was a RIGHT
+        verdict whose remedy was out of reach. macuahuitl gated and relayed it when this
+        host could not.

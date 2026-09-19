@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-token-views-print-zeros-beside-source-absent-so-a-host-that-has-never-emitted-reads-as-a-host-that-cannot
+    order: 1222-u8vx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    pickup_role: any
+    capability_tags: [metrics, tokens, fail-loud, instrument, low-end]
+    estimated_hours: 2
+    owned_files:
+      - scripts/cycle-metrics.sh
+    title: |
+      The token views print zeros beside `source=absent`, so a host that has never emitted is indistinguishable from one that cannot — and a floor host concluded its own figures had to be estimates
+    context: |
+      REPORTED BY macneo-macos 2026-09-16, unprompted, in the tokens: line of
+      their own handoff: "cycle-metrics reports token telemetry as source=absent
+      on this host, so every figure I have sent you this week is an ESTIMATE; I
+      was not labelling them and macbookair's disclosure prompted me to start."
+      THE PREMISE IS FALSE AND THE READING IS REASONABLE. `--emit-tokens` EXISTS
+      (order 1119-6wn6), is documented in the meta-orchestration skill at the
+      point of use, writes one JSON line, and NEEDS NO TOOLCHAIN — verified here
+      by pointing TILLANDSIAS_TOKENS_LOG at a scratch file and emitting a record
+      for host=macneo successfully. So a floor host can measure its own spend
+      today. Nothing is missing on that host except the first append.
+      WHAT THE OUTPUT ACTUALLY SAYS, reproduced by pointing the reader at an
+      empty log:
+        tokens: cycle=- main_ctx=0 subagent_tokens=0 agents=0 by_model=- avg_subagent_tokens=0 cycles=0 source=absent
+        token_recur: window=7d labels=0 top3=- source=absent
+        token_max: window=7d tokens=0 label=- cycle=- source=absent
+      `source=absent` means "nothing has been appended yet" — the script's own
+      comment says exactly that ("they report source=absent until the first
+      append") — and it READS as "this host has no token telemetry". The author
+      knew the distinction and the OUTPUT does not carry it.
+      THE ZEROS ARE THE WORSE HALF. `main_ctx=0 subagent_tokens=0 agents=0` is
+      the same shape a cycle that genuinely spent nothing would print. So the
+      absent case is not merely ambiguous about its source; it emits VALUES that
+      a reader can carry away as measurements. A cycle that spawned nothing
+      legitimately writes subagent_tokens=0 agents=0, and this prints the
+      identical bytes while meaning "I have no idea".
+      WHY IT MATTERS MORE THAN ITS SIZE. 1119-6wn6 exists because the token pool
+      ran out a week early and an expensive repeatable delegation was invisible.
+      The hosts whose spend is LEAST visible are exactly the floor hosts, and
+      this is the message those hosts get. macneo did the honest thing — labelled
+      a week of figures as estimates rather than letting them read as measured —
+      and the labelling was only necessary because the instrument told them they
+      could not measure.
+      SAME FAMILY AS THE NIGHT'S OTHER FINDINGS: a well-formed output that does
+      not announce its own boundary. Compare 1220-zb7q (an expiry candidate whose
+      holder has unlanded work prints identically to one whose work landed) and
+      the check-must-ship stale-binary path, which gets this RIGHT — it refuses to
+      answer rather than emit a zero meaning "cannot see marks". That refusal is
+      the model for this fix and it is already in the tree.
+    exit_criteria:
+      - 'with no token log, the tokens/token_recur/token_max views say that NOTHING HAS EMITTED YET on this host and name `--emit-tokens` as the remedy, instead of printing zeros beside source=absent (pre-fix result: FAILS — verbatim output above, reproduced against an empty log)'
+      - 'the absent case does not emit numeric values a reader can carry away as measurements; "no data" and "spent nothing" must not print the same bytes'
+      - 'NEGATIVE CONTROL: a host that HAS emitted is unchanged, and a genuine subagent_tokens=0 agents=0 cycle still reports those zeros as the measurement they are'
+      - 'the fixture drives the reader against both an absent log and a log containing a real zero-spend record, and asserts the two OUTPUTS DIFFER — since the defect is precisely that they do not'
+    unscoreable: |
+      wording-not-chosen: whether the absent case prints a skip line, a named
+      refusal, or a present-but-flagged row is a grammar decision affecting every
+      consumer of the metrics block. The behaviour is measured and reproducible on
+      any host by pointing TILLANDSIAS_TOKENS_LOG at an empty file; the shape of
+      the remedy is not chosen.
+    events:
+      - type: filed
+        ts: "2026-09-16T08:40:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t084000z"
+        host: macuahuitl
+        summary: |-
+          Filed from macneo-macos' own disclosure that a week of their token
+          figures were estimates. The coordinator verified --emit-tokens works
+          without a toolchain before filing, so the row is about the READER's
+          wording and not about a missing capability on the floor.

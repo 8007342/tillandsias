@@ -36,8 +36,11 @@ tillandsias-podman = { path = "../tillandsias-podman" }
 # toolchain cost every platform lane pays; `send` enables Send-bound
 # across tokio tasks for concurrent dispatch.
 mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
+tillandsias-exec = { path = "../tillandsias-exec" }
 tokio = { workspace = true }
 chrono = { workspace = true }
+# Order 964-tzmp: the derived ledger cache (see workspace Cargo.toml).
+redb = { workspace = true }
 
 [dev-dependencies]
 # ORDER 977-dpbj. proptest, not quickcheck: integrated shrinking that respects

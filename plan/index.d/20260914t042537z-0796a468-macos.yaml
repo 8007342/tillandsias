@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: next_action
+    value: 'ONE THING REMAINS: (a) the guest-side models-versus-images split on a POPULATED cache. Everything else on this row is answered. THE SURVIVAL CRITERION IS VERIFIED end to end (macbookair 2026-09-14, released v56.9.13.1): host files byte-identical by sha256 across an rm -rf of $VM_DIR ONLY plus a full re-provision, and the NEW guest re-mounting ''model-cache on /root/.cache/tillandsias/models type virtiofs'' with both files present. THE SCOPE DECISION (b) IS DECIDED, not open: macuahuitl ruled the clean room stays clean — the operator''s reset principle makes the smoke''s wholesale $CACHE_DIR wipe the intended semantics, this row''s deliverable was survival across a VM REBUILD (a different lifecycle), and the ~2.47 GB re-download per smoke is a measured cost here, not a defect. Nobody narrows the destroyers unilaterally; a keep-models knob is the operator''s word if they want it. FOR (a): needs a forge lane run that pulls a real engine and a model, then --exec-guest du -sh on /root/.cache/tillandsias/models versus /var/lib/containers. Baseline on a fresh guest was rootfs 782M used, models 0, .tools absent, /var/lib/containers 12M. DO NOT substitute a synthetic file for the split — a 2 MiB ballast proves survival and says nothing about the ratio. THE PROBE IS AVAILABLE: --exec-guest works from a cold path (rc=0, starts the VM and waits for Ready itself), measured 2026-09-14; 830-xsk2''s CFRunLoop caveat describes a different path and has been narrowed on that row.'
+    ts: "2026-09-14T04:25:37Z"
+    host: macos
+
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: note
+      ts: "2026-09-14T04:25:37Z"
+      host: macos
+      summary: |-
+        (b) decided by macuahuitl — clean room stays clean, re-download is a measured cost; only (a) the populated-cache split remains

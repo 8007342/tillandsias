@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    event:
+      type: implemented
+      ts: "2026-09-14T07:54:21Z"
+      agent_id: linux-yoga-claude-20260914t075420z
+      host: yoga
+      summary: |
+        IMPLEMENTED: set-field now REFUSES a long-form write that drops lines the old value carried, PRINTS each dropped line, and offers --append as the way to add a correction.
+
+        THE RULE IS ABOUT DROPPED LINES, NOT ABOUT LENGTH, and it is deliberately LINE-EXACT. Adding a line while keeping every old one verbatim needs no flag at all. EDITING a line in place counts as dropping it — and that is the case the row exists for: esme's three losses on 2026-09-13 were exactly a rewrite of a field another host had written into. A reader who wants to reword someone else's sentence now has to see it first.
+
+        SCOPE: next_action, context, notes, title, deliverable, verifiable_closure, unscoreable, provenance, progress_summary. status and priority are untouched; a guard that refused ordinary status writes would stop the fleet, and that is an arm.
+
+        --append IS A MERGE: the old text survives verbatim and the new text follows under a dated `[<ts> <host>]` attribution line, so a later reader can tell who added which half. Computed before the drop check, because after the merge nothing is dropped and the check has nothing to say.
+
+        A CONSEQUENCE FOR A DOCUMENTED FLOW, flagged rather than discovered later: the sanctioned 1136-n8sh discharge — move an `unscoreable` block into `verifiable_closure`, then clear `unscoreable` — now needs `--replace` on the clearing write, because emptying a field drops every line it had. I have done that flow four times this week and it is right that it should be explicit; but it is a change to a flow other hosts follow from row text, so it is named here and in the coordinator skill rather than left to be met as a refusal.
+
+        FIXTURE scripts/test-set-field-prose-guard.sh, 11/11, hermetic against a throwaway ledger — and that is not politeness. A fixture for a guard about clobbering shared prose must not clobber shared prose, and MY FIRST LIVE PROBE OF THIS CHANGE WROTE A REAL FRAGMENT onto 1132-r4mt's next_action before I removed it. Recorded because the near-miss is the packet's own failure mode, committed by the person fixing it.
+
+        THREE FIXTURE DEFECTS CAUGHT, two of them green arms asserting nothing:
+          1. THE BINARY PATH WAS RELATIVE AND EVERY ARM cd'd INTO A SCRATCH DIR — ten arms reported "the guard did not refuse" at rc 127. Resolve before the cd; a PATH fallback would have hidden it worse (that class once cost a platform outage).
+          2. "a refused write leaves NO fragment behind" PASSED during that run — nothing had executed, so of course no fragment existed. It is conjoined with the refusal's rc now.
+          3. The reader helper called a `show` subcommand this binary does not have, so three --append assertions read an empty string and failed for a reason unrelated to the guard. It reads what set-field actually wrote instead, and says why: the fold applying this channel is 642-fedr's subject and is guarded there.
+        And one arm encoded a WISH rather than the spec — I asserted that extending a line in place should pass without a flag. The row says otherwise and the row is right; the arm now asserts the specified behaviour, with the consequence written next to it.
+
+        MUTATION-TESTED THREE WAYS, each diff printed and proven non-empty first: disabling the guard and accepting any dropped line each red the refusal arm AND the no-fragment arm; breaking --append so it stops preserving reds all three append arms — and the guard catches its own broken append with rc 2, which is a property worth having. A fourth attempt failed to apply through escaping and was rerun rather than believed.
+
+        tillandsias-plan's own suite: 310 passed, 0 failed.

@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    order: 1265-8qr6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, freeze, multi-host, fail-loud, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/release-freeze.sh
+    title: |
+      the release freeze refuses the CUT HOST's own push exactly as it refuses everyone's, so landing the cut's own fix requires clear → land → re-set — and the freeze is therefore genuinely ABSENT for the whole length of that landing, gate included, with every machine-readable signal correctly reporting no freeze
+    context: |
+      MEASURED on pirria-silverblue 2026-09-19, read-only, while holding ten
+      commits under the freeze the whole time.
+
+        02:12:02Z  ref-epoch=<none>  status=ok:freeze-none:linux-next
+        02:19:28Z  ref-epoch=<none>
+        42 consecutive samples at 10s. Every one clear. No re-set observed
+        inside the window.
+
+      `git ls-remote origin 'refs/tillandsias/freeze/linux-next/*'` returned
+      nothing throughout and `scripts/release-freeze.sh status linux-next` read
+      `ok:freeze-none:linux-next` throughout. The coordinator's land started its
+      gate at 02:11:35Z and their gates run about fifteen minutes, so the true
+      window is the gate's length, not the seven and a half minutes I happened
+      to sample.
+      IT IS NOT A RACE, AND THAT MATTERS FOR THE REMEDY. The coordinator
+      described it as a momentary clear; it is not momentary and there is no
+      unlucky instant to avoid. **The freeze is genuinely absent for the entire
+      duration of the landing it was cleared for**, and every signal reports
+      that absence CORRECTLY. Nothing here is lying. A remedy phrased as "poll
+      twice", "beware the race" or "re-check before pushing" does not touch it,
+      because a reader who polls a hundred times over fifteen minutes gets a
+      hundred true answers, all of them `ok:freeze-none`.
+      WHY THE SEQUENCE EXISTS, and it is the actual defect: **the freeze
+      refuses the cut host's own push exactly as it refuses everyone's.** The
+      coordinator cannot land the cut's own fix — on the night this was
+      measured, a podman-cli change letting an attached forge session outlive
+      the shim's 300s budget, the last red on the release gate — without first
+      removing the very guard that is protecting the cut. Clear, land, re-set is
+      the only sequence available, so the hole is not an accident of how someone
+      used the tool; it is the tool's shape.
+      THE INSTRUCTION HAZARD THIS CREATES, which is how it nearly bit. The
+      standing wording given to hosts at the start of the hold was: "Until the
+      literal 'freeze cleared' from me, OR scripts/release-freeze.sh status
+      linux-next saying ok:freeze-none, push no code to linux-next." That "or"
+      makes the marker sufficient on its own — correctly, in every other
+      circumstance. During this window the marker says exactly what the
+      instruction authorises, and a host following its instruction would push
+      code into the cut while doing nothing wrong. It was closed by prose: the
+      coordinator retracted the marker clause to lenovinha and yoga a minute
+      before the clear and to macbookair and macneo during it, and every host
+      with code confirmed. **A guard that depends on five out-of-band messages
+      landing before a fifteen-minute window is not a guard.**
+      RELATED, SAME NIGHT, SAME SHAPE ONE LEVEL DOWN: 1256-f7td
+      (`ok:skills-single-source:0:16` — a guard passing having examined nothing)
+      and 1257-z3cu (a host in a long gate rendering as idle). In all three an
+      instrument reports a narrow truth that the reader takes as the broad one.
+      Here the narrow truth is "no freeze ref exists right now" and the broad
+      one the reader takes is "the freeze is over".
+    exit_criteria:
+      - 'the cut host can land a fix to a frozen branch WITHOUT clearing the freeze — pre-fix evidence: 42 consecutive clear samples across 7m26s of a gate-length window on 2026-09-19, with the coordinator confirming the only available sequence was clear → land → re-set'
+      - 'PREFERRED REMEDY (coordinator, 2026-09-19): the pre-push hook admits a code push to a frozen branch from the host NAMED IN THE MARKER`S OWN PATH, refs/tillandsias/freeze/<branch>/<host>/<epoch>. The cut host then never clears its own freeze and no reader ever sees an absence during a legitimate landing'
+      - 'NEGATIVE CONTROL FOR THAT EXEMPTION, and it must be checked before the exemption ships: the marker is an ordinary ref on origin, so ANY host that can push can create refs/tillandsias/freeze/<branch>/<itself>/<epoch> and thereby exempt itself from a freeze it just declared. Verify that a host cannot self-exempt by declaring — either the declaring host is pinned by something the pusher does not control, or declaring a freeze is itself gated. If it cannot be closed, the exemption is too broad and the fallbacks below apply'
+      - 'FALLBACK A — atomic re-set: set the successor ref BEFORE deleting the predecessor, so the ref set is never empty and `ls-remote` never returns nothing during a legitimate re-set'
+      - 'FALLBACK B — generation comparison: the ref path already carries an epoch (refs/tillandsias/freeze/linux-next/macuahuitl/1789775480), so a reader can be told to compare against a SUCCESSOR rather than against absence. Requires the successor to exist, which is fallback A'
+      - 'the standing instruction to hosts stops offering `ok:freeze-none` as a sufficient signal, OR the marker becomes trustworthy enough that it can be — today the wording and the marker disagree during exactly the window where it matters, and the disagreement was closed by five messages sent by hand'
+      - 'NEGATIVE CONTROL: a freeze that is genuinely over still reads clear and still lets everyone push. A fix that makes the marker permanently untrustworthy — "always wait for prose" — has removed the only machine-readable signal and left the fleet coordinating on messages, which is what this row exists to stop'
+    unscoreable: |
+      exemption-breadth-not-judged: whether the cut-host exemption is safe turns
+      on whether a host can self-exempt by declaring its own freeze, which is a
+      property of who may write refs/tillandsias/* on origin and is not
+      measurable from this host. The window itself is fully measured.
+    events:
+      - type: filed
+        ts: "2026-09-19T02:25:00Z"
+        agent_id: "linux-pirria-claude-20260919t022500z"
+        host: pirria-silverblue
+        summary: |-
+          Filed by a host that spent the window holding ten commits it could
+          have pushed, polling read-only, and reporting the measurement rather
+          than acting on it. The coordinator described the clear as momentary; I
+          measured 7m26s and rising and said so, and they corrected the estimate
+          to a full gate and supplied the better remedy — remove the sequence
+          rather than narrow the window. The evidence is perishable by
+          construction: the transient state IS the finding, and it is only
+          observable while it is happening.

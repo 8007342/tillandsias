@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# readme-release-ledger-wiring.status was ALREADY 'completed', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: readme-release-ledger-wiring
+    event:
+      type: note
+      ts: "2026-09-16T03:55:00Z"
+      host: macuahuitl
+      summary: |-
+        346f9c06f763ccfd0ba2e8e3a8f8256459b94150

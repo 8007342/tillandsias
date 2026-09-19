@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: progress
+      ts: "2026-09-17T21:48:26Z"
+      agent_id: linux-macuahuitl-claude-20260917t214826z
+      host: macuahuitl
+      summary: |
+        A SECOND INSTANCE OF THIS ROW'S SUBJECT ARRIVED ON ORIGIN TODAY, named here so
+        it is not rediscovered. Appended rather than filed as a new packet: this row
+        already owns the class, and a duplicate would split the remedy.
+
+        THE REF: salvage/forge/20260916-920-cluster-committed, tip abb850205, pushed
+        2026-09-17T21:27Z. Recorded nowhere in plan/ before this event. origin now
+        carries 18 salvage refs.
+
+        INTEGRATED INTO NOTHING, checked by ancestry on all four branches rather than
+        inferred from a message: main no, linux-next no, osx-next no, windows-next no.
+
+        WHAT IT ACTUALLY CARRIES, measured against its OWN merge-base rather than
+        against trunk, because the two answers differ by a factor of three:
+          raw diff vs trunk              137 files   <- mostly trunk having moved
+          merge-base                     5a7cdee07 (2026-09-16)
+          trunk has advanced since       127 commits
+          the ref's own commits          2
+          the ref's own work             42 files, 1160 insertions, 31 deletions
+        The 137 is not a measure of anything. `git diff trunk..ref` also reports
+        `D crates/tillandsias-plan/src/forgotten.rs`, which is NOT a deletion: that file
+        did not exist at the merge-base, so the D is staleness. Reporting it as a
+        deletion would have accused a forge session of removing a file another host
+        added afterwards.
+
+        THE HAZARD THIS ROW NAMES, LIVE. Eleven real orders are cited by the ref's two
+        commits. Their status on trunk right now:
+          ready        1141-vf9w
+          completed    1159-g96c, 1201-hsf9
+          in_progress  920-c3af, 920-eqjr, 920-ijwa, 920-mvgp, 920-tqhs,
+                       922-hm3n, 923-ys2t, 926-3vs6
+        So 1141-vf9w is offerable to any host draining plan_next while work for it
+        already exists, unintegrated, on a ref nobody has read. That is exactly this
+        row's subject and it is one row rather than eight only because the forge
+        claimed the rest properly.
+
+        (A twelfth token, `920-clus`, appears if you extract order-shaped strings from
+        those commits. It is not an order: it is my own regex clipping `920-cluster`
+        out of the commit subject. Recorded so nobody chases it as an unresolvable
+        citation.)
+
+        NOT RELAYED, and deliberately. This is 42 files of unaudited forge work
+        including crates/tillandsias-plan/src/answer.rs, a file under standing orders
+        requiring the corpus-declaration harness against the held stale index and the
+        seeded-wrong-answer negative control before any relay. It is also 127 commits
+        behind trunk, so integration is a real merge and not a fast-forward. A
+        coordination pass is the wrong place to land it and "the forge's unaudited
+        lines" is already on the operator's own blocked list. NOT DELETED either, and
+        this is the standing rule: a ref that is an ancestor of nothing is the only copy
+        of that work.
+
+        SMALLEST NEXT ACTION for whoever takes this row: read the two commits, decide
+        per-file what is still applicable after 127 commits of trunk movement, and
+        either land the applicable subset through a normal gated path or record per
+        file why it is superseded. Do not delete the ref until the four-branch ancestor
+        check passes for the parts kept.

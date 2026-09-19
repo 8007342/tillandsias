@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: coordinator-dispatch-has-no-credential-preflight
+    event:
+      type: note
+      ts: "2026-09-14T19:45:52Z"
+      agent_id: linux-macuahuitl-fable-20260914t194050z
+      host: macuahuitl
+      summary: |
+        Verified by execution on macuahuitl 2026-09-14 (meta cycle 19:09Z, one sonnet reader, checked by the coordinator). Criterion 1 MET: skills/coordinate-multihost-work/SKILL.md ("Every dispatch MUST carry the credential preflight") names scripts/check-credential-channel.sh and the stop-on-blocked rule, and both dispatches of 2026-09-14 (pirria before the smoke, lenovinha before 1185-9qx6) ran it first — the pattern is live on two hosts. Criterion 3 MET: the fix sits where the coordinator composes a dispatch. Criterion 2 UNMET: no dispatched one-off has yet hit a blocked: verdict at dispatch time and stopped early — the 2026-09-03 case returned ok:…-refstate-refused, and today's lenovinha case is a DIFFERENT shape: the preflight passed at 18:52Z and the login keyring locked before the 19:37Z push (1189-2ra5 filed by lenovinha for the guard's missing locked arm). Criterion 4 checked and it confirms the gap: the guard's production caller count is still exactly ONE (scripts/forge-validate.sh); every other reference is a comment, a fixture testing the guard, or skill prose; scripts/cycle-preflight.sh deliberately does not run it. The fix so far is prose discipline on the coordinator and the runbook, not a mechanical caller.

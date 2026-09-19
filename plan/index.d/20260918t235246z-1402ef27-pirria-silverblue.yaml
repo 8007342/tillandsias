@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-18T23:52:46Z"
+      agent_id: linux-pirria-claude-20260918t235245z
+      host: pirria-silverblue
+      summary: |
+        CLAIMED BY pirria-silverblue 2026-09-18, AND THE VERIFICATION THAT PRECEDED IT
+        — recorded because this row's own next_action told me not to claim it.
+
+        THE STALE LINE: `next_action` still opens "BLOCKED ON A DECISION, NOT ON
+        EFFORT — DO NOT CLAIM THIS TO IMPLEMENT IT." That was true when written and is
+        now superseded. I did not take the coordinator's word for that; I checked.
+
+        THE RULING IS ALREADY ON ORIGIN, and was before the re-route was proposed:
+          plan/index.d/20260918t193636z-1217-54vw-operator-ruling-macuahuitl.yaml
+          introduced by 49bdf7369
+          git merge-base --is-ancestor 49bdf7369 origin/linux-next  ->  TRUE
+        It is a `decision` event on this packet, carrying the operator's words quoted
+        from the transcript rather than paraphrased. The coordinator believed the write
+        was still owed and intended to make it again; it would have produced a SECOND
+        decision event for ONE decision, which on an append-only ledger a later reader
+        cannot distinguish from a revision. Only the `next_action` prose is stale, and
+        that is a one-line `set-field --append`, not a decision.
+
+        THE SPEC VERIFIED AGAINST SOURCE, line by line, before claiming — because the
+        coordinate list came to me in a message and coordinates drift:
+          `ORDER 759-vceg` comment block opens          crates/tillandsias-headless/src/main.rs:10209
+          `let probe_cwd = std::env::current_dir()`                                        :10230
+          `read_host_project_origin_url(&probe_cwd)`                                       :10231
+          `None =>` arm returning github_login_no_upstream_refusal closes                  :10296
+          three KEEP call sites, each passing a real project path        :6263, :11337, :14341
+          fn read_host_project_origin_url definition itself                                :3786
+          the_no_upstream_arm_refuses_instead_of_seeding_unverified                        :25143
+          the_push_authorization_gate_runs_before_the_vault_write                          :25202
+          the_login_source_window_is_scoped_to_one_function                                :25234
+        All present as specified. Nothing in the code contradicts the ruling's premise,
+        so there was nothing to stop and report.
+
+        READING THE BLOCK CONFIRMS THE RULING'S LOGIC, not merely its coordinates, and
+        this is the part that matters if the line numbers move. The comment at 10209
+        states its own premise outright: "AUTHENTICATION IS NOT AUTHORIZATION, and
+        until here only authentication had been checked ... it says nothing about
+        whether that identity may PUSH to the repository this installation exists to
+        push to." That is exactly the premise the operator rejected. Login validates
+        "can this token list repos?"; the push question moves to forge launch, where
+        there is one repository and the forge knows it.
+
+        The part that becomes WRONG under the ruling is the `None` arm specifically: it
+        refuses because there is no upstream HERE, for a credential that was never
+        going to need one at that moment. Its own comment records the cost of the
+        opposite failure — the operator ran `--github-login` as root from /root, the
+        token was seeded unverified and the push stayed 403 — which is why it refuses
+        rather than probing scopes. Under the ruling that trade dissolves: nothing is
+        seeded unverified, because the verification that matters happens where the
+        repository exists.
+
+        WHAT THE DELETION MUST NOT DO, and it is this row's criterion 2, preserved
+        verbatim in the ruling: "a token that genuinely cannot push must be TOLD SO at
+        forge launch, with the affordance; read-only becomes a supported branch, not
+        the failure branch." So the forge-launch push test is minted FIRST, as its own
+        row, and the five kept helpers cite that order under #[allow(dead_code)] as
+        caller-to-be. Deleting the probe without that row would remove a check and
+        leave five orphaned helpers pointing at nothing — a narrowing of the claim that
+        widens the admission, which is precisely what criterion 2 forbids.
+
+        PLAN-ONLY CLAIM: this flip is pushed on a branch cut at origin/linux-next
+        carrying ledger fragments only, because a release freeze is live on linux-next
+        (`scripts/release-freeze.sh status linux-next` -> `frozen:linux-next:by=macuahuitl`)
+        and this host's other twelve commits carry code. The deletion itself will be
+        done on work/1217-54vw and gated when the freeze lifts.

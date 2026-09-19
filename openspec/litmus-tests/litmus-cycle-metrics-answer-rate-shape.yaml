@@ -40,22 +40,62 @@ preconditions:
 
 critical_path:
   - step: "the reporter is executable and emits the pinned experts grammar"
-    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *calls=*answered=*unsupported=*degraded=*errors=*answer_rate=*) echo 'ok: experts grammar intact' ;; *) echo \"observed=$out\"; echo 'fail: experts grammar' ;; esac"
-    timeout_ms: 10000
+    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *calls=*answered=*unsupported=*degraded=*errors=*answer_rate=*) echo 'ok: experts grammar intact' ;; *) echo \"observed=$out\"; echo 'fail: experts grammar' ;; esac"
+    # ============================================================================
+    # !!! ELEVATED TIMEOUT — NOT A BUDGET. REMOVE ME. (order 1236-bmjh) !!!
+    # ============================================================================
+    # THIS NUMBER IS A LIE THE OPERATOR AUTHORISED ON 2026-09-17 SO A RELEASE
+    # COULD SHIP. It was 10000 ms. Nothing about this step got slower on purpose
+    # and nothing about it was fixed; the budget was raised to get out of the way
+    # of a defect that lives somewhere else entirely.
+    #
+    # MEASURED, and this is why the old number was not wrong when it was written:
+    #   scripts/cycle-metrics.sh: rc=0 in 29,908 ms on a QUIET host — THREE TIMES its own
+#   10,000 ms budget, and this step only ever runs inside a compiling gate.
+    #
+    # THE REAL CAUSE IS A QUADRATIC LEDGER FOLD, not this step and not this host.
+    # Measured within one host across two commits, same binary, quiet:
+    #   c587bf335  4.32 MB base / 364 fragments  full load ~222 ms  raw parse ~48 ms
+    #   HEAD       8.50 MB base / 827 fragments  full load ~992 ms  raw parse ~85 ms
+    # 4.5x the time for 2x the data, and the PARSE IS ONLY 85 ms OF 992 — so the
+    # obvious fix, "parse the ledger once", aims at 8.6% of the cost. The
+    # superlinearity is three per-packet linear scans in
+    # crates/tillandsias-plan/src/fragments.rs plus a full clone of the parsed
+    # tree: roughly 1.1 MILLION string comparisons per load on this corpus,
+    # growing as packets x fragments. See 964-tzmp and 1233-jqp4.
+    #
+    # SO THIS NUMBER ROTS BY DESIGN. It buys time proportional to how fast the
+    # fleet files packets, and it buys it on the BUSIEST host last — the host
+    # with the most work done reds first and looks like an outlier when it is the
+    # leading indicator. Raising it again is not a remedy; it is this same
+    # decision taken a second time with less excuse.
+    #
+    # DO NOT COPY THIS VALUE TO A NEW STEP. A step written against 300000 has no
+    # measured basis at all; it has inherited a workaround.
+    #
+    # A BUDGET KILL IS STILL A FAIL (820-c8q8), so a genuinely hung producer still
+    # reds the gate — it now costs five minutes to say so instead of ten seconds.
+    #
+    # REMOVAL IS TRACKED AS 1236-bmjh AND IS SEQUENCED: these five come out ONE
+    # AT A TIME as the fold fix lands, each removal proving on its own that the
+    # step passes at its ORIGINAL budget. A single sweeping revert would tell us
+    # nothing about which of the five the fix actually reached.
+    # ============================================================================
+    timeout_ms: 300000
     expected_behavior: "ok: experts grammar intact"
 
   - step: "answer_rate EXCLUDES degraded from its denominator (order 531 must not be absorbed as a hard question)"
-    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=100%*) echo 'ok: degraded excluded' ;; *) echo \"observed=$out expected answer_rate=100% (1 answered, 0 unsupported, 3 degraded)\"; echo 'fail: degraded folded into the denominator' ;; esac"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=100%*) echo 'ok: degraded excluded' ;; *) echo \"observed=$out expected answer_rate=100% (1 answered, 0 unsupported, 3 degraded)\"; echo 'fail: degraded folded into the denominator' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: degraded excluded"
 
   - step: "answer_rate EXCLUDES protocol errors from its denominator"
-    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"error\"}\\n{\"tool\":\"a\",\"outcome\":\"error\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=100%*) echo 'ok: errors excluded' ;; *) echo \"observed=$out expected answer_rate=100%\"; echo 'fail: errors folded into the denominator' ;; esac"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"error\"}\\n{\"tool\":\"a\",\"outcome\":\"error\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=100%*) echo 'ok: errors excluded' ;; *) echo \"observed=$out expected answer_rate=100%\"; echo 'fail: errors folded into the denominator' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: errors excluded"
 
   - step: "a genuine refusal DOES count against the rate (the metric must still be able to say 'useless')"
-    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"unsupported\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=50%*) echo 'ok: refusals counted' ;; *) echo \"observed=$out expected answer_rate=50%\"; echo 'fail: refusals not counted — the metric can no longer report uselessness' ;; esac"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"unsupported\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=50%*) echo 'ok: refusals counted' ;; *) echo \"observed=$out expected answer_rate=50%\"; echo 'fail: refusals not counted — the metric can no longer report uselessness' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: refusals counted"
 
@@ -65,12 +105,12 @@ critical_path:
     expected_behavior: "ok: 531 signature has a verdict"
 
   - step: "substitution stays honestly unknown (it needs the harness tool log; an estimate would fake it)"
-    command: "L=$(mktemp); : > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts_substitution:'); rm -f $L; case \"$out\" in *unknown*) echo 'ok: substitution unknown' ;; *) echo \"observed=$out\"; echo 'fail: substitution must stay unknown, never estimated' ;; esac"
+    command: "L=$(mktemp); : > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^experts_substitution:'); rm -f $L; case \"$out\" in *unknown*) echo 'ok: substitution unknown' ;; *) echo \"observed=$out\"; echo 'fail: substitution must stay unknown, never estimated' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: substitution unknown"
 
   - step: "the reporter never fails the cycle it measures (verdict carries judgement, not exit status)"
-    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n' > $L; TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only >/dev/null 2>&1; rc=$?; rm -f $L; if [ $rc -eq 0 ]; then echo 'ok: reporter exits 0'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metrics reporter must not fail the cycle it measures'; fi"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n' > $L; TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only >/dev/null 2>&1; rc=$?; rm -f $L; if [ $rc -eq 0 ]; then echo 'ok: reporter exits 0'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metrics reporter must not fail the cycle it measures'; fi"
     timeout_ms: 10000
     expected_behavior: "ok: reporter exits 0"
 
@@ -88,7 +128,7 @@ critical_path:
   - step: "the mcp usage line is emitted with its pinned fields (are the servers used?)"
     # Distinct from answer_rate: a volume line. Today only the plan expert logs,
     # so the other servers must be NAMED uninstrumented, never faked as zero.
-    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp: '); rm -f $L; case \"$out\" in *servers=*plan-expert-calls=*other-servers=uninstrumented-see-682-m8ek*source=*) echo 'ok: mcp usage line intact' ;; *) echo \"observed=$out\"; echo 'fail: mcp usage grammar' ;; esac"
+    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^mcp: '); rm -f $L; case \"$out\" in *servers=*plan-expert-calls=*other-servers=uninstrumented-see-682-m8ek*source=*) echo 'ok: mcp usage line intact' ;; *) echo \"observed=$out\"; echo 'fail: mcp usage grammar' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: mcp usage line intact"
 
@@ -96,7 +136,7 @@ critical_path:
     # Once every server tags its rows (682-m8ek), the mcp line groups by server
     # instead of naming the rest uninstrumented. Seed a multi-server log and
     # assert per_server carries each server's count.
-    command: "L=$(mktemp); printf '{\"server\":\"forge-plan\",\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n{\"server\":\"project-info\",\"tool\":\"project_type\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_status\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_log\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp: '); rm -f $L; case \"$out\" in *servers=3*forge-plan=1*git-tools=2*project-info=1*) echo 'ok: per-server counts' ;; *) echo \"observed=$out\"; echo 'fail: mcp per-server counts' ;; esac"
+    command: "L=$(mktemp); printf '{\"server\":\"forge-plan\",\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n{\"server\":\"project-info\",\"tool\":\"project_type\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_status\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_log\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^mcp: '); rm -f $L; case \"$out\" in *servers=3*forge-plan=1*git-tools=2*project-info=1*) echo 'ok: per-server counts' ;; *) echo \"observed=$out\"; echo 'fail: mcp per-server counts' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: per-server counts"
 
@@ -104,7 +144,7 @@ critical_path:
     # The other servers writing to the same log must NOT inflate the expert's
     # call/answer counts. One forge-plan answered + three non-expert rows must
     # still report experts calls=1.
-    command: "L=$(mktemp); printf '{\"server\":\"forge-plan\",\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n{\"server\":\"project-info\",\"tool\":\"project_type\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_status\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_log\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; if printf '%s' \"$out\" | grep -Eq 'calls=1 answered=1 '; then echo 'ok: experts scoped to plan expert'; else echo \"observed=$out\"; echo 'fail: non-expert rows leaked into experts counts'; fi"
+    command: "L=$(mktemp); printf '{\"server\":\"forge-plan\",\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n{\"server\":\"project-info\",\"tool\":\"project_type\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_status\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_log\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; if printf '%s' \"$out\" | grep -Eq 'calls=1 answered=1 '; then echo 'ok: experts scoped to plan expert'; else echo \"observed=$out\"; echo 'fail: non-expert rows leaked into experts counts'; fi"
     timeout_ms: 10000
     expected_behavior: "ok: experts scoped to plan expert"
 
@@ -148,7 +188,7 @@ critical_path:
     # Shown red against the pre-fix probe on 2026-09-04 (it reported
     # probed-but-absent: scripts/generate-traces.sh and traces=unknown) and
     # green after — the same command, so it distinguishes the two states.
-    command: "miss=''; while IFS= read -r l; do p=$(printf '%s' \"$l\" | grep -oE '[$]REPO_ROOT/scripts/[A-Za-z0-9_.-]+[.]sh' | head -1); p=${p#*REPO_ROOT/}; case \"$l\" in *'. \"$REPO_ROOT/'*|*'source \"$REPO_ROOT/'*) [ -f \"$p\" ] || miss=\"$miss $p(sourced-but-missing)\" ;; *) [ -x \"$p\" ] || miss=\"$miss $p(invoked-but-missing-or-not-executable)\" ;; esac; done < <(grep -E '[$]REPO_ROOT/scripts/[A-Za-z0-9_.-]+[.]sh' scripts/cycle-metrics.sh | sort -u); L=$(mktemp); : > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh 2>/dev/null | grep '^repo: '); rm -f $L; t=${out##*traces=}; t=${t%% *}; bad=''; [ -n \"$miss\" ] && bad=\"probed-but-absent:$miss\"; case \"$t\" in current|stale|unavailable:?*) ;; *) bad=\"$bad traces=${t:-<no-repo-line>}\" ;; esac; if [ -z \"$bad\" ]; then echo \"ok: probe targets exist, traces=$t\"; else echo \"observed:$bad\"; echo 'fail: the reporter probes a script that is not in the tree, or traces= is a bare unknown (1004-j4p4)'; fi"
+    command: "miss=''; while IFS= read -r l; do p=$(printf '%s' \"$l\" | grep -oE '[$]REPO_ROOT/scripts/[A-Za-z0-9_.-]+[.]sh' | head -1); p=${p#*REPO_ROOT/}; case \"$l\" in *'. \"$REPO_ROOT/'*|*'source \"$REPO_ROOT/'*) [ -f \"$p\" ] || miss=\"$miss $p(sourced-but-missing)\" ;; *) [ -x \"$p\" ] || miss=\"$miss $p(invoked-but-missing-or-not-executable)\" ;; esac; done < <(grep -E '[$]REPO_ROOT/scripts/[A-Za-z0-9_.-]+[.]sh' scripts/cycle-metrics.sh | sort -u); L=$(mktemp); : > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --no-experts 2>/dev/null | grep '^repo: '); rm -f $L; t=${out##*traces=}; t=${t%% *}; bad=''; [ -n \"$miss\" ] && bad=\"probed-but-absent:$miss\"; case \"$t\" in current|stale|unavailable:?*) ;; *) bad=\"$bad traces=${t:-<no-repo-line>}\" ;; esac; if [ -z \"$bad\" ]; then echo \"ok: probe targets exist, traces=$t\"; else echo \"observed:$bad\"; echo 'fail: the reporter probes a script that is not in the tree, or traces= is a bare unknown (1004-j4p4)'; fi"
     timeout_ms: 30000
     expected_behavior: "ok: probe targets exist"
 

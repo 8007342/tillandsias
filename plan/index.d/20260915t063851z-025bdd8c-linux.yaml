@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    field: status
+    value: completed
+    ts: "2026-09-15T06:38:51Z"
+    host: linux
+
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: completed
+      ts: "2026-09-15T06:38:51Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 59b13d649
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: note
+      ts: "2026-09-15T06:38:51Z"
+      host: linux
+      summary: |-
+        fleet-heartbeat.sh now reads a blocker from the folded ledger via blocked_by, accepting BOTH token kinds additively per the operator (colon-bearing = capability matched against the capability matrix, bare = host identity); and the WEDGED branch now consults the blocker before classifying, which was defect 2 — a host that keeps committing never reached the lookup, so 864-w7rc's detection had only ever worked for SILENT hosts. Fold is the authority, fragment only attributes; no plan binary disables the ledger source. Fixture 11/11 (first this classifier has ever had), falsified 5-of-11 against pre-fix. Landed 59b13d649, ok:land:59b13d649:attempt-2, gate 789s no violations

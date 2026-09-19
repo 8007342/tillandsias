@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    order: 1248-j6vd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [gpu, cdi, nvidia, inference, container, currency]
+    estimated_hours: 3
+    owned_files:
+      - scripts/nvidia-cdi-ensure.sh
+      - scripts/dev-inference-ensure.sh
+    title: |
+      `nvidia-cdi-ensure.sh` decides the CDI spec is current by comparing the DRIVER version, but the spec also pins libraries that version independently of the driver — so it reported `ok:nvidia-cdi:current:610.57.04` about a spec referencing a file that no longer existed, and every GPU container start died
+    context: |
+      FOUND ON macuahuitl 2026-09-17 while bringing up the local expert lane on
+      the operator's direction. The GPU CONTAINER lane was completely dead and
+      the currency check said it was fine.
+      THE FAILURE, from the container start log:
+        crun: cannot stat `/usr/lib64/libnvidia-egl-gbm.so.1.1.3`:
+        No such file or directory
+      MEASURED: the host has libnvidia-egl-gbm.so.1.1.4 (and .so.1). The CDI
+      spec at ~/.config/cdi/nvidia.yaml, mtime 2026-08-17, pinned 1.1.3.
+      WHY THE CHECK MISSED IT, and the script says so in its own comment. It
+      records the DRIVER the spec was generated for and regenerates when the
+      live driver differs: "A driver upgrade moves [the versioned library
+      paths]". The driver did NOT move — 610.57.04 before and after. What moved
+      was libnvidia-egl-gbm, which ships SEPARATELY from the driver package and
+      versions on its own cadence (1.1.3 -> 1.1.4). So the check anticipated
+      exactly one way for the spec to go stale and the spec went stale the other
+      way, while printing `ok:nvidia-cdi:current:610.57.04`.
+      THE RIGHT QUESTION IS NOT THE DRIVER VERSION. It is whether the files this
+      spec lists still exist. That is cheap — the spec is a list of hostPaths and
+      stat is free — and it is the only check that cannot be fooled by a
+      component versioning independently of the thing being compared. Same family
+      as 1172-dyvd: currency is a probe of the artifact's own content, not a
+      proxy for it.
+      A SECOND DEFECT FOUND ON THE SAME PATH, worth fixing in the same pass
+      because it is why nobody noticed. scripts/dev-inference-ensure.sh decides
+      the lane is ready by probing http://127.0.0.1:11434 — and reports
+      `ok:dev-inference-ready` for ANY engine answering on that port. With a
+      host-native ollama running, it returned ready WITHOUT STARTING A CONTAINER,
+      so the container lane read healthy while being entirely unable to start.
+      The two verdicts are distinguishable in the source (`ready` vs `started`)
+      but only the second proves the container path works. Killing the
+      host-native engine turned `ok:dev-inference-ready` into
+      `blocked:container-start-failed` immediately.
+      AND THE REFUSAL CARRIED NO AFFORDANCE, which is 1247-amcu's subject on a
+      live path: `blocked:container-start-failed` was the ENTIRE output. The
+      actual crun error was captured to $STATE_DIR/serve.log, a path the verdict
+      never names. Finding the cause took reading the script to learn where its
+      log lives.
+    exit_criteria:
+      - 'the currency check verifies that every hostPath in the CDI spec still stats, and regenerates when any is missing, rather than comparing only the driver version (pre-fix result: FAILS — the spec pinned libnvidia-egl-gbm.so.1.1.3 against a host carrying 1.1.4 and the check reported ok:nvidia-cdi:current:610.57.04)'
+      - 'a GPU container start failure names the cause and the log path in the refusal itself, not only in $STATE_DIR/serve.log — the bare `blocked:container-start-failed` cost a full manual diagnosis on a host where the fix was one regenerate'
+      - 'dev-inference readiness distinguishes "an endpoint answered" from "the container lane works": with a host-native engine on the same port, the container path must still be exercised or the verdict must say it was not (pre-fix result: FAILS — reported ok:dev-inference-ready while the container could not start at all)'
+      - 'NEGATIVE CONTROL: a genuinely current spec must not be regenerated on every invocation — regeneration is not free and a check that always regenerates is as uninformative as one that never does'
+    unscoreable: |
+      which-other-independently-versioned-libraries-are-pinned: the spec lists
+      many hostPaths and only one bit this time. Whether others ship on the
+      driver's cadence or their own is a question about packaging on each
+      distribution, not something this row can settle. The file-existence check
+      in criterion 1 is deliberately blind to that distinction, which is why it
+      is the right check.
+    verifiable_closure: |
+      litmus:inference-gpu-device-args — extended with an arm that a CDI spec
+      referencing a hostPath which no longer stats is reported STALE and
+      regenerated, rather than current because the driver version is unchanged.
+      The readiness half belongs to litmus:inference-readiness-probe-shape: an
+      endpoint answered by a foreign engine on the same port must not read as
+      container-lane health.
+    events:
+      - type: filed
+        ts: "2026-09-18T01:31:31Z"
+        agent_id: "linux-macuahuitl-claude-20260918t013131z"
+        host: macuahuitl
+        summary: |-
+          Found by killing a host-native engine to force the container path,
+          having noticed that the readiness verdict could not distinguish the
+          two. The CDI staleness had been latent since 2026-08-17 and was
+          invisible to its own currency check for a month, on the host the fleet
+          intends to use as its accelerated proof of concept.

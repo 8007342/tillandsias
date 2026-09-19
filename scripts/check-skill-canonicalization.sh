@@ -160,6 +160,41 @@ checked=0
 
 for h in "${HARNESSES[@]}"; do
     [ -d "$h/skills" ] || continue
+
+    # A WHOLLY-LINKED RUNTIME TREE IS CANONICAL BY CONSTRUCTION (1238-u84w).
+    # 51db2c14c collapsed .gemini/skills from per-skill symlinks to a SINGLE
+    # directory symlink -> ../skills. `[ -d ]` FOLLOWS that link, so the glob
+    # below enumerates the canonical skills themselves and reports every one as
+    # "a real directory where a symlink belongs" -- 17 offenders naming the very
+    # files they are canonical copies of.
+    #
+    # THE TWO-CHECK RULE, and it is why this widening exists at all. The sibling
+    # guard check-skills-single-source.sh was widened for this shape and is the
+    # one ./build.sh --check runs; THIS check is reached only through
+    # litmus:skills-canonical-and-mcp-first-shape, which --check does not
+    # execute (measured: a --check gate log has 63 litmus mentions and 0
+    # executions of that test -- it validates litmus METADATA, not the tests).
+    # So widening one and not the other leaves the gate green and the litmus
+    # lane red, which is exactly what happened on trunk. Both must move
+    # together, in one land.
+    #
+    # The discriminator is the tracked PATH, not the entry count: "exactly one
+    # tracked symlink" ALSO describes a runtime with per-skill links that is
+    # missing all but one, which is a REAL violation. Only an entry whose path
+    # IS "$h/skills" means the whole tree is one link.
+    _sk_path="$(git ls-files "$h/skills" 2>/dev/null | head -1)"
+    _sk_mode="$(git ls-files -s "$h/skills" 2>/dev/null | cut -d" " -f1 | head -1)"
+    if [ "$_sk_path" = "$h/skills" ] && [ "$_sk_mode" = "120000" ]; then
+        _sk_target="$(git cat-file -p "$(git rev-parse ":$h/skills" 2>/dev/null)" 2>/dev/null || true)"
+        case "$_sk_target" in
+            # It must still point INTO the canonical tree -- a directory link to
+            # somewhere else is the same divergence this guard exists to catch,
+            # just one level up.
+            *"$CANONICAL"|*"$CANONICAL/") checked=$((checked + 1)); continue ;;
+            *) violations="${violations}${h}/skills -> ${_sk_target} (directory symlink does not point into ${CANONICAL}/)"$'"'"'\n'"'"' ;;
+        esac
+        continue
+    fi
     for d in "$h"/skills/*; do
         [ -e "$d" ] || continue
         name="$(basename "$d")"

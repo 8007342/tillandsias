@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    event:
+      type: progress
+      ts: "2026-09-14T01:08:39Z"
+      agent_id: linux-lenovinha-opus5-20260914t010839z
+      host: linux
+      summary: |
+        SCOPE CORRECTION FROM THE COORDINATOR, BEFORE ANYONE BUILDS A SECOND LANE, and
+        it reduces this row rather than growing it.
+
+        I filed this as "the work/ lane needs a stamp it cannot produce, so admit an
+        ungated tree there". WRONG SHAPE. The two lanes are deliberately different and
+        both already exist:
+
+            work/<order>                 a GATED hand-off, by design
+            salvage/<host>/<date>-<slug> the UNGATED one, accepted without a stamp
+                                         because rescuing is exactly what it is for
+                                         (1146-8j7i)
+
+        So the defect is NOT a missing exemption. It is that the refusal text does not
+        name the choice: a host that cannot gate is told the tree changed since the
+        gate passed, and is not told that the ungated route exists. I had read
+        salvage-dirty-worktree as a DIRTY-tree tool — its name says so — and did not
+        know 1146-8j7i extended it to a clean tree whose HEAD is on no origin ref. The
+        lane I needed was already there and I proposed building a second one.
+
+        REVISED ASK, replacing the exemption: the pre-push refusal on a stampless push
+        names the salvage route ("cannot gate here? salvage it"), and the docs say which
+        lane is which. The NEGATIVE CONTROLS stand exactly as filed — platform branches
+        and main still require the stamp, and a relayed hand-off is still gated by the
+        coordinator before trunk, because the point was never to move whether the gate
+        runs.
+
+        MEASURED, the route working end to end on this host:
+
+          scripts/salvage-dirty-worktree.sh 1159-g96c
+          -> ok:salvaged-commits:refs/heads/salvage/lenovinha/20260914-1159-g96c:477e5ed77
+
+          on origin:  477e5ed77  refs/heads/salvage/lenovinha/20260914-1159-g96c
+          authorship: 4e38b5a29 lenovinha "fix(1159-g96c): a fallback locus asks for
+                      nothing" — reachable from the ref, commit object intact
+          payload:    scripts/check-capability-row.sh +116/-5 and its progress event
+
+        `ok:salvaged-commits:` and not `ok:salvaged-local:` — 1103-i7xq's three-verdict
+        distinction, checked rather than assumed, so the copy survives a re-clone.
+
+        THE GENERAL LESSON, which is this evening's again with the subject changed: I
+        went looking for a mechanism that did not exist instead of asking whether the
+        one I needed already did. The name of the existing tool actively misled me
+        (`salvage-DIRTY-worktree` for a clean tree), and that is worth a sentence in
+        the docs half of this row — a tool whose name describes its original case will
+        not be found by someone in its extended case.

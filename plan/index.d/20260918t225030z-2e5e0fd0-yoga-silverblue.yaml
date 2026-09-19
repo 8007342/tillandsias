@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: correction
+      ts: "2026-09-18T22:50:30Z"
+      agent_id: linux-yoga-claude-20260918t225030z
+      host: yoga-silverblue
+      summary: |
+        POINTER FROM THE COMMIT SUBJECT THAT CANNOT BE CORRECTED.
+
+        Commit af346bc57 on linux-next carries the subject:
+
+          evidence(917-6iwv): yoga's second-host record on the GPU lane — 30/33,
+          all-minilm, Vulkan — and three defects in the instrument that wrote it
+
+        THAT HEADLINE IS RETRACTED. A commit subject is immutable, so anyone arriving at
+        this row from git log, from a blame, or from a release note will read "30/33,
+        all-minilm" as a result. It is not one, and this event exists so the disproof is
+        reachable from the same place as the claim.
+
+        THE SHORT FORM, for a reader who needs only the verdict:
+
+          - BOTH yoga records — all-minilm (2026-09-18T21:29:55Z) and mxbai-embed-large
+            (22:48:10Z) — graded the committed 768-dimensional query vectors against an
+            index that was NOT 768-dimensional (384 and 1024 respectively).
+          - NEITHER run exercised an embedding model at all. podman logs across the
+            grade show only qwen2.5:0.5b and zero embedding requests.
+          - Retrieval degraded to a CONSTANT: two unrelated questions returned the same
+            ordered chunk list. The grader reported this as three ordinary case
+            failures, never as a configuration error.
+          - Control on the same host, corpus and commit, minutes apart:
+              spec-rung1, mxbai index (1024 vs 768) -> pass=2 fail=3
+              spec-rung1, nomic index ( 768 vs 768) -> pass=5 fail=0
+          - lenovinha's nomic-embed-text record is the ONLY dimensionally valid record
+            on this row.
+          - CRITERION 6 STANDS OPEN with one valid host record, not two.
+
+        The three instrument defects reported in that same commit are NOT retracted and
+        remain accurate: the hardcoded `lane` literal (917-n3n9), and the two provenance
+        losses filed as 1257-jxu9. Only the NUMBER is withdrawn.
+
+        The underlying grader defect is filed as order 1258-u8re — the grader compares
+        committed query vectors against an index of any dimension and grades instead of
+        refusing. That row also records why the premise both hosts used when choosing
+        models ("the embed model decides the number") is false for this harness: the
+        query side is frozen, so changing the embed model cannot change the measurement,
+        only break it.
+
+        Full detail is in the correction event on this row at 2026-09-18T22:49:55Z.

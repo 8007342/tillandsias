@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    field: verifiable_closure
+    value: 'litmus:gate-step-prefix-allocation (scripts/test-gate-step-prefix-allocation.sh, pre-build, size instant): in scratch repos, two sequential lands that both chose prefix 280 both land — the second''s step is moved to 281 (the smallest free integer below the next occupied prefix, 290) by scripts/allocate-gate-step-prefix.sh --base <remote tip> --commit, the rename committed, the first land''s 280 untouched, and the arm-7 check of test-gate-step-append-no-conflict.sh replicated over the scratch reads clean; PRE-FIX CONTROL: the same check over the integrated tree before allocation reports the shared prefix (the refusal the packet was filed for). NEGATIVE CONTROL: a step chosen at 285 between 280 and 290, with 285 taken, lands at 286 — still after 285 and before 290. No collision: no rename, no commit, tree hash unchanged. No gap (300..310 occupied): refused:gate-step-prefix:no-gap, nothing renamed, non-zero exit. Two added files sharing a prefix: the first keeps it, the second moves. --dry-run names the rename and moves nothing. Usage refused with exit 2. STRUCTURAL: scripts/land-on-platform-branch.sh calls the allocator with --base "origin/$BRANCH" --commit after its integrate and before ./build.sh --check (line order) and stops on a refusal. Live: on a tree adding nothing the allocator answers ok:gate-step-prefix:no-collision. Criterion 3: skills/advance-work-from-plan/SKILL.md names the allocation instead of the pick-after-the-integrate advice. The first real collision on a host''s land is the live confirmation; it prints `land: attempt N — gate-step-prefix: <old> -> <new> (NNN taken by …)`.'
+    ts: "2026-09-14T15:49:30Z"
+    host: macuahuitl
+
+events:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    event:
+      type: note
+      ts: "2026-09-14T15:49:30Z"
+      host: macuahuitl
+      summary: |-
+        discharged the unscoreable placeholder into the litmus that now exists (1136-n8sh shape)

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    field: title
+    value: blocked:plan-ledger-incomplete refused a fragment push from a detached worktree with TILLANDSIAS_PLAN_BIN pointed elsewhere — observed ONCE, never deliberately reproduced, probably 1128-4ffr's shape (the wedge this row originally claimed was a consequence of 1193-yw6u and is gone)
+    ts: "2026-09-15T05:10:41Z"
+    host: macos
+
+events:
+  - packet_id: a-macos-host-can-be-wedged-out-of-the-plan-lane-entirely-not-just-the-code-lane
+    event:
+      type: note
+      ts: "2026-09-15T05:10:41Z"
+      host: macos
+      summary: |-
+        the old title advertised a closed loop that measurement retired; packet_id keeps the old slug and cannot be corrected

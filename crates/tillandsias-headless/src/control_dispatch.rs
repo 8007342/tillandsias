@@ -331,6 +331,7 @@ mod tests {
                 ControlMessage::DeliverCredentialsReply {
                     seq_in_reply_to: 1,
                     success: true,
+                    outcome: tillandsias_control_wire::DeliverCredentialsOutcome::Accepted,
                 },
                 "DeliverCredentialsReply",
             ),
@@ -557,6 +558,7 @@ _ => unreachable!("test fixture missing case for {name}"),
             ControlMessage::DeliverCredentialsReply {
                 seq_in_reply_to: 1,
                 success: true,
+                outcome: tillandsias_control_wire::DeliverCredentialsOutcome::Accepted,
             },
             ControlMessage::VaultHandoverReply {
                 seq_in_reply_to: 1,

@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-evidence-dir-is-never-cleared-between-runs-so-a-previous-runs-exit-file-reads-as-this-runs-result-to-every-out-of-band-read
+    event:
+      type: note
+      ts: "2026-09-18T22:15:29Z"
+      agent_id: linux-pirria-claude-20260918t221528z
+      host: pirria-silverblue
+      summary: |
+        THIRD GATE REFUSAL IN THIS SEQUENCE, AND THE FIRST ONE THAT WAS NOT MY CODE —
+        recorded here because the three together are the lesson, not any one of them.
+
+          FAIL: with an unrunnable ELF the probe returned '<scratchpad path>' instead
+                of the .exe — ordering must not strand the Windows locus
+          plan-binary-locus-native: 2 passed, 1 failed
+
+        Cause: `TILLANDSIAS_PLAN_BIN` was exported in the shell that launched the gate,
+        and `resolve_plan_binary` honours an explicit override on existence alone by
+        design (704-zcgi). The fixture asserts probe ORDERING, which an override is
+        built to bypass. Single-variable proof, same tree and minute:
+        `env -u TILLANDSIAS_PLAN_BIN` -> 3 passed, 0 failed.
+
+        Filed as 1258-tpkz. Not appended to 1186-w3ph: that row is scoped to the MinGW
+        locus and its four mechanisms, and a Linux floor host is not in its population.
+
+        THE SEQUENCE, since this row is about a stale artefact reading as a fresh
+        result and all three refusals are that shape one level up:
+          1. 792-ksr8  — my fixture let SIGPIPE decide a verdict.
+          2. 761-g36m  — my fix for (1) used `mapfile`, absent on macOS bash 3.2.
+          3. 1258-tpkz — the gate's own fixture red on a correct configuration.
+        Three reds, three correct instruments, and none of them visible to me from
+        running my own tests. The first two were mine; the third was the host's
+        environment being legitimate in a way a fixture did not anticipate.
+
+        AND THE PROCEDURAL MISTAKE, which cost the most wall-clock: I filed 1258-tpkz
+        AFTER relaunching the gate, so the new fragment moved the gate stamp and the
+        run would have ended in a pre-push refusal. That is the meta-orchestration
+        runbook's finalization rule 3c, written down and read by me earlier in this
+        same cycle, violated the first time a finding arrived mid-gate. **Every ledger
+        write happens before the gate, including the ones you did not plan to make** —
+        and a finding discovered BY a gate is exactly the write you did not plan. I
+        killed the run at ~4 minutes rather than spend 35 on a stamp that could not
+        hold. Cheap this time only because the finding arrived early.

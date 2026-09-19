@@ -81,8 +81,32 @@ it never rounds up.
   false positives fixed or allowlisted) must be >= packets filed.
 - **Safety**: a deletion touching a fail-closed gate, a credential path, a
   consent gate or a fixture's planted evidence is downgraded and named.
+- **Closing a multi_cycle packet drops its long-running row in the same
+  land.** One of the first run's four land launches was refused because a
+  multi_cycle packet was closed without removing its `plan/long-running.md`
+  row in the same commit. The filing cap's packets are the sweep's own
+  output, so this lands on the sweep: if a packet you file or confirm-close
+  is multi_cycle, the row goes in the same commit that closes it, or the
+  gate refuses the whole land (drill: plan/issues/fleet-restart-2026-09-12.md, Silverblue scope confirmed).
 
 ## 4 — Land once, record, measure
+
+**Take the boundary before the cycle's first ledger write.** On the first run
+the claim set-field and the claim event ran seconds before the boundary
+snapshot in the same command, so the snapshot recorded the sweep's own two
+untracked fragments as pre-existing dirt to preserve, and the guard refused
+the land with `worktree differs from startup boundary` at finalisation — one
+wasted land launch on the sweep's own record-and-file step. Order the cycle:
+boundary snapshot first, then claim, then record and file. A boundary taken
+after your own writes does not just refuse; it describes a tree that never
+existed (drill: plan/issues/fleet-restart-2026-09-12.md, The coordinator's boundary read its own claim fragments as startup dirt).
+
+**A present runtime symlink is not a tracked one.** The first run's land was
+refused because a skill file's runtime link existed in the worktree but was
+untracked: the single-source check reads TRACKED links only, so it passed
+locally and the gate refused. Before landing, if any confirmed diff touches a
+skill or runtime file, confirm its links into `.claude .opencode .codex
+.github .gemini` are tracked, not merely present (drill: plan/issues/fleet-restart-2026-09-12.md, Silverblue scope confirmed).
 
 The coordinator applies the confirmed diffs from the workers' returned text
 (never from their worktrees), re-runs the detector, lands through
@@ -97,6 +121,15 @@ scripts/cycle-metrics.sh --emit-tokens host=<h> cycle=<id> main_ctx=<n> subagent
 The record line is what the kill rule and the refutation band read; the
 token line is what the next budget is set from. A sweep that confirms the
 corpus is clean has done its job and records it as such.
+
+**Record the whole cost, land attempts included.** The first run was written
+up at ~21 min end to end; measured with its four land launches (skill-link
+rule, self-kill, long-running-view rule, push race) it was ~44 min and ~140k
+coordinator main-context. Since this section gates the sweep on an operator
+budget and the token line is what the next budget is set from, a figure that
+stops at fan-out and judging halves the next sweep's allowance. The recorded
+end-to-end time and main-context count cover every land attempt for this
+cycle's filings, not the fan-out and the judging pass alone (drill: plan/issues/fleet-restart-2026-09-12.md, The coordinator's boundary read its own claim fragments as startup dirt).
 
 ## What the first run taught (2026-09-13, macuahuitl)
 

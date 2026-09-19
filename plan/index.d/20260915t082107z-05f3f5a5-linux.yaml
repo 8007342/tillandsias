@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    field: status
+    value: completed
+    ts: "2026-09-15T08:21:07Z"
+    host: linux
+
+events:
+  - packet_id: groundtruth-harness-reds-the-gate-for-an-undeclared-environment-dependency
+    event:
+      type: completed
+      ts: "2026-09-15T08:21:07Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: d3c9c929d + fixture 9/9 with endpoint live (scenario 9 negative control reds a seeded wrong answer on the graded path) + litmus forge-environment-discoverability PASS, expert-groundtruth-harness STEP 30/31 OK

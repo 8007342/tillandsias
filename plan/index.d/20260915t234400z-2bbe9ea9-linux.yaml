@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-pin-that-works-and-a-cadence-that-never-runs-it-let-a-release-blocking-red-land-green-and-sit-for-days-on-one-host
+    event:
+      type: progress
+      ts: "2026-09-15T23:44:00Z"
+      agent_id: linux-yoga-claude-20260915t233553z
+      host: linux
+      summary: |
+        REFUSING THIS ROW'S CRITERION: ITS STATED MECHANISM IS FALSIFIED, and I am the host that filed it. I claimed this row to build the notice and stopped before writing a line of it, because the scored criterion would have baked a FALSE statement into a guard.
+
+        THE CRITERION, quoted from this row's own unscoreable field: a change editing WIRE_VERSION is told, before landing, that litmus:guest-container-metrics-wire-shape asserts on it AND THAT BUILD.SH --CHECK DOES NOT RUN IT. That last clause is untrue.
+
+        MEASURED, four ways, on this host, 2026-09-15:
+
+        1. The litmus file declares size instant and phase pre-build. Both are top-level fields in openspec/litmus-tests/litmus-guest-container-metrics-wire-shape.yaml.
+
+        2. build.sh under --check sets CI_ARGS to --phase pre-build --fast, and scripts/local-ci.sh in fast mode runs the runner at --phase pre-build --size instant. So the gate executes exactly the phase and size this test declares.
+
+        3. RUN, not inferred: scripts/run-litmus-test.sh observability-metrics --phase pre-build --size instant --compact selects and EXECUTES litmus:guest-container-metrics-wire-shape, 2 of 2 executed, 11.1s. I did not conclude this from reading the filters; I ran them.
+
+        4. The test was genuinely RED at the commit in question. At 4fc7be930 the step pinned WIRE_VERSION = 3 while crates/tillandsias-control-wire/src/lib.rs declared it = 4. The parent commit carried the same pin. That is arithmetic, not judgement: the grep could not match.
+
+        SO THE THREE FACTS DO NOT RECONCILE. The gate runs this test; the test was red; the land was green. The row explains that with a TIER GAP, and there is no tier gap here — instant is not quick, and --check runs instant.
+
+        WHAT THIS MEANS FOR THE ROW. The cross-TIER blind spot may well be real in general, and 890-27mv's cadence finding stands on its own evidence. But THIS row's worked example is not an instance of it, and the example is the only thing the criterion scores. An implementer building to that criterion would ship a notice whose central message is a falsehood about this host's own gate.
+
+        THE REAL CAUSE IS UNDETERMINED AND IS A BIGGER QUESTION THAN THIS ROW. Every branch of the pre-build litmus section in local-ci.sh now calls log_fail_tracked, including the podman-unavailable arm, so a red or an absent runtime both fail the gate TODAY. Candidates I did not rule out, named so the next investigator does not re-derive them: the land adopted a valid gate stamp and skipped the gate entirely (1174-u5wp, which happened four times on this host tonight); the gate ran against a tree that did not yet carry the bump; or the historical local-ci defect recorded in that same section, where a red pre-build litmus printed ALL CHECKS PASSED because log_info did not increment CHECKS_FAILED, was still live at that commit. The third is documented in the file as past tense; I did not verify WHEN it was fixed relative to 4fc7be930, and that single question is probably the whole answer.
+
+        WHY I AM NOT SIMPLY FIXING THE CRITERION AND CARRYING ON. A criterion that names a mechanism is a design decision wearing a test's clothes, and the filer is the person least likely to catch it because the mechanism reads as an obvious consequence of the symptom. I wrote this one. Reinterpreting it quietly to match whatever I built is how the conflict would survive to bite the next person, so it is stated here and the row goes back to ready for the coordinator to re-scope.
+
+        WHAT SURVIVES UNCHANGED: the platform twin 1194-davi, whose premise I verified independently and which I am implementing in this cycle. Its mechanism is real and derivable, and it does not depend on anything asserted here.

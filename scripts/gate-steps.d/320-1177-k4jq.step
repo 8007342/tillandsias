@@ -1,0 +1,22 @@
+# Gate step 1177-k4jq — data, not code.
+#
+# Binds the fixture that keeps the pre-push refusal pointing at the SANCTIONED
+# ungated hand-off. Source text plus one --help invocation: no arm pushes
+# anything or creates a remote ref, because a fixture that pushed to prove a
+# push works would be doing the thing it tests, against the fleet's trunk.
+#
+# THE TWO ARMS THAT MATTER ARE THE NEGATIVE CONTROLS. This change is a POINTER,
+# not a new bypass: the refusal must still only refuse (no exit-0 path acquired),
+# the salvage exemption must stay scoped to refs/heads/salvage/ (872-c9nd), and
+# --no-verify must stay BELOW the sanctioned lane so a stuck host does not read
+# the forbidden route first. All three are what a later edit would break.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the pre-push refusal names the ungated salvage lane, not just --no-verify (1177-k4jq)"
+STEP_SCRIPT="scripts/test-refusal-names-the-ungated-lane.sh"
+STEP_ERROR="the pre-push refusal no longer points a host that cannot gate at the sanctioned ungated hand-off (1177-k4jq) — such a host is back to being offered only --no-verify, or the salvage exemption has widened past refs/heads/salvage/; see the verdict line above"
+STEP_OK="pre-push refusal names the ungated lane"
+# Exit 3 means the hook or the salvage script is absent — nothing was examined,
+# and the fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="the pre-push hook or salvage script is absent, so the refusal could not be read"

@@ -1,0 +1,33 @@
+# Gate step 1204-3s2s — data, not code.
+#
+# Binds the gate-step metrics isolation check. The guard itself lives in
+# build.sh's step loop (it must, to observe each step); this fixture pins that
+# the guard is there, that the subject fixture no longer reaches the host's log,
+# and — the load-bearing part — that an unnamed run genuinely DOES split it.
+#
+# WHY A SEPARATE FIXTURE RATHER THAN AN ARM IN test-metrics-log-path-agreement.sh,
+# which is the natural home: that fixture is an ORPHAN (invoked by no gate step,
+# no litmus binding, no build.sh call) and a prior adversarial orphan-disposition
+# sweep classified it FIX_FIRST — "wiring it before the fix converts a latent
+# library bug into an intermittent, misattributed gate failure". Putting this
+# arm there would mean either leaving it unrun like the rest of that file, or
+# binding a body that a second reader already refused to wire. Neither is a
+# guard. This file is the bindable half; the agreement fixture stays the home
+# for the PATH-AGREEMENT contract once its own blocker is cleared.
+#
+# THE ARM THAT MATTERS IS ARM 3, the negative control. Without it arm 2 passes
+# in a world where nothing writes timing records at all, and the fixture would
+# assert the absence of something that cannot happen. Its first draft did
+# exactly that: a stripped copy in a temp dir resolved its own ROOT to /tmp,
+# copied no scripts/, never reached the runner, and wrote nothing — passing the
+# absence check for a reason with nothing to do with the subject.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a gate step cannot write into the host's shared metrics log (1204-3s2s)"
+STEP_SCRIPT="scripts/test-gate-step-metrics-isolation.sh"
+STEP_ERROR="a gate step reached the host's shared metrics path (1204-3s2s) — one fixture writing /tmp/tillandsias-timing.jsonl splits the timing log, cycle-metrics then refuses every number, arms driving it read zero, and check-release-tier-freshness answers never:release-tier on this host from then on; see the failing arm above"
+STEP_OK="gate-step metrics isolation check passed"
+# Exit 3 means the subject fixture is absent — nothing was exercised, and the
+# fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation could not be exercised"

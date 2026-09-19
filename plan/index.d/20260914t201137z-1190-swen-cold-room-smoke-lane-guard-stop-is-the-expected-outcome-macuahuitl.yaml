@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator from pirria's v56.9.13.1 smoke report
+# (finding 3, filed on the in-forge agent's request), with the coordinator's
+# ruling written in: option (a).
+packets:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    order: 1190-swen
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [forge, vault, release, testing, fail-loud, skills, low-end]
+    estimated_hours: 1
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the runbook's assertion. Future litmus scripts/test-smoke-forge-lane-cold-host-outcome.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: §4 of the smoke runbook asserts, on a post-reset host, that the lane brought the enclave up and stopped at the credential guard with blocked:upstream-no-credential, nothing claimed or committed, tree pristine, no MO-FULL marker — as the PASS condition — and the §5 report says so in words; NEGATIVE CONTROL: a lane that exits 0 WITHOUT the guard line (a warm room, or a lane that skipped the guard) fails the assertion; pre-fix result: FAILS — opencode_exit=0 read as a cycle's worth of work on pirria 2026-09-14."
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+      - plan/issues/smoke-e2e-findings-v56.9.13.1-2026-09-14-linux-pirria.md
+    title: |
+      A cold Vault holds no GitHub token, so the forge lane after §2's reset publishes no-credential and the Credential Channel Guard hard-stops before any committable work, deterministically — §4 exercises bring-up and the guard and nothing past them, while opencode_exit=0 lets a reader conclude the forge did a cycle's worth of work. RULING (coordinator, 2026-09-14): the guard-stop IS §4's expected cold-host outcome; no scoped token after §3.
+    context: |
+      MEASURED by pirria 2026-09-14 (04-opencode.log:848–862): the guard
+      answered blocked:upstream-no-credential (exit 1); the mirror published
+      refs/tillandsias/upstream-auth/no-credential, fresh; the in-forge agent
+      "claimed nothing, drained nothing, filed nothing, and committed
+      nothing", left git status empty and HEAD == origin/linux-next, emitted
+      no MO-FULL marker so the absence stays loud, and asked the launching
+      host to file this — correctly refusing to commit from a container
+      about to be destroyed. The host could push at the same moment
+      (00-credential-channel.txt ok:gh-keyring-push-verified): the asymmetry
+      is the design. The coordinator's ruling takes pirria's option (a): the
+      lane's pass condition on a post-reset host is "brings the enclave up
+      and stops correctly at the credential guard", asserted from the guard
+      line, not read from exit 0. Option (b) — a scoped token after §3 — is
+      declined: it would test a different machine than the one the smoke
+      exists to prove, and a clean room that holds a credential is not a
+      clean room. The in-forge handling is not what needs fixing.
+    exit_criteria:
+      - '§4 of the smoke runbook asserts the guard-stop (blocked:upstream-no-credential, nothing claimed or committed, tree pristine, no marker) as the cold-host PASS condition, from the guard line (pre-fix result: FAILS — exit 0 alone was the condition)'
+      - 'NEGATIVE CONTROL: a lane that exits 0 without the guard line fails the assertion'
+      - 'the §5 report states the outcome in words a reader cannot mistake for a completed cycle'
+    events:
+      - type: filed
+        ts: "2026-09-14T20:11:37Z"
+        agent_id: "linux-macuahuitl-fable-20260914t201136z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from pirria's smoke report (finding 3,
+          discovered 2026-09-14T19:58:10Z on the in-forge agent's request),
+          with the ruling: option (a).

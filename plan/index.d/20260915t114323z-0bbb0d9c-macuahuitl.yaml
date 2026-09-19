@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    event:
+      type: completed
+      ts: "2026-09-15T11:43:23Z"
+      agent_id: linux-macuahuitl-opus5-20260915t113945z
+      host: macuahuitl
+      summary: |
+        Channel half fixed and landed on macuahuitl 2026-09-15. expire_claim_candidates now resolves (claim_host, claim_ts) LEASE-FIRST via status_lease_of, exactly as the sibling live_claims has since 1065-4t7t — the correction was applied to one of two functions reading the same thing and this one was left behind. A second change was required for the first to be whole: the claim's own timestamp is now a FLOOR under the row's last activity, because the event loop keeps only the claimant's own events and a claimant recorded as a platform matches no event written by a workstation, so a freshly claimed row would otherwise fall through as unknown-age. Verified: the fixture 5/5, the four sibling claim fixtures unchanged (expire-claims-write-is-opt-in 16, list-live-rows 9, reclaim-stranded-claims 6/6, resumable-claim-dirt 6/6), and the live sweep now reports one candidate (1155-jurn, a genuinely old claim on finished work) instead of misreporting a fresh one.
+        ONE OF THIS ROW'S OWN EXIT CRITERIA WAS WRONG AND IS CORRECTED RATHER THAN IMPLEMENTED. It said a row carrying events but no status write must not be aged off an event at all. Reading the code showed that fallback is DELIBERATE: a base-born in_progress carries no claimant, the event channel is the only evidence there is, and 672-bz7u treats a claim filed with nothing after it as the stranded signature. Implementing the criterion as written would have removed a working guard. Arm 3 pins the fallback instead, so the fix cannot quietly delete it.
+        THE FOURTH CRITERION IS SPLIT OUT AS 1201-hsf9 RATHER THAN CLOSED HERE: a claim written without an explicit --host records its holder as the compiled PLATFORM, and that default is deliberate and guarded by 772-4se9's unit test, which runs on every host that gates a push. Making the claimant a workstation is therefore a decision among three routes, not a fix, and it is recorded with them.

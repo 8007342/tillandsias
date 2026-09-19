@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    field: unscoreable
+    value: |-
+      unpinnable-until-the-remedy-shape-is-chosen: making the precondition
+      satisfiable in the guest is a design choice with at least three candidate
+      shapes (provision a checkout in the guest; resolve the remote from
+      configuration rather than cwd; run the probe host-side and pass the result
+      in). Each has a different blast radius across the tray, the guest image and
+      the credential path. The measurement is complete and reproducible; the
+      remedy is not chosen.
+
+
+      [2026-09-16T01:37:52Z macuahuitl] SUPERSEDED BY THE BLOCK ABOVE — read it as history, not as guidance. The three shapes it lists are NOT a comparable set: (a) is a workaround, (b) and (c) are two placements of one question nobody had asked. BLOCKED ON 1217-54vw. (a) provision-a-checkout is RULED OUT: a second source of truth for which repository, inside a guest the tray reprovisions on its own, which makes 1215-cxgb's clock a designed-in dependency. (b) and (c) cannot be chosen until 1217-54vw is settled — the probe verifies ONE repository while the credential is global (secret/github/token), ProviderLoginConfig carries no project identity at all, and four of five call sites already pass a real project path while only this probe passes Path::new("."). No choice of where to read the repository from fixes a scope mismatch. CRITERION 4 IS NOT BLOCKED and yoga-silverblue is building it; it gets more valuable under this finding, because a probe that names its repository makes the mismatch visible to every operator.
+
+      [2026-09-16T01:38:39Z macuahuitl] WORDING FIX to the block immediately above, whose first six words invert its own meaning. It opens 'SUPERSEDED BY THE BLOCK ABOVE', which attached to itself reads as though THAT block were the dead one. The intent is the reverse: the ORIGINAL three-shapes paragraph (the first block, beginning 'unpinnable-until-the-remedy-shape-is-chosen') is the superseded history; the 2026-09-16T01:37:52Z block is the CURRENT guidance. Read the blocks in order: first is history, second is current, this is a label. The operative facts are unchanged — (a) RULED OUT, (b) and (c) BLOCKED ON 1217-54vw, criterion 4 NOT blocked.
+    ts: "2026-09-16T01:38:39Z"
+    host: macuahuitl

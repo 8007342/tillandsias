@@ -73,6 +73,63 @@ the remedy is mechanical rather than attentional: **run the cross-branch check o
 every candidate before routing it, and never report a packet as unclaimed on the
 strength of a trunk read.**
 
+Since 1153-j2nm the gap has a second, shorter remedy on the CLAIMANT's side:
+`scripts/push-plan-fragments-to-trunk.sh` pushes a platform host's new
+fragments to `origin/linux-next` at claim time through the plan-only lane
+(no stamp; the worktree and branch are untouched; the relay merges the
+identical file clean). Tell a platform host that claims by message to run
+it, and when the cross-branch check reports `claimed-elsewhere:<order>:<branch>`,
+relay the fragment or ask the host to push it — the check remains the
+coordinator's control, because a host can still claim without the helper.
+
+## Is Any Host's Work Stranded — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
+
+```bash
+scripts/salvage-audit.sh                    # or --branch <ref> --pattern refs/heads/work/*
+```
+
+Order 1226-jb8y. Reports each salvage/work ref that holds content not on the
+branch, and for every differing file WHICH SIDE IS AHEAD. Only
+`ref-may-be-AHEAD` and `ABSENT` lines are relay candidates; a
+`<branch>-is-AHEAD` line means the branch moved past a stale snapshot.
+
+**BEFORE CONCLUDING A HOST'S WORK IS UNREACHABLE, RUN THIS.** On 2026-09-16
+macbookair's finished work sat on origin for hours — 872-c9nd's net had pushed
+it — while two hosts reasoned about escape routes and neither queried the refs.
+
+**It is a script because the question has three parts and every one-command
+shortcut answers a different one.** Ancestry is not integration: a ref relayed
+by cherry-pick is never an ancestor and is fully landed. `git diff A...B`
+overcounts by listing what B changed since the merge base, including files A
+added independently — six fragments read as differing and all six were
+byte-identical. `git diff A B` overcounts far worse by counting the branch's own
+progress: 526, 2009 and 2061 files against a truth of 3, 0 and 0. And "differs"
+is not "outstanding" — a file the branch touched after the snapshot is the
+branch moving on.
+
+## Which Hosts Are Active — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
+
+```bash
+scripts/fleet-activity.sh --since 3.hours      # or --since 24.hours, --ref <branch>
+```
+
+Order 1223-wzc4. It reports one row per HOST with plan-only and code counts, and
+a separate UNATTRIBUTED BUCKET row for addresses that name no host.
+
+**This is a script for the same reason the loop-status metrics audit is.** The
+recipe was recorded as drill prose in one pass and retyped WRONG two passes
+later — `%ae` was used and then `${e%%@*}` printed, stripping the domain, which
+is the only part that names the host, so two different hosts both rendered as
+`tlatoani`. Three corrections travel with the file and none of them survives
+paraphrase: count by EMAIL not name (author name maps to four addresses for one
+name); derive the host from the DOMAIN under every convention the fleet uses,
+including `<Host>.local`, not one hard-coded suffix; and report an address that
+names no host as a BUCKET, never as a host row (1012-hu7d).
+
+**It cannot answer idleness and says so on every run.** A host absent from the
+window landed nothing in the window — mid-analysis, gating, blocked and asleep
+are indistinguishable from here. Idleness is established by ASKING.
+
 ## Active Coordination & Mediation Audit
 
 In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:
@@ -90,12 +147,33 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
     -   Document the spec gap or divergence via `tillandsias-plan loop-status-append` and the host's queue file.
     -   Force-assign a corrective "Spec Alignment & Litmus Verification" packet as the next primary task.
 
+**Establish blast radius before broadcasting a land-blocker.** Where a failure
+was found is not where it bites: a guard shipped in 68d404947 failed
+`test-cycle-flow-emit-idempotency.sh`, and the coordinator relayed a
+land-blocker reading to six hosts before checking that the fixture's only
+caller is a litmus test outside both `--check` and the land path — no host
+was actually blocked, and the alarm had to be un-told within the hour. Before
+declaring or relaying a blocker, name the gate that actually runs the failing
+step (the divergence file, or one grep for the caller) and state the radius
+(`--check`, land path, litmus/`--ci-full`) in the broadcast (drill: plan/issues/fleet-restart-2026-09-12.md, Refusing a caller that had not asked the question).
+
 ### 3. Thrashing (Undo-Loops / Write-Write Collisions)
 *   **Detection**: Sibling A and Sibling B are repeatedly overwriting each other's changes, reverting each other's plan notes, or fighting over shared files.
 *   **Mediation**:
     -   Freeze both active leases.
     -   Perform a git history analysis (`git log -p -n 5 <shared-file>`) to pinpoint the root conflict.
     -   Enforce the CRDT semantic-merge policy: plan updates are semantic upserts keyed by stable IDs. If code is thrashed, assign a single synchronous conflict-resolution wave to one host and keep the other host on a separate, independent fallback path.
+
+**Repeated `attempts-exhausted` refusals across hosts, with no content
+conflict, are trunk-churn thrashing — not stale claims.** A two-fix land from
+macuahuitl was refused three times against an ~8 min gate while origin moved
+every ~2.5 min; yoga lost two more attempts at ~4 min on the same trunk.
+Under a declared ten-minute fleet-wide quiet the same land passed on attempt
+1. Mediate churn as you would a real collision: declare the quiet, then
+assign a landing order per branch for its duration — one host at a time,
+each messaging its SHA to the next — instead of a free-for-all. The loser is
+not the slowest host; it is whoever pushes last against a moving base, and it
+pays a full gate for nothing (drill: plan/issues/fleet-restart-2026-09-12.md, A push quiet is an instrument, and one was enough).
 
 ### 4. Divergent Branch Paths (Branch Drift)
 *   **Detection**: Sibling branch (`windows-next` or `osx-next`) is accumulating independent commits that are not integrated into `linux-next`.
@@ -168,6 +246,19 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
   `set-field <order> status in_progress --host <host> --evidence … --reason
   "handed by the coordinator …"` pushed through the plan-only lane, and the
   control `tillandsias-plan next <role> | grep -c <order>` → 0.
+- **Correcting a long-form field: `--append`, not a rewrite (1151-td46).**
+  `next_action`, `context`, `notes`, `deliverable`, `verifiable_closure` and
+  their siblings are SHARED PROSE on a channel that replaces wholesale, so a
+  host fixing one sentence deletes whatever other hosts wrote there. Measured on
+  esme 2026-09-13 while attaching evidence to 793-zumy: three load-bearing
+  warnings dropped in one write — a verification-debt note, "DO NOT MOVE
+  legacy_tier WITHOUT TELLING YOGA", and the hwfp-v2 field list — restored only
+  because the tool happened to echo the old value's tail. set-field now REFUSES
+  a value that drops old lines and prints each one; `--append` keeps them all
+  and adds yours under a dated attribution line, and `--replace` is for when you
+  have read the listed lines and they should go. Note the rule is LINE-EXACT:
+  editing someone else's sentence in place counts as dropping it, which is the
+  case this exists for.
 - **A closure on a platform branch is invisible until the relay.** The check
   prints `closed-on:<branch>` for a candidate whose packet carries a terminal
   status in a sibling branch's unrelayed fragments; never hand those — relay
@@ -187,6 +278,16 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
 -   **No Idle Hosts**: Every active host MUST have at least one claimed or ready unblocked primary packet, plus one named independent fallback packet (e.g. in packaging, docs-distillation, or CI testing) so that a host never sits idle when its primary path is gated.
 -   A host waiting for remote integration MUST be assigned an independent
     fallback unless all eligible work is blocked.
+-   **Under a fast-moving trunk, assign floor-tier hosts by relay-ref, not
+    direct land.** esme merged trunk at 09:13, gated green for 39 minutes,
+    and was refused at 09:52 on containment: the stamp was valid, the merge
+    premise under it was not. A green gate on that tier is 21-25 minutes at
+    best, so against a trunk moving every few minutes the platform branch
+    lands only in the gaps. Shape the assignment as: push the gated tree to
+    `work/<order>` and name a specific fast host to merge it into the
+    platform branch on its next land — tens of minutes of exposure become a
+    seconds-long merge. Plan-only pushes are the exception; they stay on the
+    host's own push path (drill: plan/issues/fleet-restart-2026-09-12.md, The floor-tier treadmill, measured).
 -   **Assign Stable Work Items**: Each assignment must specify: `id`, `owner_host`, `status`, dependencies, owned files, next concrete action, expected evidence, and `agent_status_packet` expectations.
 -   **Cross-host recurrence audit** (order 1001-q3zf). The meta-orchestration
     handoff REQUIRES pasting the cycle-metrics output verbatim, which is how
@@ -285,6 +386,15 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
     A `blocked:*` verdict means STOP AND REPORT, not work-then-discover. The
     cost of skipping this is one host-cycle of finished work that cannot be
     landed, and the coordinator then has to relay it by hand.
+
+    **Any credential-helper probe the coordinator hands to a host MUST
+    redirect stdout.** On 2026-09-12 the coordinator's own probe line, handed
+    to macneo, had no redirect: on success it printed the operator's PAT into
+    the transcript and forced a rotation. The rc is the signal; stdout is the
+    secret. Any probe dispatched with the preflight is written `… get
+    >/dev/null; echo rc=$?`, and a probe line already sent without the
+    redirect is corrected in place and the leak reported to the operator
+    (drill: plan/issues/fleet-restart-2026-09-12.md, macneo can push again; the probe leaked the token).
 
 ---
 

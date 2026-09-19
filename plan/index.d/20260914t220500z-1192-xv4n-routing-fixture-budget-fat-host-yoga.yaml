@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga from the uncontended ci-release pre-build run taken while
+# closing 1110-c4nf; macuahuitl routed the finding back to the host holding
+# the measurement, naming 1187-iij8 as the class.
+packets:
+  - packet_id: the-eight-case-capability-routing-fixture-is-budgeted-at-120s-and-needs-137s-on-a-fat-host-so-the-arm-times-out-wearing-a-failures-colour-on-a-fixture-that-passes
+    order: 1192-xv4n
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [testing, release, fail-loud]
+    estimated_hours: 2
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a budget that matches the measured cost and a check that keeps them in step. Future litmus arm or script; the claimer writes it in the same commit and moves this text into verifiable_closure: litmus:capability-routing-shape step 1 completes with 'ok: fixture 8/8' inside its declared budget on a host where the fixture measures 2m17s, AND a guard reports any single-step litmus budget that is under twice the step's last measured wall time; NEGATIVE CONTROL: a genuinely hung step still times out rather than being given an unbounded budget; pre-fix result: FAILS — TIMEOUT at 120s on yoga 2026-09-14T21:5xZ against a 2m17s fixture."
+    owned_files:
+      - openspec/litmus-tests/litmus-capability-routing-shape.yaml
+    title: |
+      litmus:capability-routing-shape step 1 budgets the eight-case routing fixture at 120s; the fixture measures 2m17s UNCONTENDED on yoga, a fat host, so the arm times out and the suite reports a red on a fixture that passes 8/8 — 1187-iij8's class, but the budget is wrong above the floor tier too, not only on it.
+    context: |
+      MEASURED on yoga 2026-09-14, and the contention question was settled
+      before the row was filed rather than after:
+
+      - `scripts/run-litmus-test.sh ci-release --phase pre-build`, run ONCE
+        with nothing else on the host: step 1/5 TIMEOUT at 120s. The runner's
+        own diagnostic agreed it was not contended — "cpu.pressure some-stall
+        31932us over 120s (0%) in this cgroup — step NOT contended at kill
+        time; genuinely too slow for its 120s budget".
+      - The same timeout appeared on an earlier run that DID have a second
+        process on the host, so the two readings agree and the uncontended
+        one is the one that decides.
+      - Standalone: `bash scripts/test-capability-routing.sh | tail -1` ->
+        "PASS: capability routing (8/8)" in 2m17s wall (user 2m07s). The
+        fixture is CORRECT. Only the budget is wrong.
+
+      This is 1187-iij8's class — a single-step litmus budget that assumes a
+      fast host — with one fact that row does not yet carry: yoga is NOT a
+      floor-tier host, and it misses the budget by fourteen percent on a
+      quiet machine. The cost is in the fixture's repeated selector-style
+      invocations against a ledger of 947 packets, so the budget decays as
+      the ledger grows and every host crosses the line eventually; the floor
+      tier crossed it first. Cite 1187-iij8 rather than re-deriving it.
+
+      The SAME failure was hit and fixed in passing at 86ac0e26d, which is
+      the second data point: step 5 of litmus-cycle-batch-triage-shape was
+      budgeted at 120s, measured 2m24s uncontended, and its timeout ABORTED
+      the whole test before step 23 — the arm that packet was about — ever
+      ran. A budget miss does not fail one arm; it truncates the test, and
+      the arms after it report nothing while looking like they were covered.
+
+      WHAT TO BUILD: raise this arm's budget to the measured cost with
+      headroom and a comment carrying the measurement (86ac0e26d shows the
+      shape), then the guard named in unscoreable, so the next ledger-growth
+      increment is reported instead of being discovered as a red. Do not
+      "fix" it by shrinking the fixture's coverage to fit the clock.
+    next_action: |
+      Time `bash scripts/test-capability-routing.sh` on the claiming host,
+      raise timeout_ms on step 1 of litmus-capability-routing-shape.yaml with
+      the measurement in a comment, then sweep the other single-step budgets
+      in openspec/litmus-tests/ for the same shape and report — do not raise
+      them blind, a budget with no measurement behind it is the defect being
+      fixed. Cross-reference 1187-iij8 and 86ac0e26d.

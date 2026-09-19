@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trunk-is-red-on-macos-so-no-macos-host-can-land-code
+    event:
+      type: evidence
+      ts: "2026-09-15T04:19:50Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t041950z
+      host: macos
+      summary: |
+        EVIDENCE CARRIED FOR macneo-macos, WHICH CANNOT PUSH. Not my measurement —
+        macneo's, relayed verbatim in substance because their host cannot land a single
+        plan fragment and their only copy is local. Attribution matters here: I did not
+        run the 2x2 below and am not claiming it. macbookair is the host with a working
+        relay; macneo is not, so this would otherwise live on one disk until that host
+        came back.
+
+        THE 2x2, measured by macneo on one macOS host, single variable:
+
+          CODE                        timeout    VERDICT
+          OLD (pre-b3a93780b)         absent     blocked:gh-cli-only            <- prover's expectation
+          OLD                         present    ok:gh-keyring-push-verified-refstate-refused
+          NEW (trunk, has b3a93780b)  absent     missing:no-credential-channel  <- the regression
+          NEW                         present    ok:gh-keyring-push-verified-refstate-refused
+
+        The two 'present' cells agreeing is the CONTROL: with the tool there the commit
+        changes nothing, so the divergence is attributable to the tool's absence rather
+        than to anything else that moved on trunk. The OLD rows came free — macneo's
+        checkout predated b3a93780b by ~25 minutes, so that host still carried the
+        before-state.
+
+        MECHANISM, one line. b3a93780b changed
+
+            && gh auth status >/dev/null 2>&1; then
+          to
+            && GH_PROMPT_DISABLED=1 _ccc_timeout 15 gh auth status >/dev/null 2>&1; then
+
+        `_ccc_timeout` returns 127 WITHOUT RUNNING THE COMMAND when neither timeout(1)
+        nor gtimeout(1) is on PATH — that is order 988 correctly refusing to run a probe
+        unbounded. But the call now sits in the GATING CONDITION of the gh arm, so a
+        missing bounding tool makes the condition false against a perfectly healthy gh,
+        the whole arm is skipped including the push probe that would have produced
+        blocked:gh-cli-only, and control falls through to missing:no-credential-channel.
+
+        THE POINT WORTH KEEPING: `_ccc_timeout`'s own header says it refuses "so the
+        caller sees 'could not run' rather than a fabricated answer". That holds for a
+        value-returning call and is FALSE in a boolean condition, where rc 127 is
+        indistinguishable from "gh has no auth". The helper was placed exactly where its
+        own documented contract does not hold. The resulting verdict is the same class
+        988-7kxf was filed for — "without it the probe returns 127 and the guard
+        reported a KEYRING fault on a platform with no keyring" — one layer up. And the
+        absence of coreutils becoming an answer about the credential is the very
+        conflation 1189-2ra5 existed to remove, so that packet's own thesis condemns
+        this side effect.
+
+        CONSEQUENCE: reading (a) in this row's context is correct. The PROVER ROW IS NOT
+        STALE and blocked:gh-cli-only was the right verdict. Do not edit the expectation.
+        The fix preserves 1189-2ra5 — bounding that probe was right and fixed a real
+        120s hang — and changes only the PLACEMENT so a missing tool stays
+        distinguishable from an auth failure at that call site.
+
+        SCOPE WIDENING macneo ASKED FOR AND COULD NOT FILE. This row says "no macOS host
+        can land CODE". On macneo that is too narrow: they cannot land a PLAN FRAGMENT
+        either, via two mechanisms independent of the credential guard — see the
+        separate packet filed alongside this note. If this row is closed when trunk goes
+        green, that half stays broken and the only symptom is a host that quietly stops
+        writing to the ledger.
+
+        macneo's evidence is stranded at commit 5598e7b3f on their osx-next and a local
+        ref salvage/macneo-20260915-1193-evidence. LOCAL TO ONE MACHINE. They said so
+        plainly rather than letting "salvaged" imply durability, which is why this note
+        exists.

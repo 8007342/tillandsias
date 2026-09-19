@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-claims-across-branches-reports-claimed-elsewhere-for-a-sibling-whose-fold-is-merely-older-than-trunk-s-a-branch-that-is-an-ancestor-of-trunk-cannot-hold-a-claim-trunk-lacks
+    order: 1262-im9j
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, multi-host, coordination, instrument-defect]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+    verifiable_closure: |
+      scripts/test-claims-stale-ancestor-fold.sh prints
+      `ok:claims-stale-fold:ancestor-sibling-not-a-claim:1:live-claim-still-reported:1`
+      and exits 0. Arm 1: a sibling branch that is an ANCESTOR of trunk, whose
+      fold reads in_progress for P while trunk's fold reads ready (trunk
+      released P after the sibling's last commit) — the check prints
+      `stale-fold:P:<branch>` and the batch verdict counts P as unclaimed.
+      PRE-FIX RESULT: FAILS — today it prints `claimed-elsewhere:P:<branch>`.
+      Arm 2 (negative control): a sibling carrying a claim fragment trunk
+      lacks still prints `claimed-elsewhere:P:<branch>`.
+    title: |
+      check-claims-across-branches.sh reports claimed-elsewhere for a sibling whose fold is merely OLDER than trunk's — a branch that is an ancestor of trunk cannot hold a claim trunk lacks
+    context: |
+      MEASURED on macuahuitl 2026-09-18T22:30Z: `--batch 1155-jurn 1186-w3ph
+      997-e4v2 793-zumy 1132-r4mt` printed claimed-elsewhere for 1155-jurn and
+      1186-w3ph on windows-next AND osx-next. windows-next was 0 ahead of trunk
+      and 617 behind; `comm` of plan/index.d listings showed ZERO fragments on
+      windows-next that trunk lacks; trunk had released both rows on
+      2026-09-13. The sibling fold was stale, not claiming. The coordinator
+      routed around the signal correctly only because the ancestry was checked
+      by hand; the tool's verdict, read alone, would have withheld two ready
+      rows from the one host that could take them. The instrument the
+      coordinate-multihost-work skill says to trust over a trunk read
+      (1034-whsp) has the inverse blind spot: it trusts a sibling read over
+      trunk even when trunk strictly contains the sibling.
+    next_action: >
+      In scripts/check-claims-across-branches.sh, before folding a sibling,
+      test `git merge-base --is-ancestor origin/<sibling> origin/linux-next`;
+      when true, the sibling's fold cannot carry anything trunk lacks, so a
+      status difference is trunk's newer fragment and the line is
+      `stale-fold:<order>:<branch>`, not a claim. Keep the existing behaviour
+      for a sibling with commits trunk lacks. Write the fixture with two
+      scratch branches so both arms run hermetically; the pre-fix run must
+      print claimed-elsewhere on arm 1.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-18 from its own
+      routing pass; the measurement is this host's and is reproducible on any
+      checkout with the platform refs fetched.

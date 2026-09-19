@@ -415,7 +415,7 @@ run_phase() {
         if [[ "$budget" -gt 0 ]]; then
             printf '  OpenSpec phase: %-28s %6sms  budget %5sms  %sx\n' \
                 "$fn" "$elapsed" "$budget" \
-                "$(awk -v e="$elapsed" -v b="$budget" 'BEGIN{printf "%.2f", e/b}')" >&2
+                "$(LC_ALL=C awk -v e="$elapsed" -v b="$budget" 'BEGIN{printf "%.2f", e/b}')" >&2
         else
             printf '  OpenSpec phase: %-28s %6sms  (no budget)\n' "$fn" "$elapsed" >&2
         fi
@@ -432,7 +432,7 @@ run_phase() {
     # That change waits on two hosts' volumes, which is what the instrumentation
     # above exists to collect.
     if [[ "$budget" -gt 0 && "$elapsed" -gt $((budget * 4)) ]]; then
-        echo "  ⚠ OpenSpec: ${fn} took ${elapsed}ms ($(awk -v e="$elapsed" -v b="$budget" 'BEGIN{printf "%.1f", e/b}')x its ~${budget}ms budget) — the scan is drifting; see order 734-sjb3" >&2
+        echo "  ⚠ OpenSpec: ${fn} took ${elapsed}ms ($(LC_ALL=C awk -v e="$elapsed" -v b="$budget" 'BEGIN{printf "%.1f", e/b}')x its ~${budget}ms budget) — the scan is drifting; see order 734-sjb3" >&2
     fi
 }
 

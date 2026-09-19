@@ -26,8 +26,19 @@ trap 'rm -rf "$TMP"' EXIT
 
 RUN_ID="local-ci-$(date -u +%Y%m%dT%H%M%SZ)"
 
-rec() { # rec <run_id> <check_id> <status>
-    printf '{"ci_run_id":"%s","ci_phase":"pre-build","check_id":"%s","status":"%s","source_log":"","archived_log":"a","sha256":"x","duration_ms":1}\n' "$1" "$2" "$3"
+# ORDER 1174-6r4k. This helper used to hardcode ci_phase:"pre-build", which
+# every arm below meant as "a run" — but once the guard learned to tell a FULL
+# tier from a phase-only one, those arms were all writing partial runs and the
+# guard correctly refused to call any of them a release-tier answer. They are
+# full runs now (`all`, which is what local-ci.sh writes for a whole run) and
+# the phase-only case has its own helper, because it is a distinct subject
+# rather than the default.
+rec() { # rec <run_id> <check_id> <status>          -> a FULL-tier record
+    printf '{"ci_run_id":"%s","ci_phase":"all","check_id":"%s","status":"%s","source_log":"","archived_log":"a","sha256":"x","duration_ms":1}\n' "$1" "$2" "$3"
+}
+
+rec_phase() { # rec_phase <run_id> <phase> <check_id> <status>  -> one phase only
+    printf '{"ci_run_id":"%s","ci_phase":"%s","check_id":"%s","status":"%s","source_log":"","archived_log":"a","sha256":"x","duration_ms":1}\n' "$1" "$2" "$3" "$4"
 }
 
 # run_guard <index-path-or-empty> [extra env assignments...]
@@ -104,6 +115,71 @@ if [ "$neg" -eq 0 ]; then
 else
     fail=$((fail + 1))
     echo "FAIL: negative control — $neg non-green outcome(s) exited 0, which is a host claiming a tier passed when it never ran it"
+fi
+
+# ── ORDER 1174-6r4k: a phase-only run must not become the tier's answer ─────
+#
+# THE MEASURED CASE (macuahuitl, 2026-09-13 23:39Z, mid-cut): a diagnostic
+# `scripts/local-ci.sh --phase pre-build` run — the cheapest way to reproduce a
+# gate-only red — appended local-ci-20260913T233926Z as the newest run. Green,
+# the daily 890-27mv exercise would have read fresh and skipped the real tier.
+#
+# Run ids are ordered by their embedded timestamp, and the FULL run is written
+# OLDER than the phase-only one on purpose: the defect is precisely that the
+# newest record wins regardless of coverage.
+_full_old="local-ci-20260913T120000Z"
+_partial_new="local-ci-20260913T233926Z"
+
+# 9. newest is phase-only and GREEN, last full run is RED -> the full run wins.
+{ rec "$_full_old" alpha fail
+  rec "$_full_old" beta pass
+  rec_phase "$_partial_new" pre-build gamma pass
+} > "$TMP/phase-only.jsonl"
+out="$(run_guard "$TMP/phase-only.jsonl")"; rc=$?
+check "a green phase-only run does not mask the last full run's red" 1 "red:release-tier:" "$rc" "$out"
+check "and the ignored run is named" 1 "skip:phase-only-run:$_partial_new" "$rc" "$out"
+
+# 10. NEGATIVE CONTROL: newest run is FULL and red -> unchanged behaviour.
+#     The point of the discriminator is coverage, never leniency: a full red run
+#     must still read red with its count, exactly as before this order.
+{ rec "$_full_old" alpha pass
+  rec "local-ci-20260913T235000Z" beta fail
+} > "$TMP/full-red.jsonl"
+out="$(run_guard "$TMP/full-red.jsonl")"; rc=$?
+check "NC: a full red run still reads red with its count" 1 "red:release-tier:1 failing" "$rc" "$out"
+
+# 11. a run that did every phase SEPARATELY has exercised the tier.
+#     Coverage, not the literal word "all" — otherwise three deliberate phase
+#     runs would read as no tier answer at all.
+#     Uses $RUN_ID, derived from NOW by the harness above, so this arm asserts
+#     a FRESH verdict without encoding a date that would rot into staleness on
+#     its own — the arms above are ordered relative to EACH OTHER and their
+#     verdicts (red, never) do not depend on age at all.
+{ rec_phase "$RUN_ID" pre-build a pass
+  rec_phase "$RUN_ID" post-build b pass
+  rec_phase "$RUN_ID" runtime c pass
+} > "$TMP/covered.jsonl"
+out="$(run_guard "$TMP/covered.jsonl")"; rc=$?
+check "phases covered separately count as a full tier" 0 "ok:release-tier-fresh:" "$rc" "$out"
+
+# 12. NOTHING BUT PHASE-ONLY RUNS IS "never", NOT "fresh".
+#     The failure this order removes, in its purest form: green partial records
+#     and no tier answer anywhere. Reporting that as fresh is what would skip
+#     the daily exercise.
+{ rec_phase "$_partial_new" pre-build gamma pass; } > "$TMP/only-partial.jsonl"
+out="$(run_guard "$TMP/only-partial.jsonl")"; rc=$?
+check "an index of only phase-only runs reports never, not fresh" 1 "never:release-tier:no FULL-tier run" "$rc" "$out"
+
+# 13. THE WRITER HONOURS THE SAME OVERRIDE THE READER DOES.
+#     Source text: running local-ci.sh here would run the tier. The assignment
+#     is the contract, and before this order it was a fixed path — so a
+#     diagnostic run could not be pointed away from the record.
+_lci="$(cd "$(dirname "$GUARD")/.." && pwd)/scripts/local-ci.sh"
+if [ -f "$_lci" ] && /usr/bin/grep -q 'CHECK_LOG_INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-' "$_lci"; then
+    pass=$((pass + 1))
+else
+    fail=$((fail + 1))
+    echo "FAIL: local-ci.sh does not honour TILLANDSIAS_CHECK_LOG_INDEX — a diagnostic run still cannot be pointed away from the record the daily exercise reads"
 fi
 
 total=$((pass + fail))

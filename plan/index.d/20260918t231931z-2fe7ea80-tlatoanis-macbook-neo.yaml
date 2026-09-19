@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    field: next_action
+    value: |-
+      OPEN: C2 name the rc=3 mechanism for arm 4, and C3 catch one refusal with the out2 print armed. The next in-gate rc=3 now NAMES which of the eight exit-3 sites it was (87f189b92), so one refusal should settle C2 instead of another cycle. C4 done (arm 5 exhibited); C1 and C5 hold by execution
+
+      [2026-09-18T08:34:46Z macuahuitl] LEFT TO DO: C2 and C3 remain blocked on recurrence of an in-gate refusal in the wild to capture the token via the armed out2 print. Ruby namespace divergence was tested and refuted on macuahuitl (host and toolbox both resolve /usr/bin/ruby 4.0.6, /usr/lib64). If no refusal recurs once check-no-competing-gate promotes, close 1132-r4mt as resolved by 1141-vf9w.
+
+      [2026-09-18T23:14:57Z tlatoanis-macbook-neo] C2 IS NOT DONE. What is left: name which of the eight exit-3 sites fires on the two REFUSING hosts (yoga, lenovinha). macneo has measured a third ruby layout — Apple system ruby 2.6.10 at /usr/bin/ruby — on which the in-gate archiver path is GREEN and non-vacuously so (1049 packets archived, ready set 531, 332/332 answered in the same run). That narrows the question but does NOT answer it: macneo cannot reproduce the refusal, so it cannot name the site. Do NOT read the green as a diagnosis.
+      NEXT CONCRETE STEP, two lines from each refusing host: 'command -v ruby' and 'ruby --version', reported alongside the exit-3 site their next in-gate refusal names (the row's own instrumentation already makes the next rc=3 name its site). Three layouts with one known-green makes this a comparison, not an investigation.
+      UNTESTED AND NOT TO BE ASSUMED: that system-vs-managed ruby is the discriminator. It is the obvious candidate given the layouts and nobody has tested it. macneo deliberately did NOT shim a second ruby onto PATH to induce a refusal, because a manufactured condition would not be a regime.
+      C3 IS NOT STARTED: staging the out2 print is a scripts/ change and therefore a gated push; macneo holds it until it has an exit site to print for and one gate to spend on it.
+
+      [2026-09-18T23:17:28Z tlatoanis-macbook-neo] REFRAMED after yoga-silverblue's regime: the question 'which of the eight exit-3 sites fires' may be premature, because NO HOST IS CURRENTLY REPRODUCING THE REFUSAL. Two regimes are green in-gate tonight — macneo (host-native, 4 gates) and yoga (toolbox, 3 completed gates on 3 trees) — and yoga is one of the two hosts that ORIGINALLY reproduced it. Establish whether the refusal still reproduces ANYWHERE before chasing which site fires; a hunt for a site that no longer fires is unbounded.
+      STEP 1, cheapest and decisive: lenovinha-silverblue has not yet reported (asked 2026-09-18). Get its EXECUTION-CONTEXT ruby — toolbox, not host — plus whether its recent in-gate archiver runs are green. If lenovinha is green too, the refusal is dormant fleet-wide and this row's next step is to find what CHANGED, not what differs between hosts.
+      STEP 2, if any host still reproduces: that host reads the exit-3 site off its own refusal (the instrumentation already names it) and reports it with its execution-context ruby.
+      COMPARE THE RUBY IN THE EXECUTION CONTEXT, NEVER THE HOST'S. build.sh re-execs into the tillandsias-builder toolbox on Silverblue and the tillandsias-build WSL2 distro on Windows, and skips on macOS (build.sh:39-52). So host ruby IS gate ruby on macOS and can differ maximally on Silverblue — yoga's host has NO ruby while its toolbox has 4.0.6.
+      DO NOT GREP LOGS FOR rc=3 TO FIND IT: the kill-time adjudicator and the MCP build-join fixture both assert rc=3 as an EXPECTED value and both appear in normal green logs. Identify the archiver refusal by its own verdict line.
+      UNTESTED, NOT REFUTED: system-vs-managed ruby as the discriminator. yoga's toolbox ruby is a distro package at /usr/bin like macneo's, so the data does not support it, but nobody has run the discriminating experiment.
+      DOES NOT TRANSFER: the namespace-divergence refutation was established on macuahuitl where host==toolbox; it says nothing about yoga, where they differ maximally.
+      C3 (stage the out2 print) REMAINS UNSTARTED and is now doubly blocked: it needs an exit site to print for, and there is currently no refusal producing one.
+
+      [2026-09-18T23:19:31Z tlatoanis-macbook-neo] EVERY GREEN ON THIS ROW MUST BE RE-READ FOR MEMOIZATION BEFORE IT COUNTS. lenovinha's 'Plan archiver check passed' was a memo replay — 'ok:archiver-check-memoized:<hash> — ledger and archiver unchanged since the last pass; check not re-run' — and from outside a memo replay and a real pass emit the same string. macneo re-verified its own green against this WITH a positive control (grep 'memoized' hits elsewhere in the same log, so the detector works on that file; no memo line in the archiver block; substantive numbers present) and it stands. YOGA'S GREEN HAS NOT BEEN RE-READ FOR A MEMO LINE — ask before counting it.
+      RULE FOR ANY FUTURE REPORT ON THIS ROW: a green counts only if the reporter shows EITHER the absence of a memo line in that block OR the substantive numbers (packets archived, ready set, answerability). A bare 'archiver check passed' is not evidence.
+      system-vs-managed IS NOW REFUTED, not untested: macneo has Apple system ruby and is green; lenovinha has NO ruby and does not refuse. The non-refusing condition survives a host with none, so which ruby is installed is not the discriminator. Do not re-run this experiment.
+      KEEP TWO THINGS SEPARATE OR THE ROW BECOMES UNFALSIFIABLE: (a) an absent-ruby exit 3 could-not-run, which is the DESIGNED path and correct — 965-sxec passes 4/4 on lenovinha, a host with genuinely no ruby; and (b) the in-gate red this row chases. An exit 3 from (a) is not an instance of the defect.
+      STILL OPEN AND NOW THE MAIN QUESTION: does the refusal reproduce ANYWHERE? macneo green (4 gates, verified non-memoized), yoga green (3 gates, memo status UNCHECKED), lenovinha not refusing (2 gates, exit 0, archiver memoized). Two of the fleet's hosts that originally reproduced it are among these. If nothing reproduces, the next step is to find what CHANGED — bisect the archiver and its inputs against the last known refusal — not to compare hosts.
+      PENDING: lenovinha is running scripts/archive-plan-packets.sh --check directly with the memo bypassed; that verdict is the first unmemoized lenovinha datapoint and should be recorded when it arrives.
+      C3 (stage the out2 print) UNSTARTED and blocked on there being any refusal at all to print for.
+    ts: "2026-09-18T23:19:31Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-18T23:19:31Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        memoization rule; system-vs-managed refuted; separate designed could-not-run from the defect

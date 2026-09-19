@@ -61,11 +61,33 @@ fi
 # and the prose mention counted as a second call site. That is the same defect
 # the 901-jtvi lint had to fix — a rule keyed on a string appearing rather than
 # on a caller — reproduced here within hours. Match the `_run bash ...` form.
+#
+# ORDER 1142-85zx — COUNT THE HOISTED PHASE, NOT THE WHOLE FILE. The rule's own
+# reason is "a duplicate would run the check TWICE PER GATE, which is how a
+# move that was really a copy hides". build.sh's ok:gate-fresh-except-plan arm
+# is a MUTUALLY EXCLUSIVE lane: it exits 0 before the hoisted phase is reached,
+# so a call site there runs instead of the hoisted one, never as well as it.
+# Counting it as a duplicate refuses the very wiring 1127-waxf requires — that
+# the lane run the guards whose paths it admitted — and 1142-85zx hit exactly
+# that when plan/issues joined the fast lane and brought its guard with it.
+#
+# The arm is EXCISED and counted separately rather than exempted, so a real
+# duplicate inside the hoisted phase is still caught, and a guard smuggled into
+# the memo arm that is NOT in the fast lane's subject is still visible.
+_hoisted_src="$(awk '/"ok:gate-fresh-except-plan "\*\)/{inarm=1} inarm&&/^[[:space:]]*;;[[:space:]]*$/{inarm=0;next} !inarm' build.sh)"
 for g in check-scorable-obligation-added check-issue-citation-convention \
          check-script-exec-bits check-litmus-pin-claims; do
-    n="$(/usr/bin/grep -cE "_run bash .*$g\.sh" build.sh 2>/dev/null || echo 0)"
-    [ "$n" = "1" ] || bad "$g.sh is invoked $n times in build.sh (expected exactly 1)"
+    n="$(printf '%s\n' "$_hoisted_src" | /usr/bin/grep -cE "_run bash .*$g\.sh" 2>/dev/null || echo 0)"
+    [ "$n" = "1" ] || bad "$g.sh is invoked $n times in build.sh outside the memoised-plan arm (expected exactly 1)"
 done
+
+# THE EXCISION MUST ACTUALLY EXCISE SOMETHING. Without this, an awk that matched
+# nothing would leave the whole file in _hoisted_src and every count above would
+# silently go back to counting both lanes — a guard weakened into agreement with
+# the thing it stopped refusing, which is the failure mode this file is about.
+if [ "$(printf '%s\n' "$_hoisted_src" | wc -l)" -ge "$(wc -l < build.sh)" ]; then
+    bad "the memoised-plan arm was not excised, so the counts above are over the whole file again"
+fi
 
 # ── THE GENERAL RULE (yoga-silverblue, merged here rather than kept separate) ─
 #

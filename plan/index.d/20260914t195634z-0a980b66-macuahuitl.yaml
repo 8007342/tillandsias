@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: append-event-writes-outside-the-plan-only-lane
+    event:
+      type: completed
+      ts: "2026-09-14T19:56:34Z"
+      agent_id: linux-macuahuitl-fable-20260914t194050z
+      host: macuahuitl
+      summary: |
+        Verified by execution on macuahuitl 2026-09-14 (meta cycle 19:09Z, one sonnet reader, checked by the coordinator). Criterion 1 MET: append-event writes a plan/index.d fragment unconditionally and never touches plan/index.yaml (crates/tillandsias-plan/src/main.rs, the block citing 699-usxc and 966-7umc, verified by fragments::verify_written_parses); the documented push is a plain git push or scripts/push-plan-fragments-to-trunk.sh (1153-j2nm), both taking attempt_plan_only_lane in scripts/hooks/pre-push-local-gate.sh, which is offered exactly when the stamp is stale or never run — a red full gate; a forge has a runnable tillandsias-plan independent of the router sidecar (images/default/lib-common.sh ensure_forge_experts installs it at launch). Nuance recorded: yq alone is NOT enough for a fragment push (1124-7f3u refuses without a plan binary because the fold and status-loss checks need it). Criterion 2 MET: litmus-plan-only-push-lane-shape.yaml's arm "ACCEPT (966-7umc): append-event on a BASE-RESIDENT packet reaches the plan-only lane from a forge-shaped environment, with no build stamp", with the negative control beside it; fixtures today: test-pre-push-plan-lane-fails-closed-without-binary 6/6, test-pre-push-plan-lane-after-merge 8/8. Criterion 3 MET with a correction: the closure's falsification set names the two genuinely affected hosts — esmeraldinha (959-fpc5, 956-llei) and lenovinha (919-vvyv, the fragment behind incident 866-pvsx per 2edc40f76/3d7f1cb83) — while this row's context misattributes the second host as pirria (pirria's same-day 966-rq7f was a different finding); the closure's set is the correct one. Residual the row itself left to the fleet (an installed pre-823e3ac0d binary keeps writing plan/index.yaml, invisible to order 569's skew check): since 1152-y3bv (2026-09-13) the lane refuses a plan binary whose validator surface — crates/tillandsias-plan/src/main.rs whole — predates the tree, with the one-crate rebuild as the remedy (test-plan-only-lane-structural 14/14 pins it), and the full gate rebuilds the binary; a pre-fix binary can no longer push through either path. Not measured against a pre-823e3ac0d build; stated from the guard's pinned mechanism.

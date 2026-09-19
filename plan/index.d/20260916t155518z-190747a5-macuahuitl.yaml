@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: answering-whether-a-salvage-ref-holds-unlanded-work-takes-three-steps-and-every-single-step-shortcut-gives-a-confidently-wrong-answer
+    event:
+      type: progress
+      ts: "2026-09-16T15:55:18Z"
+      agent_id: linux-macuahuitl-claude-20260916t155518z
+      host: macuahuitl
+      summary: |
+        CLOSING against 5efecc48ac7cdfd3a65374e25e7c722a21ea934f, verified as an ancestor of origin/linux-next before being cited — the ordering this host got wrong earlier today and now does in the other order.
+        CRITERION 1, a script reporting per ref the genuinely-differing files AND which side is ahead: MET. scripts/salvage-audit.sh does the three steps the question needs — three-dot for CANDIDATES, per-file blob comparison for the REAL differing set, last-touch date against the ref's tip for DIRECTION. Run from trunk as landed: ok:salvage-audit:12r:6w:12f.
+        CRITERION 2, ancestry is NOT the integration test and the script says so: MET, and the sentence is load-bearing rather than decorative. A ref relayed by CHERRY-PICK is never an ancestor and is fully landed — two of the twelve are exactly that, relayed by this host hours earlier. The output states it on every run, so if someone later "simplifies" the audit to an ancestry check, that line is what disappears first.
+        CRITERION 3, a fully-landed ref reports ZERO: MET. Six of twelve report nothing at all, including both macbookair refs whose content this host relayed. The output is a signal rather than a standing backlog.
+        CRITERION 4, the NEGATIVE CONTROL: MET and it is live rather than constructed. yolanda's 1186-w3ph still reports THREE ref-may-be-AHEAD files plus one linux-next-is-AHEAD — matching, line for line, the manual analysis this host did by hand in pass 40. Whatever silences the other six does not silence it.
+        IT SHIPPED WITH THE FALSE NEGATIVE IT EXISTS TO PREVENT, and that is the part worth keeping. `git for-each-ref` takes a PREFIX, not a shell glob: the first version passed a trailing /* , matched ZERO refs, and printed skipped:salvage-audit:no-refs — INDISTINGUISHABLE FROM "nothing is stranded". A silent empty lookup inside the audit built to stop silent empty answers. Caught by RUNNING it, which is 970-7fqk's lesson from the same morning, and arm 1 of the fixture pins it specifically: if the ref lookup regresses, every other arm still passes and only that one reds.
+        THE TWO WRONG ANSWERS ARE THE ROW'S EVIDENCE AND THEY ARE WHY THIS IS NOT A PARAGRAPH. Ancestry said nine refs were uncontained when two were fully landed. Three-dot said six fragments differed when all six were byte-identical. Two-dot said 526, 2009 and 2061 files against a truth of 3, 0 and 0. And "differs" said three stranded files on a ref whose row was completed and whose two files trunk had touched two days later. Each shortcut is one command and each is confidently wrong in a different direction; a reader shown only the method would not believe it needs three steps.
+        9/9, wired into build.sh beside the must-ship, ledger-distillation and fleet-activity fixtures, and the coordination skill now opens the section with RUN THE SCRIPT, DO NOT RETYPE THE QUERY.

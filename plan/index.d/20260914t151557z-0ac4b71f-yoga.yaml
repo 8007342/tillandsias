@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-14T15:15:57Z"
+      agent_id: linux-yoga-claude-20260914t151556z
+      host: yoga
+      summary: |
+        A RED RELEASE GATE THAT WAS MY INVOCATION, AND A REAL FIXTURE DEFECT UNDERNEATH IT. Found while discharging 865-r6dt's criterion 3, which asked for a ci-full run precisely so a green litmus would not be mistaken for an unblocked gate.
+
+        WHAT I SAW: ./build.sh --ci-full reported 32 passed, 1 failed, the failure being litmus:release-gates-run-locally at STEP 20/20 "gate-stamp memoization decides correctly and fails closed (765-tkq2)". NOT a budget kill — 898.5s against a 900s budget, rc=0, output `fail: gate-stamp-memoization fixture had failures`, so the fixture ran to completion and reported its own arms.
+
+        THE MECHANISM, SETTLED BY READING BEFORE IT WAS CONFIRMED BY MEASUREMENT. Case 11 runs `build.sh --check` and requires the memo to be TAKEN. Case 12 asserts that TILLANDSIAS_FORCE_CHECK=1 BYPASSES the memo. Case 11 did not clear that variable, so an ambient FORCE_CHECK makes case 11 fail BY CASE 12'S OWN CONTRACT — and the failure reads "memo hit path wrong", pointing at memoization rather than at the environment.
+
+        I launched the ci-full as `TILLANDSIAS_FORCE_CHECK=1 ./build.sh --ci-full`, and the variable propagated into the fixture's child. So the tree was not red; my invocation was.
+
+        MEASURED, THREE RUNS:
+          standalone, no ambient variable      -> ok:gate-stamp-memoization-fixture:14
+          standalone, TILLANDSIAS_FORCE_CHECK=1 -> FAIL: memo hit path wrong; rc=0   (the predicted arm, by name)
+          after the fix, with the variable set  -> ok:gate-stamp-memoization-fixture:14
+
+        THE FIX IS ONE ASSIGNMENT AND THE PAIR IS THE POINT: case 11's child now clears TILLANDSIAS_FORCE_CHECK; case 12 still sets it deliberately. A fixture whose subject is "does the memo fire" must own the one variable that defeats a memo.
+
+        WHY IT IS WORTH A ROW-SHAPED RECORD RATHER THAN A FOOTNOTE: this is 1109-t8kw's class, in a RELEASE-GATE litmus, reached by any host that runs --ci-full with a forced check. The guard is right and the fixture scored it wrong — which is precisely the failure mode that trains hosts to distrust the guard.
+
+        A NOTE ON HOW LONG IT TOOK ME TO READ THE SILENCE. The failing step sat quiet for over ten minutes and I drew two wrong conclusions before a right one: that its stdin was inherited and blocking (refuted — fd 0 was /dev/null, the shell was in do_wait waiting on a child), and that zero CPU meant blocked (refuted — pstree showed a five-deep leaf pipeline of short-lived plan-binary invocations that turned over between two samples). A wrapper accumulates no CPU by design. Measure the leaf, not the pid you happen to hold.

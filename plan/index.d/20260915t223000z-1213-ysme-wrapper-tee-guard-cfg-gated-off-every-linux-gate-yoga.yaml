@@ -1,0 +1,127 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-guard-forbidding-a-de-pipe-of-the-github-login-wrapper-is-cfg-gated-to-windows-so-on-every-host-the-fleet-actually-gates-on-it-reports-a-green-ok-having-executed-zero-tests
+    order: 1213-ysme
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [fail-loud, testing, tooling, windows]
+    estimated_hours: 1
+    unscoreable: "not-scoreable-by-a-litmus-but-PINNED-AND-MEASURED-ON-BOTH-PLATFORMS: the deliverable is that an EXISTING assertion executes on hosts it was cfg-gated off, so the pin is the Rust test landed in the same commit — crates/tillandsias-windows-tray/src/main.rs, tests::github_login_wrapper_captures_full_output_on_every_host, in main.rs's un-gated #[cfg(test)] mod tests. It runs in the standard cargo test phase of the gate. A litmus here would shell out to grep a source string, which is strictly weaker than the unit test that already holds the literal, and minting a litmus name to satisfy a vocabulary is what 885-92iu refuses. FALSIFIED by removing the tee from the wrapper (mutation grep-confirmed applied) — the test reds on the both-streams assertion and greens again on revert, with an empty git diff --stat proving the revert was not a no-op. THE MEASUREMENT THAT MAKES THIS A DEFECT RATHER THAN A PREFERENCE, taken on two hosts with the same crate, filter and command: yoga/Linux answered 0 passed, 18 filtered out; yolanda/Windows 11 MSVC answered 1 passed, 123 filtered out."
+    owned_files:
+      - crates/tillandsias-windows-tray/src/main.rs
+    title: |
+      The assertion keeping the GitHub-login wrapper's tee lives in a cfg(target_os = "windows") module, so a filter naming it on linux-next answers "ok. 0 passed; 18 filtered out" — a guard whose silence reads as protection on every host the fleet gates on
+    context: |
+      FOUND while verifying a citation yolanda-windows sent me, not by looking
+      for it. They had documented the wrapper's history correctly; I checked
+      whether the test enforcing it runs here, and it does not.
+
+      MEASURED on yoga in the tillandsias-builder toolbox, before any change:
+
+        cargo test -q -p tillandsias-windows-tray github_login_wrapper_captures
+        -> test result: ok. 0 passed; 0 failed; 18 filtered out
+
+      A full run of the crate lists no executing test whose name contains
+      wrapper, login, or wipe_guest. THE VERDICT IS A GREEN `ok` OVER ZERO
+      EXECUTED TESTS, which order 913-27ex settled is not a pass.
+
+      MECHANISM, verified independently by yolanda: in
+      crates/tillandsias-windows-tray/src/main.rs the real module is declared
+      `#[cfg(target_os = "windows")] mod wsl_lifecycle;` and a
+      `#[cfg(not(target_os = "windows"))] #[path = "stubs/wsl_lifecycle.rs"]`
+      stub is compiled everywhere else. The assertion lived beside the wrapper
+      inside the real module, so it compiles on Windows alone.
+
+      WHY THIS IS WORSE THAN AN UNTESTED LINE. A doc comment beside the wrapper
+      warns a future debugger NOT to de-pipe it on a blank-terminal recurrence:
+      piping is not the mechanism (the terminal-safety half is
+      `should_own_process_group` in tillandsias-headless), and dropping the tee
+      only costs the log that makes the next failure legible. On linux-next that
+      warning was PROSE. The change it forbids would have passed every gate
+      available to whoever made it, and the 0-byte github-login-last.log that
+      made the v0.4.260809.2 blank terminal unreadable is the recorded cost of
+      having no log at that moment.
+
+      MEASURED ON THE OTHER SIDE TOO, by yolanda-windows, so the row states
+      both halves rather than inferring either. On Windows 11 (MSVC host
+      target) the same command answers `ok. 1 passed; 0 failed; 123 filtered
+      out`. So the assertion runs on EXACTLY ONE PLATFORM — the one the fleet
+      almost never gates on (see the release-tier sampling finding: a host that
+      relays every platform branch answers `never:release-tier`).
+
+      AND THE COUNTS THEMSELVES ARE A FREE DETECTOR FOR THIS WHOLE CLASS,
+      which is yolanda's observation and worth more than this row:
+
+        yoga (Linux)       0 passed,  18 filtered out
+        yolanda (Windows)  1 passed, 123 filtered out
+
+      Same crate, same filter, same command. 105 TESTS EXIST ON ONE HOST AND
+      NOT THE OTHER, and neither output says so — each is a complete, healthy
+      `ok` about a different world. Comparing PASS counts does not catch it
+      (0 and 1 are both plausible); comparing FILTERED-OUT counts does, because
+      18 against 123 is not. That is the cheap cross-host tell for a cfg-gated
+      module silently absent, and it needs no accident to be true — it is the
+      steady state.
+
+      IT NEVER NEEDED THE MODULE. The assertion is a SOURCE SCAN — it does
+      `include_str!("wsl_lifecycle.rs")` and reads the raw literal out of the
+      file as text. Being inside a platform-gated module was incidental, and
+      moving it costs nothing. main.rs's own `#[cfg(test)] mod tests` is not
+      platform-gated and already uses the same `include_str!` idiom three
+      declarations away; `tray_registry` in the same crate carries an explicit
+      comment saying it is deliberately un-gated so its criteria are exercised
+      on every host rather than only where a registry exists. Same reasoning.
+    events:
+      - type: progress
+        ts: "2026-09-15T22:30:00Z"
+        agent_id: "linux-yoga-claude-20260915t223000z"
+        host: yoga
+        summary: |
+          FIX LANDING IN THIS COMMIT. A sibling assertion,
+          tests::github_login_wrapper_captures_full_output_on_every_host, is
+          added to main.rs's UN-GATED test module. It now executes on this host:
+          the same filter that answered "0 passed; 18 filtered out" answers
+          "ok. 1 passed" after the change.
+
+          FALSIFIED, with the mutation PROVEN APPLIED rather than assumed. I
+          removed `2>&1 | tee "$LOG"` from the wrapper, confirmed by grep that
+          the literal was gone from the file, and the test went RED on the
+          intended assertion — "both streams must reach the guest-side log, or
+          the next failure is undiagnosable again". Reverting restored green,
+          and `git diff --stat` on the mutated file was EMPTY afterwards, so the
+          revert was not itself a no-op. Green -> red -> green, each step
+          measured.
+
+          A DEFECT IN THE ORIGINAL SCAN, FIXED IN THE COPY. It sliced the
+          literal as `&source[start..start + 900]` — a fixed byte count that
+          panics on a char boundary or past EOF as soon as the script grows,
+          which would read as a defect in the wrapper rather than in the scan.
+          The new one bounds on the literal's own terminator.
+
+          AND THE TERMINATOR SEARCH HAS A TRAP I FELL INTO FIRST, recorded
+          because the failure looked like the wrapper's fault: the literal opens
+          `r#"#!/usr/bin/env bash`, so searching for `"#` from the match start
+          hits the OPENING delimiter three bytes in and yields an EMPTY body.
+          Every assertion then fails for the wrong reason — my first run died on
+          "the wrapper must launch tillandsias-headless --github-login", which
+          reads as the launch line being absent when it was the window that was
+          empty. The scan now starts after the opening delimiter and searches
+          for `"#;`.
+
+          I DELIBERATELY DID NOT TOUCH wsl_lifecycle.rs. Deleting the Windows-
+          only original would be editing a file this host compiles a STUB for,
+          so I could not verify it still builds — the class I have measured
+          before, where `cargo check -p <foreign-platform-crate>` compiles only
+          dependencies and a deliberate syntax error in the target file produces
+          ZERO errors. The duplicate is harmless (Windows runs both) and the
+          original's `start + 900` window is pre-existing. A host that can build
+          the Windows tray should remove the original and inherit the bounded
+          window; that is the remaining work on this row and it is NOT done.
+
+          SCOPE: this changes which hosts execute an existing assertion. It does
+          not change the wrapper, the tee, the login lane, or any runtime
+          behaviour on any platform.

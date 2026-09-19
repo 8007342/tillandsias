@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-podman-seam-env-var-leaks-across-the-mutex-that-documents-its-own-exclusion-so-one-test-reads-another-tests-fake-binary-and-the-suite-fails-only-at-some-core-counts
+    field: status
+    value: completed
+    ts: "2026-09-18T01:48:57Z"
+    host: yolanda
+
+events:
+  - packet_id: the-podman-seam-env-var-leaks-across-the-mutex-that-documents-its-own-exclusion-so-one-test-reads-another-tests-fake-binary-and-the-suite-fails-only-at-some-core-counts
+    event:
+      type: completed
+      ts: "2026-09-18T01:48:57Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: yolanda 16 cores: 5 consecutive full-suite runs 544/544 green vs 3/3 red immediately before, full gate rc=0 4185s; relayed to trunk as e1256ec24+f86784c9b+6eb427b75; macuahuitl 20 cores 544/544 rc=0 confirms no regression only
+  - packet_id: the-podman-seam-env-var-leaks-across-the-mutex-that-documents-its-own-exclusion-so-one-test-reads-another-tests-fake-binary-and-the-suite-fails-only-at-some-core-counts
+    event:
+      type: note
+      ts: "2026-09-18T01:48:57Z"
+      host: yolanda
+      summary: |-
+        fixed and verified on the host that reproduces it; 1250-92ty carries the remaining remote_projects hazard

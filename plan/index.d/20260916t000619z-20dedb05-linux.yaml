@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    event:
+      type: progress
+      ts: "2026-09-16T00:06:19Z"
+      agent_id: linux-yoga-claude-20260915t233553z
+      host: linux
+      summary: |
+        THE FIRST LAND WAS REFUSED, BY THE GUARD THAT EXISTS FOR EXACTLY THIS, and the refusal was correct. scripts/audit-guard-activation.sh answered orphan=1 naming check-unrunnable-platform-arms.sh: a guard exists but nothing invokes it (1087-h2z9). rc=3, refused before the push.
+
+        IT WAS NOT ACTUALLY AN ORPHAN — it is invoked from scripts/land-on-platform-branch.sh immediately before the push. The auditor could not SEE that, because its activation-surface list did not include the land tool. That is the same false-accusation class the auditor's own header documents three times already: gate-steps.d STEP_SCRIPT bindings, a second-level invoker inside archive-plan-packets.sh, and a binding declared as data and executed from a variable. This is a FOURTH door: an advisory invoked from the LAND PATH rather than from a gate.
+
+        I ADDED THE SURFACE RATHER THAN MOVING THE CALL INTO build.sh, because moving it would break the thing the placement is for: a land that adopts a valid full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp), so an advisory inside build.sh is silent on exactly those lands. The auditor's own header says extending the list is cheap and stays honest, and warns against the alternative — resolving transitively would make nearly every script a surface and trade a loud false orphan for a SILENT FALSE ACTIVE, which is the failure it exists to catch.
+
+        BLAST RADIUS MEASURED BEFORE AND AFTER, because widening a guard's reach is a change that needs re-measurement and not an assumption:
+          before  population=131 total=131 active=130 orphan=1 verdict=orphans-found
+          after   population=131 total=131 active=131 orphan=0 verdict=ok
+        The population is unchanged and exactly one guard flipped: mine. No other guard could be affected, because there was exactly one orphan to begin with.
+
+        AND I FALSIFIED THE NEW SURFACE, because my own comment in the auditor NAMES the guard, and activation is decided by grep for the basename. If the auditor were itself a surface, or if the comment were enough, the guard would read active while wired to nothing — a pattern matching its own documentation, which I did once already tonight. MEASURED: deleting the CALL from the land script (leaving every comment in place) returns orphan=1 naming this guard. Restoring it returns orphan=0. So the active verdict comes from the invocation, not from anything I wrote about it.
+
+        ARM 11 ADDED to the fixture. Arm 9 greps the land script myself, which proves only that I can grep; arm 11 asserts against audit-guard-activation.sh's OWN verdict, which is the thing that actually reds the gate and the thing that caught this. A fixture that only restates the author's assumption would not have found it.

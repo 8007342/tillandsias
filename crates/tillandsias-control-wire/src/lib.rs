@@ -57,12 +57,33 @@ use serde::{Deserialize, Serialize};
 /// decoded. A refused connection is loud and recoverable; a misdecoded
 /// credentials frame is neither.
 ///
+/// **Version 4** (order 890-y72v): adds `outcome` to
+/// `DeliverCredentialsReply`, AND NOTHING ELSE — this is the version the v3
+/// note above reserved for it, so it is not a stowaway; it is the booking
+/// being honoured.
+///
+/// Adding a variant needs no bump. Adding a FIELD to an existing variant does,
+/// and the reason is the same one v3 spells out for removal: postcard encodes
+/// a struct variant's fields positionally with no names on the wire, so a v3
+/// reader decoding a v4 `DeliverCredentialsReply` consumes `seq_in_reply_to`
+/// and `success` and then finds a trailing enum discriminant it did not expect
+/// — and the next frame's bytes begin wherever it stopped. The failure is a
+/// desynchronised STREAM, not a bad field, which is strictly worse than a
+/// refused connection because it surfaces later and somewhere else.
+///
+/// `#[serde(default)]` on the field is NOT a substitute for the bump. It makes
+/// the Rust type tolerant of an absent value; it does nothing about a reader
+/// that mis-frames the bytes. The handshake refusal is what keeps the two
+/// apart, and the default is what makes `Unstated` reachable in the one case
+/// that matters: a peer at the SAME wire version that genuinely has nothing to
+/// say.
+///
 /// `SubscriptionTopic::LocalProjects` was TRAILING in its own enum and
 /// renumbers nothing; it is removed here for tidiness, not for safety.
 ///
 /// @trace spec:vsock-transport, spec:host-shell-architecture
 /// @trace order:997-e4v2
-pub const WIRE_VERSION: u16 = 3;
+pub const WIRE_VERSION: u16 = 4;
 
 pub mod guest_transport;
 pub mod secure_wire_mode;
@@ -461,7 +482,16 @@ pub enum ControlMessage {
         root_token: Option<String>,
     },
     /// Guest -> host: acknowledge `DeliverCredentials` delivery.
-    DeliverCredentialsReply { seq_in_reply_to: u64, success: bool },
+    DeliverCredentialsReply {
+        seq_in_reply_to: u64,
+        /// Frame-level receipt ONLY. Kept for peers that predate 890-y72v;
+        /// it says the envelope arrived and was stored, never that the
+        /// credential works. Consult `outcome` for that.
+        success: bool,
+        /// ORDER 890-y72v. What the guest actually did with it.
+        #[serde(default)]
+        outcome: DeliverCredentialsOutcome,
+    },
     /// Host -> guest: query for newly generated Vault root token + Shamir share.
     GetVaultHandover { seq: u64 },
     /// Guest -> host: response with the newly generated Vault root token + Shamir share.
@@ -743,6 +773,68 @@ impl CloudRefreshOutcome {
     /// invites.
     pub fn is_confirmed(&self) -> bool {
         matches!(self, CloudRefreshOutcome::Ok)
+    }
+}
+
+/// ORDER 890-y72v. What the GUEST did with a delivered credential, as opposed
+/// to whether the frame arrived.
+///
+/// `DeliverCredentialsReply.success` answers "I received it and stored it"
+/// (`vsock_server.rs`, the reply built beside `set_in_vm_credentials`). It has
+/// never answered "I accepted it", and the host has no other channel to learn
+/// the difference — which is why the operator's 2026-08-17 failure was silent
+/// for an hour: the tray reported a successful delivery while the guest held a
+/// share that opened nothing.
+///
+/// Same fail-closed rule as `CloudRefreshOutcome` above, and for the same
+/// reason: an ABSENT discriminator is not an acceptance discriminator. A peer
+/// older than this order carries no `outcome` at all, and postcard fills the
+/// `#[default]`, so the one thing `Unstated` must never do is read as success.
+///
+/// @trace spec:host-shell-architecture, order:890-y72v, order:803-49re
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum DeliverCredentialsOutcome {
+    /// The guest stored the delivery AND nothing about it was refused. This is
+    /// the only value a caller may treat as "the guest can now open its vault".
+    Accepted,
+    /// The guest received the frame and did NOT adopt it. `reason` is a short
+    /// operator-facing phrase. The delivery is not retryable by repetition —
+    /// repeating a rejected share produces the same rejection — so a caller
+    /// seeing this should surface it rather than loop.
+    Rejected { reason: String },
+    /// The guest declined the delivery because its own state is strictly
+    /// NEWER: a fresh handover was already pending, and adopting the host's
+    /// older share would clobber it. Distinct from `Rejected` because nothing
+    /// is wrong — the host's copy is simply stale — and the remedy is for the
+    /// host to re-read, not for anyone to re-deliver.
+    Superseded,
+    /// No discriminator was carried: a peer older than 890-y72v. Treat as
+    /// "unknown, not accepted" for every decision, but keep it distinguishable
+    /// in logs so a version skew is not misread as a rejected credential.
+    #[default]
+    Unstated,
+}
+
+impl DeliverCredentialsOutcome {
+    /// The one predicate consumers should branch on. Written so that adding a
+    /// future variant fails CLOSED at every call site, which a bare
+    /// `matches!(.., Rejected { .. })` at each site would not.
+    pub fn is_accepted(&self) -> bool {
+        matches!(self, DeliverCredentialsOutcome::Accepted)
+    }
+
+    /// A short phrase for logs and tray surfaces. Never empty.
+    pub fn describe(&self) -> String {
+        match self {
+            DeliverCredentialsOutcome::Accepted => "accepted".to_string(),
+            DeliverCredentialsOutcome::Rejected { reason } => format!("rejected: {reason}"),
+            DeliverCredentialsOutcome::Superseded => {
+                "superseded by a newer in-guest handover".to_string()
+            }
+            DeliverCredentialsOutcome::Unstated => {
+                "not stated (peer predates order 890-y72v)".to_string()
+            }
+        }
     }
 }
 
@@ -2145,12 +2237,23 @@ mod tests {
     /// renumbers every later variant, so an un-bumped peer would decode a
     /// structurally valid WRONG variant rather than fail — see the
     /// `WIRE_VERSION` doc for the measured indices.
+    /// v4 (890-y72v): `outcome` added to `DeliverCredentialsReply`. A field
+    /// added to a struct variant is encoded positionally, so a v3 reader
+    /// consumes the two fields it knows and then meets a trailing
+    /// discriminant — the next frame starts wherever it stopped. The failure
+    /// is a desynchronised stream, not a bad field.
+    ///
+    /// THE TEST CAUGHT THIS BUMP TOO, which is now its second piece of
+    /// evidence: the gate reded here with `wire_version_constant_is_three`
+    /// before the change went anywhere, exactly as intended. The name moves
+    /// with the number deliberately — a test called `..._is_three` asserting
+    /// 4 would be a pin nobody trusts.
     ///
     /// @trace spec:vsock-transport, spec:host-shell-architecture
-    /// @trace order:997-e4v2
+    /// @trace order:997-e4v2, order:890-y72v
     #[test]
-    fn wire_version_constant_is_three() {
-        assert_eq!(WIRE_VERSION, 3);
+    fn wire_version_constant_is_four() {
+        assert_eq!(WIRE_VERSION, 4);
     }
 
     #[test]
@@ -2509,6 +2612,7 @@ mod tests {
                 ControlMessage::DeliverCredentialsReply {
                     seq_in_reply_to: 1,
                     success: true,
+                    outcome: DeliverCredentialsOutcome::Accepted,
                 },
                 "DeliverCredentialsReply",
             ),
@@ -3004,5 +3108,84 @@ mod tests {
             !bytes.starts_with(b"{"),
             "postcard payload must not start with JSON object delimiter"
         );
+    }
+}
+
+#[cfg(test)]
+mod deliver_credentials_outcome_tests {
+    use super::*;
+
+    /// ORDER 890-y72v. The contract that makes the discriminator worth adding:
+    /// only `Accepted` is an acceptance. If this ever loosens, the field is
+    /// decoration and the host is back to believing `success: true`.
+    #[test]
+    fn only_accepted_is_accepted() {
+        assert!(DeliverCredentialsOutcome::Accepted.is_accepted());
+        assert!(!DeliverCredentialsOutcome::Superseded.is_accepted());
+        assert!(!DeliverCredentialsOutcome::Unstated.is_accepted());
+        assert!(
+            !DeliverCredentialsOutcome::Rejected {
+                reason: "share does not authenticate".to_string()
+            }
+            .is_accepted()
+        );
+    }
+
+    /// The default is what an absent field decodes to, so it is the value a
+    /// peer that says nothing gets. It must not be the success value — this is
+    /// the same fail-closed rule CloudRefreshOutcome states for itself.
+    #[test]
+    fn the_default_is_not_an_acceptance() {
+        assert_eq!(
+            DeliverCredentialsOutcome::default(),
+            DeliverCredentialsOutcome::Unstated
+        );
+        assert!(!DeliverCredentialsOutcome::default().is_accepted());
+    }
+
+    /// Every variant says something an operator can act on, and no variant
+    /// describes itself as empty. A blank reason on a rejection is how a
+    /// discriminator becomes as uninformative as the boolean it replaced.
+    #[test]
+    fn every_variant_describes_itself() {
+        for o in [
+            DeliverCredentialsOutcome::Accepted,
+            DeliverCredentialsOutcome::Superseded,
+            DeliverCredentialsOutcome::Unstated,
+            DeliverCredentialsOutcome::Rejected {
+                reason: "fallback write failed".to_string(),
+            },
+        ] {
+            assert!(!o.describe().trim().is_empty(), "{o:?} described as empty");
+        }
+    }
+
+    /// A rejection must carry its reason THROUGH the wire, not just hold it in
+    /// memory on the guest. Round-trips through the same postcard encoding the
+    /// transport uses.
+    #[test]
+    fn a_rejection_survives_the_wire_with_its_reason() {
+        let msg = ControlMessage::DeliverCredentialsReply {
+            seq_in_reply_to: 7,
+            success: true,
+            outcome: DeliverCredentialsOutcome::Rejected {
+                reason: "cache dir unavailable".to_string(),
+            },
+        };
+        let bytes = postcard::to_allocvec(&msg).expect("encode");
+        let back: ControlMessage = postcard::from_bytes(&bytes).expect("decode");
+        match back {
+            ControlMessage::DeliverCredentialsReply {
+                success, outcome, ..
+            } => {
+                // success STILL true: the frame did arrive. That is exactly the
+                // pairing this order exists to make legible — receipt and
+                // acceptance are different answers and both travel.
+                assert!(success);
+                assert!(!outcome.is_accepted());
+                assert!(outcome.describe().contains("cache dir unavailable"));
+            }
+            other => panic!("wrong variant back: {other:?}"),
+        }
     }
 }

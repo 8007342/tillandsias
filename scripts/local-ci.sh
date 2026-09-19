@@ -290,10 +290,35 @@ EVIDENCE_BUNDLE="$SIGNATURE_DIR/evidence-bundle.json"
 DELTA_JSON="$SIGNATURE_DIR/centicolon-delta.json"
 RUNTIME_STATUS_FILE="$SIGNATURE_DIR/runtime-phase.status"
 CHECK_LOG_DIR="$SIGNATURE_DIR/check-logs"
-CHECK_LOG_INDEX="$SIGNATURE_DIR/check-logs.jsonl"
+# ORDER 1174-6r4k — THE WRITER HONOURS THE SAME OVERRIDE THE READER DOES.
+# check-release-tier-freshness.sh has always read
+# ${TILLANDSIAS_CHECK_LOG_INDEX:-target/convergence/check-logs.jsonl}, but this
+# path was fixed — so a diagnostic run could not be pointed away from the record
+# the daily exercise reads, and every `--phase pre-build` reproduction polluted
+# it. Now a run that is NOT meant to be the host's release-tier answer can say
+# so: TILLANDSIAS_CHECK_LOG_INDEX=/tmp/scratch.jsonl scripts/local-ci.sh --phase
+# pre-build. The reader's tier discriminator makes that unnecessary for
+# correctness; this makes it possible to keep the record clean as well.
+CHECK_LOG_INDEX="${TILLANDSIAS_CHECK_LOG_INDEX:-$SIGNATURE_DIR/check-logs.jsonl}"
 VERSION_VALUE="$(cat VERSION 2>/dev/null || echo "0.0.0.0")"
 SOURCE_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")"
-CI_RUN_ID="local-ci-$(date -u +%Y%m%dT%H%M%SZ)"
+# ORDER 1185-9qx6 — THE RUN ID IS THE CORRELATION KEY, SO IT MUST BE SHAREABLE.
+# check-release-tier-freshness.sh groups check-log records by ci_run_id and
+# calls a run FULL-tier when its phases cover pre-build, post-build and runtime.
+# `./build.sh --ci-full` drives the pre-build phase through THIS script and the
+# other two itself, so those records can only join this run if the caller can
+# name it. TILLANDSIAS_CI_RUN_ID lets it; unset (every interactive and cron
+# invocation) the behaviour is exactly what it always was. A malformed value is
+# REFUSED rather than normalised: the reader parses the timestamp back out of
+# this string, and a run it cannot date reports could-not-run.
+CI_RUN_ID="${TILLANDSIAS_CI_RUN_ID:-local-ci-$(date -u +%Y%m%dT%H%M%SZ)}"
+case "$CI_RUN_ID" in
+    local-ci-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *)
+        echo "refused:local-ci:TILLANDSIAS_CI_RUN_ID='$CI_RUN_ID' is not local-ci-YYYYMMDDTHHMMSSZ" >&2
+        exit 2
+        ;;
+esac
 CI_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 CHECK_IDS=(
@@ -1171,7 +1196,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # --no-fail-fast (order 829-g4xf): without it cargo stops at the first
     # failing binary, so this pass reported 1 failure where there were 8 and
     # more than half the workspace never ran.
-    if run_rust_test_on_host cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    #
+    # SEAT THE PODMAN SEAM (880-tdwn / 1022-y7kc, applied here 2026-09-18).
+    # run_rust_test_on_host ARMS TILLANDSIAS_PODMAN_REFUSE_REAL=1, so an
+    # unseated test that resolves podman PANICS at the tripwire instead of
+    # reaching the real binary. The identical seat has guarded the headless
+    # target ~36 lines below since 1022-y7kc measured 13 tests there that
+    # "never seat a fake podman themselves and only ever passed on a seat
+    # leaked by a parallel neighbour" — and that lesson was never carried to
+    # THIS invocation, which runs every other lib target in the workspace.
+    #
+    # It came due in the 2026-09-18 release gate: tillandsias-plan's
+    # groundtruth::tests::the_spec_engine_stamps_the_index_frame_not_the_readers_head
+    # was the whole red (331 passed / 1 failed) on an otherwise green ci-full
+    # with litmus at 368/0. MEASURED, not assumed: armed+unseated it fails
+    # standalone in 0.01s (so it is DETERMINISTIC, not the intermittent it was
+    # first filed as); armed+seated it passes in 0.01s; and the full
+    # `--workspace --lib` under this seat went 332 passed / 0 failed with no
+    # other verdict in the run changing.
+    #
+    # /bin/false is the same deterministic "not running" podman that
+    # podman_false_seam() chooses, and a test that seats itself still
+    # overrides it. The seat can only convert a tripwire panic into a
+    # not-running resolution — it cannot hand anything the real binary,
+    # because REFUSE_REAL already forbids that.
+    #
+    # NOT closed by this: a neighbour that REMOVES the seam mid-flight rather
+    # than restoring it still races, which is what --test-threads=1 shuts on
+    # the headless target. The durable closure is the seam-writer guard
+    # (scripts/check-seam-writers-canonical.sh) going gating once 1250-92ty
+    # lands; this seat removes the deterministic failure, not the race.
+    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
@@ -1506,6 +1561,75 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "litmus-runner-reports-rc" "scripts/test-litmus-runner-reports-rc.sh"
         archive_check_log "litmus-runner-reports-rc" "skipped"
+    fi
+
+    # ORDER 1187-iij8 arm (a), BOUND HERE because it was an orphan (1205-aipn).
+    # Its closure cited a 7/7 hand-run, which is true as a statement about that
+    # run and false as protection: nothing executed it on any gate, so the
+    # fail-open mutation it exists to catch could have landed unnoticed.
+    #
+    # Bound beside the rc-reporting fixture deliberately — both assert that the
+    # runner's VERDICT and its TALLY keep saying different things, and 820-c8q8
+    # is the ruling both defend: a step killed at its budget still FAILS, so
+    # BUDGET is a reporting dimension and never an exemption. Measured 2.1s on
+    # yoga; it drives the runner in throwaway roots and touches no real corpus.
+    if [[ -f "scripts/test-litmus-budget-tally.sh" ]]; then
+        if bash scripts/test-litmus-budget-tally.sh 2>&1 | tee /tmp/litmus-budget-tally.log; then
+            log_pass "Litmus runner tallies a budget kill apart from a failed assertion"
+            archive_check_log "litmus-budget-tally" "pass" /tmp/litmus-budget-tally.log
+        else
+            log_fail_tracked "litmus-budget-tally" "Litmus BUDGET tally regression (see /tmp/litmus-budget-tally.log)"
+            archive_check_log "litmus-budget-tally" "fail" /tmp/litmus-budget-tally.log
+        fi
+    else
+        log_fail_missing_guard "litmus-budget-tally" "scripts/test-litmus-budget-tally.sh"
+        archive_check_log "litmus-budget-tally" "skipped"
+    fi
+
+    # Order 1194-davi. The advisory it falsifies is invoked from the LAND path,
+    # not from this gate, because a land that adopts a valid stamp skips the
+    # gate entirely (1174-u5wp) and an advisory inside the gate would be silent
+    # on exactly those lands. Its FIXTURE belongs here, where fixtures run.
+    if [[ -f "scripts/test-unrunnable-platform-arms.sh" ]]; then
+        if bash scripts/test-unrunnable-platform-arms.sh 2>&1 | tee /tmp/unrunnable-platform-arms.log; then
+            log_pass "Cross-platform gate-arm advisory names arms this host cannot run"
+            archive_check_log "unrunnable-platform-arms" "pass" /tmp/unrunnable-platform-arms.log
+        else
+            log_fail_tracked "unrunnable-platform-arms" "Cross-platform arm advisory regression (see /tmp/unrunnable-platform-arms.log)"
+            archive_check_log "unrunnable-platform-arms" "fail" /tmp/unrunnable-platform-arms.log
+        fi
+    else
+        log_fail_missing_guard "unrunnable-platform-arms" "scripts/test-unrunnable-platform-arms.sh"
+        archive_check_log "unrunnable-platform-arms" "skipped"
+    fi
+
+    # Order 1218-25z3, sibling of the above: advisory invoked from the release
+    # path, fixture run here.
+    if [[ -f "scripts/test-must-ship-rows.sh" ]]; then
+        if bash scripts/test-must-ship-rows.sh 2>&1 | tee /tmp/must-ship-rows.log; then
+            log_pass "Must-ship-next release advisory names rows absent from the cut"
+            archive_check_log "must-ship-rows" "pass" /tmp/must-ship-rows.log
+        else
+            log_fail_tracked "must-ship-rows" "Must-ship advisory regression (see /tmp/must-ship-rows.log)"
+            archive_check_log "must-ship-rows" "fail" /tmp/must-ship-rows.log
+        fi
+    else
+        log_fail_missing_guard "must-ship-rows" "scripts/test-must-ship-rows.sh"
+        archive_check_log "must-ship-rows" "skipped"
+    fi
+
+    # Order 970-7fqk, sibling of the above.
+    if [[ -f "scripts/test-gate-stamp-names-content-movers.sh" ]]; then
+        if bash scripts/test-gate-stamp-names-content-movers.sh 2>&1 | tee /tmp/gate-stamp-movers.log; then
+            log_pass "Stale-stamp refusal names content movers, not mtime movers"
+            archive_check_log "gate-stamp-movers" "pass" /tmp/gate-stamp-movers.log
+        else
+            log_fail_tracked "gate-stamp-movers" "Stale-stamp content-mover regression (see /tmp/gate-stamp-movers.log)"
+            archive_check_log "gate-stamp-movers" "fail" /tmp/gate-stamp-movers.log
+        fi
+    else
+        log_fail_missing_guard "gate-stamp-movers" "scripts/test-gate-stamp-names-content-movers.sh"
+        archive_check_log "gate-stamp-movers" "skipped"
     fi
 
     # Order 1004-inkc. `--expect none` disables the absent detection, which is

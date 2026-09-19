@@ -313,6 +313,38 @@ pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
+/// Process-wide lock for tests that repoint the `TILLANDSIAS_PODMAN_BIN` seam.
+///
+/// SAME REASON AS `env_lock`, ONE LEVEL DOWN, AND IT WAS LEARNED THE HARD WAY.
+/// That var is a single process-global string, and THREE test modules write it:
+/// `main.rs` (the fake-podman fixtures, which point it at a scratch script),
+/// `accel_probe.rs` (which pins it to `/bin/false`), and `remote_projects.rs`
+/// (which points it at a mock). Each module used to guard it with a mutex of
+/// its OWN, and two independent mutexes serialise nothing — so a module that
+/// held "the" seam lock could still have the var changed underneath it by a
+/// different module holding a different lock.
+///
+/// The symptom was `delegated_result_fake_podman_covers_fresh_status_and_
+/// exact_timeout_reap`: green 3/3 alone, red in the full suite on a 16-core
+/// host, green at `--test-threads=1`, and NOT reproducible on a 20-core host —
+/// core count decides the interleaving, not whether the defect is there. It
+/// surfaced at a different assert from run to run (the exit-37 wrapper arm, the
+/// removal/reap arm) because which arm is reached depends on when the foreign
+/// write lands; one cause that reads as two bugs if the transcripts are
+/// compared without this note. `status Some(1)` in a `podman rm` failure is the
+/// fingerprint of `/bin/false` arriving from `accel_probe`.
+///
+/// Acquire this BEFORE `env_lock` wherever both are held, so the pair always
+/// locks in one order.
+#[cfg(test)]
+pub(crate) fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

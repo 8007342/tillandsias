@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: note
+      ts: "2026-09-18T20:38:02Z"
+      agent_id: windows-esme-claude-20260918t201100z
+      host: esmeraldinha
+      summary: |-
+        CRITERION 2's ENUMERATION HALF AND ALL OF CRITERION 3 ARE IMPLEMENTED AND MEASURED ON ESMERALDINHA. This is a NOTE and not a closure: criterion 1 is NOT met and cannot be met without a decision that is not mine to make (below).
+
+        WHAT LANDED, all in crates/tillandsias-headless/src/accel_probe.rs. `enumerate_vulkan_physical_devices()` dlopens libvulkan.so.1 by SONAME at runtime, creates an instance, and reads deviceType plus driverID (VkPhysicalDeviceDriverProperties through the properties2 pNext chain) for every physical device. No `ash`, no new lockfile entry: a probe that must also RUN on hosts with no Vulkan cannot link the loader at build time, because "this host has no loader" is a first-class answer it has to be able to give. The pure decider `wsl2_vulkan_verdict_from(enumeration, loader_present, icd_count)` takes `Option<&[VulkanPhysicalDevice]>` so that "nobody enumerated" and "enumerated and found none" are distinct IN THE TYPE — this file has paid for collapsing those twice (accel_proof=-, accel_npu=none). The None arm delegates to wsl2_paravirtual_gpu_reason_from unchanged, which is what keeps criterion 4 true: every host that cannot enumerate emits the byte-identical envelope it emitted before.
+
+        MEASURED, esmeraldinha, 2026-09-18, tillandsias-build WSL2 guest, Mesa 26.1.6, cache moved aside and binary proven newer than source (13:37:24 vs 13:36:50):
+          accel_gpu_name=Microsoft_Direct3D12_Intel_R_UHD_Graphics accel_gpu_path=dxg-d3d12 accel_source=measured
+          device record: name_source=enumerated, usable=true, device_node=/dev/dxg, lanes=[host-native]
+        The raw enumeration, both criterion-3 arms live in ONE call:
+          device[0] type=INTEGRATED_GPU(1) driverID=23 (Dozen) "Microsoft Direct3D12 (Intel(R) UHD Graphics)"
+          device[1] type=CPU(4)            driverID=13 (llvmpipe) "llvmpipe (LLVM 22.1.8, 256 bits)"
+        95 accel_probe tests green ON LINUX, which is the only place these arms compile.
+
+        CRITERION 1 IS BLOCKED ON A DECISION, NOT ON EFFORT, AND I DID NOT FORCE IT. The envelope still reads accel_class=cpu-only accel_gpu=present-unusable, and that is accel_envelope's `state()` predicate, not the enumeration: a device counts as `usable` there ONLY if its lanes contain `container`. /dev/dxg reaches host-native code in the guest and has never been shown to reach a container. Widening that predicate to accept `host-native` would flip macOS Metal and the AMD/Intel host-native arms from present-unusable to usable and BREAK CRITERION 4 in the same commit that satisfied criterion 1. So criteria 1 and 4 are in tension on this host and the owner picks; this is the same shape as the engine-vocabulary collision yolanda recorded rather than renamed on 2026-09-13.
+
+        A DEFECT I INTRODUCED AND FIXED, recorded because the next person will be tempted by the same shortcut. I first set unusable_reason=None on the usable arm. Order 803-rbqf on the macOS Metal record is explicit that A DEVICE EXCLUDED BY LANE MUST NAME THE OBSTRUCTION — Metal is usable=true WITH a reason. Without it the envelope rendered present-unusable beside the NPU's reason as the first named obstruction, the bare verdict this envelope's own contract forbids. Now reads container-lane-unverified:dxg-unprobed — `unverified` and not structural, because unlike Metal nothing has shown dxg CANNOT be passed into a container; it has only never been probed there.
+
+        A BLOCKING RUNTIME DEFECT FOUND ONLY BY RUNNING IT, and the reason this needed a dxg-plus-ICD host rather than a careful reader. With a vkDestroyInstance call, a probe run on ANY NON-MAIN THREAD segfaults — not during enumeration, which completes and returns the right two devices, but when that thread LATER EXITS. Four-way isolation: main thread + destroy = fine over 10 iterations; spawned thread + destroy = SIGSEGV at thread exit; spawned thread + no destroy = fine, repeatedly; cargo test + destroy = SIGSEGV, which is how it surfaced, because libtest runs every test on a spawned thread. The ICD's thread-local teardown runs after the instance it belongs to is gone; the loader prints "dzn is not a conformant Vulkan implementation, testing use only" on every instance creation. The instance is now deliberately never destroyed and the enumeration is memoised in a OnceLock, so the cost is ONE leaked instance per process rather than one per call. HAD THIS SHIPPED WITH THE DESTROY CALL IT WOULD HAVE CRASHED THE TRAY, not a test. Neither the Windows nor the macOS gate can see this code at all — both compile it out — so a green gate on two of three platforms means nothing here.
+
+        A RENDERING HAZARD WORTH KNOWING BEYOND THIS PACKET: slug() caps every envelope value at 48 characters and says nothing when it cuts. My first token, container-lane-unverified:dxg-not-probed-in-container (52), rendered as `container-lane-unverified_dxg-not-probed-in-cont` — a token that is not the token, with no marker. Same class as the nvidia_model_name UUID truncation already recorded above it, same remedy: shorten the input, never raise the cap. Any new accel_reason must be kept under 48.
+
+        NOT DONE, deliberately, and NOT claimed: the wsl2_paravirtual_gpu_reason_at(root) seam that 1135-z8gn's follow-up asked for is still absent, so the production wrapper is still uncovered on every host.

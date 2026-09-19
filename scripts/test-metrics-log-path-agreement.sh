@@ -16,6 +16,29 @@
 
 set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ORDER 1209-hkcq — THIS FIXTURE MUST NOT WRITE THE HOST'S OWN METRICS.
+#
+# Measured on lenovinha 2026-09-15 over five runs: +3 records per run into
+# .cache/metrics/forge-expert-usage.jsonl. Two separate causes — arm 1c drove
+# this repo's binary (fixed below by anchoring it in a scratch checkout), and
+# several arms run cycle-metrics.sh, which spawns `tillandsias-plan check` and
+# `ready`; log_cli_usage then appends into whatever checkout that binary belongs
+# to, which is this one. Per-call overrides kept missing spawn sites, so the
+# scope is the whole fixture: every child inherits a scratch usage log.
+#
+# POLLUTION IS ONLY HALF OF IT. The arm that mattered also ASSERTED on counts of
+# that live file, which other processes write concurrently — a gate step
+# invoking the CLI moves the baseline between the two reads. That is the
+# "intermittent, misattributed gate failure" the orphan sweep named when it
+# classified this fixture FIX_FIRST and declined to wire it.
+#
+# ARM 1c DELIBERATELY UNSETS THIS, because its subject is whether the writer
+# DERIVES its path; a fixture-wide override would turn it into a test of the
+# override and silently retire the arm that catches a writer appending elsewhere.
+_FIXTURE_METRICS="$(mktemp -d "${TMPDIR:-/tmp}/metrics-fixture-own.XXXXXX")"
+export TILLANDSIAS_EXPERT_USAGE_LOG="$_FIXTURE_METRICS/forge-expert-usage.jsonl"
+trap 'rm -rf "$_FIXTURE_METRICS"' EXIT
 pass=0; fail=0
 ok()  { printf 'ok: %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
@@ -38,6 +61,156 @@ if [ "$health_decl" -ge 1 ] && [ "$surface_decl" -ge 1 ] && [ "$metrics_decl" -g
     ok "all three health-log participants ask the shared rule (probe, surface, report)"
 else
     bad "a health-log participant still hardcodes its own path (probe=$health_decl surface=$surface_decl report=$metrics_decl)"
+fi
+
+# ── arm 1b: THE RUST PARTICIPANT AGREES WITH THE SHELL RULE (1125-92xa) ───────
+#
+# The rule lives in a SHELL file, and a Rust binary cannot source one — so
+# tillandsias-plan was never a participant at all. It hardcoded
+# /tmp/forge-expert-usage.jsonl while every shell reader resolved
+# <checkout>/.cache/metrics/. Writer and reader on different paths BY
+# CONSTRUCTION: nothing failed, nothing reported, and on pirria 2026-09-12T02:26Z
+# the usage log held 901 records that its own reader could not open — growing as
+# it was measured, because the new records were the measuring agent's own gate
+# CLI calls.
+#
+# 1125-92xa's remedy duplicates the ALGORITHM in Rust rather than the RULE, and
+# this arm is the reason that is safe: it compares the binary's own answer to the
+# shell rule's answer for the same root, so the two cannot drift apart silently.
+# That is the property the single-file rule was protecting, kept by a gate
+# instead of by a shared file, because no shared file can span the two languages.
+#
+# It asks the BINARY, not the source, for the same reason arm 1 asks the scripts:
+# a participant that forgets to consult the rule must be caught, not assumed.
+# RESOLVE THE BINARY THROUGH THE SHARED PROBE, never a hardcoded target/ path
+# (704-zcgi, 721-nyev). The first draft of this arm walked target/debug then
+# target/release itself and was refused by check-plan-binary-probe-usage.sh,
+# correctly: three scripts had already written that same wrong probe, and the
+# Windows/WSL target/ layout is not the one a hand-written search assumes. An
+# executable bit is a claim; running the binary is evidence.
+rust_bin=""
+if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
+    # shellcheck source=scripts/plan-binary-probe.sh
+    . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(resolve_plan_binary 2>/dev/null || true)"
+fi
+# ABSOLUTISE IT. The probe answers with a repo-relative path ("./target/release/…"),
+# and arm 1c below runs the binary from a scratch checkout — a relative path
+# resolves against THAT directory and silently does not exist. It cost a cycle:
+# the arm reported "no usage record was written by either path", which is the
+# honest skip it is supposed to emit when it observed nothing, and was correct —
+# it had observed nothing, because the command never ran.
+case "$rust_bin" in
+    "") ;;
+    /*) ;;
+    *) rust_bin="$ROOT/${rust_bin#./}" ;;
+esac
+if [ -z "$rust_bin" ]; then
+    # NOT a pass. An absent binary means this participant was not examined, and
+    # saying so by name is the whole point of the packet this arm comes from.
+    printf 'skip: no tillandsias-plan binary to ask (build it to exercise the Rust participant)\n'
+else
+    rust_usage="$("$rust_bin" metrics-log-path forge-expert-usage.jsonl "$ROOT" 2>/dev/null)"
+    shell_usage="$(
+        . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null || true
+        metrics_default_log forge-expert-usage.jsonl "$ROOT"
+    )"
+    if [ -z "$rust_usage" ]; then
+        bad "the binary does not answer 'metrics-log-path' — the Rust writer cannot be asked where it writes, which is the 1125-92xa defect"
+    elif [ "$rust_usage" = "$shell_usage" ]; then
+        ok "the Rust writer and the shell rule resolve the same usage-log path"
+    else
+        bad "Rust writer and shell rule DISAGREE: rust=$rust_usage shell=$shell_usage"
+    fi
+
+    # ── arm 1c: THE WRITER ACTUALLY USES THE RESOLVER, not just exposes it ────
+    #
+    # Arm 1b compares RESOLVERS, and a resolver that agrees proves nothing about
+    # where log_cli_usage actually appends: the probe subcommand and the writer
+    # could drift apart exactly as the shell and Rust sides did. That is the same
+    # class of gap as the original defect — an instrument that cannot report that
+    # it could not look — so this arm drives the real writer end to end and reads
+    # the file it lands in.
+    #
+    # The scratch dir is a git repo the binary is RUN FROM, not the one it
+    # belongs to. The record must land in the BINARY's checkout — the path the
+    # shell reader reads — and must not appear here: a writer that anchored on
+    # the cwd would create .cache/metrics inside any repo it was invoked in,
+    # which is untracked-and-unignored there. That is not hypothetical; it broke
+    # two arms of the issue-capture-lane litmus (named without its pin prefix on
+    # purpose: a guard scans scripts for that token and reads it as a
+    # verification claim this fixture does not make), about something else,
+    # within one gate of being written.
+    # ORDER 1209-hkcq — THE ARM MUST NOT WRITE THE HOST'S OWN METRICS.
+    #
+    # The first version ran THIS repo's binary and asserted THIS repo's usage log
+    # grew. Measured on lenovinha 2026-09-15 over five runs: +3 records every
+    # run into .cache/metrics/forge-expert-usage.jsonl (4803 -> 4806 -> ...).
+    # Two defects in one arm: POLLUTION (a fixture asserting about a log became a
+    # writer to it, and its records are indistinguishable from real usage after)
+    # and RACE (a count comparison on a file other processes also write — inside
+    # a gate any other step invoking tillandsias-plan moves the baseline between
+    # the two reads). That is "intermittent, misattributed gate failure" verbatim,
+    # the orphan sweep's stated reason for classifying this file FIX_FIRST.
+    #
+    # THE REWORK KEEPS THE TEETH. It still drives the REAL writer end to end —
+    # same binary, same subcommand, no env override of the log path — and stays
+    # distinct from arm 1b's resolver comparison. Only the ANCHORING changes:
+    # 1125-92xa resolves from the EXECUTABLE's location, so a copy of the binary
+    # inside a scratch checkout writes into that scratch checkout.
+    _wr="$(mktemp -d "${TMPDIR:-/tmp}/metrics-writer.XXXXXX")"
+    mkdir -p "$_wr/.git" "$_wr/target/release"
+    _tmp_usage="/tmp/forge-expert-usage.jsonl"
+    _tmp_before=0
+    [ -f "$_tmp_usage" ] && _tmp_before="$(wc -l < "$_tmp_usage" 2>/dev/null || echo 0)"
+    _canon="$shell_usage"
+    _canon_before=0
+    [ -f "$_canon" ] && _canon_before="$(wc -l < "$_canon" 2>/dev/null || echo 0)"
+    # A subcommand that actually reaches log_cli_usage. `capabilities` returns
+    # early and logs nothing, which the arm reported honestly as a skip rather
+    # than as agreement — keep it that way if this one ever stops logging.
+    cp "$rust_bin" "$_wr/target/release/tillandsias-plan" 2>/dev/null
+    # env -u: the fixture-wide override is removed HERE and only here, so this
+    # arm still tests DERIVATION. With it set, the writer would honour the env
+    # and the arm would silently stop catching a writer that resolves correctly
+    # and appends somewhere else — the exact drift it was added to catch.
+    ( cd "$_wr" && env -u TILLANDSIAS_EXPERT_USAGE_LOG ./target/release/tillandsias-plan --index "$ROOT/plan/index.yaml" capability-matrix --hosts >/dev/null 2>&1 || true )
+    _landed="$_wr/.cache/metrics/forge-expert-usage.jsonl"
+    _tmp_after=0
+    [ -f "$_tmp_usage" ] && _tmp_after="$(wc -l < "$_tmp_usage" 2>/dev/null || echo 0)"
+    _canon_after=0
+    [ -f "$_canon" ] && _canon_after="$(wc -l < "$_canon" 2>/dev/null || echo 0)"
+    if [ -s "$_landed" ]; then
+        ok "the CLI writer appends inside its OWN checkout ($(wc -l < "$_landed") record(s)), resolved not overridden"
+    elif [ "$_tmp_after" -gt "$_tmp_before" ]; then
+        bad "the CLI writer appended to $_tmp_usage instead of its checkout — 1125-92xa is back"
+    elif [ "$_canon_after" -gt "$_canon_before" ]; then
+        bad "the writer reached the HOST's log from a scratch checkout — anchoring regressed to the caller's tree"
+    else
+        # Nothing grew anywhere: this binary logged nothing at all, so the arm
+        # did not observe the writer. Say that rather than counting it as
+        # agreement — an instrument that cannot report that it could not look is
+        # the class of defect this whole packet is about.
+        printf 'skip: no usage record was written by any path (telemetry off, or no logging subcommand ran)\n'
+    fi
+
+    # 1209-hkcq's own assertion: this fixture left the host's series alone.
+    if [ "$_canon_after" -eq "$_canon_before" ]; then
+        ok "the host's forge-expert-usage.jsonl is unchanged by arm 1c ($_canon_before)"
+    else
+        bad "arm 1c wrote $(( _canon_after - _canon_before )) record(s) into the host's own metrics ($_canon_before -> $_canon_after)"
+    fi
+    rm -rf "$_wr"
+
+    # NEGATIVE CONTROL for the Rust half: outside a checkout it must still fall
+    # back to /tmp, exactly as the shell rule does. A fix that made the binary
+    # always write into a checkout would break the forge.
+    rust_outside="$("$rust_bin" metrics-log-path forge-expert-usage.jsonl "/nonexistent-checkout-$$" 2>/dev/null)"
+    if [ "$rust_outside" = "/tmp/forge-expert-usage.jsonl" ]; then
+        ok "outside a checkout the Rust writer falls back to /tmp (forge path preserved)"
+    else
+        bad "Rust no-checkout fallback broke: $rust_outside"
+    fi
 fi
 
 # ── arm 2: inside a checkout the default is repo-relative, not /tmp ───────────
@@ -159,8 +332,13 @@ esac
 # condition the stub used to paper over.
 MD="$(mktemp -d "${TMPDIR:-/tmp}/metrics-norule.XXXXXX")"
 cp "$ROOT/scripts/cycle-metrics.sh" "$MD/cycle-metrics.sh"
-norule_out="$(bash "$MD/cycle-metrics.sh" 2>&1 >/dev/null | head -1)"
-norule_rc=0; bash "$MD/cycle-metrics.sh" >/dev/null 2>&1 || norule_rc=$?
+# ORDER 1209-hkcq: the COPY resolves its own script dir, but the plan binary it
+# invokes still anchors on the REAL checkout, so its check/ready usage records
+# landed in the host's own series. Name a scratch usage log — the subject here is
+# the REFUSAL on an unresolvable rule, not where usage records go.
+_u8="$MD/forge-expert-usage.jsonl"
+norule_out="$(TILLANDSIAS_EXPERT_USAGE_LOG="$_u8" bash "$MD/cycle-metrics.sh" 2>&1 >/dev/null | head -1)"
+norule_rc=0; TILLANDSIAS_EXPERT_USAGE_LOG="$_u8" bash "$MD/cycle-metrics.sh" >/dev/null 2>&1 || norule_rc=$?
 case "$norule_out" in
     refused:metrics:unresolvable-log-path*)
         if [ "$norule_rc" -ne 0 ]; then
@@ -189,7 +367,7 @@ if grep -q 'refused:metrics:unresolvable-log-path' "$MUT" && ! grep -q 'if false
 elif ! bash -n "$MUT" 2>/dev/null; then
     bad "MUTATION: the reconstructed pre-fix script does not parse — arm 8b proves nothing"
 else
-    mut_rc=0; bash "$MUT" >/dev/null 2>&1 || mut_rc=$?
+    mut_rc=0; TILLANDSIAS_EXPERT_USAGE_LOG="$MD/forge-expert-usage.jsonl" bash "$MUT" >/dev/null 2>&1 || mut_rc=$?
     if [ "$mut_rc" -eq 0 ]; then
         ok "MUTATION: the pre-fix script silently accepts an unresolvable rule — arm 8 has teeth (pre-fix result: FAILS)"
     else
@@ -217,8 +395,18 @@ if [ -e /tmp/tillandsias-timing.jsonl ]; then
 else
     printf '{"ts":"2026-01-01T00:00:00Z","step":"fixture","phase":"f","duration_ms":1,"host":"fixture"}\n' \
         > /tmp/tillandsias-timing.jsonl
-    split_out="$(cd "$ROOT" && bash scripts/cycle-metrics.sh 2>&1 >/dev/null | head -1)"
-    split_rc=0; (cd "$ROOT" && bash scripts/cycle-metrics.sh >/dev/null 2>&1) || split_rc=$?
+    # ORDER 1209-hkcq — REDIRECT THE USAGE LOG FOR THESE TWO RUNS.
+    # cycle-metrics.sh invokes the plan CLI (`check`, `ready`) and log_cli_usage
+    # appends one record per invocation into the checkout it runs in — the REAL
+    # repo here, because the split this arm needs only exists in the real paths.
+    # Measured: exactly the two records named "check" and "ready" that this
+    # fixture was leaving in the host's forge-expert-usage.jsonl every run.
+    # The override is legitimate rather than a dodge: this arm's subject is the
+    # REFUSAL on a split TIMING log, not where usage records land, and the split
+    # it needs is still real.
+    _u9="$SD/forge-expert-usage.jsonl"
+    split_out="$(cd "$ROOT" && TILLANDSIAS_EXPERT_USAGE_LOG="$_u9" bash scripts/cycle-metrics.sh 2>&1 >/dev/null | head -1)"
+    split_rc=0; (cd "$ROOT" && TILLANDSIAS_EXPERT_USAGE_LOG="$_u9" bash scripts/cycle-metrics.sh >/dev/null 2>&1) || split_rc=$?
     case "$split_out" in
         violation:metrics-log-split:*)
             if [ "$split_rc" -ne 0 ]; then

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-step-numeric-prefix-is-read-then-written-so-two-hosts-landing-in-one-window-collide
+    field: status
+    value: obsoleted
+    ts: "2026-09-14T19:48:42Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-gate-step-numeric-prefix-is-read-then-written-so-two-hosts-landing-in-one-window-collide
+    event:
+      type: completed
+      ts: "2026-09-14T19:48:42Z"
+      host: macuahuitl
+      summary: |-
+        status 'obsoleted' with evidence_refs: 32d831a52 feat(1162-qbrx); PASS: gate-step-prefix-allocation 20/20; 1162-qbrx completed 2026-09-14
+  - packet_id: the-gate-step-numeric-prefix-is-read-then-written-so-two-hosts-landing-in-one-window-collide
+    event:
+      type: note
+      ts: "2026-09-14T19:48:42Z"
+      host: macuahuitl
+      summary: |-
+        superseded by land-time allocation (1162-qbrx): a locally minted prefix cannot be collision-free because the window is the gate

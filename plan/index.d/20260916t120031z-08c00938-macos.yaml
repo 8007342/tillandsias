@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    field: next_action
+    value: |-
+      Read 1141-vf9w's STEP_SKIP_EXIT/STEP_SKIP_DESC treatment first — the distinction and its wording are settled there and should not be re-litigated. The change is in assert_reached_stdin_path: on the live-tray refusal, report a named skip rather than asserting. Rust's test harness has no first-class skip, so the honest forms are an explicit early return with an eprintln naming WHY it did not run, or #[ignore] driven by a tray-detection helper — pick whichever the crate's existing idiom supports, and make the message say what was NOT exercised rather than going silent. THEN prove the no-tray arm still has teeth: with no tray running, break the stdin path and watch both tests red. A skip that swallows the assertion is the worse defect, and this row should not be closed without that mutation.
+
+
+      [2026-09-16T12:00:31Z macos] correction: the relay ref is not an escape; two options, not three
+    ts: "2026-09-16T12:00:31Z"
+    host: macos
+
+events:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    event:
+      type: note
+      ts: "2026-09-16T12:00:31Z"
+      host: macos
+      summary: |-
+        correction: the relay ref is not an escape; two options, not three

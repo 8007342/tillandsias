@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    field: next_action
+    value: |-
+      PARTIALLY LANDED by pirria-silverblue 2026-09-18. The remedy is CHOSEN, PROVEN,
+      and APPLIED TO ONE OF FIVE TREES. Read the blocker before you "finish the job" —
+      the obvious way to finish it destroys 44 files.
+
+      THE REMEDY, decided: collapse each `<tool>/skills` directory-of-symlinks into a
+      SINGLE directory symlink. `-r` follows a symlink NAMED ON THE COMMAND LINE but
+      never one it meets during the walk, so `.gemini/skills -> ../skills` is fully
+      searched while 16 per-skill links inside a real directory are all skipped.
+      Applied to `.gemini/` (16 symlinks -> 1). Tree went 83 symlinks -> 68.
+
+      WHAT IS LEFT FOR A DISTRUSTFUL STRANGER:
+
+      1. THE OTHER FOUR TREES ARE BLOCKED ON 1253-nmmy. `.claude/`, `.codex/`,
+         `.github/` and `.opencode/` each hold 11 REAL `openspec-*` skill directories
+         mixed in among the 16 symlinks — 44 real files that `rm -rf <tool>/skills`
+         deletes while looking like it removed symlinks. It happened here and was
+         caught before commit by:
+           git diff --cached --name-status | awk '$1=="D"{print $2}' | while read -r p; do
+             [ "$(git ls-tree HEAD -- "$p" | awk '{print $1}')" = 120000 ] || echo "REAL-CONTENT-DELETED: $p"
+           done
+         Those 44 files are already THREE divergent generated versions (openspec
+         generatedBy 1.11.0 in .claude vs 1.3.1 in .codex/.github vs a third in
+         .opencode). Consolidating them is a decision about which version wins, filed
+         as 1253-nmmy. DO NOT convert those four trees until 1253-nmmy closes.
+
+      2. RE-MEASURE THE PACKET'S EXIT-0 CLAIM. This packet asserts `grep -r` returns
+         "0 hits, EXIT CODE 0". On pirria the pre-fix failing search exits **1**, for
+         ugrep 7.8.4 AND GNU grep 3.12. Exit 1 is still the false negative, but it is
+         not what is written above. macuahuitl and macbookair filed the exit-0
+         observation — one of you re-run it and either correct this packet or name
+         what made it 0 (-s? a pipeline? a wrapper eating the status?).
+
+      3. EXIT CRITERION 4'S PREMISE IS FALSIFIED — DO NOT RUN THE SURVEY AS WRITTEN.
+         It says "a host with real GNU grep needs no change". Measured on pirria, same
+         fixture, same minute: GNU grep 3.12 `-r` skips symlinked subdirs and exits 1,
+         identical to ugrep 7.8.4. This is POSIX -r/-R semantics, not a ugrep quirk,
+         so `grep` identity partitions no host. The remedy shipped is
+         identity-independent by construction. A census is now a nice-to-have, not a
+         gate.
+
+      4. VERIFY SKILL DISCOVERY ON THE NON-CLAUDE TOOLS. Only Claude Code was verified
+         live: a fresh `claude -p` in a tree with `.claude/skills -> ../skills` listed
+         all 16 project skills. The tree that actually shipped is `.gemini/`, and NO
+         gemini agent was run against it. Whoever has gemini: run one and confirm it
+         still sees 16 skills. If gemini cannot follow a symlinked skills DIRECTORY,
+         revert `.gemini/skills` to its 16 per-skill links and record it here.
+
+      5. RUN THE THREE CHEATSHEET GATES THAT COULD NOT RUN HERE. pirria has no Rust
+         toolchain and no rg on the host: check-cheatsheet-tiers.sh skipped
+         (cargo-absent), check-cheatsheet-sources.sh died on `cargo: command not
+         found`, check-cheatsheet-refs.sh refused (no rg, no builder toolbox).
+         check-cheatsheet-frontmatter.sh (231 checked) and
+         check-cheatsheet-source-anchors.sh (23 checked) PASSED. A host with the
+         toolchain must run the other three against
+         cheatsheets/tooling/recursive-grep-symlinks.md before this is called clean.
+
+      VERIFICATION DONE ON `.gemini/`, re-runnable in one line — note the negative
+      control runs in BOTH directions, so the fix cannot have bought its hit with a
+      phantom:
+        grep         -rln bump-version.sh .gemini/skills/            # 1 hit, exit 0
+        /usr/bin/grep -rln bump-version.sh .gemini/skills/           # 1 hit, exit 0
+        grep         -rln ZZZ_ABSENT_STRING_1238_U84W .gemini/skills/  # 0 hits
+        /usr/bin/grep -rln ZZZ_ABSENT_STRING_1238_U84W .gemini/skills/ # 0 hits
+      Pre-fix, the first two returned 0 hits.
+
+      REMEDIES REJECTED, WITH THE MEASUREMENT THAT KILLED EACH:
+      - wrapper passes -R: not ours. `grep` is a shell FUNCTION injected by Claude
+        Code that execs $CLAUDE_CODE_EXECPATH with ARGV0=ugrep. A committed .ugrep
+        config is NOT honoured under that argv0 (ugrep auto-loads .ugrep only for the
+        `ug` command) — tested, still 0 hits. There is no in-repo hook on the tool.
+      - stderr warning: ugrep 7.8.4 --help offers no such option. Nothing to enable.
+      - replace symlinks with real files: five real copies of every skill; git does
+        not preserve hardlinks across clone so they diverge silently per host. Not
+        hypothetical — it is exactly what the 44 openspec files already did.
+      - remember -R: a habit, unenforceable, and -R is not portable everywhere.
+
+      STILL SYMLINKED AND DELIBERATELY SO: GEMINI.md, CODEX.md,
+      .github/copilot-instructions.md -> AGENTS.md. Symlinks to a FILE are never
+      traversed by a directory walk, and AGENTS.md sits at the repo root where any
+      `grep -r .` reaches the real content.
+
+      RECORD: cheatsheets/tooling/recursive-grep-symlinks.md (owned file), indexed.
+    ts: "2026-09-18T20:19:19Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-18T20:19:19Z"
+      host: pirria-silverblue
+      summary: |-
+        remedy chosen and proven; applied to .gemini only, other four blocked on 1253-nmmy

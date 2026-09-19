@@ -482,6 +482,48 @@ if [ -n "$details" ]; then
     echo "  the certificate nor the key, sending the reader at the wrong subsystem." >&2
     echo "  If it exits again immediately, that is a crash loop and belongs in a packet," >&2
     echo "  not a restart." >&2
+
+    # ORDER 1219-dcma — THE REMEDY ABOVE DOES NOT COVER EVERY SERVICE THIS GUARD
+    # REPORTS, and saying so is the difference between a remedy and a detour.
+    #
+    # MEASURED on lenovinha 2026-09-16, by following the instruction above
+    # exactly rather than by reading it:
+    #     this guard   -> fail:enclave-service-dead:service=tillandsias-inference:rc=137:restarts=0:age=3d1h
+    #     the remedy   -> tillandsias --ensure-enclave
+    #                  -> ok:enclave-ensured:proxy=running   rc=0
+    #     this guard   -> still degraded, dead=1, service still Exited(137)
+    # Confirmed in the source rather than inferred from that output:
+    # crates/tillandsias-headless/src/main.rs ensures vault (feature-gated) then
+    # ensure_proxy_running(), then prints ok:enclave-ensured:proxy=. Inference is
+    # never touched. This guard counts five services; that command covers two.
+    #
+    # So an operator following the line above gets rc=0, an ok: line, and an
+    # unchanged dead service — while the same block forecloses the alternative
+    # ("NOT 'podman start'"), on an argument that is sound FOR THE PROXY
+    # (975-rsgm's CA-key precondition) and was being applied to every class.
+    # The operation succeeded and the subject was untouched: the shape this
+    # fleet keeps finding in detectors, here in the REMEDY.
+    #
+    # DERIVED FROM WHAT WAS ACTUALLY REPORTED, not a second hard-coded list: the
+    # names come out of the detail lines this run just built, so a service added
+    # later is classified without editing this text. Vault and proxy are named
+    # here because they are what --ensure-enclave ensures — that list belongs to
+    # the command, and if it grows this line should shrink.
+    _covered_re='^tillandsias-(vault|proxy)$'
+    _uncovered="$(printf '%s' "$details" \
+        | sed -n 's/.*:service=\([^:]*\):.*/\1/p' \
+        | sort -u | grep -vE "$_covered_re" || true)"
+    if [ -n "$_uncovered" ]; then
+        echo "  NOT COVERED BY THAT REMEDY (1219-dcma) — 'tillandsias --ensure-enclave' ensures" >&2
+        echo "  VAULT and PROXY only. It will exit 0 and print ok:enclave-ensured without touching:" >&2
+        printf '%s\n' "$_uncovered" | sed 's/^/      /' >&2
+        echo "  For tillandsias-inference the path that ensures it is the FORGE LAUNCH" >&2
+        echo "  ('tillandsias <project> --opencode' or --codex), which waits for the inference" >&2
+        echo "  API to answer before proceeding; running --ensure-enclave will not start it." >&2
+        echo "  Read 'podman logs tillandsias-inference' first: rc=137 is SIGKILL and READS like" >&2
+        echo "  an OOM, but check 'journalctl -k' for an actual out-of-memory record before" >&2
+        echo "  believing that — on lenovinha the kernel had none and the kill came from outside." >&2
+    fi
 fi
 
 if [ "$down" -gt 0 ] || [ "$absent" -gt 0 ]; then

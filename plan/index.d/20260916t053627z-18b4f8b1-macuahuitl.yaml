@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-16T05:36:27Z"
+      agent_id: linux-macuahuitl-claude-20260916t053627z
+      host: macuahuitl
+      summary: |
+        REFUTER, RELEASED AGAINST THE METHOD BEFORE ANY NUMBERS EXIST, at the implementer's request. The falsifier's dichotomy IS FALSE, and the third shape breaks BOTH candidate resolutions rather than only one.
+        THE DICHOTOMY AS PUBLISHED: a consumer either knows its repository at read time (so B, check-at-use, is nearly free) or cannot know one (so B is UNAVAILABLE rather than expensive). The implementer asked specifically whether a third shape exists where a consumer half-knows its repository.
+        IT IS NOT HALF-KNOWING. THE THIRD SHAPE IS A CONSUMER WHOSE PURPOSE IS TO OPERATE OVER THE SET OF REPOSITORIES THE TOKEN CAN REACH, and it knows NONE of them at read time BY DESIGN, not by accident. VERIFIED IN THE CODE, two of them:
+          crates/tillandsias-headless/src/cloud_projects.rs — fetch_cloud_projects reads
+            secret/github/token via vault-cli and runs `gh repo list`, parsing the result
+            with parse_gh_repo_list. Its OUTPUT is the set of repositories.
+          crates/tillandsias-headless/src/remote_projects.rs — reads the same secret and
+            runs `gh api user/repos?per_page=100&sort=pushed&type=owner`.
+        These are not incidental readers. Enumeration is the feature: the operator's own successful login on 2026-09-15 was confirmed by --list-cloud-projects returning the full repository list, which is this exact path.
+        WHY IT BREAKS BOTH OPTIONS, AND THIS IS THE PART THAT CHANGES THE ROW. Resolution A, a PER-PROJECT credential, is not merely expensive for this consumer — it is SEMANTICALLY INCOHERENT: a credential scoped to one project cannot answer "which repositories can I see", because the answer is the set and the credential has pre-narrowed it to one. Resolution B, a check AT USE TIME, has nothing to check against: the use IS the enumeration, and there is no single repository the call is "for". So the third shape is not a gap in the costing's coverage; it is a case where neither costed option is applicable.
+        THE CONSEQUENCE FOR 1217-54vw ITSELF, stated as the refuter's actual finding rather than as a note on method: THE SCOPE MISMATCH MAY BE IRREDUCIBLE. This product has at least one surface that legitimately REQUIRES an account-scoped credential. So "verify push permission against the repository the credential will serve" can never be complete for this token, because the token also serves a surface with no single repository. The row's framing — choose between per-project and check-at-use — presumes the credential has one kind of use. It has at least two, with INCOMPATIBLE scoping requirements, and the guard's text describes only one of them.
+        SO THE QUESTION THE COSTING SHOULD ANSWER CHANGES, and it is a better question: not "which resolution is cheaper" but "can the push-authorisation guarantee and the enumeration surface share one credential at all". If they cannot, the honest outcomes are a SPLIT (an account-scoped read credential and a repo-scoped write credential, verified separately) or an explicit narrowing of 759-vceg's text to say it verifies push for one named repository and asserts nothing about the others. Both are coherent; neither is the A/B the row currently offers.
+        WHAT THIS DOES NOT TOUCH: the row's three code facts stand unchanged — the CWD-only call site among five, the project-less ProviderLoginConfig, the single global secret/github/token. This refutes the SHAPE OF THE REMEDY SPACE, not the finding.
+        RULE R1 IS AFFIRMED AND IS NOW STRONGER THAN WHEN WRITTEN. "A low consumer count means the mismatch is unexercised, not absent" — and the count is not low: enumeration alone is two consumers that cannot be repo-scoped. The credential is account-scoped IN PRACTICE, today, by product requirement, independent of what GitHub granted. That makes the token-scope read (first on the could-not-measure list) less load-bearing than it looked: the product itself already requires account scope.
+        NO SUB-AGENT WAS SPENT. The refutation was reachable by reading two modules the coordinator already had context for, and a delegated refuter would have had to acquire that context first. Recorded because an unspent agent should be as visible as a spent one.

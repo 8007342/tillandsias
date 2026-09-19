@@ -24,7 +24,8 @@ check "live-bound-passes" 0 "$?"
 
 # 2. A bound naming a symbol that exists NOWHERE must be caught. Non-vacuity of
 #    the whole guard rests on this one.
-sed -i 's/s.split("fn real_one")/s.split("fn vanished_neighbour")/' "$SB/mycrate/src/lib.rs"
+# 1135-z8gn: temp-file form, portable on both dialects.
+sed 's/s.split("fn real_one")/s.split("fn vanished_neighbour")/' "$SB/mycrate/src/lib.rs" > "$SB/lib.rs.tmp" && mv "$SB/lib.rs.tmp" "$SB/mycrate/src/lib.rs"
 TILLANDSIAS_SLICE_BOUND_ROOT="$SB" bash "$GUARD" >/dev/null 2>&1
 check "dead-bound-is-caught" 1 "$?"
 
@@ -32,7 +33,8 @@ check "dead-bound-is-caught" 1 "$?"
 #    a symbol declared in a SIBLING file of the same crate (include_str! of
 #    another module). Crate-scoped resolution must not call that dead.
 printf 'pub fn helper_symbol() {}\n' > "$SB/mycrate/src/other.rs"
-sed -i 's/s.split("fn vanished_neighbour")/s.split("pub fn helper_symbol")/' "$SB/mycrate/src/lib.rs"
+# 1135-z8gn: temp-file form, portable on both dialects.
+sed 's/s.split("fn vanished_neighbour")/s.split("pub fn helper_symbol")/' "$SB/mycrate/src/lib.rs" > "$SB/lib.rs.tmp" && mv "$SB/lib.rs.tmp" "$SB/mycrate/src/lib.rs"
 TILLANDSIAS_SLICE_BOUND_ROOT="$SB" bash "$GUARD" >/dev/null 2>&1
 check "cross-file-bound-not-accused" 0 "$?"
 

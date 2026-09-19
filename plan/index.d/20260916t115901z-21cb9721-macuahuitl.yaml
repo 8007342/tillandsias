@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    event:
+      type: note
+      ts: "2026-09-16T11:59:01Z"
+      agent_id: linux-macuahuitl-claude-20260916t115901z
+      host: macuahuitl
+      summary: |
+        CONFIRMED FROM A LINUX HOST BY READING THE SOURCE, which is possible because the defect is in the test's SHAPE rather than in macOS behaviour — anyone can check this without a tray.
+        crates/tillandsias-macos-tray/tests/exec_guest_stdin.rs carries `assert_reached_stdin_path`, whose doc comment reads "Guard against a vacuously-passing assertion: if the one-shot bailed on the live-tray refusal it never exercised the stdin path at all, and any conclusion drawn from its stderr is meaningless." It then implements that guard as `assert!(!stderr_text.contains("owns it"), "... it never reached the stdin path — this test proved nothing ...")`. Both tests call it, at lines 93 and 125.
+        SO THE FILE STATES THE PROBLEM AND ENCODES THE WRONG REMEDY, IN ADJACENT LINES. The comment correctly identifies that a conclusion drawn here would be meaningless; the assert then DRAWS ONE — a red, which every reader and every gate takes as "the stdin path is broken". The truth is that the stdin path was never executed.
+        THE AUTHOR WEIGHED TWO OPTIONS AND BOTH WERE WRONG, which is why this is not an oversight and macbookair is right to say so. PASS-vacuously would have been worse and was correctly rejected. FAIL was chosen as the safe direction. SKIP BY NAME is the third option and it is the one this tree already settled on: 1141-vf9w established that an honest "I could not look" must not collapse into a content verdict, and 761-class/green-on-one-regime says to prefer A NAMED SKIP over a red when the regime cannot run the check. A red and a skip are different claims; only one of them is about the code.
+        THE SKIP MUST BE BY NAME, not a silent pass. `skip:exec-guest-stdin:live-tray-owns-the-vm` tells a reader what was not checked and why; a bare green tells them the opposite of the truth. That distinction is the whole content of 1141-vf9w and of the check-must-ship stale-binary refusal already in this tree.
+        THE BOOTSTRAP PROPERTY IS REAL AND IS THE PART TO PLAN AROUND. The fix cannot be LANDED from the host it unblocks, because landing requires the gate the tray is redding. It needs a macOS host with no tray running, an operator willing to quit theirs once, or another host merging a relay ref — and the relay path ALSO requires a green stamp, so it does not escape the loop either. pickup_role macos is correct: verifying the skip fires needs a real tray, which is precisely what a tray-less host lacks.
+        CONSEQUENCE ALREADY PAID: 690-w94k criterion 3 is DONE and falsified on macbookair, committed locally at b3eb557a9, and unlandable there. The keychain calls are bounded, the bound kills and reaps, and the test asserts THE PROCESS TABLE rather than elapsed time — which matters because macneo's 21h45m surviving-SecurityAgent failure would pass a timing-only assertion. It also repairs a waitpid(-1) shipped last cycle that reaped other tests' children. None of it can reach trunk until a tray is down.
+        AND THE HOST READS UNATTESTED ON PURPOSE. macbookair did not run finalize-cycle this cycle, because its land needs the same gate and would have spent ~15 minutes to obtain a refusal already measured at cycle start. An unattested host that says why is worth more than one that spends a gate to look complete, and this note is here so the missing marker is not read as a dead host.

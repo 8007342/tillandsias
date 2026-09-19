@@ -60,6 +60,18 @@ particular machine's state. The distinction was missed once because this
 section read as though every host running it were a smoke host; most of the
 fleet's Windows and macOS hosts are workstations.
 
+**`TILLANDSIAS_RESET_KEEP_MODELS=1`** lets this destruction spare the model
+cache (`cache_root()/models`) on the operator's word — opt-in, per run, never
+the default: the clean room stays clean unless this run asked otherwise (the
+2026-09-13 reset ruling; operator, 2026-09-14: "let's add the keep models
+flag to our resets"). Per platform: **Linux** — the podman reset and the
+credential clearer never touch `~/.cache/tillandsias/models`, so the flag is
+a documented no-op and the models survive regardless. **macOS** — honoured by
+`scripts/e2e-step2-macos.sh` below, which names the spared directory in its
+residue line. **Windows** — a no-op until 1182-2vaz moves the weights out of
+the distro (they live at `/root/.cache/tillandsias/models` inside the vhdx
+that `wsl --unregister` deletes) (operator ruling 2026-09-14; 1181-bkem).
+
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
 of what this smoke exercises — if init bricks, that is a finding, not a failure
@@ -81,16 +93,31 @@ silently carried this gap.
 
 Run `scripts/probe-credential-cold-state.sh --format=md` and paste its block
 into the findings file, the way the Windows leg records its hashes. It reports
-`credential-cold` or `credential-warm` from keychain **metadata only** — never
+`credential-cold` or `credential-warm` from **metadata only** — never
 `secret-tool search --all`, which prints the secret inline and put live tokens
 into two transcripts on 2026-08-25 — and reports `could-not-run` when the
 question cannot be asked, which must never be read as cold.
 
-Whether the reset should CLEAR that share (the Linux analogue of 804-ckst, whose
-`scripts/clear-vault-host-credentials.ps1` exists for Windows only) or whether
-preservation is correct and this document should simply say so, is an OPEN
-DECISION on 900-z3kv. Until it is made, do not write either claim as settled —
-report the measured state and move on.
+**Since 1149-vgn2 it checks the host keychain AND
+`~/.cache/tillandsias/fallback_*`, and a cold verdict names everything it
+checked.** It read the keychain alone until then, so pirria — no keychain
+item, a `fallback_vault-shamir-share-v1` untouched since 2026-09-01 keeping
+every reset warm — was certified cold, and the verdict's own text claimed the
+resync path was exercised. If the checkout running this skill predates
+1149-vgn2, its cold verdict is keychain-only: do not trust it (drill: plan/issues/fleet-restart-2026-09-12.md, 1149-vgn2 fixed: the cold probe now checks the fallback share).
+
+**DECIDED (900-z3kv, operator ruling 2026-09-13): the reset clears the
+host-held credentials.** Not open — the platform prefers idempotency to
+legacy support, and `podman system reset --force` is the baseline.
+`scripts/clear-vault-host-credentials.sh` clears THREE locations: the
+keychain items `vault-shamir-share-v1` and `vault-root-token-v1`, the
+`~/.cache/tillandsias/fallback_*` copies of both, and
+`~/.cache/tillandsias/vault-data`. `installation-uuid-v1` is deliberately
+PRESERVED — it anchors the INSTALLATION, and clearing it makes the next vault
+underivable rather than re-initialized. **Read the clearer's own last line,
+not the reset's exit code:** a partial clear prints
+`warn:clear-vault-credentials:partial` and still exits 0, which is precisely
+the state that looks cold and is not (drill: plan/issues/fleet-restart-2026-09-12.md, 900-z3kv COMPLETED).
 
 ---
 
@@ -198,9 +225,48 @@ download cache.
    both are invisible if this step silently proceeds.
 3. **Record sibling heads** (`main`, `linux-next`, `windows-next`, `osx-next`)
    per multi-host discipline.
-4. **Create a findings log dir** the smoke will append to:
+4. **ARCHIVE THE PREVIOUS RUN'S EVIDENCE, THEN create the findings log dir**
+   (order 1189-7yvu). `mkdir -p` on its own is what let a run inherit every
+   file from every previous run:
    ```bash
-   mkdir -p target/smoke-e2e
+   SMOKE_EVIDENCE_DIR=target/smoke-e2e
+   SMOKE_RUN_START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   # MOVE ASIDE, NEVER DELETE — prior evidence is worth keeping, and a step
+   # that deletes it makes the previous run unreconstructable.
+   if [ -d "$SMOKE_EVIDENCE_DIR" ] && [ -n "$(ls -A "$SMOKE_EVIDENCE_DIR" 2>/dev/null)" ]; then
+       SMOKE_ARCHIVE="$SMOKE_EVIDENCE_DIR/_archived-$(date -u +%Y%m%dt%H%M%Sz)"
+       mkdir -p "$SMOKE_ARCHIVE"
+       # Move every entry except the archive dirs themselves.
+       for _e in "$SMOKE_EVIDENCE_DIR"/*; do
+           case "$_e" in *"/_archived-"*) continue ;; esac
+           [ -e "$_e" ] && mv "$_e" "$SMOKE_ARCHIVE"/
+       done
+       printf 'archived_to=%s\n' "$SMOKE_ARCHIVE"
+   fi
+   mkdir -p "$SMOKE_EVIDENCE_DIR"
+   printf 'run_start=%s\n' "$SMOKE_RUN_START" | tee "$SMOKE_EVIDENCE_DIR/00-run-start.txt"
+   ```
+   **WHY THIS IS NOT HOUSEKEEPING.** In-block assertions capture their status
+   in the same shell and are unaffected. Every OUT-OF-BAND read is affected:
+   the §5 report, an orchestrator polling for completion, a human scanning the
+   directory. A step that never reaches its write leaves the PREVIOUS run's
+   file under the exact name those readers open, so a stale PASS is
+   indistinguishable from a fresh one BY NAME.
+
+   MEASURED on pirria 2026-09-14: `03-init-exit.txt` containing `init_exit=0`,
+   dated 2026-09-13 01:24, was present and being read as this run's result
+   while this run's `--init` was still building the proxy image. Fourteen files
+   from the 2026-09-12/13 runs were present at start and had to be archived by
+   hand.
+
+   **CHECK EVIDENCE AGAINST `run_start`, not against its existence.** Any file
+   in the directory older than `00-run-start.txt` is a leak from an incomplete
+   archive, not a result:
+   ```bash
+   find "$SMOKE_EVIDENCE_DIR" -maxdepth 1 -type f \
+        ! -newer "$SMOKE_EVIDENCE_DIR/00-run-start.txt" \
+        ! -name 00-run-start.txt -print
+   # any output here is stale evidence that survived the archive step
    ```
 5. **Source the timing helpers, and keep them sourced for every block below**
    (order 1013-qv7c). Each smoke step emits ONE duration record so the
@@ -253,6 +319,15 @@ download cache.
 Install the published artifact the canonical way an operator would — do NOT use a
 locally built `target/` binary; the whole point is to test the *download*.
 
+**`install.sh` is not a download test — it runs the full init (1133-kktm).**
+Measured on v56.9.12.2: 131 lines of podman/vault output, a Vault bootstrap
+provisioning twelve policies and AppRole roles, and a `tillandsias-vault`
+container left running on 8201. Reversible, not inert, and not what
+"curl-install and assert the tag" describes above. The §1/§2 consent line
+still holds (§2 destroys, §1 provisions), but on an operator's workstation say
+what §1 actually does before running it; consent to a download check is not
+consent to a Vault bootstrap (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
+
 Linux:
 
 The installer honors `TILLANDSIAS_RELEASE_BASE` so the smoke pins the exact
@@ -275,7 +350,10 @@ hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
 _rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
 # The comment used to say "must equal $SMOKE_TAG". Now it is checked.
-grep -qF "${SMOKE_TAG#v}" target/smoke-e2e/01-version.txt
+# BOUNDED (amendment to 1133-kktm): the version scheme is a monotonic
+# counter, so an unbounded substring test would accept 56.9.12.20 as a match
+# for 56.9.12.2. (drill: plan/issues/fleet-restart-2026-09-12.md, The promotion proven on the default Windows path)
+grep -qE "(^|[^0-9.])${SMOKE_TAG#v}([^0-9.]|\$)" target/smoke-e2e/01-version.txt
 ```
 
 > Three assertions replacing a pipe and a comment (order 727-kmks). The
@@ -369,7 +447,10 @@ if (-not (Test-Path $tray)) { throw "tray not found on PATH or at $tray after a 
 & $tray --version 2>&1 | Tee-Object target\smoke-e2e\01-version.txt | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "tray --version failed (exit $LASTEXITCODE)" }
 $installedVersion = (Get-Content target\smoke-e2e\01-version.txt -Raw).Trim()
-if ($installedVersion -notmatch [regex]::Escape($SmokeTag.TrimStart('v'))) {
+# BOUNDED (amendment to 1133-kktm): an unbounded substring match would accept
+# 56.9.12.20 as a match for 56.9.12.2 — the version scheme is a monotonic
+# counter, so the collision is reachable, not hypothetical.
+if ($installedVersion -notmatch ('(?<![0-9.])' + [regex]::Escape($SmokeTag.TrimStart('v')) + '(?![0-9.])')) {
   throw "installed tray version '$installedVersion' does not carry release $SmokeTag"
 }
 ```
@@ -403,6 +484,14 @@ TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
+  # 900-z3kv (operator ruling 2026-09-13, landed by yoga): the reset is the baseline, and
+  # an empty podman store is not a cold room — clear the host-held Vault credentials
+  # (keychain items, ~/.cache/tillandsias/fallback_*, the vault-data dir) in the SAME
+  # step, or the next --init resyncs the old share and the clean room is not one
+  # (drill: plan/issues/fleet-restart-2026-09-12.md, 900-z3kv COMPLETED).
+  scripts/clear-vault-host-credentials.sh 2>&1 | tee -a target/smoke-e2e/02-reset.log
+  CLEAR_RC=${PIPESTATUS[0]}; printf 'clear_exit=%s\n' "$CLEAR_RC" | tee target/smoke-e2e/02-clear-exit.txt
+  test -n "$CLEAR_RC" && test "$CLEAR_RC" -eq 0
 timing_emit smoke-destructive-reset smoke "$_T0" "${RESET_RC:-1}" || true
 test -n "$RESET_RC" && test "$RESET_RC" -eq 0
 ```
@@ -414,6 +503,25 @@ printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES
   | tee target/smoke-e2e/02-empty-store.txt
 test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
 ```
+
+**`0 volumes` is not `Vault's data is gone`, and the gap ran for ~2.5
+months.** Every Linux pass asserted an empty podman store while `--init`
+logged `preserving existing data volume` — both true, about different
+things: `vault_data_volume_exists()` tests `init_cache_dir()/vault-data`, a
+HOST DIRECTORY, not a podman volume. Assert that directory is absent too, in
+the same block as the three `test -z` lines above:
+
+```bash
+VAULT_DATA_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/vault-data"
+{ echo "[vault-data-dir]"; ls -la "$VAULT_DATA_DIR" 2>&1; } | tee target/smoke-e2e/02-vault-data-dir.txt
+test ! -e "$VAULT_DATA_DIR"
+```
+
+`scripts/clear-vault-host-credentials.sh` removes it but only best-effort —
+it is written from inside a container under a subuid, so a rootless `rm -rf`
+can be refused and the script still exits 0 with a `warn:` line. A
+`0-volumes` PASS beside a surviving `vault-data/` is a clean-room claim the
+run cannot support (drill: plan/issues/fleet-restart-2026-09-12.md, 900-z3kv criterion 1 DECIDED: (a)).
 
 If the reset errors or leaves residue → file a finding (capability: `podman`,
 `runtime`).
@@ -438,17 +546,10 @@ multi-GiB VM image while reporting a clean-room result. A false PASS on the
 destruction precondition is worse than a red run, because it gates promotion.
 
 ```bash
-pkill -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray' 2>/dev/null || true
-rm -rf "$HOME/Library/Application Support/tillandsias" \
-       "$HOME/Library/Caches/tillandsias"
-# ASSERT, do not assume — the point of this block.
-MACOS_RESIDUE=""
-for d in "$HOME/Library/Application Support/tillandsias" \
-         "$HOME/Library/Caches/tillandsias"; do
-    [ -e "$d" ] && MACOS_RESIDUE="${MACOS_RESIDUE}${d}"$'\n'
-done
-printf '[macos-residue]\n%s' "$MACOS_RESIDUE" | tee target/smoke-e2e/02-macos-residue.txt
-test -z "$MACOS_RESIDUE"
+scripts/e2e-step2-macos.sh target/smoke-e2e
+test ! -e "$HOME/Library/Application Support/tillandsias"
+MACOS_RESIDUE="$(cat target/smoke-e2e/02-macos-residue.txt)"
+test -z "$(printf '%s' "$MACOS_RESIDUE" | tail -n +2)"
 ```
 
 If residue survives → file a finding (capability: `macos`, `runtime`) and do NOT
@@ -847,10 +948,17 @@ timing_commit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}"
 > the recurrence rung groups by step, so a lower-bound duration from a killed
 > run can never be averaged into real `smoke-forge-lane` timings.
 >
-> **RUN IT DETACHED ON A FLOOR HOST.** `setsid nohup … &` survived on pirria
-> where a plain backgrounded run did not, because the kill takes the process
-> group. Detaching does not make the host less short of memory — it stops the
+> **RUN IT DETACHED ON A FLOOR HOST.** A detached run survived on pirria where
+> a plain backgrounded run did not, because the kill takes the process group.
+> Detaching does not make the host less short of memory — it stops the
 > supervisor being collateral.
+>
+> **THE FORM DIFFERS BY PLATFORM AND macOS HAS NO `setsid`** (macneo,
+> 2026-09-15): `setsid nohup <script-file> < /dev/null > log 2>&1 &` on Linux,
+> `nohup <script-file> < /dev/null > log 2>&1 & disown` on macOS. This runbook
+> named only the Linux form, which fails outright on both Macs — and this is
+> the lane most likely to be run on one, since a curl-install smoke is floor
+> work. A script FILE and a terminal `rc=` marker are required on both.
 
 ### 4a — What a killed supervisor looks like, and what it is not
 
@@ -893,6 +1001,69 @@ instead of a single point.
 > *how long the failure took* and called it a measurement, so the capture is
 > part of the record, not scope creep — the 727-kmks assertion shape, arriving
 > at the one step that never had it.
+
+### 4a-cold — `opencode_exit=0` IS NOT THE PASS CONDITION ON A POST-RESET HOST
+
+**Read this before you read `LANE_RC`.** Order 1190-swen; coordinator ruling
+2026-09-14, option (a).
+
+§2 reset the substrate, so Vault is **cold** and holds no GitHub token. The
+in-forge lane therefore reaches the Credential Channel Guard and **hard-stops
+there, deterministically, before any committable work**. That is not a
+degraded run. On a post-reset host it is the *only* correct outcome, and it is
+what §4 exercises: enclave bring-up, and the guard. Nothing past them.
+
+The failure this replaces is a reader — human or orchestrator — seeing
+`opencode_exit=0` and concluding the forge did a cycle's worth of work. It did
+not. It could not have.
+
+**ASSERT THE GUARD LINE, NEVER THE EXIT CODE:**
+
+```bash
+# PASS on a cold (post-§2-reset) host: the lane came up and stopped AT the guard.
+if grep -qE 'blocked:upstream-(no-credential|auth-unpublished)' target/smoke-e2e/04-opencode.log; then
+    echo "cold-host PASS: lane reached the credential guard and stopped there"
+else
+    echo "FINDING: no credential-guard stop in the lane log on a post-reset host."
+    echo "  A cold Vault holds no token, so the guard MUST have refused."
+    echo "  Either the guard was skipped, or this room was not clean."
+fi | tee target/smoke-e2e/04a-cold-host-outcome.txt
+
+# NEGATIVE CONTROL — exit 0 WITHOUT the guard line FAILS the assertion.
+# This is the whole point: the two are independent, and only the second is evidence.
+grep -qE 'blocked:upstream-(no-credential|auth-unpublished)' target/smoke-e2e/04-opencode.log   || echo "negative control fired: opencode_exit=${LANE_RC} is NOT a pass on its own"
+```
+
+Then confirm the lane left nothing behind, which is the other half of "stopped
+before committable work":
+
+```bash
+{
+  echo "git_status_empty=$([ -z "$(git status --porcelain)" ] && echo yes || echo no)"
+  echo "head_matches_origin=$([ "$(git rev-parse HEAD)" = "$(git rev-parse origin/linux-next)" ] && echo yes || echo no)"
+  echo "mo_full_marker_present=$(grep -qE '^MO-FULL: ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
+} | tee target/smoke-e2e/04a-cold-host-residue.txt
+```
+
+Expected on a cold host: `yes`, `yes`, **`no`**. The ABSENT marker is correct
+and loud — a lane that stopped at the guard has not completed its exit contract
+and must not claim it did.
+
+MEASURED on pirria 2026-09-14 (`04-opencode.log:848-862`): the guard answered
+`blocked:upstream-no-credential` (exit 1); the mirror published
+`refs/tillandsias/upstream-auth/no-credential`, fresh; the in-forge agent
+claimed nothing, drained nothing, filed nothing, committed nothing, left
+`git status` empty and `HEAD == origin/linux-next`, and emitted no `MO-FULL:`
+marker — correctly refusing to commit from a container about to be destroyed.
+The HOST could push at that same moment
+(`00-credential-channel.txt` = `ok:gh-keyring-push-verified`). **The asymmetry
+is the design, not a defect**, and the in-forge handling is not what needed
+fixing — the runbook's pass condition was.
+
+**Option (b) — issue a scoped token after §3 — was DECLINED** by the
+coordinator, and the reason generalises: it would test a different machine than
+the one this smoke exists to prove. **A clean room that holds a credential is
+not a clean room.**
 
 This launches the full enclave + the OpenCode agent inside the forge, which runs
 [[forge-continuous-enhancement]] against the `tillandsias` checkout. Two streams
@@ -983,6 +1154,48 @@ is by design, so their ABSENCE here is the pass, not a finding.
 > what the LAST rule above exists to prevent. The block above is what that run
 > used instead, after the fact.
 
+## 5 — File the findings report
+
+> **This heading did not exist until order 1189-7yvu/1190-swen.** Five places
+> in this runbook say "see §5" or "the §5 report" (§0.2b, §3, §3b, §4, §4a-cold)
+> and a reader following any of them found no §5 — the section was here,
+> unnumbered, after §4c. A cross-reference to a section that cannot be located
+> is the cheapest kind of broken instrument.
+
+**The report MUST open with these three lines**, before any packet:
+
+```markdown
+- run_start: <the `run_start=` value from target/smoke-e2e/00-run-start.txt>
+- evidence_dir: target/smoke-e2e   (previous runs archived under _archived-<ts>/)
+- forge_lane_outcome: <see below — required whenever §4 ran>
+```
+
+`run_start` is what makes every other file in the evidence directory checkable
+(order 1189-7yvu). Without it a reader cannot tell this run's `03-init-exit.txt`
+from a previous run's, because they have the same name — and on pirria
+2026-09-14 a 2026-09-13 `init_exit=0` was read as that run's result while its
+`--init` was still building the proxy image.
+
+`forge_lane_outcome` must say, **in words a reader cannot mistake for a
+completed cycle** (order 1190-swen), which of these happened:
+
+- `cold-host guard stop (EXPECTED PASS)` — the lane brought the enclave up and
+  stopped at the Credential Channel Guard with
+  `blocked:upstream-no-credential`. Nothing was claimed, drained, filed or
+  committed; the tree is pristine; **no `MO-FULL:` marker was emitted, and its
+  absence is correct.** On a post-§2-reset host this is the expected outcome,
+  not a partial one. Say so explicitly — do NOT write "forge run clean", which
+  reads as a cycle's worth of work.
+- `completed cycle` — only legitimate if the lane got past the guard, which on
+  a properly cold host it cannot. If you are writing this after a §2 reset,
+  something held a credential and **the room was not clean** — that is a
+  finding, not a pass.
+- `supervisor lost` — see §4a; containers up and no kernel oom-kill means the
+  run is unfinished, not red.
+
+**Never report the forge lane from `opencode_exit` alone.** Exit 0 and a
+guard-stop are the same number.
+
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated, **host-qualified** smoke report:
 
@@ -1043,9 +1256,13 @@ Rules for good findings:
 - **Redact secrets.** Never paste tokens or unredacted push URLs into a packet.
 - **De-duplicate.** Before filing, grep `plan/issues/` for an existing packet on
   the same symptom; if found, append an `events:` note instead of a new packet.
-- **No silent passes.** If the smoke ran clean end-to-end, still write a one-line
-  PASS entry to the report (release tag + "init clean, forge run clean") so the
-  convergence record shows the release was exercised.
+- **No silent passes.** If the smoke ran clean end-to-end, still write a
+  one-line PASS entry to the report (release tag + "init clean") so the
+  convergence record shows the release was exercised. **Do not write "forge run
+  clean"** — state the `forge_lane_outcome` from the top of this section
+  instead. On a post-reset host the honest line is "init clean; forge lane
+  stopped at the credential guard as expected", and the old wording is exactly
+  the sentence order 1190-swen exists to remove.
 - **Cite the release's ledger row and account for its claims** (order 380). The
   report carries a short `## Ledger claims` section listing each claim from the
   row read in §0.2b under exactly one of three headings:

@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-loop-status-metrics-audits-anchor-went-stale-when-the-emitter-added-a-window-field-so-it-has-reported-every-host-as-not-pasting-for-twelve-days-and-a-coordinator-filed-that-artifact-as-a-fleet-behaviour-hazard
+    order: 1243-yiyq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [instrument, coordination, loop-status, cycle-metrics, false-negative]
+    estimated_hours: 3
+    owned_files:
+      - scripts/loop-status-metrics-audit.sh
+      - scripts/cycle-metrics.sh
+    title: |
+      `loop-status-metrics-audit.sh` anchors on `skippable: candidates=` while `cycle-metrics.sh` now emits `skippable: window=7d candidates=`, so every host has read NOT-PASTING for twelve days and the audit's healthy-looking `rows=N stems=N` says nothing about whether it can see anything
+    context: |
+      FOUND ON macuahuitl 2026-09-17 by writing a paste and watching the audit
+      refuse to see it. The audit named my brand-new file as the host's newest
+      entry and reported NOT-PASTING in the same line, which is the tell: it
+      found the file and could not read it.
+      THE MECHANISM IS ONE INTERPOSED FIELD.
+        audit anchor:            skippable: candidates=
+        emitter, 2026-09-05:     skippable: candidates=77 floor_ms=2000 ...
+        emitter, today:          skippable: window=7d candidates=98 floor_ms=2000 ...
+      `window=7d ` sits between the anchor's two halves, so the match fails.
+      MEASURED, with a positive control, because a count of misses means nothing
+      without one:
+        entries since 2026-09-06 carrying `skippable: window=`   : 8
+        entries in that window matching the audit's OWN anchor    : 0
+      Zero is the control. The anchor has matched NOTHING since the format
+      changed, so every NOT-PASTING verdict in that window is uninformative
+      rather than negative. Bracketed: the last entry the audit can read is
+      20260905t225806z; the first it cannot is 20260911t191740z.
+      WHAT IT COST, and this is why it is p1 rather than a tidy-up. The audit's
+      output is the coordination skill's designated evidence for whether hosts
+      are pasting, and the skill prescribes routing a plain ask to any host
+      reporting NOT-PASTING. On 2026-09-17 this coordinator read 23 of 23 stems
+      NOT-PASTING with a newest paste of 2026-09-05, concluded that the practice
+      had died fleet-wide twelve days earlier, RECORDED THAT AS A HAZARD in
+      plan/issues/fleet-restart-2026-09-12.md, repeated it in a landed commit
+      message, wrote it into 1241-8gy4's context as the reason two-host evidence
+      had been unavailable, and relayed it to a peer — who then pasted their
+      metrics because they had been told the channel was dark. Every one of
+      those artifacts is downstream of an instrument defect, and the instrument
+      announced itself as healthy the whole time.
+      THE HEALTH LINE IS THE PART THAT MAKES IT DANGEROUS. The audit ends with
+      `rows=23 stems=23` and exits non-zero only on a dropped stem. That check
+      is real and it passed — no stem was dropped. But it certifies ENUMERATION,
+      not COMPREHENSION, and it reads exactly like a self-check. A reader sees a
+      numeric agreement and a verdict and concludes the tool is working; the
+      tool is faithfully enumerating hosts it can no longer parse.
+      SAME DEFECT CLASS AS 1231-cbie's SEARCH, FOUND THE SAME DAY BY A PEER.
+      macbookair's `git grep "pkill -f"` returned zero because the live form is
+      `pkill -TERM -f` — the signal flag interposed between the two halves of
+      the pattern. Identical shape: a literal broken by a field inserted in the
+      middle, producing a zero indistinguishable from "nothing to find". Two
+      instances in one day in unrelated files suggests the shape is worth a
+      sweep rather than two point fixes.
+    exit_criteria:
+      - 'the audit recognises a metrics block emitted by the CURRENT cycle-metrics.sh, proven by running cycle-metrics.sh into a fresh loop_status entry and observing the audit report that host as pasting (pre-fix result: FAILS — a file written minutes earlier is named as the newest entry and reported NOT-PASTING in the same line)'
+      - 'the audit fails LOUDLY when its anchor matches nothing across the whole corpus, rather than reporting every host as NOT-PASTING: a run in which zero entries parse must print a distinct verdict naming a possible format drift, since "no host is pasting" and "I cannot read any host" are different claims with different remedies'
+      - 'the anchor is derived from, or verified against, the emitter rather than duplicated as a literal — whatever form that takes, a fixture must fail if cycle-metrics.sh changes the skippable line shape and the audit is not updated (pre-fix result: FAILS — nothing ties the two files together and the drift went twelve days unnoticed)'
+      - 'the corrections are propagated: the fleet-restart hazard entry, the landed commit message claim, and 1241-8gy4 context each get an appended correction, since an append-only record cannot be edited and the wrong claim is the one that will be read'
+      - 'NEGATIVE CONTROL: a host that genuinely is NOT pasting must still be reported as NOT-PASTING — seed an entry with no metrics block and confirm the verdict, so the fix does not convert a real negative into a false green'
+    unscoreable: |
+      how-many-other-consumers-read-this-line: cycle-metrics output is pasted
+      into handoffs and read by humans and by at least this one script. Whether
+      any OTHER parser anchors on the pre-window spelling is unknown and cannot
+      be settled from inside this row — a grep for the literal will itself be
+      subject to the same interposed-field blindness that caused the bug. That
+      sweep is named in context deliberately rather than scored here.
+    verifiable_closure: |
+      litmus:cycle-metrics-answer-rate-shape — extended with an arm that the
+      loop-status audit parses a block produced by the current emitter, and an
+      arm that an audit whose anchor matches nothing anywhere refuses with a
+      format-drift verdict instead of reporting every host as not pasting.
+    events:
+      - type: filed
+        ts: "2026-09-17T18:02:35Z"
+        agent_id: "linux-macuahuitl-claude-20260917t180235z"
+        host: macuahuitl
+        summary: |-
+          Filed against my own conclusion of six hours earlier. I read a
+          fleet-wide negative off this instrument, recorded it as a behavioural
+          hazard, put it in a commit message and a packet's context, and told a
+          peer about it — and the instrument had simply stopped being able to
+          read the format. The rule I had already written down is "before
+          trusting a negative, ask what the instrument would have printed if it
+          were broken"; the answer here is "exactly what it printed". What
+          finally exposed it was not suspicion but writing a paste and watching
+          the audit name the new file and call it NOT-PASTING in the same line.

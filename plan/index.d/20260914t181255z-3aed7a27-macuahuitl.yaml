@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    field: status
+    value: ready
+    ts: "2026-09-14T18:12:55Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-14T18:12:55Z"
+      host: macuahuitl
+      summary: |-
+        part 2 measured by esmeraldinha at the AT-RISK Git Bash locus (closure NOT met: 12 red, split by mechanism); the fixes go to the children 1186-w3ph (eight fixture reds, windows) and 1187-iij8 (tier budgets); released so a floor host that cannot fix does not hold it

@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-18T23:55:24Z"
+      agent_id: windows-yolanda-claude-20260918t235522z
+      host: yolanda-windows
+      summary: |-
+        NAMESPACE INSTANCE, measured on yolanda 2026-09-18, with the numbers — the coordinator asked for this as the eighth instance of the ask-where-the-answer-lives theme, and it cost this host its whole gating capability tonight, so it is not a curiosity.
+
+        THE QUESTION: is there enough memory to run ./build.sh --check?
+        THE TWO NAMESPACES: the WSL2 guest, and the Windows host.
+
+        MEASURED AT THE SAME MOMENT, immediately after the harness killed the gate for host memory pressure:
+
+          GUEST  (free -m inside tillandsias-build)
+            total 7515   used 1278   free 576   buff/cache 5850   available 6237
+          HOST   (Win32_OperatingSystem)
+            total 15526  free 1783   -> 11.5 percent free
+            vmmemWSL working set 7311 MB, the largest process on the machine
+
+        The guest reports 6237 MB AVAILABLE and looks perfectly healthy. The host is at 11.5 percent and is the namespace the harness's reaper actually watches. Both numbers are true. They answer different questions, and the one that is easy to ask from inside a build script is the one that cannot see the failure.
+
+        MECHANISM: WSL2 balloons its VM under build I/O — here 5850 MB of the guest's own usage is rustc page cache — and does not return that memory to Windows promptly. So guest-available stays high precisely BECAUSE the host is being starved. The two readings do not merely differ; they move in OPPOSITE directions during the event.
+
+        WHAT IT COST: I ran a pre-flight memory check before starting the gate, from inside the guest, and it told me 6273 MB free. I recorded that as "memory is healthy" and started the run. The harness reaped it 18 minutes later at the cargo test phase. I then repeated the same mistake a second time. Two full gate attempts, roughly 40 minutes of wall clock, both killed at the same phase, and the pre-flight passed cleanly before each.
+
+        THE THEME, in this instance's terms: I asked the machine I was standing on rather than the machine that owns the resource. The guest is where the build runs; the host is where the memory is accounted and where the policy that kills the build lives. A check must be taken in the namespace that OWNS THE DECISION, not the one that is convenient to the code.
+
+        THE FIX SHAPE, not yet implemented here because it is the operator's lever: either cap the guest so it cannot starve the host (.wslconfig memory=) or read the host's figure from inside the guest before starting. The second is the general remedy and the one this theme argues for — a guard that asks the owning namespace. Note that build.sh already prints ok:gate-memory:6930MB available, floor 1024MB, and that line is the guest reading. It passed immediately before both reaps. A green memory gate that is blind to the only memory pressure that can stop the build is the defect, and it is in the tree today.

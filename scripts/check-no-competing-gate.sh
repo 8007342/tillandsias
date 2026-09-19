@@ -97,18 +97,69 @@ PROC_ROOT="${TILLANDSIAS_PROC_ROOT:-/proc}"
 # NOTHING ON TRUNK READS THESE CODES YET: both call sites are `|| true`. The
 # grammar therefore binds a FUTURE consumer, and that consumer must enumerate 2
 # apart from 3 with no default that proceeds.
+# THREE SILENCES WORE ONE SENTENCE (order 1221-vkbj).
+#
+# `no-host-side-assertion` is this file's vocabulary for a caller that OMITTED
+# something, and its sibling `refused:...:caller-contract` says "FIX THE CALL
+# SITE" in so many words. Measured on lenovinha 2026-09-16, build.sh:1898's
+# unflagged invocation printed exactly that token on a host where no dispatch
+# had happened at all — no host side to assert, no container side to race, and
+# nothing whatever to fix. Three situations, one sentence, opposite responses:
+#
+#   inside a dispatch, cannot see the host side  -> correct silence, nothing to do
+#   no dispatch wrapped this gate at all         -> correct silence, nothing to do
+#   a wrapper that forgot to assert              -> FIX THE CALL SITE
+#
+# `--caller-context` lets a caller say which of the first two it is in. It is
+# still a POSITIVE ASSERTION by the caller — this file does not go looking, for
+# the reason the inversion above states at length.
+#
+# AND IT DELIBERATELY DOES NOT ANSWER. The tempting move is to let an
+# undispatched caller assert --host-side and get a verdict. It cannot: the
+# classifier groups by TILLANDSIAS_WRAPPER_TOKEN and needs a host side AND a
+# container side to tell LIVE from STRAY. With no dispatch the group is one
+# process and the only reachable verdict is `ok:no-competing-gate` — the clean
+# run that asserts nothing this header warns about twice, and which
+# 1141-vf9w's "promote once it has run clean across hosts" would then eat. A
+# green incapable of being red is worse than the silence it replaces.
 HOST_SIDE_PID=""
+CALLER_CONTEXT=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --host-side) HOST_SIDE_PID="${2:-}"; shift 2 ;;
         --host-side=*) HOST_SIDE_PID="${1#*=}"; shift ;;
+        --caller-context) CALLER_CONTEXT="${2:-}"; shift 2 ;;
+        --caller-context=*) CALLER_CONTEXT="${1#*=}"; shift ;;
         *) shift ;;
     esac
 done
 
+case "$CALLER_CONTEXT" in
+    ""|dispatched|undispatched) ;;
+    *)
+        echo "refused:competing-gate:caller-contract (--caller-context '$CALLER_CONTEXT' is not one of dispatched|undispatched; FIX THE CALL SITE, this is not a substrate limit)"
+        exit 2 ;;
+esac
+
+# A context assertion is about where the CALLER stands, so it is meaningless
+# alongside --host-side and must not silently outrank it.
+if [ -n "$HOST_SIDE_PID" ] && [ -n "$CALLER_CONTEXT" ]; then
+    echo "refused:competing-gate:caller-contract (a caller asserting --host-side must not also assert --caller-context; FIX THE CALL SITE, this is not a substrate limit)"
+    exit 2
+fi
+
 if [ -z "$HOST_SIDE_PID" ]; then
-    echo "could-not-run:competing-gate:no-host-side-assertion (this caller did not assert --host-side <pid>; only a caller that can see the dispatch's host side may be answered)"
-    exit 3
+    case "$CALLER_CONTEXT" in
+        undispatched)
+            echo "could-not-run:competing-gate:no-dispatch (the caller reports no tillandsias wrapper dispatched this run, so there is no host side to assert and no container side to race — NOTHING TO FIX HERE; a verdict from here could only ever be a vacuous clean)"
+            exit 3 ;;
+        dispatched)
+            echo "could-not-run:competing-gate:inside-dispatch (the caller reports it is INSIDE the dispatch, where the host side is unreadable — the answerable call site is the wrapper's, not this one; NOTHING TO FIX HERE)"
+            exit 3 ;;
+        *)
+            echo "could-not-run:competing-gate:no-host-side-assertion (this caller did not assert --host-side <pid>; only a caller that can see the dispatch's host side may be answered)"
+            exit 3 ;;
+    esac
 fi
 
 if [ ! -d "$PROC_ROOT/1" ]; then

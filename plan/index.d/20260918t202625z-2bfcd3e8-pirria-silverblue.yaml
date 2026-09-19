@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-smoke-evidence-dir-is-never-cleared-between-runs-so-a-previous-runs-exit-file-reads-as-this-runs-result-to-every-out-of-band-read
+    field: next_action
+    value: |-
+      RUNBOOK CHANGE LANDED on linux-next. FIXTURE WRITTEN AND GREEN BUT NOT LANDED —
+      it lives in `scripts/`, which the release freeze holds, so it is parked on the
+      branch named below. THAT PARKED FILE IS THE ONLY THING LEFT.
+
+      WHAT LANDED (skills/smoke-curl-install-and-test-e2e/SKILL.md, freeze-exempt):
+        §0.4 now archives the previous run's evidence to
+        `target/smoke-e2e/_archived-<utc>/` before `mkdir -p`, MOVING never deleting,
+        and writes `00-run-start.txt`. It also gives the reader a one-line stale-leak
+        check (`find ... ! -newer 00-run-start.txt`).
+        §5 — which DID NOT EXIST — now exists. Five places in this runbook said "see
+        §5" or "the §5 report" and pointed at nothing; the section was present but
+        unnumbered after §4c. Its first required field is `run_start`.
+
+      WHAT IS PARKED, and where:
+        branch `work/1189-7yvu-1190-swen` (pushed to origin), one commit, two files:
+          scripts/test-smoke-evidence-dir-is-fresh.sh          (this order, 6 steps)
+          scripts/test-smoke-forge-lane-cold-host-outcome.sh   (1190-swen, 7 steps)
+        Both are green on pirria and need NO toolchain — they are hermetic bash under
+        mktemp and touch neither target/ nor podman. Relay them onto linux-next when
+        the freeze on `scripts/` lifts; nothing else is outstanding.
+
+      VERIFIABLE CLOSURE, now that the fixture exists (replacing this row's
+      `unscoreable`): `bash scripts/test-smoke-evidence-dir-is-fresh.sh` prints
+      `ok:smoke-evidence-dir-is-fresh:6 step(s)` and exits 0. Its six steps are:
+        1. the runbook still carries the archive step — so the fixture cannot pass
+           against a runbook that dropped the block and end up pinning only itself;
+        2. PRE-FIX REPRODUCES: bare `mkdir -p` leaves the stale exit file. If this
+           step ever fails the packet's premise is wrong and steps 3-6 are decoration;
+        3. an out-of-band read before the step finds NO file;
+        4. NEGATIVE CONTROL: the archived copy is preserved WITH ITS CONTENT — a fix
+           that satisfied step 3 with `rm -rf` passes step 3 and fails here, which is
+           exactly why the step exists;
+        5. `00-run-start.txt` carries a well-formed ISO-8601 UTC stamp;
+        6. repeated runs archive SIDE BY SIDE and never nest — an archive step that
+           swept its own archives would bury the older run one level deeper per run.
+
+      WHAT A DISTRUSTFUL STRANGER SHOULD RE-CHECK:
+      - The fixture pins the SEMANTICS by re-implementing §0.4's block, not by
+        executing the runbook. It asserts the runbook still contains the step
+        (step 1), but the two could still drift in detail. If you change §0.4, change
+        the fixture in the same commit.
+      - NOT RUN END-TO-END. No actual smoke was executed — pirria is a floor host and
+        the gated curl-install smoke had no release tag to test against this cycle.
+        The archive block was exercised against a synthetic reproduction of the
+        measured 2026-09-14 state, not against a live run. The first real smoke after
+        this lands should confirm `00-run-start.txt` appears and that no file in
+        `target/smoke-e2e/` predates it.
+    ts: "2026-09-18T20:26:25Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: the-smoke-evidence-dir-is-never-cleared-between-runs-so-a-previous-runs-exit-file-reads-as-this-runs-result-to-every-out-of-band-read
+    event:
+      type: note
+      ts: "2026-09-18T20:26:25Z"
+      host: pirria-silverblue
+      summary: |-
+        runbook landed; fixture green and parked on work/1189-7yvu-1190-swen pending the scripts/ freeze

@@ -1,0 +1,29 @@
+# Gate step 1231-cbie SECOND HALF — data, not code (order 1072-b7eq).
+#
+# The sibling step (400-1231-cbie) proves the tray stop cannot fire OFF Darwin.
+# This proves the matcher cannot kill a BYSTANDER ON Darwin — the half that
+# needed a Mac, because the target is a .app bundle and `pgrep -x` matches an
+# executable name that may not equal the bundle name. MEASURED 2026-09-17:
+# CFBundleExecutable `tillandsias-tray` vs CFBundleName `Tillandsias`, so they
+# DIFFER and a bundle-name matcher would have matched nothing at all.
+#
+# TWO ARMS, AND THE SECOND IS WHY THE FIRST MEANS ANYTHING. Arm 1 runs a real
+# `tail -f` whose argv carries the literal and asserts it SURVIVES. Arm 2 is the
+# negative control: a process genuinely NAMED tillandsias-tray must still be
+# STOPPED, because a stop that does nothing at all satisfies arm 1 forever.
+# That control earned its place immediately — the fixture's first draft
+# truncated the extracted block, eval failed on a syntax error, `|| true`
+# swallowed it, and ARM 1 PASSED while nothing had executed. Arm 2 caught it,
+# and the fixture now asserts the block PARSES before trusting any arm.
+#
+# IT SKIPS RATHER THAN RISKING A LIVE TRAY (1141-vf9w). Arm 2 runs the genuine
+# `pkill` against the genuine executable name, so with a real tray running it
+# would kill the operator's tray. The fixture refuses and exits 2 — an honest
+# "I could not look", never a content verdict. STEP_SKIP_EXIT below is what
+# keeps that distinguishable from a pass.
+STEP_DESC="Checking the uninstaller's tray matcher spares bystanders on Darwin (1231-cbie)"
+STEP_SCRIPT="scripts/test-uninstall-matcher-spares-bystanders.sh"
+STEP_SKIP_EXIT=2
+STEP_SKIP_DESC="skipped: not Darwin, or a live tray is present (the matcher was NOT exercised)"
+STEP_ERROR="the uninstaller's tray stop killed a process that merely MENTIONED the literal, or stopped stopping the tray (1231-cbie) — see which arm failed above"
+STEP_OK="Uninstaller tray-matcher bystander safety passed"

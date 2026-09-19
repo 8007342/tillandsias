@@ -5,6 +5,7 @@ members = [
     "crates/tillandsias-core",
     "crates/tillandsias-headless",
     "crates/tillandsias-host-shell",
+    "crates/tillandsias-exec",
     "crates/tillandsias-litmus-rust",
     "crates/tillandsias-logging",
     "crates/tillandsias-macos-tray",
@@ -37,6 +38,11 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 postcard = { version = "1", features = ["alloc"] }
+# Order 964-tzmp: embedded KV for the derived ledger cache. Pure Rust, single
+# file, no daemon, MVCC snapshot reads — the storage-layer form of the fold's
+# own CRDT semantics. Chosen over SQLite so the Lua and podman layers can share
+# one store without a C dependency.
+redb = "4"
 bytes = "1"
 notify = "8"
 toml = "0.8"

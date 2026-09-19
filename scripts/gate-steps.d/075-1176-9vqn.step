@@ -1,0 +1,19 @@
+# Gate step 1176-9vqn — data, not code.
+#
+# Binds the fixture for the release-freeze mechanism: a marker on origin that
+# the pre-push hook consults for CODE pushes to the branch the marker names,
+# with plan-only pushes admitted by design. Hermetic — a bare remote and a
+# working copy under target/plan-scratch, the REAL hook installed as
+# .git/hooks/pre-push, and a content-built mutant that lands the same push
+# once the call site is stripped.
+#
+# THE ARM MOST WORTH KEEPING is the PRECONDITION: each code arm mints a gate
+# stamp first, because the freeze check sits after the stamp dispatch. Without
+# a stamp every code arm would refuse for the stamp and never reach the freeze,
+# and the arm would pass while testing nothing.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a live release freeze holds code pushes and admits plan-only ones (1176-9vqn)"
+STEP_SCRIPT="scripts/test-pre-push-honours-a-live-freeze.sh"
+STEP_ERROR="the release-freeze mechanism regressed — a freeze would again be announced in prose and enforced by nothing (1176-9vqn)"
+STEP_OK="release freeze holds code and admits plan-only"

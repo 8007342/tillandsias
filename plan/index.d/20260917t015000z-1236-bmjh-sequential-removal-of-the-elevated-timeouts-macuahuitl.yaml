@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    order: 1236-bmjh
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [litmus, budgets, release-gate, debt, ledger]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/litmus-cycle-metrics-answer-rate-shape.yaml
+      - openspec/litmus-tests/litmus-cycle-batch-triage-shape.yaml
+    title: |
+      five litmus timeouts were RAISED to 300000 ms on 2026-09-17 to unblock a release — they are elevations, not budgets, and they come back down ONE AT A TIME as the fold fix lands
+    context: |
+      OPERATOR RULING, 2026-09-17: ship now, fix properly after — raise the five
+      timeouts generously, carry massive warnings on each saying it is elevated
+      and why, file follow-up work to remove them once the real fix ships, and
+      then do the real fix architecturally rather than as a hack. This row is the
+      third of those four and exists so the second and fourth cannot drift apart.
+      WHAT WAS RAISED, all to 300000 ms, the budget 85 other steps in this tree
+      already use:
+        litmus:cycle-batch-triage-shape           "the selector no longer needs jq at all"        15000
+        litmus:cycle-metrics-answer-rate-shape    "the reporter is executable and emits ..."      10000
+        litmus:timing-telemetry-implausible-guard "AGGREGATION: a log containing an epoch-..."    20000
+        litmus:cycle-flow-telemetry-shape         "the flow: line computes a ROLLING average"     10000
+        litmus:build-test-timing-telemetry-shape  "the timing: line computes ROLLING names..."    10000
+      Each carries a ~40-line banner at its own timeout naming this order, the
+      measured runtime, and the real cause.
+      THE STEPS WERE NEVER WRONG. Measured on a QUIET twenty-core host:
+        scripts/cycle-metrics.sh      rc=0  29,908 ms   against budgets of 10,000-20,000
+        scripts/select-work-batch.sh  rc=0  14,883 ms   against 15,000 — 117 ms of headroom
+      Both producers answer correctly and exit zero. All five were killed inside
+      a gate that was compiling, so even the quiet numbers are optimistic for the
+      regime the budget has to survive.
+      THE REAL CAUSE IS A QUADRATIC LEDGER FOLD (964-tzmp, 1233-jqp4), measured
+      within one host across two commits, same binary, quiet:
+        c587bf335  4.32 MB base / 364 fragments  full load ~222 ms  raw parse ~48 ms
+        HEAD       8.50 MB base / 827 fragments  full load ~992 ms  raw parse ~85 ms
+      4.5x the time for 2x the data, and the PARSE IS ONLY 85 ms OF 992 — so
+      964-tzmp's own title, "parse the ledger ONCE", aims at 8.6% of the cost.
+      The superlinearity is three per-packet linear scans in
+      crates/tillandsias-plan/src/fragments.rs plus a full clone of the parsed
+      tree: roughly 1.1 million string comparisons per load on this corpus,
+      growing as packets x fragments.
+      WHY THE REMOVAL IS SEQUENTIAL AND NOT A REVERT. The operator asked for
+      sequential removal and the reason is diagnostic rather than procedural: the
+      five steps call different producers over different parts of the fold, so a
+      single sweeping revert would tell us only that the sweep passed or failed,
+      not WHICH of the five the fix actually reached. Removed one at a time, each
+      removal is an independent measurement — the step passes at its ORIGINAL
+      budget, or it does not and names the part of the cost the fix did not
+      touch. A fix that returns four of five is a real and useful result that a
+      revert would hide.
+      THIS NUMBER ROTS BY DESIGN AND THE BANNERS SAY SO. It buys time
+      proportional to how fast the fleet files packets. The busiest host reds
+      first and reads as an outlier when it is the leading indicator. Raising it
+      again is this same decision taken a second time with less excuse, and the
+      banners name that explicitly so the next reader cannot take the elevation
+      as precedent.
+    exit_criteria:
+      - 'each of the five steps passes INSIDE a full ci-full at its ORIGINAL budget (15000/10000/20000/10000/10000), restored one at a time, on a host whose ledger is at least the size it was when they were raised (8.50 MB base / 827 fragments) (pre-fix result: FAILS — all five were killed at those budgets in ci-full on 5c13d81e7, with both producers exiting zero standalone)'
+      - 'each restoration is a SEPARATE change that names which part of the fold cost it depended on, so a fix that returns four of five is visible as such rather than as a failed sweep'
+      - 'every ELEVATED banner is removed with its timeout — a restored budget carrying a warning about an elevation that no longer exists is worse than no warning, because the next reader cannot tell which are live'
+      - 'NEGATIVE CONTROL: a genuinely hung or genuinely wrong producer still reds at the restored budget, so returning the numbers does not trade one blind spot for another'
+      - 'no step added between the raise and the removal inherits 300000 by copying these — the banners forbid it, and the check is that any NEW step at 300000 carries its own measured justification'
+    verifiable_closure: |
+      litmus:cycle-metrics-answer-rate-shape — green inside a full ci-full at its
+      original 10000 ms budget, on a corpus at least the size recorded here, with
+      its ELEVATED banner removed in the same change.
+    events:
+      - type: filed
+        ts: "2026-09-17T01:50:00Z"
+        agent_id: "linux-macuahuitl-claude-20260917t015000z"
+        host: macuahuitl
+        summary: |-
+          Filed with the raise itself rather than after it, so the debt and its
+          repayment enter the ledger in one commit. The operator ruled ship-now
+          while they and yoga-silverblue work out the architecturally correct
+          fix; yoga holds 964-tzmp's layer 1, the quadratic scans, which needs no
+          architectural decision and plausibly returns the load to ~200 ms on its
+          own.

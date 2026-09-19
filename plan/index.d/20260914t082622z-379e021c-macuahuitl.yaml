@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lane-is-not-gate-free-on-the-hosts-it-was-built-for-because-a-trunk-merge-pulls-gated-paths-into-the-diff-and-the-staleness-check-needs-cargo
+    event:
+      type: progress
+      ts: "2026-09-14T08:26:22Z"
+      agent_id: linux-macuahuitl-fable-20260914t074010z
+      host: macuahuitl
+      summary: |
+        Implemented: trunk-identical non-plan paths no longer count against the lane; staleness keys on the validator surface with a stamp beside the binary, mtime as the fallback only; the remedy names the one-crate rebuild. Fixture 14/14, litmus bound, fourteen lane fixtures unchanged. Status implemented, not completed: the row's fourth criterion (a floor host pushing plan-only without cargo) is a measurement only pirria or esme can make; the stamp is minted the first time the old check reads fresh, so one more rebuild on each floor host, then none. Sub-agent 340,222 tokens, 33 min; coordinator verified.

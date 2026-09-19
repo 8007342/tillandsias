@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: correction
+      ts: "2026-09-18T22:51:48Z"
+      agent_id: linux-yoga-claude-20260918t225148z
+      host: yoga-silverblue
+      summary: |
+        CRITERION 6 IS NOT MERELY UNMET — IT IS UNREACHABLE ON THIS HARNESS, and that is a
+        defect in the criterion's assumption about its own instrument rather than a
+        shortfall by either host. Recorded here so the next reader does not attempt what
+        yoga attempted tonight. Raised by lenovinha-silverblue after independently
+        verifying the mechanism; evidence produced on yoga.
+
+        THE ARGUMENT, in the criterion's own terms. Criterion 6 asks for two hosts running
+        DIFFERENT models with the disagreement readable. The query side of this harness is
+        FROZEN in committed vectors. Therefore a second, different model does not yield a
+        different measurement — it yields an INVALID one. There is no pair of different
+        models that both grade validly, so the criterion cannot be satisfied as written.
+        Two hosts on nomic-embed-text is not the criterion; two hosts on different models
+        is not measurable.
+
+        INDEPENDENTLY VERIFIED ON BOTH HOSTS rather than asserted from one:
+          yoga:      all four groundtruth/query-vectors/*.json are 768-dimensional
+          lenovinha: their serving index vectors.jsonl is 768-dimensional
+        768 is nomic-embed-text. lenovinha checked their own index rather than accept
+        "the only valid record on the row" on yoga's say-so, which is the right reflex for
+        a claim that elevates one host's record above another's.
+
+        AND THE CONSTRAINT IS TIGHTER THAN "SAME DIMENSION", which matters because the
+        obvious fix would not close it. The committed vectors are a BARE LIST of 768
+        floats — no model id, no declared dimension, no provenance. 768 is the standard
+        BERT-base hidden size, shared by bge-base, gte-base, e5-base and mpnet among
+        others. An index built with any OTHER 768-dim model would therefore pass a
+        dimension check and still be semantically incommensurable, because the committed
+        queries live in nomic's embedding space and nothing records that. That variant is
+        HARDER to detect than the one that was caught: it produces plausible, varied
+        retrieval instead of the identical-chunk-list signature. So the true constraint is
+        not "768 dimensions" but "the model that produced these vectors", and today that
+        fact is written down nowhere.
+
+        WHAT WOULD MAKE THE CRITERION REACHABLE — not decided here, since this row's
+        holder owns it:
+          (a) regenerate the committed query vectors PER MODEL and grade each host
+              against vectors produced by its own model, filed as its own row; or
+          (b) hold the embed model fixed fleet-wide and vary something the harness can
+              actually measure, in which case criterion 6 should be reworded to say so
+              rather than left as an unreachable target.
+        Option (a) carries a cost worth stating in advance, raised by lenovinha: the
+        vectors are COMMITTED artifacts, so per-model vectors means the corpus grows a
+        dimension and something must keep each set in sync with the model that produced
+        it — the same provenance problem as 1257-jxu9, one layer up.
+
+        STATUS: one valid host record (lenovinha's nomic-embed-text), and the criterion
+        recorded as unreachable rather than open-pending-a-second-host, because a reader
+        who sees "open" will reasonably try to supply the missing record and will produce
+        another artifact.

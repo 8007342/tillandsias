@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-18T23:55:13Z"
+      agent_id: windows-yolanda-claude-20260918t235511z
+      host: yolanda-windows
+      summary: |-
+        INSTANCE MEASURED ON YOLANDA 2026-09-18, in this session, twice — and it is this row's defect exactly, observed from the outside rather than reasoned about.
+
+          scripts/push-plan-fragments-to-trunk.sh   printed  refused:fragments-to-trunk:push:...  and exited 0
+          git push origin windows-next              printed  error: failed to push some refs      and exited 0
+
+        Both pushes were REFUSED by the pre-push hook. Both wrappers reported exit 0. The refusal text was on stdout and stderr and was correct and detailed; only the STATUS was green. A caller gating on the exit code of either command would have recorded a successful push and moved on, and the only reason I did not is that I read the text.
+
+        WHY IT IS WORTH RECORDING RATHER THAN JUST FIXING: this is the failure the row names, but the instance shows the shape is not confined to a background wrapper. A plain foreground git push through a hook that refuses also produced exit 0 here. So the audit surface is wider than wrapper scripts — it is any place a refusal is carried as TEXT while the status is carried separately and happens to be zero.
+
+        THE CONNECTION TO 1155-jurn, which is not a coincidence and which I would put on the same family: both are a STATUS that did not survive a channel while the OUTPUT did. There the channel is the MSYS argument-conversion layer and the status comes back wrong or empty; here the channel is a wrapper's own exit path and the status comes back zero. In both the text was right and the number was not, and in both a consumer that trusted the number was misled while a consumer that read the text was not.
+
+        THE DETECTABILITY ORDERING, offered as the design rule the pair suggests: a refusal is better than an empty, and an empty is better than a plausible-but-wrong value. A wrong 0 is the worst case precisely because it is the value success produces. Anywhere a status might be silently zeroed, prefer the shape that comes back absent over the shape that comes back plausible — which inverts the usual instinct to give a value a safe default.
+
+        FOR THE TERNARY BEING DESIGNED ON 1260-2qgi, which does not exist on trunk as I write this so I am recording it here rather than dropping it: spell the third verdict as THE EXPRESSION NEVER EVALUATED rather than THE CHANNEL DROPPED IT. The first invites a consumer to substitute a fallback; the second forbids one, because there is no result to fall back to. On the 1155-jurn evidence the second is the truthful description — the assignment demonstrably executes while same-string expansion returns empty, so what is missing is the evaluation, not the transport of a value that existed. Suggested token could-not-evaluate:<subject>, deliberately NOT reusing could-not-run, which this fleet already spends on "the guard could not start"; the distinction is that could-not-run is about the guard and could-not-evaluate is about a measurement taken inside a guard that started fine. Conflating them loses exactly the 1155-jurn case.
+
+        Relay note for the coordinator: move this to 1260-2qgi when that row lands. It is filed here because 1260-2qgi and 1260-4a59 both return "no packet matches" against trunk at 023569a5c, and a fragment citing a packet that does not exist is refused by the fragment-events guard.

@@ -182,8 +182,21 @@ if [ -z "$out" ]; then
     bad "the glob produced NO result line at all (the 888-miiy symptom): $(printf '%s' "$full" | tail -1)"
 elif ! grep -q 'fail=0' <<<"$out"; then
     bad "committed glob not green: $out"
-elif printf '%s' "$out" | grep -q 'skipped=0'; then
-    ok "the committed groundtruth glob grades fail=0 with nothing skipped ($out)"
+elif printf '%s' "$out" | grep -q 'skipped=0' && printf '%s' "$out" | grep -q 'stale=0'; then
+    ok "the committed groundtruth glob grades fail=0 with nothing skipped or stale ($out)"
+elif ! grep -q 'stale=0' <<<"$out"; then
+    # ORDER 1229-2862. STALE GETS THE SAME TREATMENT AS A SKIP, and it has to be
+    # checked HERE or the field creates a silent green: a run with stale=2
+    # skipped=0 still satisfies `skipped=0` and would have reported "nothing
+    # skipped" while two cases went uncertified. Same accounting rule as
+    # 888-miiy — named engines in the summary and a per-case line — because it
+    # is the same failure it was written against.
+    if printf '%s' "$out" | grep -q 'stale_engines=' \
+       && printf '%s' "$full" | grep -q '^STALE .*NOT VALID in this checkout'; then
+        ok "glob is fail=0 and every stale case is named ($out)"
+    else
+        bad "the glob had STALE cases WITHOUT accounting for them — a silent green: $out"
+    fi
 else
     # Skips are allowed, but never invisible.
     if printf '%s' "$out" | grep -q 'skipped_engines=' \
@@ -211,8 +224,27 @@ if [ "${sp_skip:-0}" -gt 0 ] \
    && [ "${sp_total:-0}" -eq "${sp_skip:-0}" ] \
    && [ "$sp_rc" -eq 0 ]; then
     ok "an absent index SKIPS loudly, counted in the denominator (rc=0, $sp_line)"
-elif [ "${sp_skip:-0}" -eq 0 ]; then
+elif [ -n "$sp_line" ] && [ "$sp_rc" -eq 0 ] && [ "${sp_total:-0}" -gt 0 ] \
+     && [ "${sp_skip:-0}" -eq 0 ]; then
     ok "this host HAS an index — spec.answer graded rather than skipped ($sp_line)"
+elif [ -z "$sp_line" ]; then
+    # ORDER 888-miiy, found from the WITH-ENDPOINT side, which is the only side
+    # that reaches this branch. `sp_skip` is sed'd out of the result line, so
+    # when grade dies with a HARNESS ERROR and prints no result line at all,
+    # sp_skip is EMPTY, ${sp_skip:-0} is 0, and the old condition read that as
+    # "0 skipped, therefore graded" — the arm announced "this host HAS an index"
+    # while nothing had been graded and nothing had been indexed. `sp_rc` was
+    # captured two lines above and never consulted on that path.
+    #
+    # That is THIS PACKET'S OWN DEFECT, one level in: a harness error rendered
+    # as a graded result. The fix for the release gate was written correctly and
+    # the arm verifying it carried the same conflation, where no endpoint-less
+    # host could ever see it, because every such host takes the skip branch
+    # above and returns before reaching here.
+    #
+    # An absence and a zero are not the same measurement. This branch is the
+    # difference.
+    bad "grade produced NO result line (rc=$sp_rc) — a HARNESS ERROR, not a graded run with nothing skipped"
 else
     bad "absent-index skip is not properly accounted: rc=$sp_rc line=$sp_line"
 fi

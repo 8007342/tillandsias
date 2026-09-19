@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-an-absolute-path-grep-or-a-line-continued-pipeline
+    event:
+      type: implemented
+      ts: "2026-09-14T05:49:38Z"
+      agent_id: linux-yoga-claude-20260914t054937z
+      host: yoga
+      summary: |
+        BOTH ESCAPES CLOSED, and the live instance the row names is flagged.
+
+        ESCAPE 1 — AN ABSOLUTE PATH IS STILL THE COMMAND. UNBOUNDED_PRODUCER_RE anchored on `(^|[;&|(]|[[:space:]])` immediately before the command name, so in `/usr/bin/grep` the preceding character is `/` and the producer never matched. Not a hypothetical spelling: validate-traces.sh calls /usr/bin/grep EIGHT times, deliberately, so macOS gets BSD grep regardless of Homebrew. The anchor now admits an optional absolute path prefix and still requires the delimiter before it, so `foogrep` and `mygit` stay unmatched.
+
+        ESCAPE 2 — A PIPELINE SPLIT ACROSS CONTINUATIONS. The loop read one added line at a time while VERDICT_CONTEXT_RE anchors on a leading if/while/until/elif, so the verdict context sat on the first physical line and the early-exiting consumer on the last and no single line carried both.
+
+        FOLDED FROM THE FILE, NOT FROM THE DIFF, and that is the half that keeps it honest. Joining the diff's added-line stream would splice lines that are not adjacent in the file whenever a hunk adds only part of a continuation, and fabricate a pipeline nobody wrote. The FILE is folded into logical lines and a logical line is in scope when ANY of its physical lines was added — which is also the more faithful reading of "added in this change".
+
+        THE ROW'S CLOSURE ASKED FOR A REVERT IN scripts/validate-traces.sh; I REPRODUCED THE SHAPE INSTEAD, in a throwaway repo, and say so plainly: mutating a real instrument to test a guard leaves the tree one interrupted fixture away from a broken validate-traces.sh, and the assertion is identical either way. The reproduced line is the 1069-c9w6 fingerprint — `/usr/bin/grep -rl --include=... \` across two continuations into `| grep -q .` — carrying BOTH escapes at once.
+
+        MEASURED, the falsification the row asks for: with that shape in a scratch tree, the PRE-FIX guard (git show HEAD:) exits 0 and prints ok:sigpipe-verdict-added:0 checked; the fixed guard exits 1 with violation:sigpipe-verdict-added:1.
+
+        FIVE OF EIGHT ARMS ARE NEGATIVE CONTROLS, deliberately. This fix WIDENS a guard, so the risk is not that it keeps missing things but that it starts refusing correct code — the row says so in its own words. An EOF-reading consumer (sort|wc), a bounded producer (printf of a variable), a sigpipe-ok marker sitting on the LAST physical line of a folded pipeline, an unchanged file, and an untouched line in a CHANGED file all stay unflagged.
+
+        TWO FIXTURE DEFECTS CAUGHT, both producing green arms that asserted nothing:
+          1. THE RC DIED IN A SUBSHELL. The helper set `_rc=$?` while the caller ran it as `out="$(_run …)"` — a command substitution, so the function ran in a subshell and the assignment went with it. The outer _rc stayed 0: the three flagging arms reported "still escapes" and, far worse, all four negative controls PASSED, because `[ "$_rc" -eq 0 ]` was trivially true. The rc now crosses back through a file.
+          2. A NEGATIVE CONTROL THE MUTATION COULD NOT REACH. Arm 7 (an unchanged file) stayed green when I deleted the LINE-level scope check, because its file is not in the diff at all and the file loop never opens it — so it pins file-level scoping only. Arm 8 was added for the line-level half: a pre-existing violation in a file that IS changed. Only the mutation found this; reading the arm, it looks like it covers both.
+
+        MUTATION-TESTED THREE WAYS, each diff printed and proven non-empty first: reverting the path prefix reopens escape 1 and reds the live-instance arm; disabling the fold reopens escape 2 and reds the live-instance arm; deleting the line-level scope check reds arm 8. A fourth attempt failed to apply through shell quoting and printed 8/8 from an UNMUTATED file — recorded, again, because that is the false result this discipline exists to catch.
+
+        Sibling fixtures unaffected: test-sigpipe-verdict-measured.sh 5 passed 0 failed, test-sigpipe-verdict-pipelines.sh ok:11.

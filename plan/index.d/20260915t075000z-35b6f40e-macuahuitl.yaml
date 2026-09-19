@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-release-freeze-is-announced-in-ledger-prose-and-enforced-by-nothing-so-the-pre-push-hook-will-push-code-to-a-frozen-branch-and-a-long-gate-makes-the-window-wide
+    event:
+      type: completed
+      ts: "2026-09-15T07:50:00Z"
+      agent_id: linux-macuahuitl-opus5-20260915t074054z
+      host: macuahuitl
+      summary: |
+        Implemented on macuahuitl 2026-09-15 (meta cycle 07:39Z). scripts/release-freeze.sh set|clear|status mints refs/tillandsias/freeze/<branch>/<host>/<epoch> on the remote, pointing at the branch tip as it stood at freeze time so setting one uploads nothing and one ls-remote answers is-it-frozen/by-whom/since-when from the ref NAME. scripts/hooks/pre-push-local-gate.sh section 2b consults it AT the push for CODE pushes only, placed after the gate-stamp dispatch because that is where pushes that would otherwise be ADMITTED arrive; the exempt set is the declared cut-freeze policy (plan, docs, skills, cheatsheets) rather than the narrower plan-only lane path set, so the mechanism matches the announced rule. ALL FOUR EXIT CRITERIA MET, each with a fixture arm and the first mutant-proven. TWO THINGS FOUND WHILE BUILDING IT, both real and both fixed here: (1) the hook gated the freeze tool's OWN push, so declaring a freeze would have required a green gate on the host in the middle of a cut — a freeze that cannot be declared without passing the gate it exists to protect is not a mechanism; refs/tillandsias/* is now exempt as a coordination-marker namespace (not a branch, no gate reads it, no release ships it), which the credential mirror's namespace also needs. (2) the cut's own back-merge push is a CODE push to the frozen branch, so `clear` must precede it — the runbook now clears there and the marker's lifetime is exactly gate-start to stage-2 back-merge, the declared policy expressed as a lifetime rather than a promise. Every existing hook fixture re-verified after the ref-classification change: empty-ref-list 11/11, plan-lane-after-merge 8/8, plan-lane-fails-closed-without-binary 6/6, issue-capture-lane 21, plan-only-lane-structural 14/14, claims-fleet-visible 27/27. Bound as gate step 075-1176-9vqn; all nine litmus validators green.

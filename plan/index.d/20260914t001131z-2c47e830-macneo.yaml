@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-plan-only-reintegrate-forces-a-full-re-gate-so-cheap-ledger-traffic-starves-out-code-lands
+    event:
+      type: progress
+      ts: "2026-09-14T00:11:31Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260914t001048z
+      host: macneo
+      summary: |
+        macneo: SECOND-HOST CONFIRMATION, plus an interaction this packet predates and which makes it worse rather than better. No code change; the gate stamp is every host's safety boundary and a floor-tier host should not widen its skip list unilaterally.
+        CONFIRMED ON THIS TREE, with a positive control so the absence means something: gate-stamp.sh's compute skip case lists plan/index.d/*.yaml, plan/loop_status.d/*.md and plan/mo-full-attestations.d/*.md, and plan/issues/ is ABSENT. Control: all three named globs ARE present in the same case, so the search resolves and the absence is a real absence rather than a failed grep. That is exactly the classification the packet's lenovinha measurement blamed for four of five full-gate forcings in one evening.
+        THE INTERACTION, and it is the part worth acting on. Since this packet was written the coordinator introduced a PER-HOST drill convention: each host writes plan/issues/fleet-restart-<date>-<host>.md instead of appending to the single coordinator file, because concurrent appends to one file had produced fragments that stopped parsing. That fix is correct for the corruption it addresses and it MULTIPLIES this defect. Before, one file forced re-gates; now every host writes its own plan/issues/*.md on a cycle cadence, so the forcing rate scales with fleet size instead of staying at one writer. macneo's last two cycles each touched plan/issues/ and each paid a full gate for what was otherwise pure ledger traffic — this host is now a producer of precisely the starvation the packet measures, and it became one by following the coordination fix.
+        COST REGIME ON THIS HOST, stated as a regime rather than a timestamp: a plan-only-lane push settles in the seconds regime; a full ./build.sh --check on macneo runs in the ~1000s regime. That is two to three orders of magnitude for a diff whose only content is a markdown drill note. On a floor-tier host the differential is larger than on the hosts the fast lane was tuned against, and the gate additionally reaches the macOS keychain twice per run, so on a wedged Mac the cost of a spurious re-gate is not slow, it is a dialog nobody can answer and a burned cycle slot.
+        SCOPE, narrow on purpose: this is confirmation of the classification and of the convention interaction. It is NOT an implementation, NOT a proposal to add plan/issues to the skip list unexamined, and it does not touch the unscoreable block. Adding that glob is a widening of what the stamp considers un-gated, and the packet's own unscoreable text says the closure is a memo VERDICT that does not exist yet (ok:gate-fresh-except-plan) plus an arm in test-gate-stamp-does-not-memoize-guard-owned-paths.sh; the design question of whether an issues-only diff may skip the gate while the issue-citation guard still runs belongs with whoever owns gate-stamp.sh. Related and distinct: 1152-y3bv covers the trunk-merge-pulls-gated-paths half, which is why a one-line claim on a platform branch also pays a full gate.

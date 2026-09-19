@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Reconstructed 2026-09-18 after the session-scoped scratchpad holding the first
+# draft was wiped at a session boundary; the operator's words below are quoted
+# from the session transcript, not paraphrased from memory.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: decision
+      ts: "2026-09-18T19:36:36Z"
+      agent_id: "linux-macuahuitl-claude-20260918t124000z"
+      host: macuahuitl
+      summary: |-
+        OPERATOR RULING 2026-09-18 — NEITHER resolution A NOR B. It dissolves the
+        question both were answering. Quoted, because the read-only sentence is
+        the part a summary destroys:
+
+          "when we login with a token we validate the token with 'can this token
+          list repos?', and so far that's all the credential we need. When the
+          forge launches we'll test there: 'can this forge push to this repo?'
+          then the affordance error would be 'move away from <main>' for per
+          repo-hook errors, or 'this token is read only for this repo' validated
+          then, from a live forge, at runtime, at forge launch. If the token is
+          read only for that container the agent might still perform useful
+          inference for the user, like running local containers, building
+          locally, serving locally compute heavy websites, educational content,
+          etc. A READ-ONLY TOKEN IS NOT AN ERROR, but a suported scenario. Looks
+          like the current gate was implemented by an incorrect intepretation
+          of the requirement."
+
+        WHY IT SETTLES THE ROW: A and B both accepted that login must prove PUSH.
+        The operator rejects the premise. Login proves the token is usable and
+        whose it is — no repository needed — so the guard's subject problem is
+        deleted, not solved. The push question moves to forge launch, where
+        there is exactly one repository and the forge knows it.
+
+        A DELETION, NOT A BUILD: fetch_github_projects in
+        crates/tillandsias-headless/src/remote_projects.rs already runs
+        `gh api user/repos`, the exact login validation the ruling names. The
+        probe to remove is the one read_host_project_origin_url call site that
+        passes a synthetic path instead of a real project.
+
+        THE LARGEST DESIGN CHANGE IS "READ-ONLY IS NOT AN ERROR": the present
+        guard is binary, so read-only collapses into failure and a user wanting
+        local containers, local builds or locally served content is stopped for a
+        permission they were never going to use. The ruling converts a gate into
+        a CAPABILITY REPORT.
+
+        NEGATIVE CONTROL SURVIVES: this row's criterion 2 — narrowing the claim
+        must not widen the admission — still binds. A token that genuinely cannot
+        push must be TOLD SO at forge launch, with the affordance; read-only
+        becomes a supported branch, not the failure branch. yoga's M1 consumer
+        census (three of five consumers have no repository to key on) is the
+        measurement that makes "login needs no repository" obviously right.
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    event:
+      type: decision
+      ts: "2026-09-18T19:36:36Z"
+      agent_id: "linux-macuahuitl-claude-20260918t124000z"
+      host: macuahuitl
+      summary: |-
+        SUPERSEDED by the 1217-54vw ruling (operator, 2026-09-18). This row asks
+        how the login-time probe should find its repository when the tray runs
+        where no checkout exists; the ruling removes the probe, so the CWD
+        dependency has no subject left. Do NOT implement a CWD remedy and do NOT
+        close this as fixed — it closes when the probe is deleted under
+        1217-54vw. Operator: "This completely removes the whole need for a local
+        checkout for a permission you don't need at that point."
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: note
+      ts: "2026-09-18T19:36:36Z"
+      agent_id: "linux-macuahuitl-claude-20260918t124000z"
+      host: macuahuitl
+      summary: |-
+        UNBLOCKED IN PRINCIPLE by the 1217-54vw ruling (operator, 2026-09-18):
+        "there should be ZERO need now for a local checkout of any kind." The
+        login-time push probe was the last thing requiring a host checkout at
+        credential time. Note only — whoever picks this row re-reads its own
+        criteria against the ruling rather than inheriting my reading.
+  - packet_id: truly-ephemeral-project-checkout-drop-the-host-mount
+    event:
+      type: note
+      ts: "2026-09-18T19:36:36Z"
+      agent_id: "linux-macuahuitl-claude-20260918t124000z"
+      host: macuahuitl
+      summary: |-
+        Same unblocking as 776-jcf3 from the 1217-54vw ruling: the credential
+        flow no longer needs a host checkout, so the host mount's last
+        credential-shaped justification is gone. Note only; criteria unchanged.

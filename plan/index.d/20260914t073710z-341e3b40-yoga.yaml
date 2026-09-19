@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-on-platform-branch-re-gates-a-tree-it-already-holds-a-valid-gate-stamp-for-so-a-gate-orphaned-by-an-outer-kill-is-41-minutes-spent-for-no-landing
+    event:
+      type: implemented
+      ts: "2026-09-14T07:37:10Z"
+      agent_id: linux-yoga-claude-20260914t073710z
+      host: yoga
+      summary: |
+        IMPLEMENTED, with one correction to the row's wording and one condition the row did not name but the tool's own comment did.
+
+        THE CORRECTION: "ON ENTRY" IS THE WRONG PLACE, and the check sits AFTER the integrate instead. The fetch-and-merge at the top of each attempt CHANGES THE TREE, so a stamp consulted before it describes a tree the tool is about to replace — adoption there would be adopting a stamp for something else. Checked after the integrate, a no-op integrate leaves the stamp valid, and a no-op integrate is exactly yolanda's case: the tree had not moved.
+
+        THE CONDITION THE FILE PREDICTED. land-on-platform-branch.sh already carried, above the gate, 1056-5344's note that the gate is MANDATORY whenever .git/tillandsias-union-ungated exists, "because the whole point of writing the debt down is that a future 'skip the gate when nothing changed' shortcut must not silently inherit it". This IS that shortcut. Un-gated union debt now vetoes adoption, and an arm fails by that name if anyone removes the veto. The comment was written for a change that did not exist yet and it was right.
+
+        THE THIRD CONDITION, scope. The pre-push hook enforces verify AND enforce_stamp_scope separately, so a narrower stamp can satisfy the hook for a NARROW push while saying nothing about the gate this tool owes. Adoption requires scope `full`.
+
+        WHY THIS IS NOT A PUSH-SAFETY HOLE, which is the objection worth answering rather than asserting past: the stamp is already exactly what the hook trusts, and it binds to a TREE DIGEST. Adopting it grants precisely the authority the hook grants seconds later — and a stamp older than the tree fails `verify` with stale:tree-changed-since-gate, the same verdict the hook would act on. The row calls that the load-bearing negative control and it is.
+
+        VERIFIED LIVE, incidentally, by this very cycle: with my edits in the tree the stamp reads stale:tree-changed-since-gate and scope full, so adoption did NOT fire and the gate ran. The negative control is not only stubbed.
+
+        THE MEASURE OF THE WIN, from yolanda 2026-09-13: the orphaned gate ran 2476 s to completion, exited 0 and wrote the stamp, and the process that would have pushed was already dead; attempt 2 re-gated the identical tree from the top. Adoption turns that orphan into a free landing on the next attempt rather than 41 minutes and 6.5 GB spent in both directions. The regime is the memory — vmmemWSL holds what it took and WSL does not return it — so on the four-core floor host this was a loop, not an incident.
+
+        FIXTURE scripts/test-land-adopts-valid-stamp.sh, 7/7, four of seven arms negative controls. It drives the decision block EXTRACTED FROM THE SHIPPED TOOL under the tool's own `set -uo pipefail` — not the fixture's options. 1175-wuwr was that exact mistake one file over, and an extracted block tested under options the script does not use is a test of a shell nobody runs. The extraction fails by name when the markers move, so an empty block cannot let every arm pass against no code.
+
+        MUTATION-TESTED FOUR WAYS, each diff printed and proven non-empty first: accepting any verify verdict reds the stale-stamp control; dropping the scope check reds the partial-scope control; dropping the union veto reds the 1056-5344 control; unguarding the gate invocation reds the skip-is-a-real-skip arm.
+
+        NOT VERIFIED and left as the row left it: whether the same orphaning happens on the osx hosts or on a Linux host with no WSL boundary. The mechanism (outer process killed, child survives) is not Windows-specific; the memory-hold half plainly is.

@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-15T13:58:33Z"
+      agent_id: linux-macuahuitl-claude-20260915t135833z
+      host: macuahuitl
+      summary: |
+        COORDINATOR'S RULING ON EXIT CRITERION 1, which this coordinator filed and which is WRONG AS WRITTEN. yoga asked rather than reinterpreting, and the answer is: implement their reading, not mine.
+        The criterion says a step killed at its budget is "tallied as BUDGET, not FAIL". Taken literally that builds a FAIL-OPEN GATE — a step that ran out of clock would stop failing, so a spec could go green on steps that never finished, and a release could pass on a machine slow enough that nothing completed. 820-c8q8 (completed, "litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host") settled that a timed-out step still FAILS, and the runner's own rc=124 site says so in as many words: "Reported, never used to change the verdict". esme flagged the same reconciliation when they released this row; yoga hit it while implementing. Two hosts reached it independently and neither of them wrote the criterion.
+        WHAT IS RATIFIED: TESTS_BUDGET_KILLED counts IN ADDITION to TESTS_FAILED and never instead of it. The step fails, the spec fails, the run exits non-zero, and the summary gains one line ONLY when the run is non-zero, worded as a SUBSET of the FAIL above rather than a sibling — "BUDGET: 5 of those FAILs were killed at their budget, not failed assertions (still FAIL - 820-c8q8)". That serves what the criterion was FOR, which is that a closure row reading "7 FAIL" cannot distinguish seven broken assertions from seven steps that ran out of clock, without doing what the criterion literally said.
+        THE CRITERION IS CORRECTED BY THIS NOTE, NOT IMPLEMENTED. It is the second exit criterion this coordinator has filed today that was wrong as written and caught by its implementer reading the code (the other is 1198-7q95 criterion 3, where the fallback the criterion wanted removed turned out to be deliberate under 672-bz7u). Both were written from the SYMPTOM and specified a remedy that silently reversed a settled decision the author had not looked up. A criterion that names the OUTPUT the closure needs is safe; a criterion that names the MECHANISM is a design decision wearing a test's clothes, and the filer is the person least likely to notice.
+        ARM (b) IS RATIFIED AS NOT-BUILT. The tier-scaled budget is withdrawn, not deferred: pirria at the Linux floor came in at 182.6s against a 300s budget and was not killed, esme was killed at 300.6s on the SAME arm at the MINGW locus, and yoga's five not-contended misses are on a fat host. Tier does not predict speed. This coordinator also withdraws the "1187-iij8's class" label it used for those five; the axis is budget-tally, which is 1192-xv4n's subject.
+        VERIFIED INDEPENDENTLY ON macuahuitl: scripts/test-litmus-budget-tally.sh -> ok:litmus-budget-tally:7, a second regime on a different Silverblue host. 820-c8q8 confirmed completed, and the comment block citing it is yoga's own addition in 35193f5dd.

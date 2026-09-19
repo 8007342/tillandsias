@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: env-lock-has-a-redundant-second-mutex-that-cannot-be-removed-by-unification-and-implies-a-protection-it-does-not-provide
+    order: 1235-b5sf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [tests, concurrency, env, flake, gate]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      the headless test binary has TWO env mutexes, so a reader taking the wrong one is serialised against 7 writers and races 31 — and the redundant one cannot be removed by unification
+    context: |
+      FOUND 2026-09-16 by a gate flake that cost a land, and fixed only for the
+      one reader that fired. The MECHANISM is unfixed and the next collision is
+      a different pair.
+
+      THE FLAKE, for provenance. `tillandsias::tests::
+      nix_cache_launch_args_parity_is_two_sided` PASSED in land attempt 1 and
+      FAILED in attempt 2, ~20 minutes apart, on a tree whose only change was
+      seven plan-only commits touching this crate in ZERO files. It reads $HOME
+      twice and compares the results — once for the script side, again inside
+      `build_nix_cache_run_args` for the Rust side — so a neighbour's
+      `set_var("HOME", tmp)` between the two reads makes the sides disagree
+      about a value neither is testing. Fixed at 22647de07 by taking the
+      canonical lock.
+
+      MEASURED BEFORE THE FIX EXISTED, both regimes, host yoga-silverblue:
+        pair regime (the two colliding tests alone)   16 failures / 30 runs
+        gate regime (all 545 tests in the binary)      1 failure  / 30 runs
+        after the fix, same regimes                    0 / 40  and  0 / 70
+      638-ehzi quotes ~1-in-4 for the same class, which is a THIRD regime.
+      Record the regime with any rate here or the numbers do not compare.
+      `--test-threads=1` was measured as the alternative and NOT taken: 545
+      tests in 2.05s parallel against 4.30s serial, +2.25s on a 1171s gate
+      (0.19%). Cheap, and it fixes the invocation rather than the code — keep it
+      as an emergency lever with a known price.
+
+      THE DEFECT THIS ROW IS FOR. There are two distinct mutexes:
+        `env_guard()`  -> ENV_LOCK, a `static Mutex` local to the tests module
+        `env_lock()`   -> delegates to `runtime_assets::env_lock()`, the canonical one
+      `env_lock`'s own comment says "ONE process-wide lock for every env-mutating
+      test in this crate... two independent locks serialise nothing. Delegates to
+      the canonical lock (order 434 unified this after that fix pointed one test
+      at a different mutex)." ORDER 434 UNIFIED THEM; ENV_LOCK RE-SPLIT THEM, and
+      the warning sits in the same file as the violation.
+      Counted on the landed tree, by symbol rather than by line because the two
+      hosts that measured this disagreed by +27 lines:
+        functions with a real `env_lock()` acquisition   39
+        of those also taking `env_guard()`                7
+        `env_lock` ONLY                                  32   (31 before the parity fix)
+      So the canonical lock is held by EVERY $HOME writer, which is why taking it
+      in the reader was complete. Taking `env_guard()` instead — the obvious
+      "use the lock your neighbour uses" move — would have serialised against 7
+      and left it racing 31.
+      LOCK ORDER IS UNIFORM, guard->lock at all seven sites, zero inversions:
+        forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts
+        nvidia_cdi_available_honors_user_config_dir
+        write_forge_gitconfig_handles_ssh_origin_with_https_redirect
+        write_forge_gitconfig_produces_valid_config_with_origin_redirect
+        write_forge_gitconfig_ssh_lane_missing_ca_is_loud_not_silent
+        write_forge_gitconfig_states_why_no_redirect_was_written
+        write_forge_gitconfig_wires_ssh_push_lane_when_enabled
+      That uniformity is what makes the redundant mutex merely useless rather
+      than a latent deadlock, and anyone "tidying up" by reordering one site
+      needs to know it.
+
+      WHY UNIFICATION IS NOT THE FIX: all 7 `env_guard()` callers also take
+      `env_lock()`, so merging the two statics self-deadlocks every one of them
+      (std Mutex is not reentrant). Removing ENV_LOCK means deleting the
+      `env_guard()` takes, which is safe precisely because the canonical lock is
+      already held at each — but it must be done as a removal, not a merge.
+
+      THE DURABLE FIX IS ONE LEVEL OUT and is the reason this is p2 rather than
+      p3: production code should take an INJECTED path instead of tests mutating
+      a process-global $HOME. Then no reader needs to know a lock exists, and the
+      at-risk population stops being "every test that reads $HOME, directly or
+      through production code" — which is open-ended and cannot be enumerated.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable IS the guard. Future litmus
+      filename: env-lock-is-the-only-env-mutex. With ENV_LOCK removed and the seven `env_guard()` takes deleted, every function in the headless test binary that acquires an env mutex must acquire the SAME one, asserted by SYMBOL rather than by line number (two hosts measuring this on 2026-09-16 disagreed by +27 lines, so a line-anchored assertion is wrong for one of them by construction). PRE-FIX RESULT: FAILS — there are two distinct mutexes today, `env_guard()` reaching a tests-module `static ENV_LOCK` and `env_lock()` delegating to `runtime_assets::env_lock()`; 39 functions acquire the canonical one, 7 of those also take ENV_LOCK, and a reader taking only ENV_LOCK is serialised against 7 writers and races 31. NEGATIVE CONTROL the guard must also carry: reverting the `let _env = env_lock();` take in `nix_cache_launch_args_parity_is_two_sided` must REPRODUCE the flake at a measurable rate — 16 failures in 30 runs of the two colliding tests alone, 1 in 30 of the full 545-test binary, both on yoga-silverblue 2026-09-16 — so the fixture is shown to have teeth on the axis that actually failed rather than on three that did not. A second control: a merge of the two statics instead of a removal must be refused or shown to deadlock, since all 7 sites take both and std Mutex is not reentrant. Write that litmus in the same commit as the removal (1136-n8sh).
+    acceptance_criteria:
+      - ENV_LOCK is removed and the 7 `env_guard()` takes are deleted, NOT merged into the canonical lock — a merge self-deadlocks all seven
+      - a fixture proves the removal changed nothing: the 7 sites still hold the canonical lock, asserted by symbol rather than by line number
+      - the parity flake stays fixed — its regime-labelled rate is re-measured after the change and recorded with its n, not asserted
+      - a NEGATIVE CONTROL: reverting the reader's `env_lock()` take reproduces the flake at a measurable rate, so the fixture is shown to have teeth on the axis that actually failed

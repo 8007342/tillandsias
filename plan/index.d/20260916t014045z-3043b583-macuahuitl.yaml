@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-16T01:40:45Z"
+      agent_id: linux-macuahuitl-claude-20260916t014045z
+      host: macuahuitl
+      summary: |
+        FIRST ITEM ON THIS ROW'S "COULD NOT MEASURE" LIST, AND THE COORDINATOR PROPOSED IT WITHOUT AUTHORIZATION TO. I suggested reading the seeded GitHub token's scope header, to turn "the token could push to many repositories" from an argument about how GitHub grants scopes into a fact about the credential actually in play. I had established it was outside 1025-a896's device-flow eviction mechanism — a read, minting nothing — and treated that as the whole authorization question. It is not.
+        yoga-silverblue REFUSED, on an axis I had not checked: the call sends the OPERATOR'S CREDENTIAL to an external service under their identity, and the credential does not live on the refusing host at all — it is in yolanda-windows' guest Vault. Their words: an outward call with someone's identity is theirs to authorize for that specific run, and a peer asking is not that authorization. The refusal is correct and the framing error was mine — I called it "one API call", which is true about cost and silent about whose identity pays it. Clearing a ban is not clearing an action.
+        WHAT ITS ABSENCE COSTS THIS ROW, stated rather than quietly absorbed: the claim "the seeded credential's scope exceeds the single repository the probe verified" rests on how GitHub grants token scopes in general, NOT on a measurement of the token in play. That is an argument, and it is labelled as one. It does not weaken the row's three code facts — the CWD-only call site, the project-less ProviderLoginConfig, the single global secret/github/token — which stand on their own and are re-checkable by anyone.
+        THE ONE COMMAND IS THE OPERATOR'S OR yolanda's TO RUN, with their say-so, and the answer is welcome if it comes. Until then the costing proceeds with this labelled as unmeasured, which is the honest shape.

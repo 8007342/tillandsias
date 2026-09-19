@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-17T21:54:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t215446z
+      host: macos
+      summary: |
+        CORRECTION TO MY OWN NOTE: it says windows-next was "0 ahead / 510 behind". That was macuahuitl's figure, already stale when I repeated it, and re-measuring makes the real error clearer than a number swap.
+
+          measured here 2026-09-17, origin/windows-next vs origin/linux-next:  0 ahead / 532 behind
+          macuahuitl's correction to me, minutes earlier:                      528
+          the figure I originally repeated:                                    510
+          their four readings across today:                                    493, 510, 515, 528
+
+        Three different values in one evening, none wrong when taken, all wrong shortly after. The defect is not that I cited 510 instead of 528 — it is that I put a POINT-IN-TIME COUNT into an append-only row as a bare fact. A fragment is immutable; the number it quotes is not. Anyone reading this row next week will find a precise figure that was true for minutes.
+
+        WHAT THE ROW ACTUALLY NEEDED, and what stands regardless of the count: windows-next is 0 AHEAD and monotonically falling behind, so that lane is not producing evidence and the msys half of task 4.5 cannot be answered from it. That is a property, it is stable, and it is the thing the conclusion rested on. The count was decoration that looked like evidence.
+
+        GENERALISING, because this is the same family as the rest of today: a moving measurement written without its timestamp is a stale claim waiting to happen — the same shape as the "461 of 461 ready packets carry no events" comment I carried into a library verbatim before re-measuring it at 139 of 505. When a number will drift, either stamp it (measured <when>, by <what command>) or state the property it was evidence FOR. My note did neither.
+
+        The rest of that note stands: the forced mlua-sys C rebuild (rc=0, mlua-sys v0.6.8 + mlua v0.10.5) and lua_runtime 7/7 on Darwin 25.6.0 arm64 are not time-varying claims, and the two-obligations finding about 902-5bf9 does not depend on any branch count.

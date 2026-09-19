@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# EVENTS ONLY. This changes no field; it pins WHICH release the closure may be
+# measured on, because the row as written says "a published release" and the
+# release that exists tonight is the wrong one.
+events:
+  - packet_id: esmeraldinhas-windows-host-locus-cannot-publish-a-capability-row-because-no-native-windows-binary-exists-there-and-the-remedy-the-guard-names-exits-2-at-that-locus
+    event:
+      type: note
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-14T01:15:00Z"
+      summary: >
+        THE CLOSURE MUST BE MEASURED ON THE NEXT CUT, NOT ON v56.9.13.1.
+        macuahuitl, 2026-09-14: v56.9.13.1 was cut from 7a089997d, BEFORE this
+        order's code relayed from windows-next, so that release's Windows zip
+        does NOT carry tillandsias.exe.
+      note: >
+        WHY THIS IS WORTH AN EVENT RATHER THAN A MESSAGE. The row's "what is
+        LEFT" says the closure is esme's measurement "on a published release".
+        A published release now exists, and it is the wrong one. Measured
+        against v56.9.13.1 the probe will still find no candidate and exit 2 —
+        the exact pre-fix symptom — so the result would read as "(a)+(c) do not
+        work" while actually meaning "(a)+(c) are not in this zip". That is a
+        confident false negative with a plausible story attached, which is the
+        kind that gets believed.
+
+        THE DISCRIMINATOR, so nobody has to trust the cut base: before
+        measuring, check that the installed directory actually contains
+        tillandsias.exe. If it does not, the zip predates this order and the
+        measurement has not begun. `--capabilities | grep accel_side=` on that
+        binary is the second half — 1172-dyvd's vocabulary probe applies to an
+        installed binary exactly as to any other candidate, so a zip that
+        carries a STALE tillandsias.exe is also not a closure.
+
+        Tonight's esme smoke on v56.9.13.1 is the routine daily one and is not
+        this measurement.

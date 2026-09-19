@@ -69,16 +69,38 @@ critical_path:
     expected_behavior: "ok: workspace-derived"
 
   # A ratchet compares FAILURE SETS, so the set must be a function of the tree.
-  # Measured on yoga: tillandsias-headless's bin suite gave three different
-  # failure sets across three parallel runs and one stable set under
-  # --test-threads=1, because those tests share process-global state. Serial is
-  # also FASTER here (51.6s vs 61s), so this costs nothing and buys the
-  # determinism the ratchet requires. Filed separately: serial execution is a
-  # mitigation, not a cure.
-  - step: "the gate's test step runs serially and to completion"
-    command: "awk '/_step \"Running workspace tests/,/tee \\\"\\$_WS_TEST_TRANSCRIPT\\\"/' build.sh > /tmp/ws-step2.$$; ok=1; /usr/bin/grep -q -- '--test-threads=1' /tmp/ws-step2.$$ || { echo 'FAIL: not serial — a flaky failure set makes the ratchet a coin flip'; ok=0; }; /usr/bin/grep -q -- '--no-fail-fast' /tmp/ws-step2.$$ || { echo 'FAIL: missing --no-fail-fast — a suite that stops early hides its tail (829-g4xf)'; ok=0; }; rm -f /tmp/ws-step2.$$; [ \"$ok\" = 1 ] || exit 1; echo 'ok: serial and to-completion'"
+  #
+  # THIS ARM USED TO ASSERT --test-threads=1 WAS PRESENT, and 1021-hf9e inverted
+  # it. The pin was a MITIGATION for shared process-global state, and that state
+  # is now REMOVED: host_mount and the gitconfig cache root are parameters, and
+  # the tests that redirected them by writing HOME no longer touch it.
+  #
+  # MEASURED on yoga 2026-09-16 at one commit, default (parallel) runs:
+  #   headless bin suite, TEN runs  -> 544 passed, identical empty set each time
+  #   cargo test --workspace, FIVE  -> 74 result lines, zero failures, identical
+  # The set is a function of the tree again, so the ratchet gets what it needs
+  # without the pin — and the speed argument inverted with it, since serial was
+  # only faster while the contention cost more than the threads won (the bin
+  # suite is now 1.9s parallel against 4.7s serial).
+  #
+  # THE OTHER SERIAL STEP STAYS AND THIS ARM DOES NOT COVER IT. The
+  # `--features tray,listen-vsock` invocation further down build.sh is still
+  # pinned, because that feature build was MEASURED SEPARATELY and still
+  # contends: five parallel runs gave one failure of
+  # tray::tests::mcp_connection_serves_browser_family_over_the_socket
+  # (left: Null, right: "tillandsias-host-services") and four clean. Different
+  # feature set, different global, no evidence to drop it — and none of the runs
+  # above compiled that code at all.
+  #
+  # THE CHECK IGNORES COMMENT LINES (`^[^#]*`) AND THAT IS LOAD-BEARING. The
+  # first version of this inverted arm grepped for the bare flag and FAILED
+  # IMMEDIATELY — on build.sh's own prose explaining when restoring the pin
+  # would be the right move. A mention is not an invocation; a guard that
+  # cannot tell them apart reports the documentation as the defect.
+  - step: "the gate's workspace test step is PARALLEL and runs to completion (1021-hf9e)"
+    command: "awk '/_step \"Running workspace tests/,/tee \\\"\\$_WS_TEST_TRANSCRIPT\\\"/' build.sh > /tmp/ws-step2.$$; ok=1; /usr/bin/grep -qE '^[^#]*--test-threads=1' /tmp/ws-step2.$$ && { echo 'FAIL: the serial pin is back — it was a mitigation for shared state that 1021-hf9e removed; if the set went non-deterministic again the defect is new shared state, not this flag'; ok=0; }; /usr/bin/grep -q -- '--no-fail-fast' /tmp/ws-step2.$$ || { echo 'FAIL: missing --no-fail-fast — a suite that stops early hides its tail (829-g4xf)'; ok=0; }; rm -f /tmp/ws-step2.$$; [ \"$ok\" = 1 ] || exit 1; echo 'ok: parallel and to-completion'"
     timeout_ms: 5000
-    expected_behavior: "ok: serial and to-completion"
+    expected_behavior: "ok: parallel and to-completion"
 
 observability:
   traces:

@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-15T15:52:52Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260915t081011z
+      host: macneo
+      summary: |
+        macneo (macOS floor locus): THE yq-PRESENT REGIME EXISTS NOW, and it disagrees with the degraded run on two arms. Operator approved provisioning this host; yq 4.53.6 installed via brew, and the runner emitted ZERO warn:litmus-degraded-no-yq across both suites, so these counts carry no degraded caveat.
+        COUNTS, macneo, --phase pre-build --size instant --compact:
+          forge-environment-discoverability   PASS 18  FAIL 0  SKIP 7   total 25 (executed 18)  rc=0   24s
+          meta-orchestration                  PASS 21  FAIL 2  SKIP 1   total 24 (executed 23)  rc=1  117s
+        pirria's degraded readings were 24/0/1 and 23/0/1. So the disagreement is real and it is in the direction that matters: two arms that PASS degraded FAIL when yq is present and the arms actually execute.
+        BOTH FAILURES ARE ARM DEFECTS, NOT PRODUCT DEFECTS. I checked each rather than reporting a count.
+        (1) litmus:e2e-eligibility-probe-shape step 6/7 — "a live tillandsias forge / shared stack yields skip:live-runtime-present (order 442)". expected=skip:live-runtime-present, output=eligible. macneo has NO live forge (preflight reports services-no-podman), so the probe correctly answered `eligible`; there is no live runtime to skip for. The arm asserts a precondition this host cannot satisfy and reports FAIL rather than a named SKIP. That is 1004-x9ua's ruling — a falsification arm that proves nothing must SKIP, not accuse — and it is 1187-iij8's own thesis: the red wears an assertion-failure's colour and sends a fixer to something that is not broken.
+        (2) litmus:forge-findings-persistence-shape step 4/8 — "a COMMITTED but unpushed finding fails loud". THE GATE UNDER TEST IS CORRECT; the ARM is broken on BSD. The arm is hermetic (mktemp -d, own repo, own bare remote, so this is not macneo's git state) and asserts `[ "$dirt" = "0" ] && [ "$rc" = 1 ] && [ "$out" = 'unpersisted:unpushed' ]` where dirt comes from `git status --porcelain | wc -l`. Measured here: rc=1 correct, out=unpersisted:unpushed correct, and dirt=[       0] — BSD wc -l PADS to width 8, so the string compare against "0" is false on whitespace alone. Positive control: the same comparison against an unpadded "0" is true, so the operator works and the padding is the entire difference. Remedy is the project's existing idiom, `| tr -d ' '` or `$(( ))`, not a change to check-forge-findings-persisted.sh, which did exactly what the arm wanted.
+        TIMING, WITH THE CAVEAT THAT MATTERS: forge-environment-discoverability ran 24s here against pirria's 871.4s — 36x. I am NOT offering that as a host-speed comparison, because pirria's run was DEGRADED and a degraded run falls back to grep where this one used yq. The gap is confounded between host and instrument and cannot be attributed without a yq-present Linux reading. What it does NOT support is a tier-scaled budget: a floor-tier Mac finished the suite in 24s, which is consistent with my earlier reading on this row that tier does not predict speed and esme's 300.6s kill reads as a MINGW-ism rather than a floor-ism.
+        PROVENANCE: macneo is the fleet's only host that can produce this regime — pirria's yq is unprovisionable because the runner's auto-provision branch requires toolbox, which is Silverblue-only. So these are not a redundant second opinion; they are the first undegraded reading of these 45 arms.

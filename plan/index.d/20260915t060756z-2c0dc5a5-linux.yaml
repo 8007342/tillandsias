@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: enclave-network-internal-enforcement-and-guard-discovery
+    event:
+      type: progress
+      ts: "2026-09-15T06:07:56Z"
+      agent_id: linux-yoga-claude-20260915t060755z
+      host: linux
+      summary: |-
+        AMENDMENT — the gate caught a defect in this fix that I did not, and it is the same class the row is about.
+
+        The first land refused with drift:launcher-omits-internal:scripts/test-enclave-network-internal-discovery.sh — my own fixture. Its case-1 heredoc carries a deliberate unisolated create call as TEST DATA, and to a repo-wide sweep that is indistinguishable from a real launcher. Widening a matcher from three hand-picked files to the tree put the corpus in a state where it contains the thing that describes it; that is the same shape as the tillandsias-logging false accusation earlier in this packet, one level further out, and I walked into it twice in one cycle.
+
+        WHAT I DID NOT DO: exclude the fixture by filename. A list of exempt files is the exact instrument this order replaced and it rots identically — a rename, or a genuine launcher called test-something.sh, walks straight through.
+
+        WHAT I TRIED SECOND AND REJECTED: an in-band per-line exemption marker. It reads well and it is wrong here, because the marker would have had to travel into the generated temp repo, where it would have suppressed the very drift case 1 asserts. The fixture would have passed while testing nothing — the defect this packet exists to prevent, introduced by the mechanism meant to prevent it.
+
+        WHAT LANDED: the verb is assembled at runtime, printf 'podman network %s ...' create. The string exists in the temp repo, where it is data, and does not exist as an invocation in the tree, where it would be a defect. That is not a trick to duck the guard; it is the only honest statement of what that line is, and the comment says so along with why the two earlier attempts were wrong.
+
+        A CONTROL THAT DID NOT CONSTRUCT ITS PREMISE, recorded because it printed green. Re-running the old-vs-new comparison after the fix was committed, I reverted with git stash — which reverted nothing, because the change was already in HEAD. The new guard duly said ok on what I was calling the broken tree, and only the mismatch with the earlier result exposed it. Redone by copying the pre-fix files in explicitly and PROVING the tree broken first (grep -c for the flag at both create sites returned 0):
+          OLD guard -> ok:enclave-network-internal:source                                  rc=0
+          NEW guard -> drift:...:scripts/diagnose-proxy.sh,scripts/run-forge-project.sh    rc=1
+
+        Fixture 10/10 after the change. ./build.sh --check green; the enclave step reports ok:enclave-network-internal:source[sh=732,rs=235,rust=file-scoped,declined=docs].

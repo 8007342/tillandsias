@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    event:
+      type: note
+      ts: "2026-09-15T05:41:57Z"
+      agent_id: linux-macuahuitl-opus5-20260915t054157z
+      host: macuahuitl
+      summary: |
+        A SECOND INSTANCE, in the mirror direction, measured on the coordinator's relay of 2026-09-15T05:41Z — and it is not a gate arm at all, it is the COMPILER, which widens what this row's inventory has to cover. 690-w94k landed a test on osx-next calling boot::pump_cf_loop_for and boot::PUMP_CF_ITERATIONS; `pub mod boot` in crates/tillandsias-vm-layer/src/vz.rs is #[cfg(target_os = "macos")] while its `mod tests` is #[cfg(test)] only, so the test compiles on the author's platform and fails E0433 on every other, taking `cargo test --workspace` down with it. The author's gate was green and would have stayed green forever; the first compiler those arms meet is the coordinator's land gate, which is where it surfaced (refused:land:gate-failed, three E0433s). This row's own generalisation already says "in either direction" — this is that direction, with two consequences for the deliverable: (1) the inventory of platform-scoped surfaces cannot be derived from check-host-tools.sh rows alone, because #[cfg(target_os = ...)] items in Rust are the same blind spot and are far more numerous; (2) the notice this row asks for is cheap here in a way it is not for kernel- or filesystem-scoped arms — `cargo zigbuild -p <crate> --target x86_64-unknown-linux-musl` on a Mac compiles the Linux arms and finds exactly these (macbookair measured that lane on 2026-09-13 for the eleventh regime axis), so for the cfg class the notice can be a real cross-compile rather than a warning. THE FILE ALREADY KNEW: the two tests immediately below carry a comment from 804-deux describing this exact failure and the exact fix, and the new test was written above them without it. A precedent recorded as a comment beside the code did not reach the next author; the notice this row asks for is what would have. Fixed forward on the relay by gating the test the way its neighbours are gated (macuahuitl, coordination-side unblock: the relay was the thing broken).

@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on yoga 2026-09-14 after a scratch-ledger measurement; no live row was
+# written to, and the route this was found on (tier-tagging a row so the floor
+# host gets it) remains closed until this is fixed.
+packets:
+  - packet_id: set-field-on-a-list-valued-field-reads-it-as-unset-and-writes-a-string-so-the-row-vanishes-from-every-tag-query
+    order: 1184-tj2q
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, tooling, plan, integrity, fail-loud]
+    estimated_hours: 2
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the refusal. Future test in crates/tillandsias-plan (cargo test -p tillandsias-plan set_field_refuses_a_list_valued_field); the claimer writes it in the same commit and moves this text into verifiable_closure: set-field on a field whose folded value is a SEQUENCE refuses with a named verdict and writes nothing, instead of reading the list as <unset> and replacing it with a scalar string (pre-fix result: FAILS — measured on a throwaway ledger 2026-09-14, see the filed event for the control). NEGATIVE CONTROL: set-field on a scalar field is unaffected, and --replace still replaces a scalar wholesale."
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      set-field on a LIST-valued field (capability_tags, owned_files, depends_on) reads the existing list as `<unset>`, writes a scalar string in its place, and the row then matches NO tag query at all — including the tags it already had. It reports `ok:` and the 1151-td46 prose guard cannot see it, because the value it would protect reads as unset.
+    context: |
+      MEASURED ON A THROWAWAY LEDGER, yoga 2026-09-14, with the control taken
+      first so the silence afterwards means something:
+
+        control, no fragment:
+          select-rows --status ready --tag testing  ->  2  UNGROUPED  9999-tag  r  p2  ?
+
+        then: set-field 9999-tag capability_tags "testing, low-end"
+          ok: r.capability_tags <unset> -> testing, low-end        <- reads the LIST as <unset>
+
+        after:
+          select-rows --status ready --tag testing  ->  (nothing)
+          select-rows --status ready --tag low-end  ->  (nothing)
+
+      So one `ok:` write makes a row invisible to EVERY tag query: the tags it
+      carried stop matching and the tag that was being added never matches. The
+      fold holds `value: testing, low-end` — a scalar where the schema has a
+      sequence.
+
+      WHY IT IS p1 RATHER THAN A CURIOSITY. capability_tags is load-bearing in
+      the SELECTOR: the 847-wgy4 tier gate reserves `low-end`-tagged work for
+      the floor hosts and SUBTRACTS it from everyone else's pool. A row whose
+      tags have been scalarised is in nobody's pool under any tag, and the
+      damage is silent and durable — the fragment is immutable, so the only
+      repair is another correction fragment by someone who noticed.
+
+      THE 1151-td46 GUARD DOES NOT COVER THIS, and that is the sharp edge. That
+      order made set-field refuse a write that DROPS LINES from a long-form
+      field. Here the old value reads as `<unset>`, so there are no lines to
+      drop and the guard passes the write through. A guard that protects prose
+      cannot protect a list it cannot see.
+
+      HOW IT WAS FOUND: trying to tier-tag 1109-t8kw so its remaining half
+      routes to an at-risk floor host instead of being offered to this host
+      every cycle. That route is closed until this is fixed; the row was NOT
+      written to.
+    exit_criteria:
+      - 'set-field on a field whose folded value is a SEQUENCE refuses with a named verdict and writes no fragment (pre-fix result: FAILS — it reports ok and scalarises)'
+      - 'the refusal names the field and says which paths CAN edit a list, so a caller is not merely stopped'
+      - 'NEGATIVE CONTROL: scalar fields are unaffected — status, priority and long-form prose keep today''s behaviour including 1151-td46''s drop guard'
+    events:
+      - type: filed
+        ts: "2026-09-14T15:36:00Z"
+        agent_id: "linux-yoga-claude-20260914t153508z"
+        host: yoga
+        summary: |
+          Filed from a scratch-ledger measurement with the control taken first.
+          No live row was written to. Found while trying to tier-tag 1109-t8kw
+          so its remaining half routes to a floor host; that route stays closed
+          until this refuses.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-login-refusal-advertises-an-environment-variable-its-own-resolver-never-reads-so-a-stuck-operator-following-the-message-gets-the-same-refusal-and-learns-nothing
+    field: status
+    value: completed
+    ts: "2026-09-15T21:42:04Z"
+    host: linux
+
+events:
+  - packet_id: the-github-login-refusal-advertises-an-environment-variable-its-own-resolver-never-reads-so-a-stuck-operator-following-the-message-gets-the-same-refusal-and-learns-nothing
+    event:
+      type: completed
+      ts: "2026-09-15T21:42:04Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: e15c81e6dae2d391a40cab23f29949c7f0834567 landed on linux-next with tests::github_login_refusal_names_a_remedy_that_works

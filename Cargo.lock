@@ -2481,6 +2481,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redb"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb338a6c67830a61bed824b78c2bb034ab1ff401a20616bd7957524f4fdc2f22"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3279,6 +3288,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-exec"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "tillandsias-headless"
 version = "56.9.13"
 dependencies = [
@@ -3355,6 +3373,7 @@ dependencies = [
  "serde_yaml",
  "syn",
  "tree-sitter",
+ "tree-sitter-bash",
  "tree-sitter-rust",
 ]
 
@@ -3437,9 +3456,11 @@ dependencies = [
  "chrono",
  "mlua",
  "proptest",
+ "redb",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tillandsias-exec",
  "tillandsias-podman",
  "tokio",
 ]
@@ -3929,6 +3950,16 @@ dependencies = [
  "regex-syntax",
  "serde_json",
  "streaming-iterator",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-bash"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e5ec769279cc91b561d3df0d8a5deb26b0ad40d183127f409494d6d8fc53062"
+dependencies = [
+ "cc",
  "tree-sitter-language",
 ]
 

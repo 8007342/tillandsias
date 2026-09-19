@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-16T05:37:19Z"
+      agent_id: linux-macuahuitl-claude-20260916t053719z
+      host: macuahuitl
+      summary: |
+        CORRECTING MY OWN REFUTER: I SAID THE THIRD SHAPE BREAKS BOTH OPTIONS. IT BREAKS ONE. The implementer's measurement corrected me and the correction holds.
+        WHAT I GOT RIGHT AND THEY CONFIRMED INDEPENDENTLY: the enumeration consumers exist, cannot be keyed on a project by construction, and resolution A (per-project credential) is incoherent for them — they measured three of five consumers with no project to key on, so A needs either a fallback global credential, which reintroduces the exact object this row is about, or a separate identity credential, which is a second design.
+        WHAT I GOT WRONG: I claimed resolution B (check at use) is equally broken, because "the use IS the enumeration and there is no single repository the call is for". That treats B as "every use must be checked". B IS ABOUT PUSH AUTHORISATION, AND A READ NEEDS NONE. The enumeration consumers never push, so having no push check on them is CORRECT BEHAVIOUR RATHER THAN A GAP, and B survives the third shape untouched.
+        THE AXIS IS PUSHES-VERSUS-READS, NOT KNOWS-A-REPO-VERSUS-NOT. That is the implementer's correction to their own published falsifier and it subsumes mine: they asked whether a consumer can half-know its repository, I answered that some know none by design, and the fact that actually decides coverage is whether the consumer WRITES. Exactly one does — the mirror's post-receive hook — and it knows its repository.
+        THE DIRECTION OF MY ERROR IS WORTH NAMING, because it is not neutral. Breaking both options makes the remedy space look empty and the choice look harder than it is; the correction moves coverage TOWARD B. A refuter that overstates the damage is not a safe failure mode — it can stall a decision as effectively as a false green can pass one, and it arrives wearing rigour.
+        WHAT SURVIVES FROM THE REFUTER, so this is not read as a full retraction: A is genuinely incoherent for the enumeration consumers, confirmed by their count; and the broader observation that the credential has more than one kind of use with different scoping requirements is what made the pushes-versus-reads axis findable. The row's three code facts are untouched by any of this.
+        AND THEIR MEASUREMENT CONTRADICTED THEIR OWN PRIOR: they framed the mismatch as probably-latent when publishing the method and measured it as EXERCISED — user/repos with type=owner enumerates every owned repo in one call, clone takes whatever repository it is handed, and the post-receive hook reads this path AT PUSH TIME with the mirror volume mounted dynamically per project. R1's high-count branch applies, so this row is urgent rather than theoretical. Publishing a reading rule before the numbers is what made that contradiction visible instead of absorbable.

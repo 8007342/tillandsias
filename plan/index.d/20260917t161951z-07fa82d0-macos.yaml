@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-uninstallers-macos-tray-kill-ladder-sits-under-a-macos-heading-with-no-macos-guard-so-a-sigkill-sweep-on-a-command-line-match-runs-on-every-platform
+    event:
+      type: note
+      ts: "2026-09-17T16:19:51Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t161950z
+      host: macos
+      summary: |-
+        DARWIN HALF ACCEPTED by tlatoanis-macbook-air; pickup_role flipped linux -> macos so no Linux host selects work only a Mac can finish. NOT claimed in_progress: verified this cycle, implemented next, and a dangling claim is worse than an honest ready.
+
+        VERIFIED AGAINST origin RATHER THAN TAKEN ON TRUST. Both halves of the guard are present on origin/linux-next (scripts/gate-steps.d/400-1231-cbie.step, scripts/test-uninstall-tray-stop-is-macos-only.sh).
+
+        A WIRED GATE STEP WILL REFUSE THE FIX, AND ITS MESSAGE WILL MISDIRECT. scripts/test-uninstall-sweeps-both-app-dirs.sh is wired at build.sh:3470 and asserts TEXTUALLY `grep -q 'pkill -TERM -f tillandsias-tray' || fail "block-does-not-stop-the-running-tray"`. Replace `-f` with anything and that grep misses and the gate refuses — claiming the block does not stop the tray, when the block still stops it by a different matcher. The fixture pins the IMPLEMENTATION, and the implementation it pins is the exact string this packet exists to remove. Scripts and fixture must therefore move in ONE pass.
+
+        KEEP THE TEXTUAL APPROACH; ONLY THE LITERAL IS WRONG. That fixture's own comment explains why it is textual and never behavioural: a fixture that ran the real matcher would kill a developer's live tray. Sound, and worth preserving. The arm should assert the PROPERTY — some stop precedes the bundle deletion — rather than one spelling.
+
+        A THIRD PRODUCTION SITE, not named in the hand-off, and it is a SCOPE JUDGEMENT rather than an obvious inclusion. scripts/e2e-step2-macos.sh:20 carries `pkill -KILL -f 'Tillandsias.app/Contents/MacOS/tillandsias-tray'` — matched on the FULL BUNDLE PATH, not the bare `tillandsias-tray`, so its blast radius is materially narrower than uninstall.sh's and install-macos.sh's. It is still `-f` (command-line matching), and its header reasons that pkill is "harmless (typically a no-op, since the pattern never matches) elsewhere" — the same class of assumption this packet removes, much better hedged. Flagged for the row's owner to scope in or out; NOT silently widened.
+
+        SPREAD, MEASURED: `git grep "pkill -f"` matches 1 file under scripts/; `pkill -[A-Z]+ -f` matches 6. A search for the literal misses five of six, because the signal flag sits between the command and the flag. Anyone auditing this must search with the signal included. macuahuitl checked whether any GUARD is blind the same way — none is, so the hole was in a search, not in the tree's checks.
+
+        LINE NUMBERS IN THIS ROW ARE STALE AND ARE NOT A SECOND PAIR OF SITES. The row filed uninstall.sh:255/:259; they now read :282/:284 because the guard commit added a comment block above them. Same two sites. Cite by SYMBOL (881-29me) — this is the fourth line-number drift in two days on this host.
+
+        REMAINING, AND IT IS THE PART ONLY A MAC CAN DECIDE: choose the replacement matcher and report what the tray's EXECUTABLE NAME actually is versus the .app BUNDLE NAME, since they may differ. Candidates named in the hand-off: pgrep -x, a pidfile, launchctl, or the lsof arm e2e-preflight already uses. install-macos.sh needs NO platform guard added (it already dies on a uname -s test above its ladder; its defect is purely the matcher), and the two-stage stop must NOT be deleted — fixture arm 3 pins its existence after a tray was observed alive 12 minutes after a complete uninstall.

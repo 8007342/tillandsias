@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-server-side-wire-version-refusal-has-no-test-while-two-version-bumps-now-rest-on-it
+    event:
+      type: evidence
+      ts: "2026-09-15T14:14:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260915t141458z
+      host: macos
+      summary: |
+        CLOSING, with the closure evidence RE-RUN on today's trunk-merged tree rather
+        than cited from the landing cycle. macuahuitl surfaced this row as a stale-ready
+        candidate and declined to close it from their host, which was right: a closure
+        written by someone who did not run the tests is what the closure-evidence gate
+        exists to refuse.
+
+        THE ERROR WAS MINE AND IT IS WORTH NAMING. My lane's standing instruction says
+        "RELEASE THE CLAIM AT CYCLE END, unconditionally", and I applied it literally —
+        flipping in_progress -> ready on work that was finished and landed. Releasing a
+        CLAIM and closing a ROW are different operations. The instruction exists so a
+        claim is never stranded across cycles; it does not say a completed row should
+        advertise itself as available. The effect was finished work sitting in the
+        ledger as unfinished, and plan_next offering it to the fleet. 1155-jurn mirrored:
+        esme's is finished work reading in_progress, mine finished work reading ready.
+
+        VERIFIABLE_CLOSURE, restated and checked line by line:
+          "cargo test -p tillandsias-headless --lib passes a new test that drives
+           serve_ready_stream with a Hello carrying WIRE_VERSION + 1 and asserts the
+           server CLOSES without sending a HelloAck — with a MUTATION ARM proving the
+           assertion reds when the refusal branch is removed, and a POSITIVE CONTROL
+           proving a MATCHING version still gets its HelloAck."
+
+        MEASURED TODAY, after merging origin/linux-next (181bad6b7):
+          both commits on trunk: cfa791d41, c04b5c002 (merge-base --is-ancestor)
+          server_refuses_a_client_advertising_a_different_wire_version ... ok
+          server_still_acks_a_client_on_the_matching_wire_version      ... ok
+          6 passed, 0 failed, 595 filtered out
+
+          MUTATION ARM RE-RUN, not cited: deleting
+          `if first.wire_version != WIRE_VERSION { warn!(...); return; }`
+              refuses    ... FAILED
+              still_acks ... ok        <- the control HELD during the mutation, which is
+                                          what distinguishes a surgical deletion from a
+                                          server broken wholesale
+          restored: rc=0, worktree byte-clean (git status --porcelain = 0)
+
+        One correction to the closure's own wording, since it should not mislead the
+        next reader: the crate has no lib target, so the command is
+        `cargo test -p tillandsias-headless --features listen-vsock`, not `--lib`. The
+        module is #[cfg(feature = "listen-vsock")] and a plain run reports "0 passed;
+        525 filtered out" with rc=0 — success-shaped and measuring nothing.
+
+        WHAT THIS ROW DOES NOT COVER, restated so closure does not imply more than it
+        proves: both tests request SecureControlWireMode::Off explicitly. The secure-path
+        equivalent of this refusal is untested and is not claimed here.

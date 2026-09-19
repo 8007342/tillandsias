@@ -350,18 +350,55 @@ critical_path:
     # expert_accuracy: line rests on. The fixture carries its own negative
     # control — a genuinely wrong expectation must still FAIL under a declared
     # corpus — so this cannot be satisfied by making everything green.
-    command: "bash scripts/test-groundtruth-corpus-declaration.sh 2>&1 | tail -1"
+    #
+    # ORDER 1226 (yoga 2026-09-16): THE STEP DISCARDED THE FIXTURE'S DIAGNOSIS
+    # AND MASKED ITS EXIT CODE. It was `... 2>&1 | tail -1`. The fixture reports
+    # each scenario's cause through bad() on stderr and then prints one terminal
+    # line, so `tail -1` kept ONLY "fail: groundtruth-corpus-declaration
+    # scenarios failed" and threw away the `FAIL:` line naming WHICH of the nine
+    # died — the one thing a remote reader needs. Measured: green here 9/9 while
+    # red on macuahuitl-fedora, and the red carried no way to tell the two hosts
+    # apart. Several scenarios are host-conditional by design (scenario 6's glob
+    # and scenario 7 both branch on whether this host has a built spec index),
+    # so "which scenario" IS the diagnosis, not colour commentary.
+    #
+    # And the pipeline masked rc: the fixture exits 1, `tail` exits 0, and the
+    # pipeline reports tail's status — so the step logged `[FAIL] rc=0`, an
+    # exit-code mask of exactly the 797-5kqe shape this repo keeps gating for.
+    # The verdict was never fail-open (it comes from expected_behavior, not rc),
+    # but an rc nobody can trust is a trap laid for the next reader who checks
+    # the cheaper signal.
+    command: "out=$(bash scripts/test-groundtruth-corpus-declaration.sh 2>&1); rc=$?; if [ \"$rc\" = 0 ]; then printf '%s\\n' \"$out\" | tail -1; else printf '%s\\n' \"$out\" | grep -E '^(FAIL:|SKIP:|fail:)'; exit 1; fi"
     timeout_ms: 120000
     expected_behavior: "ok:groundtruth-corpus-declaration-fixture:9"
 
   - step: "NO NEW DEPENDENCY, no interpreter, and the query set is DATA not code"
     # The ratified §5 constraints of the 394 family, carried into slice 4. The
     # dependency count is asserted, not inspected: three workspace deps, the
-    # same three 394b left behind. The no-interpreter half is asserted
+    # same three 394b left behind.
+    #
+    # ORDER 964-tzmp, 2026-09-17: `redb` ADDED, operator-authorised, and the
+    # assertion updated rather than circumvented. Stating that plainly because
+    # the circumvention was available and is the reason this note exists: the
+    # check matches only `= { workspace = true }` lines, so `mlua` (declared
+    # `mlua = { version = "0.10", ... }`) and the `tillandsias-podman` path dep
+    # are BOTH already invisible to it. Adding redb in the version form would
+    # have passed a guard whose stated intent is "no new third-party code enters
+    # the tree" — a letter-versus-intent dodge, on the guard that exists to stop
+    # exactly that. If this list is to mean anything it has to be edited in the
+    # open, with the reason, by whoever adds the dependency.
+    #
+    # WHY redb: the derived ledger cache. `status <id>` parsed 8.5 MB and folded
+    # 827 fragments to print one line — 295 ms, ~90 times per warm gate. A redb
+    # point query answers the same question in 4 ms from a cache that is
+    # disposable by construction (fingerprint miss = full YAML load), so the
+    # YAML stays the source of truth in git. Pure Rust and single-file, chosen
+    # over SQLite so the Lua and podman layers can share one store with no C
+    # dependency. The no-interpreter half is asserted
     # STRUCTURALLY — the grader spawns no process at all — because a word-grep
     # would fire on the query set's own honest text (one of its cases is
     # literally "is Python allowed in a committed script?").
-    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono serde serde_json serde_yaml tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
+    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb serde serde_json serde_yaml tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-dependency-data-only-query-set"
 

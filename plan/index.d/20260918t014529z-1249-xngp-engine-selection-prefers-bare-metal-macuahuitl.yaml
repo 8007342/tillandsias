@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: engine-selection-prefers-a-bare-metal-ollama-where-one-exists-and-falls-back-to-a-throwaway-container-with-measured-overhead-so-every-host-must-report-which-lane-served-rather-than-only-that-one-did
+    order: 1249-xngp
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [inference, engine, policy, cross-platform, fallback]
+    estimated_hours: 8
+    owned_files:
+      - scripts/dev-inference-ensure.sh
+      - scripts/check-local-expert-health.sh
+    title: |
+      OPERATOR RULING 2026-09-18: prefer a BARE-METAL ollama where one exists, fall back to a throwaway CONTAINER with its measured overhead — and because both are valid, every readiness verdict must name WHICH LANE SERVED or a broken fallback stays invisible
+    context: |
+      OPERATOR RULING, 2026-09-18, in substance: "the wsl2 or macos vms could use
+      ollama on 'bare metal' on their vms, and we'll let the tillandsias linux
+      native use bare metal instances if they exist, or use container throw away
+      versions with their overhead penalties if none exist."
+      THE POLICY, stated per platform because "bare metal" means something
+      different on each:
+        WSL2 guest     the VM's own bare metal IS the native lane
+        macOS guest    same — ollama native inside the VM
+        Linux native   a host-native instance if one exists, else a throwaway
+                       container, accepting the overhead
+      So the container is the FALLBACK, not the default, and a host that finds a
+      bare-metal engine and uses it is behaving correctly.
+      WHY THIS NEEDS A ROW RATHER THAN A SENTENCE. The fallback is by definition
+      what runs on the host LEAST able to diagnose it — the one with no
+      bare-metal engine — and tonight proved that a broken fallback can stay
+      invisible indefinitely on a host where the preferred path happens to work.
+      macuahuitl's GPU container lane had been unable to start since 2026-08-17
+      (1248-j6vd) and nothing reported it, because a host-native ollama answered
+      the readiness probe on the same port and the verdict does not distinguish
+      the two. It took killing the preferred engine BY HAND to surface it.
+      THE OVERHEAD THE RULING ACCEPTS IS NOW MEASURED, not estimated, with
+      scripts/bench-accel-lane.sh on macuahuitl (A5000, qwen2.5:0.5b, 3 reps):
+        warm decode     container ~467 tok/s vs host-native ~500-560   (~10%)
+        COLD start      container first rep 24.9 tok/s                  (19x)
+        embedding       container 18-19 ms/chunk vs 7 ms, ALL reps      (2.6x)
+      THE COLD-START NUMBER IS THE ONE THAT MATTERS FOR A *THROWAWAY* CONTAINER,
+      and it is easy to miss: a throwaway lane pays the cold start every time it
+      is thrown away, so "throwaway" and "19x first-rep penalty" are the same
+      cost counted twice. A three-rep MEAN reports ~318 tok/s and hides both the
+      cold start and the warm rate. Any host tuning this must keep per-rep
+      numbers.
+      AND EMBEDDING SHOULD NOT USE THE FALLBACK AT ALL if it can be avoided:
+      it is 2.6x slower in the container across every rep (not cold start), and
+      it gains NOTHING from the GPU on either lane — 7 ms/chunk host-native on
+      both cpu and gpu. So embeddings are the first workload to keep host-side or
+      batch, and the last to hand to a throwaway container.
+    exit_criteria:
+      - 'every readiness verdict NAMES the serving lane — bare-metal or container — so two hosts in different states are distinguishable from their output alone (pre-fix result: FAILS — scripts/dev-inference-ensure.sh emits ok:dev-inference-ready for a found bare-metal engine and for a started container alike, which is how a month-long fallback outage went unreported)'
+      - 'the health of the FALLBACK is answerable without killing the preferred engine by hand, since the hosts that depend on the fallback are the ones least able to perform that diagnosis'
+      - 'the per-platform mapping is implemented and stated: a WSL2 or macOS guest treats its own VM-native ollama as the bare-metal lane rather than reaching for a container, and Linux native prefers host-native and falls back'
+      - 'NEGATIVE CONTROL: a host with NO bare-metal engine must still come up on the container fallback and say so — the preference must not become a requirement, which would strand exactly the hosts the fallback exists for'
+      - 'the measured overhead travels with the policy (warm ~10%, cold 19x, embed 2.6x) so a scheduler can decide rather than guess, and is re-measured per host class rather than assumed from macuahuitl'
+    unscoreable: |
+      what-the-overhead-is-on-consumer-hardware: every figure above is from one
+      host with an A5000 and 20 threads. The operator's plan is explicitly to
+      prove the concept here and fine-tune on consumer hardware, so these are a
+      BASELINE and a methodology, not fleet constants. A consumer host may find
+      the container penalty smaller (less to lose) or far larger (memory
+      pressure on a throwaway start). Re-run the shared harness per host class;
+      do not extrapolate this row's numbers.
+    verifiable_closure: |
+      litmus:inference-readiness-probe-shape — extended with an arm that the
+      readiness verdict names the serving lane, and an arm that a host with no
+      bare-metal engine comes up on the container fallback and reports it as the
+      fallback rather than as the preferred path.
+    events:
+      - type: filed
+        ts: "2026-09-18T01:45:29Z"
+        agent_id: "linux-macuahuitl-claude-20260918t014529z"
+        host: macuahuitl
+        summary: |-
+          Filed on the operator's ruling, and it supersedes a criterion I had
+          written an hour earlier on 1248-j6vd saying readiness must distinguish
+          "an endpoint answered" from "the container lane works". Under this
+          ruling that phrasing would have made the container mandatory and
+          destroyed the preference being specified. The defect is not that a
+          bare-metal engine was used; it is that the output cannot tell you which
+          lane ran, so the fallback can rot unobserved. Corrected on that row
+          rather than left to be implemented literally.

@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    event:
+      type: evidence
+      ts: "2026-09-16T08:04:13Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260916t080413z
+      host: macos
+      summary: |
+        CRITERION 3 IMPLEMENTED AND FALSIFIED, COMMITTED AT b3eb557a9, AND UNLANDED —
+        the gate cannot pass on this host while a tray owns the VM. Details below so the
+        next reader does not re-do it or mistake the blocker for a defect.
+
+        THE FIX. All three `security` keychain spawns now route through a bounded spawn:
+        10s budget, sized against the 30s status path it sits on, so a keychain call
+        fails well inside it and leaves room for the work that follows. The SYNC
+        signatures are preserved deliberately — those three fns have 34 callers
+        (19/13/2), so bounding inside them costs no caller a change where converting to
+        async would touch every one. Scope decided by counting, not instinct.
+
+        THE BOUND KILLS AND REAPS, AND THAT IS WHAT THE TEST ASSERTS. macneo measured
+        the failure this guards against on a macOS host this week: a timeout killed the
+        PARENT, the `security` grandchild survived at PPID 1 still holding an
+        undismissable GUI prompt, one accumulated per call, and a SecurityAgent stayed
+        alive 21h45m ignoring SIGTERM until the host was restarted. A test that checked
+        only "the call returned inside its budget" PASSES ON EXACTLY THAT — the caller
+        is unblocked and the host is left worse than if it had stalled. So
+        a_bound_that_fires_leaves_no_surviving_child counts live children by
+        `ps -Ao pid,ppid,command` filtered on our OWN pid (never a bare grep for the
+        name: macneo's count of that shape was wrong because the grep matched its own
+        command line).
+
+        FALSIFIED SURGICALLY: removing ONLY `child.kill()`, keeping the timeout, the
+        error and the reap, turns it red. That makes the assertion sensitive to the kill
+        SPECIFICALLY rather than to the harness working.
+
+        AND IT FIXED A DEFECT I SHIPPED LAST CYCLE. Criterion 4's zombie test used
+        `waitpid(-1)`, which reaps ANY child of the process — in a parallel test binary,
+        every other test's children too. It stole the `security` child of
+        keychain_persists_credentials_across_calls, whose own wait then failed ECHILD
+        "No child processes". Both tests passed ALONE and the suite failed, with the
+        failure pointing at the innocent test. Now reaps by captured pid. I found it
+        only because I ran the FULL suite this time; last cycle I ran my own test before
+        and after and treated that as the selftest rule satisfied. It was not.
+
+        WHY IT IS UNLANDED, and it is NOT a defect in this change: two integration tests
+        (exec_guest_stdin) require exclusive VM ownership and refuse when a tray is
+        running — loudly, with "this test proved nothing", rather than passing
+        vacuously. The operator installed a release tonight and that tray is live, so
+        ./build.sh --check cannot go green here. PROVEN ENVIRONMENTAL: both fail
+        identically on the pre-change tree with my changes stashed and restored
+        byte-identical. I am not quitting the operator's running application to land a
+        commit.
+
+        CRATE SUITE 135 passed, 0 failed. zigbuild --target x86_64-unknown-linux-musl
+        --tests rc=0.
+
+        OPEN AND NOT CLAIMED HERE: whether a killed-mid-decrypt `security` leaves the
+        ACL PROMPT up anyway. The test proves the PROCESS is gone; it cannot prove no
+        dialog was posted, and /bin/sleep cannot answer it. macneo investigated and
+        could not close it either — the item that wedged their host now decrypts
+        silently, and the two ways to manufacture an ungranted item (revoking a live
+        credential's grant, or creating a deny-by-default item) are both things neither
+        of us will do unattended on an operator's machine. It needs an operator present
+        at the terminal. Recorded rather than left implied by "no surviving child".
+
+        CRITERION 2 REMAINS: VzRuntime::start invoked per its documented contract, and
+        long child-process waits off async workers.

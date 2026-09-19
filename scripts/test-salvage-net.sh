@@ -15,7 +15,7 @@
 #
 # Hermetic: every scenario runs against scratch repos and a local bare
 # "origin"; the real checkout is never touched. Scenario filter: pass a name
-# (roundtrip|collision|deletion|ordering|sweep|unpushed|symlink) to run one;
+# (roundtrip|collision|deletion|ordering|sweep|unpushed|symlink|usage) to run one;
 # default all.
 set -uo pipefail
 
@@ -325,6 +325,39 @@ fi
 # salvage. Pre-fix, the script's only test was `git status --porcelain`; a
 # clean-but-unpushed HEAD answered ok:salvage-not-needed, exit 0, having
 # preserved nothing.
+if want usage; then
+    # A probe for usage must never mint a ref (2026-09-14: sixteen
+    # salvage/<host>/<date>---help refs in a day). Leading-dash and bad slugs
+    # refuse with exit 2 and the origin's ref count is unchanged; an empty
+    # argument keeps the documented default and still salvages.
+    D="$(mktemp -d "${TMPDIR:-/tmp}/salvage-net-test.XXXXXX")"
+    mk_fixture "$D"
+    echo edited > "$D/work/tracked.txt"
+    refs_before="$(git -C "$D/origin.git" for-each-ref --format='%(refname)' refs/heads/salvage/ | wc -l | tr -d ' ')"
+    for arg in --help -h -x --anything; do
+        outu="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" "$arg" 2>/dev/null | tail -1)"; rcu=$?
+        case "$outu" in
+            refused:salvage:usage:*) ok "'$arg' is refused as usage, not taken as a slug" ;;
+            *) bad "'$arg' was not refused as usage: $outu" ;;
+        esac
+        [ "$rcu" -eq 2 ] || bad "'$arg' exited $rcu, want 2"
+    done
+    outb="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" 'bad slug!' 2>/dev/null | tail -1)"
+    case "$outb" in
+        refused:salvage:bad-slug:*) ok "a slug with illegal characters is refused" ;;
+        *) bad "bad slug not refused: $outb" ;;
+    esac
+    refs_after="$(git -C "$D/origin.git" for-each-ref --format='%(refname)' refs/heads/salvage/ | wc -l | tr -d ' ')"
+    [ "$refs_before" = "$refs_after" ] \
+        && ok "no salvage ref was minted by any refused argument (origin unchanged: $refs_after)" \
+        || bad "a refused argument minted a ref: before=$refs_before after=$refs_after"
+    outd="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" 2>/dev/null | tail -1)"
+    case "$outd" in
+        ok:salvaged:refs/heads/salvage/*/*-dirty-start:*) ok "an empty argument keeps the documented default slug and salvages" ;;
+        *) bad "empty-argument verdict: $outd" ;;
+    esac
+    rm -rf "$D"
+fi
 if want unpushed; then
     D="$(mktemp -d "${TMPDIR:-/tmp}/salvage-net-test.XXXXXX")"
     mk_fixture "$D"
@@ -391,10 +424,41 @@ if want symlink; then
     D="$(mktemp -d "${TMPDIR:-/tmp}/salvage-net-test.XXXXXX")"
     mk_fixture "$D"
     echo edited > "$D/work/tracked.txt"
-    ( cd "$D/work" && ln -s /nonexistent/target dangling )
+    ( cd "$D/work" && ln -s /nonexistent/target dangling ) 2>/dev/null
 
+    # ORDER 1186-w3ph. THE SUBSTRATE MAY REFUSE TO BUILD THIS WORLD AT ALL, and
+    # that is a SKIP, not a failure. Git for Windows emulates a symlink by
+    # COPYING its target, so a missing target leaves nothing to copy and `ln -s`
+    # fails outright: `ln: failed to create symbolic link 'dangling': No such
+    # file or directory` (measured, yolanda 2026-09-14). WSL git on the same
+    # drvfs path creates it fine -- the axis is the git/shell, not the
+    # filesystem.
+    #
+    # Before this, the scenario ran on regardless and emitted four reds: the
+    # counterfactual correctly refusing, then three assertions about a path that
+    # was never created. That reads as "salvage's skip branch is broken" when it
+    # means "this host cannot pose the question". A red that names the wrong
+    # subsystem costs a reader a whole investigation, which is the same harm
+    # 1109-t8kw is about.
+    #
+    # LOUD, and keeping its teeth elsewhere: the skip names the substrate and the
+    # scenario, and it fires ONLY when the symlink is genuinely absent. On any
+    # host that CAN create it -- every Linux host, and WSL on this very path --
+    # nothing changes and the counterfactual still has to pass before the skip
+    # branch is exercised.
+    if [ ! -L "$D/work/dangling" ]; then
+        echo "skip:salvage-net:symlink:substrate-cannot-create-a-dangling-symlink"
+        echo "  \`ln -s /nonexistent/target\` failed here, so the unstageable-path"
+        echo "  scenario has no subject. This is the substrate refusing to pose the"
+        echo "  question, not salvage answering it wrongly (1186-w3ph)."
+        rm -rf "$D"
+        D=""
+    fi
+fi
+
+if want symlink && [ -n "${D:-}" ]; then
     # COUNTERFACTUAL FIRST: prove THIS filesystem stages the dangling symlink
-    # fine unaided — otherwise the skip below is not exercising anything.
+    # fine unaided -- otherwise the skip below is not exercising anything.
     ( cd "$D/work" && git add -A -- dangling ) 2>/dev/null
     rc=$?
     ( cd "$D/work" && git reset -q -- dangling ) 2>/dev/null

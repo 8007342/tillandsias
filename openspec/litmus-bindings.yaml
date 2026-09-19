@@ -8,6 +8,7 @@ specs:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
   - litmus:capabilities-envelope-names-its-source
+  - litmus:envelope-suite-resolves-the-redirected-artifact
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
@@ -103,6 +104,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:cache-recovery-fresh-start
+  - litmus:reset-keeps-models-macos
+  - litmus:uninstall-keeps-models
   coverage_ratio: 100
   last_verified: '2026-05-16'
 - spec_id: certificate-authority
@@ -152,6 +155,8 @@ specs:
   - litmus:ci-release-musl-binary-policy
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
+  - litmus:seam-writer-canonical-lock-shape
+  - litmus:bash-composition-hazards-advisory-shape
   # 1137-da83. scripts/test-*.sh is not globbed by build.sh, so a fixture runs
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
@@ -636,7 +641,12 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:claims-fleet-visible
+  - litmus:release-freeze-holds-code
+  - litmus:expire-claims-reads-the-status-write
+  - litmus:a-claim-names-a-workstation
   - litmus:fragment-keys-are-read
+  - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
@@ -664,6 +674,7 @@ specs:
   - litmus:delegate-outcome-disposition-not-silent-shape
   - litmus:append-event-rejects-unknown-flags-shape
   - litmus:version-bump-isolation-shape
+  - litmus:plan-only-lane-structural
   coverage_ratio: 100
   last_verified: '2026-08-03'
 - spec_id: meta-orchestration

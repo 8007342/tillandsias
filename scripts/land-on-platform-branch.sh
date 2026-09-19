@@ -31,6 +31,8 @@
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
 #       3 gate failed | 4 attempts exhausted | 5 auth failed
 #       6 push failed for a reason retrying cannot fix
+#       8 gate-step prefix could not be allocated after the integrate (1162-qbrx:
+#         no free slot before the next occupied prefix — renumber by hand)
 #       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
 #         helper — the push hangs forever and the log stays zero-byte)
 set -uo pipefail
@@ -126,6 +128,36 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         fi
     fi
 
+    # ORDER 1162-qbrx: ALLOCATE GATE-STEP PREFIXES HERE — after the integrate,
+    # before the gate — the only window that cannot race. A .step file's
+    # numeric prefix is chosen at authoring time; the integrate above can
+    # bring in another host's step with the same prefix, and the gate's own
+    # fixture (test-gate-step-append-no-conflict.sh, arm 7) then refuses the
+    # tree after the full gate has run. MEASURED 2026-09-13 (lenovinha): 215,
+    # 255 and 280 collided, the last one after following the "pick it after
+    # the integrate" advice exactly; each cost a full re-gate. The allocator
+    # renames only steps THIS push adds, to a free slot between its prefix
+    # and the next occupied one, and commits the rename so the gate sees the
+    # final tree. On a platform branch the trunk merge above brings in
+    # trunk's own steps, which read as "added" against origin/$BRANCH and
+    # are PUBLISHED — --exclude keeps them out of the added set.
+    if [ -f scripts/allocate-gate-step-prefix.sh ]; then
+        _alloc_rc=0
+        if [ "$BRANCH" != "$TRUNK" ]; then
+            _alloc_out="$(bash scripts/allocate-gate-step-prefix.sh --base "origin/$BRANCH" --exclude "origin/$TRUNK" --commit 2>&1)" || _alloc_rc=$?
+        else
+            _alloc_out="$(bash scripts/allocate-gate-step-prefix.sh --base "origin/$BRANCH" --commit 2>&1)" || _alloc_rc=$?
+        fi
+        case "$_alloc_out" in
+            ok:gate-step-prefix:no-collision) ;;
+            *) printf '%s\n' "$_alloc_out" | sed "s/^/land: attempt $attempt — /" ;;
+        esac
+        if [ "$_alloc_rc" -ne 0 ]; then
+            echo "refused:land:gate-step-prefix — $(printf '%s\n' "$_alloc_out" | grep -m1 '^refused:' || printf '%s\n' "$_alloc_out" | tail -1)" >&2
+            exit 8
+        fi
+    fi
+
     # ORDER 1056-5344. The plan-only lane may accept a push whose head is a
     # UNION of two separately-green sides that were never gated together, and
     # it records that debt in .git/tillandsias-union-ungated. This gate is what
@@ -161,7 +193,71 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # a later `git clean` removes.
     _gate_log="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-land-gate-attempt-${attempt}.log"
     echo "land: attempt $attempt — gate (./build.sh --check, log: $_gate_log)"
-    if ! ./build.sh --check > "$_gate_log" 2>&1; then
+    # ── ORDER 1174-u5wp — ADOPT A STAMP THIS TREE ALREADY EARNED ───────────
+    #
+    # MEASURED on yolanda 2026-09-13: the harness killed the land for low
+    # memory, `./build.sh --check` survived inside the WSL distro as an ORPHAN,
+    # ran 2476 s to completion, exited 0 and recorded a stamp for the tree --
+    # and the only process that would have read that exit code and pushed was
+    # already dead. Attempt 2, on a tree that had not moved and for which a
+    # valid stamp existed, started the same 41-minute gate from the top.
+    #
+    # THE REGIME IS THE MEMORY, which is why it compounds rather than merely
+    # wastes: vmmemWSL held 6.5 GB while the orphan ran, WSL does not return
+    # memory to Windows on its own, and the host was at 542 MB free of 15.9 GB
+    # when the kill fired. The orphan is what keeps the host in the state that
+    # caused the kill. On the four-core floor host that is a loop, not an
+    # incident.
+    #
+    # ADOPTION, NOT "DIE WITH THE PARENT" (macuahuitl's ruling): killing the
+    # orphan throws away a gate that finished GREEN. Adoption turns it into a
+    # free landing on the very next attempt.
+    #
+    # THIS IS NOT A PUSH-SAFETY HOLE, and the three conditions are why. The
+    # stamp is already exactly what the pre-push hook trusts, and it BINDS TO A
+    # TREE DIGEST -- so adopting it grants precisely the authority the hook
+    # would grant seconds later. A stamp older than the tree fails `verify`
+    # with stale:tree-changed-since-gate, which is the load-bearing negative
+    # control.
+    #
+    # AFTER THE INTEGRATE, NEVER BEFORE IT, and the row's "on entry" is the one
+    # thing corrected here: the fetch-and-merge above CHANGES THE TREE, so a
+    # stamp checked before it describes a tree this tool is about to replace.
+    # Checked here, the integrate has already happened and a no-op integrate --
+    # yolanda's case exactly -- leaves the stamp valid.
+    #
+    # THE UNION DEBT VETOES ADOPTION, and this file predicted this change: the
+    # comment above says the gate is MANDATORY whenever the marker exists,
+    # "because the whole point of writing the debt down is that a future 'skip
+    # the gate when nothing changed' shortcut must not silently inherit it"
+    # (1056-5344). This is that shortcut. It does not inherit it.
+    #
+    # SCOPE MUST BE `full`, because the hook enforces scope separately
+    # (enforce_stamp_scope) and a narrower stamp could satisfy the hook for a
+    # narrow push while saying nothing about the gate this tool owes.
+    _adopted=""
+    if [ ! -s "$_um" ]; then
+        _sv="$(bash scripts/gate-stamp.sh verify 2>/dev/null)"
+        if [ "$_sv" = "ok:gate-fresh" ]; then
+            _ss="$(bash scripts/gate-stamp.sh scope 2>/dev/null)"
+            if [ "$_ss" = "full" ]; then
+                # NAME THE STAMP, or a reader cannot tell a SKIPPED gate from a
+                # gate that never ran -- the row's third criterion. gate-stamp.sh
+                # exposes no field reader, so the `stamped` line is read from the
+                # file it owns; an unreadable one degrades to a named token
+                # rather than to silence.
+                _adopted="$(sed -n 's/^stamped[[:space:]]\{1,\}//p' "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp" 2>/dev/null | head -1)"
+                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green full-scope gate stamp; skipping the gate and going straight to the push (1174-u5wp)"
+                echo "land: attempt $attempt — gate ADOPTED, not run. A gate that finished green is worth adopting; the pre-push hook re-verifies this same stamp against this same tree."
+            fi
+        fi
+    fi
+
+    _gate_rc=0
+    if [ -z "$_adopted" ]; then
+    ./build.sh --check > "$_gate_log" 2>&1 || _gate_rc=$?
+    fi
+    if [ -z "$_adopted" ] && [ "$_gate_rc" -ne 0 ]; then
         # The FIRST failing step, not the last line: build.sh prints its verdict
         # after the failure, so a tail shows the summary and not the cause. The
         # error line is what the reader needs and it is what a re-run would have
@@ -229,7 +325,27 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "  first failing line: $_first_fail" >&2
             [ -n "$_fallback_note" ] && echo "$_fallback_note" >&2
         else
-            echo "  (no violation/refusal line matched; read the log — the gate may have died rather than refused)" >&2
+            # ORDER 1176-fn2p — "DIED" AND "REFUSED" ARE DIFFERENT FACTS, so ask
+            # the kernel rather than leaving the reader with the ambiguity this
+            # very sentence names. Measured on lenovinha 2026-09-14: two land
+            # attempts SIGKILLed in clippy, the gate log ending mid-line with no
+            # verdict, and nothing anywhere saying why. A hang and an OOM need
+            # opposite responses (wait longer versus stop and hand off).
+            #
+            # ONLY REACHED WHEN NO FAILING LINE MATCHED, so a gate that refused
+            # for an ordinary reason never consults this at all — the verdict
+            # cannot launder a real failure, which is 1176-fn2p's second
+            # negative control, enforced by POSITION here and by the kernel
+            # record itself inside the probe.
+            _oom_out="$(bash "$ROOT/scripts/check-oom-postmortem.sh" --since -60min 2>&1)"; _oom_rc=$?
+            case "$_oom_rc" in
+                1) echo "refused:land:gate-oom-killed — the gate produced no verdict (exit $_gate_rc) and the kernel records an OOM kill (1176-fn2p)" >&2
+                   printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2
+                   echo "  This host did not fail the gate; it could not run it. Free memory or hand the work off — re-running will cost another attempt for the same reason." >&2 ;;
+                0) echo "  (no violation/refusal line matched, and the kernel records NO OOM kill: the gate died for some other reason — read the log)" >&2 ;;
+                *) echo "  (no violation/refusal line matched; the OOM record could not be read, so died-versus-refused is UNDETERMINED here, not cleared)" >&2
+                   printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2 ;;
+            esac
         fi
         echo "  Do NOT re-run ./build.sh --check to diagnose this: it is a DIFFERENT" >&2
         echo "  invocation against a tree this script's integrate step may have moved," >&2
@@ -238,6 +354,60 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     fi
     # The gate just built this exact tree, union included, so the debt is paid.
     if [ -s "$_um" ]; then rm -f "$_um"; fi
+
+    # ORDER 1194-davi: name the arms this change touches that THIS HOST'S GATE
+    # CANNOT RUN, because they are scoped to another platform. ADVISORY — it
+    # exits 0 on every finding, and `|| true` is deliberate belt-and-braces:
+    # refusing a linux land over an unrunnable macos arm would trade a
+    # visibility gap for a worse one, which the row names as a negative control.
+    #
+    # IT LIVES HERE AND NOT IN build.sh ON PURPOSE. A land that finds a valid
+    # full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp, the adoption path
+    # above). An advisory inside the gate is silent on exactly those lands, and
+    # adoption is the common case for a plan-only or re-attempted land. Before
+    # the push is the one point every land passes through.
+    bash "$ROOT/scripts/check-unrunnable-platform-arms.sh" --base "origin/$BRANCH" || true
+
+    # ORDER 1201-9it2 — and this is the SIBLING of the block above, not a
+    # duplicate of it. They answer different questions and a change can trip
+    # either without the other:
+    #   1194-davi (above) — arms this host's gate CANNOT run, because they are
+    #                       scoped to another platform.
+    #   1201-9it2 (here)  — arms this gate DID NOT run, because ./build.sh
+    #                       --check executes NO litmus at all.
+    #
+    # The second is deliberate: build.sh:2508 (748-tkjx) says the suite is
+    # minutes and "a gate that slow gets bypassed with --no-verify". So a green
+    # gate is silent about every litmus arm asserting on the files just changed,
+    # and that silence has let a red ride a green gate to trunk THREE times:
+    # images/default/lib-common.sh leaving startup-context-addendum-shape red on
+    # 2026-08-15; 921-vtf4 finding three tests red back to af745f3fd on
+    # 2026-08-28; and 4fc7be930 bumping WIRE_VERSION 3 -> 4 against a pin of 3 on
+    # 2026-09-15, found three hours later by 890-27mv's cadence, not by the gate.
+    #
+    # ADVISORY BY CONSTRUCTION, for the reason the block above gives and one
+    # more: closing a VISIBILITY gap by slowing the gate trades it for a bypass
+    # problem, which is unmeasurable once it starts because the evidence of a
+    # bypass is the absence of a run.
+    #
+    # NO NEW MACHINERY: scripts/litmus-covering-specs.sh is 748-tkjx's own
+    # reverse map, built for exactly this question. Only the asking was missing.
+    # Counterfactual against real history rather than a chosen input: for
+    # 4fc7be930's changed paths it names litmus:guest-container-metrics-wire-shape,
+    # the arm that was actually red.
+    if [ -x "$ROOT/scripts/litmus-covering-specs.sh" ]; then
+        _lcs_changed="$(git diff --name-only "origin/$BRANCH...HEAD" 2>/dev/null)"
+        if [ -n "$_lcs_changed" ]; then
+            _lcs_out="$(printf '%s\n' "$_lcs_changed" | xargs -r bash "$ROOT/scripts/litmus-covering-specs.sh" 2>/dev/null)" || true
+            _lcs_specs="$(printf '%s\n' "$_lcs_out" | awk -F'\t' '$2 ~ /^spec:/ {print $2}' | sort -u | grep -c . || true)"
+            if [ "${_lcs_specs:-0}" -gt 0 ]; then
+                echo "land: NOTICE — ${_lcs_specs} litmus spec(s) assert on the files you are pushing, and ./build.sh --check ran NONE of them (748-tkjx, 1201-9it2):"
+                printf '%s\n' "$_lcs_out" | awk -F'\t' '$2 ~ /^spec:/ {print "         " $2 "  " $3 "  " $5}' | sort -u | head -20
+                echo "         Advisory, refusing nothing. To run them: scripts/run-litmus-test.sh <spec> --phase pre-build"
+                echo "         The release tier runs them; this gate does not, and that is deliberate."
+            fi
+        fi
+    fi
 
     echo "land: attempt $attempt — push"
     # No pipeline: the exit status must be git push's own. KEEP THE OUTPUT — an
@@ -447,8 +617,39 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # though they were all of them. Narrowing a pattern is not the same as
         # enumerating what it must still cover.
         if ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
-            echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
+            # 1064-r8fv named the LANE but left the sentence absolute. MEASURED
+            # on macbookair 2026-09-15: "retrying cannot help" is true of
+            # retrying THIS PUSH and false of re-running this script, whose
+            # attempt loop merges trunk at attempt start and re-gates — which is
+            # exactly the remedy for the mandated-merge refusal it fires on. A
+            # tired reader takes the sentence at face value and hand-merges;
+            # that host did, twice, before measuring the race. Say which
+            # retrying is futile, and name the step the tool already performs.
+            echo "refused:land:push-failed — retrying THIS PUSH cannot help (not a lost race); merge trunk and re-gate:" >&2
             sed -n '1,6p' "$_plog" >&2
+            # MEASURE THE REF THE REFUSAL NAMES, NOT THE BRANCH BEING PUSHED
+            # (macneo-macos, 2026-09-16). This block used to print
+            # `origin/$BRANCH` as the thing to measure. For a mandated-merge
+            # refusal that is the WRONG REF: the refusal reads "osx-next does
+            # not contain origin/linux-next", so the ref that moved is trunk,
+            # not the branch being pushed. macneo measured both — osx-next had
+            # 0 commits that hour while origin/linux-next had 19, about 3
+            # minutes apart, against a ~17 minute macOS gate. Following the old
+            # text literally answered "quiet, spend the gate" about the one ref
+            # that was not racing them. The advice was sound and pointed at the
+            # wrong subject, which is worse than no advice.
+            echo "  Re-running this script does that for you: each attempt merges origin/$BRANCH" >&2
+            echo "  first, then re-gates. That is worth one more gate ONLY if your gate is" >&2
+            echo "  shorter than the inter-commit interval of THE REF NAMED IN THE REFUSAL" >&2
+            echo "  ABOVE — which is often NOT origin/$BRANCH. A mandated-merge refusal names" >&2
+            echo "  the ref your branch must CONTAIN (origin/linux-next), and that is the ref" >&2
+            echo "  that moved under you. MEASURED on macneo 2026-09-16: osx-next was quiet" >&2
+            echo "  for the hour (0 commits) while origin/linux-next ran 19 commits ~3 min" >&2
+            echo "  apart, against a ~17 min gate — so the race was unwinnable by arithmetic," >&2
+            echo "  and measuring the branch being pushed said 'quiet, spend the gate'." >&2
+            echo "      git log --since=1.hours --oneline <the-ref-named-above> | wc -l" >&2
+            echo "  If that count times your gate length exceeds one interval, stop at two" >&2
+            echo "  attempts and take the relay ref below; more gates lose more slowly." >&2
             # ORDER 1064-r8fv. NAME THE LANE, DO NOT TAKE IT. A refusal that
             # says only "retrying cannot help" reads as a dead end; four
             # consecutive refusals on yolanda ended in a hand-rolled loop

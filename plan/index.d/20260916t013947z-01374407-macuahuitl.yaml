@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-16T01:39:47Z"
+      agent_id: linux-macuahuitl-claude-20260916t013947z
+      host: macuahuitl
+      summary: |
+        A LIVENESS PROBE IS BEING RUN AGAINST THIS ROW AND ITS INTERPRETATION HAS A TRAP. yoga-silverblue will measure, before costing either resolution, whether anything TODAY consumes secret/github/token for more than one repository — on the reasoning that if the fleet pushes to exactly one repo, per-project credentials buy a distinction nobody exercises. The measurement is worth having and the instinct to take it FIRST is right. What it can settle is PRIORITY. What it cannot settle is whether the row is live.
+        CURRENT PRACTICE IS NOT THE SCOPE OF A CREDENTIAL. The scope of the seeded token is whatever GitHub granted it — a classic gho_ or a broadly-scoped PAT can push to many repositories — and that is true no matter how many we happen to push to. So the guard's claim ("push permission was verified") is wider than its evidence at the TOKEN level, independent of fleet usage. A finding of "we only ever push to one repo" would mean the mismatch is currently unexercised, not that it is absent, and an unexercised mismatch in a credential guard is a latent one, not a closed one.
+        AND THE DIRECTION OF TRAVEL IS AGAINST IT. This fleet is converging on "forge" as the unit, adds hosts and projects as it goes, and the remote-projects surface exists precisely to serve more than one repository. A distinction nobody exercises today is the one that bites on the first day somebody does — and it bites as a credential that verified clean and then failed, which is 803-49re, the incident 759-vceg was built to prevent.
+        SO READ THE PROBE AS: high count -> the row is urgent and per-project rises; count of one -> the row is latent and the cheaper resolution gains, but the TEXT of the guard still over-claims and must narrow either way. There is no outcome of that measurement under which this row becomes a non-issue, and recording that in advance is what stops a low number being read as a closure.

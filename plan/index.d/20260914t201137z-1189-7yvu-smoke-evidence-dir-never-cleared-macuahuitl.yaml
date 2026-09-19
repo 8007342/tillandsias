@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator from pirria's v56.9.13.1 smoke report
+# (finding 2).
+packets:
+  - packet_id: the-smoke-evidence-dir-is-never-cleared-between-runs-so-a-previous-runs-exit-file-reads-as-this-runs-result-to-every-out-of-band-read
+    order: 1189-7yvu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, release, fail-loud, low-end, skills]
+    estimated_hours: 1
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the runbook step. Future litmus scripts/test-smoke-evidence-dir-is-fresh.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: with a stale target/smoke-e2e/03-init-exit.txt present, the runbook's §0 moves it aside to a timestamped subdirectory before any step runs and records the run's start time in the report, so an out-of-band read of 03-init-exit.txt before §3 finds NO file rather than the previous run's; NEGATIVE CONTROL: the archived copy is preserved, not deleted; pre-fix result: FAILS — a 2026-09-13 init_exit=0 read as the 2026-09-14 run's result on pirria."
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+      - plan/issues/smoke-e2e-findings-v56.9.13.1-2026-09-14-linux-pirria.md
+    title: |
+      §0.4 of the smoke runbook creates target/smoke-e2e with mkdir -p and nothing ever clears it, so a run inherits every evidence file from every previous run; a step that never reaches its write leaves the PREVIOUS run's file under the exact name the report and any out-of-band check read — a stale PASS indistinguishable from a fresh one by name.
+    context: |
+      MEASURED by pirria 2026-09-14: 03-init-exit.txt containing init_exit=0
+      dated 2026-09-13 01:24 was present while this run's --init was still
+      building the proxy image, and an out-of-band poll read it as this
+      run's result; 14 files from the 2026-09-12/13 runs were present at
+      start and were archived by hand under _stale-pre-2026-09-14/. In-block
+      assertions are unaffected (they capture status in the same shell);
+      every out-of-band read is — the §5 report, an orchestrator polling for
+      completion, a human scanning the directory. WHAT TO BUILD: §0.4 moves
+      any existing target/smoke-e2e/* aside to a timestamped subdirectory
+      (never deletes — prior evidence is worth keeping) before the run
+      starts, and the report records the run's own start time so any file
+      can be checked against it.
+    exit_criteria:
+      - 'a stale exit file present before the run is moved aside by §0 and an out-of-band read before the step finds no file (pre-fix result: FAILS — the previous run''s file is read)'
+      - 'NEGATIVE CONTROL: the moved-aside evidence is preserved under a timestamped subdirectory, not deleted'
+      - 'the §5 report carries the run start time'
+    events:
+      - type: filed
+        ts: "2026-09-14T20:11:37Z"
+        agent_id: "linux-macuahuitl-fable-20260914t201136z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from pirria's smoke report (finding 2,
+          discovered 2026-09-14T19:40:00Z).

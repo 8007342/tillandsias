@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha from the 1193-yw6u incident: both blocked macOS hosts read
+# WEDGED to the fleet, because they filed their blocker the modern way.
+packets:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    order: 1196-5hva
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [observability, fail-loud, instrument, coordination]
+    estimated_hours: 3
+    parent_order: 1193-yw6u
+    unscoreable: "unpinnable-until-the-reader-exists: the deliverable is the classifier's second source. Future litmus scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: a host whose ONLY blocker record is a ledger packet (status blocked, or a blocked/failed event naming that host) is counted in the `blocked` bucket, not `wedged` (pre-fix result: FAILS — open_blocker_for() greps plan/issues/*<host>*.md for '^- Status: blocked' and nothing else, measured 2026-09-15); NEGATIVE CONTROL: a host with NO blocker record anywhere and no attestation still reads wedged or dead exactly as now — the fix must not turn every silent host into a blocked one, which would be worse than the gap it closes."
+    owned_files:
+      - scripts/fleet-heartbeat.sh
+    title: |
+      fleet-heartbeat.sh decides `blocked` solely from a `- Status: blocked` line in plan/issues/<host>*.md, so a host that files its blocker as a LEDGER PACKET — the path the work loop actually teaches — is counted WEDGED, and the two states call for opposite responses.
+    context: |
+      MEASURED during 1193-yw6u, 2026-09-14/15. My b3a93780b took both macOS
+      hosts' ability to land. macbookair did everything right: it bisected in
+      pristine worktrees, filed 1193-yw6u as a ledger packet, parked its finished
+      work on a salvage branch, and finalize-cycle.sh REFUSED correctly the whole
+      time — "refused:finalize:work-land-failed — the marker is NOT emitted; a
+      marker may never follow an unpushed commit". No false attestation, which is
+      the right outcome.
+      AND THAT IS EXACTLY WHY IT READ AS WEDGED. The classifier's blocked bucket
+      is reached only through open_blocker_for(), which globs
+      plan/issues/*<host>*.md and greps '^- Status:[[:space:]]*blocked'. Neither
+      macOS host has such a file for this incident — verified 2026-09-15, the
+      grep returns nothing across every *macbookair* and *macneo* issue file.
+      The heartbeat DOES read plan/index.d/*.yaml, but only for liveness
+      timestamps (last_declared_epoch); it never looks at a packet's status or at
+      blocked/failed events. So a host that files its blocker in the ledger is
+      invisible as blocked while being perfectly visible as alive.
+      THIS IS THE SCRIPT'S OWN DOCUMENTED SIN, ONE ITERATION LATER. Its header
+      for 864-w7rc says of the previous version: "The classifier lost information
+      the ledger still had." That fix taught it to read plan/issues/. The ledger
+      has since become the place blockers are filed — 943-unii made the status
+      flip the claim mechanism, and every worker cycle files packets, not issue
+      markdown — and the classifier did not follow.
+      WHY THE CONFUSION IS EXPENSIVE, in this script's own words: "a wedged host
+      looks stood-down, so nobody looks, while it burns a cycle an hour
+      refusing… Ten of yoga's hours went that way." Here it is the inverse and
+      worse: WEDGED says "adjudicate its worktree", i.e. go look for local dirt,
+      when the true cause was a trunk-wide red that another host had already
+      diagnosed and filed. The response it prescribes points away from the fix.
+      RELATED, NOT DUPLICATE: 1195-m9vi (macneo) is about a macOS host being
+      unable to get findings OUT at all — a closed loop between the build stamp
+      and the merge rule. That is upstream of this: this row is about a host
+      whose record DID reach the ledger still being misread. Both were live in
+      the same hour, and macneo's 2x2 isolating _ccc_timeout's 127 existed on one
+      disk and reached the ledger only because macbookair carried it by hand.
+    exit_criteria:
+      - 'a host whose only blocker record is a ledger packet (status blocked, or a blocked/failed event naming that host) is counted in the `blocked` bucket (pre-fix result: FAILS — both macOS hosts read wedged through the whole 1193-yw6u window while their blocker sat in plan/index.d as 1193-yw6u)'
+      - 'the per-host line names the packet order, so the reader gets the blocker itself rather than being told to go hunting'
+      - 'NEGATIVE CONTROL: a host with no blocker record anywhere and no attestation still reads wedged/dead as it does today — silence must not become "blocked"'
+      - 'NEGATIVE CONTROL: the plan/issues markdown source keeps working; this ADDS a second source and removes nothing (864-w7rc''s records are still authoritative where they exist)'
+    events:
+      - type: filed
+        ts: "2026-09-15T04:36:34Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed from 1193-yw6u by the host that caused that incident. Both macOS
+          hosts did the right thing — filed a packet, refused to attest, parked
+          the work — and the fleet report would have shown them wedged, whose
+          prescribed response (adjudicate the worktree) points away from the
+          actual cause. Relayed by yoga-silverblue from macbookair's account of
+          finalize-cycle.sh refusing correctly throughout.

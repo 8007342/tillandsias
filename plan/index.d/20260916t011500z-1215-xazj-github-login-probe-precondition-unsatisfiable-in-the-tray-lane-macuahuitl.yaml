@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-759-vceg-push-probe-resolves-its-repository-from-the-process-cwd-and-the-tray-always-logs-in-where-no-checkout-exists
+    order: 1215-xazj
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: credential-lifecycle-audit-milestone
+    pickup_role: any
+    capability_tags: [credentials, github, login, vault, tray, fail-loud, guard-precondition]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      `--github-login` cannot succeed from the tray on any platform: the 759-vceg push probe resolves its repository from the process CWD, and the tray always runs the login in the guest, where no checkout exists
+    context: |
+      FILED BY THE COORDINATOR FROM yolanda-windows' DIAGNOSIS, which landed as
+      plan/issues/github-login-push-probe-needs-a-checkout-the-guest-lacks-2026-09-15-yolanda-windows.md
+      with no ledger row, so nothing routes it. The document is 415 lines and is
+      the evidence; this row exists to make it selectable. Root cause ESTABLISHED
+      BY CONTROLLED EXPERIMENT, with the operator running both arms on
+      2026-09-15 — same host, same binary, same token, same containers, ONE
+      variable, the process working directory:
+        cwd=/root                          refused three times, "Nothing was written to Vault"
+        cwd=/home/forge/src/tillandsias    succeeded, wrote secret/github/token at 22:31:09Z
+      After the success, --list-cloud-projects returned the full repository list
+      and an opencode session on that host pushed a commit to another repo.
+      THE MECHANISM. run_provider_login's 759-vceg probe block resolves the
+      target repository with read_host_project_origin_url(Path::new(".")), i.e.
+      from the login process's CWD. The tray launches the login INSIDE THE
+      GUEST, whose cwd is /root, and after the ~/src removal the guest contains
+      no git checkout anywhere. The probe takes its None arm on every attempt,
+      refuses, and returns without seeding Vault.
+      THE GUARD IS CORRECT AND IS NOT THE DEFECT. 759-vceg exists to prevent a
+      token that authenticates, is seeded on that basis alone, and then fails at
+      the first push — the 803-49re incident. It refused three times when it
+      could not verify, and the one time it did verify, the credential it
+      approved genuinely pushed. The defect is that its PRECONDITION IS
+      UNSATISFIABLE IN THE ONLY LANE THAT USES IT.
+      LATENT FLEET-WIDE, NOT A WINDOWS BUG. Any host that has not re-authenticated
+      since the ~/src removal is running on a credential seeded while a checkout
+      still existed. Those hosts work and keep working until they next need to log
+      in, at which point they hit this. Windows and macOS tray hosts merely reach
+      it first, because their login always executes in the guest. A CLI login run
+      from a host-side checkout resolves owner/repo and reaches the probe, so this
+      is NOT "login is broken" — it is "the tray lane cannot satisfy the probe".
+      DO NOT CLOSE THIS BY WEAKENING THE PROBE. An env-honoured host allow on the
+      credential helper was specified once on this fleet and withdrawn: it is a
+      token-redirection path (1161-42pc). The fix must make the precondition
+      SATISFIABLE in the tray lane, not optional.
+    exit_criteria:
+      - 'a login initiated from the tray menu on a guest with no checkout completes and writes secret/github/token, OR refuses with a message whose named remedy the tray lane can actually perform (pre-fix result: FAILS — three consecutive tray attempts refused with "Nothing was written to Vault", measured on yolanda-windows 2026-09-15)'
+      - 'the probe still REFUSES when push permission genuinely cannot be verified — a run against a token without push rights must not seed Vault (this is 759-vceg s whole purpose and the fix must not trade it away)'
+      - 'NEGATIVE CONTROL: a CLI login run from a host-side checkout is unchanged and still succeeds'
+      - 'the repository the probe verifies against is stated in the login output, so an operator can see WHICH repo push permission was checked for rather than inferring it from the process cwd'
+    unscoreable: |
+      unpinnable-until-the-remedy-shape-is-chosen: making the precondition
+      satisfiable in the guest is a design choice with at least three candidate
+      shapes (provision a checkout in the guest; resolve the remote from
+      configuration rather than cwd; run the probe host-side and pass the result
+      in). Each has a different blast radius across the tray, the guest image and
+      the credential path. The measurement is complete and reproducible; the
+      remedy is not chosen.
+    events:
+      - type: filed
+        ts: "2026-09-16T01:15:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t011500z"
+        host: macuahuitl
+        summary: |-
+          Coordinator-filed from yolanda-windows' landed diagnosis, which had no
+          ledger row of its own and so could never be offered by plan_next.
+          The diagnosis is theirs and the operator ran the controlled experiment;
+          this row only makes it routable.

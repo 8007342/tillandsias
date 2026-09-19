@@ -1,0 +1,46 @@
+# @trace spec:methodology-accountability
+# @trace order:1201-hsf9
+#
+# Order 1201-hsf9: a claim written without an explicit --host recorded its
+# holder as the COMPILED PLATFORM (772-4se9's deliberate, unit-tested default),
+# so every host on one platform claimed under the same name. MEASURED on the
+# live ledger 2026-09-15: yoga's claim on 888-miiy landed as a `-linux.yaml`
+# fragment and this coordinator asked the wrong host to release it; after the
+# expiry sweep's channel was corrected (1198-7q95) the same wrong message was
+# still constructible, because 1155-jurn reads `claimant:windows` and esme and
+# yolanda are both windows. Route (a) of three: refuse the claim rather than
+# change the default, which is the only route that keeps 772-4se9's guarantee
+# and its unit test byte-identical.
+name: litmus:a-claim-names-a-workstation
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1201-hsf9 on scratch ledgers: `set-field <row> status in_progress` with
+  no --host is REFUSED and writes no fragment, while an explicit --host is
+  accepted — including an explicit --host naming the platform, because the
+  defect is a silent default rather than the string, and a guard with no
+  override is an argument for reaching past it. Closing, releasing and
+  non-status writes keep defaulting their host exactly as 772-4se9 specifies,
+  and that row's own unit test is EXECUTED rather than grepped.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-a-claim-names-a-workstation.sh
+  - a runnable tillandsias-plan is resolvable, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-a-claim-names-a-workstation.sh && test -x scripts/test-a-claim-names-a-workstation.sh && echo 'ok: claim-names-a-workstation-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: claim-names-a-workstation-parses"
+
+  - step: "a claim with no --host is refused and writes nothing; explicit --host wins, including the platform; other writes are untouched"
+    command: "bash scripts/test-a-claim-names-a-workstation.sh | tail -1"
+    timeout_ms: 300000
+    expected_behavior: "PASS: a-claim-names-a-workstation"
+
+  - step: "the guard sits ABOVE set-field's list/scalar branch split, where a scalar field can reach it"
+    command: "g=$(grep -n 'ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION' crates/tillandsias-plan/src/main.rs | cut -d: -f1); l=$(grep -n 'if field_is_list(packet, &field)' crates/tillandsias-plan/src/main.rs | head -1 | cut -d: -f1); [ -n \"$g\" ] && [ -n \"$l\" ] && [ \"$g\" -lt \"$l\" ] && echo 'ok: guard precedes the branch split'"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard precedes the branch split"

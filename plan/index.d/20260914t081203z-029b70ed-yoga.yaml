@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: next-order-already-reads-the-fold-so-it-should-report-the-rows-filed-since-the-callers-last-order-instead-of-leaving-a-duplicate-to-be-noticed-from-the-number
+    field: unscoreable
+    value: ''
+    ts: "2026-09-14T08:12:03Z"
+    host: yoga
+
+events:
+  - packet_id: next-order-already-reads-the-fold-so-it-should-report-the-rows-filed-since-the-callers-last-order-instead-of-leaving-a-duplicate-to-be-noticed-from-the-number
+    event:
+      type: note
+      ts: "2026-09-14T08:12:03Z"
+      host: yoga
+      summary: |-
+        discharged: the tests are landed. --replace required by 1151-td46, which landed hours ago on this host

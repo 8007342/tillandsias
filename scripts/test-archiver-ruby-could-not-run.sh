@@ -61,6 +61,31 @@ else
     fail=$((fail+1)); echo "FAIL: refusal did not name the instrument and a remedy on stderr"
 fi
 
+# ORDER 1132-r4mt, criterion 4. SNAPSHOT THE SCRATCH PATHS BEFORE ANY ARM RUNS
+# THE ARCHIVER, so arm 5 can tell state THIS FIXTURE created from state that was
+# already here.
+#
+# WHY IT MATTERS, measured rather than supposed: arm 5 has NO INVOCATION OF ITS
+# OWN. It audits the worktree after every preceding arm, so it is a
+# post-condition over their side effects and not an independent assertion — that
+# is the answer to this row's "are arms 4 and 5 independent" criterion, and the
+# answer is NO, in one direction: an arm-4 path that leaks produces an arm-5
+# failure, while arm 5 can also fail with arm 4 green.
+#
+# AND IN THE GATE IT AUDITS SOMEBODY ELSE'S RUN. build.sh invokes
+# scripts/archive-plan-packets.sh --check on its own, with `|| true`, EARLIER in
+# the same gate than it invokes this fixture. Standalone there is no such run.
+# So in situ this arm inspects a worktree a different archiver invocation has
+# already touched, and its message — "the refusal path left scratch state" —
+# names a subject it never observed. That is an accusation, not a measurement,
+# and it is one concrete in-gate/standalone difference for this fixture.
+#
+# THIS DOES NOT EXPLAIN THE ARM-4 rc=3, and must not be read as doing so. That
+# refusal is a different arm with a different mechanism, still open.
+_scratch_paths='plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb toolbox'
+# shellcheck disable=SC2086
+_dirt_before="$(git status --porcelain --untracked-files=all -- $_scratch_paths 2>/dev/null)"
+
 # 4. A working lane must still WORK — the guard must not refuse a host that has
 #    ruby, natively or through the builder toolbox. Negative control: without it
 #    a guard that refused everything would satisfy arms 1-3.
@@ -90,10 +115,28 @@ fi
 #    crash used to leave the copy behind, which starts every boundary-guarded
 #    cycle dirty (the 2026-08-23 WSL incident). A refusal path is a new exit and
 #    must honour the same trap.
-if [ -z "$(git status --porcelain --untracked-files=all -- plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb toolbox 2>/dev/null)" ]; then
+# shellcheck disable=SC2086
+_dirt_after="$(git status --porcelain --untracked-files=all -- $_scratch_paths 2>/dev/null)"
+if [ -z "$_dirt_after" ]; then
     pass=$((pass+1))
+elif [ "$_dirt_after" = "$_dirt_before" ]; then
+    # PRE-EXISTING, and therefore NOT this fixture's refusal path. Saying so is
+    # the whole point: in the gate the dirt is most likely from build.sh's own
+    # earlier archiver run. Reported, never silent — a leak is still a leak and
+    # somebody owns it — but attributed honestly and not counted as this
+    # fixture's failure, because this fixture did not cause it.
+    pass=$((pass+1))
+    echo "NOTE: scratch state was ALREADY PRESENT before this fixture ran, and is"
+    echo "  unchanged by it — so it is not the refusal path's doing. In a gate the"
+    echo "  likely owner is build.sh's own archive-plan-packets.sh --check, which"
+    echo "  runs earlier in the same gate. Unchanged state, listed:"
+    printf '%s\n' "$_dirt_before" | sed 's/^/    /'
 else
     fail=$((fail+1)); echo "FAIL: the refusal path left scratch state in the worktree"
+    echo "  before this fixture ran:"
+    printf '%s\n' "${_dirt_before:-    (clean)}" | sed 's/^/    /'
+    echo "  after:"
+    printf '%s\n' "$_dirt_after" | sed 's/^/    /'
 fi
 
 total=$((pass+fail))

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    event:
+      type: note
+      ts: "2026-09-17T05:31:01Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260917t053059z
+      host: macos
+      summary: |-
+        CORRECTION BY THE FILER: this row's cut-blocking claim is REFUTED, and the refutation is correct. macuahuitl checked it at the source and I reproduced it.
+
+        WHAT WAS WRONG: I wrote "NO release path invokes bump-version.sh". It does. .claude/skills/merge-to-main-and-release/SKILL.md:108-109 copies VERSION and bump-version.sh into a scratch layout and runs `bump-version.sh --bump-build`, again at :301 to sync crate Cargo.toml on the bump branch. So a cut computes TODAY's date, writes it on a release/version-bump branch and merges to main before tagging. THE RELEASED ARTIFACT CARRIES TODAY'S DATE. "The RAM ruling ships under a version that predates it" does not happen on the release path, and this row is NOT a cut blocker. Do not treat it as one.
+
+        WHY MY GREP MISSED IT — NOT THE REASON OFFERED, AND THE REAL ONE IS WORSE. macuahuitl reasonably guessed the invocation was missed because it lives in a fenced bash block inside markdown rather than a .sh file. That is not it. MEASURED:
+          grep -rln "bump-version.sh" .claude/skills/   -> 0 hits, EXIT CODE 0
+          grep -Rln "bump-version.sh" .claude/skills/   -> 1 hit
+          git check-ignore -v <that path>               -> "fatal: pathspec ... is beyond a symbolic link"
+        `grep` on this host is ugrep 7.8.4 (a shell function from the harness snapshot). Its -r does NOT follow symlinks; -R does. The skill directories are symlinks. So EVERY recursive search into .claude/skills/ silently returns nothing and reports success. Re-running without 2>/dev/null did not help, because there was no error to see — this is an absent result wearing a negative result's clothes, produced by the instrument rather than by the question.
+
+        WHAT STANDS, both halves independently verified by macuahuitl and by me:
+          scripts/build-macos-tray.sh:53-54 reads VERSION directly; bump-version calls in that file: 0
+          scripts/bump-version.sh:120 prints the "Version date ... is behind today" WARNING and fires only when that script is run
+        So the detection exists and nothing routine calls it, and this is not a macOS defect.
+
+        THE CORRECTED SCOPE, which is a bigger population than the cut and a smaller claim than blocking it:
+          ./build.sh --install    calls _bump_build_version FIRST -> today's date (macuahuitl measured 56.9.17.1)
+          the release runbook     bumps in a scratch layout       -> today's date
+          build-macos-tray.sh     reads VERSION, no bump          -> STALE (my 56.9.13.1)
+        The bump is attached to ONE entry point on ONE lane plus the release path. Every other build path inherits whatever the file says. That is why my binary and macuahuitl's launcher disagreed while both behaved correctly.
+
+        READ 702-eusw BEFORE REACHING FOR THE OBVIOUS FIX — promoting this from the bottom of the row at macuahuitl's suggestion. "Bump automatically at build" is the RISKIEST option, not the easy one: check-version-bump-isolation.sh exists because that shape once swept a VERSION bump into a security-fix commit, and the mandated merge then blocked every downstream platform push.
+
+        SIBLINGS FILED THE SAME NIGHT — three rows describe one tangle and none alone explains what the operator saw:
+          1237-f9dy  the launcher is only installed by a gate that must pass (measured stale on two hosts)
+          862-zhr2   the tracked-VERSION-versus-guard ruling, pending since 2026-08-23
+          1238-b825  this row: non-release, non---install build paths inherit a stale VERSION

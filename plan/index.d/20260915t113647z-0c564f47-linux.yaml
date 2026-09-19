@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: progress
+      ts: "2026-09-15T11:36:47Z"
+      agent_id: linux-yoga-claude-20260915t113646z
+      host: linux
+      summary: |-
+        CLAIM — yoga, for the durable-timer half. This row was found here on 2026-08-25 and its next_action records macuahuitl arming a SESSION cron on 2026-09-12 with "a durable timer is the follow-up, and the row closes when the freshness guard there reads a fresh green from a non-cut run". That is the half I am taking; I am not touching their cron.
+
+        MEASURED HERE BEFORE CLAIMING, and the original evidence has moved on in one respect:
+
+          scripts/check-release-tier-freshness.sh
+            -> never:release-tier: no FULL-tier run in target/convergence/check-logs.jsonl
+               — the newest run local-ci-20260914T135912Z covers only [ pre-build]
+          target/convergence/check-logs.jsonl   35 records, all phase-only
+
+        So the packet's original "target/convergence/ is EMPTY on yoga" is no longer literally true — the directory has 35 records now — but the claim that matters is unchanged and the guard states it precisely: not one of them is a full-tier run. A phase-only run is not a release-tier answer (1174-6r4k). The release tier has still never been answered on this host.
+
+        A CORRECTION TO MY OWN FIRST READING, recorded because it nearly became the claim. I grepped the existing cycle timer for OnCalendar|OnUnitActive|Persistent, got nothing, and briefly believed it carried no schedule at all. It carries OnUnitInactiveSec=2h and OnBootSec=10min — my pattern said OnUnitActive and the file says OnUnitInactive. My own regex guess failing looked exactly like absence. What is actually true of tillandsias-cycle.timer here is narrower and separate from this row: installed on disk, `disabled` and `inactive`.
+
+        SCOPE I AM TAKING: the in-repo half — unit templates under packaging/systemd/user/ plus an installer, modelled on scripts/install-cycle-timer.sh (856-s56y), running the tier on a cadence that is not "when someone tries to ship", and a single full-tier run on this host to produce the fresh green the row's closing condition names.
+
+        SCOPE I AM NOT TAKING: I will not ENABLE a recurring job on this machine as part of an autonomous cycle. Arming a durable timer changes host state outside the checkout and keeps running after this session ends; 856-s56y's precedent is that the operator runs the installer. I will write and gate it, verify it renders and is idempotent, and leave the arming to the operator with the exact command on the row.

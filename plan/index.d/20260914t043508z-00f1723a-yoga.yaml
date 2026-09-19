@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    field: verifiable_closure
+    value: bash scripts/test-gate-memory-refusal.sh — a host below the declared floor refuses by name with the floor and the reading; a kernel OOM record yields refused:gate:oom-killed; NEGATIVE CONTROL 1, a host above the floor sees no new refusal and the default floor stays well under a completing host's headroom; NEGATIVE CONTROL 2, an OOM naming a different victim is not reported as this gate's kill and the land driver consults the record only on the no-failing-line path. Bound at scripts/gate-steps.d/315-1176-fn2p.step.
+    ts: "2026-09-14T04:35:08Z"
+    host: yoga
+
+events:
+  - packet_id: a-gate-killed-for-memory-leaves-an-empty-log-indistinguishable-from-a-hang-and-the-job-ceiling-is-a-step-function-with-no-rung-below-one-job
+    event:
+      type: note
+      ts: "2026-09-14T04:35:08Z"
+      host: yoga
+      summary: |-
+        the guard now exists; moving the text out of unscoreable per 1136-n8sh

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: claim
+      ts: "2026-09-14T20:20:36Z"
+      agent_id: windows-yolanda-claude-20260913t082232z
+      host: yolanda
+      summary: |-
+        yolanda claims. Windows host that can gate. Mechanism 2 reconnaissance done read-only before the claim and it reframes that half: the four jq arms deliberately run the forge-plan MCP script at the host locus, so the fixtures build their world correctly and the defect is emit_frame reading stdin by fd path, which MSYS jq cannot open. Each of the four will be reproduced individually before any fix.

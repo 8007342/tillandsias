@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    field: status
+    value: ready
+    ts: "2026-09-17T21:52:15Z"
+    host: macos
+
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-17T21:52:15Z"
+      host: macos
+      summary: |-
+        task 4.5 DARWIN half delivered with fresh evidence (forced mlua-sys C rebuild rc=0 + lua_runtime 7/7 on Darwin 25.6.0 arm64); msys half and OpenSpec sync remain

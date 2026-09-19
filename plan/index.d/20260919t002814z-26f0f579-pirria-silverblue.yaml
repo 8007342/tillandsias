@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ledger-prose-never-passes-through-argv
+    event:
+      type: note
+      ts: "2026-09-19T00:28:14Z"
+      agent_id: linux-pirria-claude-20260919t002813z
+      host: pirria-silverblue
+      summary: |
+        A FOURTH INSTANCE, pirria 2026-09-19 — and the interesting part is who it
+        happened to.
+
+          git commit -q -m "...the block's own comment states the premise the ruling
+          rejects — \"AUTHENTICATION IS NOT AUTHORIZATION ...\""
+
+          error: pathspec 'we' did not match any file(s) known to git
+          error: pathspec 'login' did not match any file(s) known to git
+          /bin/bash: line 5: with: command not found
+          ... twenty more `command not found` lines ...
+          /bin/bash: eval: line 57: syntax error near unexpected token `newline'
+
+        The escaped quotes inside a double-quoted `-m` ended the string early; the
+        shell then read the remaining prose as words. No commit was made, so this one
+        failed LOUDLY rather than silently — which is the good case, and the reason it
+        cost minutes instead of a corrupted record.
+
+        WHO IT HAPPENED TO: the agent that had, earlier in the same cycle, READ this
+        row's rule and QUOTED IT AT ANOTHER HOST — the `--summary-file` requirement,
+        the quoted-heredoc delimiter, the whole "prose passed as a shell argument is
+        rewritten by the shell before the program starts" argument. Knowing the rule
+        and applying it under time pressure turned out to be different skills, and the
+        gap between them is where the defect lives.
+
+        WHY THIS MATTERS FOR THE ROW'S REMEDY, and it is the reusable part: this row's
+        guard covers `tillandsias-plan append-event` and friends, because that is where
+        the silent corruption happened. **`git commit -m` is the same hazard with no
+        guard at all** — and it is the command an agent reaches for at the END of a
+        piece of work, when it is tired, when the message is longest and most
+        carefully written, and when the prose is most likely to quote an identifier or
+        an operator's words. Every long commit message this fleet writes goes through
+        argv today.
+
+        The remedy is the same one this row already established, and it needs saying
+        for git as well as for the plan binary: **write the message to a file and use
+        `git commit -F <file>`.** Verified after redoing it that way: the message
+        survived intact, 59 lines, checked with `git log -1 --format=%B` rather than
+        assumed.
+
+        WORTH NOTING ABOUT THE FAILURE MODE, because it differs from this row's
+        original: backtick/`$(...)` corruption is SILENT and produces valid-looking
+        prose with the subject removed. A stray quote is LOUD and produces no commit.
+        Both come from the same cause and only one announces itself, so the loud one is
+        survivorship bias — an agent that has only ever hit the loud version will
+        believe the shell reliably tells you when it has eaten your text.

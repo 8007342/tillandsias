@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    event:
+      type: progress
+      ts: "2026-09-15T16:48:50Z"
+      agent_id: linux-yoga-claude-20260915t164849z
+      host: linux
+      summary: |-
+        CRITERION 2 CLOSED, AND THE RESIDUE IS DISSOLVED RATHER THAN ACCEPTED. I was given the closure call; here is what changed my answer from "still blocking" to "closed".
+
+        macuahuitl's revised ruling kept residue (2) open in pirria's words: with containers up the probe short-circuits at skip:live-runtime-present (order 442) and never walks the full eligible-verdict path, so 1.6s is that host's path today and not a proven ceiling on the longest path. That caution is a correct reading of the VERDICT NAMES. It is not what the call sequence does.
+
+        READ RATHER THAN INFERRED, on the Linux branch of e2e_eligibility_verdict:
+          runtime-dir stat  ->  smoke_lock_is_held  ->  podman info  ->  live_runtime_is_present  ->  echo eligible
+        and inside live_runtime_is_present:
+          command -v podman  ->  podman info  ->  podman ps  ->  local grep over the names
+        The predicate returns TRUE at the grep (-> skip:live-runtime-present) and FALSE at the line after it (-> eligible). Every podman call happens BEFORE either outcome is decided. The eligible path adds nothing after the podman work: it is a bare `echo "eligible"`.
+
+        SO THE TWO PATHS ARE COST-IDENTICAL, and pirria's 1557/1618ms full-step figure IS a measurement of the longest path, not merely of theirs. The "future measurement on a host with podman and no tillandsias containers" would produce the same number with a different word in it. Residue (2) is retired on the code, not waived on judgement.
+
+        That also settles the headroom argument at its weakest point: 60s stands against a measured 1.6s with ~37x margin, and the margin does not depend on an unmeasured longer path, because there is no longer path.
+
+        WHAT I AM NOT CLAIMING: still no cold-start figure, and pirria showed why one cannot be bought here — podman.socket and podman.service are INACTIVE on a rootless conmon host while containers run, so `systemctl --user stop` is a no-op that would have produced a warm number wearing a cold label. What actually holds the runtime is a transient pause scope, and ending it would end a healthy 11-hour container. They declined and left it to macuahuitl, who declined too. I agree with both: that is not a trade to make for a p2 budget justification.
+
+        The criterion said "justified by a measured cold-start figure, not by the warm 110ms". What it has instead is a measured FLOOR figure 14x the number it was worried about, with its regime attached, plus a proof that the path it could not see costs the same as the one it saw. That is the criterion's intent met by a different instrument, and macuahuitl ruled the criterion met on that basis before I retired the residue.
+
+        A FINDING FROM THE SAME READING, filed as 1202-jpzy rather than folded in: `podman info` runs TWICE per invocation — once as the caller's podman-not-functional gate, once inside live_runtime_is_present as 723-fndi's reachability check. My earlier tripwire recorded exactly that (info, info, ps) and I noted it without pricing it; pirria's floor numbers price it at ~780ms of a ~1.6s step, ~48% of the whole probe, paid on every host every cycle. Both call sites are correct in isolation, which is why it is an enhancement and not a defect, and the trap is named on the row: skip:podman-not-functional is the verdict a careless de-duplication breaks.
+
+        MACUAHUITL'S PROCEDURE ERROR IS WORTH KEEPING because it nearly cost the whole argument: their instruction named `podman ps` as the probe's first podman call. It is `podman info`. Warm, those are 780ms and 55ms — a 14x difference, and the headroom argument rests on the larger one. pirria followed the caveat to read the script rather than the instruction to time ps, and that is the only reason the number is right.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    field: status
+    value: completed
+    ts: "2026-09-18T21:22:34Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    event:
+      type: completed
+      ts: "2026-09-18T21:22:34Z"
+      host: pirria-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: 09e7d2c1030cd81a718668c9c2d70b97c6771213:ok:smoke-forge-lane-cold-host-outcome:7 step(s)
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    event:
+      type: note
+      ts: "2026-09-18T21:22:34Z"
+      host: pirria-silverblue
+      summary: |-
+        runbook §4a-cold + §5 forge_lane_outcome landed; fixture green on the merged tree

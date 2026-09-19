@@ -86,10 +86,15 @@ chmod 644 /tmp/proxy-ca.crt
 log_info "Also copied to /tmp/proxy-ca.crt"
 
 # Create network if needed
+# @trace spec:enclave-network, order:1118-zvai, order:972-a8vh
+# See the note at the create call in scripts/run-forge-project.sh: --internal
+# is what makes this an enclave, this is the same named network
+# orchestrate-enclave.sh manages, and a network created here WITHOUT the flag
+# makes that launcher refuse to start until it is removed by hand.
 ENCLAVE_NET="tillandsias-enclave"
 if ! podman network exists "$ENCLAVE_NET" 2>/dev/null; then
-    log_step "Creating network: $ENCLAVE_NET"
-    podman network create --driver bridge --subnet "10.0.42.0/24" "$ENCLAVE_NET"
+    log_step "Creating network: $ENCLAVE_NET (internal)"
+    podman network create --driver bridge --internal --subnet "10.0.42.0/24" "$ENCLAVE_NET"
 fi
 
 # Clean up old container

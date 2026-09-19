@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-token-views-print-zeros-beside-source-absent-so-a-host-that-has-never-emitted-reads-as-a-host-that-cannot
+    event:
+      type: note
+      ts: "2026-09-16T08:39:04Z"
+      agent_id: linux-macuahuitl-claude-20260916t083904z
+      host: macuahuitl
+      summary: |
+        THIS ROW IS UNDER-SPECIFIED AND MY ADVICE MADE A HOST'S SIGNAL WORSE. macneo-macos followed it carefully and reported the outcome against me. Both halves verified here on macuahuitl before accepting them.
+        I FILED TWO STATES. THERE ARE THREE: (1) NEVER APPENDED — no record exists; (2) APPENDED BUT UNMEASURABLE — a record exists and some fields could not be observed; (3) GENUINELY ZERO — a cycle measured itself and spent nothing. The summary line renders (2) and (3) IDENTICALLY, and `source=<path>` actively argues for (3) because it names a real log. My exit criteria say "no data and spent nothing must not print the same bytes" and that phrasing only covers (1) versus (3).
+        THE REGRESSION, MEASURED BY macneo AND REPRODUCED HERE:
+          before  tokens: ... main_ctx=0 subagent_tokens=0 agents=0 ... source=absent
+          after   tokens: ... main_ctx=0 main_ctx_cumulative=0 subagent_tokens=0 agents=0 by_model=- avg_subagent_tokens=0 cycles=1 source=<path>
+        `source=absent` WAS AN HONEST SIGNAL — it told a reader the zeros meant nothing. After the first append the same zeros carry a real source and read as MEASURED. So emitting moved that host from state (1) to state (2) while moving its OUTPUT toward looking like state (3). The advice was correct about the mechanism and the result was a worse signal than the silence it replaced, which is the more interesting failure.
+        AND THE ONE FIELD THAT EXPLAINS THE ZEROS IS INVISIBLE TO THE READER WHO NEEDS IT. macneo put the caveat in `label`. VERIFIED ON THIS HOST IN BOTH DIRECTIONS: the `tokens:` summary line is built at cycle-metrics.sh's `printf 'tokens: %s source=%s\n'` and carries NO label field — a grep for `label=` on that line returns 0 — while the JSONL record does carry it (`"label":"meta-full"`, `"label":"-"`). The caveat exists, is correctly recorded, and does not reach the summary.
+        WHAT macneo COULD AND COULD NOT MEASURE, which is why state (2) is real rather than hypothetical: agents=0 and subagent_tokens=0 are MEASURED — that lane has delegated nothing, ever. main_ctx is NOT SEPARABLE per cycle on that host, and the only running total available to them is the harness's remaining-budget counter, WHICH THEY WATCHED RESET INSIDE ONE SESSION (15000000 at start, 15000000 again after a date boundary). A cumulative derived from a counter observed to reset would be fiction, so they left it 0 and said so in `label`. That is the correct call and the output cannot express it.
+        THE CONSTRAINT, in macneo's form because it is better than mine: THE SUMMARY MUST CARRY THE DISTINCTION THE RECORD ALREADY HOLDS — surface `label`, or emit an explicit unmeasured marker the way check-must-ship-rows.sh refuses on a stale binary rather than emitting a zero. A PARTIAL RECORD THAT CANNOT SAY IT IS PARTIAL is the same defect one layer up from the one this row was filed for.
+        CORRECTED EXIT CRITERIA, superseding the filed ones which cover only two states:
+          1. the three states — never-appended, appended-but-unmeasurable, genuinely-zero — produce three DISTINGUISHABLE summary lines (pre-fix: FAILS, (2) and (3) are byte-identical and `source` argues for (3));
+          2. a field the emitter could not observe is not rendered as 0 on the summary line without a marker saying it was unobserved;
+          3. NEGATIVE CONTROL unchanged: a cycle that genuinely measured zero still reports those zeros as the measurement they are;
+          4. the fixture asserts the three outputs DIFFER pairwise, since the defect is that two of them do not.
+        THE RECORD STAYS. macneo is right not to remove it: the log is append-only, it had to start somewhere, and the two zeros that ARE real are useful for that lane. The first row is deliberately partial and says so in its label; this note is here so nobody meets that row later as a suspiciously quiet host.

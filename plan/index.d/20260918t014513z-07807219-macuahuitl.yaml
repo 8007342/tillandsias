@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    event:
+      type: correction
+      ts: "2026-09-18T01:45:13Z"
+      agent_id: linux-macuahuitl-claude-20260918t014513z
+      host: macuahuitl
+      summary: |
+        CORRECTION TO THIS ROW'S CRITERION 3, from the operator's engine-selection
+        ruling 2026-09-18, which arrived after the row was filed.
+
+        THE RULING: WSL2 and macOS guests run ollama on the BARE METAL OF THEIR VM.
+        Tillandsias Linux native uses a bare-metal instance IF ONE EXISTS, and otherwise
+        falls back to a throwaway CONTAINER, accepting its overhead penalties.
+
+        SO THE PORT PROBE IS NOT THE DEFECT. Criterion 3 as filed says dev-inference
+        readiness must distinguish "an endpoint answered" from "the container lane
+        works". Under this ruling that is WRONG AS WRITTEN: finding a bare-metal engine
+        on 127.0.0.1:11434 and using it is the PREFERRED path, not an accident to be
+        detected. An implementer following criterion 3 literally would make the
+        container mandatory and destroy the preference the operator just specified.
+
+        WHAT THE DEFECT ACTUALLY IS, narrowed: the verdict does not say WHICH LANE
+        SERVED. `ok:dev-inference-ready` is emitted for bare-metal-found and for
+        container-started alike (the source distinguishes `ready` from `started`, but
+        only after the fact and not as a lane). Because the reported state is identical,
+        a container fallback that CANNOT START stays invisible for as long as any
+        bare-metal engine happens to be up — which on this host was a month. The lane is
+        not the error; the opacity is.
+
+        RESTATED CRITERION 3, superseding the one above: the readiness verdict NAMES the
+        serving lane (bare-metal or container) and, when it took the preferred
+        bare-metal path, does not thereby assert anything about the fallback. Whether
+        the fallback still works is a separate question that must be answerable without
+        killing the preferred engine by hand, because that is what it took tonight.
+
+        CRITERIA 1, 2 AND 4 ARE UNAFFECTED. The CDI currency defect stands exactly as
+        filed: the spec pinned libnvidia-egl-gbm.so.1.1.3 against a host carrying 1.1.4,
+        the check compared only the driver version, and it reported current for a month.
+        That is a real break of the fallback path regardless of which lane is preferred —
+        and under this ruling it is WORSE than it looked, because the fallback is what a
+        host without a bare-metal engine gets, i.e. exactly the host least able to
+        diagnose it.
+
+        AND THE OVERHEAD IS NOW QUANTIFIED, which the ruling explicitly accepts
+        ("with their overhead penalties"). Measured here with the shared harness:
+            warm decode      ~10% slower in container (467 vs ~500 tok/s, qwen2.5:0.5b)
+            COLD start       19x slower on the first rep (24.9 tok/s)
+            embedding        2.6x slower, ALL reps (18-19 ms/chunk vs 7)
+        The cold-start figure is the one to carry into scheduling: a throwaway container
+        pays it every time it is thrown away, so "throwaway" and "cold start" are the
+        same cost counted twice. Embedding is worse still and gains nothing from the GPU
+        on either lane, so it is the first thing to keep off the fallback.

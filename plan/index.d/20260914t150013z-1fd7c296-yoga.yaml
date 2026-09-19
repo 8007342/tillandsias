@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: groundtruth-harness-litmus-fails-for-two-unrelated-reasons-neither-an-expert-regression
+    field: status
+    value: completed
+    ts: "2026-09-14T15:00:13Z"
+    host: yoga
+
+events:
+  - packet_id: groundtruth-harness-litmus-fails-for-two-unrelated-reasons-neither-an-expert-regression
+    event:
+      type: completed
+      ts: "2026-09-14T15:00:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: audited on yoga: corpus-declaration fixture 9/9 with sets=4 total=33 pass=33 fail=0 skipped=0; expert-groundtruth-rung1 22/22 with no live status pin on 394; litmus:expert-groundtruth-harness PASS (101.8s) inside ./build.sh --ci-full (32 passed, 1 failed, the failure being litmus:release-gates-run-locally, a different test)
+  - packet_id: groundtruth-harness-litmus-fails-for-two-unrelated-reasons-neither-an-expert-regression
+    event:
+      type: note
+      ts: "2026-09-14T15:00:13Z"
+      host: yoga
+      summary: |-
+        all three exit criteria hold on this tree; both named defects were fixed after filing, attribution consistent with fcfb909a2 but not bisected

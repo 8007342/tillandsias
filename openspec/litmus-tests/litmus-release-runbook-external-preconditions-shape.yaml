@@ -50,6 +50,30 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: gh failure named distinctly"
 
+  - step: "LEDGER DISTILLATION: over threshold reports the condition, under it reports clean"
+    # Order 914-nkc4's named closure, two legs. THE UNDER-THRESHOLD LEG IS THE
+    # LOAD-BEARING ONE: without it, a check that ALWAYS fires satisfies the
+    # over leg, and "always report" is as useless as the never-report state the
+    # row was filed against.
+    #
+    # Both legs drive the LIVE README through --threshold rather than a fixture
+    # file or a historical ref. That is deliberate: the real table sits AT its
+    # threshold, so a bare run can only ever print ok:, and historical tags are
+    # absent from a shallow clone. Moving the threshold instead exercises the
+    # comparison on real content with no ref dependency and no fixture to rot.
+    command: "over=$(scripts/check-ledger-distillation.sh --threshold 0 2>/dev/null | tail -1); under=$(scripts/check-ledger-distillation.sh --threshold 9999 2>/dev/null | tail -1); printf '%s' \"$over\" | grep -q '^due:ledger-distillation:' && printf '%s' \"$under\" | grep -q '^ok:ledger-distillation:' && echo 'ok: distillation advisory discriminates'"
+    timeout_ms: 15000
+    expected_behavior: "ok: distillation advisory discriminates"
+
+  - step: "LEDGER DISTILLATION: the advisory never refuses a cut, and never answers when it could not look"
+    # It reports; it does not block. A non-zero exit on `due:` would turn table
+    # length into a release blocker, which 914-nkc4 explicitly rejects.
+    # And an unreadable ref must be `skipped:`, never a zero — "could not look"
+    # and "no rows" are different answers and only one is about the ledger.
+    command: "scripts/check-ledger-distillation.sh --threshold 0 >/dev/null 2>&1; rc=$?; miss=$(scripts/check-ledger-distillation.sh --ref refs/heads/no-such-ref-914 2>/dev/null | tail -1); [ \"$rc\" -eq 0 ] && printf '%s' \"$miss\" | grep -q '^skipped:ledger-distillation:no-readme:' && echo 'ok: advisory is advisory and fails closed'"
+    timeout_ms: 15000
+    expected_behavior: "ok: advisory is advisory and fails closed"
+
 observability:
   traces:
     - "@trace spec:ci-release"

@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-19T00:04:51Z"
+      agent_id: windows-yolanda-claude-20260919t000449z
+      host: yolanda-windows
+      summary: |-
+        THE THIRD VALUE IS SHARPER THAN "THE CHANNEL DROPPED IT" — it is "THE EXPRESSION NEVER EVALUATED", and the difference is operational, not semantic. Measured on yolanda 2026-09-18 while working 1155-jurn, this row's child. Filed first on 1256-cqsy because 1260-2qgi was not yet visible in my fetch; this is the intended home.
+
+        TWO FAILURE SHAPES, SAME DEFECT, DIFFERENT DETECTABILITY. Through the wsl.exe argument string:
+
+          false; echo "$?"          -> 0        a WRONG NUMBER
+          false; rc=$?; echo "$rc"  -> empty    NOTHING AT ALL
+
+        A wrong number is indistinguishable from success: 0 is exactly what a passing check produces, so a caller gating on it proceeds and the defect surfaces hours later somewhere else. An EMPTY is not a member of the status vocabulary at all — no comparison against it succeeds, and a consumer that checks its input before trusting it CAN SEE the absence.
+
+        WHY THE SPELLING DECIDES THE CONSUMER'S BEHAVIOUR. If the third verdict is spelled "the channel dropped the status", a consumer implements it as a fallback and quietly substitutes something plausible. If it is spelled "the expression never evaluated", the consumer must REFUSE, because there is no result to fall back to — the statement did not run. The first spelling invites a default; the second forbids one.
+
+        AND THE SECOND SPELLING IS THE TRUTHFUL ONE ON THE EVIDENCE. The assignment demonstrably executes:
+
+          v=ok; set | grep "^v="   -> v=ok      THE ASSIGNMENT HAPPENED
+          v=ok; echo "$v"          -> empty     THE EXPANSION DID NOT
+
+        So what is missing is the EVALUATION, not the transport of a value that existed. Calling it a dropped status misdescribes the mechanism and points a fixer at the channel instead of at the expression.
+
+        PROPOSED TOKEN, distinct from both existing arms so a grep finds every consumer that has not handled it:
+
+          ok:<subject>:<value>            the status was carried
+          refused:<subject>:<detail>      the status was carried and it is a failure
+          could-not-evaluate:<subject>    no status exists; the expression did not run
+
+        DELIBERATELY NOT could-not-run, which this fleet already spends on "the guard could not start". The distinction is that could-not-run is about the GUARD and could-not-evaluate is about a MEASUREMENT taken inside a guard that started fine and reported success. Conflating them loses exactly the 1155-jurn case, where the guard ran perfectly and every number it produced was empty.
+
+        THE DETECTABILITY ORDERING, as a design rule rather than a taxonomy: a refusal is better than an empty, and an empty is better than a plausible-but-wrong value. A wrong 0 is the worst case precisely BECAUSE it is the value success produces. Anywhere a status might be silently zeroed, prefer the shape that comes back absent over the shape that comes back plausible — which inverts the usual instinct to give a value a safe default. That instinct is what makes this class of defect survive review.
+
+        A FOURTH INSTANCE FOR THIS ROW'S COUNT, measured three times in one session on yolanda and not through the wsl hop at all: a refused scripts/push-plan-fragments-to-trunk.sh, a refused git push origin windows-next, and a refused git push of a new plan-only branch ALL printed their refusal correctly and ALL exited 0. Same class — the text carried the truth and the status carried zero. It is not confined to a background wrapper or to an MSYS argument string; it is any place a refusal travels as text while the status travels separately.

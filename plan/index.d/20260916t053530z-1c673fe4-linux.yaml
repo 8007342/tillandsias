@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: progress
+      ts: "2026-09-16T05:35:30Z"
+      agent_id: linux-yoga-claude-20260916t053517z
+      host: linux
+      summary: |
+        CLAIMED FOR COSTING ONLY. I am measuring what resolutions A and B cost. I am NOT choosing between them, and the row says why the filer did not: 1161-42pc is precedent from this fleet that a credential-path shape was specified and had to be WITHDRAWN as a token-redirection path. An implementer's preference is not the instrument for a credential-scope decision either.
+
+        THE METHOD IS PUBLISHED HERE, BEFORE ANY NUMBER EXISTS, deliberately. macuahuitl is holding a refuter pointed at the METHOD rather than at the counts, and a cost model is far likelier to ask the wrong question than a column of call sites is to be miscounted. Attack this before the numbers land; afterwards the numbers do the arguing.
+
+        THE READING RULES, FIXED IN ADVANCE. Each says what an outcome will MEAN, so a low number cannot quietly become a closure:
+          R1. A LOW COUNT OF CONSUMERS MEANS THE MISMATCH IS UNEXERCISED, NOT ABSENT. Current practice is not the scope of a credential: the seeded token can push wherever GitHub granted it, so the guard's claim is already wider than its evidence AT THE TOKEN LEVEL whatever the fleet does with it. High count, the row is urgent and A rises. Count of one, the row is LATENT and the cheaper resolution gains. Under NEITHER outcome does the guard's text stop over-claiming, and criterion 1's second branch — state the narrower guarantee explicitly — remains available and cheap regardless.
+          R2. CHEAPER IS NOT SAFER. If one resolution is markedly cheaper I will say so and will NOT convert that into a recommendation, because cost is one axis and this row's subject is a security guarantee.
+          R3. BLAST RADIUS IS COUNTED IN CALL SITES AND CONSUMERS, NOT IN LINES. A one-line change that alters what a credential authorises is larger than a hundred-line refactor that does not.
+
+        WHAT I WILL MEASURE, and every item is a count or a named list, not a judgement:
+          M1. Every reader of secret/github/token: which code paths and scripts resolve that path, and whether each already knows a repository at the point it reads.
+          M2. Whether any consumer TODAY uses it for more than one repository — read under R1.
+          M3. What a per-project path (A) would touch: the Vault path layout, the credential helper, the mirror's Vault roles, and each consumer from M1.
+          M4. Where a use-time check (B) would live: which consumers already know their repository, and whether a failure there is visible to an operator or silent.
+          M5. The failure mode each resolution produces for the operator — refusal at login versus refusal at push — stated as observable behaviour, not preference.
+
+        WHAT I CANNOT MEASURE, LISTED NOW RATHER THAN DISCOVERED LATER:
+          U1. THE ACTUAL SCOPE OF THE SEEDED CREDENTIAL. Reading it would send the operator's credential to an external service under their identity, from a host that does not even hold it — theirs to authorise for a specific run, not mine to take. Without it, "the credential's scope exceeds the one repository the probe verified" rests on how GitHub grants scopes IN GENERAL and is an ARGUMENT, not a fact about the token in play. I will label it that way wherever it appears. The row's three CODE facts are untouched by this and stand alone.
+          U2. What the operator INTENDS the credential to serve. The mirror relays for repositories I cannot enumerate from here.
+          U3. Whether a use-time refusal is acceptable UX. That is the operator's call and I will present it as an observable, not score it.
+
+        WHAT WOULD FALSIFY THE WHOLE COSTING: if M1 shows the credential has exactly one consumer which already knows its repository at read time, then B is nearly free and A is a large change buying a distinction that consumer does not need — but R1 still holds and the text must still narrow. If M1 shows consumers that CANNOT know a repository at read time, B is not merely expensive, it is unavailable, and that is a fact rather than a preference.
+
+        DELIVERABLE: two costs with their method, the could-not-measure list above, and NO recommendation. If the numbers point somewhere, that is the coordinator's to read.

@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    event:
+      type: progress
+      ts: "2026-09-15T16:08:42Z"
+      agent_id: linux-yoga-claude-20260915t160841z
+      host: linux
+      summary: |-
+        SPLIT LANDED. Criterion 1 met, criterion 3 met, CRITERION 2 ONLY HALF MET and I am not claiming it.
+
+        CRITERION 1 — the grammar no longer pays for podman. Step 4 now pins XDG_RUNTIME_DIR exactly as the row suggests and as steps 2 and 3 already did, reaching the documented skip:no-podman-user-session branch. Its budget drops 60s -> 5s.
+        PROVEN, not inferred, with a tripwire shadowing ONLY podman (never a stripped PATH — that answers about more than it was asked):
+          grammar branch  0 podman invocations, 0.004s
+          live path       3 podman invocations (info, info, ps), 0.183s warm
+        The positive control is the second line: the tripwire fires, so the first line's zero means the branch, not a broken tripwire.
+
+        CRITERION 3 — negative controls by MUTATION, not inspection, both halves:
+          TWO LINES: with a stray line added to all three no-session emitters, step 4 REDS and step 5 stays green. With it added to all three skip:live-runtime-present emitters, step 5 REDS and step 4 stays green. That two-way separation is what proves the split covers different paths rather than duplicating one.
+          ZERO LINES: silencing the live emitters reds step 5. Silencing the deterministic emitters is caught by STEP 2 first and the runner aborts the test there, so step 4 never runs — the SUITE catches zero lines on that branch, step 4 specifically does not, and I would rather say that than claim the arm did it.
+
+        A DEFECT I FOUND WHILE FALSIFYING, and fixed in the same pass. The assertion was `grep -c <grammar>`, which counts only lines that MATCH. A stray warning or debug line alongside a good verdict left the count at 1 and the step GREEN — measured: with every emitter patched to print a second, non-matching line, the step passed. The probe's own contract is "Emits exactly one line on stdout", and only a TOTAL-line count checks that half. Both steps now assert total==1 AND well-formed==1. Without this the whole exercise would have moved a blind assertion to a cheaper branch.
+
+        CRITERION 2 IS NOT FULLY MET. It asks that a step reaching live podman be "named as such and its timeout_ms justified by a measured COLD-START figure, not by the warm 110ms". The naming half is done — the step is titled for the live substrate and its comment says 60s is PODMAN's price, not the grammar's. The measurement half is NOT: 60s is still the inherited 2026-08-16 Windows MSYS figure, carried with its citation, and I produced no cold-start number on any host. Measuring one here would mean stopping the podman user service on the operator's desktop, which is host state I am not going to change inside an autonomous cycle for a p2 budget justification.
+
+        So the row stays open on that half. What would close it: a cold-start measurement from a host that can afford to take its podman down, or a ruling that the inherited MSYS figure is the justification and the criterion's wording predates it.
+
+        TWICE I MUTATED A BRANCH THIS HOST DOES NOT EXECUTE, and both times the fixture stayed green and I nearly read that as a result. First `echo "eligible"` — three emitters, one per host branch, and I patched only the first. Then all three, and the live path STILL did not change, because this host with containers up returns skip:live-runtime-present, not eligible. The emitter I needed was a different one. A mutation that applies is not a mutation that reaches the code under test, and the tell both times was a green I could not explain.
+
+        Suite unchanged otherwise: 22 PASS / 1 FAIL before and after, the same pre-existing red (litmus:mcp-expert-health-probe-shape), and no BUDGET line, correctly — that red is an assertion failure, not a kill.

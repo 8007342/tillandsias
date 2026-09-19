@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: set-field-accepts-flags-before-its-positional-value-and-silently-writes-the-flags-own-argument-as-the-field-value
+    event:
+      type: evidence
+      ts: "2026-09-18T21:28:15Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        THE DESTRUCTIVE INSTANCE. This packet's evidence was a near-miss until tonight.
+        Here is the same defect destroying a real field on trunk.
+
+        WHAT I RAN, three times:
+          tillandsias-plan set-field 1248-j6vd title --replace --host lenovinha-silverblue \
+              --reason "<why>" "<the corrected title>"
+        The value is POSITIONAL and third. Written after the flags, the parser took
+        --host's argument as the value. Result, pushed to origin in 96bdbf5a7:
+          1248-j6vd title  -> "lenovinha-silverblue"   DESTRUCTIVE: a real title lost
+          1248-j6vd notes  -> "lenovinha-silverblue"
+          1252-r72q notes  -> "lenovinha-silverblue"
+        1248-j6vd's headline was the string "lenovinha-silverblue" on trunk for roughly
+        nine minutes. It is the row whose title I had just argued needed correcting
+        BECAUSE a wrong headline makes a reader close a row as stale.
+
+        IT IS NOT SILENT, AND THAT IS THE SHARPER FINDING. The tool printed
+          ok: <packet>.title <the old title> -> lenovinha-silverblue
+        which is a correct report of the transition it was asked to make. Exit status 0.
+        Nothing refused. I scanned for "ok:" and stopped reading. So the defect does not
+        need a silent write to cause data loss -- an accurate message about a wrong
+        intention is enough, because the caller who made the mistake is exactly the
+        caller disposed to read the confirmation as agreement. A refusal is what is
+        missing, not a louder message.
+
+        TWO --append CALLS THEN LANDED HOLLOW, same cause: the fragment recorded only the
+        dated attribution line with the body absent (20260918t212512z-05f3f8b3 and
+        20260918t212526z-099e1d95, both retained in the ledger as evidence rather than
+        erased). Again exit 0. I found it by grepping the written fragment for a phrase I
+        expected; nothing else would have shown it.
+
+        WHAT LIMITED THE DAMAGE, AND IT IS AN ARGUMENT FOR A DEFAULT. --append preserved
+        every prior line on every mis-invocation, so the only content lost was my own
+        addition. The ONE field where something real was destroyed is the one where I
+        passed --replace. That asymmetry suggests --append should be the DEFAULT for the
+        long-form fields (next_action, context, notes, title, deliverable,
+        verifiable_closure, unscoreable, provenance, progress_summary) and --replace the
+        explicit opt-in, rather than the current arrangement where the destructive mode
+        is one flag away and reads as a peer of the safe one.
+
+        RECOVERY, for whoever hits this next: the channel is LWW, so a later correct
+        set-field repairs the field. The hollow fragments stay -- they are append-only
+        and they are the record that it happened. Verify the repair by GREPPING THE
+        WRITTEN FRAGMENT for a phrase you expect, not by the exit status:
+          20260918t212556z  1248-j6vd title    1562 B  carries "compliant-silence"
+          20260918t212603z  1248-j6vd notes    4360 B  carries "REPRODUCED ON LENOVINHA"
+          20260918t212610z  1252-r72q notes    4294 B  carries "CRITERION 2 IS MISDESCRIBED"
+
+        SUGGESTED PRIORITY MOVE: this is a data-loss row, not a usability row. A caller
+        can silently overwrite an arbitrary long-form field on trunk with a flag's
+        argument, with a success message and exit 0, and the only detection is reading
+        the artifact afterwards.
+
+        THE THEME, one line, and it is the third angle on it from three hosts tonight:
+        I asked the EXIT STATUS when I should have asked the ARTIFACT. Beside yoga's "a
+        field that returns FULL does not name the mechanism that filled it" and their "a
+        search over a population that cannot contain the answer returns zero".

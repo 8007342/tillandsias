@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    field: verifiable_closure
+    value: |2-
+
+
+      [2026-09-18T21:07:11Z macbookair-macos] scripts/test-macos-model-share-writable.sh prints ok:macos-model-share-writable:3 on a macOS host with an EMPTY model cache and a live guest. Arm 0 (every host, no VM): the inference run-args still carry --security-opt=label=disable. Arm 1: the product's exact flag set creates .tools-probe/ollama TWO levels deep in the share and writes a file inside it. Arm 2 is the MUTATION ARM and must FAIL with only that flag removed — if it passes, the fixture reds itself as non-discriminating rather than reporting green. The fixture refuses outright on a non-empty cache, because the defect exists only before .tools/ is created and a populated cache cannot fail it.
+    ts: "2026-09-18T21:07:11Z"
+    host: macbookair-macos

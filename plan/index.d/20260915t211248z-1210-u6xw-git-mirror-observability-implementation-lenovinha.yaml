@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha when 330 closed on ENUMERATION, so its open half stays open.
+packets:
+  - packet_id: the-git-mirror-has-no-runtime-observability-so-nobody-can-answer-whether-the-relay-is-keeping-up-without-reading-logs
+    order: 1210-u6xw
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, observability, control-wire, fail-loud, metrics]
+    estimated_hours: 8
+    parent_order: 330
+    unscoreable: "unpinnable-until-the-surface-exists: the deliverable is the six signals. Future litmus scripts/test-git-mirror-observability-signals.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: each of the six requirements below is readable over the control wire and each reports ABSENT-with-an-error when collection fails rather than a healthy default (pre-fix result: FAILS — no runtime signal exists at all; 'is the relay keeping up?' is answerable only by reading logs, measured 2026-09-15); NEGATIVE CONTROL: with collection broken, every signal must report the failure and none may read healthy — a metric that reads healthy when it cannot be measured is worse than a missing one."
+    owned_files:
+      - images/git/
+      - crates/tillandsias-control-wire/
+    title: |
+      The git mirror is a critical backbone with no runtime monitoring: the six observability requirements 330 enumerated are still unimplemented, so relay health is only knowable by reading logs.
+    context: |
+      SPLIT OUT OF 330 WHEN IT CLOSED. Order 330 had two halves: a build-vs-adopt
+      evaluation (ratified KEEP by The Tlatoāni 2026-09-15) and observability. Its
+      criterion 3 asked for the observability requirements to be ENUMERATED as
+      litmus-pinnable statements, and they are — six of them, in
+      cheatsheets/concurrent-git/git-mirror-managed-alternatives.md. Enumeration
+      is not implementation, and closing 330 on a met criterion would have buried
+      the open work inside a completed row. This is that work.
+      THE SIX, restated here so this row does not depend on a cheatsheet read:
+        1. RELAY QUEUE DEPTH — ref transactions accepted by the mirror but not yet
+           acknowledged upstream, observable at any instant. With a synchronous
+           relay this is normally 0 or 1; a persistently non-zero depth means the
+           relay has begun buffering, which the design says cannot happen.
+        2. LAST SUCCESSFUL RELAY PER REF — per exported ref, not per repo. A
+           repo-level "last push" hides one branch that stopped advancing.
+        3. PER-REF DIVERGENCE — whether the mirror's OID equals upstream's, and
+           since when if not. Transient divergence is expected; sustained is
+           pathological.
+        4. ACK LATENCY AS A DISTRIBUTION, not a mean. The TAIL is what an agent
+           experiences as a hang, and a mean hides it.
+        5. PRE-RECEIVE REJECTS COUNTED BY REASON (non-fast-forward, deletion
+           refused, fsck failure, policy gate). "Rejects went up" is only
+           actionable with the reason attached.
+        6. CREDENTIAL-REFRESH FAILURES distinguished from network failures — the
+           two have different operators and different fixes. 756-2jnj is the live
+           example: a 403 on the mirror's credential was indistinguishable from
+           unreachability until the verdict ref was published.
+      TRANSPORT IS DECIDED, not open: these ride the CONTROL WIRE per order 323,
+      not a new TCP endpoint — the same reasoning that put guest container metrics
+      on the wire in order 333, since a host that cannot reach a guest TCP port
+      cannot read guest-only facts.
+      THE ANTI-REQUIREMENT IS THE LOAD-BEARING PART. None of these may be
+      satisfied by a fabricated healthy value when collection fails. A collection
+      failure reports the error with the value ABSENT (spec:observability-metrics).
+      A metric that reads healthy when it cannot be measured is worse than a
+      missing one, and this fleet has spent the last day finding instances of
+      exactly that shape.
+      WHY IT IS WORTH DOING, from 330's own corollary: the mirror's reliability
+      failures have never been architectural. They concentrate in the credential
+      lifecycle and the serving layer — signals 6 and 1-4 respectively. That held
+      again on 2026-09-15 when a desktop autologin left this host's keyring locked
+      and the credential was absent by construction.
+    exit_criteria:
+      - 'each of the six signals is readable over the control wire (pre-fix result: FAILS — no runtime signal exists; relay health is answerable only by reading logs)'
+      - 'ack latency is reported as a distribution with its tail, never as a mean alone'
+      - 'pre-receive rejects carry their reason, not just a count'
+      - 'credential-refresh failure is distinguishable from network failure in the signal itself'
+      - 'NEGATIVE CONTROL: with collection broken every signal reports ABSENT with an error and none reads healthy — a fabricated healthy value is the defect this row exists to avoid'
+    events:
+      - type: filed
+        ts: "2026-09-15T21:12:48Z"
+        agent_id: "linux-lenovinha-claude-20260914t185710z"
+        host: lenovinha
+        summary: |
+          Filed when 330 closed on ratification. 330's criterion 3 asked for
+          enumeration and got it; this is the implementation, filed separately so
+          the open half is visible as open rather than inside a completed row.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-read-only-assertion-blames-the-selector-for-any-worktree-change-in-its-window-and-the-gate-runs-a-known-leaker
+    event:
+      type: progress
+      ts: "2026-09-14T19:35:17Z"
+      agent_id: linux-yoga-claude-20260914t193516z
+      host: linux
+      summary: |-
+        Landed 86ac0e26d. Step 23 of litmus-cycle-batch-triage-shape now captures the porcelain DIFF and NAMES every path that appeared, then attributes: archive-plan-packets.sh --check's known leak (plan_tmp*, scripts/archive-plan-packets-check.rb) is reported by name and does not convict the selector; any other path still fails while naming itself. Falsified in the useful direction on yoga 2026-09-14 — a concurrent writer seeded 0.4s into the window made the OLD arm print "FAIL: selector mutated the worktree" (rc=1, wrong subject) and the NEW arm name openspec/CONCURRENT_WRITER_PROBE.md (rc=1, right subject); seeding the archiver's own paths instead was named, attributed, rc=0; with no writer both arms are green, so the rewrite did not widen the pass. select-work-batch.sh was NOT opened - three measurements agree it writes only under TMPDIR. Step 5's budget was raised 120s to 300s in the same pass: measured standalone at 2m24s uncontended, it had been ABORTING the test before step 23 could run. Whole test 26/26 green on an uncontended scripts/run-litmus-test.sh ci-release --phase pre-build.

@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria at the coordinator's direction: a per-host capacity
+# characterisation that nothing else carries. It deliberately does NOT answer
+# §4a's open question, and says so in its own title.
+packets:
+  - packet_id: the-15gib-floor-is-a-repeated-observation-not-a-single-one-but-it-still-does-not-widen-the-range-section-4a-asks-for
+    order: 1206-5xi9
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [low-end, instrument, measurement, release-gate]
+    estimated_hours: 1
+    owned_files:
+      - skills/build-install-and-smoke-test-e2e/SKILL.md
+    unscoreable: "measurement-only: this row records dated observations about ONE host's capacity and proposes no code change, so there is nothing for a litmus to pin. It closes when a host on the other side of the 15 GiB line reports (see the OPEN QUESTION below), at which point §4a gains a range and this row is superseded rather than fixed. Filing it as scoreable would promise a guard that should not exist."
+    title: |
+      pirria's 15 GiB point is a REPEATED observation across distinct mechanisms rather than the single boundary sighting §4a records — but it is still one point, it does not widen §4a's range, and §4a's actual question may currently be unanswerable in this fleet for reasons that are an operator decision rather than a capability gap.
+    context: |
+      WHAT THIS ROW IS NOT, first, because it would otherwise be read as closing
+      something it cannot close. §4a of build-install-and-smoke-test-e2e asks for a
+      host with 8 GiB or 32 GiB to run the forge lane and report which side of the
+      line it lands on, so the floor gains a RANGE instead of a single point. THIS
+      ROW DOES NOT DO THAT. pirria is 15 GiB — it IS the single point §4a already
+      records. Everything below sharpens what that point costs; none of it moves the
+      boundary by a millimetre. A reader who takes this as §4a's answer would close
+      an open question, which is worse than leaving it open.
+
+      WHAT IT DOES ESTABLISH: that the 15 GiB point is not one sighting but a
+      repeated one, and that the failures cluster in SUPERVISION and DURATION rather
+      than in the work itself.
+
+      CORRECTING THE COUNT THIS ROW WAS COMMISSIONED WITH. The request described
+      "four resource-or-timing failures on this host in one day". Checked against
+      what is actually dated, that overstates it, and the honest set is more useful
+      than the round number:
+
+      1. HARNESS MEMORY KILL — 2026-09-15, one. The agent harness killed the
+         supervising shell waiting on a running ./build.sh --check ("the system is
+         running low on memory"). THE GATE ITSELF WAS UNTOUCHED (pid 605900 still
+         running afterwards) and finished green at 2217s. `journalctl` shows ZERO
+         kernel oom-kills in the whole 24h window, so this was the harness, not the
+         OOM killer. Restarted under `setsid nohup` per §4a's own note and it
+         completed. Regime at the time: 4 cores, 15 GiB total / ~12 GiB available
+         after the kill, load 0.20, containers tillandsias-builder and
+         tillandsias-dev-inference only.
+
+      2. THE FORGE LANE DID NOT FAIL — 2026-09-14, and this is a POSITIVE result
+         that belongs in the record. §4a's own remedy was applied (run it detached
+         with setsid) and the lane COMPLETED in 822.9s (timing record
+         smoke-forge-lane, exit=0). The 2026-09-04 supervisor kill §4a describes did
+         NOT recur. So the one prior forge-lane failure on this host remains a single
+         historical event, and detaching appears to be sufficient for it.
+
+      3. GATE DURATION — measured, not a failure but the dominant cost:
+         1760s, 1966s, 2217s, 2408s across four ./build.sh --check runs on
+         2026-09-14/15. Against a coordinator host reporting ~10.5 minutes, that is
+         3.4x, and it is why this host loses landing races (see 1203-dzxn).
+
+      4. PLAN-BINARY REBUILD TREADMILL — three push refusals in one attempt, cleared
+         only by a 54s `cargo build --release -p tillandsias-plan` inside the
+         toolbox; the whole-tree stamp then re-staled on each rebase. Timing and
+         staleness, not resources.
+
+      SO: ONE memory kill in the window, not four, plus one prior (2026-09-04) that
+      did not recur under the documented remedy, plus two DURATION costs that are
+      real and are not kills. The pattern worth keeping is that on this host the
+      thing that dies is the OBSERVER, never the work — and every time, reading the
+      observer's death as the work's death would have been the wrong verdict.
+
+      AN INSTRUMENT GAP FOUND WHILE CHECKING THIS, worth more than the count.
+      `.cache/metrics/tillandsias-timing.jsonl` contains ZERO records whose step ends
+      in `-supervisor-lost`, ever, on this host — including for the 2026-09-04 kill
+      that §4a describes in prose and that order 1026-ps4n built the stamp-and-reap
+      mechanism to catch. So the one event the reaper exists for produced no record.
+      Either it predates the instrument or the stamp was never reaped. Whoever takes
+      this should determine which BEFORE trusting an empty reap log to mean "no
+      supervisor was ever lost" — an instrument with no positives and no confirmed
+      catch is indistinguishable from one that does not fire.
+    exit_criteria:
+      - 'the four items above are recorded with their regimes so a later reader can tell a per-host cost from a software property'
+      - 'the row does NOT claim to answer §4a, and a reader can see that from the title alone'
+      - 'the -supervisor-lost instrument gap is either explained (predates 1026-ps4n) or filed as its own defect'
+    events:
+      - type: filed
+        ts: "2026-09-15T19:30:00Z"
+        agent_id: "linux-pirria-opus5-20260915t162552z"
+        host: pirria
+        summary: |
+          Filed at the coordinator's direction after they checked 1176-fn2p
+          (COMPLETED, a memory-killed gate leaving an empty log) and 1141-vf9w (an
+          unkillable dispatch wrapper) and found neither carries per-host capacity
+          characterisation.
+
+          THE OPEN QUESTION, RESTATED SO IT IS NOT LOST, and why it is currently an
+          operator decision rather than a fleet incapacity. §4a needs a host that is
+          8 GiB or 32 GiB AND can run the forge lane. macneo is the 8 GiB host and
+          has NO podman at all — and that absence is load-bearing, since it is the
+          instrument that exposed the eligibility-arm defect today, so provisioning
+          it to answer §4a would destroy the thing making it valuable. The
+          coordinator host is the 32 GiB candidate, but running the lane there is a
+          DESTRUCTIVE smoke on the operator's own workstation and needs their
+          per-run consent under 1004-vsh2, which nobody has requested. So §4a's
+          request is unanswered because the one action that would answer it has not
+          been put to the operator, not because the fleet cannot do it. The
+          coordinator is putting that to them. Until then §4a's range stays open and
+          this row must not be mistaken for closing it.
+
+          A NOTE ON THE COUNT, recorded rather than quietly fixed: I was asked to
+          file "four resource-or-timing failures in one day" and the dated evidence
+          does not support four. One harness memory kill, one forge lane that
+          SUCCEEDED under the documented remedy, and two duration costs that are not
+          kills. Zero kernel oom-kills in 24h. I have written what is dated rather
+          than the number commissioned, because a capacity row whose count is
+          inflated is exactly the kind of thing a later reader would reasonably stop
+          trusting in whole.

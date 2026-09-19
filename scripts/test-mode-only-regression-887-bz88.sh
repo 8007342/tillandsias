@@ -180,7 +180,29 @@ if [ "$MODES_REPRESENTABLE" = 1 ]; then
          skip{next}
          {print}' "$REPO_ROOT/scripts/check-script-exec-bits.sh" \
       | sed 's/^    if \[ "\$mode" != "100644" \]; then/    if false; then/' > "$PRE"
-    sed -i 's/^    \[ -f "\$path" \] || continue$/    [ -f "$path" ] || continue\n    [ "$mode" = "100644" ] || continue/' "$PRE"
+    # 1135-z8gn. THIS MUTATION SILENTLY DID NOT APPLY ON macOS, and the arm
+    # below still reported "arm 3 has teeth". BSD sed -i reads the next
+    # argument as a backup suffix, so the expression became the suffix and
+    # $PRE was parsed as the script: `sed: 1: "/var/folders/...": invalid
+    # command code f`. The reconstruction was then asserted against an
+    # UNMUTATED $PRE and passed — the arm's own `bad` branch warns it "may
+    # pass for the wrong reason", which is precisely what happened, on every
+    # macOS run, in green.
+    cp "$PRE" "$PRE.premutation"
+    sed 's/^    \[ -f "\$path" \] || continue$/    [ -f "$path" ] || continue\n    [ "$mode" = "100644" ] || continue/' "$PRE" > "$PRE.tmp" && mv "$PRE.tmp" "$PRE"
+    # 1135-z8gn / 829-dkuc: PROVE THE MUTANT DIFFERS BEFORE ASSERTING ANYTHING
+    # ABOUT IT. The temp-file form above fixes the sed that failed here; this
+    # arm fixes the CLASS, because the next non-portable edit will fail open
+    # the same way whatever tool it uses. A mutation that did not apply is
+    # indistinguishable from a guard that never fires — and worse here, it
+    # produced a GREEN "arm 3 has teeth" for a reconstruction that was never
+    # mutated.
+    if cmp -s "$PRE.premutation" "$PRE"; then
+        rm -f "$PRE.premutation"
+        bad "mutation did not apply — \$PRE is byte-identical after the edit, so the arm below would pass for the wrong reason"
+        return 1 2>/dev/null || exit 1
+    fi
+    rm -f "$PRE.premutation"
     chmod -x "$victim"
     out="$(bash "$PRE" 2>/dev/null)"
     chmod +x "$victim"

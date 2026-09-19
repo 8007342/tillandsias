@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-18T23:52:35Z"
+      agent_id: linux-pirria-claude-20260918t235234z
+      host: pirria-silverblue
+      summary: |
+        ONE MORE INSTANCE OF THE FAMILY, pirria 2026-09-18: a wrapper's exit status that
+        says something other than what the reader takes it to mean.
+
+          out="$(timeout 3000 scripts/land-on-platform-branch.sh linux-next 2>&1)"; rc=$?
+          LAND_RC=124
+
+        `124` is `timeout`'s own "I killed it", NOT the land tool's verdict. The land
+        had gated green on attempt 1, pushed, lost the race to a concurrent landing,
+        and was mid-gate on attempt 2 when the deadline fired. Read carelessly, `rc=124`
+        beside a land log is easy to file as "the land failed" — it is "the land was
+        not allowed to finish", and the two call for opposite next actions.
+
+        THE UNDERLYING ERROR, which is the generalisable part: **the tool manages its
+        own retries — up to four attempts, each re-gating — and I wrapped it in a
+        deadline shorter than ONE attempt.** On this 4-core host a gate is ~45 minutes,
+        so 3000s could not survive a single retry; the kill was guaranteed the moment
+        the first push lost a race. A deadline around a self-retrying tool has to be a
+        multiple of its worst-case attempt, or it must not be there at all. The tool
+        already refuses non-retryable failures at once with their remedy, which is the
+        thing a timeout would otherwise be protecting against.
+
+        It also produced a 1132-r4mt survivor as a side effect: reaping the land tool
+        left three orphaned `build.sh --check` processes with nothing alive to read
+        their verdict. Recorded on that row as its own instance.

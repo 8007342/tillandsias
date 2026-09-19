@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: status
+    value: completed
+    ts: "2026-09-18T23:16:59Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: completed
+      ts: "2026-09-18T23:16:59Z"
+      host: macbookair-macos
+      summary: |-
+        status 'completed' with evidence_refs: 4bb6b6a0f: part (a) measured on tlatoanis-macbook-air 2026-09-18 through the product's own path — baseline models=0 verified in-guest, then image localhost/tillandsias-inference:v56.9.13.1 with build_inference_run_args' exact flags, model pulled via the engine's own /api/pull ({"status":"success"}, size 397,821,319 B from /api/tags). Result: models 437M (blobs 380M, .tools 58M, manifests 4.0K) vs /var/lib/containers 7.5G, rootfs 5.0G -> 5.7G. Part (b) decided earlier by macuahuitl (clean room stays clean) with TILLANDSIAS_RESET_KEEP_MODELS shipped as 1181-bkem; not reopened.

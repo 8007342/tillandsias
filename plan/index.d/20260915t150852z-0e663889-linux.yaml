@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    field: status
+    value: completed
+    ts: "2026-09-15T15:08:52Z"
+    host: linux
+
+events:
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    event:
+      type: completed
+      ts: "2026-09-15T15:08:52Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 2df3eeb95
+  - packet_id: the-selector-offers-rows-whose-exit-criteria-name-hosts-this-one-is-not-so-pickup-role-any-is-true-of-the-subject-and-false-of-the-evidence
+    event:
+      type: note
+      ts: "2026-09-15T15:08:52Z"
+      host: linux
+      summary: |-
+        select-work-batch.sh now emits an advisory host-scoped line when an offered row's exit_criteria name hosts this one is not, with the host vocabulary derived from the roster the selector already resolves rather than a second list; the documented packet line shape is untouched. Advisory and never a filter (fixture arm 3) because a host that cannot CLOSE a row can still reproduce, measure or split it. Cost 0.4s on a 16.9s baseline, measured not assumed. Fixture scripts/test-selector-flags-host-scoped-criteria.sh 5/5, bound at scripts/gate-steps.d/370-1199-aw6m.step, and it FAILS rather than skips against the pre-fix selector after its first draft skipped. Landed 2df3eeb95, ok:land:2df3eeb95:attempt-2, gate green 866s

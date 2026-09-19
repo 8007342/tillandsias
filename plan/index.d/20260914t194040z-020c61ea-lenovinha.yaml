@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    field: next_action
+    value: operator re-provisions the gh credential on lenovinha; then git push origin refs/heads/salvage/lenovinha/20260914-1185-9qx6 and scripts/land-on-platform-branch.sh linux-next to land dc4721a09
+    ts: "2026-09-14T19:40:40Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-release-tier-freshness-cannot-read-a-green-ci-full-because-the-index-records-only-pre-build-phases-so-the-daily-exercise-is-invisible-to-the-guard-it-exists-to-satisfy
+    event:
+      type: note
+      ts: "2026-09-14T19:40:40Z"
+      host: lenovinha
+      summary: |-
+        gated and complete, blocked only on the push

@@ -248,9 +248,27 @@ pub async fn deliver_credentials_and_check_handover(
         .map_err(|e| format!("DeliverCredentials request failed: {e}"))?;
 
     match reply.body {
+        // ORDER 890-y72v. `success: true` is FRAME RECEIPT — the guest got the
+        // envelope and stored it. It was never an acceptance, and matching on
+        // it alone is what let a delivery the guest discarded, or one whose
+        // fallback write failed, read here as a working credential. The
+        // operator's 2026-08-17 failure was silent for an hour on this arm.
+        //
+        // `..` still absorbs the rest of the variant, so this arm compiled
+        // unchanged when `outcome` was added — which is precisely why it has
+        // to be written out rather than left to a field nobody reads.
         tillandsias_control_wire::ControlMessage::DeliverCredentialsReply {
-            success: true, ..
-        } => {}
+            success: true,
+            outcome,
+            ..
+        } => {
+            if !outcome.is_accepted() {
+                return Err(format!(
+                    "DeliverCredentials was received but not accepted: {}",
+                    outcome.describe()
+                ));
+            }
+        }
         tillandsias_control_wire::ControlMessage::Error { message, .. } => {
             return Err(format!("DeliverCredentials failed: {message}"));
         }

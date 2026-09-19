@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    event:
+      type: note
+      ts: "2026-09-16T19:57:54Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260916t195752z
+      host: macos
+      summary: |-
+        criterion 2 is HALF STALE and half now fixed. Re-derived by symbol (its line citations were stale 3-of-3).
+
+        STALE HALF — "two provisioning async fns wait synchronously on long child processes (xz -d, qemu-img convert, qemu-img resize)": superseded by 980-xcaf, which made image conversion pure Rust. All 11 surviving `qemu-img` hits in vz.rs are comments and test names. Only two Command::new sites remain in vz.rs — hdiutil (in fn generate_cidata_iso) and /usr/sbin/sysctl (in fn host_memory_bytes) — both plain sync fns, and generate_cidata_iso's ONLY caller is start() itself. Nothing left to move off an async worker here. Do not re-chase it.
+
+        LIVE HALF — fixed at the real site. VzRuntime::start states its contract in-body: it pumps CFRunLoop on the CALLING thread until the result arrives or 30s elapses, so "the caller must run start() on tokio::task::spawn_blocking if invoked from an async runtime." action_host::run_start awaited it directly, parking a tokio worker for that window while on_phase consumers were live on the same runtime. Now wrapped, with a guard anchored on the call (not a line) that asserts its anchor exists before scanning.
+
+        WHY THE FIX IS AT THE CALLER, NOT THE SIGNATURE: start() is a VmRuntime trait method (lib.rs:161) shared with wsl.rs and fake.rs, and its body does genuinely await once. The signature cannot become sync. The obligation is the caller's exactly as the comment says — and it is dischargeable: VzRuntime is Send + 'static. Compile-probed, not assumed, with an inverted control (*const u8) to prove the probe had teeth; now pinned by a const assertion so a future non-Send field fails with the reason attached.
+
+        NOT FIXED, deliberately: the three diagnose.rs callers (:1464, :1782, :1894) sit inside rt.block_on(async move { ... }) on a dedicated runtime rather than on a shared worker pool. Milder shape, different judgement, left for whoever takes this next.
+
+        Verified: cargo test -p tillandsias-macos-tray --bins -> 136 passed, 0 failed. Mutation control (revert to bare vz.start().await) -> 1 failed, guard names the reason. cargo zigbuild --target x86_64-unknown-linux-musl --tests -> 0.
+
+        NOT LANDED. Commit 8c2f1c695 is on refs/heads/salvage/tlatoanis-macbook-air/20260916-690-w94k-crit2-spawn-blocking. The gate is blocked by 1224-zpek while a tray is live on this host (1 process up). Criteria 1, 3, 4 are done; criterion 2 needs the diagnose.rs judgement plus a real land.

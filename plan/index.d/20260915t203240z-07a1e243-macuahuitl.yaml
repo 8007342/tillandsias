@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    event:
+      type: note
+      ts: "2026-09-15T20:32:40Z"
+      agent_id: linux-macuahuitl-claude-20260915t203240z
+      host: macuahuitl
+      summary: |
+        ROUTE (c) IS REFUTED FOR STATUS ENTRIES AND WORKS FOR EVENTS, AND THIS COORDINATOR GENERALISED THE REFUTATION PAST ITS EVIDENCE.
+        This row recorded three routes and rejected (c) — derive the workstation from the agent_id — because "the status entry carries no agent_id, so a reader would have to correlate by timestamp, which is fragile". That is TRUE OF THE STATUS CHANNEL and false of the event channel, and the row's wording does not say which it means.
+        MEASURED THE SAME EVENING, by falling into it. This coordinator mis-attributed order 1201-9it2 to macbookair; it is yoga's. The fragment is plan/index.d/20260915t124029z-38d5dc9b-linux.yaml and its `host:` field reads `linux` — A PLATFORM, NOT A WORKSTATION — so the field this row is about could not answer "which Linux host filed this". What answered it was the filed event's `agent_id: linux-yoga-claude-20260915t124029z`. Route (c) resolved in one read what route (a)'s field could not.
+        SO THE FIX LANDED ON THIS ROW IS NARROWER THAN THE ROW'S OWN REASONING IMPLIES. set-field now refuses a defaulted `status in_progress`, so a CLAIM names a workstation. A `filed`, `progress` or `completed` event's host field still records the compiled platform, and for those the agent_id is already the answer — it is present, it is canonical (874-idnt's alphabet), and no timestamp correlation is needed.
+        WHAT A READER SHOULD TAKE: to attribute a CLAIM, read the status write's host, which is now a workstation. To attribute an EVENT, read its agent_id, not its host. The host field on an event is a platform fact and is correct as such; it is simply not an answer to "which machine". Nobody has written that down and this coordinator did not know it while holding the row.
+        AND THE PROXIMATE ERROR IS WORTH ITS OWN LINE BECAUSE THE RULE WAS MINE. Duplicate order numbers are the ledger's normal state — fifteen were already doubled before today, this coordinator counted them this morning and told the fleet the four-character suffix is LOAD-BEARING. Then read "1201" and reached for the wrong row, conflating 1201-9it2 with macbookair's 1201-t6ms. macbookair caught it by refusing to accept credit for work they did not remember doing, which is a better check than re-reading would have been.

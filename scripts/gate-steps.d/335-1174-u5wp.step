@@ -1,0 +1,29 @@
+# Gate step 1174-u5wp — data, not code.
+#
+# Binds the fixture for stamp adoption in the land tool. It drives the DECISION
+# block, extracted from the shipped script by markers, under the script's OWN
+# `set -uo pipefail` and against a stubbed gate-stamp.sh — no arm runs a gate,
+# pushes anything, or invokes the land tool, because a fixture that ran the land
+# tool to prove it skips a gate would take 41 minutes and push to trunk.
+#
+# THE DRIVE REGIME IS NOT INCIDENTAL: 1175-wuwr was this exact mistake one file
+# over, a consumer fixture driving an extracted block under `set +e` while the
+# shipped script runs under errexit, so it could not see the shell dying at the
+# capture. An extracted block tested under options the script does not use is a
+# test of a shell nobody runs.
+#
+# FOUR OF SEVEN ARMS ARE NEGATIVE CONTROLS, and one of them is the reason this
+# change is safe to make at all: a stamp OLDER than the tree must never be
+# adopted. The others keep a narrower scope from passing as a full gate, keep
+# the 1056-5344 union debt vetoing adoption, and keep the gate invocation
+# actually skipped rather than merely preceded by an announcement.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the land tool adopts only a green, full-scope, debt-free gate stamp (1174-u5wp)"
+STEP_SCRIPT="scripts/test-land-adopts-valid-stamp.sh"
+STEP_ERROR="stamp adoption in the land tool regressed (1174-u5wp) — a stale, narrower-scope or union-indebted stamp may now be adopted, which would send an un-gated or under-gated tree to the push; see the verdict line above"
+STEP_OK="land stamp-adoption check passed"
+# Exit 3 means the tool is absent or the extraction markers moved — nothing was
+# examined, and the fixture says so by name rather than passing.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="the land tool is absent or its adoption block could not be extracted"

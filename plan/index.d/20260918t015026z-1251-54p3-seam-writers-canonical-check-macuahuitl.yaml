@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    order: 1251-54p3
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [guard, tests, env-lock, seam, static-analysis]
+    estimated_hours: 4
+    owned_files:
+      - scripts
+      - crates/tillandsias-headless/src/runtime_assets.rs
+    title: |
+      a check that every file WRITING a process-global seam var references the CANONICAL lock — prototyped and scored on real trees by yolanda; on the pre-fix tree it names `accel_probe.rs`, the actual culprit of 1245-wbqh, before a single test runs
+    context: |
+      THIS IS THE MECHANICAL FORM of the lesson 1245-wbqh ended on: a
+      correctly-scoped guarantee needs its scope RE-READ whenever a second writer
+      appears, and nothing in the process prompts that re-read. A note cannot
+      prompt it; a check can.
+      PROTOTYPED AND SCORED BY yolanda-windows 2026-09-18, four arms, all RUN
+      against real trees rather than described:
+        ARM 1   current trunk        refused:seam-writer-uncanonical:remote_projects.rs
+                                     -> reds TODAY on the live 1250-92ty hazard
+        ARM 2   pre-fix (e1256ec24^) refuses accel_probe.rs AND remote_projects.rs
+                                     -> NAMES THE ACTUAL CULPRIT of 1245-wbqh
+        ARM 3a  real code reference  ok:seam-writers-canonical:3
+        ARM 3b  reference in a COMMENT only  -> still refused
+      ARM 2 IS THE WHOLE ARGUMENT. The defect that cost two full gates and a
+      night of diagnosis would have been named by a grep before any test
+      executed. That is the difference between a lesson and a guard.
+      ARM 3b WAS FOUND BY ACCIDENT AND IS NOT DECORATION. Their first 3a fixture
+      appended the canonical reference AS A COMMENT and the check correctly
+      ignored it. Source scans that do not strip comments are a repeat defect in
+      this repo, so the guard strips `//` before matching while the PROBE leaves
+      the comment in place — which EXERCISES the blindness instead of asserting
+      the absence of it.
+      IT ALSO CARRIES A POSITIVE CONTROL: with no writers at all it refuses
+      `seam-var-has-no-writers` rather than passing vacuously, because a check
+      that greens when its target disappears is the shape that rots silently —
+      exactly what `nvidia-cdi-ensure.sh` did for a month in 1248-j6vd.
+      Parameterised as (crate-dir, var, canonical-lock-symbol) so it generalises
+      past this one variable. Grammar: ok:seam-writers-canonical:<n> /
+      refused:seam-writer-uncanonical:<file>.
+      THE LIMITATION, STATED BY ITS AUTHOR BEFORE ANYONE DISCOVERED IT: it is
+      FILE-granular, not FUNCTION-granular. A file that references the canonical
+      lock in one test and writes the var without it in ANOTHER test PASSES. That
+      is a real gap and is the likely shape of the next instance. Their argument
+      for shipping anyway is sound and is recorded rather than re-derived: a new
+      writer almost always arrives as a NEW FILE, which is the cross-module case
+      that actually bit, and ARM 2 proves the file-granular form catches it. A
+      function-granular version needs real parsing rather than grep.
+      ORDERING — DO NOT GATE THIS YET, and the reason is not caution. ARM 1 is
+      RED on current trunk, correctly, against the hazard 1250-92ty already owns.
+      Wiring it into ./build.sh --check before 1250-92ty lands would red trunk
+      for every host on a defect another row is responsible for. Advisory tier
+      first; promote to gating once 1250-92ty is closed.
+    exit_criteria:
+      - 'the check lives in the repo with the four scored arms as a fixture, and ARM 2 is re-run against e1256ec24^ to confirm it still names accel_probe.rs (pre-fix result: the guard does not exist, and the defect it would have caught cost two full gates and a night)'
+      - 'it runs in the ADVISORY tier while ARM 1 is red, and is promoted to ./build.sh --check only after 1250-92ty lands — a guard that reds trunk for every host on another row''s hazard will be disabled rather than obeyed'
+      - 'the file-granular limitation is written in the script itself, not only in this row, so the next reader does not assume function-granularity and conclude a file is clean when one of its tests is not'
+      - 'NEGATIVE CONTROL: the positive control must itself be exercised — a run against a crate where the var has NO writers refuses seam-var-has-no-writers rather than reporting ok:0, since vacuous green is the failure mode being guarded against'
+    unscoreable: |
+      whether-file-granularity-is-enough: it demonstrably catches the case that
+      bit (cross-module, new file) and demonstrably misses the intra-file case.
+      Which one dominates in future cannot be settled from two instances, and the
+      author is explicit that a function-granular version needs parsing rather
+      than grep. Closing this row does not close that question, and a later
+      intra-file instance is evidence for the parser rather than a failure of
+      this guard.
+    verifiable_closure: |
+      the four arms as a committed fixture: ARM 1 red on a tree carrying an
+      uncanonical writer, ARM 2 naming accel_probe.rs at e1256ec24^, ARM 3a
+      green on a real reference, ARM 3b red on a comment-only reference, plus
+      the no-writers positive control refusing rather than passing.
+    events:
+      - type: filed
+        ts: "2026-09-18T01:50:26Z"
+        agent_id: "linux-macuahuitl-claude-20260918t015026z"
+        host: macuahuitl
+        summary: |-
+          Filed at the author's request — they prototyped and scored it, then
+          declined to file, on the grounds that filing rows is the coordinator's
+          mandate and not a peer dispatch's, and that the placement question
+          (gating versus advisory) needs a host that can see trunk's state. Both
+          are right. The script is ~30 lines of bash in their scratchpad and has
+          not yet been placed in the repo; the first exit criterion is that it
+          arrives with its four arms intact rather than being rewritten from this
+          description.

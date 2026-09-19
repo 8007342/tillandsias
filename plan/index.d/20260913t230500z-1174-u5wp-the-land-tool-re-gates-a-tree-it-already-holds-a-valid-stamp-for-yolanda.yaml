@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yolanda from a measurement on its own host, at macuahuitl's direction
+# (2026-09-13): one row, and the ADOPTION remedy rather than the kill-the-gate
+# one, because a gate that finished green is worth adopting and not worth
+# discarding.
+packets:
+  - packet_id: land-on-platform-branch-re-gates-a-tree-it-already-holds-a-valid-gate-stamp-for-so-a-gate-orphaned-by-an-outer-kill-is-41-minutes-spent-for-no-landing
+    order: 1174-u5wp
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    capability_tags: [land-tool, windows, wsl, gate, memory, floor-tier]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is an arm of the land fixture family that does not exist yet. Future evidence line in scripts/test-land-adopts-valid-stamp.sh: `ok:land-adopts-valid-stamp` rc 0, where a PLANTED stamp for HEAD's tree digest makes the tool skip the gate and print which stamp it adopted (pre-fix result: FAILS — the tool re-gates unconditionally; measured yolanda 2026-09-13, a green stamp for tree 51895eada sat in .git/tillandsias-gate-stamp while attempt 2 started ./build.sh --check from the top). NEGATIVE CONTROL, and it is the load-bearing half: a stamp OLDER than the tree must NOT be adopted — move the tree after stamping and the tool must gate."
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      land-on-platform-branch.sh re-gates a tree it already holds a valid gate stamp for, so a gate orphaned by an outer kill costs its full runtime and buys nothing: on yolanda the harness killed the land for low memory, the gate kept running inside WSL for another 30 minutes, exited 0 and wrote the stamp, and the process that would have read that exit code and pushed was already dead. The next attempt then re-gated the identical tree from the top. Adopt a valid stamp on entry instead.
+    context: |
+      MEASURED on yolanda 2026-09-13. The land was killed by the harness for low
+      memory. `bash ./build.sh --check` survived inside the tillandsias-build
+      distro as an orphan, ran to completion (gate phases totalled 2476 s), exited
+      0, and recorded `.git/tillandsias-gate-stamp` for tree 51895eada with
+      `Gate stamp recorded (pre-push will accept this tree)`. Nothing pushed: the
+      land script was the only thing that would have, and it was gone. Attempt 2,
+      on a tree that had not moved and for which a valid stamp already existed,
+      started the same 41-minute gate again.
+
+      THE REGIME IS THE MEMORY, and it is why this compounds rather than merely
+      wastes. vmmemWSL held 6.5 GB while the orphan ran and WSL does not return
+      memory to Windows on its own; the host was at 542 MB free of 15.9 GB when
+      the kill fired. So the orphan is also what keeps the host in the state that
+      caused the kill, and the next attempt is likelier to be killed too. On
+      esmeraldinha — four cores, the floor host, the likeliest of the fleet to
+      have an outer process killed for memory — that is a loop, not an incident.
+
+      WHY ADOPTION AND NOT "DIE WITH THE PARENT" (macuahuitl's ruling, and the
+      reasoning is the point): making the gate die with its parent throws away a
+      gate that finished GREEN, which on these numbers is 41 minutes and 6.5 GB
+      spent for nothing in either direction. Adoption turns the orphan into a
+      free landing on the very next attempt. It is also the debt the tool's own
+      comment already names — see the "skip the gate when nothing changed" note
+      in land-on-platform-branch.sh, by symbol, near the attempt loop.
+
+      NOT A PUSH-SAFETY HOLE, which is the obvious objection and the reason the
+      negative control is the load-bearing half: the stamp is already what the
+      pre-push hook trusts, and it binds to a tree digest, so adopting it grants
+      exactly the authority the hook would grant anyway. The danger is a stamp
+      that is valid-looking and OLDER than the tree — that is the arm to write
+      first.
+
+      NOT VERIFIED: whether the same orphaning occurs on the osx hosts or on a
+      Linux host where the gate is not behind a WSL boundary. The mechanism
+      (outer process killed, child keeps running) is not Windows-specific, but
+      the memory-hold half plainly is, and I measured only this host.
+    exit_criteria:
+      - 'on entry, when a gate stamp exists for HEAD''s tree digest and is younger than the tree, the tool SKIPS the gate, PRINTS which stamp it adopted, and goes straight to the push (pre-fix result: FAILS — it re-gates unconditionally)'
+      - 'NEGATIVE CONTROL: a stamp older than the tree is NOT adopted and the gate runs; move the tree after stamping and assert the gate ran'
+      - 'the adoption is announced in the land log, so a reader can tell a skipped gate from a gate that never ran'
+    events:
+      - type: filed
+        ts: "2026-09-13T23:05:00Z"
+        agent_id: "windows-yolanda-claude-20260913t082232z"
+        host: yolanda
+        summary: |
+          Filed by yolanda from its own measurement, at macuahuitl's direction
+          and with their ruling on which of the two remedies the row is. The
+          land tool is fleet-owned (1164-cftu was macuahuitl's on the same
+          file), so this is filed unassigned rather than claimed.

@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# EVENTS ONLY. Changes no field. esme's implementation is the one that landed;
+# this records that a second host built the same packet, and why, because the
+# mechanism repeated itself on this host in the same cycle and that is evidence
+# rather than an anecdote.
+events:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: note
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-14T16:00:00Z"
+      summary: >
+        SECOND-HOST CONFIRMATION, which the packet's next_action asks for:
+        esme's fixture runs 7/7 on yolanda, and arm 7 (live) FIRES here — this
+        host's transport drops exit status, measured through esme's canary
+        rather than my own. The canary is now exercised on both Windows hosts.
+      note: >
+        A SECOND HOST BUILT THIS PACKET, AND esme's OWN DIAGNOSIS PREDICTED IT.
+        esme claimed at 2026-09-13T23:55:59Z. That claim rode in the SAME commit
+        as the code, the commit was held on an unrelated gate blocker, and so the
+        claim did not reach the ledger until 2026-09-14T07:57Z. I read the row as
+        unclaimed at 04:22Z and claimed it. esme had already written the rule the
+        near-miss produces — a claim is plan-only and must not wait on the thing
+        it claims — and I am the second host their note says the gap invites.
+
+        I THEN MADE THE IDENTICAL MISTAKE, which is why this is worth recording
+        rather than apologising for. My claim ALSO rode in the same commit as my
+        code. My gates failed twice (a ghost-trace on an invented spec, and the
+        1177-k4jq salvage hang), so my claim never landed either, and for the
+        same hours the row advertised itself as unclaimed to anyone else looking.
+        Two hosts, one cycle, the same defect in the same shape, neither aware of
+        the other. That is not a coincidence about two agents; it is a property
+        of a claim that is coupled to a 41-minute gate that can fail.
+
+        THE SHARPER FORM OF esme's RULE, from the second instance: it is not
+        enough for a claim to be plan-only in PRINCIPLE. Mine was plan-only in
+        content and still invisible, because I committed it beside code and
+        landed them together. The rule has to be about the COMMIT, not the
+        content — a claim must be its own commit and its own push, taking the
+        plan lane, before the work starts. On a host where landing costs 41
+        minutes and can be refused by anything in the tree, anything that shares
+        a commit with code is not a claim; it is an intention.
+
+        WHAT I AM NOT DOING: not closing this row. esme deliberately left the
+        caller-routing decision untaken — wrap callers in a helper that writes a
+        script file, or refuse and let the caller choose — and asked that it be
+        decided by a reader rather than settled as a side effect. My own
+        (discarded) implementation chose REFUSE and wrote out the reasoning; that
+        is an opinion for whoever takes the decision, not a fait accompli.
+
+        MY IMPLEMENTATION IS DISCARDED, and esme's is better on the point that
+        matters. I had wired my fixture so that it skipped WHOLESALE off MSYS,
+        which would have made it inert inside the gate on every host — the gate
+        re-execs into WSL and evaluates as Linux. esme's skips only the live arm;
+        arms 1-6 still run in-gate and still validate the canary's logic. I
+        reported that inertness as a general hazard before checking it against
+        their version, and it is not: it was a defect in mine.

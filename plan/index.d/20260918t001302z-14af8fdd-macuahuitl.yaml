@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: progress
+      ts: "2026-09-18T00:13:02Z"
+      agent_id: linux-macuahuitl-claude-20260918t001302z
+      host: macuahuitl
+      summary: |
+        THE GPU LANE IS UP ON THIS HOST AND MEASURED. The row's stated blocker is stale
+        for two of three lanes, and the third fails in a way worth naming.
+
+        THE BLOCKER AS WRITTEN IS OUT OF DATE. This row records (2026-08-26) that every
+        accelerator is "present and NOT SCHEDULABLE", macuahuitl's A5000 as "usable; NO
+        ENGINE covers lanes". The capability matrix as of 2026-09-11 already says
+        otherwise: gpu/container/ollama, gpu/host-native/ollama, cpu/container/ollama
+        and cpu/host-native/ollama are all SCHEDULABLE. Only npu/Intel NPU remains
+        engine-missing. Do not re-derive the old blocker from this row's prose.
+
+        WHAT WAS ACTUALLY WRONG was smaller and entirely local: no ollama instance was
+        running and no models were pulled. The progression, each verdict from
+        scripts/check-local-expert-health.sh:
+            down:local-experts-ollama-unreachable
+            degraded:local-experts-model-missing:qwen2.5:0.5b
+            ok:local-experts-healthy
+        Started host-native ollama (CUDA detected, library=CUDA compute=8.6) and pulled
+        the three models the tree names: qwen2.5:0.5b, qwen2.5:7b, nomic-embed-text.
+
+        MEASURED WITH THE SHARED HARNESS, NOT A HOST RECIPE. scripts/bench-accel-lane.sh
+        (workload_suite 802-2536-v1) exists precisely so the numbers form a matrix rather
+        than three anecdotes, so it was used as-is. Hardware: Intel Core Ultra 7 265KF,
+        20 threads, 62 GiB; NVIDIA RTX A5000, 24564 MiB, driver 610.57.04.
+
+          lane  model             decode tok/s (3 reps)   embed ms/chunk   lane_observed
+          gpu   qwen2.5:0.5b      487.9 / 561.1 / 513.9   7 / 7 / 7        gpu-resident 932446207/932446207
+          cpu   qwen2.5:0.5b       72.6 /  71.7 /  72.8   7 / 7 / 7        cpu-resident 0/936692939
+          gpu   qwen2.5:7b        115.8 / 117.0 / 116.8   -                gpu-resident 6593561230/6593561230
+
+        THE NUMBER THAT MATTERS FOR THE FLEET PLAN: this host runs a 7B model at 116
+        tok/s, which is 1.6x FASTER than it runs a 0.5B model on CPU (72 tok/s). A 14x
+        larger model, faster. That is the argument for proving the concept here first —
+        consumer hardware will not merely be slower, it will be pushed into a different
+        MODEL CLASS, and a design validated only at 0.5B on CPU would be a different
+        system.
+
+        EMBEDDING SHOWS NO GPU BENEFIT: 7 ms/chunk on both lanes, identical across three
+        reps each. So routing embeddings to the accelerator buys nothing on this host and
+        the GPU should be reserved for generation. That is a routing decision and it was
+        measurable only because the harness runs embed and generate separately.
+
+        THE CPU LANE LIED UNTIL IT WAS FORCED, and the harness caught it. A bare
+        `--lane cpu` returned lane_observed=gpu-resident — the same server, model already
+        resident, so the two lanes were one lane sampled twice and reported as a
+        comparison. `--force-lane` (order 793-qc6q, which exists for exactly this) gives
+        cpu-resident:0/936692939. Anyone benchmarking a lane must read lane_observed and
+        not lane_requested.
+
+        THE NPU DOES NOT REFUSE, IT DEGRADES SILENTLY. `--lane npu` returns rc=0 with
+        lane_observed=cpu-resident:0/936692939. The device is present (/dev/accel/accel0)
+        and ollama has no NPU backend, so the request falls through to CPU and reports
+        success. A caller reading lane_requested would record an NPU benchmark that never
+        touched the NPU. That is the same mislabelled-arm failure 793-qc6q fixed for the
+        CPU lane, still live for the NPU lane, and it is the honest content of
+        "engine-missing".
+
+        STATE LEFT ON THIS HOST, so nobody is surprised: ollama is running host-native on
+        127.0.0.1:11434, started manually rather than by a unit — there is no systemd
+        unit for it on this host, so the lane does NOT survive a reboot. Making it
+        persistent is a change to the operator's workstation beyond tonight's work and is
+        left for their say-so. Model cache ~/.ollama now holds 5.4 GB.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    field: unscoreable
+    value: ''
+    ts: "2026-09-15T11:43:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: expire-claims-ages-a-claim-by-the-newest-event-on-the-row-and-attributes-it-to-that-events-host-so-a-fresh-claim-reads-as-two-weeks-old-and-belongs-to-the-wrong-host
+    event:
+      type: note
+      ts: "2026-09-15T11:43:24Z"
+      host: macuahuitl
+      summary: |-
+        1136-n8sh discharge: the guard exists

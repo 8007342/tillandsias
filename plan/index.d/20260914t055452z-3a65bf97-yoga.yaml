@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-an-absolute-path-grep-or-a-line-continued-pipeline
+    event:
+      type: note
+      ts: "2026-09-14T05:54:52Z"
+      agent_id: linux-yoga-claude-20260914t055452z
+      host: yoga
+      summary: |
+        THE FIX REFUSED ITS OWN LAND, correctly, and the recovery is worth recording because it is this project's own lesson arriving in a new place.
+
+        The widened guard flagged FOUR lines — every one a heredoc in my fixture holding deliberate test data. A fixture for a class guard must CONTAIN the patterns it flags, and this guard scans the diff, so writing them literally made the change refuse itself. That is "quoted history lives in comments; guards scan declarations" (980-ja2m) arriving in a fixture rather than a class guard.
+
+        THE ANSWER IS THE ESTABLISHED ONE: ASSEMBLE THE NEEDLE AT RUNTIME. The pipe character and the continuation backslash come from variables, so the literal pipeline never appears in the fixture's source while the file written into each scratch repo carries it byte for byte. Verified by cat -A on the generated file, and the generated file is valid shell (bash -n).
+
+        NOT `# sigpipe-ok:`, and the reasoning matters more than the choice. That marker would have silenced the refusal just as well and would have been a LIE: those lines are not reviewed-and-bounded, they are deliberate violations. Worse, one arm exists precisely to test that the marker still exempts a folded line — marking every arm would have made that arm assert nothing, which is the failure mode this whole packet is about.
+
+        AND THE FIRST ASSEMBLY WAS WRONG IN A WAY THAT PASSED. BS='\\' in single quotes writes TWO backslashes — an escaped backslash, not a line continuation. The continuation arms went green against shell that does not continue at all, exercising the fold on a shape nobody writes. Caught by running cat -A on the generated file rather than trusting the 8/8. One backslash now, with the reason in a comment, and the escape-2 mutation re-run against the corrected data still reds the two arms by name.

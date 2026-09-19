@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -23,6 +23,7 @@ use std::time::Duration;
 #[cfg(feature = "vault")]
 use keyring::Entry;
 
+use tillandsias_control_wire::DeliverCredentialsOutcome;
 use tillandsias_podman::{PodmanClient, podman_cmd_sync};
 use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, VaultError, auto_unseal};
 use zeroize::Zeroize;
@@ -72,16 +73,36 @@ pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock
 
 #[cfg(feature = "vault")]
 #[allow(dead_code)]
+/// ORDER 890-y72v. Returns WHAT HAPPENED, where this used to return unit.
+///
+/// The unit return was the whole defect at this end: every path through this
+/// function looked identical to its caller, so `vsock_server` had nothing to
+/// build a reply from and hardcoded `success: true`. Two of those paths are
+/// not success. The early return below drops the delivery on the floor, and a
+/// failed fallback write leaves the guest without the share it was just told
+/// it had.
+///
+/// `Accepted` here means STORED AND PERSISTED — in memory, and to the fallback
+/// file when a cache dir exists. It does NOT mean the share authenticates
+/// against a live vault; that is the larger half of this order and is NOT
+/// claimed by this value. Read `DeliverCredentialsOutcome`'s docs before
+/// treating an `Accepted` as proof the vault will open.
 pub fn set_in_vm_credentials(
     unseal_share_b64: Option<String>,
     installation_uuid: String,
     root_token: Option<String>,
-) {
+) -> DeliverCredentialsOutcome {
     // If we have a pending fresh handover, the VM's state is strictly newer than
     // whatever the host tray just delivered. Ignore the stale delivery to prevent
     // clobbering the fresh token in memory and the fallback file.
+    //
+    // 890-y72v: this return is CORRECT and was SILENT. The host was told
+    // success=true for a delivery this guest deliberately discarded, so a tray
+    // that delivered a stale share saw the same answer as one that delivered a
+    // working one. `Superseded` says the host's copy is stale without implying
+    // anything is broken.
     if get_pending_handover().1.is_some() {
-        return;
+        return DeliverCredentialsOutcome::Superseded;
     }
 
     let share_for_disk = unseal_share_b64.clone();
@@ -114,6 +135,13 @@ pub fn set_in_vm_credentials(
                 share_for_disk.as_deref(),
             ) {
                 report_fallback_write_failure("host delivery into the guest", &e.to_string());
+                // 890-y72v: the in-memory copy survives this process and the
+                // file does not, so the next launch has nothing. Reporting
+                // success here is how a guest tells the host it holds a
+                // credential it will have forgotten by morning.
+                return DeliverCredentialsOutcome::Rejected {
+                    reason: format!("fallback write failed: {e}"),
+                };
             }
         }
         Err(e) => {
@@ -121,8 +149,12 @@ pub fn set_in_vm_credentials(
                 "host delivery into the guest",
                 &format!("cache dir unavailable: {e}"),
             );
+            return DeliverCredentialsOutcome::Rejected {
+                reason: format!("cache dir unavailable: {e}"),
+            };
         }
     }
+    DeliverCredentialsOutcome::Accepted
 }
 
 #[cfg(feature = "vault")]
@@ -206,12 +238,17 @@ pub fn is_running_in_vm() -> bool {
     false
 }
 
+/// 890-y72v: the no-vault build stores nothing, so it must not answer
+/// `Accepted`. It is not a rejection either — there is no vault to reject
+/// anything — and `Unstated` is the value whose whole contract is "no claim
+/// was made", which is exactly true here.
 #[cfg(not(feature = "vault"))]
 pub fn set_in_vm_credentials(
     _unseal_share_b64: Option<String>,
     _installation_uuid: String,
     _root_token: Option<String>,
-) {
+) -> DeliverCredentialsOutcome {
+    DeliverCredentialsOutcome::Unstated
 }
 
 #[cfg(not(feature = "vault"))]
@@ -904,36 +941,79 @@ const VAULT_EXEC_ADDR: &str = "https://127.0.0.1:8200";
 /// - `VAULT_ADDR`        — the loopback TLS listener (the entrypoint sets this; exec does not)
 /// - `VAULT_SKIP_VERIFY` — the cert is self-signed; the request never leaves the
 ///   container loopback, so verification is moot here (not a network hop)
-/// - `VAULT_TOKEN`       — auth; forwarded via name-only `-e VAULT_TOKEN` so the
-///   token rides in the podman process's environment and never appears in the
-///   exec argv (i.e. not visible in `ps`)
+/// - `VAULT_TOKEN`       — auth; delivered on STDIN and exported by a one-line
+///   `sh` shim INSIDE the container, so it never appears in the exec argv (not
+///   visible in `ps`) and never depends on the podman process's environment
+///   reaching the container.
 ///
-/// Without these, `vault kv get` fails first with a TLS error and then a
-/// missing-client-token error — which silently broke every host-side credential
-/// read after the move from the HTTP Vault client to `podman exec`.
+/// WHY STDIN, AND NOT THE NAME-ONLY `-e VAULT_TOKEN` PASS-THROUGH THIS USED TO
+/// BE. Inside the tillandsias-builder toolbox — the namespace `./build.sh
+/// --ci-full` runs in — `podman` is a wrapper that runs the HOST binary through
+/// flatpak-spawn, which forwards stdio, cwd and the exit code but NOT the
+/// caller's environment. Measured on macuahuitl 2026-09-18: `FOO=x podman exec
+/// -e FOO … env` printed nothing inside the container while `-e FOO=explicit`
+/// arrived intact. So the pass-through delivered no token, every vault read
+/// from the release gate answered 403, and the forge launch died at
+/// `opencode_auth_content_available` — the three forge-lane reds of the
+/// v56.9.18.1 ci4 run. stdin crosses that boundary; the environment does not.
+///
+/// Without VAULT_ADDR/VAULT_SKIP_VERIFY, `vault kv get` fails first with a TLS
+/// error and then a missing-client-token error — which silently broke every
+/// host-side credential read after the move from the HTTP Vault client to
+/// `podman exec`.
+///
+/// `discard_stdout` drops the CLI's stdout INSIDE the container, so a
+/// presence-only probe never lets a secret's value reach launcher memory.
 ///
 /// @trace spec:tillandsias-vault, plan/issues/vault-exec-env-regression-2026-06-27.md
 fn vault_exec_command(
-    root_token: &str,
     vault_args: &[&str],
+    discard_stdout: bool,
 ) -> tillandsias_podman::SyncPodmanCommand {
     let mut cmd = podman_cmd_sync();
-    // Token in the podman process env → forwarded by name-only `-e VAULT_TOKEN`,
-    // so it stays out of argv.
-    cmd.env("VAULT_TOKEN", root_token);
     cmd.args([
         "exec",
+        "-i",
         "-e",
         &format!("VAULT_ADDR={VAULT_EXEC_ADDR}"),
         "-e",
         "VAULT_SKIP_VERIFY=true",
-        "-e",
-        "VAULT_TOKEN",
         VAULT_CONTAINER_NAME,
-        "vault",
+        "sh",
+        "-c",
+        if discard_stdout {
+            VAULT_STDIN_TOKEN_SHIM_QUIET
+        } else {
+            VAULT_STDIN_TOKEN_SHIM
+        },
+        "sh",
     ]);
     cmd.args(vault_args);
     cmd
+}
+
+/// The in-container shim: read the token line from stdin, export it, exec the
+/// CLI with the remaining argv. `IFS=` and `-r` keep the token byte-exact.
+const VAULT_STDIN_TOKEN_SHIM: &str =
+    "IFS= read -r VAULT_TOKEN && export VAULT_TOKEN && exec vault \"$@\"";
+/// Same, with the CLI's stdout dropped inside the container (presence probes).
+const VAULT_STDIN_TOKEN_SHIM_QUIET: &str =
+    "IFS= read -r VAULT_TOKEN && export VAULT_TOKEN && exec vault \"$@\" >/dev/null";
+
+/// Run the in-container `vault` CLI with the root token on stdin, bounded by
+/// the container operation budget. Every host-side vault read goes through here.
+fn vault_exec_output(
+    root_token: &str,
+    vault_args: &[&str],
+    discard_stdout: bool,
+) -> std::io::Result<std::process::Output> {
+    let mut input = Vec::with_capacity(root_token.len() + 1);
+    input.extend_from_slice(root_token.as_bytes());
+    input.push(b'\n');
+    vault_exec_command(vault_args, discard_stdout).output_bounded_with_stdin(
+        &input,
+        tillandsias_podman::OperationKind::Container.default_budget(),
+    )
 }
 
 /// Fast presence-only check: returns `true` iff `secret/github/token` exists
@@ -975,14 +1055,13 @@ pub(crate) fn is_github_key_present() -> bool {
     let Ok(root_token) = read_and_handover_root_token(false) else {
         return false;
     };
-    vault_exec_command(
+    // Presence only: stdout is dropped inside the container (discard_stdout).
+    vault_exec_output(
         &root_token,
         &["kv", "get", "-field=token", "secret/github/token"],
+        true,
     )
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
-    .map(|s| s.success())
+    .map(|output| output.status.success())
     .unwrap_or(false)
 }
 
@@ -1008,8 +1087,7 @@ pub(crate) fn vault_kv_get_via_exec(
     // VAULT_ADDR/TOKEN/skip-verify supplied explicitly (see vault_exec_command).
     let root_token = read_and_handover_root_token(debug)?;
     let field_arg = format!("-field={field}");
-    let output = vault_exec_command(&root_token, &["kv", "get", &field_arg, secret_path])
-        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+    let output = vault_exec_output(&root_token, &["kv", "get", &field_arg, secret_path], false)
         .map_err(|e| format!("podman exec {VAULT_CONTAINER_NAME} vault kv get: {e}"))?;
     if output.status.success() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -1047,16 +1125,14 @@ pub(crate) fn opencode_auth_content_available(debug: bool) -> Result<bool, Strin
     let _stability = vault_stability_lease(debug)?;
     let root_token = read_and_handover_root_token(debug)?;
     let field_arg = format!("-field={OPENCODE_AUTH_VAULT_FIELD}");
-    let mut command = vault_exec_command(
+    // Presence only: stdout is dropped INSIDE the container so the Gemini key
+    // never enters launcher memory. The scoped forge reads it later.
+    let output = vault_exec_output(
         &root_token,
         &["kv", "get", &field_arg, OPENCODE_AUTH_VAULT_PATH],
-    );
-    // Presence only: discard stdout at the process boundary so the Gemini key
-    // never enters launcher memory. The scoped forge reads it later.
-    command.stdout(Stdio::null());
-    let output = command
-        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
-        .map_err(|error| format!("OpenCode Vault auth availability command failed: {error}"))?;
+        true,
+    )
+    .map_err(|error| format!("OpenCode Vault auth availability command failed: {error}"))?;
     if output.status.success() {
         return Ok(true);
     }
@@ -2187,6 +2263,59 @@ fn vault_selinux_label_opt(debug: bool) -> Option<String> {
         Err(_) => false,
     };
     if !enforcing_or_permissive {
+        // ASK IN THE RIGHT NAMESPACE (release gate, 2026-09-18).
+        //
+        // `getenforce` describes the namespace it RUNS IN; the container we are
+        // about to launch is labelled by the HOST's policy. Those differ, and
+        // the release gate runs inside the `tillandsias-builder` toolbox:
+        //
+        //     host                        getenforce -> Enforcing, /sys/fs/selinux/enforce = 1
+        //     inside tillandsias-builder  getenforce -> Disabled,  selinuxfs NOT mounted
+        //
+        // So on an Enforcing host the probe concluded "SELinux is off", returned
+        // None, and podman applied its DEFAULT container_t — the one outcome the
+        // fallback below exists to avoid. Measured on the failed container:
+        // SecurityOpt was [no-new-privileges] with NO label, ProcessLabel
+        // container_t:s0:c317,c827, and vault exited 1 on boot with
+        //
+        //     AVC denied { read } comm="vault" name="_seal-config"
+        //       scontext=system_u:system_r:container_t:s0:c317,c827
+        //       tcontext=unconfined_u:object_r:cache_home_t:s0
+        //
+        // which is exactly root cause (1) of
+        // plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md
+        // arriving through a path that issue's fix does not cover.
+        //
+        // DISCRIMINATED, not assumed. On ~/.cache/tillandsias/vault-data, which
+        // is drwxr-xr-x so UNIX permits any uid to list it:
+        //     podman default label   -> DENIED
+        //     --security-opt label=disable -> LIST OK
+        // (An earlier comparison used --userns=keep-id and the image's default
+        // user; both arms then failed on UNIX perms on the 0700 core/ dir, so it
+        // could not discriminate the label at all. Probe a path where the
+        // confounder is neutral.)
+        //
+        // A CONTAINER WITHOUT selinuxfs CANNOT SEE THE HOST'S STATE, so its
+        // "Disabled" is not evidence about the host. Treat it as UNKNOWN and pick
+        // the option correct in BOTH regimes: label=disable is a no-op when
+        // SELinux really is off, and is the documented fleet default when it is
+        // on (spec:podman-container-spec lists it as a standard hardening
+        // default). None is the only choice that can fail, so it must require
+        // POSITIVE evidence — an unmounted selinuxfs inside a container is not
+        // that.
+        let containerized =
+            Path::new("/run/.containerenv").exists() || Path::new("/.dockerenv").exists();
+        let selinuxfs_visible = Path::new("/sys/fs/selinux/enforce").exists();
+        if containerized && !selinuxfs_visible {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] getenforce reports not-enforcing but selinuxfs is not \
+                     mounted in this container — the HOST's state is unknown from here; using \
+                     label=disable, which is correct whether or not the host enforces"
+                );
+            }
+            return Some("label=disable".to_string());
+        }
         return None;
     }
 
@@ -4797,12 +4926,15 @@ mod tests {
     #[test]
     fn vault_exec_command_sets_required_env_and_hides_token() {
         // `podman exec` does not inherit the entrypoint env, so the exec'd vault
-        // CLI must get VAULT_ADDR + VAULT_SKIP_VERIFY + VAULT_TOKEN or it fails
-        // with a self-signed-cert TLS error and then a missing-token error. The
-        // token must be forwarded by name only (-e VAULT_TOKEN) so it stays out
-        // of argv. Regression guard for the HTTP→podman-exec credential-read move.
+        // CLI must get VAULT_ADDR + VAULT_SKIP_VERIFY or it fails with a
+        // self-signed-cert TLS error. The token must reach the container on
+        // STDIN, read by the in-container shim: never on argv (visible in `ps`)
+        // and never as a name-only `-e VAULT_TOKEN` pass-through, which the
+        // builder toolbox's flatpak-spawn podman wrapper drops on the floor
+        // (measured 2026-09-18; the v56.9.18.1 ci4 forge-lane reds). Regression
+        // guard for the HTTP→podman-exec credential-read move and for that one.
         // @trace plan/issues/vault-exec-env-regression-2026-06-27.md
-        let cmd = vault_exec_command("super-secret-root-token", &["kv", "get", "secret/x"]);
+        let cmd = vault_exec_command(&["kv", "get", "secret/x"], false);
 
         let args: Vec<String> = cmd
             .get_args()
@@ -4816,25 +4948,41 @@ mod tests {
             args.contains(&"VAULT_SKIP_VERIFY=true".to_string()),
             "missing VAULT_SKIP_VERIFY; args={args:?}"
         );
-        // Name-only passthrough: the literal "VAULT_TOKEN" appears, but the token
-        // value must NOT be anywhere in argv.
+        // stdin must be attached for the shim to read the token line.
         assert!(
-            args.iter().any(|a| a == "VAULT_TOKEN"),
-            "missing name-only -e VAULT_TOKEN; args={args:?}"
+            args.contains(&"-i".to_string()),
+            "missing -i; args={args:?}"
+        );
+        // The shim reads the token from stdin inside the container...
+        assert!(
+            args.iter().any(|a| a.contains("read -r VAULT_TOKEN")),
+            "missing the stdin token shim; args={args:?}"
+        );
+        // ...and the broken pass-through form is gone: no bare `VAULT_TOKEN`
+        // argv entry, and no VAULT_TOKEN in the podman process environment.
+        assert!(
+            !args.iter().any(|a| a == "VAULT_TOKEN"),
+            "name-only -e VAULT_TOKEN pass-through must not be used; args={args:?}"
         );
         assert!(
-            !args.iter().any(|a| a.contains("super-secret-root-token")),
-            "token leaked into argv (visible in ps); args={args:?}"
+            !cmd.get_envs()
+                .any(|(k, _)| k == std::ffi::OsStr::new("VAULT_TOKEN")),
+            "VAULT_TOKEN must not be set in the podman process env"
         );
-
-        // The token rides in the podman process environment instead.
-        let token_in_env = cmd.get_envs().any(|(k, v)| {
-            k == std::ffi::OsStr::new("VAULT_TOKEN")
-                && v == Some(std::ffi::OsStr::new("super-secret-root-token"))
-        });
+        // The vault argv follows the shim's `sh` $0 placeholder intact.
+        let tail: Vec<&str> = args.iter().rev().take(3).map(String::as_str).collect();
+        assert_eq!(
+            tail,
+            ["secret/x", "get", "kv"],
+            "vault argv order; args={args:?}"
+        );
+        // Presence probes drop stdout inside the container, not at the host.
+        let quiet = vault_exec_command(&["kv", "get", "secret/x"], true);
         assert!(
-            token_in_env,
-            "token must be set in the process env, not argv"
+            quiet
+                .get_args()
+                .any(|a| a.to_string_lossy().ends_with(">/dev/null")),
+            "discard_stdout must redirect inside the container"
         );
     }
 

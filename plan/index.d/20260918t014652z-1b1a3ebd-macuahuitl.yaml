@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-podman-seam-env-var-leaks-across-the-mutex-that-documents-its-own-exclusion-so-one-test-reads-another-tests-fake-binary-and-the-suite-fails-only-at-some-core-counts
+    event:
+      type: correction
+      ts: "2026-09-18T01:46:52Z"
+      agent_id: linux-macuahuitl-claude-20260918t014652z
+      host: macuahuitl
+      summary: |
+        FIXED AND VERIFIED ON THE HOST THAT REPRODUCES IT — and the cause was neither
+        hypothesis on this row, including mine.
+
+        THE VERIFICATION FIRST, because it is the part that earns the rest: full suite,
+        default threads, FIVE consecutive runs 544/544 green, against 3/3 RED
+        immediately before. Full gate rc=0, stamp recorded, 4185s. Run before and after
+        in the regime where it fails, not in isolation where it hides.
+
+        MY SUGGESTION WAS WRONG. This row records poison recovery via
+        `unwrap_or_else(|e| e.into_inner())` as the first place to look. yolanda
+        established it is not: that form bypasses the poison ERROR but still BLOCKS, so
+        exclusion was never lost through it. A plausible mechanism named by a
+        coordinator who could not reproduce the failure, and it survived into the row
+        because it sounded right.
+
+        THE ACTUAL CAUSE IS BETTER THAN EITHER GUESS. TILLANDSIAS_PODMAN_BIN is ONE
+        process-global string, and THREE test modules write it — main.rs's fake-podman
+        fixtures (a scratch script), accel_probe (/bin/false), and remote_projects (a
+        mock) — each guarding it with A MUTEX OF ITS OWN. The invariant at main.rs:18127
+        reads "EVERY writer of TILLANDSIAS_PODMAN_BIN in this tests mod serializes on
+        THIS mutex". It was TRUE AS WRITTEN. It simply did not cover the crate.
+
+        THE SCOPE OF THE GUARANTEE WAS THE BUG, NOT ITS WORDING. That is the durable
+        sentence and it is yolanda's. A correctly-stated narrow guarantee is invisible
+        to precisely the reader who needs it widened, because nothing about it looks
+        wrong. Same shape as a drift figure that names a branch without naming the REF:
+        accurate, and read as broader than it is.
+
+        The fingerprint was `status Some(1)` on a podman rm — /bin/false arriving from
+        accel_probe while main.rs's fixture held what it believed was the seam lock.
+
+        THE FIX: one canonical `runtime_assets::podman_seam_lock()` beside the canonical
+        env_lock; main.rs and accel_probe both delegate. accel_probe ALSO takes env_lock
+        (seam-then-env) because remote_projects repoints the same variable holding only
+        env_lock — the seam lock alone would have excluded main.rs's fixtures and not
+        that module, moving the gap rather than closing it.
+
+        AND THE HALF WORTH MORE THAN THE FIX. A second change was shipped that was
+        necessary neither for the failure nor the repair: unifying remote_projects'
+        private ENV_LOCK. The suite stayed RED 4/4 with it applied. It was kept anyway
+        on plausibility — in a SEPARATE commit whose message said plainly that it had no
+        failing control of its own and that reverting left the suite green 3/3. That
+        separation is what made the next part survivable: the gate then HUNG for ten
+        minutes on a test taking the module-local lock AND the canonical one in the same
+        body. Once both pointed at the same non-reentrant mutex it blocked on itself
+        forever, and A DEADLOCK PRESENTS AS A HANG, NOT A FAILURE — nothing was ever
+        reported, the suite simply stopped. Reverted in one commit.
+
+        Their own verdict, recorded verbatim because it is the lesson: "I had the
+        evidence to drop it at the 4/4-red step and chose to keep it on plausibility;
+        that was the error." And: "it didn't reproduce in three runs" is not evidence of
+        safety for a race whose signature is needing the right interleaving. Three greens
+        bound a rate; they do not establish absence. This coordinator made the mirror of
+        that error on this row, reporting four greens at nproc=20 as if they settled the
+        question rather than bounding it.
+
+        STILL LIVE AND DELIBERATELY NOT BUNDLED: remote_projects has five tests writing
+        TILLANDSIAS_PODMAN_BIN and PATH under a mutex that excludes nothing outside the
+        file, while six others in the same file already call the canonical env_lock.
+        Fixing it requires removing the redundant INNER acquisitions FIRST, then
+        unifying, with a control — otherwise it reproduces the deadlock above. Its own
+        piece of work.
+
+        DIAGNOSIS CREDIT, at the finder's explicit request, goes to the CONTROL rather
+        than to them: running the full suite before and after, and refusing to call a
+        green a fix.

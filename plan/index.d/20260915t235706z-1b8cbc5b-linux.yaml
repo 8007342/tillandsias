@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-platform-scoped-gate-arm-is-invisible-to-every-host-not-on-that-platform-so-a-change-can-land-green-through-a-gate-structurally-incapable-of-testing-it
+    event:
+      type: progress
+      ts: "2026-09-15T23:57:06Z"
+      agent_id: linux-yoga-claude-20260915t233553z
+      host: linux
+      summary: |
+        IMPLEMENTED AND LANDING IN THIS COMMIT. scripts/check-unrunnable-platform-arms.sh names, before the push, every changed path exercised by a prover row whose platforms field EXCLUDES this host, with the arm and the platform named. Falsified by scripts/test-unrunnable-platform-arms.sh, 10 arms.
+
+        ALL FOUR EXIT CRITERIA, and how each is met:
+
+        1. A change touching a file exercised by an arm scoped elsewhere prints a notice naming the arm and the platform, before the land. MEASURED: appending a line to scripts/check-credential-channel.sh produces advisory:unrunnable-platform-arms:1 of 3 changed paths, naming the timeout prover row, scoped macos, and saying this host never runs it.
+
+        2. The inventory is DERIVED FROM THE ROWS, never a second list. It parses the required_tools spec heredoc in check-host-tools.sh and mirrors that file's own platform test, so the two agree by construction. If the 8-field contract moves, it answers fail:unparsable-spec rather than reading the wrong column.
+
+        3. NEGATIVE CONTROL, silence when nothing platform-scoped is touched: ok:unrunnable-platform-arms:0 of N changed paths.
+
+        4. NEGATIVE CONTROL, advisory and never a refusal: every verdict exits 0, and the land call site adds an explicit guard on top.
+
+        THE DISCRIMINATING CONTROL, which is the one that makes the rest mean anything: the SAME changed file is SILENT when the host is macos, because macos runs that arm. Without it, every other arm would pass for a guard that merely greps for a filename. Mutating away the platform test makes linux and macos both fire and reds exactly that arm.
+
+        TWO DEFECTS IN MY OWN FIXTURE, FOUND BY MUTATION AND RECORDED BECAUSE BOTH PRINTED GREEN:
+
+          - The refusal mutation, changing the advisory path's final exit 0 to exit 1, left the fixture GREEN at 9 of 9. The arm meant to catch it looped over spec sources against THIS repo, where nothing platform-scoped is changed, so every call returned ok or skipped and the advisory branch was NEVER REACHED. An arm whose other branch is unreachable on the host running it is not testing that branch. Added arm 10, which drives the probe repo where the advisory genuinely fires; it reds under the same mutation.
+
+          - My verification grep for the first mutation matched its own header COMMENT describing the line I had deleted, so it reported the line still present when the code was gone. The count was of my own documentation. Re-counted anchored to the indented code line.
+
+        BINDING, so this is not a closure citing an orphan: the advisory is invoked from scripts/land-on-platform-branch.sh immediately before the push, and the fixture runs in BOTH gates, build.sh --check and local-ci.sh.
+
+        WHY THE LAND PATH AND NOT THE GATE: a land that finds a valid full-scope stamp SKIPS THE GATE ENTIRELY (1174-u5wp). That is the common case for a plan-only or re-attempted land, and it happened five times on this host tonight. An advisory living inside the gate would be silent on exactly those lands.
+
+        THE DIVERGENCE THIS CREATED WAS FIXED BY RUNNING IT, NOT BY DECLARING IT. Binding the fixture in local-ci alone made --ci-full and --check differ, which 1087-h2z9 refuses undeclared. The fixture is 0.15s and hermetic, far too cheap to earn a permanent line in a ratchet meant for differences worth keeping, so it is wired into build.sh --check as well and the guard returns ok:gate-divergence-declared:18 unchanged.
+
+        A REFUSAL I TRIPPED WRITING THIS EVENT, worth one line: my first append carried a hand-written --ts 23 minutes AHEAD of the host clock and append-event refused it, naming the drift and the limit. An invented timestamp in a ledger is exactly the fixture defect this project keeps finding, committed in the record of fixing one.
+
+        THE HONEST LIMIT, stated in the script header so no reader infers coverage from silence: the inventory is exactly as complete as the rows' own prover column. MEASURED on linux — 13 rows, 8 skipped here, and of those 8 exactly ONE names a prover. That one is check-credential-channel.sh, precisely the file whose breakage cost both macOS hosts a day. The other 7 carry a dash, and any file association for them lives in prose in the why field, which is not a queryable column. So a silent run means no path in this change is named by a prover row scoped away from here; it does not mean the change is safe across platforms. Backfilling prover on rows that have one is a different packet and I am not filing it as a side effect of this one.

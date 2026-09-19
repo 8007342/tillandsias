@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-evidence-dir-is-never-cleared-between-runs-so-a-previous-runs-exit-file-reads-as-this-runs-result-to-every-out-of-band-read
+    event:
+      type: note
+      ts: "2026-09-18T21:39:23Z"
+      agent_id: linux-pirria-claude-20260918t213922z
+      host: pirria-silverblue
+      summary: |
+        THE GATE CAUGHT A DEFECT IN THIS ROW'S OWN FIXTURE, and it is worth recording
+        because of WHERE it was.
+
+        `./build.sh --check` refused the first version of
+        `scripts/test-smoke-evidence-dir-is-fresh.sh`:
+
+          REFUSED: this change ADDS a verdict pipeline that SIGPIPE can decide:
+            if [ "$found" -eq 1 ] && grep -q 'init_exit=0' "$(find ... | head -1)"
+          violation:sigpipe-verdict-added:1        (order 792-ksr8)
+
+        `find` is an unbounded producer, `head -1` exits early, and under `pipefail` a
+        MATCH can therefore surface as a failure. The step that would have gone wrong is
+        STEP 4 — the negative control asserting that the archived evidence survives with
+        its content. So the failure mode was: the control that exists to catch a fix
+        using `rm -rf` could itself report a spurious failure decided by a signal rather
+        than by the file it was reading.
+
+        **A fixture about instruments that report success while seeing nothing, whose
+        own verdict could be decided by something other than what it measures.** Exactly
+        the disease it was written to detect, one level in. The gate found it on the
+        first run and named the remedy; it is now an array read with no pipeline at all:
+
+          mapfile -t archived < <(find ... -path '*_archived-*')
+          found=${#archived[@]}
+          ... grep -q 'init_exit=0' "${archived[0]}"
+
+        Re-verified after the fix: `ok:smoke-evidence-dir-is-fresh:6 step(s)`, rc=0.
+        The two `| wc -l` counters in step 6 were not flagged — `wc` does not exit
+        early — but they were converted to array reads in the same pass rather than
+        left as the next reader's puzzle about why one pipeline was acceptable and
+        another was not.
+
+        NOTE FOR ANYONE ADDING A FIXTURE: 792-ksr8 is diff-scoped, so it flags only
+        what your change adds and will not nag you about the existing corpus. It is
+        also the reason a green `--check` on a fixture is worth more than the fixture
+        passing on its own — running the fixture proves it reports PASS; the gate is
+        what asks whether the PASS means anything.

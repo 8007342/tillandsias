@@ -698,6 +698,30 @@ fi
 # right now" is the question asked most often, and it should not cost a repo
 # scan.
 EXPERTS_ONLY=false
+# ORDER 1245-xxxx — SKIP THE ACCURACY GRADE FOR CALLERS THAT ONLY WANT TELEMETRY.
+#
+# The comment beside the grade call says "The grader is cheap (~0.4s over 19
+# cases) so it runs every cycle". MEASURED on macuahuitl 2026-09-17 it is
+# 17,945ms over 33 cases -- 45x, while the corpus grew 1.7x. Per set:
+#   expert-groundtruth-rung1.yaml   16,793ms / 22 cases  (~763ms each)
+#   spec-rung1.yaml                    803ms /  5 cases
+#   expert-groundtruth-plan-next        181ms /  3 cases
+#   expert-groundtruth-fragment-prov     51ms /  3 cases
+# It is NOT the ledger fold (269ms for a folded read, 379ms fold+check) and NOT
+# a per-case fold bug (Harness::ledger memoises). It is genuine per-case expert
+# answering, so it cannot be optimised away here.
+#
+# WHAT IT COST: three litmus steps assert on the `skippable:`/`flow:`/`timing:`
+# lines, call this script BARE at a 10s budget, and pay 18s of expert grading to
+# read telemetry. All three timed out in the release-tier ci-full and reported
+# `genuinely too slow for its 10s budget` -- which is TRUE and points at the
+# wrong thing. That red blocked a release while main sat 793 commits behind.
+#
+# The remedy is NOT a bigger budget (sequential removal of the five elevations
+# is 1236-bmjh's job, and adding a sixth would bury this). It is that a caller
+# wanting telemetry should not buy an accuracy grade. `--experts-only` already
+# existed; this is its inverse.
+NO_EXPERTS=false
 # ORDER 1105-h8vr — THE SAME EARLY EXIT UNDER A NAME THAT DESCRIBES THE
 # GUARANTEE RATHER THAN THE AUDIENCE.
 #
@@ -729,6 +753,7 @@ SKIP_FLOOR_MS="${TILLANDSIAS_SKIP_FLOOR_MS:-2000}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --experts-only) EXPERTS_ONLY=true ;;
+        --no-experts) NO_EXPERTS=true ;;
         --no-repo-scan) NO_REPO_SCAN=true ;;
         --cycle-start) if [ $# -gt 1 ]; then shift; CYCLE_START_TS="$1"; fi ;;
         --cycle-start=*) CYCLE_START_TS="${1#--cycle-start=}" ;;
@@ -951,6 +976,13 @@ GRADE_BIN=""
 . "$REPO_ROOT/scripts/plan-binary-probe.sh"
 GRADE_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
+# --no-experts: keep the DEFERRED line above rather than grading. The line is
+# still emitted and still says `deferred`, so a reader can tell "not graded this
+# run" from "graded and green" -- the distinction a silent omission would erase.
+if [ "$NO_EXPERTS" = true ]; then
+    accuracy_line='expert_accuracy: skipped source=--no-experts (caller asked for telemetry only)'
+    GRADE_BIN=""
+fi
 # Order 786-kjke: grade EVERY committed query set, not just rung1.
 #
 # This line used to run bare `grade --root .`, which defaults to rung1 and

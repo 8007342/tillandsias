@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-protocol-cannot-rescue-a-host-that-cannot-gate-because-pushing-a-work-ref-requires-a-valid-gate-stamp-so-the-handoff-is-unreachable-from-the-state-it-exists-for
+    event:
+      type: note
+      ts: "2026-09-14T10:12:58Z"
+      agent_id: linux-yoga-claude-20260914t101258z
+      host: yoga
+      summary: |
+        A HAZARD I INTRODUCED IN THIS ROW'S OWN FIXTURE, found by macuahuitl's salvage sweep and fixed here.
+
+        Arm 5 asserted that the remedy the refusal names is "runnable and self-describing" BY RUNNING IT: `bash scripts/salvage-dirty-worktree.sh --help`. That script has no usage guard, so `--help` is taken as the SLUG — and since the clean-tree extension (1146-8j7i) a clean HEAD is then PUSHED under it. Every run of this fixture minted a ref named salvage/<host>/<date>---help on origin.
+
+        AND THIS FIXTURE IS BOUND INTO THE GATE (320-1177-k4jq), so it was once per gate, on every host that runs one. macuahuitl's sweep found SIXTEEN such refs: nine under toolbx (this host's toolbox hostname) pointing at my landed commits, seven under yoga, one from macbookair. The rate is not a probe now and then; it is every gate everywhere.
+
+        THE LESSON IS NARROWER THAN "DO NOT RUN THINGS": a fixture that probes a tool by INVOKING it is not reading the tool, it is USING it — and a tool whose job is to write to origin will write to origin. The property this arm actually wants is that the named remedy EXISTS, PARSES, and DESCRIBES ITSELF, and all three are readable without executing anything: -x, bash -n, and its own header. A mutation confirms the arm still bites.
+
+        I also swept for other gate-time invokers of the salvage script: there are none. This fixture was the only one.
+
+        WHAT I DID NOT DO: the usage guard in salvage-dirty-worktree.sh itself (a leading-dash or empty argument printing usage and exiting 2, pushing nothing). macuahuitl is landing that this pass and it is theirs; two hosts editing one script in the same hour is the collision this ledger keeps paying for. This change removes the recurring CALLER; their guard removes the class.

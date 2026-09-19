@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-launcher-is-only-installed-by-a-gate-that-must-pass-so-a-fleet-that-builds-daily-runs-a-binary-from-the-last-green-day
+    event:
+      type: note
+      ts: "2026-09-17T03:54:03Z"
+      agent_id: linux-macuahuitl-claude-20260917t035403z
+      host: macuahuitl
+      summary: |
+        SECOND HOST CONFIRMS, AND IT IS WORSE. Exit criterion 4 satisfied — this was
+        measured on one host and reported fleet-wide, so a second reading was required
+        rather than an extrapolation.
+
+            yoga-silverblue   /var/home/tlatoani/.local/bin/tillandsias
+                              version  Tillandsias v56.9.11.1
+                              mtime    2026-09-11 19:00:04 -0700
+                              on PATH  yes
+            macuahuitl        v56.9.12.2, mtime 2026-09-12 07:09 (before tonight's manual install)
+
+        SIX DAYS on yoga against five here, and the SAME stamp-correct pattern holds
+        independently: 56.9.11.x IS 2026-09-11. The launcher's version is exactly right
+        for the day it was built, on a host that has been building continuously all
+        night. Two hosts, two different days, same conclusion — the stamping works and
+        the INSTALL is what never happens. yoga's tracked VERSION reads 56.9.13.1 while
+        its launcher says 56.9.11.1, so the gap there is two releases, not one.
+
+        CORROBORATION FROM THE PHASE RECORDS, yoga's timing log, which measures the
+        mechanism from the other end rather than agreeing with the conclusion:
+            build        52,901   last 2026-09-17T03:09
+            build-span    3,234   last 2026-09-17T03:09
+            pre-build     3,090   last 2026-09-16T21:53
+            check         1,918   last 2026-09-17T03:09
+            post-build       14   last 2026-09-15T12:39
+            runtime          31   last 2026-09-15T12:39
+            smoke             5   last 2026-09-12T03:39
+        Fifty-three thousand build records against FOURTEEN post-build. The routine loop
+        is build/check and nothing else, and the last post-build phase predates the last
+        build by two days. "Every --ci-full --install died before its install step" seen
+        from the phase side.
+
+        AND THE FAILURE IS SILENT, which is yoga's addition and is the sharpest thing on
+        this row. A stale launcher reports a version that is INTERNALLY CONSISTENT and
+        CORRECT FOR ITS OWN BUILD — nothing about it looks wrong. The operator noticed
+        because they knew what day it was, not because anything told them. So a fix that
+        makes the launcher merely accurate does not surface the NEXT occurrence: it is
+        already accurate. What would surface it is the launcher knowing how old it is
+        RELATIVE TO THE CHECKOUT IT WAS BUILT FROM — the same shape as the spec index's
+        .commit marker, which this fleet spent tonight learning to read rather than
+        reconstruct. That belongs in the exit criteria of whatever fix is chosen: not
+        "the version is right" but "a stale launcher says so".

@@ -62,6 +62,27 @@ critical_path:
     command: "trace_lifecycle() { :; }; eval \"$(awk '/^probe_mirror_reachable\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; export TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S=3 LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8; if probe_mirror_reachable 'bogus-alias-xyz-not-real-99' 'tillandsias' 2>/tmp/pmr_l_$$; then echo 'FAIL: unresolvable alias did not fast-fail under a French locale'; rm -f /tmp/pmr_l_$$; exit 1; fi; grep -q 'ALIAS UNRESOLVABLE' /tmp/pmr_l_$$ && echo 'ok: DOA class survives a non-English locale'; rm -f /tmp/pmr_l_$$"
     timeout_ms: 20000
     expected_behavior: "ok: DOA class survives a non-English locale"
+  # ORDER 777-k88g, BOUND HERE because it was an orphan (1205-aipn). Its
+  # closure cited a 4/4 hand-run, which is true about that run and false as
+  # protection: nothing executed it on any gate.
+  #
+  # It belongs in THIS spec rather than beside the runner fixtures because its
+  # subject is the clone, and it is the complement of the step below: that one
+  # greps the loop's SOURCE line, so a while-true reds there. This one asserts
+  # the BEHAVIOUR on exhaustion — that it terminates, that a FATAL names the
+  # mirror, and separately that the status is non-zero. A loop can be bounded
+  # in source and still return success on exhaustion, and bounded-loud-and-
+  # quietly-successful is the combination the source pin cannot see.
+  #
+  # Hermetic and offline: the implementation is extracted with awk (the same
+  # idiom this file already uses on probe_mirror_reachable) and git, sleep and
+  # the mirror host are stubbed. Measured 0.026s on yoga — twelve attempts cost
+  # nothing because the backoff is a no-op stub.
+  - step: "the clone's bounded wait fails LOUD and NON-ZERO on exhaustion (behaviour, not the loop literal)"
+    command: "bash scripts/test-forge-clone-wait-is-bounded.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:forge-clone-wait-is-bounded"
+
   - step: "the probe runs BEFORE the clone loop in the launch path"
     # Property check (call precedes the retry loop), not a literal source pin.
     command: "probe=$(grep -n 'probe_mirror_reachable \"$(git_mirror_host)\"' images/default/lib-common.sh | head -1 | cut -d: -f1); loop=$(grep -n 'for i in $(seq 1 $max_retries)' images/default/lib-common.sh | head -1 | cut -d: -f1); if [ -n \"$probe\" ] && [ -n \"$loop\" ] && [ \"$probe\" -lt \"$loop\" ]; then echo 'ok: probe precedes the clone loop'; else echo \"FAIL: probe not before clone loop (probe=$probe loop=$loop)\"; exit 1; fi"

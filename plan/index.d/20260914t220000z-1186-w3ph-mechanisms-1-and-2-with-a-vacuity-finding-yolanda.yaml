@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# EVENTS ONLY. The row stays in_progress: two mechanisms of four are done, and
+# the arm count the row carries turned out to be a count of what was VISIBLE.
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: progress
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-14T22:00:00Z"
+      evidence_refs:
+        - "MECHANISM 2, by symbol: images/default/config-overlay/mcp/forge-plan.sh emit_frame, --rawfile text /dev/stdin -> jq -cRs. Four arms reproduced INDIVIDUALLY (10/17, 18/21, 18/31, 16/29), each with one jq line as its entire output; all four green after."
+        - "MECHANISM 1, by symbol: litmus-credential-channel-check-shape.yaml and litmus-forge-upstream-auth-gate.yaml, the `env PATH=` arms. GITDIR found via command -v git; each arm now refuses if git is not reachable under its own pinned PATH."
+        - "NEGATIVE CONTROLS RUN: mechanism 1 fix removed -> arm 8 reds `FAIL: rc=1 out=missing:no-credential-channel`; the new world-assertion fires with git off PATH and is silent with git present. Mechanism 2's negative control is the pre-fix suite log itself, all four arms red for the recorded reason."
+        - "ATTRIBUTION of mechanism 2 done across loci: with the fix applied, expert-capability-skew-honesty 24/29 (escape survival, directly downstream of the edit) PASSES on Linux and FAILS on MSYS. A change-caused regression fails on both; this fails on one."
+      summary: >
+        MECHANISMS 1 AND 2 LANDED, AND MECHANISM 2'S FRAMING IS WRONG ON THE ROW.
+        Those four arms do NOT assert about a world they never built: they
+        deliberately run the forge-plan MCP script with `bash` at the host locus,
+        which is how the MCP surface is meant to be tested end to end. The
+        fixtures were right and the script was not portable. The fix is in the
+        script, not in the fixtures.
+
+        MECHANISM 1 IS NINE ARMS, NOT ONE. Following the mechanism rather than
+        the list found litmus-forge-upstream-auth-gate.yaml, absent from esme's
+        report, whose eight `env PATH=` arms are ALL red under the pinned PATH
+        and ALL green with git present.
+      note: >
+        THE RED WAS THE HARMLESS HALF, which inverts the severity this row
+        assigns. Arms 6/7/9 of credential-channel-check-shape EXPECT a
+        fail-closed verdict and GET it under the pinned PATH — for the wrong
+        reason. With origin pointed at the CORRECT enclave mirror, where the
+        honest answer is ok:forge-git-mirror rc=0, the pinned PATH still answered
+        missing:no-credential-channel rc=1, byte-identical to the github-origin
+        case. Those arms cannot distinguish their own premise; git's absence
+        satisfies them. One loud red stops a suite and gets fixed; three quiet
+        greens assert that a credential channel is correctly refused when all
+        they measured is that git was not on PATH. Same polarity as 1172-dyvd:
+        the silent wrong answer outranks the loud one.
+
+        THE ARM COUNT IS A COUNT OF WHAT WAS VISIBLE. A suite test stops at its
+        first failing step, so every arm after a broken one was unreachable.
+        Fixing mechanism 2 advanced three tests to failures that appear ZERO
+        times in the pre-fix log: methodology-path-query-citability 18/21 ->
+        21/21, expert-groundtruth-harness 18/31 -> 20/31,
+        expert-capability-skew-honesty 16/29 -> 24/29. These were EXPOSED, not
+        introduced. Two are attributed to the MSYS locus by the cross-locus run
+        (21/21 and 24/29 pass on Linux). 20/31 is NOT attributed: the Linux run's
+        expert-groundtruth-harness failed before printing any step, so that arm
+        never executed there and I will not claim a verdict the run did not
+        produce.
+
+        WHAT REMAINS on this row: mechanism 3 (CRLF through pipes, three
+        instances, one graded as the verdict at rc=0), mechanism 4 (the curl exit
+        vocabulary pinned to one locus's deadline), the open citation-frame arm
+        that needs the cargo run, and the newly exposed arms above.
+
+        A HARNESS NOTE worth more than it cost, because it nearly became a
+        finding: the first cross-locus run reported nineteen failures, every test
+        dying at STEP 1 with rc=127. That was not Linux disagreeing with MSYS; it
+        was `cargo` not being on PATH because the distro was entered with
+        `bash -c` instead of `bash -lc`. Nineteen red lines that look exactly
+        like evidence and mean only that the harness never started.
+
+        NOT A CONFOUND, checked rather than assumed: the runner warns
+        `yq is not on PATH ... before trusting a verdict from this run`, and
+        neither of esme's reports records whether it fired. All ten affected
+        litmus files contain ZERO yq references, so the warning does not touch
+        any arm in this row; it concerns the runner's own metadata reads, which
+        fall back to the compiled reader.

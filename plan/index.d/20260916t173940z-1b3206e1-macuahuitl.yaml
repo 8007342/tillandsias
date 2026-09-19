@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: note
+      ts: "2026-09-16T17:39:40Z"
+      agent_id: linux-macuahuitl-claude-20260916t173940z
+      host: macuahuitl
+      summary: |
+        CADENCE HALF (b) RAN ON macuahuitl AND THE HEADLINE IS THAT IT MOVED NOTHING.
+          head=fd6ca622a  rc=1  duration=2463s (41m)  freshness BEFORE=never:release-tier  freshness AFTER=never:release-tier
+        THE EXERCISE COMPLETED AND THE VERDICT IS UNCHANGED, which is the result rather than a disappointment. ./build.sh --ci-full --install stops at its FIRST failing phase; litmus-pre-build failed, so post-build and runtime never ran, and the new record local-ci-20260916T163919Z lands covering [ pre-build] only. 1174-6r4k correctly refuses to count a phase-only run as a release-tier answer.
+        SO THE never: VERDICT ON THIS HOST IS NOT A SCHEDULING GAP. It is downstream of three red litmus arms, and NO CADENCE FIXES IT. A host with any pre-build red can never record a full-tier run, by construction — the gate cannot reach the phases the record requires. This is the second time this session that reasoning has appeared and the first time it has been demonstrated end to end with a real 41-minute run.
+        CHECKS 36 passed / 1 failed. LITMUS 364 pass / 3 fail / 121 skip of 488 (367 executed). The three:
+          ci-release                        litmus:capability-routing-shape          KILLED AT ITS 120s BUDGET, not a failed assertion
+          forge-environment-discoverability litmus:expert-groundtruth-harness        step 30/31, order 786-kjke
+          meta-orchestration                litmus:e2e-eligibility-probe-shape
+        THE BUDGET KILL MUST NOT BE COUNTED AS AN ASSERTION FAILURE, and the runner says so itself: "BUDGET: 1 of those FAILs were killed at their budget, not failed assertions (still FAIL — 820-c8q8)", with the timing line labelled "(killed at budget — censored; the true time is longer)". So this is TWO genuine assertion failures plus one timeout, and the three want different responses.
+        AND THE TIMEOUT IS ON A FAT HOST, WHICH IS NEW INFORMATION FOR 1187-iij8. That row's premise is that single-step litmus budgets assume a fast host, so a FLOOR-TIER timeout wears an assertion failure's colour. macuahuitl is 20 cores with 58 GB free and it still killed capability-routing-shape at 120s. Either the budget is tight for everyone rather than only for the floor, or this arm has grown past it — and 1187-iij8's framing would send a reader looking at the wrong tier.
+        ONE GRAMMAR OBSERVATION, recorded because it is the runner behaving correctly and could read as a bug: the groundtruth step reports `[FAIL] rc=0` — it EXITED ZERO while its stdout said `fail: groundtruth-corpus-declaration scenarios failed`. The verdict came from the output, not the exit code, which is the documented contract and the right way round.
+        WHAT THIS MEANS FOR ARMING THE PER-HOST TIMER, which is an open operator question: arming it on macuahuitl today would spend 41 minutes every 24 hours and return never: every time, until those three arms are addressed. The timer is not the blocker; the pre-build reds are. Recommend fixing the arms first and arming after, and NOT reading a persistent never: as a cadence failure.
+        No release was cut, no destructive smoke was run, no sub-agents were spawned. The --install completed per 1122-6sqz.

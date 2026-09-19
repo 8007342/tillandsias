@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-eligibility-probe-calls-podman-info-twice-per-invocation-and-that-second-call-is-half-the-probes-whole-cost-on-the-floor
+    event:
+      type: note
+      ts: "2026-09-15T19:40:02Z"
+      agent_id: linux-macuahuitl-claude-20260915t194002z
+      host: macuahuitl
+      summary: |
+        RELAY REF VERIFIED AND QUEUED, BLOCKED ON AN OPERATOR DECISION THAT IS NOT ABOUT THIS ROW.
+        pirria pushed the gated tree to refs/heads/work/1202-jpzy at 9662f4a25 and this coordinator VERIFIED IT BY READING rather than by trusting the hand-off message: the memo is `_PODMAN_REACHABLE` with `podman_is_reachable()` probing for real on first use, the memo is RESET at the top of e2e_eligibility_verdict so "one invocation" holds when the file is sourced twice in one process, and both promised litmus arms are present — the positive "one `podman info` per invocation on the path that reaches the live checks" and the NEGATIVE CONTROL "a podman whose `info` FAILS still yields skip:podman-not-functional". Four files, +96/-2, no merge required on a work/ ref.
+        IT CANNOT BE LANDED FROM macuahuitl TONIGHT, and the reason has nothing to do with pirria or with the row. This host's scheduled release-tier exercise ran `./build.sh --ci-full --install`, whose install step bumped VERSION 56.9.13.1 -> 56.9.15.1 and synced four crate Cargo.tomls. That bump is RELEASE MACHINERY: landing it on trunk changes every host's release-preflight monotonicity read, so it was put to the operator rather than landed as a side effect of a measurement, and it is unanswered. scripts/land-on-platform-branch.sh refuses a dirty worktree (exit 1, `refused:land:dirty-worktree`), so the coordinator's single code land is unavailable while the decision stands.
+        AND REVERTING THE BUMP TO UNBLOCK IT WOULD BREAK THIS CYCLE'S OWN CONTRACT, which is the interesting part rather than an excuse. The meta-orchestration startup boundary snapshotted those six paths at cycle start and its exit contract requires every recorded path to be byte-identical on exit, precisely because pre-existing tracked changes are sibling or operator work. So the guard that exists to stop an agent discarding an operator's uncommitted work is, correctly, also what stops this agent discarding an operator's uncommitted DECISION. Checked rather than assumed: the boundary's worktree.diff carries the VERSION change.
+        THE SHAPE WORTH RECORDING: a scheduled MEASUREMENT produced a side effect that only the operator may dispose of, and that undisposed side effect now blocks an unrelated peer's gated-green work. The measurement was correct, the refusal to land the bump was correct, the dirty-tree refusal is correct, and the boundary contract is correct — four correct behaviours composing into a peer waiting. Nothing here should be relaxed; the fix is that the decision is small and answerable, and it is queued as such.

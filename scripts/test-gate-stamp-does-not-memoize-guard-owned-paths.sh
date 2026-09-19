@@ -106,6 +106,86 @@ if [ "${out%% *}" = "stale:tree-changed-since-gate" ]; then
     bad "arm3: the memo refused outright — correct about the hole, wrong about the cost (930-i6x4)"
 fi
 
+# ── ARM 3b: a plan/issues change takes the SAME lane (1142-85zx) ────────────
+# The fourth glob, and the one that motivated 1142-85zx: four of five full-gate
+# forcings in one evening were plan-only and all four touched one coordinator
+# drill record under plan/issues/. Same verdict as arm 3, and the pairing is
+# asserted in both directions below, because excluding from `compute` WITHOUT
+# adding to plan_digest yields a full ok:gate-fresh and silently retires the
+# issue guard — 1127-waxf's hole, one directory over.
+# The scratch worktree carries no plan/issues until a case needs one, and a
+# printf into a missing directory fails silently enough to look like a verdict
+# about the digest. Create it, then re-stamp so this arm starts from a CLEAN
+# memo rather than inheriting arm 3's moved fragment.
+mkdir -p "$W/wc/plan/issues"
+_stamp_now
+printf 'a drill record\n' > "$W/wc/plan/issues/zzz-1142-85zx-probe.md"
+out="$(S memo-check check)"
+if [ "${out%% *}" = "ok:gate-fresh-except-plan" ]; then
+    ok "arm3b: a plan/issues-only change yields ok:gate-fresh-except-plan"
+elif [ "${out%% *}" = "ok:gate-fresh" ]; then
+    bad "arm3b: a plan/issues change was INVISIBLE to both digests — the issue guard would never run: $out"
+else
+    bad "arm3b: a plan/issues-only change did not produce the partial verdict, got: $out"
+fi
+
+# ── ARM 3c: TOP LEVEL ONLY — a subdirectory still re-gates ──────────────────
+# The skip glob and plan_digest's -maxdepth 1 must cover exactly the same set. A
+# file one level down is deliberately NOT in the fast lane, and asserting it is
+# what stops the two from drifting apart into a path that is in neither.
+rm -f "$W/wc/plan/issues/zzz-1142-85zx-probe.md"
+_stamp_now
+mkdir -p "$W/wc/plan/issues/research"
+printf 'a nested record\n' > "$W/wc/plan/issues/research/zzz-1142-85zx-nested.md"
+out="$(S memo-check check)"
+case "${out%% *}" in
+    stale:*) ok "arm3c: a plan/issues SUBDIRECTORY change still stales the stamp, as the glob says" ;;
+    *)       bad "arm3c: a nested plan/issues file took the fast lane; the skip glob and the digest's -maxdepth disagree, got: $out" ;;
+esac
+rm -rf "$W/wc/plan/issues/research"
+
+# ── ARM 3d: THE MUTATION CONTROL LIVES HERE, not in the author's memory ─────
+#
+# macuahuitl's arm 6c, adapted. Their construction and their reason, and the
+# reason is the better half: arms 3b and 3c assert what the FIXED stamp does,
+# and the only evidence they can distinguish fixed from broken was five
+# mutations run by hand and written up in a commit message. Nobody re-runs a
+# commit message. This arm rebuilds the pre-fix stamp and requires it to FAIL.
+#
+# BUILT BY CONTENT, NOT BY PROVENANCE, and that is the adaptation. Their version
+# read the mutant from `git show HEAD:scripts/gate-stamp.sh`, which yields a
+# mutant only while the fix is UNCOMMITTED — measured on yoga once 236329190 was
+# on trunk: rc 0 and byte-identical to the worktree copy, so the arm would red on
+# every host that had merged the fix, with a message accusing the checkout of
+# having the change uncommitted. A fixture that asserts its own change has not
+# landed yet is one step from pinning the bug's symptom as a contract.
+#
+# Stripping by content has the same failure mode as any mutation — matching
+# nothing and certifying everything — so the cmp below is not a formality. Both
+# of our fixtures produced exactly that false pass tonight, once each.
+_mutant="$W/prefix-gate-stamp.sh"
+sed -e '/plan\/issues\/\*\.md) case "\${path#plan\/issues\/}"/d' \
+    -e '/find "\$REPO_ROOT\/plan\/issues" -maxdepth 1/d' \
+    "$STAMPER" > "$_mutant"
+if cmp -s "$STAMPER" "$_mutant"; then
+    bad "arm3d: the pre-fix reconstruction stripped NOTHING — it is a copy of the fixed stamp, so anything it certifies is worthless (did the skip-glob or the plan_digest find get rewritten?)"
+else
+    ok "arm3d: the pre-fix reconstruction differs from the fixed stamp — the mutant is real"
+    cp "$_mutant" "$W/wc/scripts/gate-stamp.sh"
+    _stamp_now
+    printf 'a drill record\n' > "$W/wc/plan/issues/zzz-1142-85zx-mutant.md"
+    _mut_out="$(S memo-check check)"
+    case "${_mut_out%% *}" in
+        ok:gate-fresh-except-plan)
+            bad "arm3d: the PRE-FIX stamp also produced ok:gate-fresh-except-plan — arms 3b/3c cannot tell fixed from broken: $_mut_out" ;;
+        *)
+            ok "arm3d: the pre-fix stamp does NOT put a plan/issues change on the fast lane (got: ${_mut_out%% *}) — 3b reds without the fix" ;;
+    esac
+    rm -f "$W/wc/plan/issues/zzz-1142-85zx-mutant.md"
+    cp "$STAMPER" "$W/wc/scripts/gate-stamp.sh"
+    _stamp_now
+fi
+
 # ── ARM 4: a stamp with no plan_digest FAILS CLOSED ─────────────────────────
 _stamp_now
 # Strip the field to synthesise a stamp written before this order.
@@ -148,6 +228,13 @@ elif grep -q 'check-fragment-status-loss.sh' <<<"$_arm" && grep -q 'strict-fragm
     ok "arm5: build.sh's partial-memo arm runs BOTH ledger guards"
 else
     bad "arm5: build.sh's partial-memo arm does not run both ledger guards"
+fi
+# 1142-85zx: the fourth glob brought a third guard with it. Same structural
+# assertion, same reason — the lane must run the guard whose subject it admitted.
+if grep -q 'check-issue-citation-convention.sh' <<<"$_arm"; then
+    ok "arm5b: the partial-memo arm also runs the issue guard, whose subject joined the lane"
+else
+    bad "arm5b: plan/issues is in the fast lane but its guard does not run there (1142-85zx)"
 fi
 
 echo "test-gate-stamp-does-not-memoize-guard-owned-paths: ${pass} passed, ${fail} failed"

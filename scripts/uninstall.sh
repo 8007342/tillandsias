@@ -9,6 +9,12 @@ set -euo pipefail
 # OUTSIDE $HOME (/usr/local/bin) and branches on uname, so a test that could not
 # redirect those two things would have to either skip the macOS arm or delete a
 # real installed binary to run.
+#
+# 1181-bkem: TILLANDSIAS_RESET_KEEP_MODELS=1 is an opt-in, per-run environment
+# flag. With --wipe, it spares $CACHE_DIR/models (the downloaded model cache)
+# instead of deleting it with the rest of the cache; unset, --wipe is unchanged
+# from before this flag existed. It never widens what --wipe alone would not
+# already remove, and it is a documented no-op without --wipe.
 _uname_s="${TILLANDSIAS_UNINSTALL_FAKE_UNAME:-$(uname -s)}"
 
 IS_MACOS=false
@@ -42,6 +48,10 @@ fi
 
 WIPE=false
 [[ "${1:-}" == "--wipe" ]] && WIPE=true
+
+# 1181-bkem: opt-in, per-run, never the default. See the seams comment above.
+KEEP_MODELS=false
+[[ "${TILLANDSIAS_RESET_KEEP_MODELS:-}" == "1" ]] && KEEP_MODELS=true
 
 echo ""
 echo "  Tillandsias Uninstaller"
@@ -242,10 +252,48 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # have uninstalled from. Verified live on tlatoanis-macbook-air 2026-08-30:
 # pid alive 12m after a "complete" uninstall with its bundle deleted.
 # Same two-stage stop as the installer, and the same tolerance of absence.
-if pgrep -f tillandsias-tray >/dev/null 2>&1; then
-    pkill -TERM -f tillandsias-tray 2>/dev/null || true
-    sleep 1
-    pkill -KILL -f tillandsias-tray 2>/dev/null || true
+#
+# ── ORDER 1231-cbie: THE GUARD THIS HEADING ALREADY CLAIMED ──────────────────
+#
+# This block sat at COLUMN 0 under a "macOS desktop cleanup" heading, four lines
+# after an unconditional LINUX cleanup block — so the heading read as scope and
+# was not one. It ran on EVERY platform, and uninstall.sh is a SHIPPED RELEASE
+# ARTIFACT (release.yml installs it and asserts it is present), so the reach was
+# every machine that installs a release and later uninstalls.
+#
+# WHY THAT MATTERED ON LINUX SPECIFICALLY: there is no `tillandsias-tray`
+# process here. The launcher is `tillandsias`. So every match `-f` could produce
+# on a Linux host was a FALSE one — an editor, a grep, a CI shell, or the agent
+# command running the uninstall — and the ladder then sent it SIGTERM and
+# SIGKILL. scripts/e2e-preflight.sh condemns this exact form by name, with a
+# measurement: its own first draft "reported PRESENT against its own invoking
+# shell". That warning never travelled the two files to here.
+#
+# THE MATCHER IS NOW `-x`, MEASURED ON DARWIN 2026-09-17 (1231-cbie, second
+# half). `-f` matches a COMMAND LINE, so it killed anything merely mentioning
+# the string; `-x` matches the EXECUTABLE NAME exactly.
+#
+# The three facts a Linux host could not establish, each measured here:
+#   1. CFBundleExecutable is `tillandsias-tray` and CFBundleName is
+#      `Tillandsias`, so they DIFFER — a matcher keyed on the bundle name
+#      would have matched nothing at all.
+#   2. `tillandsias-tray` is exactly 16 characters, historically MAXCOMLEN on
+#      BSD, so `-x` was not obviously safe. It is: `ps -o comm=` reports the
+#      full path untruncated and `pgrep -x tillandsias-tray` matches it.
+#   3. The collateral damage is real and `-x` removes it. With a live decoy
+#      named `tillandsias-tray` and an innocent `tail -f .../tillandsias-tray.log`
+#      running alongside, `pgrep -f` returned BOTH pids and `pgrep -x` returned
+#      only the decoy. Under the old form that `tail` got SIGTERM then SIGKILL.
+#
+# THE TWO-STAGE STOP IS DELIBERATELY KEPT, not collapsed: a tray was observed
+# alive 12m after a "complete" uninstall, and the sweeps fixture pins the
+# stop's existence for that reason. Only the matcher narrowed.
+if [[ "$IS_MACOS" == true ]]; then
+    if pgrep -x tillandsias-tray >/dev/null 2>&1; then
+        pkill -TERM -x tillandsias-tray 2>/dev/null || true
+        sleep 1
+        pkill -KILL -x tillandsias-tray 2>/dev/null || true
+    fi
 fi
 
 # BOTH candidate install dirs, in the installer's own precedence order.
@@ -267,6 +315,7 @@ done
 rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 
 SERVICE_HOME_REMOVED=false
+SERVICE_MODELS_NOT_SPARED=false
 if [[ "$IS_ROOT" == true ]]; then
     rm -f "/usr/local/bin/tillandsias" "/usr/local/bin/tillandsias-uninstall"
     # 804-wfcu. `userdel -r` removes the account's HOME, and `rm -rf` finishes
@@ -275,14 +324,33 @@ if [[ "$IS_ROOT" == true ]]; then
     # an uninstall; claiming afterwards that the cache was preserved is not.
     # Record what happened so the closing message can tell the truth.
     [ -d "$SERVICE_HOME" ] && SERVICE_HOME_REMOVED=true
+    # 1181-bkem: this script never moves or chowns files out of a root-owned
+    # service home on the invoking user's word, so under the flag we do not
+    # try to spare this copy — we only say, truthfully, that it is not spared.
+    if [[ "$KEEP_MODELS" == true && -d "$SERVICE_HOME/.cache/tillandsias/models" ]]; then
+        SERVICE_MODELS_NOT_SPARED=true
+    fi
     userdel -r "$SERVICE_USER" 2>/dev/null || true
     groupdel "$SERVICE_GROUP" 2>/dev/null || true
     rm -rf "$SERVICE_HOME"
+    if [[ "$SERVICE_MODELS_NOT_SPARED" == true ]]; then
+        echo "keep-models: $SERVICE_HOME/.cache/tillandsias/models is NOT spared by this script (service account home; not touched with reduced privilege)"
+    fi
 fi
 
 if [[ "$WIPE" == true ]]; then
-    # Remove cache (container images, opencode, openspec, secrets)
-    rm -rf "$CACHE_DIR"
+    # Remove cache (container images, opencode, openspec, secrets). 1181-bkem:
+    # under the flag, spare $CACHE_DIR/models and remove everything else
+    # directly under $CACHE_DIR instead of the whole tree, and say so — a run
+    # that kept models must not be able to read back as a clean room by
+    # accident.
+    if [[ "$KEEP_MODELS" == true && -d "$CACHE_DIR/models" ]]; then
+        _models_size="$(du -sh "$CACHE_DIR/models" 2>/dev/null | cut -f1)"
+        find "$CACHE_DIR" -mindepth 1 -maxdepth 1 ! -name models -exec rm -rf {} +
+        echo "keep-models: spared $CACHE_DIR/models (${_models_size:-unknown})"
+    else
+        rm -rf "$CACHE_DIR"
+    fi
 
     # Remove all versioned forge and web images. The GNU-only no-run-if-empty
     # xargs flag is gone (851-28b5): the empty case is genuinely reachable

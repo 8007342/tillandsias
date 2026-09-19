@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: evidence
+      ts: "2026-09-14T23:53:21Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t235321z
+      host: macos
+      summary: |
+        THE DEVICE QUESTION IS SETTLED, AND THE ANSWER IS NEITHER OPTION AS FRAMED.
+        Measured in the live guest, four arms, same image and same
+        `socat VSOCK-CONNECT:2:42421`, varying only podman flags.
+
+          A  profile flags only (--cap-drop=ALL --security-opt=no-new-privileges)
+               socket(40, 1, 0): Operation not permitted
+          B  A + --device /dev/vsock
+               socket(40, 1, 0): Operation not permitted     <- device present, STILL refused
+          C  B + --security-opt seccomp=unconfined
+               socket OK; connect(... cid:2 port:42421): Connection timed out
+          D  A + seccomp=unconfined, NO device
+               socket OK; connect(...): Connection timed out
+
+        Guest root namespace has the node: crw-rw-rw-. 1 root root 10, 261 /dev/vsock.
+
+        B IS THE LOAD-BEARING ARM: with /dev/vsock inside the container, AF_VSOCK socket
+        creation is still refused. The device is NOT the barrier. D shows the converse —
+        seccomp relaxed with NO device passed, and the socket is created and the connect
+        reaches CID 2. socat's `open("/dev/vsock"): No such file or directory` warning is
+        incidental to socat, not a requirement of AF_VSOCK.
+
+        CONSEQUENCE: the container route costs ONE change — a seccomp allowance for
+        AF_VSOCK socket creation — not device passthrough, and not the
+        `--add-host inference:<gateway>` alternative this packet warned would touch the
+        shared container profile and therefore every consumer.
+
+        ETIMEDOUT IN C AND D IS EXPECTED, NOT A FAILURE. It is the signature this packet
+        established on 2026-08-29: the guest's stack routes to CID 2 and transmits and
+        nothing answers, because under --exec-guest nothing CAN — Virtualization.framework
+        retains guest connection requests until the host pumps CFRunLoop. The 2s bound is
+        Linux's VSOCK_DEFAULT_CONNECT_TIMEOUT. Reading these arms as "still broken" would
+        be exactly the confusion the prior claimant recorded the constraint to prevent.
+
+        RECOMMENDATION, and the thing not to do: do NOT ship
+        `--security-opt seccomp=unconfined`. It was the right instrument to ISOLATE the
+        cause and is the wrong one to fix it — it disables the entire filter to permit one
+        socket family. The narrow shape is a custom profile equal to podman's default plus
+        `socket` with AF_VSOCK, applied ONLY to the dedicated forwarder container, leaving
+        every agent container on the default filter. That also removes the "touches every
+        consumer" objection that made the --add-host route look comparable.
+
+        STILL NOT ESTABLISHED: the runtime proof of the whole hop cannot come from
+        --exec-guest; it needs a continuously-pumping host context (tray mode). Inherited
+        constraint, not re-measured here. These arms answer only whether a container CAN
+        open AF_VSOCK, which was the open question.
+
+        Write-up: plan/issues/vsock-container-seccomp-2026-09-14-macos-macbookair.md

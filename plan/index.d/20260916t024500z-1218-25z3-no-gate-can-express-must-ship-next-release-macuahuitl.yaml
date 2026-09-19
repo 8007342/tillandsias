@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nothing-in-the-release-path-can-express-this-must-be-in-the-next-cut-so-the-instruction-survives-only-as-long-as-someone-remembers-it
+    order: 1218-25z3
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, gate, plan-ledger, coordination, memory-not-mechanism]
+    estimated_hours: 4
+    owned_files:
+      - scripts/release-preflight.sh
+    title: |
+      No release gate can express "this must be in the next cut", so the instruction survives only as long as a human or an agent remembers it
+    context: |
+      FOUND BY TRYING TO OBEY AN OPERATOR INSTRUCTION AND DISCOVERING THERE WAS
+      NOWHERE TO PUT IT. On 2026-09-16 the operator hit 1215-xazj live on
+      macbookair against the freshly-promoted stable, chose not to have it fixed
+      that night, and said: "take note of anything that needs to get done, and
+      make sure it happens by the next release whenever that happens."
+      THE MEASUREMENT. scripts/release-preflight.sh carries exactly four gates —
+      VERSION monotonicity, retired CLI flags, plan-ledger integrity, and the
+      GitHub Actions budget. None of them reads the ledger for a row marked as
+      required for the next cut, and no other release-path check does either.
+      The ledger has desired_release and release_target, but those express INTENT
+      (which milestone a row belongs to) and are not consulted by anything that
+      can stop or annotate a cut. So the only thing standing between "must ship
+      next" and "shipped whenever" is that somebody remembers.
+      WHY THAT IS THE SHAPE THIS FLEET KEEPS FILING. A release cut is exactly the
+      moment when the person cutting it has the least context about what six
+      other hosts found last week. The current answer is a prose list in
+      plan/issues/ that the cutter must know to read — see
+      plan/issues/macos-client-state-and-next-release-blockers-2026-09-16.md,
+      which is this instruction's only durable form today. That is the same class
+      as an unwired fixture: written down, correct, and unable to act.
+      IT IS ALREADY COSTING SOMETHING MEASURABLE. 1211-34v6 fixed a refusal that
+      advertises a remedy its own resolver cannot read. It landed on trunk and
+      was NOT in the cut that followed, so the promoted stable actively
+      misdirects every operator who reads it — which the operator then
+      experienced personally. Nothing was done wrong: no gate asked.
+      NOT A REQUEST FOR A BLOCKING GATE, NECESSARILY. An advisory that PRINTS the
+      outstanding must-ship rows at cut time may be the right strength — the
+      tray-parity completeness check is the local precedent for a release-scoped
+      advisory hold that the operator can override. The point is that the cutter
+      should not have to already know.
+    exit_criteria:
+      - 'a row can be marked as required for the next cut, and the release path reports every such row that is not in the tree being cut (pre-fix result: FAILS — release-preflight.sh has four gates and none consults the ledger for this; 1211-34v6 missed a cut with nothing reporting it)'
+      - 'the report names each row and whether its fix is present in the cut, so the cutter can act on it rather than only be warned'
+      - 'NEGATIVE CONTROL: a cut with no outstanding must-ship rows prints a clean line and does not become noise that gets ignored'
+      - 'whether it BLOCKS or merely REPORTS is recorded as a decision on this row with its reason, rather than being settled by whoever implements it'
+    unscoreable: |
+      strength-of-the-gate-not-chosen: blocking a cut and annotating one have very
+      different costs when the cutter is an agent under a freeze window. The gap
+      is measured and the 1211-34v6 miss is a concrete instance; whether the
+      remedy refuses or reports is a judgement the tray-parity precedent informs
+      but does not decide.
+    events:
+      - type: filed
+        ts: "2026-09-16T02:45:00Z"
+        agent_id: "linux-macuahuitl-claude-20260916t024500z"
+        host: macuahuitl
+        summary: |-
+          Filed because the operator gave an instruction the system has no way to
+          hold. The blocker list they asked for exists only as a prose document
+          the next cutter must know to open, which is the gap this row names.

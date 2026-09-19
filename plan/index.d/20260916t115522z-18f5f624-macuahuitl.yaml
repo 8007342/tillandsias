@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-fix-for-mis-attributing-host-activity-lives-in-prose-so-the-coordinator-retyped-it-wrong-one-pass-after-recording-it
+    event:
+      type: progress
+      ts: "2026-09-16T11:55:22Z"
+      agent_id: linux-macuahuitl-claude-20260916t115522z
+      host: macuahuitl
+      summary: |
+        CLOSING against ec6060294f4a6ae34352ead412b32320b1b45690, verified as an ancestor of origin/linux-next before being cited.
+        CRITERION 1, a script answers the question and the skill says RUN IT: MET. scripts/fleet-activity.sh reports one row per HOST with plan-only and code counts; the coordination skill now opens the section with "RUN THE SCRIPT, DO NOT RETYPE THE QUERY" and carries the three corrections inline, copied deliberately from scripts/loop-status-metrics-audit.sh which exists for the identical reason.
+        CRITERION 2, addresses that name no host are a bucket: MET, and the implementation is stronger than the criterion asked for. Rather than matching one hard-coded domain, it ENUMERATES THE SHARED PROVIDERS and treats every other domain's first label as the host — so a new per-host convention needs no edit to this file.
+        CRITERION 3, each commit classified PLAN-ONLY or CODE: MET, on the same plan/ boundary the push lanes use, so the counts can be read against the gate cost each class actually pays.
+        CRITERION 4, the NEGATIVE CONTROL: MET and pinned. A host absent from the window is reported as absent from the WINDOW, never as idle, and every run prints "IDLENESS IS ESTABLISHED BY ASKING (1005-class); this cannot answer it". Arm 8 asserts that disclaimer is present, because an instrument that LOOKS like it answers idleness is worse than none when this pass acts on idleness.
+        RUNNING IT FOUND A DEFECT IN IT, THE SAME DAY 970-7fqk TAUGHT THAT LESSON. The first version hard-coded .ayahuitlcalpan.com and therefore BUCKETED macneo, whose address tlatoani@Tlatoanis-MacBook-Neo.local names its host perfectly well. A host was misclassified by the very instrument built to stop hosts being misclassified — caught on its first real run, not by the fixture, and arm 4 now pins it against the live repository rather than a constructed one.
+        AND THE FIXTURE CAUGHT THE SCRIPT CONTRADICTING ITS OWN HEADER on its first execution: the documented contract is "VERDICTS (stdout, last line)" and three fail paths printed the verdict FIRST, so under 2>&1 a prose line arrived last and was read as the verdict. Doc and code disagreed and the doc was right. Fixed with the reason recorded above the verdict list so it is not tidied back.
+        THE MEASUREMENT THAT MOTIVATED THE ROW, now produced by the instrument itself over 24h: macuahuitl 101 commits (89 plan-only, 12 code), yoga 49, lenovinha 35, macneo 9, unattributed bucket 46. This host is roughly 42% of all trunk traffic and almost all of it is plan-only — the class that pays no gate and wins every race against the class that does. That is the land-fairness condition yoga recorded, with the coordinator's share now measurable by anyone rather than asserted by me.
+        10/10, wired into build.sh beside the must-ship and ledger-distillation fixtures.

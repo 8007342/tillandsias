@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-14T23:35:09Z"
+      agent_id: linux-pirria-opus5-20260914t192603z
+      host: pirria
+      summary: |
+        CORRECTION to this host's own yq caveat, recorded by the host that made the wrong claim.
+
+        WHAT I WROTE EARLIER TODAY, on this row and in the v56.9.13.1 smoke report: "yq is not on PATH here and could not be provisioned (the toolbox route is Silverblue-only and passes through on CachyOS; a package install needs a sudo password this session does not hold)."
+
+        THE SECOND HALF IS FALSE. A `tillandsias-builder` toolbox EXISTS on pirria — `registry.fedoraproject.org/fedora-toolbox:42` — and it carries yq v4.47.1 at /usr/bin/yq, plus the same cargo 1.98.1 the host has. `toolbox run --container tillandsias-builder bash -lc 'yq --version'` answers directly. So yq was reachable from this host the whole time, one command away, and the remedy for a degraded count here is LOCAL, not "re-run it on a host that has yq" as I told the coordinator and wrote on 1187-iij8.
+
+        HOW I GOT IT WRONG, since the reasoning is the reusable part. I read the header of scripts/with-tillandsias-builder.sh, which says it detects Fedora Silverblue and that "non-Silverblue hosts (Workstation, macOS, Windows) pass through with zero overhead", and I stopped there — concluding no toolbox route exists on CachyOS. I inferred the absence of a toolbox from the behaviour of one wrapper, and never asked the host. `podman ps -a` would have answered it in one call, and the runner's own warning names the toolbox by name. scripts/lib-cargo-sites.sh:68-73 even says it outright — "a host whose gate re-execs into a container (Silverblue, CachyOS with tillandsias-builder, Windows with the WSL2 distro)" — naming CachyOS explicitly, and recording that this very host measured the resulting GLIBC failure on 2026-09-05.
+
+        WHAT IS STILL TRUE AND WHAT CHANGES:
+        - STILL TRUE: every litmus count I took today ran on the HOST, not in the toolbox, and carried `warn:litmus-degraded-no-yq`. The degradation was real and the counts are still owed a clean re-run.
+        - STILL TRUE: the two named 1187-iij8 arms are exempt, because neither yaml contains a yq reference at all (grep -c gave 0 and 0). The 182.6s / 1.7s timings and the two PASS verdicts do not depend on this correction.
+        - CHANGED: the re-run is a local chore, not a hand-off. Anyone re-taking those counts on pirria should run the suites through `toolbox run --container tillandsias-builder`, not route them to another host.
+        - CHANGED, and worth more than the correction itself: yq's absence ON THE HOST is what exposed both of part 1's real hits. A yq-present host clears the plan-only lane's FIRST validator gate and never reaches the fold/status-loss check behind it, so neither fixture would have gone red there. Had I run the suites in the toolbox, the sweep would have found nothing and reported a clean floor. The degraded environment was the instrument.
+
+        RELATED, MEASURED WHILE LANDING THE PART 1 FIXES, and the reason this correction surfaced at all: `./build.sh --check` re-execs into that same toolbox, and it refused three times with `target/debug/tillandsias-plan: /lib64/libm.so.6: version 'GLIBC_2.44' not found` while the identical binary ran fine from the host shell. That is exactly the condition lib-cargo-sites.sh:68-73 documents from this host on 2026-09-05: a host-built artifact need not run inside the gate's container. The fix was `cargo clean -p tillandsias-plan` followed by a rebuild INSIDE the toolbox. Two notes for whoever meets it next: the failure names a missing glibc symbol that the host's libm demonstrably exports, so `strings` on the host libm sends you the wrong way — the mismatch is between two environments, not two libraries; and `cargo clean -p <crate>` removed 8611 files / 5.6 GiB here, not one crate's artifacts, turning a targeted clean into a full workspace rebuild and a 1966s gate. Budget for that before running it on a floor host.

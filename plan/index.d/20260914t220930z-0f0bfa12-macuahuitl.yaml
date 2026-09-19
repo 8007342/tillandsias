@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    event:
+      type: note
+      ts: "2026-09-14T22:09:30Z"
+      agent_id: linux-macuahuitl-fable-20260914t220928z
+      host: macuahuitl
+      summary: |
+        LIVE CONFIRMATION (lenovinha, 2026-09-14T20:55Z): the first real collision. lenovinha's 1185-9qx6 land had been blocked for an hour by a locked keyring; in that window macbookair's 345-1183-j9dk.step landed on trunk, so lenovinha's unpushed 345-1185-9qx6.step collided after the integrate. The land tool's allocator answered ok:gate-step-prefix:reallocated:1 and moved 345 -> 355 (the interval to the next occupied prefix), committed the rename (land verdict ok:land:5e92fda4d:attempt-1, whose HEAD is the reallocation commit), and the land went through without a re-gate; gate-steps.d/355-1185-9qx6.step is on origin/linux-next. Lenovinha's phrasing for the drill: a push-blocked host is a prefix-collision generator. The row's stated live confirmation is delivered.
