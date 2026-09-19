@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-release-acceptance-gate-has-never-verified-a-cosign-signature-on-any-platform-so-signed-is-asserted-by-nobody-while-promotion-rests-on-it
+    order: 1273-4mak
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, security, supply-chain, testing, smoke]
+    estimated_hours: 4
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      the curl-install smoke — the acceptance gate a release is promoted to stable on — has never verified a cosign signature on ANY platform, so every "signed release" claim is asserted by nobody
+    context: |
+      FOUND BY macneo-macos 2026-09-19 while writing the NOT CHECKED section of
+      the v56.9.19.2 macOS smoke report. Reported to the coordinator as a gap in
+      my own run; they asked for it as a row because promotion to stable rests
+      on these smokes.
+      MEASURED, not assumed:
+        grep -ci 'cosign|verify.sh' skills/smoke-curl-install-and-test-e2e/SKILL.md -> 0
+      The runbook contains neither string on ANY lane — Linux, macOS or Windows.
+      Every release publishes cosign bundles beside every asset (v56.9.19.2: 32
+      assets, each with a .cosign.bundle, plus a verify.sh and its own bundle),
+      and the acceptance gate downloads the artifacts and never checks one.
+      WHAT THE SMOKE DOES CHECK, so the gap is stated precisely rather than
+      overclaimed: install-macos.sh verifies the asset's SHA256 against the
+      published SHA256SUMS-macos, and this lane asserts the installed binary's
+      exact version. That is INTEGRITY against a manifest fetched from the same
+      place as the artifact. It is not AUTHENTICITY: a SHA256SUMS served
+      alongside a substituted asset is self-consistent. The signature is the
+      only artifact in the set that answers "who produced this", and it is the
+      one nothing reads.
+      CORRECTION TO THE COORDINATOR'S FRAMING, which asked for this row on the
+      basis that no packet mentions cosign in a smoke context. It does not hold,
+      and the truth is worse for the gate rather than better:
+        plan/issues/smoke-e2e-findings-v0.4.260826.1-linux-2026-08-28-*.md
+        plan/issues/smoke-e2e-findings-v0.4.260826.1-windows-2026-08-28-*.md
+      BOTH mention cosign — both under the heading "NOT CHECKED (no per-check
+      data captured)", as "SHA256SUMS match and cosign signing coverage". So the
+      gap was NOTICED on two other platforms three weeks earlier and recorded
+      honestly by those runs, and nothing turned the observation into a check.
+      That is a stronger case for the row, not a weaker one: the NOT CHECKED
+      discipline worked exactly as designed, three times on three platforms, and
+      the gap still shipped. A gap that everyone declares and nobody closes is a
+      missing GATE, not a missing observation.
+      HOST CONSTRAINT MEASURED HERE, which the fix must handle: `command -v
+      cosign` on macneo returns nothing. cosign is NOT installed on this macOS
+      floor host, so the macOS lane cannot verify anything today without
+      installing it. That is why the exit criteria below require an explicit
+      could-not-run token rather than letting a missing tool pass silently — on
+      a host without cosign, "no verification failures" is the reading a naive
+      implementation would produce, and it is the same could-not-run-read-as-ok
+      shape as 965-sxec and 1176-fn2p.
+      SHAPE CITED: 727-kmks. The version line in this same runbook carried
+      `# must equal $SMOKE_TAG` as a COMMENT, so the clean-room test of a
+      published release never once confirmed it was testing that release, until
+      the comment became an assertion. "Cosign bundles present" in a report is
+      today's comment: it reads like a check and asserts nothing.
+    exit_criteria:
+      - 'each lane''s §1 block ends by emitting a line `cosign:verified:<n>/<n>` naming the assets it verified against their published bundles, and the §5 report carries that line verbatim — PRE-FIX RESULT: FAILS on every file matching plan/issues/smoke-e2e-findings-*, none of which carries any verification line; the macneo v56.9.19.1 and v56.9.19.2 reports say only that bundles are "present", and the two 2026-08-28 Linux and Windows reports list cosign under NOT CHECKED'
+      - 'a lane that CANNOT verify emits `cosign:could-not-run:<reason>` and the §5 report carries THAT instead, and neither the runbook nor any report treats it as a pass — PRE-FIX RESULT: unrepresentable, there is no token; measured precondition: `command -v cosign` is empty on macneo, so the macOS lane hits this path on day one'
+      - 'the verification covers the artifact the lane actually INSTALLED, not merely a downloadable asset — on macOS that is the tar.gz the installer consumed; a fixture proves it by verifying a deliberately substituted asset and requiring the lane to refuse'
+      - 'the Linux lane uses the release''s own published verify.sh where it exists, and the macOS and Windows lanes have their own call rather than inheriting a Linux-only assumption — PRE-FIX RESULT: verify.sh ships in the release and is named nowhere in the runbook'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable includes the fixture
+      that would score it, so no litmus name exists to pin and 885-92iu would
+      refuse one that does not. Intended filename
+      scripts/test-smoke-verifies-a-signature.sh, written in the same commit as
+      the §1 verification blocks it tests (1136-n8sh). Its shape is fixed by the
+      third exit criterion: substitute an asset whose SHA256SUMS entry has been
+      regenerated to match it, and require the lane to REFUSE on the signature
+      even though the hash is self-consistent — which is precisely the attack
+      the current integrity-only check cannot see.
+    events:
+      - type: filed
+        ts: "2026-09-19T19:00:47Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260919t190047z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Filed from the macOS lane after two consecutive PASS smokes of
+          v56.9.19.1 and v56.9.19.2, both of which I reported as PASS and
+          neither of which verified a signature. The row exists because I could
+          not honestly write "signed" in either report.
