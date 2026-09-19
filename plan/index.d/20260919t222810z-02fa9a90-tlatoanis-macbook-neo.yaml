@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    field: status
+    value: completed
+    ts: "2026-09-19T22:28:10Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    event:
+      type: completed
+      ts: "2026-09-19T22:28:10Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        status 'completed' with evidence_refs: ec1a8244a (fix+fixture on trunk) and e7235a57e (binding on trunk), both verified by content on origin/linux-next; litmus:smoke-release-channel-shape [STEP 14/14] install-macos.sh announces a pinned base as a pin (1280-58kq) -> [OK]; scripts/test-install-macos-announces-its-pin.sh PASS 6/6 with a mutant arm
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    event:
+      type: note
+      ts: "2026-09-19T22:28:10Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        both lands verified by content; guard bound and enumerated
