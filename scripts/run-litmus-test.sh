@@ -944,13 +944,18 @@ check_signal() {
 # ORDER 1252-znbn. STRUCTURED ADJUDICATION — the replacement for
 # behavior_matches_output's natural-language `case` arms.
 #
-# WHY. behavior_matches_output is a natural-language interpreter written in
-# bash `case` arms: `*"multiple"*` means "grep the first integer and require
-# >= 2", `*"succeeds"*` means "ignore the output and honour the exit code",
-# `*"cargo"*` means "grep the output for cargo". REWORDING AN ENGLISH SENTENCE
-# CHANGES THE RULE THAT DECIDES THE VERDICT, with no diff anywhere saying the
-# test now checks something else. 64 steps carry a sentence containing
-# "succeeds" whose content is therefore decorative.
+# WHY. behavior_matches_output WAS a natural-language interpreter written in
+# bash case arms. One arm meant "grep the first integer out of the output and
+# require it to be at least two"; another meant "ignore the output entirely and
+# honour the exit code"; another meant "grep the output for the word cargo".
+# Which arm fired depended on which English words the sentence happened to
+# contain, so REWORDING A SENTENCE CHANGED THE RULE THAT DECIDED THE VERDICT,
+# with no diff anywhere saying the test now checked something else.
+#
+# Those arms are now DELETED (not bypassed) and every step that depended on one
+# declares its rule below. The arms are deliberately not quoted verbatim
+# anywhere in this file: the row closes on a grep for them returning nothing,
+# and a comment reciting them would answer that grep forever.
 #
 # The fields here name the OUTPUT they check instead of describing it in prose:
 #   assert_exit: <n>                exact exit status
@@ -1032,111 +1037,13 @@ behavior_matches_output() {
 
     [[ -z "$expected_lc" ]] && return 0
 
-    if [[ "$expected_lc" =~ ([0-9]+)\+\ env\ vars ]]; then
-        local threshold="${BASH_REMATCH[1]}"
-        local count
-        count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-        [[ -n "$count" ]] || return 1
-        [[ "$count" -ge "$threshold" ]]
-        return $?
-    fi
-
-    case "$expected_lc" in
-        *"0 directories"*|*"0 mounts"*|*"0 sockets"*|*"0 files"*|*"0 matches"*|*"0 log files"*|*"0 token files"*|*"0 socket files"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ "${count:-}" == "0" ]]
-            return $?
-            ;;
-        *"1 or more"*|*"at least one"*|*"multiple"*|*"several"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ -n "$count" ]] || return 1
-            if [[ "$expected_lc" == *"multiple"* || "$expected_lc" == *"several"* ]]; then
-                [[ "$count" -ge 2 ]]
-            else
-                [[ "$count" -ge 1 ]]
-            fi
-            return $?
-            ;;
-        *"3-10 env vars"*|*"3 to 10 env vars"*|*"3-10 env vars only"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ -n "$count" ]] || return 1
-            [[ "$count" -ge 3 && "$count" -le 10 ]]
-            return $?
-            ;;
-        *"readable file with size > 0"*|*"size > 0 bytes"*|*"size > 0"*)
-            local size
-            size="$(grep -Eo '[0-9]+' <<<"$output" | tail -1 || true)"
-            [[ -n "$size" ]] || return 1
-            [[ "$size" -gt 0 ]]
-            return $?
-            ;;
-        *"no such file"*|*"file not found"*|*"directory not found"*|*"not found error"*)
-            grep -Eqi 'no such file|not found|directory_not_found|directory not found' <<<"$output"
-            return $?
-            ;;
-        *"timeout or connection refused"*|*"connection refused"*|*"network unreachable"*|*"could not resolve"*)
-            grep -Eqi 'failed to connect|connection refused|network unreachable|timeout|could not resolve|curl_exit=[1-9]' <<<"$output"
-            return $?
-            ;;
-        # These name a SPECIFIC artefact the step must print, so silence really is
-        # a failure for them. Listed first: `case` takes the first match, and
-        # "shutdown command succeeds" would otherwise fall into the generic
-        # exit-code branch below and stop requiring its output.
-        # "grep succeeds" is a claim about a MATCH, so it means output, not exit
-        # status — a step may chain several greps and end on a non-zero one while
-        # the match it cares about was printed. Listed before the generic
-        # "succeeds" branch, which honours the exit code instead.
-        *"grep succeeds"*|*"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*)
-            [[ -n "$output" ]]
-            return $?
-            ;;
-        # Order 661-nm73. A bare "succeeds" is a claim about the step's OUTCOME,
-        # not about it printing something. Requiring non-empty output made ABSENCE
-        # assertions unpassable by construction: the canonical form is a negated
-        # grep (`! grep -E '<forbidden>' file`), which — when the property HOLDS —
-        # matches nothing, prints nothing, and exits 0. Correct behaviour, empty
-        # output, and the runner called it FAIL.
-        #
-        # That punished exactly the tests that check something is NOT there, which
-        # are the negative controls this project relies on. litmus:no-raw-error-in-
-        # status-chip failed this way while the property it asserts was true.
-        #
-        # It honours the EXIT CODE ONLY — deliberately, and `output || exit_code`
-        # was tried first and is wrong. With `! grep`, a VIOLATION prints the
-        # offending lines and exits 1, so any condition that accepts non-empty
-        # output passes the very case the step exists to catch. That is how
-        # litmus:no-raw-error-in-status-chip came to be inverted in BOTH
-        # directions: silent-and-correct read as FAIL, loud-and-violating read as
-        # PASS. Caught by injecting a violation and watching the step stay green.
-        #
-        # "succeeds" is a claim about the outcome. The exit code IS the outcome.
-        *"succeeds"*)
-            [[ "$exit_code" -eq 0 ]]
-            return $?
-            ;;
-        *"path is correctly set"*|*"cargo"*)
-            grep -Eqi 'cargo' <<<"$output"
-            return $?
-            ;;
-        *"token file exists in git-service"*)
-            grep -q 'TOKEN_MOUNTED' <<<"$output"
-            return $?
-            ;;
-        *"token files are present"*|*"token files are readable"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ -n "$count" ]] || return 1
-            [[ "$count" -ge 1 ]]
-            return $?
-            ;;
-        *"minimal env vars"*|*"minimal necessary vars present"*)
-            grep -Eqi '^(PATH|HOME|USER)=' <<<"$output"
-            return $?
-            ;;
-    esac
+    # ORDER 1252-znbn. The natural-language case arms that used to sit here are
+    # DELETED, not bypassed — see the note above structured_assert_matches for
+    # what they did and why it was wrong. Every step that depended on one now
+    # declares assert_exit / assert_output_contains / assert_output_matches /
+    # assert_output_nonempty, which structured_assert_matches adjudicates
+    # BEFORE this function is reached. What remains is the honest fallback the
+    # interpreter always ended in: case-insensitive fixed-string containment.
 
     if grep -Fqi "$expected" <<<"$output" || grep -Fqi "$expected_lc" <<<"$output_lc"; then
         return 0
