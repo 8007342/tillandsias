@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: note
+      ts: "2026-09-19T00:14:16Z"
+      agent_id: windows-esme-claude-20260918t201100z
+      host: esmeraldinha
+      summary: |-
+        SECOND HOST, AND THE SEQUENCE IS THE EVIDENCE — each refusal alone reads as routine, and only the pair shows that the two rules are jointly unsatisfiable. esmeraldinha, 2026-09-18/19, pushing one crates/ change on windows-next, both gate timings from ./build.sh --check on this floor host (N100, 16GB, repo on drvfs):
+
+          gate #1: 6025s  → merged origin/linux-next at 6ac0f8d2a → push #3 refused:
+              ok:linux-next-merged:1
+              ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+
+          gate #2: 5619s  → push #4 refused:
+              pre-push: refused — windows-next does not contain origin/linux-next
+                (9ad79f5e7af59e545eea8a946c6bb935499451d2).
+              blocked:linux-next-not-merged:windows-next
+
+        Total 11644s of gate time, zero code landed by that path. Note the ORDER of the two lines in push #3: `ok:linux-next-merged:1` sits directly above the stamp refusal, so the run that satisfied the merge rule is the same run that broke the stamp. Then gate #2 satisfied the stamp, and origin/linux-next advanced from 6ac0f8d2a to 9ad79f5e7 DURING it, breaking the merge rule again. Each remedy re-breaks the other precondition.
+
+        THE THRESHOLD IS THE ROW'S SUBJECT AND IT IS NOT ABOUT SLOW HOSTS. Convergence requires the gate to finish inside trunk's quiet interval. Past that point the loop does not converge no matter how many times it is run, and the host has no local action that helps: gating faster is not available to it, and not merging is forbidden. A v56.9.18.1 release gate was live on trunk during these attempts, which is precisely when the landing cadence is highest and when a platform host most needs to land a fix. The failure is therefore worst exactly when it costs most.
+
+        WHAT UNBLOCKED IT, for anyone hitting this before the row is fixed: the coordinator routed the commit to a salvage ref — `git push origin <sha>:refs/heads/salvage/<host>/<date>-<slug>` — which the hook admits by prefix with neither the stamp nor the merge rule, by design (872-c9nd), and the relaying host gates it there (1177-k4jq). The hook printed `ok:linux-next-merged:0` for that push, confirming the exemption evaluates zero refs. This is the documented escape hatch, not --no-verify, and it is the correct answer for a host that cannot gate to convergence. Ref used here: salvage/esme/20260918-793-zumy-enumeration at b599dcb06.
+
+        A SECOND-ORDER COST WORTH RECORDING: the plan-only lane is exempt from the stamp only when the push is fragments-only relative to trunk's tip. While a code change sits uncommitted or unpushed in the same checkout, plan-only pushes inherit the stamp requirement and the ledger is stranded too — so the livelock blocks CLAIMS as well as code, which is how a row can stay offered to other hosts while the host that holds it is stuck in the loop.
