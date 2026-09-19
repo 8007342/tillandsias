@@ -587,6 +587,22 @@ jobs:
             --dir target-guest
           ls -la target-guest
           test -s target-guest/tillandsias-headless-x86_64-unknown-linux-musl
+          # v56.9.19.1 (release run 35453526671, 2026-09-19): this job compiles
+          # tillandsias-headless for the tray, and that crate's build.rs refuses
+          # when images/router/tillandsias-router-sidecar is absent — a build
+          # artifact build.sh stages and this job never did (723-wd8i names the
+          # remedy; a fresh runner is the "fresh clone" case). The Linux job
+          # (needs:) already published the source-matched sidecar to THIS
+          # release, so stage it the same way the guest is staged. Fail the job
+          # if absent: a tray built without it does not build at all.
+          mkdir -p images/router
+          gh release download "v${{ steps.version.outputs.version }}" \
+            --pattern 'tillandsias-router-sidecar-x86_64-unknown-linux-musl' \
+            --dir images/router
+          mv images/router/tillandsias-router-sidecar-x86_64-unknown-linux-musl \
+             images/router/tillandsias-router-sidecar
+          ls -la images/router
+          test -s images/router/tillandsias-router-sidecar
 
       # ── Authenticode signing identity (orders 722-w7a2 / 724-rpna) ────────
       # Gated on the repo variable rather than unconditional, so the Windows
