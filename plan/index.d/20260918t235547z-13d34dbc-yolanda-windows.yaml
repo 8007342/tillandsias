@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    event:
+      type: note
+      ts: "2026-09-18T23:55:47Z"
+      agent_id: windows-yolanda-claude-20260918t235545z
+      host: yolanda-windows
+      summary: |-
+        PROPERTY WORTH PINNING, observed 2026-09-18 on yolanda: the plan-only lane selects fragments BY ABSENCE ON TRUNK, not by anything the caller asserts, and that is what made a post-restart push safe without the caller being careful.
+
+        The situation: this host was carrying two 2026-09-18 fragments written before a fleet restart, for rows that ALSO had three older 2026-09-13 fragments already on trunk. The dispatch's instruction was "push only the newer two, do not re-push the three 09-13 files" — a correctness requirement placed on the operator of the script.
+
+        What actually happened: scripts/push-plan-fragments-to-trunk.sh computed its own set as "every lane file present here and absent on origin/linux-next" and selected exactly the two. The --dry-run named them both and nothing else. The constraint held BY CONSTRUCTION rather than by the caller obeying it.
+
+        WHY THIS IS THE RIGHT SHAPE AND WORTH RECORDING ON THIS ROW: a lane that trusts the caller to name the right files is a discipline, and after a restart the caller is precisely the party who has lost the context needed to name them. Absence-on-trunk is a fact the lane can check for itself at push time. The dry-run then makes that computed set visible before anything is sent, so the caller can verify the machine's answer instead of supplying one.
+
+        The general form, for whoever touches this lane next: prefer a lane that DERIVES its working set from the remote's state over one that accepts a working set from its caller. The derived version cannot be wrong about what trunk already has, and it degrades safely when the caller's memory of the session is gone.

@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-claims-across-branches-reports-claimed-elsewhere-for-a-sibling-whose-fold-is-merely-older-than-trunk-s-a-branch-that-is-an-ancestor-of-trunk-cannot-hold-a-claim-trunk-lacks
+    event:
+      type: note
+      ts: "2026-09-18T23:54:34Z"
+      agent_id: linux-pirria-claude-20260918t235433z
+      host: pirria-silverblue
+      summary: |
+        SECOND TRIGGER, AND IT IS NOT THE ANCESTOR CASE — measured on pirria
+        2026-09-18T23:55Z, minutes after this row was filed.
+
+          scripts/check-claims-across-branches.sh 1217-54vw
+            -> claimed-elsewhere:1217-54vw:linux-next
+               "A sibling branch holds this packet in_progress and your fold has not
+                seen it yet. It is NOT yours to implement."
+
+        THE CLAIM IT WAS WARNING ME OFF WAS MY OWN, pushed ninety seconds earlier:
+
+          expire-claims --list-live
+            live-claim  1217-54vw  ...  pirria-silverblue  2026-09-18T23:51:46Z
+            rows: live=9 unclaimed=0 expired=0 held=0 unknown_age=0 total=9
+
+        One live row, this host, no other claimant anywhere.
+
+        WHY IT IS A DISTINCT TRIGGER FROM THIS ROW'S TITLE: this row says "a sibling
+        whose fold is merely OLDER than trunk's — a branch that is an ancestor of trunk
+        cannot hold a claim trunk lacks." My local `linux-next` is NOT an ancestor of
+        trunk:
+
+          git merge-base --is-ancestor linux-next origin/linux-next  ->  FALSE
+
+        It has DIVERGED — twelve commits of code held back by the release freeze, while
+        the claim went up on a separate plan-only branch cut at origin/linux-next. So
+        the shape is broader than "older": **any local branch whose fold differs from
+        the branch the claim landed on can be reported as a rival claimant, including
+        one that diverged rather than lagged, and including the case where the
+        "rival" claim is the caller's own.**
+
+        WHY IT IS DANGEROUS RATHER THAN NOISY, and why I am adding it here rather than
+        filing separately: the verdict's own remedy text is *"Arbitration is by claim
+        TIMESTAMP, not push order: if theirs is earlier you release and reroute."* A
+        reader who follows that instruction on this false positive RELEASES A CLAIM THEY
+        CORRECTLY HOLD — and the coordinator had separately told me to expect a real
+        rival with an EARLIER timestamp on another branch, which is exactly the
+        condition under which the instruction says to release. Two plausible readings,
+        one of which discards live work, and the artifact is indistinguishable from the
+        real thing at the call site. I resolved it by going to `expire-claims
+        --list-live` for the claimant identity rather than trusting either the verdict
+        or the message.
+
+        SUGGESTED, for whoever fixes this: the verdict should NAME THE CLAIMANT HOST and
+        the claim timestamp it is objecting to. "A sibling branch holds this" with no
+        host and no timestamp cannot be checked by the reader against the arbitration
+        rule the same verdict tells them to apply — which is the fail-loud-diagnosis
+        shape: the refusal states a conclusion without the evidence its own remedy
+        requires.
+
+        ALSO WORTH NOTING for the freeze-era workflow that produced this: holding code
+        on one local branch while pushing ledger fragments from another, cut at trunk,
+        is the discipline the coordinator asked for during the freeze and is what
+        macneo used tonight. It will therefore be COMMON, not exotic, for as long as
+        freezes are in use — so this trigger will recur on every host that follows the
+        instruction correctly.

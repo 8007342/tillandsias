@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: evidence
+      ts: "2026-09-19T00:20:52Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        SECCOMP HALF DONE AND LANDED at 906a7c475 on osx-next. The packet's "seccomp is the sole blocker" is now a shipped, guarded artefact rather than a recommendation. Outputs below, not the word verified.
+
+        THE RULE, read from the installed default in the live guest rather than from documentation:
+          block 31: {"names":["socket"], "action":"SCMP_ACT_ERRNO", "args":[{"index":0,"value":40,"op":"SCMP_CMP_EQ"}], "errnoRet":1, "errno":"EPERM"}
+        That single rule is the barrier. 40 is AF_VSOCK.
+
+        SHIPPED: scripts/derive-vsock-seccomp.sh DERIVES podman's default with that one rule flipped to SCMP_ACT_ALLOW, rather than forking the 17,705-byte vendor file. A static copy stops tracking podman's default the day podman updates it, and a stale ALLOW list is the kind nobody notices. Deriving costs one file read.
+
+        THE THREE REFUSAL ARMS, stdout verbatim (all exit 1):
+          unreadable input   -> violation:vsock-seccomp:input-unreadable:<path>
+          malformed JSON     -> violation:vsock-seccomp:input-not-a-seccomp-profile
+          no AF_VSOCK rule   -> violation:vsock-seccomp:no-af-vsock-deny-rule-podman-default-changed-shape
+        The third is the one that matters: if podman's default changes shape, this emits NOTHING. An unverified profile is worse than no profile because it reads as one.
+
+        STRUCTURAL, against the live default (40 blocks): block count unchanged 40/40; blocks differing [31]; removed keys ['errno','errnoRet']; action SCMP_ACT_ERRNO -> SCMP_ACT_ALLOW; names unchanged True; args unchanged True; top-level keys differing ['tillandsiasChange','tillandsiasDerivedFrom'] (the two provenance keys the script adds so a reader who finds the file on a host need not diff 17KB). Exhaustive where a runtime probe can only sample.
+
+        RUNTIME MATRIX, measured in the guest, image localhost/tillandsias-forge-base:v56.9.13.1, flags --cap-drop=ALL --security-opt=no-new-privileges:
+                         NETLINK_AUDIT        AF_VSOCK
+          DEFAULT        DENIED errno=22      DENIED errno=1
+          DERIVED        DENIED errno=22      CREATED
+          UNCONFINED     CREATED              CREATED
+        The derived column sits STRICTLY between the other two. That is the claim; "AF_VSOCK works" alone is equally true of seccomp=unconfined, which is the thing not to ship. UNCONFINED is the positive control proving the probe can see a difference at all.
+
+        TWO PROBES DISCARDED FOR NOT DISCRIMINATING, recorded so nobody re-tries them: `unshare -U true` succeeded under all three profiles (rc=0 each), and `swapon /dev/null` failed identically under all three ("read swap header failed", rc=255 each). Neither syscall is denied by this default, so neither separated anything. A control that does not discriminate is not a weaker control; it is not a control.
+
+        TWO DEFECTS THE LIVE RUN CAUGHT THAT INSPECTION DID NOT, both mine, both now fixed and asserted by the fixture:
+          1. crun refuses a block carrying an errno value under SCMP_ACT_ALLOW — "OCI runtime error: crun: errno value specified for action SCMP_ACT_ALLOW". The derived JSON was perfectly well-formed and EVERY container using it failed to start. A file-shape check would have passed it; only running a container caught it.
+          2. `mktemp -t NAME` is the BSD form; GNU coreutils answers "too few X's in template". Authored on macOS, runs only in the Linux guest.
+
+        GUARD: scripts/test-vsock-seccomp-derivation.sh -> ok:vsock-seccomp-derivation:8 in the guest. On the macOS host it prints unsupported:vsock-seccomp-derivation:structural-only-no-podman-or-probe-image and says which half it skipped, rather than reporting a bare green from the arms that cannot tell you crun will accept the file. Its runtime arms need only podman and an image with python3, so a LINUX host can run them natively — this is not macOS-only coverage.
+
+        WHAT REMAINS ON THIS ROW, and it is the larger half. (1) A dedicated forwarder container wired into headless with this profile, and the in-guest endpoint answering inference:11434 and dialling CID 2 — the transparency criterion needs that name to keep working, so a bare relay is not sufficient. (2) The end-to-end hop proven in TRAY CONTINUOUS-RUNLOOP mode. --exec-guest provably cannot prove it: the ETIMEDOUT seen in the derived arm above (connect to AF=40 cid:2 port:42421) is the documented 2026-08-29 signature of the host not pumping CFRunLoop, NOT a failure of the hop, and reading it as failure is the confusion the earlier claimant recorded the constraint to prevent. (3) The host half needs no work: host_vsock_forward.rs exists and is spawned from transport_macos.rs:711.

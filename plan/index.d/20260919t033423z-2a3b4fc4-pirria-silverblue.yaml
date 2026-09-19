@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    event:
+      type: note
+      ts: "2026-09-19T03:34:23Z"
+      agent_id: linux-pirria-claude-20260919t033423z
+      host: pirria-silverblue
+      summary: |
+        THIRD STATE, AND IT IS A DIFFERENT FAILURE FROM THE FIRST TWO: the freeze
+        became UNCLEARABLE BY ITS OWNER.
+
+        The sequence this row now carries, end to end:
+
+          1. CLEARED FOR A LANDING   02:11:35Z-02:28:10Z, 16m35s, marker absent, every
+             signal correctly reporting no freeze while the cut host landed its own fix.
+          2. RE-SET                  02:28:10Z, epoch 1789784891 at 19f8d0b88.
+          3. UNCLEARABLE             the cut host's keyring crashed at 03:01:37Z during
+             the gate's e2e phase and came back LOCKED. Every push from that host is
+             refused until the operator unlocks it by hand — **including the delete of
+             the freeze's own ref.** The marker was removed by lenovinha at the owner's
+             request, from a different host.
+
+        Verified here after: `git ls-remote origin 'refs/tillandsias/freeze/*'` returns
+        nothing and `scripts/release-freeze.sh status linux-next` reads
+        `ok:freeze-none:linux-next`.
+
+        WHY STATE 3 IS NOT THE SAME BUG. States 1 and 2 are about a marker that is
+        ABSENT WHEN IT SHOULD BE PRESENT. State 3 is the converse: a marker that is
+        PRESENT AND CANNOT BE MADE ABSENT, because the only party whose removal is
+        legitimate has lost the credential needed to remove it. A freeze is a hold
+        placed by one host on every host; if the placing host can die, be re-imaged,
+        lose a keyring or simply go away, the hold outlives it and there is no
+        documented way out that is not "ask a human, or have another host do it".
+        Tonight the way out was a message to lenovinha. That worked because the
+        coordinator was awake to ask.
+
+        A DISAGREEMENT WITH THE PROPOSED REMEDY, stated because agreeing here would
+        hide a gap. The coordinator says the owner exemption "also solves" this case.
+        **It does not, and it is worth being precise about what it does solve.**
+
+          - The exemption lets the OWNER PUSH CODE to its own frozen branch without
+            clearing. That removes the clear-land-re-set sequence and therefore removes
+            states 1 and 2 entirely. It is the right fix for those.
+          - It does NOT let anyone REMOVE a freeze whose owner cannot push. At the end
+            of the cut somebody still has to delete the ref, and if the owner's
+            credential is dead, the exemption changes nothing about that delete — the
+            owner still cannot push, and the exemption is about admitting pushes, not
+            about who may remove a marker.
+
+        What the exemption DOES buy for state 3 is narrower and still worth having: a
+        stuck freeze stops blocking its OWNER, so the cut can continue from the host
+        that placed it. It leaves every OTHER host blocked by a marker nobody present
+        is allowed to remove.
+
+        WHAT STATE 3 ACTUALLY NEEDS, for whoever picks this up — offered as options, not
+        a decision, since the freeze's authority model is the coordinator's to set:
+          - AN EXPIRY ON THE FREEZE. The ref path already carries a declaration epoch,
+            so a freeze older than N hours could be treated as lapsed by readers, or be
+            removable by any host. A cut that outruns the expiry re-declares, which is
+            cheap and leaves a trace.
+          - OR AN EXPLICIT BREAK-GLASS: any host may delete a freeze whose owner has not
+            pushed within some window, with the deletion recorded. Tonight this happened
+            informally — lenovinha deleted another host's marker on a message — and it
+            should be a sanctioned path with a record rather than a favour.
+          - NOT "the owner keeps a spare credential". That makes the remedy depend on
+            the thing that failed.
+
+        THE GENERAL SHAPE, which is why all three belong on one row: **a freeze is a
+        piece of shared state whose lifecycle depends on a single host remaining able to
+        act.** States 1 and 2 are what happens when that host must temporarily remove
+        the state to do its job; state 3 is what happens when it loses the ability to
+        remove it at all. Both are consequences of one-host ownership, and a remedy that
+        addresses only the first leaves the fleet one keyring crash away from a hold
+        nobody can lift.
+
+        PROVENANCE NOTE: I did not observe the keyring crash or the deletion; both are
+        the coordinator's report. What I verified is the end state — no freeze refs on
+        origin, `ok:freeze-none:linux-next`, trunk at 45f5b43d4 — and the timestamps in
+        states 1 and 2, which I measured.

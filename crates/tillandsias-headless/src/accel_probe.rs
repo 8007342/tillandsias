@@ -1195,9 +1195,408 @@ fn wsl2_vulkan_facts_at(root: &std::path::Path) -> (bool, usize) {
 #[cfg(target_os = "linux")]
 /// Production entry point: gather the facts from the live filesystem, then
 /// decide. Kept as a thin seam so the decision stays testable without IO.
-fn wsl2_paravirtual_gpu_reason() -> String {
+///
+/// ORDER 793-zumy, CRITERION 2's OTHER HALF. This used to be the WHOLE
+/// decision, and a filesystem read cannot make it: criterion 2 opens with
+/// "Detection is by ENUMERATION, not file existence", and criterion 3 requires
+/// that a software rasterizer never satisfy the GPU check. Neither is decidable
+/// from `icd.d` — the directory that proves llvmpipe is installed is the same
+/// directory that proves Dozen is. So the filesystem facts are now the FALLBACK
+/// arm only, reached when nothing enumerated, and the verdict comes from an
+/// actual `vkEnumeratePhysicalDevices` when one is reachable.
+fn wsl2_paravirtual_gpu_verdict() -> Wsl2VulkanVerdict {
     let (loader, icds) = wsl2_vulkan_facts_at(std::path::Path::new("/"));
-    wsl2_paravirtual_gpu_reason_from(loader, icds)
+    wsl2_vulkan_verdict_from(enumerate_vulkan_physical_devices().as_deref(), loader, icds)
+}
+
+/// One enumerated Vulkan physical device, reduced to exactly what criterion 2
+/// and criterion 3 decide on, plus the name that will reach the fleet matrix.
+///
+/// ORDER 793-zumy. `driver_id` AND `device_type` are both carried deliberately,
+/// for the same reason `vendor_id` and `device_id` are used together elsewhere
+/// in this file: either one alone is a partial answer. lavapipe reports
+/// PHYSICAL_DEVICE_TYPE_CPU *and* DRIVER_ID_MESA_LLVMPIPE today, but a software
+/// rasterizer that mislabels its own type is exactly the case the rejection
+/// exists to survive, and a future one that reports OTHER would slip a
+/// type-only check.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VulkanPhysicalDevice {
+    /// `VkPhysicalDeviceProperties::deviceType`, as the raw enum value.
+    device_type: u32,
+    /// `VkPhysicalDeviceDriverProperties::driverID`, as the raw enum value.
+    driver_id: u32,
+    /// `VkPhysicalDeviceProperties::deviceName`, for `name_source=enumerated`.
+    name: String,
+}
+
+/// `VK_PHYSICAL_DEVICE_TYPE_CPU`.
+#[cfg(any(target_os = "linux", test))]
+const VK_PHYSICAL_DEVICE_TYPE_CPU: u32 = 4;
+/// `VK_DRIVER_ID_MESA_LLVMPIPE`.
+#[cfg(any(target_os = "linux", test))]
+const VK_DRIVER_ID_MESA_LLVMPIPE: u32 = 13;
+
+#[cfg(any(target_os = "linux", test))]
+impl VulkanPhysicalDevice {
+    /// Criterion 3, as one predicate: a device that is a CPU path wearing a
+    /// Vulkan interface. MEASURED on esmeraldinha 2026-09-18, both arms live in
+    /// one enumeration: `llvmpipe (LLVM 22.1.8, 256 bits)` type=CPU(4)
+    /// driverID=13 beside `Microsoft Direct3D12 (Intel(R) UHD Graphics)`
+    /// type=INTEGRATED_GPU(1) driverID=23 (Dozen) over /dev/dxg.
+    fn is_software_rasterizer(&self) -> bool {
+        self.device_type == VK_PHYSICAL_DEVICE_TYPE_CPU
+            || self.driver_id == VK_DRIVER_ID_MESA_LLVMPIPE
+    }
+}
+
+/// What the probe is entitled to say about a `/dev/dxg` device.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Wsl2VulkanVerdict {
+    /// A non-CPU physical device enumerated. Carries the name it enumerated
+    /// under, so the record stops being a placeholder on the one host that can
+    /// prove otherwise.
+    Usable { name: String },
+    /// Not usable, and the reason says which question was actually asked.
+    Unusable { reason: String },
+}
+
+/// ORDER 793-zumy — the pure half of criterion 2's enumeration clause and all
+/// of criterion 3.
+///
+/// `enumeration` IS AN OPTION AND THAT IS THE WHOLE POINT. `None` means nobody
+/// enumerated — no loader to `dlopen`, no instance, no `vkGetPhysicalDeviceProperties2`
+/// — and `Some(&[])` means the loader answered and offered nothing. This file
+/// has paid for collapsing those twice already (`accel_proof=-` conflating
+/// "nobody to ask" with "asked and found none"; `accel_npu=none` derived from a
+/// question that failed), so the distinction is in the type rather than in a
+/// comment.
+///
+/// THE `None` ARM DELEGATES TO THE FILESYSTEM READING UNCHANGED, which is what
+/// keeps criterion 4 true: on every host that could not enumerate, the envelope
+/// is byte-identical to what it produced before this change. The two
+/// `engine-missing` arms criterion 2 requires verbatim are untouched.
+#[cfg(any(target_os = "linux", test))]
+fn wsl2_vulkan_verdict_from(
+    enumeration: Option<&[VulkanPhysicalDevice]>,
+    loader_present: bool,
+    icd_count: usize,
+) -> Wsl2VulkanVerdict {
+    let Some(devices) = enumeration else {
+        return Wsl2VulkanVerdict::Unusable {
+            reason: wsl2_paravirtual_gpu_reason_from(loader_present, icd_count),
+        };
+    };
+
+    if let Some(real) = devices.iter().find(|d| !d.is_software_rasterizer()) {
+        return Wsl2VulkanVerdict::Usable {
+            name: real.name.clone(),
+        };
+    }
+
+    // Enumerated, and what came back does not answer the question. Both arms
+    // keep `engine-missing` — criterion 2's word for "hardware present, no
+    // runtime that reaches it" — because that is exactly the state: the dxg
+    // device is delivered and nothing translating onto it enumerated.
+    Wsl2VulkanVerdict::Unusable {
+        reason: if devices.is_empty() {
+            // The loader ran and offered zero devices. Distinct from no loader:
+            // this one names a question that WAS asked.
+            "engine-missing:vulkan-enumerated-no-device".to_string()
+        } else {
+            // Criterion 3's refusal, and it must be its own token: a host where
+            // lavapipe is the only answer looks identical to a working one in
+            // every filesystem fact, and differs only here.
+            "engine-missing:vulkan-software-rasterizer-only".to_string()
+        },
+    }
+}
+
+/// ORDER 793-zumy — the IO half: actually enumerate.
+///
+/// WHY `dlopen` AND NOT A VULKAN CRATE. This is a PROBE. A build-time binding
+/// (`ash`) would link the loader into every build of a binary that must run on
+/// hosts with no Vulkan at all, and would turn "this host has no loader" — a
+/// first-class answer this function has to be able to give — into a link error
+/// or a panic. Loading by SONAME at runtime and returning `None` when it is not
+/// there is the shape the answer requires. It also adds no lockfile entry:
+/// `libc` is already a dependency of this crate.
+///
+/// WHY THE STRUCT DEFINITIONS STOP WHERE THEY DO. Only the head of
+/// `VkPhysicalDeviceProperties` is read (`deviceType` and `deviceName`), so
+/// rather than transcribe `VkPhysicalDeviceLimits` — 100-odd fields whose
+/// layout this file would then own and could silently get wrong — the
+/// `VkPhysicalDeviceProperties2` receiving buffer is an over-sized aligned byte
+/// array that the loader writes into, and the two fields are read at their
+/// fixed offsets. A transcription error in a field nobody reads is a
+/// vacuous-green defect; an over-sized buffer cannot have one.
+///
+/// Returns `None` — never `Some(vec![])` — for every failure of the mechanism
+/// itself, so "nobody asked" never arrives dressed as "asked and found none".
+/// MEMOISED FOR THE LIFE OF THE PROCESS, for the reason spelled out at the
+/// `vkDestroyInstance` comment below: the instance this creates is never
+/// destroyed, so running the body twice would leak twice. Enumerating the
+/// host's physical devices is also not a question whose answer changes while
+/// the process runs — a GPU does not appear mid-probe — so a second call would
+/// pay the ICD load again for an identical answer.
+///
+/// This is NOT the `~/.cache/tillandsias/capabilities.json` cache (1139-xe5m)
+/// and must not be confused with it: nothing here survives the process, so a
+/// fresh run always re-enumerates and this can never serve a stale provisioning
+/// state across runs.
+#[cfg(target_os = "linux")]
+fn enumerate_vulkan_physical_devices() -> Option<Vec<VulkanPhysicalDevice>> {
+    static ENUMERATION: std::sync::OnceLock<Option<Vec<VulkanPhysicalDevice>>> =
+        std::sync::OnceLock::new();
+    ENUMERATION
+        .get_or_init(enumerate_vulkan_physical_devices_uncached)
+        .clone()
+}
+
+#[cfg(target_os = "linux")]
+fn enumerate_vulkan_physical_devices_uncached() -> Option<Vec<VulkanPhysicalDevice>> {
+    use std::ffi::{CStr, CString, c_char, c_void};
+
+    const VK_STRUCTURE_TYPE_APPLICATION_INFO: u32 = 0;
+    const VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO: u32 = 1;
+    const VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2: u32 = 1_000_059_001;
+    const VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES: u32 = 1_000_196_000;
+    // VK_MAKE_API_VERSION(0, 1, 1, 0). 1.1 is what promotes
+    // vkGetPhysicalDeviceProperties2 into core; the KHR alias is tried as a
+    // fallback below for a 1.0 loader carrying the extension.
+    const VK_API_VERSION_1_1: u32 = (1 << 22) | (1 << 12);
+    // A WSL2 guest does not have dozens of GPUs. The cap exists so a
+    // nonsense count out of a broken ICD cannot drive an allocation.
+    const MAX_DEVICES: u32 = 16;
+
+    #[repr(C)]
+    struct VkApplicationInfo {
+        s_type: u32,
+        p_next: *const c_void,
+        p_application_name: *const c_char,
+        application_version: u32,
+        p_engine_name: *const c_char,
+        engine_version: u32,
+        api_version: u32,
+    }
+
+    #[repr(C)]
+    struct VkInstanceCreateInfo {
+        s_type: u32,
+        p_next: *const c_void,
+        flags: u32,
+        p_application_info: *const VkApplicationInfo,
+        enabled_layer_count: u32,
+        pp_enabled_layer_names: *const *const c_char,
+        enabled_extension_count: u32,
+        pp_enabled_extension_names: *const *const c_char,
+    }
+
+    #[repr(C)]
+    struct VkPhysicalDeviceDriverProperties {
+        s_type: u32,
+        p_next: *mut c_void,
+        driver_id: u32,
+        driver_name: [c_char; 256],
+        driver_info: [c_char; 256],
+        conformance_version: [u8; 4],
+    }
+
+    // The receiving buffer for VkPhysicalDeviceProperties2. 8-aligned because
+    // the struct it stands in for contains VkDeviceSize (u64) members.
+    #[repr(C, align(8))]
+    struct Properties2Buffer([u8; 4096]);
+
+    // Offsets into that buffer. sType(4) + padding(4) + pNext(8) = 16 is where
+    // the embedded VkPhysicalDeviceProperties starts; within it,
+    // apiVersion/driverVersion/vendorID/deviceID are four u32 before
+    // deviceType, and deviceName follows immediately.
+    const PROPERTIES_OFFSET: usize = 16;
+    const DEVICE_TYPE_OFFSET: usize = PROPERTIES_OFFSET + 16;
+    const DEVICE_NAME_OFFSET: usize = PROPERTIES_OFFSET + 20;
+    const VK_MAX_PHYSICAL_DEVICE_NAME_SIZE: usize = 256;
+
+    type PfnVoid = unsafe extern "C" fn();
+    type PfnGetInstanceProcAddr = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void;
+    type PfnCreateInstance =
+        unsafe extern "C" fn(*const VkInstanceCreateInfo, *const c_void, *mut *mut c_void) -> i32;
+    type PfnEnumeratePhysicalDevices =
+        unsafe extern "C" fn(*mut c_void, *mut u32, *mut *mut c_void) -> i32;
+    type PfnGetPhysicalDeviceProperties2 = unsafe extern "C" fn(*mut c_void, *mut c_void);
+
+    // SAFETY: every call below is an ABI-correct call into the Vulkan loader
+    // through pointers it handed back, with every failure returning None
+    // before the next pointer is used. No Rust value outlives the instance.
+    unsafe {
+        let soname = CString::new("libvulkan.so.1").ok()?;
+        let lib = libc::dlopen(soname.as_ptr(), libc::RTLD_NOW);
+        if lib.is_null() {
+            return None;
+        }
+
+        let sym = |name: &str| -> Option<*mut c_void> {
+            let c = CString::new(name).ok()?;
+            let p = libc::dlsym(lib, c.as_ptr());
+            if p.is_null() { None } else { Some(p) }
+        };
+
+        let get_instance_proc_addr: PfnGetInstanceProcAddr =
+            std::mem::transmute::<*mut c_void, PfnGetInstanceProcAddr>(sym(
+                "vkGetInstanceProcAddr",
+            )?);
+
+        let proc_addr = |instance: *mut c_void, name: &str| -> Option<PfnVoid> {
+            let c = CString::new(name).ok()?;
+            let p = get_instance_proc_addr(instance, c.as_ptr());
+            if p.is_null() {
+                None
+            } else {
+                Some(std::mem::transmute::<*mut c_void, PfnVoid>(p))
+            }
+        };
+
+        let create_instance: PfnCreateInstance = std::mem::transmute::<PfnVoid, PfnCreateInstance>(
+            proc_addr(std::ptr::null_mut(), "vkCreateInstance")?,
+        );
+
+        let app_name = CString::new("tillandsias-accel-probe").ok()?;
+        let engine_name = CString::new("tillandsias").ok()?;
+        let app_info = VkApplicationInfo {
+            s_type: VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            p_next: std::ptr::null(),
+            p_application_name: app_name.as_ptr(),
+            application_version: 0,
+            p_engine_name: engine_name.as_ptr(),
+            engine_version: 0,
+            api_version: VK_API_VERSION_1_1,
+        };
+        let create_info = VkInstanceCreateInfo {
+            s_type: VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            p_next: std::ptr::null(),
+            flags: 0,
+            p_application_info: &app_info,
+            enabled_layer_count: 0,
+            pp_enabled_layer_names: std::ptr::null(),
+            enabled_extension_count: 0,
+            pp_enabled_extension_names: std::ptr::null(),
+        };
+
+        let mut instance: *mut c_void = std::ptr::null_mut();
+        if create_instance(&create_info, std::ptr::null(), &mut instance) != 0 || instance.is_null()
+        {
+            return None;
+        }
+
+        // From here on every early return must still destroy the instance, so
+        // the body is a closure and the teardown is unconditional after it.
+        let mut out: Option<Vec<VulkanPhysicalDevice>> = None;
+        'enumerate: {
+            let Some(enumerate) = proc_addr(instance, "vkEnumeratePhysicalDevices") else {
+                break 'enumerate;
+            };
+            let enumerate: PfnEnumeratePhysicalDevices =
+                std::mem::transmute::<PfnVoid, PfnEnumeratePhysicalDevices>(enumerate);
+
+            let get_props2 = proc_addr(instance, "vkGetPhysicalDeviceProperties2")
+                .or_else(|| proc_addr(instance, "vkGetPhysicalDeviceProperties2KHR"));
+            let Some(get_props2) = get_props2 else {
+                break 'enumerate;
+            };
+            let get_props2: PfnGetPhysicalDeviceProperties2 =
+                std::mem::transmute::<PfnVoid, PfnGetPhysicalDeviceProperties2>(get_props2);
+
+            let mut count: u32 = 0;
+            if enumerate(instance, &mut count, std::ptr::null_mut()) != 0 {
+                break 'enumerate;
+            }
+            count = count.min(MAX_DEVICES);
+
+            let mut handles: Vec<*mut c_void> = vec![std::ptr::null_mut(); count as usize];
+            if count > 0 && enumerate(instance, &mut count, handles.as_mut_ptr()) != 0 {
+                break 'enumerate;
+            }
+            handles.truncate(count as usize);
+
+            let mut devices = Vec::with_capacity(handles.len());
+            for handle in handles {
+                if handle.is_null() {
+                    continue;
+                }
+
+                let mut driver_props = VkPhysicalDeviceDriverProperties {
+                    s_type: VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
+                    p_next: std::ptr::null_mut(),
+                    driver_id: 0,
+                    driver_name: [0; 256],
+                    driver_info: [0; 256],
+                    conformance_version: [0; 4],
+                };
+                let mut buffer = Properties2Buffer([0u8; 4096]);
+                let base = buffer.0.as_mut_ptr();
+                base.cast::<u32>()
+                    .write(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
+                base.add(8)
+                    .cast::<*mut c_void>()
+                    .write((&raw mut driver_props).cast::<c_void>());
+
+                get_props2(handle, base.cast::<c_void>());
+
+                let device_type = base.add(DEVICE_TYPE_OFFSET).cast::<u32>().read();
+                let name_bytes = std::slice::from_raw_parts(
+                    base.add(DEVICE_NAME_OFFSET),
+                    VK_MAX_PHYSICAL_DEVICE_NAME_SIZE,
+                );
+                let name = CStr::from_bytes_until_nul(name_bytes)
+                    .ok()
+                    .and_then(|c| c.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+
+                devices.push(VulkanPhysicalDevice {
+                    device_type,
+                    driver_id: driver_props.driver_id,
+                    name,
+                });
+            }
+            out = Some(devices);
+        }
+
+        // THE INSTANCE IS DELIBERATELY NOT DESTROYED, AND THIS IS MEASURED,
+        // NOT A CONVENIENCE. esmeraldinha, 2026-09-18, Mesa 26.1.6 dzn+lvp in
+        // a WSL2 guest: with a `vkDestroyInstance` call here, a probe run on
+        // ANY NON-MAIN THREAD segfaults — not during the enumeration, which
+        // completes and returns the right two devices, but when that thread
+        // LATER EXITS. Isolated to this one call by a four-way experiment:
+        //
+        //   main thread,     with destroy  -> fine, 10 iterations
+        //   spawned thread,  with destroy  -> enumerates, then SIGSEGV at thread exit
+        //   spawned thread,  no destroy    -> fine, repeated threads, repeated calls
+        //   `cargo test`,    with destroy  -> SIGSEGV (libtest runs every test on a
+        //                                     spawned thread, which is how this was found)
+        //
+        // The ICD's thread-local teardown runs after the instance it belongs
+        // to is gone. That is the ICD's defect — the loader prints "dzn is not
+        // a conformant Vulkan implementation, testing use only" on every
+        // instance creation — and this probe cannot fix it; it can only avoid
+        // standing in front of it.
+        //
+        // THE COST IS ONE LEAKED INSTANCE PER PROCESS, AND NOT ONE PER CALL:
+        // the result is memoised below, so this body runs at most once. A
+        // probe that already loads a third-party ICD into its own address
+        // space is not the place to insist on a teardown that crashes the
+        // host process — and a crash here would take down the tray, which is
+        // a far worse failure than a retained allocation in a process that is
+        // about to write a capabilities document and move on.
+        //
+        // DO NOT "TIDY THIS UP" by restoring the destroy call without
+        // re-running the four-way experiment above on a dxg-plus-ICD guest.
+        // The Windows and macOS gates cannot see this code at all, and the
+        // Linux gate only catches it because libtest happens to use threads.
+        let _ = instance;
+
+        out
+    }
 }
 
 /// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
@@ -3065,6 +3464,16 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
             Path::new("/dev/dri").exists(),
             !gpus.is_empty(),
         ) {
+            // ORDER 793-zumy, criterion 2's enumeration half. Everything below
+            // that reads `verdict` used to be a constant: `usable: false`, a
+            // placeholder name, no lane, and a reason derived from the
+            // filesystem. On a host where the loader answers, the answer now
+            // comes from the loader.
+            let verdict = wsl2_paravirtual_gpu_verdict();
+            let enumerated_name = match &verdict {
+                Wsl2VulkanVerdict::Usable { name } => Some(name.clone()),
+                Wsl2VulkanVerdict::Unusable { .. } => None,
+            };
             gpus.push(DeviceRecord {
                 device_class: "gpu".to_string(),
                 // /dev/dxg is vendor-AGNOSTIC: Intel, AMD and NVIDIA all present
@@ -3073,14 +3482,28 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // guess, and a wrong vendor in the fleet matrix is worse than an
                 // honest "unknown".
                 vendor: "unknown".to_string(),
-                name: "WSL2 paravirtual GPU (/dev/dxg)".to_string(),
-                // Every WSL2 host emits this same string: it identifies the
-                // substrate, not the card (1137-rgfm: declared placeholder).
-                name_source: Some("placeholder".to_string()),
+                // ORDER 793-zumy: the placeholder is now the FALLBACK, not the
+                // only answer. When a device enumerated, its own
+                // `VkPhysicalDeviceProperties::deviceName` is the name and the
+                // source says `enumerated` — "Microsoft Direct3D12 (Intel(R)
+                // UHD Graphics)" on esmeraldinha — because a name the loader
+                // handed back is not a placeholder and must not be declared as
+                // one (1137-rgfm cuts both ways).
+                name: enumerated_name
+                    .clone()
+                    .unwrap_or_else(|| "WSL2 paravirtual GPU (/dev/dxg)".to_string()),
+                // Every WSL2 host that could not enumerate emits this same
+                // string: it identifies the substrate, not the card
+                // (1137-rgfm: declared placeholder).
+                name_source: Some(if enumerated_name.is_some() {
+                    "enumerated".to_string()
+                } else {
+                    "placeholder".to_string()
+                }),
                 device_node: Some("/dev/dxg".to_string()),
                 fw_version: None,
                 driver: None,
-                usable: false,
+                usable: enumerated_name.is_some(),
                 // ORDER 793-zumy. This said `wsl2-no-dri-render-node`, and that
                 // reason was a red herring dressed as a diagnosis. WSL2 delivers
                 // the GPU through /dev/dxg and is NOT EXPECTED to create a DRI
@@ -3103,16 +3526,81 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // sibling `rocm-runtime-missing` / `intel-compute-runtime-missing`
                 // shape: a provisioning statement should name its own remedy.
                 //
-                // THE VERDICT IS DELIBERATELY UNCHANGED. usable stays false and
-                // the class stays cpu-only: nothing here makes the GPU reachable
-                // today, and inflating the class would place GPU work on a host
-                // that cannot run it — the opposite failure, and the worse one.
-                unusable_reason: Some(wsl2_paravirtual_gpu_reason()),
+                // THE VERDICT IS NO LONGER A CONSTANT (793-zumy, criterion 2).
+                // It stays false — and `unusable_reason` stays populated — on
+                // every host where nothing enumerated a non-CPU device, which
+                // is every host this file has ever been measured on except the
+                // one carrying a working Dozen ICD. Inflating the class where
+                // the GPU is NOT reachable would place GPU work on a host that
+                // cannot run it; refusing it where the loader just enumerated
+                // the device is the false negative this packet was filed for.
+                // Both directions are now decided by the same evidence.
+                // ORDER 803-rbqf, WHICH THIS ARM MUST OBEY TOO: A DEVICE
+                // EXCLUDED BY LANE MUST NAME THE OBSTRUCTION. The enumerated
+                // arm below is `usable: true` with the `container` lane
+                // dropped, which is exactly the macOS Metal shape — and that
+                // record does NOT leave the field empty, because a consumer
+                // reading a device that is simply not offered in a lane has no
+                // way to learn why. Leaving this `None` on the usable arm would
+                // have rendered `accel_gpu=present-unusable` beside the NPU's
+                // reason as the first named obstruction, which is the bare
+                // verdict this envelope's own contract forbids.
+                //
+                // `unverified` and not a structural claim, which is where this
+                // differs from Metal. Metal genuinely cannot cross into the
+                // linux-aarch64 guest — there is no flag that would change the
+                // answer. /dev/dxg has not been shown to be unpassable; it has
+                // only never been probed from inside a container on this host,
+                // so the AMD arm's `container-lane-unverified` is the honest
+                // word. Claiming it structural would be a second false cause
+                // in the packet that exists to remove the first one.
+                unusable_reason: match &verdict {
+                    // MEASURED 2026-09-19, so this is no longer `unverified`.
+                    // It said `container-lane-unverified:dxg-unprobed` until
+                    // the container lane was actually probed on esmeraldinha,
+                    // three arms:
+                    //   --device /dev/dxg alone                -> llvmpipe ONLY
+                    //   + /usr/lib/wsl/lib bound               -> dzn loads, then
+                    //        ID3D12DeviceFactory::CreateDevice failed; llvmpipe only
+                    //   + ALL of /usr/lib/wsl (incl. drivers/) -> the host's two
+                    //        devices, Dozen driverID=23 beside llvmpipe
+                    //
+                    // So the node DOES cross and the d3d12 libraries are
+                    // mountable; what is absent is the projected WINDOWS DRIVER
+                    // STORE that dzn resolves the real D3D12 device out of.
+                    // Naming it that way matters: "dxg does not reach the
+                    // container" would be false, and would read as a
+                    // passthrough limitation when it is a mount policy the
+                    // product could choose to change.
+                    //
+                    // KEPT UNDER 48 CHARACTERS DELIBERATELY (43). `slug()` caps
+                    // every envelope value at 48 and says nothing when it cuts:
+                    // an earlier spelling of this token was 52 characters and
+                    // rendered as `container-lane-unverified_dxg-not-probed-in-cont`
+                    // — a token that is not the token, with no marker that it
+                    // had been shortened. Same failure the `nvidia_model_name`
+                    // comment above records for a name truncated mid-UUID, and
+                    // the same remedy: shorten the input, do not raise the cap.
+                    Wsl2VulkanVerdict::Usable { .. } => {
+                        Some("container-lane-absent:dxg-needs-wsl-drivers".to_string())
+                    }
+                    Wsl2VulkanVerdict::Unusable { reason } => Some(reason.clone()),
+                },
                 policy_unscheduled: None,
-                // No lane: unreachable from the container AND from host-native
-                // code in the guest, because no Vulkan ICD is installed to
-                // translate onto the dxg path.
-                lanes: vec![],
+                // The lane is HOST-NATIVE ONLY, and never `container`. The
+                // Vulkan device was enumerated by THIS process, in the guest;
+                // nothing here has looked inside a container, and /dev/dxg is
+                // not passed into one by default. Claiming a container lane off
+                // a host-native enumeration is precisely the vantage confusion
+                // `Vantage` exists to prevent.
+                lanes: if enumerated_name.is_some() {
+                    vec!["host-native".to_string()]
+                } else {
+                    // No lane: unreachable from the container AND from
+                    // host-native code in the guest, because nothing translates
+                    // onto the dxg path.
+                    vec![]
+                },
                 memory_bandwidth_gbps: None,
                 memory_bandwidth_source: "unknown".to_string(),
                 cpu_flags: None,
@@ -6190,6 +6678,127 @@ mod tests {
             reason.contains("unverified"),
             "the honest statement is that nothing has enumerated it yet; got {reason}"
         );
+    }
+
+    /// A device as the loader described it, for the tests below.
+    #[cfg(test)]
+    fn vk_device(device_type: u32, driver_id: u32, name: &str) -> VulkanPhysicalDevice {
+        VulkanPhysicalDevice {
+            device_type,
+            driver_id,
+            name: name.to_string(),
+        }
+    }
+
+    /// 793-zumy CRITERION 3, pinned: "Devices of type PHYSICAL_DEVICE_TYPE_CPU
+    /// or driverID DRIVER_ID_MESA_LLVMPIPE are rejected, with a test pinning
+    /// the rejection."
+    ///
+    /// THE VALUES ARE MEASURED, NOT INVENTED. esmeraldinha, 2026-09-18, one
+    /// enumeration over /dev/dxg with the stock Mesa ICD set installed:
+    ///   device[0] type=INTEGRATED_GPU(1) driverID=23 "Microsoft Direct3D12 (Intel(R) UHD Graphics)"
+    ///   device[1] type=CPU(4)            driverID=13 "llvmpipe (LLVM 22.1.8, 256 bits)"
+    /// That is the exact pair criterion 3 describes — the software rasterizer
+    /// offered BESIDE the real part, not instead of it — so a probe that takes
+    /// the first device the loader lists would report a slow CPU path as a GPU.
+    ///
+    /// The two rejection predicates are asserted SEPARATELY as well as
+    /// together, because on today's Mesa they always co-occur and a check that
+    /// only ever sees them together cannot tell which one it is relying on.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn a_software_rasterizer_never_satisfies_the_gpu_check() {
+        let dozen = vk_device(1, 23, "Microsoft Direct3D12 (Intel(R) UHD Graphics)");
+        let llvmpipe = vk_device(4, 13, "llvmpipe (LLVM 22.1.8, 256 bits)");
+
+        // ARM 1: lavapipe alone is a refusal, not a GPU.
+        match wsl2_vulkan_verdict_from(Some(std::slice::from_ref(&llvmpipe)), true, 12) {
+            Wsl2VulkanVerdict::Unusable { reason } => assert!(
+                reason.contains("software-rasterizer"),
+                "the refusal must name the rasterizer, not a missing ICD: {reason}"
+            ),
+            other => panic!("a software rasterizer was accepted as a GPU: {other:?}"),
+        }
+
+        // ARM 2: type=CPU alone, with a driverID that is NOT llvmpipe — a
+        // second software rasterizer (SwiftShader reports 10) must not slip
+        // through a driverID-only check.
+        assert!(
+            matches!(
+                wsl2_vulkan_verdict_from(Some(&[vk_device(4, 10, "SwiftShader Device")]), true, 12),
+                Wsl2VulkanVerdict::Unusable { .. }
+            ),
+            "PHYSICAL_DEVICE_TYPE_CPU must be rejected on its own"
+        );
+
+        // ARM 3: driverID=MESA_LLVMPIPE alone, with a type that is NOT CPU — a
+        // rasterizer that mislabels its own type must not slip through a
+        // type-only check.
+        assert!(
+            matches!(
+                wsl2_vulkan_verdict_from(Some(&[vk_device(0, 13, "llvmpipe")]), true, 12),
+                Wsl2VulkanVerdict::Unusable { .. }
+            ),
+            "DRIVER_ID_MESA_LLVMPIPE must be rejected on its own"
+        );
+
+        // ARM 4: THE MEASURED MIXED CASE. The real part is present and the
+        // rasterizer must not mask it — and equally must not be the one picked.
+        match wsl2_vulkan_verdict_from(Some(&[llvmpipe, dozen]), true, 12) {
+            Wsl2VulkanVerdict::Usable { name } => assert!(
+                name.contains("Direct3D12"),
+                "the enumerated GPU's own name must reach the record, not the rasterizer's: {name}"
+            ),
+            other => panic!("the real Dozen device was rejected: {other:?}"),
+        }
+    }
+
+    /// 793-zumy CRITERION 2's opening clause: detection by ENUMERATION, and
+    /// the three answers an enumeration can give kept distinct.
+    ///
+    /// THE `None` ARM IS THE ONE THAT PROTECTS CRITERION 4. Every host that
+    /// cannot enumerate — no loader, no instance, no properties2 — must produce
+    /// the byte-identical reason it produced before this change, or the "no
+    /// regression on the hosts that were already correct" criterion is broken
+    /// by the fix for the others.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn nobody_enumerated_and_enumerated_nothing_are_different_answers() {
+        // NOBODY ASKED: delegates to the filesystem reading, verbatim.
+        for (loader, icds) in [(false, 0usize), (true, 0), (true, 12)] {
+            assert_eq!(
+                wsl2_vulkan_verdict_from(None, loader, icds),
+                Wsl2VulkanVerdict::Unusable {
+                    reason: wsl2_paravirtual_gpu_reason_from(loader, icds)
+                },
+                "with no enumeration the verdict must be the pre-793-zumy reason unchanged"
+            );
+        }
+
+        // ASKED, AND THE LOADER OFFERED NOTHING. A different fact, so a
+        // different token — and it must not borrow the not-enumerated wording,
+        // because something DID enumerate.
+        let empty = wsl2_vulkan_verdict_from(Some(&[]), true, 12);
+        let not_asked = wsl2_vulkan_verdict_from(None, true, 12);
+        assert_ne!(
+            empty, not_asked,
+            "`asked and found none` must not render as `nobody asked`"
+        );
+        match empty {
+            Wsl2VulkanVerdict::Unusable { reason } => {
+                assert!(
+                    reason.starts_with("engine-missing"),
+                    "criterion 2 requires the verbatim word for hardware with no runtime: {reason}"
+                );
+                assert!(
+                    !reason.contains("not-enumerated"),
+                    "it WAS enumerated; the reason must not claim otherwise: {reason}"
+                );
+            }
+            other => panic!("an empty enumeration was accepted as a GPU: {other:?}"),
+        }
     }
 
     /// 793-zumy, the IO half against a FIXTURE TREE — never the real /usr,

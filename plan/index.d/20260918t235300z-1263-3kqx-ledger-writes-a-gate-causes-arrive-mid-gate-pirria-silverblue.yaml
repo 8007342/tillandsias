@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: finalization-rule-3c-says-every-ledger-write-happens-before-the-gate-but-a-finding-discovered-BY-a-gate-arrives-mid-gate-by-construction-so-the-rule-cannot-be-followed-for-the-writes-that-matter-most
+    order: 1263-3kqx
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [meta-orchestration, gate, ledger, agent-safety, process]
+    estimated_hours: 2
+    owned_files:
+      - skills/meta-orchestration/SKILL.md
+    title: |
+      finalization rule 3c ("every ledger write happens before the gate") cannot be obeyed for a finding the GATE ITSELF produces — those arrive mid-gate by construction — and the remedy is to PARK the fragment outside the tree until the gate ends, which two hosts already do and nothing documents
+    context: |
+      MEASURED on pirria-silverblue 2026-09-18, by violating the rule within an
+      hour of quoting it.
+      Rule 3c exists for a good reason and states it well: the gate stamp hashes
+      the CONTENT of every tracked and untracked file, so a ledger write after a
+      green gate moves the digest and the pre-push hook then refuses a tree
+      whose code the gate validated perfectly. Order your finalization so every
+      `append-event`, `set-field`, `loop-status-append` and issue file lands
+      FIRST, then gate once, then commit and push. Correct as far as it goes.
+      WHAT IT CANNOT COVER: the gate refused this host with
+      `plan-binary-locus-native: 2 passed, 1 failed`. That is a FINDING — it
+      became 1258-tpkz. Filing it is mandatory under the capture rule
+      ("an unfiled finding is a lost finding and a contract violation"). But it
+      did not exist until the gate ran, so "write it before the gate" is not
+      advice that could have been taken. The two rules are in direct tension for
+      exactly the class of write that matters most: **the ones a gate teaches
+      you to make.**
+      WHAT I DID, and the cost: filed 1258-tpkz into `plan/index.d/` while a
+      fresh gate was already running, which moved the stamp and guaranteed the
+      run would end in a pre-push refusal. Killed it at ~4 minutes rather than
+      spend 35 on a stamp that could not hold. Cheap only because the finding
+      arrived early; had it arrived at minute 40 of a 44-minute gate on this
+      4-core host, the cost would have been the whole run.
+      THE REMEDY IS ALREADY PRACTICE AND IS WRITTEN DOWN NOWHERE (coordinator,
+      2026-09-18): **park the fragment outside the tree until the gate ends.**
+      macbookair did exactly that tonight for two of their findings. The
+      scratchpad directory every agent already has is the obvious home; the
+      fragment is composed there, the gate runs against an unmoved tree, and the
+      fragment is moved into `plan/index.d/` in the window between the gate
+      finishing and the commit.
+      WHY THIS IS A ROW AND NOT A ONE-LINE RUNBOOK EDIT: a habit is not
+      enforceable, which is this fleet's own standing objection to habit-shaped
+      remedies (1238-u84w rejected "remember -R" on exactly that ground). An
+      agent under the capture rule, holding a finding it is obliged not to lose,
+      will write it where findings go. The runbook has to name the parking place
+      at the point of the tension, and the guidance has to survive the reader
+      being mid-gate and wanting to be done.
+      RELATED, and deliberately NOT folded in: 1109-t8kw / 1186-w3ph are about
+      fixtures asserting properties of their environment. This is about the
+      ORDER of two correct rules. Same night, different defect.
+    exit_criteria:
+      - 'the meta-orchestration runbook names the parking place AT rule 3c, so a reader meeting the tension is told what to do rather than discovering that the two rules conflict — pre-fix evidence: 3c as written says only "land FIRST", and the host that quoted it violated it within the hour on the first finding a gate handed it'
+      - 'the guidance covers the write the agent did NOT plan to make, in those terms — a finding discovered BY a gate — because that is the case 3c silently excludes and the only case where obeying it is impossible'
+      - 'macbookair`s existing practice is cited as the source rather than presented as a new proposal; two hosts were already doing this and the gap was documentation, not invention'
+      - 'NEGATIVE CONTROL: the rule must NOT become "write ledger fragments whenever you like". A write landing in the tree after a green gate still moves the stamp and still earns a refusal; the parking place is a place to WAIT, not a licence to skip the ordering. A remedy that reads as "3c relaxed" is refused'
+      - 'the runbook says what to do when the gate is ALREADY running and a finding arrives — park it, let the gate finish, then land it — rather than only what to do when planning finalization, since by then it is too late to reorder anything'
+    unscoreable: |
+      placement-not-chosen: whether the parking place is the agent scratchpad,
+      a `plan/incoming/` directory the gate ignores, or a documented
+      `git stash`-free convention is a design choice with different blast
+      radii. The tension is fully measured and the practice exists; what is
+      undecided is which of the working forms to write down.
+    events:
+      - type: filed
+        ts: "2026-09-18T23:53:00Z"
+        agent_id: "linux-pirria-claude-20260918t235300z"
+        host: pirria-silverblue
+        summary: |-
+          Filed by the host that broke the rule, at the coordinator's
+          instruction, after they corrected my framing. I had proposed a runbook
+          edit saying the rule "must cover the writes you did not plan"; they
+          pointed out that naming the obligation is not a remedy and that the
+          remedy already exists as practice on another host. The useful artifact
+          is macbookair's parking, not my restatement of the problem.

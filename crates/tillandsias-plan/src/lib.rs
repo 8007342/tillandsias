@@ -57,6 +57,7 @@ pub mod ledger_cache;
 pub mod loop_status;
 /// Lua runtime for the adversarial decomposition pipeline. Sandboxed,
 /// hot-reloadable, type-checked middle layer between Rust and Shell.
+pub mod lua_predicate;
 pub mod lua_runtime;
 pub mod methodology;
 

@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-litmus-steps-run-pkill-f-tillandsias-inside-a-runner-whose-own-command-line-contains-that-string-so-the-step-can-kill-the-process-executing-it
+    order: "1266-75tr"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, process, self-match, composition]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/litmus-ca-ephemeral.yaml
+      - openspec/litmus-tests/litmus-mount-cleanup.yaml
+    title: |
+      two litmus steps run `pkill -f tillandsias` from inside a runner whose own command line contains that string — the step can kill the process executing it, and the harness would report the result as an ordinary failure
+    context: |
+      THE TWO STEPS, verbatim on trunk:
+        litmus-ca-ephemeral.yaml:34
+          command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
+        litmus-mount-cleanup.yaml:34
+          command: "pkill -f tillandsias 2>/dev/null && sleep 4 && echo SHUTDOWN_COMPLETE"
+
+      WHY THIS IS A SELF-MATCH. `pkill -f` matches against the FULL COMMAND LINE
+      of every process. run-litmus-test.sh executes each step as
+        bash -c 'source "$LITMUS_STDLIB"; <the step command>'
+      from a checkout at /var/home/<user>/claudia/tillandsias, so the executing
+      shell's own command line contains the string `tillandsias` several times
+      over — in the path, in the stdlib path, and in the command text itself.
+      The pattern matches the matcher.
+
+      THE FAILURE IS NOT THEORETICAL ON THIS FLEET. The same shape has cost
+      exit-144s here before: a sweep whose own command line carried the literal
+      it swept for killed the shell issuing it while the intended target
+      survived. `pkill -f` cannot distinguish "the process I mean" from "the
+      process asking".
+
+      WHAT MAKES IT WORSE THAN A WEDGE. If the step kills its own runner, the
+      harness does not report "the step killed me". It reports a dead step —
+      a non-zero exit or a timeout — which reads as an ordinary test failure
+      against whatever the step was nominally checking. A reader debugging
+      litmus-mount-cleanup would look at mount cleanup. Nothing in the output
+      names the actual mechanism.
+
+      AND THE STEPS ARE CURRENTLY GREEN FOR AN UNRELATED REASON, which is why
+      this has not bitten yet and why it should not be left. Their
+      expected_behavior is "shutdown command succeeds", which selects the
+      interpreter arm requiring NON-EMPTY OUTPUT and IGNORING THE EXIT CODE
+      (1252-znbn). `echo SHUTDOWN_COMPLETE` prints, so the step passes
+      regardless of what pkill did or did not kill — including, potentially,
+      nothing. The assertion cannot see the hazard.
+
+      NOT TOUCHED DELIBERATELY. These two were excluded from 1252-znbn's
+      per-step migration, along with five others calling podman or
+      `tillandsias --init`, because executing them to survey their behaviour
+      would take side effects on a live host. A measurement that kills processes
+      to find out whether it kills processes is not a measurement.
+
+      THE REMEDY PATH IS 1252-fg9e, not a patch here. That order builds an
+      idiomatic command executor whose argv is assembled callee-side, which
+      deletes `pkill -f` self-match as a CLASS rather than fixing two instances —
+      its own context names exactly this defect among the ten it removes by
+      construction. Two instances patched by hand would leave the shape
+      available to the next author.
+    exit_criteria:
+      - 'NEITHER STEP CAN KILL ITS OWN RUNNER: both resolve the target by PID, or by a matcher that cannot match the executing shell, or through the 1252-fg9e executor. PRE-FIX EVIDENCE: `pkill -f tillandsias` executed from a runner whose command line contains `tillandsias` in the checkout path, the stdlib path and the command text'
+      - 'THE STEPS ASSERT WHAT THEY MEAN: today both pass on `echo SHUTDOWN_COMPLETE` alone under the non-empty-output arm, so neither can observe whether the shutdown happened. Each must assert the state it is about — the process gone, the mount released — not that a literal was printed after a kill of unknown effect'
+      - 'A SELF-KILL IS REPORTED AS A SELF-KILL: if a step does kill its runner, the harness names that rather than reporting a dead step as an ordinary assertion failure against the step''s nominal subject. A reader must not be sent to look at mount cleanup when the mechanism was a matcher matching itself'
+      - 'NEGATIVE CONTROL: with the fix in place, a deliberately wrong target must still fail the step. A shutdown assertion that cannot fail has moved the hazard rather than removed it'
+    unscoreable: |
+      whether-these-two-have-ever-actually-self-killed: they are green today and
+      would be green either way, because the non-empty-output arm cannot see the
+      difference. So the evidence for harm is the SHAPE and this fleet's prior
+      exit-144s, not a recorded incident on these files. Establishing whether it
+      has fired would mean running them and watching, which is the side effect
+      this row declined to take. That question is not closed by this row and a
+      later incident on these files is confirmation rather than a new defect.
+    events:
+      - type: filed
+        ts: "2026-09-19T04:00:44Z"
+        agent_id: "linux-yoga-claude-20260919t040044z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga during the 1252-znbn migration, which excluded these
+          two from execution and from editing. Parent is 1252-fg9e, whose
+          executor removes this shape by construction; filed separately so the
+          two live instances are findable rather than buried in that order's
+          list of ten.

@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    event:
+      type: note
+      ts: "2026-09-19T02:28:47Z"
+      agent_id: linux-pirria-claude-20260919t022846z
+      host: pirria-silverblue
+      summary: |
+        THE EXACT WINDOW, closed. Supplied by the coordinator and verified here against
+        origin rather than accepted on report.
+
+          freeze cleared     02:11:35Z   (land begins gating)
+          land verdict       02:27:55Z   ok:land:19f8d0b88:attempt-2
+          freeze re-set      02:28:10Z   refs/tillandsias/freeze/linux-next/macuahuitl/1789784891
+          ----------------------------------------------------------------
+          ABSENT FOR         16m 35s     one gate plus a retry push
+
+          predecessor epoch  1789775480
+          successor  epoch   1789784891
+
+        VERIFIED INDEPENDENTLY on pirria at 02:28:34Z:
+          git ls-remote origin 'refs/tillandsias/freeze/linux-next/*'
+            -> 19f8d0b88e0012838edcdb67d2cd8f0408fda966
+               refs/tillandsias/freeze/linux-next/macuahuitl/1789784891
+          scripts/release-freeze.sh status linux-next
+            -> frozen:linux-next:by=macuahuitl:since=1789784891:age=24s
+
+        My own sample log covers 02:12:02Z-02:19:28Z, 42 consecutive clear readings, so
+        it observed 7m26s of a 16m35s hole and missed both ends. Worth stating plainly:
+        **the sampling understated the exposure by more than half**, and a host that
+        polled once anywhere in those sixteen minutes would have received a true
+        `ok:freeze-none` with no indication of how long it had been true or how long it
+        would remain so. The marker carries no duration and no predecessor, so a single
+        reading is indistinguishable from a settled state.
+
+        NOTE FOR FALLBACK B, from the arithmetic: the two epochs differ by 9411s
+        (2h37m), which is the length of the FREEZE, not of the window. So the epoch is
+        the declaration timestamp of each freeze, not of the clear — which is what makes
+        successor comparison workable: a reader holding 1789775480 and seeing 1789784891
+        can tell it is looking at a later declaration rather than at an absence. The
+        fallback is sound on this evidence; it needs only that the successor exists
+        before the predecessor is removed, which is fallback A.
+
+        THE RETRY IS PART OF THE NUMBER AND SHOULD NOT BE READ AS OVERHEAD: the land
+        took attempt 2, so the window is not "how long a gate takes" but "how long a
+        gate takes plus however many times trunk moves under it". On a busy trunk that
+        is unbounded upward. Sixteen minutes is this instance, not the ceiling.

@@ -781,15 +781,40 @@ attempt_plan_only_lane() {
                     # to origin/linux-next's blob for that same path is
                     # trunk's content, already gated there, and is DROPPED
                     # from this push's obligations rather than refused. A
-                    # path that DIFFERS from trunk — including one that does
-                    # not exist on trunk at all — still refuses exactly as
+                    # path that DIFFERS from trunk still refuses exactly as
                     # before; this narrows what counts against the lane, and
                     # never widens what the lane will accept once counted.
+                    #
+                    # THE CLAUSE "including one that does not exist on trunk at
+                    # all" WAS WRONG AND IS CORRECTED HERE. It conflated two
+                    # cases that are not alike: a path absent on trunk but
+                    # PRESENT in the push is new content nothing has gated and
+                    # must refuse, while a path absent on trunk AND absent in
+                    # the push is the two sides agreeing and must not. The
+                    # sentence as written described the bug as if it were the
+                    # design.
+                    #
+                    # AN AGREEING DELETION IS ALSO "DIFFERS FROM NOTHING".
+                    # The guard below originally required the path to EXIST on
+                    # trunk, so a path absent on BOTH sides — deleted on trunk
+                    # and deleted in this push, i.e. the two agree perfectly —
+                    # left _1152_trunk_blob empty, skipped the whole block, and
+                    # was refused. A tree byte-identical to trunk could not be
+                    # pushed, which blocks every platform branch'"'"'s
+                    # fast-forward.
+                    # ABSENT-ON-BOTH IS AGREEMENT and is dropped. Absent on
+                    # trunk but PRESENT in the push is NOT agreement and still
+                    # refuses — that is new content nothing has gated, and the
+                    # mutation arm in the test pins it.
                     _1152_trunk_blob=""
                     _1152_trunk_blob="$(git rev-parse --verify --quiet "refs/remotes/origin/linux-next:${path}" 2>/dev/null)" || true
+                    _1152_push_blob=""
+                    _1152_push_blob="$(git rev-parse --verify --quiet "${local_sha}:${path}" 2>/dev/null)" || true
+                    if [[ -z "$_1152_trunk_blob" && -z "$_1152_push_blob" ]]; then
+                        echo "plan-only lane: '$path' differs from nothing — absent on origin/linux-next AND absent in this push (an agreeing deletion); dropped from this push's obligations (1152-y3bv)" >&2
+                        continue
+                    fi
                     if [[ -n "$_1152_trunk_blob" ]]; then
-                        _1152_push_blob=""
-                        _1152_push_blob="$(git rev-parse --verify --quiet "${local_sha}:${path}" 2>/dev/null)" || true
                         if [[ -n "$_1152_push_blob" && "$_1152_trunk_blob" == "$_1152_push_blob" ]]; then
                             echo "plan-only lane: '$path' differs from nothing — byte-identical to origin/linux-next, already gated there; dropped from this push's obligations (1152-y3bv)" >&2
                             continue
@@ -1394,6 +1419,22 @@ attempt_plan_only_lane() {
         fi
     else
         LANE_NOTES+=("scripts/check-no-base64-script-injection.sh absent — skipped")
+    fi
+
+    # ORDER 1261-bn7v. A long-form field whose OUTGOING fold drops a line
+    # ORIGIN's fold carries is a silent deletion of another host's writing.
+    # set-field's own guard (1151-td46) cannot catch it: that guard compares
+    # against the fold the WRITING HOST HOLDS, and a peer's append this host has
+    # not fetched is invisible to it. The lane already fetches, so the lane is
+    # where the comparison can be made.
+    if [[ -f scripts/check-append-vs-origin-fold.sh ]]; then
+        if ! out="$(bash scripts/check-append-vs-origin-fold.sh 2>&1)"; then
+            echo "plan-only lane: validation FAILED — this push drops a line origin's fold carries (1261-bn7v):" >&2
+            echo "$out" | head -12 | sed 's/^/  /' >&2
+            return 1
+        fi
+    else
+        LANE_NOTES+=("scripts/check-append-vs-origin-fold.sh absent — skipped")
     fi
 
     # ── Accept ────────────────────────────────────────────────────────────────

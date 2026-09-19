@@ -34,30 +34,35 @@ critical_path:
     command: "cargo run -p tillandsias-host-shell --example wait-vm-ready -- --timeout-secs 60"
     timeout_ms: 65000
     expected_behavior: "succeeds (VM is up and tillandsias-headless is listening on vsock)"
+    assert_exit: 0
 
   - step: "vault is sealed=false within 5s of container start"
     phase: runtime
     command: "bash -lc 'T_CONTAINER_START=$(cargo run -p tillandsias-host-shell --example replay-audit-log -- --grep \"container=tillandsias-vault.*started\" --format ts); T_UNSEAL=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault status -format=json 2>/dev/null | cargo run --quiet -p tillandsias-policy -- vault-unsealed-epoch); DELTA=$((T_UNSEAL-T_CONTAINER_START)); [[ $DELTA -le 5 ]] && echo \"OK: unseal in ${DELTA}s\" || (echo \"FAIL: unseal took ${DELTA}s > 5s\"; exit 1)'"
     timeout_ms: 15000
     expected_behavior: "succeeds; delta <= 5s"
+    assert_exit: 0
 
   - step: "no passphrase prompt surfaced (host process did not block on TTY or window)"
     phase: runtime
     command: "bash -lc '! grep -qiE \"passphrase|password|unseal key|enter unseal\" /tmp/litmus-vault-boot.log && ! pgrep -af \"^(pinentry|ssh-askpass|/usr/lib/seahorse|osascript.*password)\" >/dev/null && echo \"OK: no prompt\"'"
     timeout_ms: 5000
     expected_behavior: "succeeds (no prompt-related processes, no prompt strings in log)"
+    assert_exit: 0
 
   - step: "unseal key is on tmpfs and absent from persistent disk"
     phase: runtime
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"findmnt /run/secrets | grep -q tmpfs && ! find /vault /etc -type f -exec grep -l 'unseal' {} + 2>/dev/null | grep -v audit\" && echo \"OK\"'"
     timeout_ms: 10000
     expected_behavior: "succeeds (unseal key path on tmpfs; no persistent file contains the key)"
+    assert_exit: 0
 
   - step: "bootstrap artifacts (init.json, root.token) are deleted from disk"
     phase: runtime
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"[ ! -f /vault/data/init.json ] && [ ! -f /vault/data/root.token ]\" && echo \"OK\"'"
     timeout_ms: 5000
     expected_behavior: "succeeds (files removed after first boot handover)"
+    assert_exit: 0
 
 observability:
   traces:

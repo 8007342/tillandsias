@@ -23,30 +23,35 @@ critical_path:
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"vault login -no-print -policy=tray-policy && vault kv put secret/github/token value=ghp_litmusFIXTURE0000000000000000000000\"' "
     timeout_ms: 10000
     expected_behavior: "succeeds (fixture token written)"
+    assert_exit: 0
 
   - step: "issue a forge-policy-scoped token"
     phase: setup
     command: "bash -lc 'FORGE_TOKEN=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault token create -policy=forge-policy -ttl=300s -format=json | cargo run --quiet -p tillandsias-policy -- json-get-string auth.client_token); echo \"$FORGE_TOKEN\" > /tmp/litmus-forge-token'"
     timeout_ms: 10000
     expected_behavior: "succeeds; /tmp/litmus-forge-token contains a valid forge-policy token"
+    assert_exit: 0
 
   - step: "forge-policy token gets 403 on secret/github/token"
     phase: runtime
     command: "bash -lc 'FORGE_TOKEN=$(cat /tmp/litmus-forge-token); STATUS=$(cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"VAULT_TOKEN='$FORGE_TOKEN' vault kv get -format=json secret/github/token 2>&1 | grep -oE 'Code: [0-9]+' | head -1 || curl -sS -o /dev/null -w '%{http_code}' -H 'X-Vault-Token: '$FORGE_TOKEN http://vault:8200/v1/secret/data/github/token\"); echo \"STATUS=$STATUS\"; echo \"$STATUS\" | grep -qE \"403\"'"
     timeout_ms: 15000
     expected_behavior: "succeeds (status is 403 / permission denied)"
+    assert_exit: 0
 
   - step: "forge-policy token CAN read secret/ca/proxy-cert (positive control)"
     phase: runtime
     command: "bash -lc 'FORGE_TOKEN=$(cat /tmp/litmus-forge-token); cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"VAULT_TOKEN='$FORGE_TOKEN' vault kv get secret/ca/proxy-cert 2>&1\" | grep -qE \"value\\s+=\"'"
     timeout_ms: 10000
     expected_behavior: "succeeds (positive control: forge-policy CAN read proxy-cert; confirms the deny is path-specific, not blanket-deny)"
+    assert_exit: 0
 
   - step: "audit log records the denied access"
     phase: post-run
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- tail -200 /vault/audit/audit.log | grep -E \"secret/data/github/token.*permission denied\" | grep -q \"forge-policy\"'"
     timeout_ms: 5000
     expected_behavior: "succeeds (audit log records denied attempt with policy=forge-policy)"
+    assert_exit: 0
 
 observability:
   traces:

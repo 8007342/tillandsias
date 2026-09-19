@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: decision
+      ts: "2026-09-18T23:48:27Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        DECISION: now_ms STAYS OUT of the Cacheable class. Ruled by macuahuitl-fedora
+        2026-09-18, citing the operator's approved design — purity enforced by SYMBOL
+        ABSENCE — and recorded here so the divergence from the old verb set is a RULING
+        and not an inheritance.
+
+        THE DIVERGENCE, stated plainly: lua_runtime.rs exposes expert.now_ms to
+        everything. lua_predicate.rs withholds it from Cacheable and grants it only to
+        Observing. That is deliberate and is not an oversight to be "fixed" by aligning
+        the two verb sets.
+
+        THE REASONING. A clock read is an observation of the world exactly as a shell
+        call is. A predicate that branches on now_ms and is then served from cache
+        returns an answer computed at a time that has passed — which is the same stale
+        verdict this packet exists to prevent, arriving through a quieter door than the
+        shell verb. So: a predicate that needs the clock is OBSERVING BY DEFINITION.
+        The shell verb is the loud impurity; the clock is the quiet one; a purity
+        boundary that admits the quiet one is not a purity boundary.
+
+        ENFORCEMENT IS STRUCTURAL, NOT DOCUMENTARY, consistent with the rest of the row:
+        the Cacheable environment does not CONTAIN now_ms, so a pure predicate calling
+        it raises "attempt to call a nil value" at call time. Pinned by
+        the_cacheable_class_cannot_read_the_clock, which asserts the FAILURE MODE rather
+        than merely that something failed.
+
+        WHOEVER WANTS now_ms IN THE PURE CLASS must overturn this event, not merely
+        widen the set: the verb enumeration is pinned by a test, so adding it is a
+        visible diff — which is the property that made this decision available to be
+        made at all.

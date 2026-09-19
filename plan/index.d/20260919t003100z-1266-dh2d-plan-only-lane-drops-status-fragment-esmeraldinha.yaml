@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: push-plan-fragments-to-trunk-can-carry-a-claims-events-while-silently-dropping-its-status-fragment-and-still-report-ok-so-trunk-keeps-offering-a-claimed-row
+    order: 1266-dh2d
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-lane, fail-loud, false-negative, multi-host, claims]
+    estimated_hours: 3
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    unscoreable: ""
+    verifiable_closure: |
+      A fixture drives the script's DEFAULT selection over a repository whose
+      local fold flips a packet status while the corresponding status fragment
+      is reachable only as an already-committed file, and asserts that the run
+      either carries that fragment or REFUSES. A green run that omits it must
+      fail the fixture.
+
+      A MUTATION ARM must show the fixture passes when the status fragment is
+      carried, so it is not asserting that the script always refuses.
+
+      A SECOND ARM asserts the verdict is self-describing: the ok: line reports
+      how many carried fragments write a status field, so a reader can see zero
+      on a run whose fold flipped a status.
+    title: |
+      the plan-only lane can push a claim's note and next_action fragments while silently omitting its status fragment, report ok:fragments-on-trunk, and leave trunk offering a row that a host has already claimed
+    context: |
+      MEASURED on esmeraldinha, 2026-09-19, while claiming 793-zumy — a row
+      that had ALREADY been handed back twice by hosts that could not run it,
+      and which carried a PICKUP RULE written by yolanda specifically to stop a
+      third wrong pickup.
+
+      The lane reported success:
+
+        ok:fragments-on-trunk:8dee1b4dae4662e04d86d70a5d0d2c9efb0d48d4:4
+
+      The four carried were two note events and two next_action writes. The
+      status fragment — the set-field flip from ready to in_progress — was NOT
+      among them. It was not refused, and no note naming it reached stderr. The
+      verdict line was indistinguishable from one that had carried it.
+
+      Verified the way the methodology specifies, computed against trunk rather
+      than grepped, by extracting trunk's plan/index.yaml and plan/index.d and
+      running the tool there:
+
+        793-zumy	ready	accel-probe-blind-to-wsl2-paravirtualised-gpu
+
+      So after an ok: verdict, trunk still offered a claimed, in-progress row to
+      every other host. The prose landed; THE SELECTOR DOES NOT READ PROSE.
+
+      Passing the same path explicitly worked first time and produced
+      01e0b951009f5fc953d3a46f551f26a6df71def2, after which trunk reads
+      in_progress and next windows no longer offers the row. So the defect is in
+      the DEFAULT candidate set, not in the carrying.
+
+      THE DEFAULT SELECTION IS THREE SOURCES: untracked files under the lane
+      directories, staged adds, and adds in a diff against a base. The status
+      fragment here was COMMITTED in an earlier commit on the branch, and did
+      not surface as an add against the base after that branch had merged trunk;
+      the four that did ride were all written later in the same session. The
+      exact base resolution is the thing to fix or to prove correct. What is
+      certain is that a committed-earlier fragment can fall out of the default
+      set while later ones ride.
+
+      THIS IS A GUARD THAT ALREADY EXISTS, ONE STEP EARLIER IN THE LIFECYCLE.
+      The script already refuses status-loss for the TERMINAL case: pushing a
+      completed or obsoleted event without its status fragment would leave trunk
+      offering a closed row as ready, the 1127-apa8 shape. A claim is the same
+      shape and the same consequence — trunk offering a claimed row as ready —
+      and the existing guard misses it only because it keys on terminal events.
+
+      REMEDIES, in preference order: extend the status-loss refusal to any
+      carried event whose packet status on trunk disagrees with the local fold,
+      naming the missing fragment; make the verdict self-describing so the count
+      of carried status writes is visible; and at minimum emit the same stderr
+      note for a default candidate silently dropped as for one skipped by the
+      lane grammar, because a silent drop and a noted skip must not look alike.
+
+      FAMILY: same lane and same failure mode as 1261-bn7v, where a peer's
+      appended lines vanish with no conflict and no marker. Both are writes to
+      the shared ledger that succeed loudly while losing the part that separates
+      hosts.

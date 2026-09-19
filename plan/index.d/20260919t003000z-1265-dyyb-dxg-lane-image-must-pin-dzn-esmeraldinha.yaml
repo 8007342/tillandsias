@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-dxg-container-lane-image-must-pin-a-mesa-carrying-dzn-or-it-enumerates-llvmpipe-only-and-that-is-indistinguishable-from-a-passthrough-failure
+    order: 1265-dyyb
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [accel, wsl2, container, image, fail-loud, false-negative]
+    estimated_hours: 3
+    owned_files:
+      - images/inference/Containerfile
+      - scripts/check-container-bases.sh
+    unscoreable: ""
+    verifiable_closure: |
+      A fixture asserts that any image intended for the dxg container lane
+      carries a dzn ICD manifest, by NAME and not by Mesa version string:
+      the file dzn_icd.x86_64.json (or its arch sibling) must exist under
+      /usr/share/vulkan/icd.d in the built image. A MUTATION ARM must show
+      the same fixture FAILS against a base known not to ship it — debian:13
+      or fedora:41 both serve, both measured below — otherwise the fixture
+      proves only that some file exists somewhere.
+
+      Version-string matching is explicitly refused as the test: the package
+      that carries dzn is what matters, distributions renumber, and a check
+      that greps for 26.1 would pass a rebuilt 25.x that had been patched and
+      fail a 27.x that ships it.
+    title: |
+      an image built for the dxg container lane must pin a Mesa that actually carries the dzn ICD, because a dzn-less image enumerates llvmpipe alone and that result is byte-identical to a genuine dxg passthrough failure
+    context: |
+      MEASURED on esmeraldinha, 2026-09-19, while taking 793-zumy's container
+      measurement. Two mainstream bases were built and probed before one worked,
+      and BOTH FAILURES LOOKED EXACTLY LIKE THE INTERESTING NEGATIVE:
+
+        debian:13   Mesa 25.0.7-2+deb13u1   no dzn_icd   -> llvmpipe only
+        fedora:41   Mesa 25.0.7             no dzn_icd   -> llvmpipe only
+        fedora:44   Mesa 26.1.6 / 26.2.2    dzn_icd      -> the real device enumerates
+
+      The package that carries it here is mesa-vulkan-drivers-26.1.6-1.fc44,
+      established by rpm -qf against the working host distro, which is itself
+      a Fedora Linux 44 container image.
+
+      WHY THIS IS A FAIL-LOUD DEFECT AND NOT A PACKAGING NOTE. The probe
+      question for that lane is "does a non-CPU device enumerate inside the
+      container". A dzn-less image answers NO. A container the device node
+      never reached also answers NO. The two are indistinguishable in the
+      output — same physical_device_count=1, same llvmpipe row, same exit
+      status — and they have OPPOSITE remedies: one is fixed by changing the
+      image, the other says the lane is impossible. During this measurement
+      the first dzn-less result was nearly recorded as a genuine arm-1
+      negative, which would have handed 793-zumy a false structural finding
+      of precisely the kind that packet exists to end: its original defect was
+      an unconditional engine-missing:no-vulkan-icd asserted on a host that
+      carried both a loader and an ICD.
+
+      THE PRODUCT CONSEQUENCE IS WORSE THAN A WRONG REPORT. If this lane ever
+      ships with a dzn-less image, the Vulkan loader inside it does not fail —
+      it succeeds, and offers lavapipe. The probe would then be looking at a
+      SOFTWARE RASTERIZER standing where the GPU is supposed to be. That is
+      exactly the case 793-zumy criterion 3 exists to refuse, arriving through
+      the image rather than through the host. The landed rejection does refuse
+      it, verified on live container data in all three arms of that
+      measurement (type=CPU(4) driverID=13 rejected every time), so the guard
+      holds — but a lane that quietly degrades to CPU while reporting success
+      elsewhere in the stack is a fleet-planning hazard, not a cosmetic one.
+
+      SCOPE NOTE: this row is about the IMAGE requirement only. Whether the
+      product may mount the host Windows driver store to make that lane work
+      at all is a separate operator decision recorded on 793-zumy; this row
+      stands whichever way that goes, because a dzn-less image is wrong under
+      both answers.

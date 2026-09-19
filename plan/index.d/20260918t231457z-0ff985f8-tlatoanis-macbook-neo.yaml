@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    field: next_action
+    value: |-
+      OPEN: C2 name the rc=3 mechanism for arm 4, and C3 catch one refusal with the out2 print armed. The next in-gate rc=3 now NAMES which of the eight exit-3 sites it was (87f189b92), so one refusal should settle C2 instead of another cycle. C4 done (arm 5 exhibited); C1 and C5 hold by execution
+
+      [2026-09-18T08:34:46Z macuahuitl] LEFT TO DO: C2 and C3 remain blocked on recurrence of an in-gate refusal in the wild to capture the token via the armed out2 print. Ruby namespace divergence was tested and refuted on macuahuitl (host and toolbox both resolve /usr/bin/ruby 4.0.6, /usr/lib64). If no refusal recurs once check-no-competing-gate promotes, close 1132-r4mt as resolved by 1141-vf9w.
+
+      [2026-09-18T23:14:57Z tlatoanis-macbook-neo] C2 IS NOT DONE. What is left: name which of the eight exit-3 sites fires on the two REFUSING hosts (yoga, lenovinha). macneo has measured a third ruby layout — Apple system ruby 2.6.10 at /usr/bin/ruby — on which the in-gate archiver path is GREEN and non-vacuously so (1049 packets archived, ready set 531, 332/332 answered in the same run). That narrows the question but does NOT answer it: macneo cannot reproduce the refusal, so it cannot name the site. Do NOT read the green as a diagnosis.
+      NEXT CONCRETE STEP, two lines from each refusing host: 'command -v ruby' and 'ruby --version', reported alongside the exit-3 site their next in-gate refusal names (the row's own instrumentation already makes the next rc=3 name its site). Three layouts with one known-green makes this a comparison, not an investigation.
+      UNTESTED AND NOT TO BE ASSUMED: that system-vs-managed ruby is the discriminator. It is the obvious candidate given the layouts and nobody has tested it. macneo deliberately did NOT shim a second ruby onto PATH to induce a refusal, because a manufactured condition would not be a regime.
+      C3 IS NOT STARTED: staging the out2 print is a scripts/ change and therefore a gated push; macneo holds it until it has an exit site to print for and one gate to spend on it.
+    ts: "2026-09-18T23:14:57Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-18T23:14:57Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        next_action states what is left, not what was done
