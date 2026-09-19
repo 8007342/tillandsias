@@ -29,48 +29,56 @@ critical_path:
     command: "bash -lc '[[ \"$(uname -s)\" == \"Darwin\" ]] && echo OK || (echo \"SKIP: not macOS\"; exit 77)'"
     timeout_ms: 3000
     expected_behavior: "succeeds on macOS; exits 77 (skip) elsewhere"
+    assert_exit: 0
 
   - step: "launch tillandsias-tray.app in the background"
     phase: runtime
     command: "bash -lc 'open -a /Applications/tillandsias-tray.app --args --vm-backend stub & echo $! > /tmp/litmus-mac-tray-pid; sleep 2'"
     timeout_ms: 10000
     expected_behavior: "succeeds; tray app is running"
+    assert_exit: 0
 
   - step: "verify Info.plist has LSUIElement = true"
     phase: runtime
     command: "bash -lc '/usr/libexec/PlistBuddy -c \"Print :LSUIElement\" /Applications/tillandsias-tray.app/Contents/Info.plist | grep -qE \"^true$\"'"
     timeout_ms: 3000
     expected_behavior: "succeeds (no Dock entry)"
+    assert_exit: 0
 
   - step: "verify NSStatusItem exists in system menu bar"
     phase: runtime
     command: "osascript ./scripts/litmus/mac-probe-status-item.scpt tillandsias-tray"
     timeout_ms: 15000
     expected_behavior: "succeeds; AppleScript reports the status item is present"
+    assert_exit: 0
 
   - step: "open menu and capture items"
     phase: runtime
     command: "osascript ./scripts/litmus/mac-probe-menu-items.scpt tillandsias-tray /tmp/litmus-mac-menu.json"
     timeout_ms: 15000
     expected_behavior: "succeeds; /tmp/litmus-mac-menu.json contains a JSON array of menu items"
+    assert_exit: 0
 
   - step: "assert parity contract present"
     phase: runtime
     command: "cargo run --quiet -p tillandsias-policy -- assert-menu-items /tmp/litmus-mac-menu.json status_text projects agents.claude agents.codex agents.opencode observatorium opencode_web github_login"
     timeout_ms: 5000
     expected_behavior: "succeeds"
+    assert_exit: 0
 
   - step: "assert observatorium and opencode_web are disabled with v2 reason"
     phase: runtime
     command: "cargo run --quiet -p tillandsias-policy -- assert-disabled-v2 /tmp/litmus-mac-menu.json observatorium opencode_web"
     timeout_ms: 5000
     expected_behavior: "succeeds (both items disabled with v2 reason)"
+    assert_exit: 0
 
   - step: "shut down tray cleanly"
     phase: post-run
     command: "bash -lc 'osascript -e \\'tell application \"tillandsias-tray\" to quit\\' 2>/dev/null || killall tillandsias-tray 2>/dev/null; true'"
     timeout_ms: 10000
     expected_behavior: "succeeds"
+    assert_exit: 0
 
 observability:
   traces:

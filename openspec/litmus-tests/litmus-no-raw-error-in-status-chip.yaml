@@ -48,6 +48,7 @@ critical_path:
   - step: "windows-tray: no raw format-error passed to update_status_text"
     command: "! grep -nE 'update_status_text\\s*\\(\\s*&\\s*format!\\s*\\(\\s*\".*\\{.*err.*\\}|update_status_text\\s*\\(\\s*&\\s*format!\\s*\\(\\s*\".*\\{.*:.*\\?.*\\}' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "succeeds"
+    assert_exit: 0
     timeout_ms: 3000
 
   - step: "windows-tray: update_status_text exists (guard against file rename hiding the check)"

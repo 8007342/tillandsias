@@ -28,42 +28,49 @@ critical_path:
     command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) command -v wt.exe >/dev/null 2>&1 || command -v cmd.exe >/dev/null 2>&1 || (echo SKIP; exit 77) ;; Darwin) [ -d /Applications/Terminal.app ] || (echo SKIP; exit 77) ;; *) echo \"SKIP: cross-platform-only test\"; exit 77 ;; esac && echo OK'"
     timeout_ms: 3000
     expected_behavior: "succeeds on Windows or macOS with a terminal; skips elsewhere"
+    assert_exit: 0
 
   - step: "ensure a forge container is running for project litmus-attach"
     phase: setup
     command: "cargo run -p tillandsias-host-shell --example send-control -- --kind LaunchForge --project litmus-attach --agent bash"
     timeout_ms: 30000
     expected_behavior: "succeeds; forge 'tillandsias-litmus-attach-forge' is running"
+    assert_exit: 0
 
   - step: "trigger Attach Here via the host shell control surface"
     phase: runtime
     command: "cargo run -p tillandsias-host-shell --example attach-here -- --project litmus-attach 2>&1 | tee /tmp/litmus-attach.log"
     timeout_ms: 15000
     expected_behavior: "succeeds; log indicates a terminal process was spawned with vm-exec podman exec -it"
+    assert_exit: 0
 
   - step: "verify the spawned process command line matches the contract"
     phase: runtime
     command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\"Name='WindowsTerminal.exe' OR Name='cmd.exe'\\\" | Where-Object { $_.CommandLine -match 'vm-exec podman exec -it tillandsias-litmus-attach' } | Measure-Object | %{ exit (1 - [int]($_.Count -gt 0)) }\" ;; Darwin) ps -ef | grep -E \"vm-exec podman exec -it tillandsias-litmus-attach\" | grep -v grep ;; esac'"
     timeout_ms: 10000
     expected_behavior: "succeeds (matching process visible)"
+    assert_exit: 0
 
   - step: "verify no ssh invocation in the spawned tree"
     phase: runtime
     command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\"Name='ssh.exe' OR Name='plink.exe'\\\" | Where-Object { $_.CommandLine -match 'tillandsias' } | Measure-Object | %{ exit ([int]($_.Count -gt 0)) }\" ;; Darwin) ! ps -ef | grep -E \"ssh.*tillandsias\" | grep -v grep ;; esac'"
     timeout_ms: 8000
     expected_behavior: "succeeds (no ssh found targeting tillandsias)"
+    assert_exit: 0
 
   - step: "drive a keystroke into the attached shell and read back the prompt"
     phase: runtime
     command: "cargo run -p tillandsias-host-shell --example pty-probe -- --attach-handle $(cat /tmp/litmus-attach.handle) --type-then-read 'echo LITMUS_PROMPT_OK' --expect-substr 'LITMUS_PROMPT_OK'"
     timeout_ms: 15000
     expected_behavior: "succeeds (terminal is interactive and echoes the typed string)"
+    assert_exit: 0
 
   - step: "close the terminal window cleanly"
     phase: post-run
     command: "cargo run -p tillandsias-host-shell --example pty-probe -- --attach-handle $(cat /tmp/litmus-attach.handle) --close"
     timeout_ms: 8000
     expected_behavior: "succeeds"
+    assert_exit: 0
 
 observability:
   traces:
