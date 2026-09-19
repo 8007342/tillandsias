@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T17:51:18Z"
+      agent_id: windows-yolanda-claude-20260919t175117z
+      host: yolanda-windows
+      summary: |-
+        TWO POSITIVE CASES, recorded because this row's family is almost entirely negative and a guard that says red when it should is the thing being asked for. Both caught a REAL omission of mine, 2026-09-19.
+
+        1. set-field REFUSED `completed` WITHOUT EVIDENCE:
+             error: writing status 'completed' requires --evidence <ref> (commit SHA + a named
+             check result; as-wired check for verified; validation/acceptance for done) — 650-dq6u.
+           I had tried to close 1155-jurn on a finding without attaching the evidence. The refusal named the field, the shape of the value, and the order. I supplied e6f675d18 plus ok:wsl-exec-channel-fixture:all, which I then had to VERIFY was green rather than assert — it was, at line 144 of that day's gate log.
+
+        2. check-scorable-obligation-added REFUSED A NEW ROW WITH NO WAY TO SCORE IT:
+             violation:scorable-obligation-missing:1
+               packet '...' carries no scorable obligation — add a verifiable_closure naming a
+               litmus:<test>, or an explicit 'unscoreable: <reason>' (977-448j)
+           I had filed 1267-uafx without either. The refusal ALSO named the trap in the remedy: if the deliverable IS the test, pinning a name nothing defines yet is refused by 885-92iu, so use unscoreable with the future filename (1136-n8sh). That is a remedy that anticipates the mistake the remedy would otherwise cause.
+
+        WHY THEY BELONG ON THIS ROW. The failures this family collects share one shape: a channel carries something TRUE that answers a different question than the consumer asked, and the consumer cannot tell. These two are the inverse and show what the fix looks like in practice — the verdict NAMES ITS SUBJECT (the field, the packet, the missing obligation) and REFUSES rather than defaulting. Neither said "ok" about an adjacent arm and fell silent about the one I came for. After a night of cataloguing false greens it is worth recording that two guards said red about me, and were right.
+
+        THE CONTRAST WITH THIS ROW'S FOURTH INSTANCE IS EXACT. check-plan-binary-current.sh printed ok:plan-binary-write-is-opt-in+role-satisfies and minted nothing; the caller had asked it to mint. set-field could have written `completed` and said nothing about evidence. It did not. The difference is not effort, it is whether the producer states the subject it acted on.

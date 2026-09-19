@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-19T17:52:08Z"
+      agent_id: windows-yolanda-claude-20260919t175207z
+      host: yolanda-windows
+      summary: |-
+        MECHANISM B IS MOVED, NOT FIXED HERE, and this row does not close on it. Filed as 1268-fx87, a child of 1252-fg9e.
+
+        WHY IT MOVED. B's remaining four arms fail because the step verdict is compared against a capture that MERGES stdout and stderr, so cargo's warnings become a candidate verdict. The fix is to read the verdict from stdout alone — and scripts/run-litmus-test.sh says, in its own comment above structured_assert_matches, that this is deliberate and whose work it is:
+
+          There is no assert_stdout_* / assert_stderr_* pair, because the runner redirects every
+          step with `>"$step_capture" 2>&1` — the two streams are MERGED before adjudication can
+          see them... Separating them is order 1252-fg9e's executor... A field absent by
+          CONSTRAINT reads identically to one nobody thought of unless the code says which, so
+          this paragraph is the difference.
+
+        1252-fg9e is in_progress on lenovinha with commits already on origin/work/1252-fg9e. Implementing the stdout-only read here would have rewritten a claimed row's in-flight work from a second host — the fourth such collision this cycle had already been avoided three times, and that paragraph is the only reason it was avoided a fourth. The merge also happens BEFORE adjudication, so there is nowhere in the current shell runner to read a verdict from stdout alone; it is an executor, not a patch.
+
+        1268-fx87 CARRIES THE TRAP THAT WOULD HAVE MADE IT CLOSE FALSELY, at lenovinha's own request: these four arms are GREEN ON LINUX BEFORE AND AFTER the change, because the Linux build emits no warnings and there is no contaminant. A host that proves the mechanism synthetically and then sees four green arms locally has measured nothing about them. So the row carries TWO named exit criteria with TWO named hosts — lenovinha proves the mechanism and the controls on any host; yolanda-windows re-runs the four real arms at the Git Bash locus and records the counts — and it closes only on the second.
+
+        SO THIS ROW'S REMAINING STATE, for a stranger:
+          FIXED AND VERIFIED GREEN   4 arms (see the count-correction event)
+          MOVED to 1268-fx87         4 arms, mechanism B
+          OPEN BY NAME               project-answer-synthesis-refusal-typed 3/10 (curl exit vocabulary, output= EMPTY)
+                                     citation-frame-and-caller-relation 8/8 (needs the cargo run to say WHICH tests printed FAILED)
+          MECHANISM A's LAST ARM     expert-groundtruth-harness — FIXED IN THIS PUSH, see below
+
+        expert-groundtruth-harness WAS NOT SKIPPED, AND THE DISAGREEMENT IS RECORDED. The routing asked for a named skip at "a locus with neither binary nor cargo". Measured: this locus had BOTH. The arm built its own candidate from cargo metadata's target_directory — a Windows path with backslashes concatenated with a forward-slash tail — judged it with test -x, and never considered the .exe. target/release/tillandsias-plan.exe existed and answered build-id throughout. A skip would have recorded a capability as ABSENT while the binary sat in the tree: a well-formed verdict about the wrong subject, 1260-2qgi's shape, hiding a small real defect. Fixed instead by sourcing scripts/plan-binary-probe.sh, which is run-don't-stat for non-override candidates and prefers the locus-native artefact. FIFTH INSTANCE of the re-derived-resolution class 704-zcgi centralised that file to end; cross-cited to 1267-uafx, whose "a fourth independent copy is how the first three went wrong" is now a measurement rather than a prediction.
+
+        A CONTROL OF MINE FAILED AND WAS CORRECTED RATHER THAN QUIETLY DROPPED. The first mutation arm asserted that test -x ACCEPTS a chmod +x text file, so that running it would be the discriminator. It does not: Git Bash derives executability from the extension, so the arm could not fail the intended way — a control that proves nothing, written into a row about controls that prove nothing. The comment claiming "the bit lied in BOTH directions" overstated the measurement and was corrected to the one direction observed here: test -x is FALSE for an extensionless ELF that exists. The arm now asserts that, is gated to MSYS, and SKIPS LOUDLY elsewhere, because on Linux the ELF runs and the pre-fix test was correct there — which is exactly how this class survived.
