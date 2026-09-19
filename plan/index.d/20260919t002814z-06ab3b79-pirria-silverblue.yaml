@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-plan-binary-locus-native-asserts-probe-ORDERING-but-an-inherited-tillandsias-plan-bin-override-short-circuits-the-probe-by-design-so-the-fixture-reds-a-healthy-tree-on-exactly-the-hosts-that-must-set-it
+    event:
+      type: note
+      ts: "2026-09-19T00:28:14Z"
+      agent_id: linux-pirria-claude-20260919t002813z
+      host: pirria-silverblue
+      summary: |
+        CORRECTION TO THIS ROW'S ROUTING — esme IS NOT THE NEXT READER, AND THE
+        TRIGGER IS NOT A HOST CLASS. Measured on esme's own gate, relayed 2026-09-19.
+
+          esme: scripts/test-plan-binary-locus-native.sh -> 3 passed, 0 failed
+
+        esme passes because `TILLANDSIAS_PLAN_BIN` is UNSET there. esme has a Rust
+        toolchain and builds its own plan binary, so it never needs the export at all.
+
+        MY ROUTING WAS WRONG AND THE REASONING IS THE PART WORTH KEEPING. I routed this
+        to esme as "the fleet's other floor-tier control unit", inferring from the
+        operator's description of esme as modest hardware without accelerated GPU or
+        NPU. **That description is about accelerators, not about a compiler.** I turned
+        a statement about GPU/NPU into a claim about cargo, and the two are unrelated:
+        a host can be the slowest box in the fleet and still compile.
+
+        THE TRIGGER, STATED CORRECTLY: **any host that must export
+        `TILLANDSIAS_PLAN_BIN` to have an instrument at all — and a toolchain confers
+        immunity.** It is environmental, not a tier and not a platform. pirria hits it
+        because it has no cargo and no rustc and builds `tillandsias-plan` inside
+        localhost/tillandsias-forge:latest; esme does not hit it because it compiles.
+        Naming a host class as the next reader teaches the wrong rule to whoever picks
+        this up, because they will check the roster instead of checking the
+        environment.
+
+        SO THE SURVEY QUESTION CHANGES. Do not ask "which hosts are floor tier". Ask
+        **"which hosts export TILLANDSIAS_PLAN_BIN, and why"** — the answer is the
+        population, and it is discoverable in one line on each host rather than
+        inferred from hardware. Exit criterion 4 ("the fleet is surveyed rather than
+        assumed") is unchanged in intent and now has the right predicate.
+
+        esme's SECOND FINDING, recorded here because it is the same instrument and the
+        same blind spot, one level over:
+
+          The gate resolved a path as a LOCUS-NATIVE ELF while a Windows-side `file`
+          on the same path reports PE32+.
+
+        A plan-binary freshness or identity verdict that does not NAME THE LOCUS IT WAS
+        MEASURED FROM is not checkable: on a shared Windows/WSL checkout the same path
+        is two different artifacts depending on which side is asking, which is the
+        condition `scripts/plan-binary-probe.sh` was written for in the first place
+        ("an executable BIT is a claim; RUNNING the binary is evidence" — 704-zcgi).
+        The probe resolves by execution precisely because the bit lies across that
+        boundary; a verdict that reports WHAT it resolved without WHERE it stood
+        reintroduces the ambiguity the probe removed. Whoever fixes arm 3 should make
+        the verdict carry its locus, since they are already in the file.
