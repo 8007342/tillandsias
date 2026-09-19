@@ -130,6 +130,29 @@ else
     bad "ARM 5: a non-matching alternation passed"
 fi
 
+# ── ARM 6b: assert_output_nonempty — silence is the failure ─────────────────
+# This is the honest translation for the interpreter arm that requires a
+# specific artefact be PRINTED ("grep succeeds" and friends), as distinct from
+# the arm that honours the exit code. It exists as its own field because
+# `assert_output_matches: "."` says the same thing and is indistinguishable
+# from a typo.
+write_case "irrelevant" "assert_output_nonempty: true"
+# The command above exits 3, so this arm also pins that nonempty is judged
+# INDEPENDENTLY of exit status — otherwise it would silently become an
+# exit-code check, which is the very substitution this row exists to prevent.
+sed -i.bak 's|command: "echo hello; exit 3"|command: "echo hello"|' "$TMP/lt/litmus-znbn-probe.yaml" 2>/dev/null || true
+if run_with "$RUNNER"; then
+    ok "ARM 6b: assert_output_nonempty passes when the step prints"
+else
+    bad "ARM 6b: a printing step failed assert_output_nonempty"
+fi
+sed -i.bak 's|command: "echo hello"|command: "true"|' "$TMP/lt/litmus-znbn-probe.yaml" 2>/dev/null || true
+if ! run_with "$RUNNER"; then
+    ok "ARM 6c: assert_output_nonempty FAILS on a silent step (rc=0 but no output)"
+else
+    bad "ARM 6c: a silent step passed assert_output_nonempty — silence must be the failure"
+fi
+
 # ── ARM 6: a legacy step is untouched ───────────────────────────────────────
 # The regression guard. Declaring no assert_* must leave the old path exactly
 # as it was, which ARM 1's literal case already exercised on the control.

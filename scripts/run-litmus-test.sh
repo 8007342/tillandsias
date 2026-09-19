@@ -969,8 +969,8 @@ structured_assert_declared() { # <exit> <contains> <matches>
     [[ -n "${1}${2}${3}" ]]
 }
 
-structured_assert_matches() { # <output> <exit_code> <a_exit> <a_contains> <a_matches>
-    local output="$1" exit_code="$2" a_exit="$3" a_contains="$4" a_matches="$5"
+structured_assert_matches() { # <output> <exit_code> <a_exit> <a_contains> <a_matches> <a_nonempty>
+    local output="$1" exit_code="$2" a_exit="$3" a_contains="$4" a_matches="$5" a_nonempty="${6:-}"
 
     if [[ "$exit_code" -eq 124 && "$a_exit" != "124" ]]; then
         printf '%s\n' "         assert: step TIMED OUT (rc=124) — not an assertion miss; raise timeout_ms or fix the step" >&2
@@ -986,6 +986,17 @@ structured_assert_matches() { # <output> <exit_code> <a_exit> <a_contains> <a_ma
     fi
     if [[ -n "$a_matches" ]] && ! grep -Eq -- "$a_matches" <<<"$output"; then
         printf '%s\n' "         assert_output_matches: regex did not match: ${a_matches}" >&2
+        return 1
+    fi
+    # ORDER 1252-znbn. An EXPLICIT non-emptiness field. `assert_output_matches:
+    # "."` expresses the same thing today and is why this exists: a reader
+    # cannot tell a lone dot from a typo, and this row's whole point is that
+    # what a step checks must be legible IN the step. It is the honest
+    # translation for the interpreter arm that requires a specific artefact be
+    # printed — where silence is the failure — as distinct from the arm that
+    # honours the exit code.
+    if [[ -n "$a_nonempty" && -z "${output//[[:space:]]/}" ]]; then
+        printf '%s\n' "         assert_output_nonempty: the step printed nothing (silence is the failure for this step)" >&2
         return 1
     fi
     return 0
@@ -1290,6 +1301,7 @@ run_litmus_test_file() {
     local current_step_assert_exit=""
     local current_step_assert_contains=""
     local current_step_assert_matches=""
+    local current_step_assert_nonempty=""
     local -a step_names=()
     local -a step_commands=()
     local -a step_timeouts=()
@@ -1300,6 +1312,7 @@ run_litmus_test_file() {
     local -a step_assert_exits=()
     local -a step_assert_contains_all=()
     local -a step_assert_matches_all=()
+    local -a step_assert_nonempty_all=()
     local -a unparsed_step_names=()
     # ORDER 1252-znbn. critical_path items opened by a key other than `step:`.
     local -a malformed_items=()
@@ -1324,6 +1337,7 @@ run_litmus_test_file() {
         step_assert_exits+=("$current_step_assert_exit")
         step_assert_contains_all+=("$current_step_assert_contains")
         step_assert_matches_all+=("$current_step_assert_matches")
+        step_assert_nonempty_all+=("$current_step_assert_nonempty")
     }
 
     while IFS= read -r line; do
@@ -1344,6 +1358,7 @@ run_litmus_test_file() {
             current_step_assert_exit=""
             current_step_assert_contains=""
             current_step_assert_matches=""
+            current_step_assert_nonempty=""
             in_critical_path=0
             in_gating_points=1
             continue
@@ -1360,6 +1375,7 @@ run_litmus_test_file() {
             current_step_assert_exit=""
             current_step_assert_contains=""
             current_step_assert_matches=""
+            current_step_assert_nonempty=""
             in_critical_path=0
             in_gating_points=0
         fi
@@ -1376,6 +1392,7 @@ run_litmus_test_file() {
                 current_step_assert_exit=""
                 current_step_assert_contains=""
                 current_step_assert_matches=""
+                current_step_assert_nonempty=""
             elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]+([a-zA-Z_][a-zA-Z0-9_]*): ]]; then
                 # ORDER 1252-znbn. A critical_path ITEM may only be opened by
                 # `- step: "..."`. An item opened by ANY other key — `- name:`
@@ -1448,6 +1465,8 @@ run_litmus_test_file() {
                 current_step_assert_contains="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ ^[[:space:]]*assert_output_matches:[[:space:]]+\"(.+)\" ]]; then
                 current_step_assert_matches="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ ^[[:space:]]*assert_output_nonempty:[[:space:]]+(true|yes) ]]; then
+                current_step_assert_nonempty="1"
             fi
         fi
 
@@ -1524,9 +1543,10 @@ run_litmus_test_file() {
         local step_assert_exit="${step_assert_exits[$idx]}"
         local step_assert_contains="${step_assert_contains_all[$idx]}"
         local step_assert_matches="${step_assert_matches_all[$idx]}"
+        local step_assert_nonempty="${step_assert_nonempty_all[$idx]}"
         # ORDER 1252-znbn. Non-empty when the step declares ANY structured
         # assertion, which takes precedence over every legacy arm below.
-        local step_structured="${step_assert_exit}${step_assert_contains}${step_assert_matches}"
+        local step_structured="${step_assert_exit}${step_assert_contains}${step_assert_matches}${step_assert_nonempty}"
         local step_output=""
         local exit_code=0
 
@@ -1644,7 +1664,8 @@ run_litmus_test_file() {
         # that rely on its keyword-matching logic.
         if [[ -n "$step_structured" ]]; then
             if ! structured_assert_matches "$step_output" "$exit_code" \
-                    "$step_assert_exit" "$step_assert_contains" "$step_assert_matches"; then
+                    "$step_assert_exit" "$step_assert_contains" "$step_assert_matches" \
+                    "$step_assert_nonempty"; then
                 printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
                 printf '%s\n' "         output=${step_output}" >&2
                 return 1
