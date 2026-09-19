@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-19T19:16:51Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t191651z
+      host: macneo
+      summary: |-
+        SIBLING INSTANCE ON macOS, DIFFERENT TOOL, IDENTICAL FAILURE MODE: BSD awk
+        silently does not support `\b`, so a search for a word boundary returns a clean
+        empty result that is indistinguishable from "no such line exists".
+
+        macneo, 2026-09-19, while trying to find which block encloses build.sh's plan
+        archiver step for 1132-r4mt:
+          awk 'NR<=3138 && /^(if|case|while|for)\b/ {print NR": "$0}' build.sh
+          -> NOTHING. Reported as "no column-0 if/case/while encloses it".
+        The line was there the whole time:
+          1651: if [[ "$FLAG_CHECK" == true ]]; then
+        Re-run with a POSIX class instead of `\b`:
+          awk 'NR<=3138 && /^(if|case|while|for)[[:space:][]/ {print ...}' build.sh
+          -> 1442: if [[ "$FLAG_INSTALL" == true ]]; then
+             1565: if [[ "$FLAG_TEST" == true ]]; then
+             1651: if [[ "$FLAG_CHECK" == true ]]; then
+        MINIMAL REPRODUCTION, measured on this host:
+          echo "if foo" | awk '/^if\b/{print "MATCHED"}'          -> no output
+          echo "if foo" | awk '/^if[[:space:]]/{print "MATCHED"}' -> MATCHED
+        `\b` is a GNU extension. POSIX awk has no word-boundary assertion, so BSD awk
+        does not error on it — it treats the escape as something else and quietly
+        matches nothing. Same shape as this row's grep: a search that reports success
+        while seeing nothing, on the platform where the search is being run.
+
+        WHAT IT COST, which is why it is worth recording rather than just fixing:
+        the empty result was reported to the coordinator as a positive claim about
+        build.sh's structure — "no column-0 if/case/while encloses it, cause untraced".
+        The coordinator traced it from a Linux host and found the `if` immediately. Two
+        agents then held contradictory readings of the same file, and the disagreement
+        was resolvable only because the macOS side had stated its claim as a failed
+        search rather than as a fact about the code.
+        It also came within one step of a WRONG POSITIVE earlier in the same
+        investigation: an awk that reported `_prepare_ci_full_install_inputs` as the
+        enclosing scope, which would have made the archiver a `--ci-full` step and
+        inverted the coordinator's observation. That was caught by checking the
+        function's brace balance (it closes at 1361, ~1800 lines before the archiver).
+
+        RULE, in the same form as this row's grep rule: on this fleet, never use `\b` in
+        an awk pattern. Use `[[:space:]]`, `[[:punct:]]`, an explicit character class,
+        or anchor the match. And when an awk search returns EMPTY, run the positive
+        control before reporting the absence — give it a line you KNOW matches and
+        confirm the pattern finds it. An empty awk result on macOS is not evidence until
+        the pattern has been shown to work on that file.

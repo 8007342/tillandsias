@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: evidence
+      ts: "2026-09-19T19:11:08Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        THE NAME CRITERION IS MET AS A CAPABILITY AND IS NOT YET WIRED INTO THE PRODUCT. Both halves of that sentence are load-bearing; please do not read the first without the second.
+
+        MEASURED tlatoanis-macbook-air 2026-09-19T19:09:17Z, tray in continuous-runloop mode.
+
+        A container on the enclave network, addressing THE NAME — not localhost, not an IP, not CID 2 — reached a process running on the macOS host:
+
+          CLIENT CONTAINER (separate container, --network tillandsias-enclave, confined):
+            curl -sS http://inference:11434/api/version
+            attempt=1 rc=0 BODY=[{"version": "host-native-metal-stub"}]
+            VERDICT=NAME-RESOLVED-TO-HOST-NATIVE
+          HOST-NATIVE HTTP SERVER (127.0.0.1:9999, plain python, OUTSIDE the VM):
+            19:09:17 HOST-HTTP-SAW: b'GET /api/version HTTP/1.1'
+          TRAY:
+            [vz] host vsock: ACCEPTED a guest-initiated connection (fd 13) — the guest reached the host
+
+        The body the client received was composed by a process on the macOS host. That is the transparency criterion this packet defined: the name keeps working while the process behind it moves across the VM boundary.
+
+        THE FORWARDER: podman run -d --name tillandsias-vsock-forwarder --network tillandsias-enclave --network-alias inference --cap-drop=ALL --security-opt=no-new-privileges --security-opt seccomp=<derived> --entrypoint socat <forge-base> TCP-LISTEN:11434,fork,reuseaddr VSOCK-CONNECT:2:42421. State running; IP 10.0.42.2 on the enclave network. Confined throughout — the derived profile, not unconfined, no /dev/vsock passthrough.
+
+        A PRIOR FINDING CONFIRMED IN PASSING: the forwarder logged `socat[2] W open("/dev/vsock", ...): No such file or directory` AND SERVED THE REQUEST ANYWAY. The 2026-09-14 arms called that warning incidental to socat rather than a requirement of AF_VSOCK; this is that claim holding under a working relay. Anyone who sees it in logs should not go hunting for device passthrough.
+
+        I STOOD THE REAL INFERENCE CONTAINER DOWN FIRST, and this is a design consequence rather than a test artefact: build_inference_run_args also claims --network-alias inference, so for the host-native tier the forwarder REPLACES that container. Two containers on one alias is a coin flip, not a transport. Whoever wires this must make the tier selection mutually exclusive, not additive.
+
+        WHAT IS NOT DONE, stated plainly because the demonstration is easy to overread. The product does NOT launch this forwarder. I started it from a probe script. Verified rather than assumed: grep for vsock-forwarder / VSOCK-CONNECT across crates/ returns only host_vsock_forward.rs's thread name, readiness.rs's doc comment and an unrelated WSL test — nothing that launches a guest-side forwarder. So:
+          HOST LISTENER      in the product, opt-in (TILLANDSIAS_HOST_VSOCK_PORT / _FORWARD_TO), shipped
+          SECCOMP DERIVATION in the product, shipped in v56.9.19.1
+          IN-GUEST FORWARDER demonstrated only; no code launches it
+        The packet's deliverable names "a host-side vsock listener PLUS the in-guest hop", so one of the two named pieces is still a hand-run container. The row stays in_progress.
+
+        WHAT IS LEFT, for whoever takes it — me next, unless routed elsewhere:
+          1. headless launches the forwarder when the effective tier is host-native, running the derivation first (decided: at container-start in headless, because vz.rs provisioning is first-boot-only and podman applies seccomp before an entrypoint can act).
+          2. Tier selection must make forwarder and inference container MUTUALLY EXCLUSIVE on the alias.
+          3. A fixture. Note what it must not be: an --exec-guest test, which cannot reach a passing state here for reasons already on this row. The shape that works is the boot-triggered oneshot plus the virtiofs side channel, and the honest fixture asserts the CLIENT CONTAINER sees the host's body — a forwarder that starts and answers nothing is the silent-success shape this milestone exists to remove.
+          4. The port (42421) and the forward target are currently operator-set env vars. For a shipped lane they need a defined source; that is a real decision, not a detail.
