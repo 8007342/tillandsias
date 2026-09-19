@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    order: "1274-cbk7"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, yaml, guard, parse, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/check-litmus-yaml-parses.sh
+    title: |
+      `run-litmus-test.sh --parse-only` reports ok on a corpus file that YAML rejects — a duplicated mapping key passes the check an author reaches for and reds the gate later
+    context: |
+      TWO CHECKS ANSWER TWO DIFFERENT QUESTIONS AND ONLY ONE OF THEM IS THE ONE
+      AUTHORS RUN.
+        run-litmus-test.sh --parse-only   -> "can the RUNNER extract steps from this"
+        scripts/check-litmus-yaml-parses.sh -> "does this LOAD as YAML"
+      The runner's parser is line-based and tolerates a duplicated mapping key,
+      taking the last occurrence. A YAML loader rejects the document outright.
+      So a file can be `ok:litmus-parseable` and unloadable at the same time.
+
+      MEASURED, with a probe file carrying `assert_output_contains` twice:
+        run-litmus-test.sh --parse-only <probe>
+          -> ok:litmus-parseable:<probe>:1 step(s)   rc=0
+      It reports the file as parseable, counts a step, and exits clean.
+
+      THIS IS NOT HYPOTHETICAL. It happened during the 1252-znbn per-step
+      migration on 2026-09-19. A migration added a duplicate key to three
+      corpus files; `--parse-only` over the whole corpus reported 423 ok files
+      and the author took that as verification. The gate then refused:
+        blocked:yaml-load-failed: litmus-macos-tray-diagnose-cli-surface.yaml
+        blocked:yaml-load-failed: litmus-wire-unreachable-chip-text-symmetric.yaml
+        blocked:litmus-yaml-unparseable:2
+      Roughly fifteen minutes of gate, and the author had run a check, read a
+      green verdict, and believed it. The check was real; it was aimed at a
+      different question than the one being asked of it.
+
+      THE UNDERLYING CAUSE OF THAT MIGRATION'S BUG IS WORTH KEEPING because it
+      is the same shape one level down: the migration's own duplicate-guard
+      scanned the lines ALREADY EMITTED, but the pre-existing
+      `assert_output_contains` sits AFTER the anchor line the guard keys on, so
+      it had not been read yet when the check ran. A guard looking backwards at
+      a key that lives forwards. It reported no duplicates and produced three.
+
+      A SECOND OBSERVATION, FOUND WHILE BUILDING THE PROBE AND NOT PART OF THE
+      DEFECT: check-litmus-yaml-parses.sh hardcodes its corpus —
+      `find "$ROOT/openspec/litmus-tests"` at line 43 — and has no directory
+      override. Pointing TILLANDSIAS_LITMUS_TESTS_DIR at a scratch corpus is
+      silently ignored and it scans the real one, reporting 436 files for a
+      probe directory containing one. That is not this row's defect, but a
+      fixture for the criterion below cannot use that script against a
+      throwaway corpus the way the 1252-znbn fixtures use the runner, and an
+      implementer will discover it the hard way otherwise.
+    exit_criteria:
+      - 'THE OUTPUT IS A NAMED REFUSAL: `run-litmus-test.sh --parse-only` on a corpus file with a duplicated mapping key prints a refusal naming the file and the duplicated key, and exits non-zero. PRE-FIX RESULT, measured: it prints `ok:litmus-parseable:<file>:1 step(s)` and exits 0 on a file carrying `assert_output_contains` twice'
+      - 'NEGATIVE CONTROL — A CLEAN FILE STILL PARSES: a well-formed corpus file continues to report ok with its correct step count, and the whole corpus continues to report 423 ok files. A refusal that also fires on valid input has replaced a false green with a false red'
+      - 'THE TWO CHECKS SAY WHICH QUESTION THEY ANSWER: --parse-only''s own output or usage states that it answers runner-extractability and NOT YAML validity, and names check-litmus-yaml-parses.sh as the check for the latter. The defect is that an author reached for the wrong one reasonably; the remedy is that the wrong one says so, not that authors are told to remember'
+      - 'THE FIXTURE EXERCISES A DUPLICATE OTHER THAN assert_output_contains — a duplicated `command:` or `timeout_ms:` must refuse too. A fix keyed on the assert family would close the instance that was hit and leave every other key open, which is the shape this milestone exists to remove'
+    unscoreable: |
+      whether --parse-only should become a full YAML load: making it one would
+      remove the gap and would also change what the mode IS — it exists so a
+      caller can ask whether the RUNNER can read a file, which is a weaker and
+      genuinely useful question on a host that may not have a YAML reader at
+      all (the reader's availability is itself guarded by
+      test-yaml-reader-availability.sh). Refusing a duplicate key does not
+      require becoming a loader; detecting repeated keys within one step block
+      is a line-level check the existing parser can do. Whether the mode should
+      go further than that is a design question this row does not settle.
+    verifiable_closure: |
+      a fixture over a throwaway corpus in which a file with a duplicated
+      mapping key makes --parse-only print a named refusal and exit non-zero,
+      a clean file still reports ok with its step count, and the duplicate is
+      exercised on a non-assert key as well.
+    events:
+      - type: filed
+        ts: "2026-09-19T19:32:07Z"
+        agent_id: "linux-yoga-claude-20260919t193207z"
+        host: yoga-silverblue
+        summary: |-
+          Filed from yoga by the author of the migration that hit it, at the
+          coordinator's routing. The evidence is a probe built for this row
+          rather than the original incident, so the pre-fix line is
+          reproducible by anyone: one file, one duplicated key, ok and rc=0.

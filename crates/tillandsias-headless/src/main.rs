@@ -4946,6 +4946,74 @@ async fn wait_for_git_mirror_ready(
     ))
 }
 
+/// The host tree WSL2 projects into the guest: the Windows driver store plus
+/// the WSL userspace libraries. Named once because it appears in the mount
+/// spec, the existence check, and the boundary note below.
+const WSL_HOST_TREE: &str = "/usr/lib/wsl";
+
+/// ORDER 793-zumy. The podman flags that make the WSL2 paravirtual GPU
+/// reachable from the inference container — pure, so every combination is
+/// testable on a host that has none of this.
+///
+/// ═══ THE BOUNDARY OF THIS MOUNT ═══════════════════════════════════════════
+/// Authorised by the operator on 2026-09-19 as a QUALIFIED yes, and the
+/// qualification is load-bearing: they approved it while stating that the
+/// exposed surface is not fully known, and required the boundary be written
+/// down and the surface audited. THAT AUDIT IS ORDER 1267-fj2z. Do not widen
+/// this mount, and do not copy it into another container, without reading it.
+///
+///   WHAT IT IS:  `/usr/lib/wsl/drivers`, the projected Windows driver store
+///                (thousands of .inf directories), and `/usr/lib/wsl/lib`,
+///                holding libd3d12.so, libd3d12core.so and libdxcore.so.
+///   WHAT IT IS NOT:  no user data, and no writable surface — `:ro`.
+///   WHAT IS UNKNOWN:  everything else under that tree. Nobody has enumerated
+///                it. "Only drivers" is what was NEEDED, not what is present.
+///
+/// ═══ WHY THE WHOLE TREE, AND NOT JUST `lib` ═══════════════════════════════
+/// Because binding only `lib` does not work, and the failure is silent in the
+/// worst way. MEASURED on esmeraldinha 2026-09-19, three arms:
+///
+/// ```text
+///   --device /dev/dxg alone          → llvmpipe ONLY
+///   + /usr/lib/wsl/lib               → dzn loads, then
+///        `ID3D12DeviceFactory::CreateDevice failed`; llvmpipe ONLY
+///   + all of /usr/lib/wsl            → the host's two devices: Dozen
+///        INTEGRATED_GPU driverID=23 beside llvmpipe CPU driverID=13
+/// ```
+///
+/// dzn resolves the real D3D12 device out of the driver store. Without it the
+/// loader does not fail — it SUCCEEDS and offers lavapipe, i.e. a software
+/// rasterizer standing where the GPU should be, which is exactly what
+/// 793-zumy criterion 3 exists to refuse.
+///
+/// ═══ WHY IT CANNOT FIRE OFF WSL2 ══════════════════════════════════════════
+/// Both conditions are read from the filesystem and BOTH are required.
+/// `/dev/dxg` does not exist on bare-metal Linux and `/usr/lib/wsl` is created
+/// by WSL's own projection, so neither a native Linux host nor macOS can
+/// satisfy this — there is no OS check to get wrong, only two paths that are
+/// absent everywhere else.
+///
+/// `LD_LIBRARY_PATH` is set because that is what the measurement used: the
+/// WSL libraries are not on the image's default search path, and the arm that
+/// enumerated the real device had it set.
+fn wsl2_dxg_container_args(dxg_present: bool, wsl_tree_present: bool) -> Vec<String> {
+    // NEITHER HALF IS SUFFICIENT AND THE PARTIAL CASE IS THE DANGEROUS ONE:
+    // the node without the tree is the arm that yields a software rasterizer
+    // while looking like success. If the host is only half-equipped, deliver
+    // nothing and let the probe report the GPU unreachable, which is true.
+    if !(dxg_present && wsl_tree_present) {
+        return Vec::new();
+    }
+    vec![
+        "--device".into(),
+        "/dev/dxg".into(),
+        "-v".into(),
+        format!("{WSL_HOST_TREE}:{WSL_HOST_TREE}:ro"),
+        "--env".into(),
+        format!("LD_LIBRARY_PATH={WSL_HOST_TREE}/lib"),
+    ]
+}
+
 // @trace spec:inference-engine-slots: Stable enclave inference endpoint (http://inference:11434) and engine slot run args.
 fn build_inference_run_args(
     certs_dir: &Path,
@@ -5100,6 +5168,18 @@ fn build_inference_run_args(
         }
         _ => {}
     }
+
+    // ORDER 793-zumy, and it is NOT part of the tier match above on purpose:
+    // WSL2's GPU arrives through /dev/dxg, which is neither a DRM render node
+    // nor a CDI device, so `detect_inference_tier()` classifies such a host
+    // cpu-only and always will until the probe's own verdict changes. The
+    // delivery is orthogonal to the tier, so it is decided on its own
+    // evidence.
+    args.extend(wsl2_dxg_container_args(
+        Path::new("/dev/dxg").exists(),
+        Path::new(WSL_HOST_TREE).exists(),
+    ));
+
     args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={tier}")]);
     // The tier reported to the container must reflect DELIVERABILITY, not just
     // hardware: a gpu-cuda host without a CDI spec runs CPU-only. The container
@@ -18628,6 +18708,74 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    /// ORDER 793-zumy: the WSL2 dxg delivery, pinned as a pure function so
+    /// every arm runs on every host — none of this is reachable on the CI
+    /// machines that have neither /dev/dxg nor /usr/lib/wsl.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn the_wsl2_dxg_mount_needs_both_halves_and_is_read_only() {
+        // THE ONLY ARM THAT DELIVERS ANYTHING.
+        let args = wsl2_dxg_container_args(true, true);
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--device" && w[1] == "/dev/dxg"),
+            "the device node must be passed: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a == "/usr/lib/wsl:/usr/lib/wsl:ro"),
+            "the WSL tree must be bound: {args:?}"
+        );
+        // READ-ONLY IS A BOUNDARY THE OPERATOR SET, not a default to drift.
+        // A `:rw` here would silently widen an approved surface, so it is
+        // asserted rather than assumed.
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with("/usr/lib/wsl:") && !a.ends_with(":ro")),
+            "the WSL tree must never be mounted writable: {args:?}"
+        );
+
+        // NEITHER HALF ALONE, and the node-without-tree arm is the important
+        // one: that is the measured configuration where dzn fails at
+        // CreateDevice and the loader hands back lavapipe instead. Delivering
+        // it would put a software rasterizer where the GPU should be, which
+        // is what criterion 3 refuses.
+        assert!(
+            wsl2_dxg_container_args(true, false).is_empty(),
+            "the device node without the driver store must deliver NOTHING"
+        );
+        assert!(
+            wsl2_dxg_container_args(false, true).is_empty(),
+            "the WSL tree without the device node must deliver nothing"
+        );
+
+        // AND THE OFF-WSL2 CASE, which is every other host in the fleet.
+        assert!(
+            wsl2_dxg_container_args(false, false).is_empty(),
+            "a host with neither path must get no dxg flags at all"
+        );
+    }
+
+    /// 793-zumy: the production caller must read BOTH paths, or the gating
+    /// above is decorative. A source-window assertion for the same reason the
+    /// neighbours use one — the caller builds real podman args and cannot be
+    /// invoked in a unit test.
+    #[test]
+    fn the_dxg_delivery_is_gated_on_both_paths_in_production() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("wsl2_dxg_container_args("),
+            "the production argument builder must call the dxg delivery"
+        );
+        assert!(
+            window.contains("Path::new(\"/dev/dxg\").exists()")
+                && window.contains("Path::new(WSL_HOST_TREE).exists()"),
+            "both halves must be read from the filesystem at the call site"
         );
     }
 

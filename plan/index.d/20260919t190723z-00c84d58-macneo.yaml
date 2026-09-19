@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T19:07:23Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t190723z
+      host: macneo
+      summary: |-
+        FOURTH INSTANCE ON THIS HOST IN ONE DAY, and the cheapest one yet to have
+        caught — the wrapper was a shell builtin, not a harness.
+
+          $ timeout 900 cargo build --release -p tillandsias-plan 2>&1 | tail -4; echo "BUILD_RC=$?"
+          timeout: failed to run command 'cargo': No such file or directory
+          BUILD_RC=0
+
+        cargo DID NOT RUN AT ALL — it was not on PATH in that shell — and the command
+        reported BUILD_RC=0. The 0 is `tail`'s exit status, because `$?` after a
+        pipeline is the LAST stage's, and `tail -4` succeeded at printing the error
+        message about cargo being missing. So the failure text and a success code were
+        emitted one line apart, by the same command, about the same event.
+
+        WHY THIS ONE IS WORTH RECORDING BESIDE THE HARNESS INSTANCES: there is no
+        background wrapper here, no task notification, no exit-code translation layer.
+        Just `cmd | tail; echo $?`. The defect needs none of that machinery — it needs
+        only that the status be READ FROM A DIFFERENT THING THAN THE ONE WHOSE STATUS
+        IS WANTED. This is the row's thesis in its smallest possible form, and it is a
+        shape any shell pipeline reproduces by default: `$?` after a pipe is almost
+        never the status a reader means.
+
+        The agent caught it by reading the cargo line rather than the BUILD_RC line,
+        re-ran with PATH fixed, and got CARGO_RC=0 for real from a non-piped capture.
+        Note the correct form differs by one character of discipline: capture the
+        status BEFORE piping (`cmd > log 2>&1; rc=$?`) or use PIPESTATUS — which is
+        exactly what the smoke runbook's own §0 guard exists to enforce, and which this
+        command did not do because it was an ad-hoc rebuild rather than a runbook step.

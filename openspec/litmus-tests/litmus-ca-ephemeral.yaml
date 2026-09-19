@@ -34,6 +34,9 @@ critical_path:
     command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
     timeout_ms: 8000
     expected_behavior: "shutdown command succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "SHUTDOWN_COMPLETE"
 
   - step: "verify CA files deleted after shutdown"
     command: "find /tmp -maxdepth 1 -type f -name 'tillandsias-ca-*' 2>/dev/null | wc -l"

@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: enumerate-what-the-read-only-usr-lib-wsl-mount-actually-exposes-inside-the-inference-container-file-by-file-and-by-what-reads-it
+    order: 1267-fj2z
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [security, hardening, audit, wsl2, container, accel]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-podman/src/lib.rs
+      - plan/issues/research/wsl2-igpu-vulkan-over-dxg-measured-2026-08-16.md
+    unscoreable: ""
+    verifiable_closure: |
+      A written enumeration, checked in beside the existing dxg research note,
+      of what the read-only /usr/lib/wsl mount exposes inside the inference
+      container, answering three questions with evidence rather than with
+      inference:
+
+        1. WHAT IS THERE. The top-level entries under /usr/lib/wsl as seen
+           FROM INSIDE the container, with counts and total size, and for each
+           entry whether it is a driver-store directory, a shared library, or
+           something else. Anything in the third category is listed
+           individually, because that is the category nobody has looked at.
+
+        2. WHAT READS IT. Which processes in the container actually open paths
+           under that tree during a representative inference run, captured by
+           observation rather than assumed: strace, or an equivalent, filtered
+           to that prefix. The expected answer is the Vulkan loader and dzn;
+           the point of the exercise is to find out whether anything else does.
+
+        3. WHAT IS REACHABLE THAT SHOULD NOT BE. Explicitly: whether any path
+           under the mount is a symlink or a bind that escapes the tree, and
+           whether any file under it is writable from inside the container
+           despite the read-only flag. Both are asserted as NEGATIVE findings
+           with the command that established them, not left unstated.
+
+      A FIXTURE pins the two safety properties that must not regress: the mount
+      is read-only from inside the container, and it is absent entirely on a
+      host where /usr/lib/wsl does not exist. A MUTATION ARM must show the
+      second assertion FAILS if the host check is removed, otherwise it proves
+      only that the path happens to be missing on the test machine.
+    title: |
+      audit what the read-only /usr/lib/wsl mount actually exposes inside the inference container, file by file and by what reads it, since the operator approved it on a stated unknown
+    context: |
+      FILED AS A CONDITION OF THE MOUNT, not as a follow-up someone may or may
+      not get to. The operator approved bind-mounting the host's projected
+      Windows driver store into the inference container on WSL2 hosts on
+      2026-09-19, and approved it WITH A STATED RESERVATION, in their own
+      substance: "we're not entirely sure what that surface exposes besides
+      those drivers, but it sounds like a reasonable mount for legitimate
+      uses", together with "let's make sure it gets audited later". This row
+      IS that audit, and the mount's own comment in the code cites this order
+      so the debt is discoverable from the thing that incurred it.
+
+      WHAT IS ALREADY KNOWN, so the audit starts from evidence rather than
+      from zero. Measured on esmeraldinha 2026-09-19 while taking 793-zumy's
+      container measurement, three arms:
+
+        --device /dev/dxg alone                  -> llvmpipe ONLY
+        + /usr/lib/wsl/lib bound                 -> dzn loads, then
+             ID3D12DeviceFactory::CreateDevice failed; llvmpipe only
+        + ALL of /usr/lib/wsl (incl. drivers/)   -> the host's two devices,
+             Dozen INTEGRATED_GPU driverID=23 beside llvmpipe CPU driverID=13
+
+      So the tree has exactly two known-load-bearing parts: `lib`, holding
+      libd3d12.so, libd3d12core.so and libdxcore.so; and `drivers`, the
+      projected Windows driver store of thousands of .inf directories, which
+      is what dzn resolves the real D3D12 device out of. The device node
+      itself crosses without any of this; the driver store is what the
+      translation layer needs.
+
+      WHAT IS NOT KNOWN IS THE WHOLE POINT. Nobody has enumerated the tree.
+      "Two known parts" is a statement about what was needed to make the
+      device enumerate, NOT a statement about what is present or reachable.
+      The driver store is a Windows-derived artefact projected into a Linux
+      guest and then into a container, and the fleet has no inventory of it.
+      Recording "it is only drivers" without looking would be the
+      literal-in-place-of-evidence shape this family keeps paying for.
+
+      SCOPE BOUNDARY: this row does not re-litigate the mount. The decision is
+      made and recorded on 793-zumy. This row enumerates and pins the surface,
+      and if it finds something that changes the risk picture, THAT becomes a
+      new row with its own evidence rather than a silent revert here.
+
+      FAMILY: belongs beside 1252-qyii (SELinux from audit to enforcement,
+      forge container first) — same hardening epic, and a policy that has to
+      cover this mount will need the inventory this row produces.
