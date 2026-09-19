@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: note
+      ts: "2026-09-19T19:54:38Z"
+      agent_id: linux-yoga-opus5-20260919t195438z
+      host: yoga
+      summary: |
+        THE KEYWORD NONEMPTY ARM AND assert_output_nonempty DIVERGE IN EXACTLY ONE CASE, AND IT IS A PROPERTY OF THE INTERPRETER THIS ROW DELETES.
+
+        Measured on yoga 2026-09-19 against a throwaway corpus, same command, same step, one with the arm and one with the assert:
+
+          case                          keyword arm   assert_output_nonempty
+          output is whitespace only     rc=0          rc=1
+          step TIMES OUT (rc=124)       rc=1          rc=1
+          ordinary non-empty output     rc=0          rc=0
+
+        THE ONE DIVERGENCE IS WHITESPACE-ONLY OUTPUT. The arm is `[[ -n "$output" ]]`,
+        so a step that printed two spaces and a newline passes it. The assert strips
+        whitespace before testing and refuses. Under the arm, a command that produced
+        nothing but a blank line is indistinguishable from one that printed the
+        artefact it was meant to print — silence with a newline in it reads as success.
+        That matters for the four phrases routed to this arm (`grep succeeds`,
+        `container id returned`, `launches without error`, `shutdown command succeeds`),
+        because every one of them names a SPECIFIC artefact the step must print, which
+        is the reason the interpreter puts them ahead of the generic exit-code branch.
+        The arm's own comment says silence really is a failure for these; whitespace is
+        the case where it is not.
+
+        AND THE INSTALL-WINDOWS STEP CAN LEAVE THE ARM TODAY, which was the practical
+        question. Applying `assert_output_nonempty` ALONE to it — no assert_exit — keeps
+        windows-native-tray at rc=0, an identical verdict. The earlier claim that
+        migrating it "would red the release tier" was imprecise: the red comes from
+        `assert_exit: 0`, not from nonempty, and the two had been applied together
+        everywhere else. So criterion 6 does not wait on 1258-8wfb; that row still owns
+        the installer regression, and the step still must not gain assert_exit until it
+        closes.
+
+        A READING OF THE SOURCE WAS RIGHT ABOUT THE CODE AND WRONG ABOUT WHAT RUNS.
+        From the source I predicted the timeout case would diverge too, because the
+        assert special-cases rc=124 and the arm does not. Measured, both fail: the
+        runner reports a timed-out step dead before adjudication is reached, so the
+        assert's 124 branch is unreachable on that path and the arm never gets the
+        chance to accept partial output. The prediction was a correct description of
+        two code paths and a wrong claim about which one executes. Second instance on
+        this host tonight of a source reading that was accurate and unreachable — the
+        other was a fix written for a state the fixture could not construct — and in
+        both cases only running it settled the question.

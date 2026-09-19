@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T18:14:01Z"
+      agent_id: windows-yolanda-claude-20260919t181401z
+      host: yolanda-windows
+      summary: |-
+        CROSS-CITE TO 1269-gfdi, which owns the TREE half of this defect. Neither row closes the other.
+
+        1269-gfdi owns the litmus step that pipes its fixture through `| tail -1` and so discards the failing arm, plus the margin arm's missing regime line; its fix lives in openspec/litmus-tests and the fixture.
+
+        THIS ROW KEEPS THE PRACTICE HALF: an AGENT piping a guard's output through a truncating filter, recorded here as evidence for the status-channel rule. Three times in one session I destroyed a verdict line with my own `| tail -N`, after naming the mistake to the coordinator following the first one. The two halves share a mechanism and have different subjects — a fixture doing it to its own fixture, and an operator doing it to a guard — so a fix to either leaves the other live.
+
+        THE GENERALISATION THAT COVERS BOTH: the verdict line is not reliably at the end of a guard's output. A refusal commonly prints its REMEDY after its VERDICT, so `tail` keeps the advice and discards the finding — which is why all three of my losses looked like helpful output rather than like truncation.
+
+        ALSO A CORRECTION TO MY OWN FLAG, recorded because I raised it as a defect and it is not one: I reported the 1269/1270 order-number collision between two hosts as a problem needing a fleet ruling. methodology/distributed-work.yaml:1144-1160 already settles it — `the_prefix_is_not_authoritative`: "Several packets sharing a prefix is NORMAL, not a defect, and the prefix alone does not resolve — `plan_status 575` is a miss, `plan_status 575-k3f9` is a hit", and two hosts picking the same prefix "produce two distinct, permanent, correct identifiers that need no reconciliation". Verified against the file. Nothing to rename, supersede or file. The only real residue is a PRACTICE point: dispatches, claims and @trace must carry the FULL token, and tonight's dispatches (including several of mine) said bare numbers because the prefixes had happened to be unique so far.
