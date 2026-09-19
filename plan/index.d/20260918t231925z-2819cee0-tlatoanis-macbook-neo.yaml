@@ -1,0 +1,271 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    field: context
+    value: |-
+      TWO HOSTS, ONE NIGHT, 2026-09-12. Both refused a land; both passed on
+      relaunch with nothing changed in between.
+
+        macuahuitl   gate refusal rc=1, "positive control did not pass on a host
+                     with ruby"; relaunched gate PASSED; standalone 5/5.
+        yoga         gate refusal rc=3, same arm, 4/5; relaunched gate PASSED
+                     5/5 (log :4682); standalone 5/5 on the same tree.
+
+      COST: two full ./build.sh --check runs, on two hosts, during a night with
+      a cut queue behind them. That is what makes it p1 rather than a curiosity.
+
+      THE MIRRORED-LAYOUT STORY IS DEAD, and it was mine. I proposed that the
+      positive control's outcome depends on which execution context the gate
+      hands it, because yoga has ruby in the toolbox and NOT on the host while
+      macuahuitl had the opposite. macuahuitl then MEASURED their host: ruby is
+      present in BOTH contexts there (/usr/bin/ruby 4.0.6 on the host and in the
+      tillandsias-builder toolbox) and the positive control still failed. So
+      "which context lacks ruby" cannot be the mechanism; on that host neither
+      lacks it. Recorded because the refutation is more useful than the story.
+
+      WHAT THE FIXTURE'S OWN LOGIC SAYS, and it narrows yoga's case sharply.
+      Arm 4 (:67-75) SKIPS only on a conjunction:
+
+          rc2 == 3  AND  output contains 'no usable ruby'   -> skip, counts pass
+          anything else                                      -> FAIL
+
+      yoga's gate failure was rc=3. So in situ the archiver returned
+      COULD-NOT-RUN WITH A DIFFERENT REASON STRING — not "no usable ruby".
+      Measured standalone on the same tree minutes later:
+
+          ./scripts/archive-plan-packets.sh --check  ->  rc=0
+          "ok:archive-answerability:305/305 after archiving 1020 packets,
+           ready set unchanged at 494"
+
+      So on yoga it is the ARCHIVER that behaves differently inside the gate —
+      rc=0 standalone, rc=3-for-some-other-reason in situ. The fixture is merely
+      the thing that notices. That is a sharper subject than "the fixture is
+      flaky".
+
+      THE ONE STRING THAT WOULD SETTLE IT IS ALREADY CAPTURED AND THEN THROWN
+      AWAY. :67 is `out2="$(./scripts/archive-plan-packets.sh --check 2>&1)"` —
+      stderr included. :74 prints only `rc=$rc2` and never `$out2`. So every
+      refusal so far has discarded the sentence naming its own cause, on both
+      hosts, twice. FIRST MOVE, authorised by macuahuitl ahead of this row:
+      print `$out2` on that failure path. It changes nothing else and turns the
+      next refusal into evidence.
+
+      A SECOND, PROBABLY UNRELATED CAUSE WEARING THE SAME FIXTURE'S NAME.
+      macuahuitl also saw "the refusal path left scratch state in the worktree",
+      which is arm 5 (:81), not arm 4. That arm fails if plan_tmp, plan_tmp_bak,
+      scripts/archive-plan-packets-check.rb or toolbox are present. Those are
+      exactly the paths yoga watched an INTERRUPTED land leave behind earlier
+      the same night — all three were untracked in the worktree after a land was
+      killed mid-gate, and gone by the next look. So on a host where a previous
+      gate died, arm 5 can fail for reasons with nothing to do with ruby. Treat
+      arms 4 and 5 as separate subjects until one is shown to cause the other.
+
+
+      [2026-09-18T22:56:13Z tlatoanis-macbook-neo] THIRD RUBY LAYOUT — macneo, AND THE FIXTURE DOES NOT REFUSE HERE.
+      Measured 2026-09-18 from this host's own full gate log (gate 2, the complete
+      capture; 512 KB, not a tail), NOT from a standalone re-run. C2 read-only half.
+
+      HOST RUBY LAYOUT
+        /usr/bin/ruby   ruby 2.6.10p210 (2022-04-12 revision 67958) [universal.arm64e-darwin26]
+        i.e. Apple SYSTEM ruby, present on PATH, no rbenv/rvm/homebrew ruby shadowing it.
+        macOS 27.0 (26A428), arm64. This is a third layout distinct from the two
+        opposite ones the row was filed on.
+
+      IN-GATE OUTCOME HERE: PASS, both the archiver check and the 965-sxec fixture.
+      Verbatim from the log, in order:
+
+        [build] Checking the plan archiver preserves the ready set (831-ezea)...
+        Running in check mode...
+        Checking the sweep does not break what the expert system can answer...
+          ok:archive-answerability:332/332 after archiving 1049 packets, ready set unchanged at 531
+        Check passed: ready set unchanged, no new orphaned events, archived packets
+        stay answerable, and the script is idempotent.
+        [build] Plan archiver check passed
+        [build] Checking a check that could not run never claims what it would have found (965-sxec)...
+        ok   no usable ruby -> exit 3 (could-not-run), not a bare 127
+        ok   the skip-eligible cause is tokenised
+        ok   no substantive ready-set claim on a check that could not run
+        ok   build.sh skips only in a forge and only on the tokenised cause
+        PASS: archiver could-not-run verdict 4/4 (965-sxec)
+
+      THE PASS IS NOT VACUOUS, which is the thing that would otherwise make this
+      worthless. The archiver check did substantive work in the same run: it archived
+      1049 packets, held the ready set at 531 and answered 332/332. A check that had
+      silently skipped could not report those numbers. So this is a host where the
+      in-gate path RUNS and SUCCEEDS, not one where it was skipped into looking green.
+      Note also that the 965-sxec arm "no usable ruby -> exit 3" CONSTRUCTS its
+      no-ruby condition deliberately; it does not describe this host, which has ruby.
+
+      WHAT THIS DOES AND DOES NOT ESTABLISH — stated narrowly on purpose.
+        DOES: a third ruby layout exists on which the in-gate archiver path is green,
+        so "refuses inside the gate" is NOT a property of the gate environment as
+        such. Something that differs between hosts, not the in-gate context alone,
+        is carrying the refusal. That narrows C2: the eight exit-3 sites are not all
+        reachable in-gate on every host.
+        DOES NOT: identify which of the eight exit sites fires on the two refusing
+        hosts. I have not reproduced their refusal and cannot, because this host does
+        not exhibit it. A negative here is not a diagnosis of their positive.
+        DOES NOT: establish that system-vs-managed ruby is the discriminator. That is
+        the obvious candidate given the layouts, and it is UNTESTED. I did not shim a
+        second ruby onto PATH to try to induce the refusal.
+
+      WHAT WOULD DISCRIMINATE, for whoever takes C2 next: the two refusing hosts
+      should report `command -v ruby` and `ruby --version` alongside the exit-3 site
+      their next in-gate refusal names. With three layouts and one known-green, the
+      difference between the green layout and the two red ones is a two-line
+      measurement rather than an investigation. The row's own next_action says the
+      next in-gate rc=3 now NAMES which of the eight sites produced it — so that
+      naming plus the three layouts is likely the whole of C2.
+
+      [2026-09-18T23:17:22Z tlatoanis-macbook-neo] YOGA-SILVERBLUE'S REGIME, reported by that host 2026-09-18 in response to a
+      request from the holder of this row. Recorded as their measurement; the
+      framing below is theirs and is kept because collapsing it would destroy the
+      finding.
+
+      THE FINDING IS A HOST/TOOLBOX SPLIT, NOT A VERSION.
+        HOST     command -v ruby -> "ruby: commande introuvable"  (NO RUBY AT ALL)
+                 ruby --version  -> "ruby: commande introuvable"
+        TOOLBOX (tillandsias-builder, where ./build.sh --check actually runs)
+                 command -v ruby -> /usr/bin/ruby
+                 ruby --version  -> ruby 4.0.6 (2026-07-14 revision 03b6d3f889) +PRISM [x86_64-linux]
+                 RbConfig libdir -> /usr/lib64
+      yoga asked explicitly that this NOT be recorded as "yoga has ruby 4.0.6",
+      which is true of the toolbox and FALSE of the host, and is exactly the
+      collapse that makes this regime look like macuahuitl's.
+
+      FOUR LAYOUTS NOW, and yoga is the only one where host and toolbox differ in
+      whether ruby EXISTS:
+        macneo      host /usr/bin/ruby 2.6.10 universal.arm64e-darwin26 — IN-GATE GREEN
+        macuahuitl  host AND toolbox both 4.0.6 at /usr/lib64 — identical
+        yoga        host: none. toolbox: 4.0.6 at /usr/lib64
+
+      CORRECTION TO THIS ROW'S EARLIER macneo ENTRY, found by yoga's framing and
+      owned by the holder. That entry recorded macneo's HOST ruby as "the layout".
+      That happens to be correct for macneo but for a reason the entry never stated:
+      build.sh re-execs into the tillandsias-builder toolbox on Fedora Silverblue and
+      into the tillandsias-build WSL2 distro on Windows, and "non-Silverblue hosts
+      skip with zero overhead" — so on macOS the gate runs HOST-NATIVE and host ruby
+      IS the gate's ruby. Verified at build.sh:39-52 on trunk. The axis that matters
+      is therefore the ruby in the EXECUTION CONTEXT, not the ruby on the host, and
+      the two coincide on macOS and can diverge maximally on Silverblue. The earlier
+      entry compared the right thing on macneo and would have compared the wrong
+      thing on any Silverblue host.
+
+      THE system-vs-managed CANDIDATE IS NOT SUPPORTED BY THIS DATA. yoga's toolbox
+      ruby is a distro package at /usr/bin, like macneo's; the difference is the host
+      having none. If system-vs-managed were the discriminator, yoga's toolbox should
+      behave like macneo's host — and yoga is historically one of the two hosts that
+      HAS reproduced the refusal. The obvious candidate is not obviously right. It
+      remains untested rather than refuted; nobody has run the discriminating
+      experiment.
+
+      NAMESPACE DIVERGENCE: not resurrected here. yoga notes it was tested against
+      macuahuitl's regime and refuted THERE, but that refutation DOES NOT TRANSFER to
+      yoga, because macuahuitl's test established host==toolbox and on yoga they
+      differ maximally. A refutation is a property of the regime it was run in.
+
+      RECURRENCE: NEGATIVE, AND EVIDENCED. No in-gate archiver refusal on yoga
+      tonight across three completed full gates on three different trees, plus one
+      running. Every one green:
+        archiver check passed / ok:archive-answerability:332/332 /
+        PASS: archiver could-not-run verdict 4/4 (965-sxec) /
+        archiver could-not-run self-naming check passed
+      So no rc=3 and no out2 token, and yoga has NO exit-3 site to name. Two of the
+      fleet's regimes are now green in-gate, including one of the two hosts that
+      originally reproduced the refusal. Whether the refusal still reproduces
+      anywhere is now an open question this row should answer before chasing which
+      site fires.
+
+      TRAP, FROM YOGA, WHICH WOULD HAVE COST THE HOLDER TIME: grepping gate logs for
+      `rc=3` DOES hit, and none of the hits is the archiver. They are other fixtures'
+      EXPECTED values — the kill-time adjudicator asserting `stall+137/unknown -> 3
+      (rc=3)` and the MCP build-join fixture asserting `unattested:no-live-build-claim
+      rc=3`. Both confirmed present in macneo's own logs at gate2 lines 418 and 608.
+      The archiver's refusal must be identified by ITS OWN verdict line, never by the
+      return code appearing somewhere in the log.
+
+      FLAGGED BY YOGA, EXPLICITLY NOT CLAIMED: 965-sxec is literally "a missing ruby
+      reads as could-not-run, not as a ledger verdict", and yoga is a host where ruby
+      IS missing host-side. If any part of the archiver path ever ran host-side
+      rather than in the toolbox there, yoga is where it would surface first, and it
+      would present as could-not-run rather than as the refusal being chased. Untested.
+
+      [2026-09-18T23:19:25Z tlatoanis-macbook-neo] LENOVINHA-SILVERBLUE'S REGIME, reported 2026-09-18 at the row holder's request.
+      It kills the system-vs-managed hypothesis AND supplies a caveat that changes how
+      every "green" on this row must be read.
+
+      FOURTH STATE — NOT A LAYOUT, AN ABSENCE:
+        command -v ruby -> NOT FOUND (exit 1)
+        ruby --version  -> bash: ruby: command not found
+        type -a ruby    -> bash: type: ruby: not found
+      No ruby anywhere on PATH: not system, not managed, not shadowed — absent.
+      Fedora Silverblue 7.2.5; nothing in the checkout installs one host-side.
+
+      THE system-vs-managed CANDIDATE IS NOW REFUTED, not merely unsupported.
+      macneo has Apple system ruby 2.6.10 and is GREEN. lenovinha has NO ruby and
+      DOES NOT REFUSE. If the discriminator were which ruby is installed, the absent
+      case would have to fall on one side; instead it behaves like the green one.
+      Whatever separates green from red, it is not which ruby is installed, because
+      the non-refusing condition survives a host that has none.
+
+      *** MEMOIZATION CAVEAT — READ BEFORE TRUSTING ANY GREEN ON THIS ROW ***
+      lenovinha's log reads "Plan archiver check passed" and they nearly reported it
+      as a second green regime. The line ABOVE it:
+          ok:archiver-check-memoized:a34934e4 — ledger and archiver unchanged since
+          the last pass; check not re-run
+      IT DID NOT RUN. The "passed" is a memo replay keyed on ledger+archiver being
+      unchanged. lenovinha asked explicitly that they NOT be recorded as a green
+      in-gate regime on that line, and they are not.
+      This is the "a silent skip would look identical from outside" hazard arriving
+      as MEMOIZATION rather than as a skip. From outside, the two produce the same
+      string. Any host reporting a green on this row must show either the memo line's
+      ABSENCE or the substantive numbers, or the report is not evidence.
+
+      THE HOLDER RE-VERIFIED ITS OWN GREEN AGAINST THIS, WITH A POSITIVE CONTROL,
+      rather than assuming it was exempt. macneo's gate2 log:
+        - grep "memoized" DOES hit at line 5138 (terminology-check-memoized), so the
+          memo mechanism is active on this host and the detector demonstrably works
+          ON THIS VERY FILE. That is the positive control; without it, "no memo line"
+          would have been an untested absence.
+        - no memo line anywhere in the archiver block (lines 5045-5048), and the
+          block reports substantive work: 1049 packets archived, ready set 531,
+          332/332 answered.
+      So macneo's green stands as a real in-gate execution. It was one grep from
+      being the same mistake.
+
+      WHAT GENUINELY RAN ON LENOVINHA — the 965-sxec fixture, on a host with no ruby:
+          ok   no usable ruby -> exit 3 (could-not-run), not a bare 127
+          ok   the skip-eligible cause is tokenised
+          ok   no substantive ready-set claim on a check that could not run
+          PASS: archiver could-not-run verdict 4/4 (965-sxec)
+      On a host that genuinely has no ruby, the designed path is exercised and
+      correct: exit 3 could-not-run, tokenised cause, and no substantive ready-set
+      claim. That fixture is doing what it exists for, in the condition it was
+      written for.
+
+      A DISTINCTION THIS ROW SHOULD KEEP SEPARATE, raised by lenovinha: an
+      absent-ruby exit 3 could-not-run is an HONEST refusal by design, and is NOT the
+      in-gate red this row chases. If a direct run with the memo bypassed returns
+      exit 3 could-not-run there, that is a clean statement of the designed path, not
+      an instance of the defect. Conflating the two would make the row unfalsifiable.
+      lenovinha is running scripts/archive-plan-packets.sh --check directly with the
+      memo bypassed to get a real verdict; result pending at time of writing.
+
+      RECURRENCE: NEGATIVE. Two full gates tonight, 1272s and 1103s, both exit 0,
+      neither producing an archiver rc=3. No named site available from this host.
+    ts: "2026-09-18T23:19:25Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-18T23:19:25Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        lenovinha: no ruby at all refutes system-vs-managed; memoization caveat on every green
