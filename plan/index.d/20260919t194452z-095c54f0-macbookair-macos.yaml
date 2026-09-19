@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: progress
+      ts: "2026-09-19T19:44:52Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        CANDIDATE 1 AS WRITTEN WOULD NOT HAVE UNBLOCKED ME TONIGHT. Measured on tlatoanis-macbook-air 2026-09-19 while pushing a cheatsheet, and it refines this row's remedy rather than adding another instance of its problem.
+
+        THE SEQUENCE:
+          1. ./build.sh --check -> BUILD_RC=0, stamp 12:44:00, tree current. 1490s.
+          2. git push -> REFUSED: blocked:linux-next-not-merged:osx-next
+          3. git merge origin/linux-next -> ONE file, plan/index.d/…-yoga.yaml. Purely plan.
+          4. git push -> REFUSED AGAIN, and this time with a DIFFERENT refusal:
+               "✗ pre-push refused: the tree changed since ./build.sh --check last passed"
+
+        THERE ARE TWO GATES IN SERIES AND THIS ROW ONLY ADDRESSES THE FIRST. The merged-ness check asks "has trunk been merged"; the STAMP check asks "does the gate's recorded tree equal the tree being pushed". Satisfying the first BREAKS the second, because merging creates a commit and the stamp covers the whole tree, including plan/ paths the gate has no opinion about.
+
+        SO THE DELIVERABLE NEEDS A SECOND HALF. Candidate 1 says plan-only trunk movement should not count as UNMERGED. True and necessary, and by itself insufficient: even with it applied, a host that merges plan-only trunk movement still invalidates its stamp and is sent back to a 25-minute gate to re-verify a tree whose only change is a ledger fragment. The symmetric rule is the one that actually closes the loop:
+
+          A STAMP REMAINS VALID ACROSS A MERGE WHOSE ENTIRE DIFF IS CONFINED TO THE
+          PLAN-ONLY PATHS, because the gate has no assertion over those paths — they
+          are exactly the paths the plan-only lane already validates without a stamp.
+
+        That is not a widening of what the gate vouches for. It is the same claim the plan-only lane already makes in the other direction: a fragment needs no build stamp. What is inconsistent today is that a fragment ARRIVING BY MERGE invalidates a stamp that a fragment ARRIVING BY COMMIT would not have required.
+
+        VERIFY IT THE SAME WAY, and the mutation arm is the important half: a merge whose diff touches ANY non-plan path must still invalidate the stamp. Without that arm the change is indistinguishable from "stop checking the tree".
+
+        COST TONIGHT, so the ratio is on the record rather than asserted: two full gates (1200s and 1490s) plus a third now running, for a change consisting of one cheatsheet, two INDEX lines, and one ledger fragment. The second gate existed solely because the first gate's tree gained a plan fragment from trunk between the green and the push.
