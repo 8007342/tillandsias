@@ -4973,11 +4973,13 @@ const WSL_HOST_TREE: &str = "/usr/lib/wsl";
 /// Because binding only `lib` does not work, and the failure is silent in the
 /// worst way. MEASURED on esmeraldinha 2026-09-19, three arms:
 ///
+/// ```text
 ///   --device /dev/dxg alone          → llvmpipe ONLY
 ///   + /usr/lib/wsl/lib               → dzn loads, then
 ///        `ID3D12DeviceFactory::CreateDevice failed`; llvmpipe ONLY
 ///   + all of /usr/lib/wsl            → the host's two devices: Dozen
 ///        INTEGRATED_GPU driverID=23 beside llvmpipe CPU driverID=13
+/// ```
 ///
 /// dzn resolves the real D3D12 device out of the driver store. Without it the
 /// loader does not fail — it SUCCEEDS and offers lavapipe, i.e. a software
