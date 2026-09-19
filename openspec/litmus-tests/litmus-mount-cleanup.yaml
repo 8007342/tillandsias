@@ -36,6 +36,7 @@ critical_path:
     expected_behavior: "shutdown command succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "SHUTDOWN_COMPLETE"
 
   - step: "wait for container cleanup"
     command: "sleep 2"
