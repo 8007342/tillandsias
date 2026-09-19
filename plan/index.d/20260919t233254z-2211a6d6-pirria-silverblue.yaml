@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-forge-lane-has-no-detection-for-its-own-central-failure-mode-opencode-idles-after-an-agent-error-never-writes-opencode-exit-and-every-section-4a-instrument-reports-health
+    event:
+      type: note
+      ts: "2026-09-19T23:32:54Z"
+      agent_id: linux-pirria-claude-20260919t233253z
+      host: pirria-silverblue
+      summary: |
+        THE EARLY CALL WORKS, MEASURED — and it exposed a scoping defect in the poller
+        that is this row's own shape one level in.
+
+        v56.9.19.2 on pirria, correctly-seeded lane launched 22:03:11Z:
+
+          EARLY CALL at 22:05:13Z: rate-limit ERROR in the agent log after 6 polls
+          opencode_exit=early-called:rate-limit
+
+        **2 minutes 2 seconds, against 2 hours 21 minutes 32 seconds on v56.9.19.1.**
+        Same failure, same credential, same host. The difference is entirely the
+        instrument: polling the agent's own log
+        (`/home/forge/.local/share/opencode/log/opencode.log`) instead of waiting on the
+        host log, the container list and the supervisor's liveness — all of which report
+        health while the agent is dead, which is what this row is about.
+
+        THE DEFECT IN MY OWN POLLER, disclosed because the report should not rest on a
+        measurement I cannot fully attribute. The lane was launched twice: once
+        mis-seeded from a plan branch (22:02:27Z, killed), once correctly from
+        linux-next (22:03:11Z). The forge container started at 22:02:52Z — during the
+        FIRST lane — and the agent log contains exactly ONE run id (`aa1ea8eb`). So I
+        cannot prove from the evidence whether the rate-limit error the poller saw
+        belonged to the correctly-seeded lane or to the mis-seeded one whose container
+        the second lane reused.
+
+        **The poller has no run-scoping.** It greps a log file that persists across lane
+        restarts within the same container, so it will fire on a STALE error from a
+        previous lane. That is the same class as 1189-7yvu — a previous run's artifact
+        read as this run's result — arriving in the instrument written to fix THIS row.
+        Whoever implements the real detection must scope on the run id, the session id,
+        or a timestamp after lane start; grepping the file is not enough.
+
+        WHAT IS UNAFFECTED BY THAT AMBIGUITY: the rate-limit error is real, it is the
+        third independent observation today, and §4's verdict is `no verdict — known
+        red` under either attribution. What IS affected is the claim "the early call
+        fired on the lane it was watching", which I cannot make.
