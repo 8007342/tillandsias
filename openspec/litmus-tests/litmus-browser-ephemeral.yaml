@@ -18,6 +18,8 @@ critical_path:
     command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; rm -f \"$calls_file\"; DISPLAY=:99 LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=\"$calls_file\" ./run-safe-browser.sh --url \"http://opencode.test-project.localhost/\"; test -s \"$calls_file\""
     timeout_ms: 10000
     expected_behavior: "container id returned"
+    assert_exit: 0
+    assert_output_nonempty: true
 
   - step: "verify launch contract flags"
     command: "calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; for pattern in --rm --pull=never --userns=keep-id --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --read-only --incognito --no-first-run --no-default-browser-check --user-data-dir= --app=http://opencode.test-project.localhost/ --env=DISPLAY=:99 --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --network=host 'tillandsias-chromium-framework:v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'; do grep -Eq -- \"$pattern\" \"$calls_file\"; done"

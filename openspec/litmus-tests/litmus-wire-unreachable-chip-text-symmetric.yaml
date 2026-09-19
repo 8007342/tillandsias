@@ -36,14 +36,22 @@ critical_path:
   - step: "windows-tray declares the named const"
     command: "grep -F 'pub const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "pub const WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "macos-tray declares the named const"
     command: "grep -F 'const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-macos-tray/src/action_host.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "const WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "both trays attach the identically-named pin test"
     command: "grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-macos-tray/src/action_host.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
     timeout_ms: 3000
