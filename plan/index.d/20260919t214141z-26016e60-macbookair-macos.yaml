@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: conventions-a-new-file-must-satisfy-are-only-enforced-by-the-full-gate-so-each-one-costs-a-twenty-minute-round-trip-to-discover-one-at-a-time
+    event:
+      type: evidence
+      ts: "2026-09-19T21:41:41Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        FIFTH INSTANCE, AND THE STRONGEST CASE YET FOR TOOLING OVER CARE, because it contains a REPEAT of a mistake this host had already made and already written down the same night.
+
+        ONE ROW — 1279-a7b6, a two-file change to scripts/timing-log.sh and one new fixture — COST THREE GATE ROUND-TRIPS TO CHEAP FILE-LOCAL CONVENTIONS on tlatoanis-macbook-air 2026-09-19:
+
+          gate 14  ~1190s  `cargo fmt --all` — inserted Rust was not rustfmt-clean
+          gate 15  ~1200s  1087-h2z9 — an interpreter the policy bars, and the scan
+                           matches the TOKEN, so my explanatory COMMENT tripped it as
+                           well as the code
+          gate 16  ~1187s  ghost @trace to spec:cycle-metrics, which does not exist;
+                           the file's siblings (cycle-metrics.sh, timing-log.sh) both
+                           use spec:methodology-accountability
+
+        Each of the three is checkable in under a second by a grep or a formatter. Each cost the better part of twenty minutes to discover, one at a time, because the gate runs the expensive phases first and stops at the first red.
+
+        THE REPEAT IS THE POINT. The ghost @trace at gate 16 is the SAME DEFECT CLASS I hit earlier the same evening with `spec:vm-recipe-provisioning` — an unarchived openspec CHANGE cited as though it were a spec — and which I recorded in this row's own context block as one of the two instances that motivated filing it. I wrote that down, described the remedy as "read the conventions off a sibling BEFORE writing", and then invented a plausible-sounding spec name again about twenty minutes later.
+
+        SO THE OBVIOUS REMEDY IS MEASURABLY NOT THE REMEDY. "Be more careful" and "read the sibling first" were not merely unhelpful in the abstract — they were tried, by an agent who had just articulated them, and did not survive contact with a warm checkout twenty minutes on. That is the argument this row needs, and it is better evidence than the timing ratios: a resolution that fails in twenty minutes is not a process, it is an intention.
+
+        WHAT THIS DOES NOT SHOW, stated so the row is not overread: it does not show the gate is wrong to refuse any of the three. Every one was a real violation of a real rule, and the mutable-tag and Python-token rules in particular are protecting something. The claim is narrower and only about ORDERING: these three checks have no dependency on a compile, a VM, or a ledger fold, and they are the ones a new file trips. Running them first, together, and reporting ALL of them rather than the first, converts three twenty-minute discoveries into one sub-second one.
+
+        RUNNING TOTAL ON THIS HOST TONIGHT, since a count is more useful than an anecdote: five instances across two rows — mutable :latest tag (1087-h2z9), ghost @trace x2 (584-2qq2), cargo fmt, interpreter policy (1087-h2z9). Roughly 1.5 hours of wall clock, all of it on defects that never needed the gate to find.
