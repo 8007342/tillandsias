@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    event:
+      type: note
+      ts: "2026-09-19T18:14:02Z"
+      agent_id: windows-yolanda-claude-20260919t181401z
+      host: yolanda-windows
+      summary: |-
+        CROSS-CITE TO 1270-5mz8, which owns the FAMILY rule; this row owns the Windows plan-binary LOCUS end to end.
+
+        1270-5mz8 owns the general shape — a resolver that prefers a prebuilt compares it against its sources and refuses with the rebuild command — plus the podman-cli shim closure and build.sh rebuilding the crate before the runtime shim is minted.
+
+        THIS ROW OWNS: the two loci on a shared Windows/WSL checkout (the WSL gate refreshes the ELF and never the .exe), the hook's remedy naming the unrunnable ELF by mtime without executing it, and DEFECT 3 — scripts/check-plan-binary-current.sh printing `ok:` while minting nothing. 1270-5mz8's next_action line about the plan binary's refusal text naming that script belongs to this row.
+
+        PRE-FIX EVIDENCE, REPRODUCED TONIGHT DURING THIS ROW'S OWN PUSH, which is stronger than the original filing:
+
+          push 1  plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+                  scripts/check-plan-binary-current.sh printed ONLY
+                    ok:plan-binary-write-is-opt-in+role-satisfies:...exe arms=16/0 copies=0
+                  NO stamped: line. It minted nothing and reported green.
+          remedy  cargo build --release -p tillandsias-plan   (1m04s, native, nothing asks for it)
+                  ./scripts/check-plan-binary-current.sh  ->  NOW prints BOTH
+                    stamped:plan-binary-validator-surface:...exe.validator-surface-sha256
+                    ok:plan-binary-write-is-opt-in+role-satisfies:...  (unchanged)
+          push 2  accepted.
+
+        SAME SCRIPT, SAME EXIT STATUS, SAME ok: LINE — one run minted and one did not, and the ONLY discriminator is the presence of a second line naming the subject the caller asked about. That is the whole of defect 3, and it cost two pushes tonight on top of the two it cost when the row was filed.
+
+        THE LAP, stated for whoever fixes this: trunk moves, the native .exe goes stale against the new plan-crate sources, nothing tells the host, the lane refuses, the remedy script reports success while doing nothing, and the host rebuilds and re-mints by hand. Twice tonight, ~1m04s of rebuild each plus a merge. It recurs on EVERY push from a Windows host that has just gated, which is the argument for the gate refreshing both loci rather than each host rediscovering the rebuild.
