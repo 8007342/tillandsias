@@ -50,6 +50,7 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "--diagnose"
     timeout_ms: 3000
 
   - step: "DiagnoseFormat enum + Human/Json variants pinned"
@@ -57,6 +58,7 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "pub enum DiagnoseFormat"
     timeout_ms: 3000
 
   - step: "JSON schema-pin unit tests attached"
@@ -64,6 +66,7 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "fn diagnose_report_none_bytes_serialise_as_null"
     timeout_ms: 3000
 
   # Order 735-2g5i renamed the test from exit_code_provisioned_zero_degraded_two
@@ -78,6 +81,7 @@ critical_path:
     assert_exit: 0
     assert_output_nonempty: true
     assert_output_contains: "fn exit_code_separates_healthy_converging_and_degraded"
+    assert_output_contains: "fn exit_code_separates_healthy_converging_and_degraded"
     timeout_ms: 3000
 
   - step: "NEGATIVE CONTROL: the pre-735-2g5i two-state test name is gone — a half-rename (both names present) or a revert to the exit-2-only contract must FAIL here"
@@ -90,6 +94,7 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "install bits broken"
     timeout_ms: 3000
 
   - step: "Gatekeeper hint is quarantine-gated, not unconditional (order 421)"
@@ -102,6 +107,7 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "--diagnose --json"
     timeout_ms: 3000
 
   - step: "cheatsheet exists with the documented schema"
@@ -109,4 +115,5 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "manifest_pin_aarch64_img"
     timeout_ms: 3000

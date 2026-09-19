@@ -39,6 +39,7 @@ critical_path:
     assert_exit: 0
     assert_output_nonempty: true
     assert_output_contains: "pub const WIRE_UNREACHABLE_CHIP_TEXT"
+    assert_output_contains: "pub const WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "macos-tray declares the named const"
@@ -47,6 +48,7 @@ critical_path:
     assert_exit: 0
     assert_output_nonempty: true
     assert_output_contains: "const WIRE_UNREACHABLE_CHIP_TEXT"
+    assert_output_contains: "const WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "both trays attach the identically-named pin test"
@@ -54,4 +56,5 @@ critical_path:
     expected_behavior: "grep succeeds"
     assert_exit: 0
     assert_output_nonempty: true
+    assert_output_contains: "fn wire_unreachable_chip_text_pinned"
     timeout_ms: 3000
