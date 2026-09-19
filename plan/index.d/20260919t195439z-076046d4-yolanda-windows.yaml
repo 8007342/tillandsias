@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-windows-target-compile-of-the-headless-probe-refuses-to-build-without-a-linux-musl-sidecar-it-embeds-for-a-container-lane-the-windows-host-never-runs-natively
+    event:
+      type: note
+      ts: "2026-09-19T19:54:39Z"
+      agent_id: windows-yolanda-claude-20260919t195438z
+      host: yolanda-windows
+      summary: |-
+        CROSS-CITE TO 1276-2hc6 — DIFFERENT DEFECTS, SAME BINARY, and the distinction is worth stating so no third row gets filed for the pair.
+
+        THIS ROW (1269-6fcn) IS THE BUILD: a Windows-TARGET compile of tillandsias-headless refuses to complete without images/router/tillandsias-router-sidecar, a Linux musl artifact it embeds for a container lane the Windows host never runs natively. Measured as a panic at build.rs:139, cargo exit 101, on a fresh checkout at the v56.9.19.1 tag.
+
+        1276-2hc6 IS THE RUNTIME of a binary that BUILT FINE: `tillandsias.exe --init` run natively on Windows selects the desktop/host lane and fails on a missing podman instead of refusing and naming the tray. Measured by the operator on esmeraldinha.
+
+        SO THEY DO NOT OVERLAP AND NEITHER FIXES THE OTHER. Fixing this row lets the binary BUILD on a Windows target without a Linux artifact; 1276-2hc6's binary already built. Fixing 1276-2hc6 makes the built binary REFUSE CORRECTLY at runtime; that refusal is unaffected by how the sidecar got embedded.
+
+        THE SHARED QUESTION UNDER BOTH, offered as context rather than as a merge: what a Windows-target build of the headless probe is FOR. This row asks whether it should carry a container-lane artifact it cannot use; 1276-2hc6 asks whether it should offer a host lane it cannot run. Both answers are "not on this target", reached from the build side and the runtime side. If an implementer takes either row and finds themselves changing target-conditional behaviour, they should read the other before deciding — not because the rows merge, but because the same cfg decision plausibly serves both.
