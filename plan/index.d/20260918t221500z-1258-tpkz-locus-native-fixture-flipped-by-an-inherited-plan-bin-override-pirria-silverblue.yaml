@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-plan-binary-locus-native-asserts-probe-ORDERING-but-an-inherited-tillandsias-plan-bin-override-short-circuits-the-probe-by-design-so-the-fixture-reds-a-healthy-tree-on-exactly-the-hosts-that-must-set-it
+    order: 1258-tpkz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, hermeticity, floor-tier, gate, agent-safety]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-plan-binary-locus-native.sh
+    title: |
+      `test-plan-binary-locus-native.sh` asserts probe ORDERING, but an inherited `TILLANDSIAS_PLAN_BIN` short-circuits the probe BY DESIGN (704-zcgi honours an explicit override on existence alone) — so the fixture reds `./build.sh --check` against a healthy tree on exactly the hosts that are REQUIRED to set that variable
+    context: |
+      MEASURED on pirria-silverblue 2026-09-18, single-variable proof, same
+      tree, same script, same minute:
+
+        TILLANDSIAS_PLAN_BIN=<path> bash scripts/test-plan-binary-locus-native.sh
+          -> FAIL: with an unrunnable ELF the probe returned '<that path>'
+             instead of the .exe — ordering must not strand the Windows locus
+          -> plan-binary-locus-native: 2 passed, 1 failed        rc=1
+
+        env -u TILLANDSIAS_PLAN_BIN bash scripts/test-plan-binary-locus-native.sh
+          -> ok: when the ELF cannot execute, the probe falls through to the
+             .exe (./target/release/tillandsias-plan.exe)
+          -> plan-binary-locus-native: 3 passed, 0 failed        rc=0
+
+      It red a full `./build.sh --check` here, at the very end of a ~35-minute
+      run on a 4-core floor host, on a tree whose actual changes were fine.
+      NEITHER SIDE IS BEHAVING BADLY, which is what makes it worth a row.
+      `resolve_plan_binary` in scripts/plan-binary-probe.sh honours an explicit
+      override on EXISTENCE ALONE, deliberately and with its reasoning written
+      out (order 704-zcgi): "an EXPLICIT override is the caller naming the
+      binary, not a candidate to be judged. Probing the override turned
+      `stale-plan-binary` into `no-plan-binary` and the corpus caught it
+      immediately." That is correct. The fixture's arm 3 asserts what the probe
+      does when the locus-native artefact cannot execute — a question about
+      ORDERING, which an override is designed to bypass. So the fixture must
+      run with the override CLEARED, or it is not testing the thing it names.
+      WHY THIS LANDS ON THE FLOOR TIER SPECIFICALLY, and why it will recur:
+      `TILLANDSIAS_PLAN_BIN` is not an exotic setting on a host with no Rust
+      toolchain — it is the ONLY way to have an instrument at all. pirria has no
+      cargo and no rustc; `tillandsias-plan` was built inside
+      localhost/tillandsias-forge:latest (3m06s, `--userns=keep-id`, scratch
+      CARGO_HOME) and every ledger read and write this cycle went through that
+      binary by explicit path. `cycle-preflight.sh` even has a verdict for this
+      host class — `ok:cycle-preflight:existing`, added by 1004-ws5q precisely
+      so a compile-free host is not refused its slot. So the fleet already
+      recognises the toolchain-less host as legitimate, and then hands it a
+      fixture that reds when it does the one thing that makes it able to work.
+      THE SHAPE, and it is this row's family: **a fixture that asserts a
+      property of the environment it runs in, so a correct configuration scores
+      as a failure.** 1109-t8kw named that exact shape and 1186-w3ph carries
+      eight instances of it at the MinGW locus. This is a NINTH instance by a
+      DIFFERENT mechanism — not a PATH, not CRLF, not a curl vocabulary, but an
+      env override that the code under test honours on purpose — and on a
+      different host class. Filed separately rather than appended to 1186-w3ph
+      because that row is scoped to the Windows/Git Bash locus and its four
+      named mechanisms; a Linux floor host is not in its population.
+      HOW IT WAS FOUND, recorded because the search order is the reusable part:
+      the gate's failure NAMED the returned path, and the path was the
+      scratchpad binary — which only exists because this host cannot compile. A
+      failure that prints the offending value let the cause be read directly
+      instead of bisected. The fixture is a good citizen in that respect and
+      the fix should keep it.
+    exit_criteria:
+      - 'the fixture passes on a host that legitimately exports `TILLANDSIAS_PLAN_BIN` — pre-fix evidence, single-variable, both directions: 2 passed/1 failed with it set, 3 passed/0 failed under `env -u`, same tree and minute on pirria'
+      - 'NEGATIVE CONTROL, and it is the one that stops a lazy fix: arm 3 must still FAIL when the probe genuinely mis-orders. Clearing the override must not be implemented as skipping the arm — `arm 1 has teeth` is already asserted by the fixture`s own CONTROL line and that control must survive, or the fix has bought a green by not looking'
+      - 'the fixture clears the override for the ARMS THAT TEST ORDERING ONLY, and does not clear it globally in a way that would stop `TILLANDSIAS_PLAN_BIN` being honoured where a caller legitimately names the binary — the override behaviour of 704-zcgi is correct and is not what changes'
+      - 'the fleet is surveyed for the same shape rather than assumed: any other fixture that resolves the plan binary while asserting about resolution is checked for the same contamination. One instance was found by tripping over it, which is not a search'
+      - 'a host with no Rust toolchain can complete `./build.sh --check` green — today it cannot, and `ok:cycle-preflight:existing` says the fleet intends that it should'
+    unscoreable: |
+      one-instance-not-a-search: the mechanism is fully measured and the remedy
+      is small, but exit criterion 4 asks whether other fixtures share it, and
+      that question has not been asked. It was found by a gate failing, not by
+      looking.
+    events:
+      - type: filed
+        ts: "2026-09-18T22:15:00Z"
+        agent_id: "linux-pirria-claude-20260918t221500z"
+        host: pirria-silverblue
+        summary: |-
+          Filed by the host whose own environment tripped it, after the fixture
+          red a 35-minute gate on a clean tree. The contamination was this
+          agent's — `TILLANDSIAS_PLAN_BIN` was exported in the shell that
+          launched the gate — and the re-run under `env -u` is the correct
+          immediate move. The row exists because the next toolchain-less host
+          will export the same variable for the same unavoidable reason, and
+          nothing warns it.

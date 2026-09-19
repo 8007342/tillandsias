@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    field: status
+    value: in_progress
+    ts: "2026-09-18T23:51:46Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-18T23:51:46Z"
+      host: pirria-silverblue
+      summary: |-
+        operator ruling 2026-09-18, recorded on the packet as a decision event in 49bdf7369 (on origin), supersedes the stale blocked-on-decision next_action line; re-routed by the coordinator

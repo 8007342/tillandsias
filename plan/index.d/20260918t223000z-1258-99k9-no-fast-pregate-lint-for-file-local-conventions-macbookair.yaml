@@ -1,0 +1,126 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: conventions-a-new-file-must-satisfy-are-only-enforced-by-the-full-gate-so-each-one-costs-a-twenty-minute-round-trip-to-discover-one-at-a-time
+    order: 1258-99k9
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, tooling, developer-loop]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+      - scripts/check-container-bases.sh
+    unscoreable: |
+      scoreable-once-the-lint-exists, and not before. The obligation is a NEW
+      entry point, so there is nothing yet to assert against; naming a litmus
+      for a thing that does not exist is what 885-92iu refuses. The name is
+      stated here instead: `./build.sh --lint` (or an equivalent verb), to be
+      written in the same commit as the fixture below.
+
+      WHAT THAT FIXTURE MUST ASSERT, so it is not weakened into a smoke test:
+      given a file that violates ONE known-cheap convention (a mutable image
+      tag, or an @trace naming something absent from openspec/specs/), the lint
+      exits non-zero AND names the file and the convention. A MUTATION ARM must
+      show it exits ZERO on the same file with the violation removed —
+      otherwise the fixture proves only that some checker can fail.
+
+      AND A BUDGET IS PART OF THE OBLIGATION, not a nice-to-have: if the lint
+      is not decisively faster than the gate it replaces for this purpose, it
+      will not be run, and an unrun check is worse than none because it reads
+      as coverage. State the measured wall-clock in the closure.
+    verifiable_closure: ""
+    title: |
+      the cheap, file-local conventions a new file must satisfy — no mutable image tag, no @trace to a spec that does not exist, a scorable obligation on every packet — are enforced only inside the full ~20-minute gate, which surfaces one at a time, so writing one new file cost three gate round-trips across two hosts tonight
+    context: |
+      MEASURED 2026-09-18 across two macOS hosts in one evening. Five gate
+      round-trips on macbookair-macos, of which THREE were spent on defects
+      that a sub-second file-local check could have named before the first one
+      started.
+
+      THE INSTANCES, with the cost each actually charged:
+
+        macbookair-macos, adding ONE new fixture (scripts/test-macos-model-share-writable.sh):
+          run 3  ghost @trace spec:vm-recipe-provisioning — an unarchived
+                 openspec CHANGE, not a spec, so the 584-2qq2 ratchet refused
+                 the gate stamp. ~18 min to learn.
+          run 4  mutable image tag `tillandsias-inference:latest`, refused by
+                 1087-h2z9 (container-base-policy). ~18 min to learn.
+          Both conventions were readable from the sibling fixture
+          scripts/test-macos-signing-seam.sh and from the policy checkers
+          themselves, BEFORE the file was written. Neither needed a compile, a
+          VM, or any of the ~1087s the gate spends.
+
+        macneo-macos, on a plan fragment (reported by macneo, first-hand there,
+        not inspected from here):
+          violation:scorable-obligation-missing:1 (977-448j) on its own
+          fragment — a stale copy predating an amend made elsewhere.
+          ~25 min round trip on a warm checkout.
+
+      THE SHAPE, and it is the same in all three: a neighbouring artefact was
+      used as a model without checking what it actually asserted. That is worth
+      naming precisely because the obvious remedy — "read more carefully" — is
+      the one that does not work. Both agents involved had already resolved to
+      be careful, in this same session, after the first instance.
+
+      WHY THE COST IS STRUCTURAL RATHER THAN A SKILL PROBLEM. The gate is the
+      ONLY enforcement point, it runs the expensive phases first, and it stops
+      at the first red. So N cheap violations in one new file cost N x ~20
+      minutes, discovered strictly serially, and the ordering is arbitrary with
+      respect to how cheap each check is. On a host where the gate is the only
+      trunk gate (Push CI no longer exists), there is no faster surface at all.
+
+      THE BUDGET NUMBER, so the ratio is not asserted: gate phases totalled
+      1087s on macbookair-macos for a green run. The three checks above are
+      greps over a single file.
+    deliverable: |
+      A fast, file-local lint that runs the cheap conventions WITHOUT the
+      compile, the VM, or the ledger fold, reporting ALL violations it finds
+      rather than stopping at the first. At minimum the three that bit tonight:
+      mutable image tags (1087-h2z9), @trace referents that do not resolve in
+      openspec/specs/ (584-2qq2), and scorable obligations on plan fragments
+      (977-448j).
+
+      Reporting ALL of them is the point, not a refinement: a lint that also
+      stops at the first violation reproduces the serial-discovery cost it
+      exists to remove, just faster.
+
+      TWO REAL DECISIONS, neither a detail:
+        1. Whether the lint is a new verb on build.sh or a standalone script.
+           A verb shares build.sh's dispatch and is discoverable from --help;
+           a script is callable from a hook and from an editor on save.
+        2. Whether it becomes a pre-commit hook. That is tempting and it is NOT
+           obviously right: this fleet already carries a pre-commit hook whose
+           own phase budget is a tracked concern (1064-5hv2), and a hook that
+           makes every commit slower to make some pushes faster is a trade
+           nobody has measured. Default to opt-in; do not wire it silently.
+
+      NOT IN SCOPE: moving or reordering the gate's own phases. The gate is the
+      trunk's only enforcement and this row must not weaken it — the lint is a
+      faster PREVIEW of a subset, never a substitute, and anything that could
+      be read as "the lint passed so the gate can be skipped" is a defect in
+      this row's own outcome.
+    next_action: >
+      Reproduce the cost before designing anything, because the ratio is the
+      entire argument: take any tracked file, introduce ONE mutable image tag,
+      run ./build.sh --check, and time how long it takes to be told — expect
+      the better part of twenty minutes, and note that a second violation in
+      the same file would have cost that again. Then read the three checkers
+      named in the deliverable (scripts/check-container-bases.sh, the 584-2qq2
+      ghost-trace ratchet in build.sh, and the 977-448j scorable-obligation
+      check) and establish which are already pure file-local greps — that
+      determines whether this row is mostly WIRING existing checks to a new
+      entry point or writing new ones, and the two are very different sizes.
+      Do NOT start by writing a new checker: the likely finding is that all
+      three already exist and only the entry point is missing.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-18. Two of the three instances
+      are this host's own, with gate logs on disk (check3.log BUILD_RC=1,
+      check4.log BUILD_RC=1) and the 1087s phase total from check5.log. The
+      third is macneo's, reported by macneo and NOT inspected from here; it is
+      carried as a sourced claim, and macneo has offered its primaries in the
+      same form. Filed by the host that caused two of the three, at macneo's
+      request: macneo is floor tier under a standing instruction not to
+      self-select work, and declined to file a row it would have an interest in.

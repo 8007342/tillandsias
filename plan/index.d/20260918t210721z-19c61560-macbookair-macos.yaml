@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    field: status
+    value: completed
+    ts: "2026-09-18T21:07:21Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    event:
+      type: completed
+      ts: "2026-09-18T21:07:21Z"
+      host: macbookair-macos
+      summary: |-
+        status 'completed' with evidence_refs: ef9c850bd: scripts/test-macos-model-share-writable.sh -> ok:macos-model-share-writable:3 on tlatoanis-macbook-air 2026-09-18 (empty cache, live VZ guest, mutation arm red as required). Acceptance of the deliverable sentence, measured separately on the product's own path with the same empty-cache precondition: real entrypoint + build_inference_run_args' exact flags + default context-less mount -> '[inference] engine payload: need core (have none)' -> 'ollama arm64 engine core installed (23M libs) into model cache' -> listening on :11434, cache afterwards holds .tools/{ollama,lib,.engine-set}.

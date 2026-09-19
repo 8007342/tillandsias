@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: set-field-append-s-drops-lines-guard-compares-against-the-local-fold-so-an-append-written-against-a-fold-that-lacks-a-peer-s-newer-append-silently-deletes-the-peer-s-lines-with-no-conflict-and-no-marker
+    order: 1261-bn7v
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, ledger, multi-host, agent-safety, instrument-defect]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-plan/src
+      - scripts/pre-push-checks.sh
+    verifiable_closure: |
+      scripts/test-append-vs-origin-fold.sh prints
+      `ok:append-vs-origin:refused-drop:1:admitted-current:1` and exits 0. Arm 1:
+      packet P's long-form field carries line L1 on origin; a host whose fold
+      does NOT carry L1 runs `set-field P next_action "<L2>" --append` and
+      pushes through the plan lane — the push is REFUSED with a line matching
+      `^refused:append-drops-lines-vs-origin:P:` naming L1, and origin's fold
+      still carries L1. PRE-FIX RESULT: FAILS — today the push is admitted and
+      the fold after it carries L2 only. Arm 2 (negative control): the same
+      append from a host whose fold DOES carry L1 is admitted and the fold
+      carries L1 then L2.
+    title: |
+      set-field --append's drops-lines guard (1151-td46) compares against the LOCAL fold, so an append written against a fold that lacks a peer's newer append passes the guard and, because LWW is per field, silently deletes the peer's lines
+    context: |
+      MEASURED by esmeraldinha 2026-09-18 on 793-zumy: their first next_action
+      --append was written against a fold that did not yet carry yolanda's
+      05:50:37Z append (6ac0f8d2a reached trunk afterwards). LWW is per FIELD,
+      not per line, so the stale-base value would have silently deleted
+      yolanda's blocker and PICKUP RULE — the text written specifically to stop
+      a fourth Windows pickup of that row. Caught only because the coordinator
+      had told them to read yolanda's fragment; they rebuilt the field as
+      yolanda's text verbatim with theirs appended. The 1151-td46 guard is
+      correct for what it sees and blind by construction: it compares against
+      the fold the writing host holds, and a peer's append that has not reached
+      that host is invisible to it. `--append` is append-safe only against the
+      base you actually hold; anything that fetches after an --append can lose
+      another host's write with no conflict and no marker.
+    next_action: >
+      Reproduce with two clones of a scratch remote before touching code: clone
+      A appends L1 and pushes; clone B (not fetched) appends L2 and pushes; show
+      the fold. Then decide WHERE the origin comparison lives — the plan lane in
+      scripts/pre-push-checks.sh already fetches, so it can fold origin's copy
+      of each packet a set-field fragment touches and refuse when the outgoing
+      long-form value drops a line origin's fold carries; set-field itself
+      cannot see origin without a fetch and should not fetch. Write the refusal
+      to name the dropped line and the fragment that carries it on origin, so
+      the remedy is "fetch, re-read, rebuild" and not a guess.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-18 from
+      esmeraldinha's report the same day; the near-loss and the recovery are
+      theirs, on 793-zumy's fragments.

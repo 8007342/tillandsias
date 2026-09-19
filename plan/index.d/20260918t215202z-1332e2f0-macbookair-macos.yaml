@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    event:
+      type: progress
+      ts: "2026-09-18T21:52:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        TWO OF THE FIVE ARE NOW CONFIRMED AND FIXED; the other three are still EXPOSED-NOT-PROVEN and one of them looks genuinely benign. Filing this so the next taker inherits the split rather than the grep. CONFIRMED AND FIXED (each caught by a real gate red on this host, not by inspection): (1) scripts/bench-inference-floor.sh — export LC_ALL=C; test-bench-prompt-uniqueness.sh 5-passed-1-failed -> ok:bench-prompt-uniqueness:6. (2) scripts/hooks/pre-commit-openspec.sh — the phase table printed '0,02x' and test-hook-phase-instrumentation.sh red with 'the table has no usable numbers'; pinned LC_ALL=C on the two awk formatters only, NOT on the whole hook, because that script also sorts and matches user-facing text and LC_ALL=C changes collation as well as numerics. Now 6 passed, 0 failed. STILL CANDIDATES, and the reason matters: scripts/freshness-inventory.sh (one %.1f percentage), scripts/select-work-batch.sh (%.3f/%.6f/%.1f scores), scripts/refusal-calibration/measure-bands.sh (one %.4f margin). NOT FIXED DELIBERATELY — this packet's own next_action says the grep establishes exposure, not defect, and blanket-pinning all of them would be the thing it warns against. ONE OF THEM IS PROBABLY FINE, AND THE REASON IS WORTH RECORDING BEFORE SOMEONE 'FIXES' IT: select-work-batch.sh pipes its awk scores straight into  and , and sort honours the SAME LC_NUMERIC that awk just used — so awk writes 3,500 and sort reads 3,500 as 3.5, and the ranking is self-consistent. Pinning LC_ALL=C on the awk ALONE would BREAK it: awk would then emit 3.500 while sort still parsed under the comma locale and read it as 3. If that script is touched, awk and sort must be pinned together or neither. That is the opposite of the remedy the other two needed, which is exactly why per-script confirmation is the instruction here. The remaining two are untested against a consumer; I did not run them.

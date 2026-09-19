@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    field: context
+    value: |-
+      MEASURED ON macuahuitl AT 8dd482881 across all 427 litmus files, and the
+      first cut of this measurement WAS WRONG in a way worth recording: an
+      initial classifier reported 89.6% of steps as unenforced prose. It
+      required values to contain no spaces, so it missed `ok: consumers-wired`
+      — a perfectly enforceable literal. Corrected figures, of 2,541 steps
+      carrying a `command:`:
+        1,622  verdict-prefixed literal (ok:/PASS:/refused:/…)  ENFORCED
+          580  other short literal (<=60 chars)                 ENFORCED
+           85  success_pattern regex                            ENFORCED
+          180  exit code only, no pattern declared              strict since 267
+           64  expected_behavior CONTAINING THE WORD "succeeds" NOT ENFORCED
+           10  long English sentence (>60 chars)                NOT ENFORCED
+      So the prose-vs-enforceability gap is ~74 steps, NOT 2,276. The corpus
+      self-selected toward verdict tokens because the fallback is strict
+      (`grep -Fqi`, then return 1). Do not re-derive the larger number; it is
+      wrong and this row exists partly so nobody has to rediscover that.
+      THE MECHANISM IS THE FINDING, not the count. `behavior_matches_output` in
+      scripts/run-litmus-test.sh is a NATURAL-LANGUAGE INTERPRETER WRITTEN IN
+      BASH `case` ARMS. `*"multiple"*` and `*"several"*` mean "grep the first
+      integer out of the output and require >= 2". `*"succeeds"*` means "ignore
+      the output entirely, honour the exit code" — so 64 steps have a sentence
+      whose content is decorative. `*"cargo"*` means "grep the output for
+      cargo". Rewording a sentence changes the adjudication rule, with no diff
+      anywhere saying the test now checks something else.
+      IT HAS ALREADY DRAWN BLOOD: order 868-p8xi is the scar. An expectation
+      written as an `(a|b)` alternation is searched for VERBATIM, so it can
+      never match and the step fails on every one of its own legitimate
+      outcomes — litmus:sidecar-arch-derivation printed exactly one of its three
+      listed alternatives and still failed.
+      FOUR OF THE TEN ENGLISH SENTENCES ASSERT TIMING ("~10 minutes", "slower
+      than cached path"). Nothing can check those, and they should be deleted
+      rather than translated — a timing claim belongs in a budget, not a
+      predicate.
+      MIGRATE THE 74 FIRST. They are the steps with no teeth today, so they are
+      where translation BUYS something; the 2,287 enforceable ones are working
+      and a sweep over them is churn with a chance of regression. This is the
+      migrate-on-touch rule applied to the corpus.
+      ORDERING NOTE: the structured form should be expressible as a 1252-hsrz
+      predicate eventually, but this row does NOT depend on it. The keyword
+      interpreter can be replaced by declarative assert fields in YAML with no
+      Lua at all, and holding this behind the runtime would leave 64 toothless
+      steps in the gate for another two packets' duration.
+
+
+      [2026-09-18T23:52:34Z yoga-silverblue] MEASUREMENT REFINEMENT 2026-09-19, yoga — THE 10 LONG-SENTENCE BUCKET IS WRONG FOR AT LEAST HALF ITS MEMBERS, and the error has the same shape as the one this row already records about its FIRST classifier. Reproduced the row's counts on today's tree before touching anything and got succeeds=64, success_pattern=85, exit-only=180, long-sentence=10, unenforced total 74 — converging with the row exactly, so the classifier agrees. But CLASSIFYING BY LENGTH CONFLATES LONG LITERALS WITH PROSE. Of the 10, at least 5 are enforceable today. Three contain their expected_behavior verbatim in their own command, so the grep -Fqi fallback matches what the command echoes — for example response_shaped_variants_are_response_only_on_both_transports and rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key, both of which are grep -F arguments in their own step. Two more end in the four characters that make them look like prose, a space then three dots then ok, and are in fact CARGO TEST OUTPUT FORMAT — the command is cargo test -p tillandsias-headless <name> and cargo prints test <name> then space dots ok, so the expectation matches the runner's output exactly. THE SECOND PAIR ALSO DEFEATED MY OWN DETECTOR, which is worth recording because it bounds the method rather than the corpus. I tested enforceability by asking whether the expected_behavior string appears verbatim in the step's own command; that finds literals ECHOED BY THE COMMAND and misses literals PRODUCED BY A TOOL'S KNOWN OUTPUT FORMAT, so it reported those two as prose. A syntactic test over commands cannot see cargo's contract. THE DISCRIMINATOR IS NOT LENGTH AND IT IS NOT MY TEST EITHER — it is whether the output can be relied on to contain the value, which needs a judgement per step. WHAT THIS CHANGES FOR THE WORK: the 64 succeeds steps remain the clean mechanical set, because there the sentence is decorative BY CONSTRUCTION — the interpreter honours the exit code and ignores the string whatever it says, which is a property of the interpreter and not of the text. The 10 are NOT a batch and should not be migrated as one; roughly half already have teeth and translating them would be churn with a regression chance, which is this row's own migrate-on-touch argument turned on itself. The four wall-clock claims remain deletions as the row states. Filed by yoga while implementing, before migrating anything, so the next implementer does not migrate five working steps.
+    ts: "2026-09-18T23:52:34Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: note
+      ts: "2026-09-18T23:52:34Z"
+      host: yoga-silverblue
+      summary: |-
+        the row's long-sentence bucket conflates long literals with prose; measured before migrating so nobody migrates five steps that already have teeth
