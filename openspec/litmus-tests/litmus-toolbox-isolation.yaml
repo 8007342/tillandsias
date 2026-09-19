@@ -55,6 +55,7 @@ critical_path:
     command: "if command -v cargo &>/dev/null; then HOST_CARGO=$(which cargo); echo \"Host cargo: $HOST_CARGO\"; else echo 'No host cargo (expected)'; fi"
     timeout_ms: 3000
     expected_behavior: "either no host cargo or path differs from toolbox cargo"
+    assert_output_matches: "^(Host cargo: |No host cargo )"
 
 gating_points:
   - signal: "toolbox_used_cached_path"

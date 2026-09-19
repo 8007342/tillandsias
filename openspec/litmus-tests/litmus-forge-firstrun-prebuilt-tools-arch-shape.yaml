@@ -37,6 +37,7 @@ critical_path:
     command: "grep -qE 'cargo-chef-[0-9.]+-x86_64' images/default/lib-common.sh && { echo 'FAIL: hardcoded x86_64 cargo asset'; exit 1; } || echo 'ok: no hardcoded x86_64 cargo asset'"
     timeout_ms: 3000
     expected_behavior: "ok: no hardcoded x86_64 cargo asset"
+    assert_output_contains: "ok: no hardcoded x86_64 cargo asset"
 
   - step: "install_prebuilt is timeout-guarded (a stalled fetch cannot hang launch)"
     command: "grep -qF 'max-time' images/default/lib-common.sh && echo 'ok: timeout-guarded'"
@@ -52,6 +53,7 @@ critical_path:
     command: "grep -qF 'install_archive cargo-chef' images/default/Containerfile.base && { echo 'FAIL: cargo chain still at build'; exit 1; } || echo 'ok: cargo chain removed from creation'"
     timeout_ms: 3000
     expected_behavior: "ok: cargo chain removed from creation"
+    assert_output_contains: "ok: cargo chain removed from creation"
 
   - step: "slice 2: actionlint/vale/wasmtime also arch-aware first-run, and gone from creation"
     # @trace order 180 slice 2: actionlint/vale/wasmtime moved to first-run
