@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-smoke-forge-lane-has-no-detection-for-its-own-central-failure-mode-opencode-idles-after-an-agent-error-never-writes-opencode-exit-and-every-section-4a-instrument-reports-health
+    order: 1275-ngrc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, opencode, testing, release, fail-loud, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      §4 of the curl-install smoke has NO detection for its own central failure mode — when the in-forge agent errors, opencode idles instead of exiting, `opencode_exit` is never written, and every §4a instrument reports health while the lane runs forever
+    context: |
+      MEASURED on pirria 2026-09-19 during the v56.9.19.1 Linux smoke. The lane
+      ran 2h21m32s and produced no verdict. The agent had been dead for 2h19m of
+      that.
+      THE AGENT'S ACTUAL END, from opencode's own log — a path this runbook
+      never names, `/home/forge/.local/share/opencode/log/opencode.log`, captured
+      to `target/smoke-e2e/04-opencode-agent.log`:
+
+        17:19:36.019Z ERROR stream error ... "AI_APICallError: Rate limit exceeded."
+        17:19:38.767Z ERROR stream error ... "AI_RetryError: Failed after 3 attempts."
+
+      and then nothing but `cleanup prune=7.days` at 17:20, 18:20 and 19:20.
+      Three hourly timer ticks in two hours.
+      **THE FINDING IS NOT THE RATE LIMIT.** That was the release's pre-declared
+      known red and the coordinator's go said to record it and not let it fail
+      the install/reset/init verdicts. The finding is that the lane cannot tell
+      it happened.
+      EVERY INSTRUMENT THE RUNBOOK PRESCRIBES REPORTED HEALTH, and §4a exists
+      precisely to adjudicate this question:
+        - all six containers Up 2 hours; inference, git and vault healthy
+        - `journalctl | grep -iE 'oom-kill|Killed process'` — empty
+        - supervisor process alive
+      §4a reads that combination as "the supervisor was killed by the harness,
+      not the product — the run is unfinished, not red", which is correct
+      guidance for the state it was written for and exactly wrong here.
+      A CPU-DELTA PROBE WAS ADDED MID-RUN AND ALSO SAID ALIVE. The coordinator
+      proposed sampling `ps -o etime,time` sixty seconds apart, on the rule that
+      a zero CPU delta with a static log is dead rather than slow. Measured:
+      `00:03:15 -> 00:03:16` — one second of CPU per minute, non-zero, so ALIVE
+      by that rule, and the rule is right. An idle event loop plus an hourly
+      cleanup timer burns about that. **A frozen process is detectable; a live
+      process idling after its agent died is not, by any check this runbook
+      currently prescribes.** That is a THIRD state beside slow and dead, and it
+      is the one §4 actually produces.
+      WHY A BUDGET WAS NEVER THE ANSWER: this host's "~70 minutes historically"
+      came from runs where the agent WORKED. There is no budget for this state
+      because nothing ends it. Waiting longer was never going to resolve it, and
+      the only reason this run stopped at 2h21m is that a coordinator asked a
+      question.
+    exit_criteria:
+      - 'within N minutes of the in-forge agent`s last ERROR line, §4 TERMINATES with a recorded §4 verdict that NAMES that error — pre-fix result: the agent errored at 17:19:38Z and §4 was still running at 19:41Z, `opencode_exit` unwritten, 2h19m measured'
+      - 'the agent`s terminal error appears in HOST-SIDE evidence. Today the only record is inside the container at a path the runbook never mentions, so the smoke cannot diagnose its own §4 unless the operator already knows where to look'
+      - 'NEGATIVE CONTROL, and it is the criterion that rejects the obvious fix: a lane whose agent is genuinely still working must NOT be terminated. THE FIX IS NOT A LONGER TIMEOUT and it is not a shorter one — a wall-clock bound tuned to the ~70-minute working figure would kill healthy long lanes AND still wait 70 minutes to notice a death at minute 2. The signal must come from the agent`s state, not the clock'
+      - 'the §4a section distinguishes THREE states rather than two: supervisor killed (containers up, no oom, supervisor gone), genuinely working, and agent-dead-process-idling. Today it names the first two and the third is indistinguishable from the second'
+      - 'a lane that fails this way costs MINUTES, not hours — the coordinator`s framing: a lane that costs five minutes to fail is worth running, one that costs two hours is not'
+    unscoreable: |
+      mechanism-not-chosen: whether the lane tails opencode's log for a terminal
+      error, whether the forge entrypoint exits non-zero when its agent does, or
+      whether opencode is asked to exit on a terminal error upstream, is a
+      design choice with different blast radii. The measurement is complete and
+      the failing state is reproducible by rate-limiting the credential.
+    events:
+      - type: filed
+        ts: "2026-09-19T19:45:00Z"
+        agent_id: "linux-pirria-claude-20260919t170541z"
+        host: pirria-silverblue
+        summary: |-
+          Filed by the host that spent two hours nineteen minutes waiting on a
+          dead agent while every instrument it was told to trust said to keep
+          waiting. The coordinator's CPU-delta test was well-formed and returned
+          the right answer to the question it asked; the discriminator turned out
+          to be a log file neither of us knew the runbook omitted. Recorded that
+          way because the next reader's instinct will be to add a timeout, and
+          the negative control above is there to stop them.

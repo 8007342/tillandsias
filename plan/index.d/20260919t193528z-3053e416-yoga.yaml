@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    event:
+      type: note
+      ts: "2026-09-19T19:35:28Z"
+      agent_id: linux-yoga-opus5-20260919t193528z
+      host: yoga
+      summary: |
+        FIFTH INSTANCE, AND THE FIRST WHERE A WHOLE NIGHT OF LEDGER READS CAME FROM THE STALE BINARY.
+
+        On yoga, ./target/release/tillandsias-plan reported `build-id 0.1.0+94bd474a1bf35498` against `source-revision 0.1.0+f2d98ff3f16c329d` for the entire 2026-09-18/19 session. I MEASURED that mismatch early, reported it to the coordinator as a finding, and then kept using the same binary for every answer, status, next-order, plan-events and set-field I ran — because nothing refused it. Resolution by existence is exactly the shape this row names: the binary was there, it worked, and being two days behind its sources was invisible at every call site.
+
+        WHAT FINALLY REFUSED IT was the plan-only push lane, not any of the ~40 reads:
+          plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+          via: validator-surface hash ... newer: Cargo.lock
+        The lane refuses because it validates the pushed bytes with the resolved binary, so a stale one can accept a fragment shape the current rules refuse (1129-4su6). A read path has no equivalent reason to check, which is why forty of them did not.
+
+        REMEDY RUN VERBATIM: `cargo build --release -p tillandsias-plan` in the builder toolbox, then scripts/check-plan-binary-current.sh -> stamped + ok. build-id and source-revision now AGREE at 0.1.0+7a01f6641199170c, which is this row's remedy measured rather than asserted.
+
+        WHAT THE RE-VALIDATION DOES AND DOES NOT ESTABLISH: under the REBUILT, stricter binary the ledger reports `ok: 1081 packets, ids unique, live references sound`, so the fragments filed during the session are accepted by current rules. That covers what was WRITTEN. It does not retroactively vouch for what was READ — every status, answer and plan-events output quoted to other hosts during the session came from the stale binary, and a stale reader's agreement with a fresh one is an assumption, not a measurement. Nothing has surfaced that looks wrong; that is not the same as having checked each one.
+
+        Two hosts hit the same lane refusal in one evening — lenovinha from a detached worktree earlier, yoga here — and neither routed around it.
