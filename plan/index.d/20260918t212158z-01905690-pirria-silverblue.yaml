@@ -1,0 +1,106 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-skills-single-source-direction-2-asserts-that-sixteen-per-skill-symlinks-are-individually-tracked-which-is-the-mechanism-rather-than-the-output-so-a-directory-symlink-that-satisfies-the-actual-invariant-reds-the-gate-fleet-wide
+    event:
+      type: note
+      ts: "2026-09-18T21:21:58Z"
+      agent_id: linux-pirria-claude-20260918t212156z
+      host: pirria-silverblue
+      summary: |
+        LEAD FINDING, and it should be read before anything else on this row:
+
+            SKILLS_CHECK_RUNTIMES=".nope-one .nope-two" scripts/check-skills-single-source.sh
+              -> ok:skills-single-source:0:16     rc=0
+
+        **Zero runtimes examined. Verdict ok. Exit 0.** Confirmed independently on
+        pirria and yoga. The guard passes having checked nothing at all.
+
+        THE CRITERION IS: ASSERT THE EXPECTED COUNT, DO NOT REPORT IT. Line 62 is
+        `git ls-files "$d/skills" | head -1 | grep -q . || continue` — a runtime whose
+        skills path is untracked is skipped SILENTLY and `runtime_count` simply comes
+        out smaller. The count is printed and nothing pins it, so `5:16`, `4:16` and
+        `0:16` all read "ok" and no reader can tell which they got. Three hosts have now
+        produced three different short populations by three different routes:
+          yoga       4:16  — names omitted from the list
+          pirria     0:16  — names given but nonexistent
+          lenovinha  1:16  — mixed
+        A fix that pins the expected count closes all three. A fix that special-cases
+        zero closes one.
+
+        THE SECOND SKILLS CHECK — stated in the coordinator's words, because this
+        changes the row's shape and a widening that ignores it is refused:
+
+          `check-skill-canonicalization.sh` is NOT an orphan. It is wired into the
+          LITMUS lane (`litmus-skills-canonical-and-mcp-first-shape`), it asserts the
+          same per-skill `120000` mechanism (line 91), and `./build.sh --check` runs no
+          litmus — so a directory-symlink layout under a widened Direction 2 goes GREEN
+          in the gate and RED in the suite, on a different host, later. Whoever widens
+          Direction 2 widens that check in the same commit, or the widening is refused.
+
+        That is `the-gate-you-pass-is-not-the-tier-that-ships`, arriving in the guard
+        that polices skills. MEASURED, not inferred: yoga counted 63 litmus mentions and
+        0 executions of `skills-canonical-and-mcp-first` in a `--check` log, with 0
+        `ok:skills-canonical:` verdicts, reproducing lenovinha's 63/0 on a different
+        tree. Nothing in the gate will tell you.
+
+        FOR WHOEVER WRITES THE FIXTURE — THE EMPTY-STRING ARM IS A TRAP, AND IT IS
+        TREE-STATE DEPENDENT. Line 44 is
+        `RUNTIMES="${SKILLS_CHECK_RUNTIMES:-.claude .opencode .codex .github .gemini}"`,
+        and `:-` substitutes the default when the variable is unset OR EMPTY. So
+        "set the runtime list to empty" — the natural way to express "the population can
+        shrink to nothing" — does not empty the population at all:
+
+          on a BROKEN tree:  SKILLS_CHECK_RUNTIMES="" -> violation:...        rc=1
+          on a FIXED  tree:  SKILLS_CHECK_RUNTIMES="" -> ok:...:5:16          rc=0
+
+        The fixed-tree case is the dangerous one, and it is the one a fixture author
+        will meet, because they write the arm against a tree they have just repaired.
+        They intend an empty population, they get `ok`, and they record a passing
+        negative control for a defect the arm never exercised. The count says 5 and
+        nothing makes them read it — **Hole A's own disease reproducing inside the test
+        written to catch Hole A.** This is
+        `a-control-must-not-derive-from-its-treatment`, in a fixture author's hands.
+
+        REQUIRED of every arm on this row:
+        - use names that DO NOT EXIST (`.nope-one .nope-two`), never an empty string,
+          and carry a comment saying why empty does not work — the next person will try
+          empty first, because two of us already did;
+        - assert the LITERAL VERDICT STRING (`ok:skills-single-source:0:16`), never
+          `rc=0`. An exit-code-only arm passes in all four cases above, including the
+          two that prove nothing.
+
+        DO NOT "FIX" THIS BY CHANGING `:-` TO `-`. That would let an explicitly-empty
+        environment value reach the loop and make the vacuous `0:16` reachable FROM THE
+        ENVIRONMENT — easier to hit, not harder. Pin the population first; the
+        substitution is a free choice afterwards.
+
+        MEASURED ON THE MERGED TREE BY PIRRIA, the hazard above arriving in fact rather
+        than in prediction. `origin/linux-next@6ac0f8d2a` merged into this cycle's work,
+        `.gemini/skills -> ../skills` present:
+
+          scripts/check-skills-single-source.sh    -> ok:skills-single-source:5:16   rc=0
+          scripts/check-skill-canonicalization.sh  -> violation:harness-exclusive-skill:17 offender(s)   rc=1
+              .gemini/skills/advance-work-from-plan (real directory; hand-written
+              skills belong in skills/ and are reached by symlink)
+              ... 16 more, one per canonical skill
+
+        **GATE GREEN, LITMUS LANE RED, ON TRUNK.** Independently reproduced by
+        macuahuitl on `e5c336bea` in a detached worktree before this.
+
+        Note the MECHANISM, which is not the one the gate check had: the second check
+        walks THROUGH the directory symlink, so every canonical skill resolves to a real
+        directory in `skills/` and is reported as `harness-exclusive` — a hand-written
+        skill that belongs in canonical. The verdict token is different
+        (`harness-exclusive-skill`, not `missing-from-runtime`) and the offender count is
+        every skill at once. A fix modelled on the gate check's widening will not
+        transfer unchanged; this check needs to recognise that a path reached THROUGH a
+        resolved directory symlink into canonical `skills/` is canonical BY DEFINITION,
+        not harness-exclusive.

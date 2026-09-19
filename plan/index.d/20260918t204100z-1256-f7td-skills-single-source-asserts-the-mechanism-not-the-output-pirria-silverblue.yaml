@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-skills-single-source-direction-2-asserts-that-sixteen-per-skill-symlinks-are-individually-tracked-which-is-the-mechanism-rather-than-the-output-so-a-directory-symlink-that-satisfies-the-actual-invariant-reds-the-gate-fleet-wide
+    order: 1256-f7td
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, skills, single-source, symlinks, agent-safety]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-skills-single-source.sh
+    title: |
+      `check-skills-single-source.sh` Direction 2 requires `git ls-files -s .gemini/skills/<skill>` to report mode 120000 for all sixteen canonical skills — it asserts the MECHANISM (per-skill symlinks) rather than the OUTPUT (each canonical skill reachable from each runtime, no second source), so a directory symlink that satisfies the real invariant reds `./build.sh --check` for every host
+    context: |
+      FOUND BY yoga-silverblue 2026-09-18, who diagnosed it correctly and
+      refused the cheap exit; confirmed on pirria in the same hour.
+      WHAT HAPPENED: 1238-u84w collapsed `.gemini/skills` from sixteen
+      per-skill symlinks to ONE directory symlink (`.gemini/skills -> ../skills`),
+      because `-r` follows a symlink NAMED ON THE COMMAND LINE but never one it
+      meets during the walk. That measurement stands and is not in question
+      here. The consequence was:
+        violation:missing-from-runtime:.gemini/skills/advance-work-from-plan
+        gate rc=1
+      on linux-next, fleet-wide, for every host that has hooks installed.
+      THE DIAGNOSIS, and it is yoga's: Direction 2 walks the canonical skills
+      and demands `git ls-files -s .gemini/skills/<skill>` report mode 120000
+      for each one. With a directory symlink, NO per-skill path is tracked —
+      only `.gemini/skills` itself is — so the very first skill trips it. The
+      skill is still reachable. There is still exactly one source. The invariant
+      the check exists to protect is INTACT; what is violated is the particular
+      shape the check was written against.
+      A directory symlink resolving to the canonical `skills/` satisfies the
+      output AND removes a second source AND fixes the recursive-search defect.
+      Teaching Direction 2 to accept it satisfies everything at once.
+      THE CHEAP EXIT, NAMED SO IT IS NOT TAKEN QUIETLY. The refusal offers
+      "declare it in skills/HARNESS-SCOPED.txt or link it", and `skills/` is
+      freeze-exempt — so declaring all sixteen skills harness-scoped would
+      unblock the whole fleet in one commit that the freeze permits. yoga
+      deliberately did not, and the reason should outlive the incident: they
+      are not harness-scoped, and it would silence the check permanently to
+      route around a problem that lasts until a back-merge. Under push
+      pressure, with trunk red and every host blocked, that is the option that
+      will look reasonable. It is not.
+      THE INTERLOCK THAT MAKES THIS AWKWARD: the real fix is in `scripts/`,
+      which the live release freeze holds against linux-next, so it may have to
+      travel on the coordinator's fix-forward branch. Pending that, pirria
+      REVERTED `.gemini/skills` to the sixteen per-skill symlinks on trunk
+      (`ok:skills-single-source:5:16` restored) to unblock the fleet, and
+      1238-u84w now carries that as an additional blocker. The revert is not a
+      retraction of the measurement — the tooling cheatsheet keeps the full
+      evidence — it is the smallest change that makes trunk pushable again.
+      WHY p1 RATHER THAN p2: it is not a latent defect. It red the trunk gate
+      for every host with hooks, and the one host it did NOT block was the one
+      that introduced it, because that host had no hooks at all (1255-s4im).
+      Two guard gaps compounding is what let a fleet-blocking change reach
+      origin: the author could not be refused, and the check that would have
+      refused it was asserting the wrong property.
+    exit_criteria:
+      - 'Direction 2 accepts `.gemini/skills -> ../skills` (a directory symlink resolving to the canonical tree) — pre-fix evidence: `violation:missing-from-runtime:.gemini/skills/advance-work-from-plan`, gate rc=1, reproduced on yoga and pirria'
+      - 'NEGATIVE CONTROL, and this is the criterion that keeps the check worth having: a genuine SECOND SOURCE still violates. Place a real file at `.gemini/skills/<skill>/SKILL.md` that is not a link to the canonical tree and the check must refuse — a fix that merely stops walking per-skill paths would pass criterion 1 and destroy the invariant'
+      - 'the per-skill-symlink shape STILL passes, since four runtimes legitimately use it today (`ok:skills-single-source:5:16` on the reverted tree) — this is a widening, not a replacement'
+      - 'the refusal text stops offering HARNESS-SCOPED as a remedy for a link-shape mismatch; a skill that IS reachable is not harness-scoped, and offering that exit is how the check gets silenced under pressure'
+      - 'a runtime whose skills tree is genuinely MISSING a canonical skill still violates — the point of Direction 2 — verified by removing one entry from a per-skill tree'
+    unscoreable: |
+      blocked-by-freeze-not-by-doubt: the remedy is understood and the owned
+      file is `scripts/check-skills-single-source.sh`, which the live freeze
+      holds against linux-next. The diagnosis needs no further measurement; it
+      needs a branch it is allowed to land on.
+    events:
+      - type: filed
+        ts: "2026-09-18T20:41:00Z"
+        agent_id: "linux-pirria-claude-20260918t204100z"
+        host: pirria-silverblue
+        summary: |-
+          Filed by the host that CAUSED the breakage, from the diagnosis of the
+          host that caught it. yoga verified both refusals against origin rather
+          than reporting a symptom, named the cheap exit they declined to take,
+          and said explicitly they would not route around the coordinator's
+          freeze. Recording that here because the useful artifact is the
+          judgement, not the bug.

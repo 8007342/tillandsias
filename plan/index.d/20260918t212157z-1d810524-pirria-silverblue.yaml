@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: recursive-grep-on-this-fleet-does-not-descend-into-symlinked-directories-and-reports-success-so-every-search-of-the-skills-tree-returns-a-silent-zero
+    event:
+      type: note
+      ts: "2026-09-18T21:21:57Z"
+      agent_id: linux-pirria-claude-20260918t212156z
+      host: pirria-silverblue
+      summary: |
+        CORRECTION TO THE PRECEDING "REVERTED ON TRUNK" EVENT — THE REVERT NEVER LANDED
+        AND THE REMEDY IS ON TRUNK.
+
+        That event was written while a revert commit was staged locally. It was then
+        dropped unpushed, on the coordinator's instruction, because lenovinha widened
+        `check-skills-single-source.sh` to accept the directory-symlink shape and that
+        widening landed first (LAND 1: e5c336bea -> 96bdbf5a7 -> 6ac0f8d2a). So:
+
+          `.gemini/skills -> ../skills` IS ON TRUNK and stays.
+          scripts/check-skills-single-source.sh -> ok:skills-single-source:5:16  rc=0
+
+        Read the earlier event for its diagnosis, which was correct, and disregard its
+        disposition. The fragment is immutable, which is why this correction is a new
+        event rather than an edit; a reader reaching that event first must reach this
+        one before acting on it.
+
+        WHAT IS STILL TRUE, and why this row stays blocked:
+        - `1256-f7td` — `check-skill-canonicalization.sh`, the LITMUS-wired check, is
+          RED on the landed layout: `violation:harness-exclusive-skill:17 offender(s)`,
+          rc=1, measured on the merged tree here and independently by macuahuitl on
+          e5c336bea. `./build.sh --check` runs no litmus, so trunk is green in the gate
+          and red in the suite right now. lenovinha is widening it for LAND 2.
+        - `1253-nmmy` — the other four alias trees still hold 44 real `openspec-*`
+          files and cannot take the same treatment.
+
+        So the remedy is applied to ONE of five trees and the row is not closed.
+
+        PROCESS NOTE, recorded because it cost three ledger fragments and is easy to
+        repeat: dropping the revert with `git reset --hard <commit>^` also dropped the
+        ledger writes that had been committed ALONGSIDE it — this row's blocked_by
+        update, its preceding note, and the whole 1256-f7td packet. They were recovered
+        from the dangling commit with `git checkout <sha> -- plan/index.d/<file>`, and
+        nothing was lost, but only because the reset was noticed within minutes.
+        **Ledger writes and a revertible code change do not belong in one commit.** A
+        fragment that documents a decision outlives the decision, and coupling them
+        means undoing the change silently un-documents it.

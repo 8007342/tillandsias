@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-script-treats-auth-failed-as-terminal-so-a-transient-credential-blip-costs-a-whole-cycle-where-one-retry-after-a-pause-would-have-landed
+    event:
+      type: evidence
+      ts: "2026-09-19T05:49:30Z"
+      agent_id: linux-lenovinha-claude-20260918t212456z
+      host: lenovinha-silverblue
+      summary: |-
+        THE ONE-RETRY BOUND IS TOO TIGHT, measured on a HEALTHY credential.
+
+        This row closed by making auth-failed non-terminal: one retry after a pause,
+        because "a transient credential blip costs a whole cycle where one retry after a
+        pause would have landed". That fix is correct and tonight it was not enough.
+
+        MEASURED, lenovinha, 2026-09-19, landing ae4749426:
+          land: attempt 1 — push
+          land: auth-failed once, retrying after 30s (1164-cftu)
+          refused:land:auth-failed — git cannot authenticate to origin.
+        The gate had PASSED; this was the push step alone. Immediately after the refusal,
+        on the same host with nothing changed:
+          scripts/check-credential-channel.sh -> ok:gh-keyring-push-verified
+          git ls-remote origin refs/heads/linux-next -> OK
+        and pushing the same commit directly against the fresh stamp succeeded FIRST TRY.
+
+        So the credential was healthy before the land, healthy after it, and the blip
+        outlasted one retry at thirty seconds. The row's premise holds — a retry is the
+        right shape — but the specific bound does not cover the transient this host saw.
+        The cost is the one this row exists to prevent: a full gate discarded, and on
+        this occasion a fleet re-gate blocked behind it.
+
+        WHY IT IS WORTH A LINE RATHER THAN A REOPEN: the observed event is a single
+        occurrence and nothing here establishes its duration or cause. What it does
+        establish is that `healthy before + healthy after + failed twice` is reachable,
+        which the current bound implicitly treats as not worth covering. A second data
+        point should decide whether the answer is more retries, a longer pause, or
+        backoff; one occurrence does not.
+
+        CONTEXT WORTH KNOWING FOR ANYONE READING THIS AS A CREDENTIAL FAULT: it is not
+        one. The coordinator was, on the same night, genuinely blocked by a locked
+        gnome-keyring returning 401 on every push. A reader who sees `auth-failed` on
+        this fleet tonight will reasonably assume that class. This instance is the other
+        kind, and the discriminator is cheap: run scripts/check-credential-channel.sh
+        immediately after the refusal. Healthy means transient; blocked:* means the real
+        thing.

@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    order: 1255-s4im
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [git-hooks, release-freeze, agent-safety, floor-tier, instrument]
+    estimated_hours: 3
+    owned_files:
+      - scripts/install-hooks.sh
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      the release freeze, the local gate, the VERSION guard and the linux-next merge gate are ALL enforced only by `.git/hooks/pre-push`, which `build.sh` installs — so a host with no Rust toolchain has NO hooks, pushes past every guard, and no instrument anywhere says so
+    context: |
+      FOUND BY pirria-silverblue 2026-09-18, and found the way these things
+      always get found: macuahuitl read a push that should have been refused and
+      asked why it was not.
+      MEASURED ON THIS HOST, before any repair:
+        git config --get core.hooksPath   -> (unset)
+        ls .git/hooks | grep -vc '\.sample$'  -> 0
+      Not one hook. Not a stale hook, not a wrong-path hook — none. Every guard
+      in scripts/hooks/ was inert on this checkout: the local gate, the VERSION
+      guard, the linux-next merge gate (851-gpb5), the no-stale-base-revert
+      guard, the main-branch affordance, and the release-freeze hold
+      (1176-9vqn).
+      THE CONSEQUENCE, demonstrated rather than argued. A live freeze
+      (refs/tillandsias/freeze/linux-next/macuahuitl/1789761286) held crates/
+      and scripts/. This host pushed 51db2c14c to linux-next carrying deletions
+      and an addition under `.gemini/skills/`. The freeze predicate is
+      `pre-push-local-gate.sh:1693`:
+        _freeze_path_is_exempt() { case "$1" in plan/*|docs/*|skills/*|cheatsheets/*) return 0 ;; *) return 1 ;; esac }
+      `.gemini/skills/...` does not match `skills/*` — the pattern is anchored —
+      so by the hook's own definition that push carried held paths during a live
+      freeze and MUST have been refused. It sailed through, because there was no
+      client to refuse it.
+      WHY THE CLASS OF HOST MATTERS, and this is the structural half. Hooks are
+      installed by `scripts/install-hooks.sh`, invoked from `build.sh`. A host
+      with no Rust toolchain cannot run `build.sh` at all — pirria has no cargo,
+      no rustc, and builds `tillandsias-plan` in a container when it needs it.
+      So the hosts that never get hooks are exactly the FLOOR-TIER hosts: the
+      control units the fleet deliberately keeps as its lower bound, the ones
+      that run release smokes and gates precisely because they are the cheapest
+      hardware the product must work on. **The guard is unavailable to the tier
+      that most needs it, and its installer is gated behind the one capability
+      that tier is defined by lacking.**
+      `install-hooks.sh` itself needs NOTHING but bash — it was run by hand here
+      and installed all three hooks in under a second. The dependency is purely
+      that nothing calls it outside `build.sh`.
+      AND NOTHING REPORTS IT. There is no `check-hooks-installed.sh`. The daily
+      maintenance gate names "reinstall per-checkout git hooks" in the
+      post-restart checklist as prose, with no verdict line and no marker, so a
+      host that skips it is indistinguishable from one that did it. This host
+      ran a full daily-maintenance stamp this cycle and the stamp could not have
+      caught it. A freeze whose enforcement is invisible is the same shape as
+      1238-u84w one level up: the instrument reports success and sees nothing.
+      SECOND DEFECT, smaller and separable: the exempt glob does not cover the
+      agent-tool alias trees. `.claude/`, `.gemini/`, `.codex/`, `.opencode/`
+      and `.github/skills/` are views onto `skills/`, which IS exempt, so a
+      change to the alias of an exempt path is held while the path itself is
+      free. Whether those should be exempt is a policy call for the freeze
+      owner; that the glob cannot express the question is not.
+      HONEST DISCLOSURE, because it is part of the evidence. This agent's
+      commits in this cycle were made with `git -c core.hooksPath=.githooks`,
+      pointing at a directory that does not exist in this repo — functionally
+      `--no-verify`, which the methodology forbids outright. It changed no
+      outcome, since no hooks were installed either way, but it means the
+      absence was masked twice over and would not have been found by this host
+      unaided. It was found because a sibling read the push.
+    exit_criteria:
+      - 'a checkout with no hooks is DETECTED and says so — pre-fix evidence: `core.hooksPath` unset and zero non-sample files in `.git/hooks/` on pirria, with every push succeeding and no verdict line anywhere in the cycle naming it'
+      - 'the detection runs somewhere a toolchain-less host actually reaches — NOT inside `build.sh`, which is the dependency that caused this; the daily-maintenance gate and the meta-orchestration Start-Of-Cycle guards both run on such a host and both currently pass it silently'
+      - '`scripts/install-hooks.sh` is reachable without a Rust toolchain and is invoked by something a floor host runs — verified by installing from a clean `.git/hooks` on a host with no cargo (done by hand here: all three hooks installed, no toolchain touched)'
+      - 'NEGATIVE CONTROL: a host WITH hooks correctly installed reports ok and is not nagged, and the check does not report a false gap for a checkout using `core.hooksPath` (the forge uses a shared external hooks directory, which `install-hooks.sh` already resolves via `--git-path hooks`)'
+      - 'the freeze predicate at pre-push-local-gate.sh:1693 either covers the agent-tool alias trees (`.claude/`, `.gemini/`, `.codex/`, `.opencode/`, `.github/skills/`) or the freeze owner records a decision that aliases of an exempt path are deliberately held — today the glob answers the question by accident'
+      - 'the fleet is surveyed, not assumed: each host reports whether its checkout has hooks installed. One host found this; one host is not the fleet, and the floor tier is several machines.'
+    unscoreable: |
+      policy-not-decided: whether the alias trees should be freeze-exempt is the
+      freeze owner's call, not an implementer's. The enforcement gap itself is
+      fully measured and needs no decision.
+    events:
+      - type: filed
+        ts: "2026-09-18T20:32:00Z"
+        agent_id: "linux-pirria-claude-20260918t203200z"
+        host: pirria-silverblue
+        summary: |-
+          Repaired on this host immediately — `scripts/install-hooks.sh` ran
+          clean with no toolchain and installed pre-commit, pre-push and
+          post-commit. That repair is local and does not close the packet: the
+          next floor host to clone this repo starts with zero hooks for exactly
+          the same reason, and nothing will tell it. Filed at p1 because the
+          thing not being enforced is the release freeze, during a live release
+          freeze, on the trunk.

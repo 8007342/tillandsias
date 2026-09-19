@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    event:
+      type: note
+      ts: "2026-09-18T21:22:20Z"
+      agent_id: linux-pirria-claude-20260918t212219z
+      host: pirria-silverblue
+      summary: |
+        FREEZE LIFTED — THE FIXTURE IS LANDING, NOT PARKED. Disregard the "parked on
+        work/1189-7yvu-1190-swen" disposition in this row's next_action: that branch was
+        never created and is not needed. The release freeze on `scripts/` was lifted
+        before this cycle finalized (`git ls-remote origin 'refs/tillandsias/freeze/*'`
+        returns nothing), so `scripts/test-smoke-forge-lane-cold-host-outcome.sh` lands on linux-next in the same commit
+        as the runbook change it pins — which is what both rows asked for in the first
+        place ("the claimer writes it in the same commit").
+
+        VERIFIED ON THE MERGED TREE (origin/linux-next@6ac0f8d2a merged in), not merely
+        on the tree where it was written:
+
+          bash scripts/test-smoke-forge-lane-cold-host-outcome.sh
+            -> ok:test-smoke-forge-lane-cold-host-outcome:7 step(s)   rc=0
+
+        The next_action's VERIFIABLE CLOSURE section stands as written and is now
+        runnable by anyone; its "WHAT A DISTRUSTFUL STRANGER SHOULD RE-CHECK" items are
+        unchanged and still open — in particular that no LIVE smoke was run this cycle,
+        because no release tag existed to test against.
