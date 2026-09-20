@@ -92,7 +92,7 @@ while IFS= read -r f; do
             refused=$((refused + 1))
             {
                 echo "violation:fragment-ts-future:$f"
-                echo "  ts $stamp is ${delta}s AHEAD of this host's clock ($(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)); limit ${LIMIT}s."
+                echo "  ts $stamp is ${delta}s AHEAD of this host's clock ($(date -u +%Y-%m-%dT%H:%M:%SZ)); limit ${LIMIT}s."
                 echo "  A future timestamp is not a backfill — no clock-correct writer produces one."
                 echo "  REMEDY: read the clock instead of composing a time:"
                 echo "    date -u +%Y-%m-%dT%H:%M:%SZ"
