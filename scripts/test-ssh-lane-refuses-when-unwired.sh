@@ -55,10 +55,24 @@ trap restore EXIT INT TERM
 # does not itself contain the literal string its own guard forbids — the
 # self-matching-instrument shape filed as 1287-myx8.
 _pre_fix="Pushes fall ""back to the anonymous mirror redirect"
-if ! sed -i "s|Pushes REFUSE\. The anonymous mirror redirect above is NOT used in their|${_pre_fix}|" "$SRC"; then
-    bad "could not apply the mutation — arm 2 proves nothing and must not read as a pass"
+# CAPTURE THEN TEST (795-imz3). This was `if ! sed -i ...`, which the gate
+# refused: under pipefail a negated pipeline can invert the verdict, and the
+# arm that decides whether a MUTATION APPLIED is the last place to want an
+# inverted verdict — a mutation that silently did not apply would read as a
+# passing guard. Hazard shape 3 of 1252-r72q, written here by the person who
+# filed that order.
+sed -i "s|Pushes REFUSE\. The anonymous mirror redirect above is NOT used in their|${_pre_fix}|" "$SRC"
+_mutation_rc=$?
+# A zero exit from sed is not proof the text changed — sed succeeds on no match.
+# Verify the mutation is PRESENT before drawing any conclusion from the tests.
+_mutation_present=1
+grep -q "$_pre_fix" "$SRC" || _mutation_present=0
+if [ "$_mutation_rc" -ne 0 ] || [ "$_mutation_present" -ne 1 ]; then
+    bad "could not apply the mutation (sed rc=$_mutation_rc, present=$_mutation_present) — arm 2 proves nothing and must not read as a pass"
 else
-    if cargo test --quiet -p tillandsias-headless --bin tillandsias write_forge_gitconfig >/dev/null 2>&1; then
+    _mutant_out="$(cargo test --quiet -p tillandsias-headless --bin tillandsias write_forge_gitconfig 2>&1)"
+    _mutant_rc=$?
+    if [ "$_mutant_rc" -eq 0 ]; then
         bad "MUTATION SURVIVED: the pre-fix fallback wording was reintroduced and the unit arms still passed — the guard has no teeth"
     else
         ok "the mutated source REDS, so the guard bites"
