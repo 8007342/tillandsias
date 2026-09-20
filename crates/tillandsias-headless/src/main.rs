@@ -4446,6 +4446,22 @@ pub(crate) const GIT_VAULT_TOKEN_SECRET_OPTS: &str =
 /// environment.
 const GIT_VAULT_APPROLE_SECRET_OPTS: &str = "target=vault-approle,uid=1000,gid=1000,mode=0400";
 
+/// ORDER 1313-prin. The SIGNER AppRole document mounts at its OWN target.
+///
+/// THE BUG THIS FIXES, found on lenovinha 2026-09-20 by looking at
+/// /run/secrets inside a running mirror: the signer secret was passed with
+/// GIT_VAULT_APPROLE_SECRET_OPTS above, whose `target=vault-approle` is the
+/// RELAY document's path. Both secrets therefore mounted to the same file and
+/// one clobbered the other, so `ls /run/secrets` showed a single entry and the
+/// signer agent found the wrong document — or the relay agent did.
+///
+/// The irony is recorded deliberately: vault-agent-signer.hcl carries a comment
+/// warning that two agents sharing any path would overwrite each other's state,
+/// and I then shared the one path that comment did not enumerate. Distinct
+/// sinks, pid files and id files are not enough if the INPUT documents collide.
+const GIT_VAULT_SIGNER_SECRET_OPTS: &str =
+    "target=vault-approle-signer,uid=1000,gid=1000,mode=0400";
+
 /// Project-unique DNS identity of the per-project git-mirror service.
 ///
 /// Returns the opaque per-project hostname (`git-<mirror-id>`) when the
@@ -4668,7 +4684,7 @@ fn build_git_run_args(
         // relay keeps git-mirror-agent. One token never carries both authorities.
         if let Some(signer_secret) = host_signer_secret {
             args.push("--secret".into());
-            args.push(format!("{signer_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+            args.push(format!("{signer_secret},{GIT_VAULT_SIGNER_SECRET_OPTS}"));
             args.push("--env".into());
             args.push(format!(
                 "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
@@ -26784,6 +26800,16 @@ esac
         // sshd-identity.sh at the signer sink instead of the relay token, which
         // is how "one token never carries both authorities" is ENFORCED rather
         // than merely intended.
+        // AND at its OWN mount target: both documents once landed on
+        // target=vault-approle and one clobbered the other, leaving a single
+        // file in /run/secrets and an agent reading the wrong identity.
+        assert!(
+            args_with
+                .iter()
+                .any(|a| a == "signer-sec,target=vault-approle-signer,uid=1000,gid=1000,mode=0400"),
+            "the signer document must mount at its OWN target, not the relay path; \
+             got:\n{args_with:?}"
+        );
         assert!(
             args_with.iter().any(|a| a.starts_with("signer-sec,")),
             "the mirror must receive the SIGNER AppRole material when the lane is on; \
