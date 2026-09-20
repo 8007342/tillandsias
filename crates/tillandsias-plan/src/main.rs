@@ -7094,7 +7094,9 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     std::process::exit(2);
                 }
                 if positional.len() < 2 {
-                    eprintln!("usage: tillandsias-plan set-field <id|order> <field> --value-file <path> [...]");
+                    eprintln!(
+                        "usage: tillandsias-plan set-field <id|order> <field> --value-file <path> [...]"
+                    );
                     std::process::exit(2);
                 }
             }
