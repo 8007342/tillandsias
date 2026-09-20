@@ -70,6 +70,17 @@ DIGEST_ARGS=""
 case "$DIGEST_CMD" in *" "*) DIGEST_ARGS="${DIGEST_CMD#* }" ;; esac
 _digest() { "$DIGEST_BIN" $DIGEST_ARGS "$1" 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1; }
 
+# ORDER 1302-7j8p. SAY WHICH TOOL ANSWERED. macbookair ran this fixture twice on
+# 2026-09-20 — ambient PATH, where sha256sum resolved from /sbin, and a narrowed
+# PATH where `shasum -a 256` answered — and THE TWO OUTPUTS WERE BYTE-IDENTICAL.
+# Both printed 5/5 and neither said which candidate had run, so establishing
+# which regime the green proved meant replaying the selection loop by hand.
+#
+# A verdict that cannot name the regime it exercised is not evidence for a
+# second-regime record: the whole point of that record is WHICH one. Same shape
+# as 1300-q7eq's ARM 0 naming what it left untested rather than passing quietly.
+printf 'digest: %s (%s)\n' "$DIGEST_CMD" "$DIGEST_BIN"
+
 SKILL="skills/smoke-curl-install-and-test-e2e/SKILL.md"
 
 # ---------------------------------------------------------------- ARM 0

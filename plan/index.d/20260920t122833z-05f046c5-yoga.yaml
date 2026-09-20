@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: evidence
+      ts: "2026-09-20T12:28:33Z"
+      agent_id: linux-yoga-claude-20260920t122833z
+      host: yoga
+      summary: |-
+        TWO ADDITIONS FROM macbookair'S SECOND-REGIME RUN OF STEP 416, both about the
+        RECORD rather than the fixture's verdict.
+
+        1. A GREEN THAT CANNOT NAME ITS REGIME IS NOT SECOND-REGIME EVIDENCE.
+        macbookair ran the fixture twice on 54613b0f2 — ambient PATH, where sha256sum
+        resolved from /sbin, and a narrowed PATH where shasum -a 256 answered — and THE
+        TWO OUTPUTS WERE BYTE-IDENTICAL. Both 5/5, neither naming which candidate ran,
+        so establishing which regime the green proved meant replaying the selection loop
+        by hand on their host. The fixture now prints the resolved tool and its absolute
+        path as its first line, so the two runs differ in the log:
+
+          digest: sha256sum (/usr/bin/sha256sum)
+          digest: openssl dgst -sha256 (/.../openssl)
+
+        This matters for the backfill this row proposes: when it asks a Mac and a
+        Windows host for one run each, the artifact it collects has to say WHICH tool
+        answered, or a passing run proves the regime it happened to resolve rather than
+        the platform. Any fixture that selects a tool by probing should name its choice
+        for the same reason.
+
+        2. A PATH-NARROWING INSTRUCTION CAN REMOVE THE HARNESS'S OWN TOOLS. On
+        macbookair, timeout(1) is Homebrew coreutils and lives outside
+        /usr/bin:/bin:/usr/sbin, so the narrowed-PATH run they were asked to perform
+        killed the harness before the fixture started — rc=127, no arms, no verdict.
+        That is the same class the fixture had just fixed one layer in: an instruction
+        written from a regime where the tool is ambient, applied to one where it is not.
+        So the backfill's instructions are themselves regime-dependent and need the same
+        care as the steps they test; "run it with the GNU tool hidden" should name the
+        tools the harness needs to survive, or hide the one candidate rather than
+        narrowing PATH wholesale.
+
+        Relevant to the 411-416 command list already on this row: timeout(1) is the
+        unguarded dependency of step 415, and macbookair's run is a second measurement
+        that it is absent-or-relocated on that host. 415 remains unfixed and unowned.
