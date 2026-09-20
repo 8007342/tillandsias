@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    order: 1300-q7eq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [macos, scripts, litmus, gate, instrument-defect, regime]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-tool-materialize.sh
+      - scripts/test-tool-materialize-litmus-surfaces-arm.sh
+    verifiable_closure: |
+      scripts/test-tool-materialize-litmus-surfaces-arm.sh prints
+      `ok:tool-materialize-litmus:arm-surfaced:5/5` and exits 0 on a macOS host
+      (macneo, then macbookair as the second BSD regime), where its ARM 0 line
+      reads `ok: ARM 0: the regime probe read REAL host values with nothing
+      injected (load N.NN on C cpus, KkB free)` with C equal to
+      `sysctl -n hw.ncpu` on that host and N.NN the first field of
+      `sysctl -n vm.loadavg`; on Linux the same fixture still prints 5/5 with
+      the /proc reading (this host's gate of 2026-09-20: load 0.98 on 20 cpus,
+      32652792kB free); and a host with NEITHER /proc/loadavg NOR a readable
+      vm.loadavg ends the margin arm in `skip:tool-materialize-margin:no-regime-probe`
+      with the verdict token intact, never a red. PRE-FIX RESULT: FAILS — macneo,
+      2026-09-20, three ./build.sh --check gates (two with no load, one under a
+      racing load) all end `blocked:tool-materialize-litmus:arm-surfaced:4-failed-of-5`
+      with `FAIL: ARM 0: the margin arm did not report a measured regime from
+      the real host`, then ARM 1, 1b and 2 red and ARM 3 ok; the fixture's own
+      text says ARM 0 red means arms 1-2 prove nothing, so this is one broken
+      probe, not four defects.
+    title: |
+      the tool-materialize regime probe reads /proc/loadavg and nproc only, so on macOS ARM 0 of the arm-surfacing gate step never sees a measured regime and both macOS gates red
+    context: |
+      scripts/test-tool-materialize.sh's margin arm reads the 1-minute load
+      from /proc/loadavg (absent on macOS, so the value is empty), the core
+      count from nproc (absent on stock macOS, so the fallback prints 1), and
+      free space from df -Pk (portable). With an empty load the probe cannot
+      print `regime quiet (load N.NN on C cpus, KkB free)`, so the gate step
+      1269-gfdi wired into ./build.sh --check on 2026-09-20 (yoga; green on
+      the Linux regime at 5/5) reds on every macOS gate: ARM 0 requires that
+      line from the real host. macneo reproduced it identically in two clean
+      gates and one loaded gate, and refuted their own first hypothesis that
+      their racing load caused it. This is the green-on-one-regime shape: a
+      gate step measured on one platform changes which hosts run it, and the
+      BSD userland has no /proc. Both macOS lanes cannot land code until it is
+      fixed; plan-only pushes are unaffected. Blocked capability: macOS builder.
+    next_action: >
+      In scripts/test-tool-materialize.sh's probe block (the
+      TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG / _AVAIL_KB reading path), add a BSD
+      arm: when /proc/loadavg is unreadable, take the first number of
+      `sysctl -n vm.loadavg` (its output is `{ 0.52 0.61 0.70 }`) and the core
+      count from `sysctl -n hw.ncpu` before falling back to nproc; when neither
+      source is readable, print the named skip
+      `skip:tool-materialize-margin:no-regime-probe` and keep the verdict token.
+      Then make ARM 0 of scripts/test-tool-materialize-litmus-surfaces-arm.sh
+      accept that named skip as a distinct ok line on hosts with no probe
+      source, and run the fixture on macneo and on macbookair; paste both ARM 0
+      lines into the closing event with the sysctl values beside them.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from macneo's
+      three-gate report and this host's read of the probe block and of its
+      own green gate log; nothing run on macOS here.
