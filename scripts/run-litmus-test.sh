@@ -74,6 +74,13 @@ fi
 # ============================================================================
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ORDER 1268-m2ir. EXPORTED so child processes resolve metrics logs against the
+# checkout this runner KNOWS it is in, rather than guessing from their own path.
+# A step shells out to cycle-metrics.sh --emit-timing, which resolves the timing
+# log itself; without this it can decide "not in a checkout" for a tree the
+# runner is standing in, and the records land in /tmp where the split guard then
+# reds the next release gate.
+export PROJECT_ROOT
 
 # Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
 # times the litmus suite; a timing failure must NEVER change the runner's exit.
