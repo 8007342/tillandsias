@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: note
+      ts: "2026-09-20T14:50:00Z"
+      host: yolanda-windows
+      summary: |-
+        CAUSE LOCATED, AND IT IS NOT A HANG. It is scripts/hooks/pre-push-local-gate.sh:1620-1622, and on this host that one pipeline costs roughly EIGHTEEN MINUTES, so every bound I set killed a running job rather than a stuck one.
+
+        HOW IT WAS FOUND, using macuahuitl's discriminator. Running the hook directly with its output through a pipe reproduced it: `cat` did not return after the verdict line, rc=124 at a 120s bound. Then, with the pipeline backgrounded, Win32_Process gave the live command lines, which is what named it:
+
+          bash scripts/hooks/pre-push-local-gate.sh origin <url>
+            git ls-files -z --cached --others --exclude-standard
+            | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt <.git/tillandsias-gate-stamp> ] && printf ...'
+            | head -12
+
+        READ BACK OUT OF THE FILE, not inferred from the process list:
+        scripts/hooks/pre-push-local-gate.sh:1620-1622, inside the branch that
+        names which paths moved since the stamp. A `scripts/gate-stamp.sh
+        movers` process was ALSO alive in the same tree and I first wrote this
+        event blaming it; that was wrong. The per-file spawn is the HOOK's own,
+        and I found the right line only by grepping for `-I{}` instead of
+        trusting the process listing.
+
+        THE ARITHMETIC, measured on this host:
+          files from that git ls-files            7070
+          cost of one `sh -c` spawn (50 sampled)  155 ms
+          7070 x 155 ms                           ~1095 s  (~18 minutes)
+        `xargs -I{}` spawns ONE shell PER FILE. At 155 ms a spawn that is ~18 minutes of pure process creation. The 1095 s figure is an EXTRAPOLATION from the 50-spawn sample, NOT a timed full run, and it is labelled that way deliberately. I started a confirming run against scripts/gate-stamp.sh movers before I had located the line, which was the wrong target and produced nothing; a timed run of the hook's own pipeline is the measurement still owed on this event.
+
+        WHY THIS HOST AND NOT LINUX: a process spawn costs ~1 ms on the Linux hosts, so the same 7070 files cost them about seven seconds and nobody ever noticed. The defect is not in the logic; it is that the logic's cost is multiplied by a platform constant that differs by ~150x. This is exactly the class in cheatsheets/tooling/git-bash-cannot-fork-or-enumerate.md (MSYS cannot fork cheaply, and enumeration through a shell-per-item is where it shows).
+
+        CORRECTIONS THIS FORCES TO MY OWN ROW, in order of how wrong they were:
+          1. "The push hangs." NO. Nothing hangs. A step takes ~18 minutes and every bound I used (120 s, 150 s, 180 s, 200 s) was far under it. Seven "instances" were seven kills of a job that was working.
+          2. "The hang is AFTER the verdict, so it is a teardown that never returns." NO. The line I read as the verdict -- "plan-only lane: not applicable ... (full gate required)" -- is an INTERMEDIATE note, not a verdict. The hook then proceeds INTO the full-gate path, and the per-file pipeline at :1620 is inside it. The hook was still working, exactly as it was designed to.
+          3. "git-remote-https owns it." NO. It was alive because git had not yet been told to proceed, not because it was stuck.
+        What survives unchanged: the hook owns the elapsed time (2 s with --no-verify against a 150 s kill with it), and the trunk pushes DID land while I reported them as failed -- that remains the operationally dangerous part and the reason the closure is "the push RETURNS".
+
+        A SECOND HAZARD IN THE SAME PIPELINE, now checked rather than suspected: the consumer is `head -12`, a truncating consumer, so once twelve movers are found head exits and the producers take SIGPIPE -- and the hook DOES set `set -uo pipefail` at :60. So this pipeline's status is inverted by its own success on any repo with more than twelve movers. It is inside a `$(...)` whose status is not tested, so it is latent today rather than live; it is the 795-imz3 / grep-q family sitting one line from a guard that does test statuses.
+
+        WHAT THIS MEANS FOR THE FIX, stated as direction and not as a decision: the work is finding files newer than a stamp, and `find -newer` does it in one process. Nobody should edit the hook on my say-so, but the shape of the remedy is "one process, not 7070", and the exit criterion on this row ("the push RETURNS ... within a bounded time") is met by any change that removes the per-file spawn.
