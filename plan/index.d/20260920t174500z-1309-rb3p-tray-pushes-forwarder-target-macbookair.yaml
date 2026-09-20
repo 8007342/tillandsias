@@ -1,0 +1,161 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: headless-reads-the-vsock-forwarder-target-the-tray-pushed-over-the-control-wire-after-ready-and-no-capability-bit-is-needed-because-the-psk-binds-the-build-version
+    order: 1309-rb3p
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: macos
+    capability_tags: [macos, vsock, control-wire, inference, transport]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-control-wire/src/lib.rs
+      - crates/tillandsias-headless/src/control_dispatch.rs
+      - crates/tillandsias-macos-tray/src/action_host.rs
+    unscoreable: |
+      needs-a-macos-host-with-a-live-guest for the end-to-end arm: the push only
+      happens after wait_phase_ready on a booted VM, and the read only happens
+      when headless starts an inference container. The message-level arms (a new
+      variant round-trips; the guest dispatch handles it) are ordinary unit tests
+      and need no host.
+    verifiable_closure: |
+      OUTPUT, on a macOS host with a live guest and TILLANDSIAS_HOST_VSOCK_PORT
+      set: with NO file written by hand and NO env var set in the guest, a client
+      container on the enclave network reaches `http://inference:11434` and
+      receives a body composed by a process on the macOS host.
+
+      That is the same sentence as 830-xsk2's closure, with one word changed:
+      the configuration arrives from THE TRAY rather than from a fixture's seam.
+
+      PRE-FIX RESULT: FAILS — `vsock_forward_target()` reads
+      /run/tillandsias/vsock-forward and nothing writes it, so the forwarder
+      never starts and the client reaches the in-guest inference container
+      instead (or nothing, if images are absent).
+
+      NEGATIVE CONTROL: with TILLANDSIAS_HOST_VSOCK_PORT UNSET, the tray pushes
+      nothing, headless finds nothing, the forwarder does not start, and the
+      inference container runs exactly as today. The lane must cost nothing when
+      it is off.
+    title: |
+      the tray pushes the vsock forwarder's target over the control wire after Ready and headless reads it at container start — and the capability-negotiation question dissolves, because the secure channel's PSK binds the build version, so no mixed-version session can exist
+    context: |
+      830-xsk2 proved the transport end to end and shipped everything except the
+      writer: the seccomp derivation, the forwarder run-args, and the lane wired
+      at all four production inference sites are on trunk. What is missing is the
+      host→guest delivery of `(cid, port)`. Today `vsock_forward_target()` reads
+      /run/tillandsias/vsock-forward and NOTHING WRITES IT, so the lane is
+      reachable only through TILLANDSIAS_GUEST_VSOCK_FORWARD_TO, which is a test
+      seam rather than the product path.
+
+      ORDERING — SETTLED (READ). The host vsock listener binds INSIDE
+      VzRuntime::start(), where the guest is not yet Ready and the control wire
+      is unusable, so the push cannot ride the bind. The usable point is after
+      `wait_phase_ready`, which is where every tray path already opens its
+      stream (diagnose.rs exec_guest_main; action_host.rs poll_vm_status_once,
+      poll_cloud_projects_once, poll_github_login_once). headless starts
+      inference containers from FORGE-LAUNCH paths rather than at boot, and
+      `vsock_forward_target()` reads at CONTAINER START rather than caching at
+      process start, so the window holds BY CONSTRUCTION rather than by luck.
+
+      THE CHANNEL IS A TYPED MESSAGE, NOT A FILE WRITE (READ). ControlMessage's
+      ~32 variants are each a named, typed operation — Hello/HelloAck,
+      IssueWebSession, Error, EvictProject, McpFrame, VmStatus*, VmShutdown*,
+      CloudRefresh*, Pty*, DeliverCredentials*, GetVaultHandover,
+      GithubLoginStatus*, Subscribe, MetricsSnapshot*. There is no generic exec
+      and no file write. So this is a wire-protocol change: a new variant, a
+      guest-side handler, and tests on both halves.
+
+      AND THE CAPABILITY BIT IS NOT ONE OF THEM (READ, and this is the finding).
+      crates/tillandsias-secure-channel/src/lib.rs:136 derives the channel PSK as
+
+          info = "v={build_version};wire={wire_version};hop={hop}"
+          HKDF-SHA256(salt=CONTROL_CHANNEL_SALT, ikm=root_secret, info)
+
+      so THE BUILD VERSION IS AN INPUT TO THE KEY, pinned by its own test
+      (`psk_differs_across_build_version`: "different build_version MUST yield a
+      different PSK"). Two peers at different versions derive different keys and
+      NNpsk0 fails closed. NO MIXED-VERSION SESSION CAN EXIST. Therefore an
+      unknown variant can never arrive from a peer that does not share the
+      sender's build — and a new variant needs no negotiation bit, only the same
+      version on both ends, which a tray and its embedded guest share by
+      construction.
+
+      It is stricter still for this hop: `channel_psk_for_guest` derives from the
+      GUEST BINARY's SHA-256, which the guest self-hashes and the host must
+      supply from build time (1084-x8ya). A guest that was never re-staged keeps
+      its old self-hash, mismatches, and is refused with a named cause — the
+      doc calls that "the design working, not a regression".
+
+      MEASURED (RUN), tlatoanis-macbook-air 2026-09-20, guest headless
+      v56.9.13.1, probing the guest's own listener over vsock loopback (CID 1
+      port 42420 — vsock_loopback is loaded, so this needs no tray and no
+      CFRunLoop):
+
+        sent  0000000b 0401000570726f62650000   Hello{from:"probe",caps:[],build:None}
+        got   140 bytes, envelope wire_version=4 seq=0 DISCRIMINANT 4 (Error):
+              "secure control wire required: the version-bound secure-channel
+               handshake failed; plaintext or mismatched-version peers are not served"
+        then  stream CLOSED (recv -> b''), second send -> BrokenPipe [Errno 32]
+        guest log: "[tillandsias] secure control wire REFUSED:
+                    [peer-sent-no-usable-frame] noise: input error … (psk inputs:
+                    v=56.9.13.1, wire=4, hop=host-guest)"
+
+      So a plaintext peer ERRORS with a typed envelope naming the cause and the
+      stream CLOSES: no silent drop, no wedge. The unknown-variant discriminant
+      I sent (100) was never reached.
+
+      THE FACT EVERYONE WHO ASSUMED Hello IS THE NEGOTIATION POINT NEEDS:
+      Hello is never read from a peer that cannot complete the handshake. The
+      secure channel gates the stream BEFORE any variant dispatch, so
+      Hello/HelloAck cannot carry a compatibility bit for peers that differ in
+      the way that matters — those peers never exchange a Hello at all.
+
+      WHAT REMAINS UNMEASURED AND WHY IT NO LONGER BLOCKS: in-session
+      unknown-variant behaviour. Reaching it needs a full Noise handshake with
+      the version-bound PSK. It is not on the path to this row's deliverable,
+      because the version binding means such a frame cannot arise between real
+      peers.
+    deliverable: |
+      A new ControlMessage variant carrying the forwarder target, sent by the
+      tray after Ready and handled by headless, with the file at
+      /run/tillandsias/vsock-forward remaining the read-side contract
+      `vsock_forward_target()` already implements.
+
+      THE VARIANT APPENDS AT THE END. ControlMessage's doc is explicit:
+      "Existing variants MUST stay in their current positions; new variants
+      append at the end." The discriminant is positional in postcard, so
+      inserting anywhere else silently re-numbers every later variant — a peer
+      built before the change would read frame N as whatever variant IT has at
+      index N. There is a test that pins every discriminant by literal; update
+      it in the same commit.
+
+      NO CAPABILITY BIT, and the row's own context is the reason. If a future
+      reader wants one anyway, they must first explain how two peers with
+      different builds exchange any frame at all given the PSK derivation.
+
+      NOT IN SCOPE: changing the PSK derivation, the handshake, or the version
+      binding. This row consumes that property; it must not weaken it.
+    next_action: >
+      Read crates/tillandsias-secure-channel/src/lib.rs:136 (derive_psk) FIRST if
+      you are tempted to add a negotiation bit — the build version is in the
+      HKDF info string and that is why no bit is needed. Then append the variant
+      at the END of ControlMessage, update the discriminant-pinning test in the
+      same commit, add the guest-side handler that writes
+      /run/tillandsias/vsock-forward, and send it from the tray at the
+      post-wait_phase_ready point the context names. Build the END-TO-END arm on
+      a live guest LAST and treat it as the closure: a client container reaching
+      inference:11434 and getting a body composed on the host, with NOTHING
+      written by hand in the guest. DO NOT assert on the forwarder having
+      started — a relay that starts and answers nothing is the silent-success
+      shape this milestone exists to remove.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-20 at the coordinator's request,
+      after taking the tray-side writer and finding the job was a protocol change
+      rather than a file write. Claims are tagged READ (source) or RUN
+      (measured): the ordering, the variant enumeration, the PSK derivation and
+      the append-at-end rule are READ; the plaintext-refusal bytes, the Error
+      discriminant, the stream close and the guest log line are RUN on this host
+      against guest headless v56.9.13.1. The in-session unknown-variant arm is
+      explicitly UNMEASURED.

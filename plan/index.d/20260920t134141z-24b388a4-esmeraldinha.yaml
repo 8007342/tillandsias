@@ -1,0 +1,145 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    event:
+      type: note
+      ts: "2026-09-20T13:41:41Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        THE AUDIT THIS ROW ASKS FOR, AND A CORRECTION TO ITS OWN RULE. READ THE RULE FIRST: the closure's wording ("bound exactly once, and its block EQUALS its own spec field") is FALSE against the corpus it governs and would refuse a large slice of a healthy tree. The closure line is immutable; this event is the pointer, and the fixture named there is to be written to the CORRECTED rule below. Measured on esmeraldinha 2026-09-20, read-only, nothing moved.
+
+        === THE CORRECTED RULE ===
+
+          Every binding's block must be a MEMBER of that file's declared spec set.
+          Every named file must be bound AT LEAST once.
+
+        NOT equality, and NOT exactly-once. Both halves of the original are false, each for a measured reason:
+
+          1. `spec:` IS A COMMA-SEPARATED LIST, not a scalar. litmus-binary-e2e-smoke.yaml declares
+             `spec: headless-mode, graceful-shutdown, tray-app`. FOURTEEN of 430 files do this. An equality
+             test against a three-element list fails for all three of the specs the file actually declares.
+          2. MULTI-BINDING IS BY DESIGN. FORTY-TWO test names are bound under more than one block; an e2e
+             smoke legitimately serves several specs. "Exactly once" would refuse every one of them.
+
+        The corrected rule still catches both defects this row exists for: a wrong-block binding is not a
+        member of the declared set, and an unbound file has no binding at all.
+
+        HOW THE RULE WAS CAUGHT, because the method transfers. I implemented the literal rule first and ran
+        it against the real corpus before writing any fix. It emitted a wall of MISMATCH lines for files that
+        are plainly correct — litmus-binary-e2e-smoke.yaml "mismatching" against the three specs it names in
+        its own frontmatter. THE OUTPUT WAS ABSURD BEFORE IT WAS INTERESTING, and that is what sent me back
+        to the rule rather than to the corpus. A rule written from one file's shape must be run against the
+        corpus it governs before it is implemented; a guard derived from a single example is a guess about
+        every other example.
+
+        === THE AUDIT, UNDER THE CORRECTED RULE ===
+
+          mismatched bindings : 69, across 42 files
+          unbound files       : 16
+          dangling bindings   : 0  (every binding names a test that exists)
+          corpus              : 431 top-level litmus files, 494 binding entries, 413 distinct bound names
+
+        --- 2a: THE HEADLINE IS A MATCHED PLATFORM SWAP ON THE TRAY SPECS ---
+
+          litmus-pty-attach-project-threading-symmetric.yaml  bound-under=macos-native-tray    declared={windows-native-tray}
+          litmus-tray-status-text-helpers-symmetric.yaml      bound-under=windows-native-tray  declared={macos-native-tray}
+          litmus-wire-unreachable-chip-text-symmetric.yaml    bound-under=macos-native-tray    declared={windows-native-tray}
+
+        Two Windows tests filed under macOS and one macOS test under Windows. That is this row's coverage lie
+        in the live tree, on the platform specs, in both directions at once — each platform's suite is
+        credited with a test that names the other, so neither spec's coverage number means what it says.
+
+        Four more of the 69, to show the shape: these are PLAUSIBLE NEAR-MISSES, which is why none was caught.
+
+          litmus-runtime-diagnostics-emitter-shape.yaml  bound-under=runtime-diagnostics        declared={runtime-diagnostics-stream}
+          litmus-tray-minimal-ux-contract-shape.yaml     bound-under=simplified-tray-ux         declared={tray-minimal-ux}
+          litmus-proxy-container-shape.yaml              bound-under=transparent-https-caching  declared={proxy-container}
+          litmus-project-bootstrap-readme-shape.yaml     bound-under=project-summarizers        declared={project-bootstrap-readme}
+
+        AND ONE OF THE 69 IS THIS FILER'S OWN, NAMED RATHER THAN BURIED:
+          litmus-spawn-failure-names-program.yaml        bound-under=ci-release                 declared={init-command}
+        That litmus was written on this host for 1277-g5k9, and the coordinator added the ci-release binding
+        during land 21 to get a new spec name past the gate without reading the file's own spec line
+        (recorded against themselves). `init-command` is a real block and exists. So init-command gets no
+        credit and ci-release is credited with a test that is not its. It moves in the cleanup.
+
+
+        --- 2b: ALREADY GUARDED. MY FIRST READING OF THIS HALF WAS WRONG. ---
+
+        I first reported SIXTEEN unbound files as an undiscovered invisibility problem. THAT IS FALSE, and I
+        am correcting it before it reaches anyone's plan: all sixteen are a documented, guarded, ratcheted
+        exemption set, and the existing checker accounts for every file in the corpus.
+
+          scripts/check-litmus-bindings.sh (order 660-ryhn) ALREADY EXISTS and already refuses a new unbound
+          litmus AT CREATION TIME. Run against the live tree:
+
+              ok:litmus-bindings:files=431 bound=415 retired=6 grandfathered=10
+
+          415 + 6 + 10 = 431. Nothing is unaccounted for.
+
+          My sixteen decompose exactly: TEN are listed in
+          openspec/litmus-tests/unbound-grandfathered.txt (ca-ephemeral, control-dispatch-shape,
+          cross-platform-terminal-attach, macos-tray-menu-renders, mount-cleanup, publish-local-e2e,
+          tray-host-control-socket-unix-shape, vm-provisioning-idempotent, vm-shutdown-drains-forges,
+          windows-tray-menu-renders) and SIX carry `phase: retired` in their own frontmatter
+          (build-cache-transparent, build-clean-from-scratch-works, ci-unchanged-behavior,
+          status-check-stack-verification, token-file-cleanup, toolbox-isolation). Both are deliberate
+          exemptions that 660-ryhn's header describes in terms, including the ratchet reasoning: binding all
+          historical strays at once "converts one silent problem into an undiagnosed red suite".
+
+        HOW I GOT IT WRONG, since it is the same shape twice in one audit. My check looked for the FILENAME
+        stem (`litmus-ca-ephemeral`) in the grandfathered list, which stores the NAME form
+        (`litmus:ca-ephemeral`). Every lookup missed, so sixteen exempt files reported as strays. THE FIRST
+        VERSION OF THIS AUDIT GOT THE RULE WRONG (equality instead of membership) AND THE SECOND GOT THE KEY
+        WRONG (filename instead of name) — two different wrong comparisons against the same registry, and
+        both produced confident output. An audit is a comparison, and a comparison is exactly as good as its
+        key.
+
+        WHAT 2b ACTUALLY LEAVES OPEN, which is narrower than the row assumes. The invisibility MECHANISM is
+        real and my fixture reproduction stands: a file bound under no block produces zero mentions, rc=0 and
+        `Coverage: 100%` in an unfiltered run. But it is already refused at creation time, so the exposure is
+        not "unbound files are invisible" — it is that THE RUNNER ITSELF still reports nothing, so the
+        guard's absence at gate time is covered only by a separate script that someone must run. The
+        remaining work for 2b is therefore the NAMED SKIP the closure also asks for (a bound litmus filtered
+        out by spec or tier must print a line, never nothing), not a new unbound-file check. The
+        unbound-file check exists and works.
+
+        --- SO WHAT IS ACTUALLY UNGUARDED ---
+
+        2a, and only 2a. check-litmus-bindings.sh verifies that a file IS BOUND; NOTHING verifies that the
+        block it is bound under matches its declared spec. That is the 69 mismatches above, including the
+        tray platform swap and my own litmus. The guard this row needs is one cross-check added beside an
+        existing, working one — considerably smaller than the row's framing, and the 16-file half of its
+        closure should be re-scoped to the named skip.
+
+        === WHAT WAS DELIBERATELY NOT DONE ===
+
+        NOT ONE BINDING WAS MOVED. The row says audit and list before fixing, and the list is above.
+
+        SEQUENCING, agreed with the coordinator: the guard lands FIRST, with its mutation arms against a
+        throwaway corpus via the 1252-znbn overrides, so its refusal is proved before it ever meets the real
+        tree. The corpus cleanup is a SECOND change, which the new guard then validates. Landing a new
+        refusal together with 69 corpus edits makes it impossible to tell whether the guard works or the
+        corpus was merely tidied — and this row is about a check that could not fail, so a check whose first
+        run is also its own cleanup proves nothing.
+
+        ON THE 69: they need deciding per file, not batch-fixing. A binding under a block that is not the
+        file's declared spec may mean the BINDING is wrong or the DECLARATION is wrong, and the tray swap in
+        particular reads like two files whose declarations are right and whose bindings were crossed. 660-
+        ryhn's ratchet reasoning applies here too: 69 edits in one change is the undiagnosed-red-suite
+        hazard again, so a grandfathering list for mismatches may be the honest interim.
+
+        METHOD: read-only, scripts staged as files (an inline wsl.exe string loses its variables on this
+        host), run against the real openspec/litmus-tests and openspec/litmus-bindings.yaml. Nothing in the
+        tree was modified at any point. The 2b correction above came from running the EXISTING checker rather
+        than from reasoning about my own output, which is what I should have done before writing the first
+        version.

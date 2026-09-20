@@ -29,6 +29,10 @@ use tillandsias_plan::{
 // @trace order:984-i4k2
 #[path = "source_revision.rs"]
 mod source_revision;
+// ORDER 1287-h6qn — the same file build.rs include!s, so the embedded hash and
+// the runtime hash are one implementation.
+#[path = "validator_surface.rs"]
+mod validator_surface;
 
 const CAPABILITY_MANIFEST: &str = include_str!("../capabilities.txt");
 
@@ -102,6 +106,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology-index",
     "next",
     "next-order",
+    "validator-surface-hash",
     "parked-blocks",
     "pipeline",
     "query",
@@ -246,6 +251,9 @@ const USAGE: &str = concat!(
     "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
     "                                     the fold could not read.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
+    "           validator-surface-hash    what this binary was BUILT from; --current what the\n",
+    "                                     checkout holds now; --check compares them (0 same,\n",
+    "                                     3 different, 4 cannot ask) — 1287-h6qn\n",
     "           build-id                  which SOURCES this binary was compiled from (984-i4k2)\n",
     "           source-revision [dir]     what a rebuild from a checkout would bake (984-i4k2)\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
@@ -2576,6 +2584,67 @@ fn find_repo_root() -> Option<PathBuf> {
     }
 }
 
+/// ORDER 1287-h6qn. The hash of the validator surface this binary was BUILT
+/// from, embedded by build.rs. Empty when the build could not compute one.
+fn embedded_validator_surface() -> &'static str {
+    env!("TILLANDSIAS_PLAN_VALIDATOR_SURFACE")
+}
+
+/// Compare what this binary was built from against what the checkout holds now.
+///
+/// Returns None when the question cannot be asked — an installed binary with no
+/// checkout above it (find_repo_root -> None), or a manifest that names nothing.
+/// "Cannot ask" is never "fresh"; the callers say so in their own words.
+fn validator_surface_drift() -> Option<(String, String)> {
+    let root = find_repo_root()?;
+    let current = validator_surface::validator_surface_hash(&root)?;
+    let embedded = embedded_validator_surface();
+    if embedded.is_empty() || embedded != current {
+        return Some((embedded.to_string(), current));
+    }
+    None
+}
+
+/// ORDER 1287-h6qn, output (2). Is the binary that is about to hand out an
+/// identifier one the plan-only lane will refuse minutes later?
+///
+/// WHY THE MINT IS THE PLACE TO ASK. The lane asks this question at PUSH time,
+/// when the work is already written. The sharpest instance on record is a binary
+/// that allocated an order number and was then refused by the lane, for that
+/// number's own fragment, minutes later in the same shell — so the identifier
+/// came from a binary the lane had already decided it would not trust. Asking
+/// here moves the discovery to before the row is written, where the remedy costs
+/// a rebuild instead of a rebuild plus a rebase plus a re-push.
+///
+/// IT COMPARES CONTENT, NOT mtimes, so it is EXACT rather than conservative: a
+/// rebase that rewrites a surface file with identical bytes changes nothing and
+/// mints normally, while a real edit refuses. The first draft of this function
+/// compared mtimes against the whole crate and would have refused every mint
+/// after every rebase — the defect this row is about, reintroduced inside its
+/// own fix.
+fn plan_binary_currency_complaint() -> Option<String> {
+    let (embedded, current) = validator_surface_drift()?;
+    let built = if embedded.is_empty() {
+        "unknown (this binary embeds no surface hash — built before 1287-h6qn, \
+         or built where the manifest was unreadable)"
+            .to_string()
+    } else {
+        embedded
+    };
+    Some(format!(
+        "refused:next-order:stale-plan-binary — this binary's validator surface \
+         does not match the checkout's (1287-h6qn).\n  \
+         built from: {built}\n  \
+         checkout:   {current}\n\
+         The plan-only lane will refuse the fragment this identifier is for. \
+         Rebuild first:\n  \
+         cargo build --release -p tillandsias-plan\n\
+         Refusing BEFORE minting on purpose: an identifier handed out by a binary \
+         the lane will not accept costs a rebuild, a rebase and a re-push once the \
+         row is written, instead of a rebuild now."
+    ))
+}
+
 /// ORDER 706-jmi7, path corrected by 1125-92xa. Record direct CLI invocations to
 /// the shared telemetry channel
 /// (${TILLANDSIAS_EXPERT_USAGE_LOG:-<checkout>/.cache/metrics/forge-expert-usage.jsonl}).
@@ -3032,6 +3101,83 @@ fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
     }
 }
 
+/// ORDER 1307-kic6. The positional paths of a `fragment-*` subcommand.
+///
+/// Flags are skipped rather than assumed absent: `fragment-terminal-events`
+/// already takes `--live`, and a path list that swallowed it would read a flag
+/// as a filename and report it `unreadable`.
+fn fragment_arg_paths(args: &[String]) -> Vec<String> {
+    args.iter()
+        .skip(1)
+        .filter(|a| !a.starts_with("--"))
+        .cloned()
+        .collect()
+}
+
+/// ORDER 1307-kic6. One framed line per input file, so a batch NEVER collapses
+/// per-file verdicts into one process exit.
+///
+/// `<status>\t<path>\t<payload>`, where status is `ok`, `unparseable` or
+/// `unreadable`. A readable fragment with nothing to report still gets one `ok`
+/// line with an empty payload -- that is the difference between "read it, found
+/// nothing" and "never read it", which is exactly the distinction 787-f7dh was
+/// filed about when empty-stdout-exit-0 meant both.
+fn emit_fragment_frame(status: &str, path: &str, payload: &str) {
+    println!("{status}\t{path}\t{payload}");
+}
+
+/// The misplaced-definition signature, extracted so the single-path and
+/// multi-path modes cannot drift. See the arm below for why this shape is the
+/// one that matters (812-d45t).
+fn fragment_misplaced_ids(doc: &serde_yaml::Value, out: &mut Vec<String>) {
+    if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+        for e in evs {
+            if e.get("event").is_some() {
+                continue;
+            }
+            let looks_like_definition = ["order", "title", "kind", "deliverable"]
+                .iter()
+                .any(|k| e.get(*k).is_some());
+            if !looks_like_definition {
+                continue;
+            }
+            let pid = e
+                .get("packet_id")
+                .and_then(serde_yaml::Value::as_str)
+                .unwrap_or("<no packet_id>");
+            out.push(pid.to_string());
+        }
+    }
+}
+
+/// The event-addressing signature (797-qm4t), extracted for the same reason.
+fn fragment_event_packet_ids(doc: &serde_yaml::Value, out: &mut Vec<String>) {
+    if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+        for pk in pkts {
+            let Some(pid) = pk.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            if pk
+                .get("events")
+                .and_then(serde_yaml::Value::as_sequence)
+                .is_some_and(|evs| !evs.is_empty())
+            {
+                out.push(pid.to_string());
+            }
+        }
+    }
+    if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+        for e in evs {
+            let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            if e.get("event").is_some() {
+                out.push(pid.to_string());
+            }
+        }
+    }
+}
+
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
         "experts-probe" => {
@@ -3181,44 +3327,69 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // rather than merely "no event key" keeps a malformed-but-intended
             // event from being reported as a lost packet.
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>");
+            let paths = fragment_arg_paths(args);
+            if paths.is_empty() {
+                eprintln!(
+                    "usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>..."
+                );
                 std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!(
-                        "unparseable:{path}: {e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
+            }
+            // ORDER 1307-kic6. MULTI-PATH MODE, AND IT NEVER COLLAPSES A
+            // VERDICT. check-fragment-status-loss.sh called this once per
+            // fragment; on a host where a process spawn costs 134 ms that is
+            // 1302 spawns for one of three passes. Handed every path at once it
+            // is ONE spawn -- but only if a bad fragment among good ones is
+            // still named individually, which is what the framed output is for.
+            // Collapsing 1302 answers into one exit code would turn a
+            // parse-error detector into a silent pass, which is the failure the
+            // caller's own comment forbids ("checking NOTHING is not [acceptable]").
+            let framed = paths.len() > 1 || args.iter().any(|a| a == "--files");
             let mut ids: Vec<String> = Vec::new();
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    if e.get("event").is_some() {
-                        continue;
+            for path in &paths {
+                let path = path.as_str();
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if framed {
+                            emit_fragment_frame("unreadable", path, &format!("read {path}: {e}"));
+                            continue;
+                        }
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
                     }
-                    let looks_like_definition = ["order", "title", "kind", "deliverable"]
-                        .iter()
-                        .any(|k| e.get(*k).is_some());
-                    if !looks_like_definition {
-                        continue;
+                };
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let why = format!(
+                            "{e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
+                        );
+                        if framed {
+                            emit_fragment_frame("unparseable", path, &why);
+                            continue;
+                        }
+                        eprintln!("unparseable:{path}: {why}");
+                        std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
                     }
-                    let pid = e
-                        .get("packet_id")
-                        .and_then(serde_yaml::Value::as_str)
-                        .unwrap_or("<no packet_id>");
-                    ids.push(pid.to_string());
+                };
+                let mut file_ids: Vec<String> = Vec::new();
+                fragment_misplaced_ids(&doc, &mut file_ids);
+                file_ids.sort_unstable();
+                file_ids.dedup();
+                if framed {
+                    if file_ids.is_empty() {
+                        emit_fragment_frame("ok", path, "");
+                    } else {
+                        for id in &file_ids {
+                            emit_fragment_frame("ok", path, id);
+                        }
+                    }
+                } else {
+                    ids.extend(file_ids);
                 }
+            }
+            if framed {
+                return true;
             }
             ids.sort_unstable();
             ids.dedup();
@@ -3252,55 +3423,60 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // parse and the same exit 3 on an unparseable fragment, because
             // silence from a parser is not evidence of absence (787-f7dh).
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>");
+            let paths = fragment_arg_paths(args);
+            if paths.is_empty() {
+                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>...");
                 std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!(
-                        "unparseable:{path}: {e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
+            }
+            // ORDER 1307-kic6. Multi-path mode; see fragment-misplaced-definitions
+            // above for why the output is framed per file rather than collapsed.
+            let framed = paths.len() > 1 || args.iter().any(|a| a == "--files");
             let mut ids: Vec<String> = Vec::new();
-            // Inline: packets: [{packet_id, events: [...]}]. A pid here also
-            // CREATES the packet, so it can never be unknown — collected anyway
-            // so the caller sees one consistent set and decides for itself.
-            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
-                for p in pkts {
-                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if p.get("events")
-                        .and_then(serde_yaml::Value::as_sequence)
-                        .is_some_and(|evs| !evs.is_empty())
-                    {
-                        ids.push(pid.to_string());
+            for path in &paths {
+                let path = path.as_str();
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if framed {
+                            emit_fragment_frame("unreadable", path, &format!("read {path}: {e}"));
+                            continue;
+                        }
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
                     }
+                };
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let why = format!(
+                            "{e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
+                        );
+                        if framed {
+                            emit_fragment_frame("unparseable", path, &why);
+                            continue;
+                        }
+                        eprintln!("unparseable:{path}: {why}");
+                        std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                    }
+                };
+                let mut file_ids: Vec<String> = Vec::new();
+                fragment_event_packet_ids(&doc, &mut file_ids);
+                file_ids.sort_unstable();
+                file_ids.dedup();
+                if framed {
+                    if file_ids.is_empty() {
+                        emit_fragment_frame("ok", path, "");
+                    } else {
+                        for id in &file_ids {
+                            emit_fragment_frame("ok", path, id);
+                        }
+                    }
+                } else {
+                    ids.extend(file_ids);
                 }
             }
-            // Top-level: events: [{packet_id, event: {...}}] — the shape that
-            // declares WITHOUT creating, and therefore the one that can address
-            // a packet nobody has ever filed.
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if e.get("event").is_some() {
-                        ids.push(pid.to_string());
-                    }
-                }
+            if framed {
+                return true;
             }
             ids.sort_unstable();
             ids.dedup();
@@ -3341,161 +3517,195 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // Exit 3 makes the two cases distinguishable at the point of use;
             // silence from a parser is not evidence of absence.
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
+            let paths = fragment_arg_paths(args);
+            if paths.is_empty() {
+                eprintln!(
+                    "usage: tillandsias-plan fragment-terminal-events <fragment.yaml>... [--live]"
+                );
                 std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    // Distinguishable, and stdout stays EMPTY so no caller can
-                    // mistake a parse failure for a set of declarations.
-                    eprintln!(
-                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
-            // A `declares` entry: the event carries `type: completed`, or nests
-            // `event: completed` / `event: {type: completed}` (the shapes the old
-            // awk reached via `/type: completed/ || /event: completed/`).
-            let declares_terminal = |event: &serde_yaml::Value| -> bool {
-                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
-                    return true;
-                }
-                if let Some(inner) = event.get("event")
-                    && (inner.as_str() == Some("completed")
-                        || inner.get("type").and_then(serde_yaml::Value::as_str)
-                            == Some("completed"))
-                {
-                    return true;
-                }
-                false
-            };
-            // ORDER 751-i9mb. Packets do not only live at `doc["packets"]`.
-            // Compaction folds every fragment INTO plan/index.yaml, where they
-            // live at `plan_index.steps[]` — so this subcommand, pointed at the
-            // base ledger, parsed all 3.4MB and printed NOTHING with exit 0.
-            // Empty-and-zero is indistinguishable from "declares no terminal
-            // events", so a checker built on that answer reports clean on a
-            // ledger it never examined: this guard's OWN failure class
-            // (785-sqe6, 787-f7dh), and the mechanical reason packet 532 sat
-            // claimable with its exit criterion already green while
-            // `./build.sh --check` printed ok:no-fragment-status-loss.
-            //
-            // The walk stops descending at any mapping carrying `packet_id` —
-            // the same rule the fold itself uses — so it is shape-independent
-            // by construction and a future ledger layout cannot silently
-            // re-blind it. Fragments (top-level `packets:`) and the base
-            // (`plan_index.steps[]`) both fall out of the one rule.
-            fn collect_packet_nodes(v: &serde_yaml::Value, out: &mut Vec<serde_yaml::Value>) {
-                if v.get("packet_id").is_some() {
-                    out.push(v.clone());
-                    return;
-                }
-                if let Some(map) = v.as_mapping() {
-                    for (_k, val) in map {
-                        collect_packet_nodes(val, out);
-                    }
-                } else if let Some(seq) = v.as_sequence() {
-                    for item in seq {
-                        collect_packet_nodes(item, out);
-                    }
-                }
             }
-
-            // ORDER 751-i9mb. `--live` additionally applies the WITHDRAWAL rule:
-            // a closure that a later `falsified` event retracted is not a live
-            // declaration. Opt-in, so the existing gate's syntactic question —
-            // "does this events block DECLARE a terminal event?" — is unchanged
-            // and its callers keep their exact semantics. The advisory base pass
-            // asks the different, semantic question, and the packet requires the
-            // negative control: "a packet ... whose closure was later falsified"
-            // must NOT be flagged.
-            //
-            // Timestamps are ISO-8601 Zulu, which orders correctly under plain
-            // lexicographic comparison; an event with no ts sorts as empty and
-            // therefore never wins against a stamped one.
-            let live_only = args.iter().any(|a| a == "--live");
-            let event_ts = |e: &serde_yaml::Value| -> String {
-                e.get("ts")
-                    .and_then(serde_yaml::Value::as_str)
-                    .or_else(|| e.get("event").and_then(|i| i.get("ts")?.as_str()))
-                    .unwrap_or("")
-                    .to_string()
-            };
-            let declares_falsified = |event: &serde_yaml::Value| -> bool {
-                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("falsified") {
-                    return true;
-                }
-                if let Some(inner) = event.get("event")
-                    && (inner.as_str() == Some("falsified")
-                        || inner.get("type").and_then(serde_yaml::Value::as_str)
-                            == Some("falsified"))
-                {
-                    return true;
-                }
-                false
-            };
-
-            let mut ids: Vec<String> = Vec::new();
-            // Inline: a node carrying packet_id and events: [{type: completed}],
-            // at ANY depth.
-            let mut packet_nodes: Vec<serde_yaml::Value> = Vec::new();
-            collect_packet_nodes(&doc, &mut packet_nodes);
-            for p in &packet_nodes {
-                let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                    continue;
+            // ORDER 1307-kic6. MULTI-PATH MODE, AND THE PER-FILE VERDICT IS THE
+            // WHOLE POINT HERE. This subcommand's EXIT CODE is how
+            // check-fragment-status-loss.sh detects an unparseable fragment --
+            // 787-f7dh exists because "declares no terminal events" and "could
+            // not be read" were once the same answer. Batching 1302 fragments
+            // into one process must therefore NOT collapse 1302 verdicts into
+            // one exit code, so framed mode reports each file's verdict on
+            // stdout and an unparseable fragment among good ones is still named
+            // by name. Single-path callers keep the old exit codes exactly.
+            let framed = paths.len() > 1 || args.iter().any(|a| a == "--files");
+            for path in &paths {
+                let path = path.as_str();
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if framed {
+                            emit_fragment_frame("unreadable", path, &format!("read {path}: {e}"));
+                            continue;
+                        }
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
+                    }
                 };
-                let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
-                    continue;
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let why = format!(
+                            "{e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
+                        );
+                        if framed {
+                            emit_fragment_frame("unparseable", path, &why);
+                            continue;
+                        }
+                        eprintln!("unparseable:{path}: {why}");
+                        std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                    }
                 };
-                if !evs.iter().any(declares_terminal) {
-                    continue;
-                }
-                if live_only {
-                    let newest_closure = evs
-                        .iter()
-                        .filter(|e| declares_terminal(e))
-                        .map(event_ts)
-                        .max()
-                        .unwrap_or_default();
-                    let newest_withdrawal = evs
-                        .iter()
-                        .filter(|e| declares_falsified(e))
-                        .map(event_ts)
-                        .max()
-                        .unwrap_or_default();
-                    // A withdrawal only counts when it POSTDATES the closure it
-                    // retracts; a later re-closure wins again.
-                    if !newest_withdrawal.is_empty() && newest_withdrawal > newest_closure {
-                        continue;
+                // A `declares` entry: the event carries `type: completed`, or nests
+                // `event: completed` / `event: {type: completed}` (the shapes the old
+                // awk reached via `/type: completed/ || /event: completed/`).
+                let declares_terminal = |event: &serde_yaml::Value| -> bool {
+                    if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
+                        return true;
+                    }
+                    if let Some(inner) = event.get("event")
+                        && (inner.as_str() == Some("completed")
+                            || inner.get("type").and_then(serde_yaml::Value::as_str)
+                                == Some("completed"))
+                    {
+                        return true;
+                    }
+                    false
+                };
+                // ORDER 751-i9mb. Packets do not only live at `doc["packets"]`.
+                // Compaction folds every fragment INTO plan/index.yaml, where they
+                // live at `plan_index.steps[]` — so this subcommand, pointed at the
+                // base ledger, parsed all 3.4MB and printed NOTHING with exit 0.
+                // Empty-and-zero is indistinguishable from "declares no terminal
+                // events", so a checker built on that answer reports clean on a
+                // ledger it never examined: this guard's OWN failure class
+                // (785-sqe6, 787-f7dh), and the mechanical reason packet 532 sat
+                // claimable with its exit criterion already green while
+                // `./build.sh --check` printed ok:no-fragment-status-loss.
+                //
+                // The walk stops descending at any mapping carrying `packet_id` —
+                // the same rule the fold itself uses — so it is shape-independent
+                // by construction and a future ledger layout cannot silently
+                // re-blind it. Fragments (top-level `packets:`) and the base
+                // (`plan_index.steps[]`) both fall out of the one rule.
+                fn collect_packet_nodes(v: &serde_yaml::Value, out: &mut Vec<serde_yaml::Value>) {
+                    if v.get("packet_id").is_some() {
+                        out.push(v.clone());
+                        return;
+                    }
+                    if let Some(map) = v.as_mapping() {
+                        for (_k, val) in map {
+                            collect_packet_nodes(val, out);
+                        }
+                    } else if let Some(seq) = v.as_sequence() {
+                        for item in seq {
+                            collect_packet_nodes(item, out);
+                        }
                     }
                 }
-                ids.push(pid.to_string());
-            }
-            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+
+                // ORDER 751-i9mb. `--live` additionally applies the WITHDRAWAL rule:
+                // a closure that a later `falsified` event retracted is not a live
+                // declaration. Opt-in, so the existing gate's syntactic question —
+                // "does this events block DECLARE a terminal event?" — is unchanged
+                // and its callers keep their exact semantics. The advisory base pass
+                // asks the different, semantic question, and the packet requires the
+                // negative control: "a packet ... whose closure was later falsified"
+                // must NOT be flagged.
+                //
+                // Timestamps are ISO-8601 Zulu, which orders correctly under plain
+                // lexicographic comparison; an event with no ts sorts as empty and
+                // therefore never wins against a stamped one.
+                let live_only = args.iter().any(|a| a == "--live");
+                let event_ts = |e: &serde_yaml::Value| -> String {
+                    e.get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .or_else(|| e.get("event").and_then(|i| i.get("ts")?.as_str()))
+                        .unwrap_or("")
+                        .to_string()
+                };
+                let declares_falsified = |event: &serde_yaml::Value| -> bool {
+                    if event.get("type").and_then(serde_yaml::Value::as_str) == Some("falsified") {
+                        return true;
+                    }
+                    if let Some(inner) = event.get("event")
+                        && (inner.as_str() == Some("falsified")
+                            || inner.get("type").and_then(serde_yaml::Value::as_str)
+                                == Some("falsified"))
+                    {
+                        return true;
+                    }
+                    false
+                };
+
+                let mut ids: Vec<String> = Vec::new();
+                // Inline: a node carrying packet_id and events: [{type: completed}],
+                // at ANY depth.
+                let mut packet_nodes: Vec<serde_yaml::Value> = Vec::new();
+                collect_packet_nodes(&doc, &mut packet_nodes);
+                for p in &packet_nodes {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
                         continue;
                     };
-                    if e.get("event").is_some_and(declares_terminal) {
-                        ids.push(pid.to_string());
+                    let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                        continue;
+                    };
+                    if !evs.iter().any(declares_terminal) {
+                        continue;
+                    }
+                    if live_only {
+                        let newest_closure = evs
+                            .iter()
+                            .filter(|e| declares_terminal(e))
+                            .map(event_ts)
+                            .max()
+                            .unwrap_or_default();
+                        let newest_withdrawal = evs
+                            .iter()
+                            .filter(|e| declares_falsified(e))
+                            .map(event_ts)
+                            .max()
+                            .unwrap_or_default();
+                        // A withdrawal only counts when it POSTDATES the closure it
+                        // retracts; a later re-closure wins again.
+                        if !newest_withdrawal.is_empty() && newest_withdrawal > newest_closure {
+                            continue;
+                        }
+                    }
+                    ids.push(pid.to_string());
+                }
+                // Top-level: events: [{packet_id, event: {type: completed, ...}}]
+                if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                    for e in evs {
+                        let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str)
+                        else {
+                            continue;
+                        };
+                        if e.get("event").is_some_and(declares_terminal) {
+                            ids.push(pid.to_string());
+                        }
                     }
                 }
-            }
-            ids.sort_unstable();
-            ids.dedup();
-            for id in ids {
-                emit(&id);
+                ids.sort_unstable();
+                ids.dedup();
+                if framed {
+                    if ids.is_empty() {
+                        emit_fragment_frame("ok", path, "");
+                    } else {
+                        for id in &ids {
+                            emit_fragment_frame("ok", path, id);
+                        }
+                    }
+                } else {
+                    for id in ids {
+                        emit(&id);
+                    }
+                }
             }
             true
         }
@@ -3830,6 +4040,72 @@ fn main() {
             "{{\"earned\":{},\"denominator\":{},\"residual\":{},\"regime\":\"{}\"}}",
             score.earned, score.denominator, score.residual, regime
         );
+        return;
+    }
+
+    // ORDER 1287-h6qn. The currency question, answerable by anyone, with no
+    // stamp file to be absent, lagging or orphaned under a redirected
+    // CARGO_TARGET_DIR — the failure class the stamp had and this does not.
+    //
+    //   validator-surface-hash             what this binary was BUILT from
+    //   validator-surface-hash --current   what the checkout holds NOW
+    //   validator-surface-hash --check     exit 0 same, 3 different, 4 unknown
+    //
+    // --check is what the plan-only lane calls, so the comparison lives in ONE
+    // place and the hook does not reimplement it in shell.
+    //
+    // BEFORE THE LEDGER LOAD, with the methodology subcommands and for the same
+    // reason: this answers a question about the BINARY, and it must answer it
+    // from any directory. The first draft sat in the main match and inherited
+    // the ledger read, so running it outside a checkout failed with
+    // "read plan/index.yaml: No such file or directory" — a currency probe
+    // reporting a missing ledger, which is a wrong answer that a caller
+    // treating non-zero as stale would have believed.
+    if args[0] == "validator-surface-hash" {
+        let want_current = args.iter().any(|a| a == "--current");
+        let want_check = args.iter().any(|a| a == "--check");
+        let current = find_repo_root().and_then(|r| validator_surface::validator_surface_hash(&r));
+        if want_check {
+            match current {
+                None => {
+                    eprintln!(
+                        "unknown:validator-surface — no checkout above this binary, or the \
+                         manifest names nothing. This is NOT a freshness verdict."
+                    );
+                    std::process::exit(4);
+                }
+                Some(cur) => {
+                    let embedded = embedded_validator_surface();
+                    if !embedded.is_empty() && embedded == cur {
+                        println!("ok:validator-surface:{cur}");
+                        return;
+                    }
+                    let built = if embedded.is_empty() {
+                        "unknown"
+                    } else {
+                        embedded
+                    };
+                    eprintln!("stale:validator-surface built-from={built} checkout={cur}");
+                    std::process::exit(3);
+                }
+            }
+        }
+        if want_current {
+            match current {
+                Some(h) => println!("{h}"),
+                None => {
+                    eprintln!("unknown:validator-surface");
+                    std::process::exit(4);
+                }
+            }
+            return;
+        }
+        let embedded = embedded_validator_surface();
+        if embedded.is_empty() {
+            eprintln!("unknown:validator-surface — this binary embeds no hash");
+            std::process::exit(4);
+        }
+        println!("{embedded}");
         return;
     }
 
@@ -4919,6 +5195,13 @@ fn main() {
             return;
         }
         "next-order" => {
+            // ORDER 1287-h6qn output (2): refuse to mint from a binary the lane
+            // will refuse. Checked BEFORE any parsing, so a stale binary cannot
+            // hand out a token even on the flag paths.
+            if let Some(complaint) = plan_binary_currency_complaint() {
+                eprintln!("{complaint}");
+                std::process::exit(3);
+            }
             // Mint a collision-free order token for a NEW packet.
             //
             // Replaces "read the ledger, add one" — which is computed from a

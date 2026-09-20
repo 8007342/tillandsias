@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Two events, not two rows: the coordinator ruled both refusals known shapes
+# belonging to existing packets (2026-09-20). Refusal lines are verbatim from
+# the pushing host's terminal, not paraphrased.
+events:
+  - packet_id: gate-stamp-emits-an-except-plan-verdict-the-pre-push-hook-has-no-arm-for-so-it-takes-the-warn-and-continue-fallback-and-skips-the-scope-check-the-fresh-path-enforces
+    event:
+      type: note
+      ts: "2026-09-20T19:05:00Z"
+      agent_id: "linux-pirria-claude-20260920t190500z"
+      host: pirria
+      summary: |-
+        MEASURED ON PIRRIA 2026-09-20: the plan-only lane is unavailable on a
+        branch that is NEW ON THE REMOTE, because the lane qualifies by BASE and
+        a branch with no remote counterpart has none to diff against. Verbatim:
+
+          plan-only lane: not applicable — refs/heads/plan/pirria-1286 is new on
+          the remote; no base to diff against (full gate required)
+          ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+
+        The push carried two plan/index.d/ fragments and nothing else — exactly
+        the content the lane exists to admit without a 33-minute gate on a floor
+        host. WHAT MAKES IT WORTH AN EVENT: the refusal is correct and its text
+        is complete, but the condition is invisible at authoring time. Nothing
+        about writing a fragment on a local branch says that the branch's
+        EXISTENCE ON THE REMOTE is what decides whether the cheap lane opens, so
+        the lane is least available exactly when a host has just started a new
+        piece of work — which is when fragments get written.
+
+        RESOLVED BY REBASING THE FRAGMENTS ONTO origin/linux-next AND PUSHING
+        THERE, which is where they belonged: they are ledger rows, not branch
+        work. Recorded so the next host reads "push fragments to trunk, or level
+        the branch first" rather than reaching for the gate.
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T19:05:00Z"
+      agent_id: "linux-pirria-claude-20260920t190500z"
+      host: pirria
+      summary: |-
+        A SHARPER INSTANCE, measured on pirria 2026-09-20 on a PURE FRAGMENT
+        PUSH. Verbatim:
+
+          plan-only lane: REFUSED — the resolved plan binary is STALE (full gate
+          required)
+            stale one can accept a fragment shape the current rules refuse (1129-4su6).
+          ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+
+        WHAT MAKES IT SHARP: the binary the lane refused as STALE is the same
+        binary that had allocated both of the order numbers in the fragments
+        being pushed, minutes earlier, in the same shell —
+        `./target/release/tillandsias-plan next-order` answered 1309-q4kr and
+        1309-fhxb without complaint. So the binary is trusted to hand out the
+        identifiers and to validate the fragment shape, and then refuses to let
+        the fragments it produced through the lane whose entire justification is
+        that the binary validated them.
+
+        The refusal's own reasoning (1129-4su6: a stale binary can accept a
+        fragment shape the current rules refuse) is exactly right about the risk
+        and is the argument for checking the binary EARLIER — at `next-order`,
+        where the staleness already mattered and nothing looked — rather than at
+        the push, where the work is already written.
+
+        Rebuilding took 70 seconds in the builder toolbox
+        (`cargo build --release -p tillandsias-plan`), after which
+        `scripts/check-plan-binary-current.sh` reported
+        `stamped:plan-binary-validator-surface` and then
+        `ok:plan-binary-write-is-opt-in+role-satisfies` and the lane opened. Noting
+        the stamp was WRITTEN by the checker on that run, which is this packet's
+        subject: the remedy is only complete because the checker itself is what
+        creates the surface file it later tests for.

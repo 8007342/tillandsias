@@ -1793,6 +1793,122 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
 }
 
 #[cfg(feature = "vault")]
+/// ORDER 1286-4437. Clear the HOST-HELD vault credentials, preserving the
+/// installation anchor. This is the same rule
+/// `scripts/clear-vault-host-credentials.sh` implements, and the coordinator's
+/// 2026-09-20 ruling makes the BINARY the implementation the installers call,
+/// because `install.sh` is a standalone published artifact that fetches the
+/// binary and nothing else and cannot invoke a repo script.
+///
+/// PRESERVES `installation-uuid-v1` deliberately and permanently: the in-guest
+/// Vault derives its master key from it, so clearing it makes the next vault
+/// UNDERIVABLE rather than re-initialised (order 803-49re). Every platform's
+/// equivalent anchor is preserved for the same reason —
+/// `tillandsias-vm-uuid` on Windows, `INSTALL_ANCHOR_V1` on macOS.
+///
+/// Returns the list of things it CLEARED and the list it COULD NOT, so the
+/// caller can refuse rather than warn: 1284-jf86 is the row about a clearer
+/// that printed "the room is NOT cold" and exited 0.
+/// Linux-only, matching its single caller `run_reset_state`: it clears a
+/// host-held credential set whose locations (the Secret Service keychain, the
+/// `~/.cache/tillandsias` fallbacks, the subuid-owned `vault-data`) are Linux
+/// shapes, and it reaches for `podman unshare` and `libc::getuid`, neither of
+/// which exists on `x86_64-pc-windows-gnu`. The Windows and macOS equivalents
+/// clear Credential Manager and the keychain from their own trays.
+#[cfg(target_os = "linux")]
+pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
+    let mut cleared: Vec<String> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
+
+    // The root-token attr has no constant in this module (only the share and
+    // the anchor do); the name is the one scripts/clear-vault-host-credentials.sh
+    // clears, kept literal here so the two cannot drift apart silently.
+    for attr in [VAULT_SHAMIR_SHARE_V1, "vault-root-token-v1"] {
+        let a = attr.to_string();
+        let res = with_keyring_timeout(move || {
+            Entry::new(KEYCHAIN_SERVICE, &a).and_then(|e| e.delete_credential())
+        });
+        match res {
+            Ok(()) => cleared.push(format!("keychain:{attr}")),
+            Err(e) => {
+                // A missing entry is CLEARED, not failed — the post-condition is
+                // absence, and an already-absent item satisfies it. Anything
+                // else is a real failure and must not be reported as success.
+                if e.to_lowercase().contains("no entry") || e.to_lowercase().contains("not found") {
+                    cleared.push(format!("keychain:{attr} (already absent)"));
+                } else {
+                    failed.push(format!("keychain:{attr}: {e}"));
+                }
+            }
+        }
+    }
+
+    let cache = match crate::init_cache_dir() {
+        Ok(c) => c,
+        Err(e) => {
+            failed.push(format!("cache dir unavailable: {e}"));
+            return (cleared, failed);
+        }
+    };
+    for name in [
+        format!("fallback_{VAULT_SHAMIR_SHARE_V1}"),
+        "fallback_vault-root-token-v1".to_string(),
+    ] {
+        let f = cache.join(&name);
+        if !f.exists() {
+            cleared.push(format!("file:{name} (already absent)"));
+            continue;
+        }
+        match fs::remove_file(&f) {
+            Ok(()) => cleared.push(format!("file:{name}")),
+            Err(e) => failed.push(format!("file:{name}: {e}")),
+        }
+    }
+
+    // vault-data is written from INSIDE A CONTAINER UNDER A SUBUID, so a
+    // plain remove as the invoking uid is refused on every subdirectory.
+    // Measured twice on pirria 2026-09-19 (orders 1284-jf86): owner 524388,
+    // subdirectories mode 700. `podman unshare` runs in the user namespace
+    // where that subuid maps to root and is the one context able to remove
+    // what the product wrote. Tried only AFTER the plain remove, so a host
+    // whose directory is owned by the invoking user never needs a container
+    // runtime for this.
+    let vd = cache.join("vault-data");
+    if !vd.exists() {
+        cleared.push("dir:vault-data (already absent)".to_string());
+    } else if fs::remove_dir_all(&vd).is_ok() && !vd.exists() {
+        cleared.push("dir:vault-data".to_string());
+    } else {
+        // Bounded, not bare (order 714-4r6w): a synchronous podman call with no
+        // deadline is indistinguishable from slow work when the substrate is
+        // wedged, and `podman unshare` takes the storage lock. Container's
+        // budget is the right class — this removes a data tree, not an image —
+        // and it is a deadlock detector, not a performance target.
+        let unshared = podman_cmd_sync()
+            .args(["unshare", "rm", "-rf"])
+            .arg(&vd)
+            .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+            .map(|st| st.success())
+            .unwrap_or(false);
+        if unshared && !vd.exists() {
+            cleared.push("dir:vault-data (via podman unshare — subuid-owned)".to_string());
+        } else {
+            failed.push(format!(
+                "dir:vault-data: refused as uid {} and `podman unshare rm -rf` did not resolve it",
+                unsafe { libc::getuid() }
+            ));
+        }
+    }
+
+    if debug {
+        eprintln!("[tillandsias] cleared: {}", cleared.join(" "));
+        if !failed.is_empty() {
+            eprintln!("[tillandsias] FAILED: {}", failed.join(" "));
+        }
+    }
+    (cleared, failed)
+}
+
 fn with_keyring_timeout<F, T, E>(f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, E> + Send + 'static,

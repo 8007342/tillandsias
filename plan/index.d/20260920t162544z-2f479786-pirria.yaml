@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    field: status
+    value: in_progress
+    ts: "2026-09-20T16:25:44Z"
+    host: pirria
+
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T16:25:44Z"
+      host: pirria
+      summary: |-
+        handed by the coordinator 2026-09-20: pirria holds the most measurements of the stale-binary refusal (five in a day on one host, 66 s per rebuild, a one-attempt push once check-plan-binary-current.sh ran after the rebase); the remedy is in the lane's shell, a floor host can land it by relay

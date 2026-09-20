@@ -417,6 +417,24 @@ fn main() {
     // the inference model cache) and re-initialize from scratch.
     let reset_guest = user_args.iter().any(|a| a == "--reset-guest");
 
+    // ORDER 1286-4437 (operator ruling 2026-09-20). `--reset-state` is a
+    // SUPERSET of `--reset-guest`: it additionally clears the HOST-HELD
+    // credentials (keychain entries, the fallback_* files), vault-data and the
+    // images, then reprovisions through the same `--init` path. Name and
+    // semantics are IDENTICAL on all three platforms (agreed with yolanda, who
+    // holds the Windows arm, and macneo, who holds the macOS arm); the
+    // per-platform internals differ.
+    //
+    // It PRESERVES THE INSTALLATION IDENTITY, and that is the contract's other
+    // half rather than a detail: `installation-uuid-v1` here,
+    // `tillandsias-vm-uuid` on Windows, `INSTALL_ANCHOR_V1` on macOS. The
+    // in-VM/in-guest Vault derives its master key from it, so clearing it makes
+    // the next vault UNDERIVABLE rather than re-initialised — order 803-49re,
+    // permanently broken GitHub login. yolanda rejected the name
+    // `--reset-install` on exactly this ground: it would have named the one
+    // thing the flag is forbidden to touch.
+    let reset_state = user_args.iter().any(|a| a == "--reset-state");
+
     // @trace spec:enclave-service-catalog
     // `--publish-local <project>` — order 364 e2e closure: bring up the
     // service catalog and publish a local project's WEB container, returning
@@ -911,6 +929,18 @@ fn main() {
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     if reset_guest {
         if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // ORDER 1286-4437. Same dispatch shape as `--reset-guest` deliberately: one
+    // convention, exit 1 on any Err. macneo asked for exact numeric propagation
+    // and then withdrew the request for this reason — one imperfect convention
+    // beats two correct-looking ones.
+    if reset_state {
+        if let Err(e) = run_reset_state(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1424,6 +1454,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cache-verify [--debug]");
     println!("       tillandsias --cache-clear [--debug]");
     println!("       tillandsias --reset-guest [--debug]");
+    println!("       tillandsias --reset-state [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
@@ -1461,6 +1492,13 @@ fn print_usage(version: &str) {
         "  --reset-guest  EPHEMERAL RESET: wipe the guest substrate (vault + enclave \
          containers/volumes/secrets; keeps the model cache) and re-initialize. \
          Destructive by design; you'll re-authenticate once"
+    );
+    println!(
+        "  --reset-state  FULL LOCAL RESET: everything --reset-guest wipes PLUS the \
+         host-held vault credentials, the Vault store and ALL podman images, then \
+         reprovisions. PRESERVES the installation anchor (installation-uuid-v1). \
+         Same name and semantics on Linux, macOS and Windows (order 1286-4437). \
+         Skip with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0."
     );
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!(
@@ -9528,9 +9566,19 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
 /// extra ceremony; an explicit `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` (harness
 /// policy: plan/archive/podman-reset-harness-policy-2026-06-16.md) refuses
 /// loudly instead of silently proceeding.
-fn destructive_reset_allowed() -> bool {
-    std::env::var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").map_or(true, |v| v != "0")
-}
+// ORDER 1286-4437: THE GATE MOVED TO `tillandsias_core::reset_state`. It was a
+// private fn in this bin-only crate, so the macOS and Windows trays could not
+// import it and would each have had to COPY it — a second implementation of the
+// one affordance the operator's ruling says must have exactly one. All four
+// binaries already depend on tillandsias-core. Do not reintroduce a local copy.
+// `destructive_reset_allowed` is the gate for BOTH resets and `run_reset_guest`
+// is built on every platform, so it is imported unconditionally. The printer and
+// the skipped-case line are used only by the Linux `--reset-state` body; gating
+// them keeps the non-Linux build free of unused-import warnings, which the gate
+// treats as errors.
+use tillandsias_core::reset_state::destructive_reset_allowed;
+#[cfg(target_os = "linux")]
+use tillandsias_core::reset_state::{RESET_SKIPPED_LINE, announce_reset_plan};
 
 /// Pure scope filter: which podman object names (containers/volumes/secrets)
 /// belong to the Tillandsias guest substrate. Everything the stack creates is
@@ -9595,9 +9643,109 @@ fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
     }
 }
 
+/// The non-Linux arm, and it exists because the cross-target check refused the
+/// first draft (land 30): the dispatch calls `run_reset_state` unconditionally
+/// while the body is `#[cfg(target_os = "linux")]`, so on
+/// `x86_64-pc-windows-gnu` the call found an item that was configured out.
+///
+/// It REFUSES BY NAME rather than silently succeeding, the 1276-2hc6 shape: a
+/// launcher on a platform where its lane cannot work says so on arrival and
+/// names the working command. `--reset-state` destroys a podman substrate this
+/// binary does not own anywhere but Linux; the Windows and macOS trays carry
+/// their own bodies against WSL2 and Virtualization.framework respectively, and
+/// all three share the gate, the printer and the strings from
+/// `tillandsias_core::reset_state` — which is the whole point of the core half
+/// landing first. The caller prints this and exits 1, so the refusal is
+/// non-zero without a second exit convention.
+#[cfg(not(target_os = "linux"))]
+fn run_reset_state(_debug: bool) -> Result<(), String> {
+    Err(
+        "refused:reset-state-not-this-platform:--reset-state resets the Linux \
+         podman substrate, which this binary does not own on this platform; run \
+         tillandsias-tray.exe --reset-state on Windows, or the installed tray on \
+         macOS"
+            .to_string(),
+    )
+}
+
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
 /// same end state as a pristine `--init` + vault bring-up, with every prior
 /// guest credential discarded (the honest UX: you'll re-authenticate once).
+/// ORDER 1286-4437 (operator ruling 2026-09-20). A SUPERSET of
+/// `--reset-guest`: the guest substrate PLUS the host-held credentials,
+/// vault-data and the images, then reprovision through the same `--init` path.
+///
+/// `--reset-guest` is deliberately NOT changed. It documents "images are
+/// preserved, so this is fast when they still exist" and callers rely on that;
+/// this flag is the stronger sibling, not a redefinition.
+#[cfg(target_os = "linux")]
+fn run_reset_state(debug: bool) -> Result<(), String> {
+    announce_reset_plan(
+        &[
+            "every Tillandsias podman container, volume, secret and network",
+            "ALL podman images on this host (podman system reset --force)",
+            "the host keychain entries vault-shamir-share-v1 and vault-root-token-v1",
+            "the host fallback files fallback_vault-shamir-share-v1 and fallback_vault-root-token-v1",
+            "<cache>/tillandsias/vault-data (the Vault store)",
+        ],
+        &[
+            "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the \
+             in-guest Vault derives its master key from it, so clearing it would \
+             make the next vault underivable rather than re-initialised (803-49re)",
+            "the installed tillandsias binary itself",
+            "~/.cache/tillandsias/models (the podman reset does not reach it)",
+        ],
+    );
+
+    // ONE affordance, and it already existed: `--reset-guest` has honoured
+    // TILLANDSIAS_DESTRUCTIVE_RESET_OK since it was written, and the smoke
+    // runbook names it "the only supported opt-out". A new
+    // TILLANDSIAS_INSTALL_SKIP_RESET was proposed, agreed by three hosts and
+    // approved, before anyone read this line — it would have been the second
+    // "keep my state" affordance the same ruling forbade.
+    if !destructive_reset_allowed() {
+        eprintln!("{RESET_SKIPPED_LINE}");
+        return run_init(debug, false);
+    }
+
+    // ORDER: podman reset FIRST, then the host credentials. Not arbitrary —
+    // clearing vault-data needs `podman unshare`, which needs a working podman,
+    // and the smoke's §2 has run this order since 900-z3kv.
+    // THROUGH THE SHARED LAYER. The first draft built the process command
+    // directly and `tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer`
+    // caught it: "headless runtime must not construct podman commands directly".
+    // That is a real invariant — the shared layer carries the operation budgets
+    // and the debug tracing every other podman call in this binary gets.
+    //
+    // NOTE FOR THE NEXT EDITOR: that test is a raw SOURCE SCAN of this file, so
+    // it fails on the forbidden constructor appearing ANYWHERE — including in a
+    // comment quoting it to explain the rule. This paragraph therefore describes
+    // the constructor instead of spelling it, which is why it reads indirectly.
+    eprintln!("[tillandsias] --reset-state: podman system reset --force ...");
+    let mut reset_cmd = podman_command();
+    reset_cmd.args(["system", "reset", "--force"]);
+    run_podman_command(reset_cmd, debug)
+        .map_err(|e| format!("podman system reset --force failed: {e}"))?;
+
+    let (cleared, failed) = vault_bootstrap::clear_host_vault_credentials(debug);
+    eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
+    if !failed.is_empty() {
+        // REFUSE, do not warn. 1284-jf86 is the row about a clearer that
+        // printed "the room is NOT cold" and exited 0; a reset that cannot
+        // clear the credentials has not produced the state the caller asked
+        // for, and reprovisioning on top of it would recover the old share.
+        return Err(format!(
+            "--reset-state could not clear: {} — the local state is NOT reset, so \
+             reprovisioning now would recover the old Vault share. Nothing further \
+             was attempted.",
+            failed.join(" ")
+        ));
+    }
+
+    eprintln!("[tillandsias] --reset-state: local state reset \u{2713} — reprovisioning ...");
+    run_init(debug, false)
+}
+
 fn run_reset_guest(debug: bool) -> Result<(), String> {
     if !destructive_reset_allowed() {
         return Err(

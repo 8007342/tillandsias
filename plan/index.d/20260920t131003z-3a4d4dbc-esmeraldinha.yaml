@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    event:
+      type: note
+      ts: "2026-09-20T13:10:03Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        CLOSED. The installer verifies what it installed again, and the guard that could not fail can fail — demonstrated against the real installer, not inferred.
+
+        === LAND ===
+        ok:land:5928dbad2:attempt-2 (relay-landed by macuahuitl from the Linux gate; attempt 1 lost the push to a trunk move, attempt 2 adopted the stamp). Source commit 37b71d0877b1f4322422fc5b74c334b841f6b79a, handed off on refs/heads/salvage/esmeraldinha/20260920-1258-8wfb-installer-diagnose because this host's ~100-minute gate would have spent an evening on a change the relay gates in seconds, and because the work/<order> lane demands a stamp this host did not have. The hook accepted it with `✓ local gate: salvage ref — exempt by design (872-c9nd)`.
+
+        VERIFIED ON TRUNK BY CONTENT, not by ancestry — a land here rebases, so a SHA comparison can read MISSING while the work is present. Five markers checked against origin/linux-next at 49b4efe31:
+          scripts/install-windows.ps1 : `DiagExit -eq 1` present (1)
+          scripts/install-windows.ps1 : `install bits broken` present (1)
+          scripts/install-windows.ps1 : `os_version` present (2)
+          litmus-windows-tray-diagnose-cli-surface.yaml : that step declares `assert_exit: 0` (1)
+          litmus-windows-tray-diagnose-cli-surface.yaml : `assert_output_nonempty` on that step GONE (0)
+
+        === THE FOUR EXIT CRITERIA ===
+
+        1. THE STEP MIGRATES AND PASSES. Done: `assert_exit: 0`, `assert_output_nonempty` removed with a comment saying not to restore it, litmus green.
+        2. THE INSTALLER VERIFIES WHAT IT INSTALLED. Done, by restoration rather than by ratifying the removal.
+        3. THE OPERATOR-FACING SURFACE DECIDED EXPLICITLY. All three return: version, build_commit, os_version and wsl_version are surfaced, each with a NAMED placeholder when absent rather than silence.
+        4. THE STEP MUST BE ABLE TO FAIL AGAIN. Done, and proved twice — see below.
+
+        === THE NEGATIVE CONTROL, RUN TWICE ON PURPOSE ===
+
+        The copies-only version proves the CHAIN reds and NOT that the STEP does, and the step is the thing that reported PASS for three months. So both:
+
+        (a) On COPIES, chain level, all seven literals, real installer never touched:
+              REDS rc=1 remaining=0  <- cmd.exe / --diagnose --json / --version /
+                                        install bits broken / build_commit /
+                                        os_version / wsl_version
+              ok:negative-control:7/7 literals load-bearing
+        (b) On the REAL installer, STEP level: with `install bits broken` deleted and the litmus re-run:
+              [FAIL] spec=windows-native-tray test=litmus:windows-tray-diagnose-cli-surface
+              Status: [FAIL]
+            File restored from the commit afterwards; `git status` verified empty and the literal count back to 1.
+
+        PRE-FIX, for the record: the seven conjuncts gave rc=0/1/0/1/1/1/1 with CHAIN_RC=1 and exactly one line of output, and the litmus reported PASS 9/9, 100%, Status [PASS].
+
+        === THE CLOSURE WAS CORRECTED BEFORE IT WAS IMPLEMENTED ===
+
+        The instruction reaching this host said "a non-ready diagnose fails the install with its exit". THAT WOULD HAVE FAILED EVERY FIRST INSTALL ON EVERY WINDOWS HOST. `exit_code_from()` (notify_icon.rs:3130) returns 2 whenever the distro is not registered, which is the state at the end of every clean install; 3 is CONVERGING; 0 needs phase Ready. The removed code documented exactly this and guarded its throw with `-eq 1`:
+            #   2 = first install: binary works but distro not provisioned yet (expected, ok).
+            #   1 = hard failure: binary missing or won't run -> installer fails.
+        Exit 1 is not reachable from exit_code_from at all, so it means the binary produced no verdict. THE CHECK VERIFIES THE INSTALL BITS, NOT THE PROVISIONING. The coordinator accepted the correction; the implemented closure is the corrected one.
+
+        INDEPENDENTLY CONFIRMED BY yolanda from a RUN rather than a read: the installer ends with a fire-and-forget `Start-Process` and their two cold provisions took 91s and 79s, so a readiness assertion there would be a race — pass on a fast host, fail on a slow one. On this host it is stronger: the check sits at :454, BEFORE the `Start-Process` at :504, so the tray has not launched at all and the distro is unregistered. READY is not a race sometimes lost; it is lost every time on a clean machine.
+
+        === THE HISTORY IS FOUR COMMITS, NOT THREE ===
+        Correcting this row's own context, which lists three:
+          d7bfcdd9f  2026-05-28  ADDED --diagnose --json, the exit-1 "install bits broken" throw, version/pin surfacing
+          567009f68  2026-05-30  ADDED the --version preflight, build_commit, wire-error surfacing
+          a9163cdaa             ADDED os_version / wsl_version ("  host:      OS=$osVer; WSL=$wslVer")
+          6cdaa8ac2  2026-06-23  REMOVED the diagnose half of all three, KEEPING the --version layer
+        a9163cdaa matters because two of the three fields criterion 3 names originate there. And 6cdaa8ac2 keeping --version while dropping --diagnose is the sentence that explains the chain's shape: conjuncts 1 and 3 still matched, the other five did not.
+
+        === ORDERING, AGREED WITH yolanda FOR 1286-4437 ===
+        (1) --version preflight, (2) THIS check on the install bits, (3) yolanda's --reset-state, (4) yolanda's post-reprovision readiness check. A broken binary aborts at (2) and never reaches anything destructive. Mine certifies the BITS before destruction, theirs certifies the RESULT after; neither substitutes. yolanda verified this commit by content before branching their reset arm from it.
+
+        === ALSO VERIFIED, because a Linux relay would not catch either before its gate ===
+        PowerShell parser clean (`[Parser]::ParseFile` -> PARSE CLEAN), and zero non-ASCII bytes: that file is pinned pure-ASCII by TWO litmus guards (installer-wsl-preflight-shape and smoke-release-channel-shape), so `--` and `->` only, no em-dashes.
+
+        === AN ERROR OF MINE, THIS ROW'S OWN FAMILY ===
+        My first mutation harness reported FOUR of the seven literals as not load-bearing. The fix was fine; the harness was not. `grep -c` PRINTS 0 AND EXITS 1 on no match, so `count=$(grep -Fc ... || echo 0)` appended a SECOND zero, yielding "0\n0" and an "integer expression expected" failure I first read as the chain not reddening. A tool that both emits a usable value and signals failure defeats the reflexive `|| default`. That is this row's defect — a discarded exit code — committed by me while measuring it.
+
+        WHAT THIS CLOSURE DOES NOT CLAIM: no installer was executed on this host. The evidence is source-level plus the litmus, plus yolanda's two real runs for the timing. The end-to-end install remains theirs.
