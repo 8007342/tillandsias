@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: measure-whether-a-shared-sccache-on-the-lan-repays-its-complexity-before-any-host-is-asked-to-depend-on-one
+    order: 1287-w9s4
+    status: ready
+    kind: investigation
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, build, performance, multi-host]
+    estimated_hours: 6
+    owned_files: []
+    title: |
+      measure whether a shared sccache on the LAN repays its complexity, with lenovinha as the measuring host — a COMPILE cache, not a Nix cache, and the number that decides it is a hit rate read from sccache itself, never a quoted speedup
+    context: |
+      PROPOSED as fleet work; filed by lenovinha-silverblue 2026-09-19 as the
+      measuring host. This row exists to STOP a plausible optimisation from
+      being adopted on a vendor's marketing number.
+
+      WHAT IT IS AND IS NOT. sccache caches COMPILATION UNITS — rustc
+      invocations keyed by input hash, flags and compiler version. It is not a
+      Nix/binary-artifact cache and does not substitute for one; the two answer
+      different questions and conflating them is the most common way this
+      proposal is mis-scoped.
+
+      WHY THE FLEET IS A PLAUSIBLE CASE. Multiple hosts compile the SAME tree at
+      the same commits: macuahuitl, lenovinha, yoga and pirria all run gates on
+      Linux. Cross-host reuse is the only argument for a SHARED cache over a
+      local one, and it is exactly the thing nobody has measured.
+
+      WHY IT MIGHT NOT PAY, stated up front so the measurement is honest:
+      - a gate's cost is not all rustc; link time, the litmus surface and the
+        guard scripts do not cache at all, and this session measured one full
+        gate at 1165s of which the Rust build is only a part;
+      - a LAN round trip per compilation unit can LOSE to a local disk cache on
+        small units, and the fleet's link is unmeasured;
+      - hosts differ in toolchain and CPU dispatch, and any flag divergence
+        partitions the keyspace, so the effective hit rate across hosts can be
+        far below the single-host rate.
+
+      THE NUMBER THAT DECIDES IT IS A HIT RATE sccache REPORTS ABOUT ITSELF
+      (`sccache --show-stats`), on OUR tree, across OUR hosts. A quoted
+      speedup from a vendor page, a blog or another project is NOT evidence
+      here and must not appear in the closure.
+    next_action: |
+      Nobody holds this. What is LEFT, in order:
+      1. BASELINE FIRST, LOCAL ONLY. On lenovinha, cold vs warm on the SAME
+         tree at the SAME commit: wipe the local cache, build, record wall
+         clock and `sccache --show-stats`; rebuild untouched, record both
+         again. This alone may settle it — if a LOCAL cache already captures
+         most of the win, a shared one is complexity for the remainder.
+      2. THEN CROSS-HOST, which is the only thing a shared cache adds. Populate
+         from one host, build the same commit on a second, and read the hit
+         rate on the SECOND host. That number is the whole proposal.
+      3. MEASURE THE PARTITIONING before believing step 2 generalises: compare
+         toolchain version and RUSTFLAGS across the Linux hosts and record any
+         divergence, because divergence silently halves the keyspace.
+      4. REPORT AGAINST THE GATE, not against `cargo build`. The fleet's unit
+         of pain is a gate, and the Rust build is only part of it — a 40%
+         compile win on a 20%-compile gate is an 8% gate win, and that framing
+         is what makes the decision.
+      5. ONLY THEN propose adoption, or record the refusal with its numbers.
+      A NEGATIVE RESULT CLOSES THIS ROW SUCCESSFULLY. "Measured, does not pay,
+      here is the hit rate" is the deliverable as much as a yes.
+    unscoreable: |
+      the-deliverable-is-a-measurement-not-an-artifact. This row closes on a
+      RECORDED NUMBER taken on this fleet, and a NEGATIVE result closes it
+      successfully, so there is no test that can pass or fail for it. Scoring it
+      with a litmus would require inventing the threshold this row exists to
+      DISCOVER. The closure below is the obligation; it is checkable by reading
+      it, not by running it.
+    verifiable_closure: |
+      A recorded measurement, taken on this fleet's hosts and this tree, giving:
+      cold and warm wall clock on one host; the cross-host hit rate read from
+      `sccache --show-stats` on a host that did NOT populate the cache; any
+      toolchain/flag divergence found; and the win expressed as a fraction of
+      GATE time, not of compile time. Plus a stated recommendation. No number
+      in the closure may originate outside this fleet.
+
+events:
+  - packet_id: measure-whether-a-shared-sccache-on-the-lan-repays-its-complexity-before-any-host-is-asked-to-depend-on-one
+    event:
+      type: note
+      ts: "2026-09-20T05:51:54Z"
+      host: lenovinha-silverblue
+      summary: |-
+        filed with the measurement protocol fixed in advance, so a positive result cannot be assembled after the fact
