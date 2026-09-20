@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    event:
+      type: note
+      ts: "2026-09-20T20:10:34Z"
+      agent_id: linux-pirria-claude-20260920t201500z
+      host: pirria
+      summary: |
+        CONSUMER CENSUS, done BEFORE the runner changes (coordinator ruling 3, 2026-09-20).
+        A reporting change that moves a number a gate compares is a gate change, so every
+        parser of the runner's output surface is named here with WHAT IT READS.
+
+          scripts/local-ci.sh
+              reads TESTS_SKIPPED (into --argjson litmus_skipped for its JSON report),
+              greps [FAIL], and prints its OWN line `Pass Rate: %d%% (%d/%d)` from its
+              own counters. Two pass-rate lines exist in the fleet and they are not the
+              same line; conflating them is its own hazard.
+          scripts/test-litmus-missing-bound-test-reds.sh
+              asserts the LITERAL string `Pass Rate: 100% (1/1 executed)` and
+              `Status: [PASS]`. THE TIGHTEST COUPLING FOUND: a reshaped pass-rate line
+              reds this fixture immediately. It is why the ruling's "add lines, do not
+              rename or reshape" is not a style preference.
+          scripts/test-litmus-budget-tally.sh          reads `Status: [FAIL]`
+          scripts/test-litmus-step-pipefail.sh         reads `Status: [PASS]` / `[FAIL]`
+          scripts/test-litmus-runner-reports-rc.sh     reads `[FAIL]` and the rc= grammar (1018-5f5a)
+          scripts/litmus-opencode-e2e-launch.sh
+          scripts/litmus-codex-e2e-launch.sh
+              grep `MO-SMOKE: PASS` — the AGENT's verdict line, not the runner's, but
+              meta-orchestration's smoke mode quotes the pre-build pass rate when it
+              decides that verdict (822-4vwa), so the number reaches them one hop away.
+
+        THE PLAN THAT FOLLOWS FROM IT: every line above keeps its exact format and its
+        exact position. The four verdict counts arrive as ADDED lines, with their own
+        definition line so nobody re-derives the denominator from the numbers.
+
+        WHAT WILL MOVE ANYWAY, and this is the announcement's subject rather than a
+        breakage: the pass RATE's VALUE changes on hosts where a skip previously counted
+        as a failure, because the denominator excludes skipped. The format is identical;
+        the number is not. Direction is predictable and one-way — pass rates go UP on
+        floor and platform-minority hosts, whose skips stop being scored as defects, and
+        nothing goes DOWN except where a fabricated skip was masking a red, which is what
+        the load-bearing negative control exists to catch.
+
+        MEASURED EXPOSURE this is all for: 144 corpus steps invoke a script that can emit
+        a named skip while declaring an expectation that does not admit one, plus 6 for
+        advisory — out of 2580 steps, 104 skip-capable scripts, and only 20 steps whose
+        expectation admits the word.
