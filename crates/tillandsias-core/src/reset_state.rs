@@ -49,7 +49,15 @@ pub fn destructive_reset_allowed() -> bool {
 /// The exact line every platform prints when the opt-out above suppressed the
 /// reset. A shared constant rather than three string literals so it is
 /// greppable across the fleet and cannot drift.
-pub const RESET_SKIPPED_LINE: &str = "[tillandsias] --reset-state: reset SKIPPED by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \
+///
+/// THE PHRASE `reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` IS FIXED,
+/// BYTE FOR BYTE, INCLUDING ITS LOWERCASE. It is yolanda's wording, already
+/// shipped in the Windows arm, and the coordinator settled on it on 2026-09-20
+/// so three hosts would stop negotiating. Do not "fix" the casing to match the
+/// surrounding style: a litmus and any operator greps this phrase across three
+/// platforms, and a capital letter here is a silent divergence on two of them.
+pub const RESET_SKIPPED_LINE: &str =
+    "[tillandsias] --reset-state: reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \
      — reprovisioning through the platform's plain init instead.";
 
 /// The exact prefix of the refusal every platform prints when its reprovision
@@ -129,7 +137,15 @@ mod tests {
     /// reword here is a visible break rather than a silent divergence.
     #[test]
     fn shared_lines_are_greppable_and_name_the_variable() {
-        assert!(RESET_SKIPPED_LINE.contains("TILLANDSIAS_DESTRUCTIVE_RESET_OK=0"));
+        // BYTE-EXACT, including the lowercase. This is yolanda's wording,
+        // shipped in the Windows arm and settled by the coordinator as the one
+        // phrase all three platforms print. A litmus greps it across three
+        // platforms, so a casing "fix" here is a silent divergence on two of
+        // them — this assertion exists to make that a red test instead.
+        assert!(
+            RESET_SKIPPED_LINE.contains("reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0"),
+            "the byte-exact shared phrase must be present; got: {RESET_SKIPPED_LINE}"
+        );
         assert!(RESET_SKIPPED_LINE.contains("--reset-state"));
         assert!(RESET_NO_REPROVISION_PATH.contains("REFUSING to destroy anything"));
     }
