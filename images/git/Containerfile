@@ -122,6 +122,7 @@ RUN chmod +x /usr/local/bin/ssh-lane-sidecar
 
 # @trace spec:tillandsias-vault, spec:git-mirror-service
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
+COPY vault-agent-signer.hcl /etc/tillandsias/vault-agent-signer.hcl
 COPY vault-agent-bootstrap.sh /usr/local/bin/vault-agent-bootstrap
 
 # @trace spec:secrets-management — order 424: keeps the upstream token off argv.

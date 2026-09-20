@@ -4334,6 +4334,89 @@ pub async fn provision_lane_signer_approle_for_launch(
     provision_lane_signer_approle(&client, mirror_id, debug).await
 }
 
+/// AppRole name for one mirror's HOST-certificate signing identity (D6/D12).
+/// Deliberately the SAME string as [`mirror_host_signer_policy_name`], for the
+/// same reason the lane side does it: a shared name makes the one-role-one-
+/// policy pairing visible in every Vault listing.
+pub fn mirror_host_signer_role_name(mirror_id: &str) -> String {
+    mirror_host_signer_policy_name(mirror_id)
+}
+
+/// Provision the per-mirror HOST-signer AppRole (order 1313-prin, closing the
+/// gap 1288-5qpn's dogfooding found).
+///
+/// THE DEFECT THIS EXISTS TO FIX. `provision_mirror_ssh_roles` MINTED
+/// `ssh-host-signer-<mid>` and nothing was ever bound to it: the lane side had
+/// both halves (`provision_lane_signer_approle`), the host side had the mint
+/// only. So the mirror authenticated with the GLOBAL `git-mirror-agent` role,
+/// whose token carries `["default","git-mirror-policy"]`, and every
+/// `ssh-host-signer/sign/host-<mid>` request answered 403 permission denied.
+/// MEASURED on lenovinha 2026-09-20 by `auth/token/lookup-self` from inside the
+/// mirror with the token it already held, and by grep: one operative reference
+/// to the policy name, and it was the mint.
+///
+/// WHY NOT THE SMALLER FIX, recorded because it is the one a reader reaches for.
+/// Adding the per-mirror policy to `GIT_MIRROR_AGENT_ROLE` would attach it in
+/// three lines. That role is GLOBAL — one role for every project's mirror — so
+/// with two projects up, project A's mirror token would carry project B's
+/// `ssh-host-signer-<B>` policy: cross-project HOST-CERTIFICATE SIGNING. That is
+/// the authority the 2026-08-10 amendment withdrew (D12), and
+/// [`reject_sign_wildcard`] cannot see it, because no policy BODY contains a
+/// wildcard — the same authority granted by a different route, past a guard
+/// watching the wrong door. The only test that distinguishes the two fixes is
+/// the exactness arm: sign answers 200 for this mirror's id and 403 for another's.
+///
+/// ONE TOKEN NEVER CARRIES BOTH AUTHORITIES: the mirror uses this identity for
+/// SIGNING ONLY and keeps `git-mirror-agent` for everything else.
+///
+/// Refuses extra policies by construction (it takes none), exactly as the lane
+/// side does. Idempotent: role writes are overwrites, and the policy this role
+/// names is minted by `provision_mirror_ssh_roles` first — policy-before-role
+/// ordering means a half-provisioned mirror fails CLOSED at login rather than
+/// open at sign time.
+pub async fn provision_host_signer_approle(
+    client: &VaultClient,
+    mirror_id: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let role = mirror_host_signer_role_name(mirror_id);
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] provisioning host-signer AppRole {role} -> {}",
+            mirror_host_signer_policy_name(mirror_id)
+        );
+    }
+    client
+        .enable_approle()
+        .await
+        .map_err(|e| format!("enable_approle: {e}"))?;
+    client
+        .create_approle_agent_role(
+            &role,
+            &[&mirror_host_signer_policy_name(mirror_id)],
+            APPROLE_TOKEN_TTL_SECS,
+            APPROLE_TOKEN_MAX_TTL_SECS,
+        )
+        .await
+        .map_err(|e| format!("create_approle_agent_role {role}: {e}"))?;
+    Ok(role)
+}
+
+/// Launch-path wrapper for [`provision_host_signer_approle`], built the same
+/// way [`provision_lane_signer_approle_for_launch`] is.
+pub async fn provision_host_signer_approle_for_launch(
+    mirror_id: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    provision_host_signer_approle(&client, mirror_id, debug).await
+}
+
 /// Read the host-signer CA public key (T10: the forge's `@cert-authority`
 /// known_hosts line must carry this, delivered read-only — `~/.ssh` in the
 /// forge is an empty tmpfs by design, D9).
@@ -5988,6 +6071,59 @@ mod tests {
                 "shared alias {retired} must never re-enter the host CA"
             );
         }
+    }
+
+    /// ORDER 1313-prin. The host-signer AppRole must pair one-to-one with its
+    /// minted policy, exactly as the lane-signer role does. The shared NAME is
+    /// the visible half of that pairing in every Vault listing.
+    #[test]
+    fn host_signer_role_name_equals_its_policy_name() {
+        let mid = "kvs69tkis9dfnbejbatg";
+        assert_eq!(
+            mirror_host_signer_role_name(mid),
+            mirror_host_signer_policy_name(mid),
+            "the host-signer role and its policy share a name so the one-role-one-policy \
+             pairing is visible in a Vault listing, as the lane side already does"
+        );
+        assert_eq!(
+            mirror_host_signer_role_name(mid),
+            format!("ssh-host-signer-{mid}")
+        );
+        // PER-MIRROR, not global. This is the whole point: a shared role
+        // carrying per-mirror policies would grant project A's mirror the
+        // authority to sign project B's host certificates (D12, withdrawn
+        // 2026-08-10), past reject_sign_wildcard, which only inspects policy
+        // BODIES and would see no wildcard to refuse.
+        assert_ne!(
+            mirror_host_signer_role_name("aaa"),
+            mirror_host_signer_role_name("bbb"),
+            "the host-signer role must be PER-MIRROR; one shared role carrying every mirror's \
+             policy is cross-project host-certificate signing with no wildcard anywhere"
+        );
+    }
+
+    /// ORDER 1313-prin. Source-level, because the property is "takes no other
+    /// policy BY CONSTRUCTION" and a behavioural test would need a live Vault.
+    /// The lane side documents the same invariant; this pins that the host side
+    /// was built the same way rather than by widening a shared role.
+    #[test]
+    fn host_signer_approle_binds_exactly_one_policy() {
+        let src = include_str!("vault_bootstrap.rs");
+        let body = src
+            .split("pub async fn provision_host_signer_approle(")
+            .nth(1)
+            .expect("provision_host_signer_approle source");
+        let window = &body[..body.find("\n}\n").unwrap_or(body.len())];
+        assert!(
+            window.contains("&[&mirror_host_signer_policy_name(mirror_id)]"),
+            "the host-signer role must be created with EXACTLY its own minted policy; got:\n{window}"
+        );
+        assert!(
+            !window.contains("GIT_MIRROR_AGENT_ROLE"),
+            "the host-signer authority must NOT be attached to the global git-mirror-agent role \
+             — that is the cross-project grant D12 withdrew, reachable with no wildcard in any \
+             policy body; got:\n{window}"
+        );
     }
 
     #[tokio::test]

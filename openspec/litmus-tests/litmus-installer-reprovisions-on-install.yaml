@@ -33,10 +33,18 @@ critical_path:
     # parse, dispatch, usage and help lines; >=4 rather than =N so adding a help line is not a red.
 
   - step: "nothing READS a second opt-out variable"
-    command: "n=$(grep -rn 'TILLANDSIAS_INSTALL_SKIP_RESET' crates/ scripts/ 2>/dev/null | grep -vcE '^[^:]+:[0-9]+: *(//|#)' || true); if [ \"$n\" -eq 0 ]; then echo ok:no-second-optout; else echo \"FAIL:reads=$n\"; fi"
+    command: "n=$(grep -rn 'TILLANDSIAS_INSTALL_SKIP_RESET' crates/ scripts/ 2>/dev/null | grep -vE '^scripts/test-[a-z0-9-]+\\.sh:' | grep -vcE '^[^:]+:[0-9]+: *(//|#)' || true); if [ \"$n\" -eq 0 ]; then echo ok:no-second-optout; else echo \"FAIL:reads=$n\"; fi"
     timeout_ms: 30000
     expected_behavior: "ok:no-second-optout"
     # zero READS, not zero mentions: the first draft asserted zero OCCURRENCES and failed against 2 doc comments recording the rejection, which are exactly what stops reintroduction.
+
+    # A FIXTURE THAT GUARDS THE NAME IS NOT A READ OF IT. macneo's
+    # scripts/test-reset-state-contract.sh both greps for this variable and PLANTS
+    # it in fixture text, so this step counted its guard as the violation — a false
+    # RED on trunk from the moment 66f952eed landed, on the arm whose own note warns
+    # that asserting the MENTION would force deleting the warnings that prevent the
+    # defect. Excluding scripts/test-*.sh keeps the property (no code CONSULTS the
+    # variable) and lets the fixtures that defend it exist.
 
   - step: "the guard and the announcement live in core, importable by all three binaries"
     command: "n=$(grep -cE 'pub fn destructive_reset_allowed|pub fn announce_reset_plan|pub const RESET_SKIPPED_LINE|pub const RESET_NO_REPROVISION_PATH' crates/tillandsias-core/src/reset_state.rs || true); if [ \"$n\" -eq 4 ]; then echo ok:core-public-items; else echo \"FAIL:core-public-items=$n\"; fi"
