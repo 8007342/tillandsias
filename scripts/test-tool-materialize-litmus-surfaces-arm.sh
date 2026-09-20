@@ -55,6 +55,7 @@ skiparm() {
 }
 # Set by ARM 0 when the subject skipped its toolbox-dependent arms.
 NO_TOOLBOX=0
+NO_TOOLBOX_TAG="toolbox arms skipped"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -96,6 +97,15 @@ elif _tms_skip="$(printf '%s' "$(sed -n 's/.*\(arms 4-7 need [^"]*\)/\1/p' "$TMP
         bad "ARM 0: on BARE-METAL LINUX the subject skipped its toolbox arms ($_tms_skip) — that is an anomaly, not a platform fact: this host is expected to have a working tillandsias-builder carrying jq, and without it step 414 would go green while guarding nothing"
     else
         NO_TOOLBOX=1
+        # ORDER 1300-q7eq v4. The aggregate tag must name WHICH skip fired, not
+        # a fixed guess. yoga measured the summary reading "no toolbox" while
+        # ARM 0's own line correctly said the builder lacked jq — the summary
+        # coarser than the evidence, which is the v2 defect one level down.
+        case "$_tms_skip" in
+            *"carry jq"*) NO_TOOLBOX_TAG="builder present but its jq is not usable" ;;
+            *"need a toolbox"*) NO_TOOLBOX_TAG="no toolbox" ;;
+            *) NO_TOOLBOX_TAG="toolbox arms skipped" ;;
+        esac
         ok "ARM 0: the subject SKIPPED arms 4-7 ($_tms_skip), so the regime probe could not run — arms 1, 1b and 2 are skipped by name below for the same reason, so NOTHING in this run exercises the margin arm; that coverage lives on a host with a working builder"
     fi
 elif grep -q 'skip:tool-materialize-margin:no-regime-probe' "$TMP/real.out"; then
@@ -123,9 +133,9 @@ fi
 # not happen (965-sxec: a check that could not run must not claim what it would
 # have found).
 if [ "$NO_TOOLBOX" -eq 1 ]; then
-    skiparm "ARM 1: needs a toolbox — the subject skips its margin arm on this host, so a forced failure never reaches it" "no toolbox, margin arm not exercised"
-    skiparm "ARM 1b: needs a toolbox — same reason as ARM 1" "no toolbox, margin arm not exercised"
-    skiparm "ARM 2: needs a toolbox — an injected load cannot reach a margin arm that does not run" "no toolbox, margin arm not exercised"
+    skiparm "ARM 1: needs a toolbox — the subject skips its margin arm on this host, so a forced failure never reaches it" "$NO_TOOLBOX_TAG, margin arm not exercised"
+    skiparm "ARM 1b: needs a toolbox — same reason as ARM 1" "$NO_TOOLBOX_TAG, margin arm not exercised"
+    skiparm "ARM 2: needs a toolbox — an injected load cannot reach a margin arm that does not run" "$NO_TOOLBOX_TAG, margin arm not exercised"
 else
 # ---------------------------------------------------------------- ARM 1
 # A RED NAMES ITS ARM, AND THE VERDICT SURVIVES TOO. Driven through the REAL
@@ -271,7 +281,7 @@ if [ "$fail" -eq 0 ]; then
     # exercised on this host" when nothing exercised it. Name the absence.
     if [ "$skipped" -gt 0 ]; then
         printf 'ok:tool-materialize-%s:arm-surfaced:%d/%d (%d skipped: %s)\n' \
-            "$LIT" "$pass" "$((pass + fail))" "$skipped" "$(printf '%s' "$skip_reasons" | tr ';' ',' )"
+            "$LIT" "$pass" "$((pass + fail))" "$skipped" "$(printf '%s' "$skip_reasons" | sed 's/;/, /g')"
         exit 0
     fi
     printf 'ok:tool-materialize-%s:arm-surfaced:%d/%d\n' "$LIT" "$pass" "$((pass + fail))"
