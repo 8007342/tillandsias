@@ -19,9 +19,27 @@ bad() { fail=$((fail+1)); printf '  [FAIL] %s\n' "$1"; }
 # The roster is the three places a guard can be wired. esme's 1303 litmus was
 # refused by check-litmus-expression-pinning-added (634-39ik), a guard absent
 # from every hand-assembled list that day including an eighteen-entry one.
-for r in '_fast_refusal_checks' 'gate-steps.d' 'scripts/hooks'; do
-    if grep -q "$r" build.sh; then ok "the roster reads $r"; else bad "the roster does not read $r"; fi
+# The three rosters, each READ AS LITERALS (1063-nraf: a binding assembled from a
+# variable is invisible to every name-based scan). An earlier draft of this row
+# drove the fast tier from a list variable and 1009-gccx's own fixture refused
+# it; this arm's first version then asserted the roster read that list, and
+# outlived the design it described — a stale assertion passing judgement on code
+# that no longer works that way.
+_roster_fn="$(awk '/^_preflight_roster\(\) \{/,/^\}/' build.sh)"
+for r in 'FAST REFUSALS' 'gate-steps.d' 'scripts/hooks'; do
+    if printf '%s' "$_roster_fn" | grep -q "$r"; then
+        ok "the roster scans $r"
+    else
+        bad "the roster does not scan $r"
+    fi
 done
+# And it must scan, not curate: no list variable may stand between the tier and
+# the door.
+if printf '%s' "$_roster_fn" | grep -q '_fast_refusal_checks'; then
+    bad "the roster reads a list variable — the tier's bindings would be invisible to name-based scans (1063-nraf)"
+else
+    ok "the roster scans literal bindings, with no list variable to drift from"
+fi
 
 # ── ARM 2: RUN OR NAMED — no silent third state ─────────────────────────────
 # Plant a roster entry that is neither run nor named and the door must not
@@ -81,9 +99,19 @@ fi
 # ── ARM 6: THE WALL-CLOCK BUDGET IS THE CONTRACT ───────────────────────────
 # A guard that grows slow must red THIS ARM rather than silently making the door
 # useless. The budget is SET from a measurement and never raised (standing rule).
-# 120s: 55.3s of real work under the 5s deadline plus 11 guards x 5s of
-# deadline is ~110s, so this is the honest headroom and no more (1305-udgs).
-BUDGET_S="${TILLANDSIAS_PREFLIGHT_BUDGET_S:-120}"
+# 150s = the MEASURED 140s on the floor host plus ten seconds (1305-udgs).
+#
+# A BUDGET IS A NUMBER MEASURED WITH THE MECHANISM ENFORCED. The first figure
+# here was 120s, and it was arithmetic over a deadline that bounded nothing —
+# never a budget at all, so replacing it was a correction rather than a raise.
+# THE RULE, so nobody hides a raise behind that sentence: the FIRST ENFORCED
+# measurement sets the budget, and the no-raise rule applies from that moment.
+# 140s is that measurement (ran=94 skipped=14, orphan delta zero).
+#
+# Ten seconds of headroom and not more, because pirria IS the floor host: there
+# is no slower machine for this number to be generous towards. 180 would be a
+# round number, not a measured one.
+BUDGET_S="${TILLANDSIAS_PREFLIGHT_BUDGET_S:-150}"
 out="$(./build.sh --preflight 2>&1)"; rc=$?
 wall="$(printf '%s' "$out" | grep -oE 'wall=[0-9]+s' | tail -1 | tr -cd '0-9')"
 if [ -z "$wall" ]; then
