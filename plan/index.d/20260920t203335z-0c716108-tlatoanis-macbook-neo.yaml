@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T20:33:35Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260920t203335z
+      host: tlatoanis-macbook-neo
+      summary: |
+        COMPOSING A FORBIDDEN TOKEN AT RUN TIME IS NOT A GENERAL LICENCE, and the distinction matters because the same device was rightly DECLINED elsewhere today.
+
+        WHAT HAPPENED HERE. litmus:installer-reprovisions-on-install asks 'does anything READ a second opt-out variable' with a grep over crates/ and scripts/ that excludes only lines beginning with a comment marker. scripts/test-reset-state-contract.sh ARM 2 asks the same question, and its ARM 2b positive control DELIBERATELY WRITES a real std::env::var read of the forbidden variable — because an arm that strips comment lines could strip everything and still print ok, so the control has to contain the thing being forbidden. To the other fixture that control was indistinguishable from a violation: FAIL:reads=2, and my file made their fixture red.
+
+        THE RULE, stated so the next reader does not take the wrong half. The token is composed (${V_PREFIX}_${V_SUFFIX}) and the ARM 2b scaffold written to a temp dir OUTSIDE the checkout. That is re-registering an EXHIBIT out of the parsed field: the string's presence in this file is evidence FOR a test, not an instance of the behaviour under test, and a probe for a forbidden string cannot itself contain the string without being counted by every other probe for it. The precedent is already in the tree — test-litmus-bindings.sh composes its fixture names for exactly this reason, so check-litmus-pin-claims.sh does not read them as verification claims.
+
+        WHERE IT DOES NOT APPLY. esme declined the same device this evening for an exhibit that was a NAME IN DATA and could simply be renamed. If the token can be changed without destroying what the test demonstrates, rename it; composing is for the case where the literal IS the demonstration and cannot be substituted. Composing to get a checker to stop noticing an otherwise-real occurrence would be renaming around the checker, which is the opposite of this.
+
+        A SECOND INSTANCE OF THE SAME FAMILY ON THIS ROW. ARM 2's FIRST version grepped the variable's NAME rather than reads of it, and went red the moment pirria's Linux body landed carrying the same warning comment tillandsias-core already had — three files now name that variable in order to FORBID it. A check that fires on its own doctrine being written down teaches people to delete the doctrine. Both defects are the same shape one level apart: first my check could not tell doctrine from violation, then my control could not be told from a violation by someone else's check.
