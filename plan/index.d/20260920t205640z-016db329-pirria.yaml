@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    field: status
+    value: completed
+    ts: "2026-09-20T20:56:40Z"
+    host: pirria
+
+events:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: completed
+      ts: "2026-09-20T20:56:40Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 6e677d42f; ok:preflight:ran=94 skipped=14 wall=140s orphan-delta-0; litmus:preflight-front-door 12/12 PASS bound; budget arm 144<=150
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: note
+      ts: "2026-09-20T20:56:40Z"
+      host: pirria
+      summary: |-
+        closed — one command runs every guard that can refuse a push, enumerated from three rosters read as literals; seven defects in the door itself, six found by running it

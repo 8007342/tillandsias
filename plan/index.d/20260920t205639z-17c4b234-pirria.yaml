@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: note
+      ts: "2026-09-20T20:56:39Z"
+      agent_id: linux-pirria-claude-20260920t210000z
+      host: pirria
+      summary: |
+        CLOSED. `./build.sh --preflight` is on trunk at 6e677d42f with
+        litmus:preflight-front-door (12/12, BOUND), the two hoisted deciders, the traps
+        page and its derived copy; all three platform branches levelled.
+
+        THE MEASURED DOOR, first enforced run on the floor host:
+
+          ok:preflight:ran=94 skipped=14 wall=140s     orphan delta ZERO
+          budget arm: 144s <= 150s
+
+        ENUMERATED, NEVER CURATED, from the three rosters a guard can be wired into — the
+        fast tier's region of build.sh, scripts/gate-steps.d/*.step, and the pre-push
+        lane's checks — READ AS LITERALS, so a guard wired anywhere is visible to the
+        door the moment it lands and to every other name-based scan by the same fact.
+
+        WHY IT EXISTS: four consecutive refusals on one ref in one evening (656-spux,
+        714-4r6w, 851-cduu, 721-nyev), each decidable in about a second, each paid for
+        with a full gate — 33 minutes on this host. The deciders were always runnable;
+        what did not exist was one command that ran them, so a host assembled the list
+        from each refusal as it arrived.
+
+        SEVEN DEFECTS IN THE DOOR ITSELF, SIX FOUND BY RUNNING IT AND NONE BY READING THE
+        DIFF. Each is now an arm:
+          - it STARTED CONTAINERS (51s, dev proxy launched, sidecar staged)
+          - it ATE ITS OWN WORKLIST (guards inherited the loop's heredoc as stdin; the
+            door hung with no output at all)
+          - its DEADLINE BOUNDED NOTHING (`out="$(timeout N cmd)"` waits for a pipe EOF
+            that never comes while the guard's children hold stdout: deadline:296s
+            against a 5s limit, 467s wall)
+          - the deadline machinery then COST MORE THAN THE WORK (a 1s poll put a 1s floor
+            under all 108 guards: 148s -> 196s)
+          - a NAMED SKIP was scored as a REFUSAL — 1309-fhxb's shape, inside the fix for
+            1305, by the host that had filed 1309-fhxb the same evening
+          - `setsid timeout` left NINE orphans AND broke the 124 detection, so timed-out
+            guards were reported as refusals
+          - the SEVENTH was found by the fixture, not the door: arm 1 asserted the roster
+            read a list function deleted hours earlier, green for nine runs because
+            nothing ever changed the thing it named. It now pins the PROPERTY and refuses
+            the inverse, so it cannot outlive the next redesign as it outlived this one.
+
+        THE RULE THE BUDGET CARRIES, recorded beside the number rather than only here: a
+        budget is a number MEASURED WITH THE MECHANISM ENFORCED. The first figure was
+        120s, arithmetic over a deadline that bounded nothing — never a budget, so
+        replacing it was a correction and not a raise. The FIRST ENFORCED measurement
+        sets the budget and the no-raise rule applies from that moment. 140s is that
+        measurement; 150s is it plus ten seconds, because pirria IS the floor host and
+        headroom above its number is small.
+
+        A DESIGN I PROPOSED AND WAS REFUSED BY A FIXTURE, kept here because the refusal
+        was right: driving the tier from a single list variable made its bindings
+        variable-assembled and invisible to every name-based scan (1063-nraf), and
+        1009-gccx's own fixture caught it — two hours after I had quoted that very rule
+        explaining why a build.sh grep finds none of the 88 gate steps. The tier keeps
+        its literal invocations; the roster scans them.
+
+        CONCURRENCY IS THE SIBLING 1314-2mdv, not a slice of this row: 70 of the 140
+        seconds are fourteen skipped guards each waiting out a full deadline in turn, and
+        making that fast has its own hazard — guards that share state can change a
+        verdict under concurrency, and in a front door that is a green that is wrong.

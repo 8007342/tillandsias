@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    field: status
+    value: in_progress
+    ts: "2026-09-20T20:06:43Z"
+    host: pirria
+
+events:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    event:
+      type: note
+      ts: "2026-09-20T20:06:43Z"
+      host: pirria
+      summary: |-
+        claimed by pirria — the host that measured the 37 PASS / 3 FAIL run this row is filed from, and that reproduced the same defect inside 1305-udgs's own front door hours later

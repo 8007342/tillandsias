@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nine-remaining-orphan-fixtures-each-need-a-two-regime-byte-measurement-before-binding-and-that-disposal-is-not-1063-nrafs-work
+    event:
+      type: note
+      ts: "2026-09-20T20:04:04Z"
+      agent_id: linux-pirria-claude-20260920t200000z
+      host: pirria
+      summary: |
+        TWO NAMES FOR ARM B, from 1293-wka4 (2026-09-20). Recorded here rather than on
+        660-ryhn, which owns the binding ratchet but is ARCHIVED: the tool refused the
+        append in as many words — "Events belong on live packets; an event appended here
+        lands in a fragment no reader folds." This row is the live one whose ARM B is
+        the same check ("every verdict-position pipeline is measured, not
+        pattern-matched") and whose timing is the same ("before it is bound"). Move it
+        if a better home exists; it should not sit where nothing folds.
+
+        1293-wka4 fixed the litmus runner's step shell: it now carries `set -o pipefail`
+        for steps whose verdict the exit status decides, so a producer failing into a
+        filter reaches the verdict instead of being adjudicated on the filter's status.
+        That covers the step's OWN pipeline. It does NOT reach a pipeline wrapped one
+        level deeper — `bash -lc '... | tee ...'` — because the grandchild is another
+        fresh shell. scripts/test-litmus-step-pipefail.sh arm 5 pins that hole
+        deliberately rather than hiding it.
+
+        TWO ORPHANS ARE IN THAT HOLE, and their exposure arrives the day they are bound:
+
+          litmus:vm-provisioning-idempotent   "second provision is a no-op"                  (| tee)
+          litmus:vm-shutdown-drains-forges    "issue VmShutdownRequest and measure drain time" (| tee)
+
+        Both are on unbound-grandfathered.txt, so LIVE exposure today is ZERO and
+        nothing is being asked of anyone now. On the day either is bound, its
+        verdict-position pipeline cannot fail for the reason the step names: either
+        unwrap the pipeline so the runner's prelude applies, or put `set -o pipefail;`
+        inside the wrapper.
+
+        THE MEASUREMENT, stated so it can be falsified: strip `$(...)` repeatedly until
+        stable INSIDE the wrapper's payload as well as outside it, then inspect the last
+        element of the remaining pipeline. Doing it only outside gives 4 candidates and
+        one false positive (litmus:forge-as-only-runtime, whose pipeline is inside a
+        substitution behind an `&& [ -n ... ]` guard and is correctly written). The
+        corrected count is these two. That false positive is the same limitation yoga
+        disclosed in their own audit, reproduced one level down by the host checking
+        their work — which is why this note carries its method rather than its number.

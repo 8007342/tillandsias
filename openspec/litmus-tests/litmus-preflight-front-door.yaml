@@ -1,0 +1,43 @@
+# @trace spec:ci-release, order:1305-udgs
+name: litmus:preflight-front-door
+spec: ci-release
+phase: pre-build
+size: quick
+severity: high
+description: >
+  ORDER 1305-udgs. `./build.sh --preflight` runs every guard that can refuse a
+  push — enumerated from the three rosters a guard can be wired into (the fast
+  tier's own list, scripts/gate-steps.d/*.step, and the pre-push lane's checks),
+  never curated. A list assembled from what has bitten people is not the set of
+  guards that exist: esme's 1303 litmus was refused on 2026-09-20 by
+  check-litmus-expression-pinning-added (634-39ik), absent from every list any
+  host assembled that day, including an eighteen-entry one written an hour
+  earlier.
+
+  EVERY ARM REPRODUCES A DEFECT THIS DOOR ACTUALLY HAD, all measured on pirria
+  the day it was built: it started the dev proxy container and took 51s because
+  the dispatch sat after the build's setup; it ATE ITS OWN WORKLIST, because
+  guards ran inside a `while read` loop over a heredoc and a guard that reads
+  stdin consumed the roster, so the door hung with no output at all; and it
+  scored a NAMED SKIP as a refusal (`skip:not-darwin` from a Darwin-only
+  fixture) — 1309-fhxb's shape inside the fix for 1305, written by the host that
+  filed 1309-fhxb the same evening.
+
+  THE WALL-CLOCK BUDGET IS THE CONTRACT. A front door is a thing people run
+  instead of thinking, so one that grows slow is one nobody runs; the budget arm
+  makes a guard that grows slow red THIS ARM, with its name, rather than
+  silently making the door useless. The budget is SET from a measurement and the
+  standing no-raise rule applies from the day it lands.
+preconditions:
+  - workspace contains scripts/test-preflight-front-door.sh
+  - build.sh accepts --preflight
+
+critical_path:
+  - step: "the front door enumerates, names every skip, closes stdin, precedes setup, and fits its budget"
+    command: "bash scripts/test-preflight-front-door.sh"
+    timeout_ms: 900000
+    expected_behavior: "ok:preflight-front-door"
+    # size: quick rather than instant — the budget arm runs the real door, which
+    # is the only way to measure the thing the arm asserts. A budget arm that
+    # read a number out of a file instead of taking one would pass on a tree
+    # where the door had become useless.
