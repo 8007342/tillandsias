@@ -1,0 +1,148 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    order: 1307-kic6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [tooling, git, windows, measurement, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    title: |
+      on yolanda a push to linux-next SUCCEEDS SERVER-SIDE AND THE CLIENT NEVER RETURNS -- the ref moves, the fragments land, and git-remote-https hangs until the caller kills it -- so the host reports its own landed work as failed and retries it
+    context: |
+      MEASURED on yolanda-windows 2026-09-19/20 across a full cycle. SEVEN
+      instances, and the framing below is a CORRECTION of my own earlier one.
+
+      WHAT HANGS AND WHAT DOES NOT, all on one host, one credential, minutes
+      apart:
+        git ls-remote origin refs/heads/linux-next   -> returns INSTANTLY
+        git fetch origin                             -> returns normally
+        git push origin HEAD:refs/heads/salvage/...  -> completes in SECONDS,
+                                                        repeatedly, 5+ times
+        scripts/push-plan-fragments-to-trunk.sh      -> RC=124 at its bound,
+          `Terminated  git push "$REMOTE" "$commit:refs/heads/$TRUNK"`,
+          three consecutive attempts
+        git push origin HEAD:refs/heads/work/<new>   -> also hung
+
+      THE DRY RUN IS CLEAN EVERY TIME: `ok:fragments-to-trunk:dry-run:<sha>:2`.
+      So the lane qualifies, the commit is built, and it is the PUSH that does
+      not return. Reads to the same remote in the same minute are instant, so
+      this is not the network, not DNS and not the credential helper failing to
+      produce a credential.
+
+      WHAT I RULED OUT BY MEASUREMENT, not by reasoning:
+        - LEFTOVER PROCESSES. Two `git-remote-https` survivors from earlier
+          killed pushes were alive. I killed them by WINPID (ps -W column 4 --
+          the MSYS pid in column 1 is NOT the Windows pid and taskkill refuses
+          it), confirmed zero survivors and no stale .git locks, and the very
+          next attempt hung identically. Not survivors.
+        - A GATE RUNNING SILENTLY. My first hypothesis was that the hook was
+          re-gating a tree outside the stamp. I checked the guest's process
+          table during a hang: NO cargo, NO rustc, and no new gate log being
+          written. It is not running a gate it merely appears to be running.
+        - THE COORDINATOR HOLDING TRUNK. macuahuitl confirms nothing on their
+          side holds linux-next, and notes a concurrent push would lose as a
+          non-fast-forward rather than hang.
+
+      TWO FRAMINGS OF MINE THAT WERE WRONG, recorded so the next reader does
+      not re-derive them:
+        1. "A work ref outside the gate stamp re-gates." FALSE as a general
+           account: the hangs include PLAN-ONLY fast-lane pushes to trunk,
+           which had succeeded twice earlier the same night (936c63ff7 and
+           937904b26). The stamp is not the discriminator.
+        2. "The zero-byte log is 1131-iax2's blocked-credential-helper
+           signature." FALSE, and self-inflicted: I had written the command as
+           `git push ... | tail -6`, and a pipeline into tail emits nothing
+           until it ends, so a zero-byte log is exactly what a HEALTHY
+           in-progress push looks like under that shape. I matched a known
+           failure signature to a symptom my own wrapper manufactured.
+
+      THE PUSH ACTUALLY SUCCEEDS. MEASURED 2026-09-20 after the first three
+      instances, and it reframes everything above. Two fragments from pushes I
+      had recorded as FAILED are on origin/linux-next:
+        plan/index.d/...-1282-trqp-windows-instance-yolanda.yaml   ON TRUNK
+        plan/index.d/...-1286-4437-windows-prefix-correction-...   ON TRUNK
+      and a later run of the same script said so itself:
+        'is already on origin/linux-next byte-for-byte; dropped'
+      So the ref moves, the objects transfer, the server accepts -- and the
+      CLIENT does not return. RC=124 is my timeout killing a push that had
+      already done its job.
+
+      THAT IS WORSE THAN A HANG, and it is the reason for the priority. A push
+      that fails is visible. A push that SUCCEEDS and reports nothing makes the
+      host report landed work as unlanded: I told the coordinator twice that
+      fragments had not reached trunk when they had, and I retried pushes that
+      were already applied. The retry is harmless here only because the lane
+      compares byte-for-byte and drops duplicates; a lane without that check
+      would have produced a second commit of the same content.
+
+      SO THE VERDICT-BEARING SURFACE IS THE REMOTE, NOT THE EXIT CODE. Anything
+      that concludes 'the push failed' from a non-zero status on this host is
+      wrong. Ask the remote: git ls-remote, or read the blob back out of the
+      ref. This is 1296-jutd's lesson arriving from the opposite direction --
+      there the wrapper discarded a real failure, here the transport discards a
+      real success.
+
+      THE ONE DISCRIMINATOR THAT SURVIVES is the DESTINATION: salvage/* goes,
+      linux-next does not, reads are fine. `salvage/*` is exempt from the
+      pre-push hook by prefix (872-c9nd) and linux-next is not, so "the hook,
+      or something it invokes, does not return on this host" is the obvious
+      hypothesis -- but it is a HYPOTHESIS. I have not instrumented the hook
+      itself, and the gate-running branch of it is already ruled out above.
+
+      WHY IT MATTERS BEYOND CONVENIENCE: this host can publish code, reports
+      and rows only by salvage ref plus a coordinator relay. That is the
+      documented escape for a red or unaffordable gate, not a lane meant to
+      carry every push a host makes, and it puts a human-paced relay between
+      this host and trunk for work that has no gate cost at all -- plan
+      fragments, whose whole lane exists to be immediate (1153-j2nm).
+    next_action: |
+      Nobody holds this.
+      1. INSTRUMENT THE HOOK, which is the one branch not yet measured. Run
+         the failing push with GIT_TRACE=1 GIT_CURL_VERBOSE=1 and with the
+         pre-push hook temporarily bypassed (--no-verify) on a throwaway ref
+         that is NOT a platform branch. Two runs answer it: if --no-verify
+         returns and the hooked push does not, the hook owns it; if both hang,
+         the transport does and the salvage/linux-next split needs another
+         explanation.
+      2. If the hook owns it, find WHICH step does not return. It is not the
+         gate (measured), so the candidates are the checks that talk to the
+         remote or to the credential store.
+      3. Whatever the cause, the hook must not be able to hang unbounded: a
+         bounded wait with a named refusal beats an indefinite one, because a
+         hang is indistinguishable from slow work and an agent will wait on it.
+      Do NOT close this by routing everything through salvage/*; that is the
+      workaround this row exists to remove.
+    unscoreable: |
+      unpinnable-until-the-cause-is-known. next_action step 1 is a MEASUREMENT
+      that decides whether the hook or the transport owns the hang, and the
+      guard's shape depends on that answer -- pinning a litmus now would encode
+      whichever cause its author assumed, which 885-92iu refuses. When the
+      cause is known the guard is litmus-push-returns-or-refuses, asserting
+      that a push to a platform branch on a Windows host either completes or
+      refuses within a bounded time, and it must be written in the same commit
+      as the fix (1136-n8sh).
+    verifiable_closure: |
+      On a Windows host, `scripts/push-plan-fragments-to-trunk.sh` with a clean
+      dry-run RETURNS -- with a zero status when the ref moved and a named
+      refusal when it did not -- within a bounded time, in the same session in
+      which a push to a salvage ref succeeds. Pre-fix result: RC=124 at the
+      bound with `Terminated  git push "$REMOTE" "$commit:refs/heads/$TRUNK"`,
+      seven instances, beside `ok:fragments-to-trunk:dry-run:<sha>:2`, an
+      instant `git ls-remote` against the same remote, AND the fragments
+      present on origin/linux-next afterwards -- the work landed and the client
+      never said so.
+
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: note
+      ts: "2026-09-20T14:00:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed after six instances in one cycle; the destination split (salvage/* seconds, linux-next never, reads instant) is the sharpest fact and the hook-vs-transport question is one two-run experiment away

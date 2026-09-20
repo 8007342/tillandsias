@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: evidence
+      ts: "2026-09-20T12:27:43Z"
+      agent_id: linux-yoga-claude-20260920t122743z
+      host: yoga
+      summary: |-
+        BACKFILL DELIVERABLE FROM yoga: the external-command dependency of gate steps
+        411-416, all six of which I wired from this Linux regime. Two have already
+        reddened a Mac; the other four have never run anywhere but here, which is not
+        evidence that they are portable, only that nobody has looked.
+
+        METHOD, so this can be falsified rather than believed: each fixture was scanned
+        for external program names and then for the FLAG-LEVEL usages where portability
+        actually lives, because a tool being present on both platforms says nothing
+        about its options agreeing. Divergences below are named by the specific call,
+        not by the tool.
+
+          411  test-litmus-item-opener-refused.sh
+               cat cp dirname env grep mktemp printf rm sed
+               NO KNOWN DIVERGENCE. POSIX basics only; no flags outside the common set.
+
+          412  test-litmus-structured-assert.sh
+               dirname env find git grep mkdir mktemp printf rm sed
+               sed -i.bak — ALREADY THE PORTABLE FORM. BSD sed requires an argument to
+               -i and GNU accepts a suffix attached, so the attached-suffix spelling is
+               the one that works on both; the bare `sed -i` spelling would fail on BSD.
+               `git show HEAD:<path>` is portable.
+
+          413  test-litmus-parse-only-duplicate-key.sh
+               chmod dirname env grep mktemp printf rm sed tail
+               NO KNOWN DIVERGENCE. Its "timeout" hits are the string timeout_ms: in
+               generated YAML, not the timeout(1) program — worth stating because a
+               name-level scan reports it as a dependency and it is not one.
+
+          414  test-tool-materialize-litmus-surfaces-arm.sh
+               awk cat cp df dirname env grep head jq locale mkdir mktemp printf rm sed
+               sysctl tail toolbox
+               KNOWN AND HANDLED by macneo's v4 (1300-q7eq): toolbox is Fedora-only and
+               absent on both Macs and on Windows; the subject's regime probe read
+               /proc/loadavg and nproc, both GNU/Linux, and now reads sysctl vm.loadavg
+               and hw.ncpu with LC_ALL=C pinned at the read because that value formats
+               through LC_NUMERIC and prints a comma decimal under a fr locale.
+
+          415  test-litmus-step-pipefail.sh   <-- THE ONE STILL EXPOSED
+               cat chmod dirname env grep head mkdir mktemp printf rm sed tee timeout
+               TWO UNGUARDED DIVERGENCES, both in one line of run_probe:
+                 timeout 120 ...      timeout(1) is coreutils and is NOT on stock macOS.
+                                      This is the same absence that kept a gate step off
+                                      1268-m2ir, and 415 calls it with no command -v guard.
+                 sed 's/\x1b\[...'    \xHH IS A GNU SED EXTENSION. BSD sed does not honour
+                                      it and matches a literal x1b, so the ANSI strip
+                                      silently does nothing, the following
+                                      grep -oE '^Status: \[(PASS|FAIL)\]' finds no
+                                      anchored match in colour-coded output, the verdict
+                                      comes back EMPTY and every arm reports a mismatch.
+                                      A SILENT WRONG ANSWER, not an error.
+               I have not fixed this: 1302-7j8p is not mine to work and 415 is not under
+               an active row. It is the first thing a Mac run will find.
+
+          416  test-smoke-verifies-a-signature.sh
+               awk cat chmod curl dirname env grep head mkdir mktemp openssl printf rm
+               sha256sum shasum wc
+               FIXED at 54613b0f2 — the digest is resolved by running candidates
+               (sha256sum, shasum -a 256, openssl dgst -sha256) and keeping whichever
+               emits 64 hex, at all four call sites including ARM 3's integrity premise,
+               which was sha256sum -c and has no portable equivalent (openssl has no -c
+               at all). REMAINING: curl is invoked as `curl` and is `curl.exe` under
+               MSYS; this fixture serves its fake release over file:// so it does not
+               fetch, but a Windows run should confirm the name resolves.
+
+        THE PATTERN ACROSS THE SIX, which is what the row is for: every divergence is a
+        GNU-NAME OR GNU-FLAG ASSUMPTION made by an author who had that tool present.
+        None is exotic. All six were written by one host and none was run on another
+        before entering --check.
+
+        AND ONE THING A SECOND-REGIME RUN WILL NOT CATCH BY ITSELF, learned from 416
+        this pass and worth the row's attention: a stub-only fix to 416 would have gone
+        GREEN on macbookair, because their host carries the GNU tool under /sbin and the
+        fixture's own PATH finds it, while still failing on a stock Mac where only
+        shasum exists. THE RECORD MUST NAME WHICH TOOL ANSWERED, and the backfill should
+        ask for a run with the GNU tool HIDDEN wherever a BSD candidate exists — a run
+        that merely passes proves the regime it happened to resolve, not the platform.

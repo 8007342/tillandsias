@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-runners-parse-only-says-ok-for-a-file-that-is-not-yaml-because-its-extraction-is-line-based-so-the-verdict-word-overrides-its-own-note-and-a-broken-litmus-reaches-a-gate
+    order: 1303-2d5g
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, scripts, instrument-defect, windows, floor]
+    estimated_hours: 3
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/check-litmus-yaml-parses.sh
+    verifiable_closure: |
+      scripts/test-litmus-parse-instruments-agree.sh prints
+      `ok:litmus-parse-instruments-agree:3/3` and exits 0, where arm 1: a
+      litmus file that is not valid YAML (933-4gm8's shape, a plain-scalar list
+      item carrying ": " continuing onto a second line, or an inline awk
+      program in a double-quoted command scalar) is REFUSED by
+      `scripts/run-litmus-test.sh --parse-only` with a non-zero exit and a line
+      that does not begin with `ok:`, naming the same file and line
+      `tillandsias-plan validate-yaml` names; arm 2: a valid litmus file is
+      accepted by both; arm 3 (mutation): with the document load removed from
+      --parse-only, arm 1 reds. PRE-FIX RESULT: FAILS — measured on two hosts
+      2026-09-20: yolanda's inline-awk scalar parsed for the runner
+      (`ok:litmus-parseable ... 4 step(s)`) and was blocked by
+      scripts/check-litmus-yaml-parses.sh (`blocked:litmus-yaml-unparseable:1`);
+      esme's 933-4gm8 fixture: `tillandsias-plan validate-yaml` rc=1
+      (`blocked:yaml-load-failed: could not find expected ':'`),
+      `run-litmus-test.sh --parse-only` rc=0 (`ok:litmus-parseable:<f>:1
+      step(s)`), with the runner's own note printed above the ok line:
+      "parse-only answers runner-extractability, NOT YAML validity".
+    title: |
+      the litmus runner's --parse-only says ok for a file that is not YAML, because its extraction is line-based, so the verdict word overrides its own note and a broken litmus reaches a gate
+    context: |
+      Not silent, and that is the point: the runner prints a correct note
+      under a verdict word that overrides it for anyone skimming, and the
+      hint text points a person at --parse-only first. The mechanism (esme):
+      the runner never loads the document; it extracts steps line by line, so
+      it reports "1 step(s)" from a file that is not YAML. Two instruments
+      disagreeing about one file, the stricter right and the looser the one
+      reached for first, is how a litmus reaches a gate on one host and is
+      refused twenty minutes later on another (land 25, 2026-09-20). The row
+      decides whether the note is enough or the verdict may not say ok; the
+      closure above takes the second: an instrument's verdict word is what a
+      reader acts on. Floor-tier: both instruments run on any host in seconds.
+    next_action: >
+      Make --parse-only load the document (the same loader
+      check-litmus-yaml-parses.sh uses, or a call into it) before extracting
+      steps, keep the extractability report as a second line, make the
+      refusal name the file and line the strict checker names, fix the hint
+      text to name the authoritative instrument, and write the three-arm
+      fixture with the mutation arm; esme's fixture file lives OUTSIDE
+      openspec/litmus-tests on purpose (the strict gate globs that directory).
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from
+      yolanda-windows's measurement and esme-windows's reproduction with
+      TILLANDSIAS_LITMUS_TESTS_DIR on a throwaway corpus; nothing run here.

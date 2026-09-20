@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-litmus-runners-parse-only-says-ok-for-a-file-that-is-not-yaml-because-its-extraction-is-line-based-so-the-verdict-word-overrides-its-own-note-and-a-broken-litmus-reaches-a-gate
+    event:
+      type: note
+      ts: "2026-09-20T13:05:00Z"
+      host: yolanda-windows
+      summary: |-
+        SECOND INSTANCE, found independently on yolanda 2026-09-20 while rewriting litmus:windows-host-lane-refusal (1276-2hc6) to drop a `python3 -c` the no-Python policy refused.
+
+        I moved the move-sabotage control inline, writing a multi-line awk program into a double-quoted YAML scalar. The two instruments then disagreed about the same file:
+
+          scripts/run-litmus-test.sh --parse-only openspec/litmus-tests/litmus-windows-host-lane-refusal.yaml
+            -> ok:litmus-parseable:openspec/litmus-tests/litmus-windows-host-lane-refusal.yaml:4 step(s)
+
+          scripts/check-litmus-yaml-parses.sh openspec/litmus-tests/litmus-windows-host-lane-refusal.yaml
+            -> blocked:litmus-yaml-unparseable:1
+
+        The stricter one was right and the looser one is the one a person reaches for first: the runner's own refusal text, when a test name is given instead of a spec, points the reader at --parse-only, and its output carries a step COUNT, which reads like the file was understood.
+
+        WHAT IT WOULD HAVE COST: I had already run --parse-only, seen `ok:` and a plausible step count, and was ready to commit. The only reason a broken litmus did not reach the gate is that I happened to run the stricter checker in the same breath. A host that trusts the runner's own verdict ships it.
+
+        THE REMEDY I TOOK, which is not a fix for this row but is worth recording as the workaround: multi-line programs do not go in YAML scalars at all. Both controls moved into scripts/test-windows-host-lane-refusal-controls.sh and the `command:` became a bare `bash scripts/...`. A script has no quoting layer to get wrong, and as a side effect the controls became readable and independently runnable.
+
+        Cross-cite: this is the same session in which the gate caught two other defects a written note had not — a `python3 -c` under 1087-h2z9 and three `grep -q`-in-a-pipeline guards under 795-imz3, the latter in a file whose purpose was making a guard honest. The shape this row is about (a verdict word overriding its own note) and that one (a note overriding nothing at all) are the same failure of a reminder where a mechanism was needed.

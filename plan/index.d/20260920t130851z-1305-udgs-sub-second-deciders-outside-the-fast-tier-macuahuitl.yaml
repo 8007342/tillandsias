@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    order: 1305-udgs
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, scripts, build, instrument-defect, linux]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/gate-steps.d/155-1087-h2z9.step
+      - scripts/test-gate-fast-refusals.sh
+      - scripts/check-enclave-membership-documented.sh
+    verifiable_closure: |
+      scripts/test-gate-fast-refusals.sh gains two arms and prints its
+      verdict with them counted: with a planted `python3 -c` in a litmus step
+      command under openspec/litmus-tests, and separately with a planted
+      `elif ! printf '%s' "$x" | grep -q y; then` verdict guard in a script
+      under scripts/, `TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check` refuses
+      naming the file and line BEFORE any compile phase is entered (no cargo
+      build, clippy or test line precedes the refusal in the gate log), in
+      seconds; and the same fixture with the planted defects removed still
+      passes the tier. PRE-FIX RESULT: FAILS — measured on macuahuitl
+      2026-09-20: land 25 refused on `python3 -c` in
+      litmus-windows-host-lane-refusal.yaml:59 at line 5813 of the gate log
+      after the full cargo phase (step 155 among the ordered gate steps), and
+      land 26 refused on two `elif ! … | grep -q` guards in
+      scripts/test-windows-host-lane-refusal-controls.sh at line 5345 of a
+      5350-line log (scripts/check-no-spawn-in-if-not.sh is called at
+      build.sh:3385, after the compile phase); both refusals are decided in
+      under a second and each cost about twenty minutes of a fat host.
+      A THIRD the same hour: land 26b refused on
+      scripts/check-enclave-membership-documented.sh (245 P8,
+      `violation:enclave-membership:undocumented=1`) at line 6929 of a
+      6930-line log, the very last step; also a one-second tree check.
+    title: |
+      three sub-second deciders, the no-Python check, the if-not pipeline guard and the enclave membership guard, run after the compile phase instead of in the fast-refusals tier, so a one-second refusal costs a twenty-minute gate
+    context: |
+      The fast-refusals tier exists (1009-gccx, build.sh:1794-2011, "ADD NEW
+      SUB-SECOND GUARDS HERE, not at the end of the gate", measured 222 s to
+      2 s on lenovinha for a planted exec-bit defect) and pins its ORDER with
+      scripts/test-gate-fast-refusals.sh. Two guards that fit its definition
+      were added after it and not into it: scripts/check-no-python-scripts.sh
+      (1087-h2z9) as gate step 155, which runs after the compile phase because
+      every scripts/gate-steps.d/*.step does, and
+      scripts/check-no-spawn-in-if-not.sh (795-imz3), called inline at
+      build.sh:3385. Both are tree-only text checks. Twice on 2026-09-20 a
+      peer's ref was relayed through this host's gate and refused by one of
+      them at the end; the same two checks run in a second on the merged tree
+      before the launch (the coordinator now does that by hand). The tier is
+      also where 1303-2d5g's document-loading parse check and 1304-wbb2's
+      binding cross-check belong when they land: tree-only, sub-second, can
+      fail.
+    next_action: >
+      Move the no-Python check and the if-not guard into the fast-refusals
+      block (read the tier's own rules at build.sh:1794-2011 first: memo
+      bypass, the 606-byte-log caveat, and that a guard there must be able to
+      fail), keep or retire step 155 so the check runs once, extend
+      scripts/test-gate-fast-refusals.sh with the two planted-defect arms and
+      the clean-tree arm, and note in the tier's comment that 1303-2d5g and
+      1304-wbb2 add theirs there.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from two
+      refused relay gates on this host and a read of build.sh's fast-refusals
+      block and scripts/gate-steps.d/; nothing planted or run here.

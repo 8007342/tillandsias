@@ -166,7 +166,7 @@ directory:
 
 ## Sibling traps
 
-[msys-grep-cannot-count-carriage-returns.md](msys-grep-cannot-count-carriage-returns.md)
+[msys-cr-blindness.md](msys-cr-blindness.md)
 — on the same hosts, `grep` cannot match a CR and `awk` cannot see one.
 [awk-word-boundary.md](awk-word-boundary.md) and
 [recursive-grep-symlinks.md](recursive-grep-symlinks.md) — the same family on
