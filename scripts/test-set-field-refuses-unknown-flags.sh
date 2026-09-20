@@ -49,11 +49,17 @@ trap 'rm -rf "$TMP"' EXIT
 # The binary under test is the BUILT one, never whatever is on PATH: an
 # installed copy may predate this change and would make every arm below report
 # on code that is not in this tree.
-BIN="$ROOT/target/release/tillandsias-plan"
-if [ ! -x "$BIN" ]; then
-    BIN="$ROOT/target/debug/tillandsias-plan"
-fi
-if [ ! -x "$BIN" ]; then
+#
+# RESOLVED THROUGH THE SHARED PROBE (721-nyev), not a hardcoded target/ path.
+# The first version of this line looked under ./target/release then
+# ./target/debug, and the gate refused it: every forge exports CARGO_TARGET_DIR
+# so ./target does not exist in the mounted checkout at all, and a probe that
+# looks only there cannot see the binary that was just built. The probe also
+# honours TILLANDSIAS_PLAN_BIN, which is how a caller names a binary rather than
+# offering a candidate.
+. "$ROOT/scripts/plan-binary-probe.sh"
+BIN="$(resolve_plan_binary)" || BIN=""
+if [ -z "$BIN" ] || [ ! -x "$BIN" ]; then
     printf 'skip:set-field-unknown-flags:no-built-binary (cargo build -p tillandsias-plan)\n'
     exit 0
 fi
