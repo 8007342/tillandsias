@@ -358,7 +358,18 @@ out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD
 case "$out" in
     blocked:credential-expired-mid-cycle)
         bad "claimed an expiry with no prior pass — a host that never had one has not lost one" ;;
-    blocked:*|missing:*) ok "no prior pass -> ordinary verdict, not a false expiry ($out)" ;;
+    # unknown: JOINED THIS LIST WITH 1189-2ra5. The arm asserts one thing — that
+    # a host which never had a pass is not told it LOST one — and it did that by
+    # enumerating verdict prefixes, so a new legitimate prefix reads as a
+    # surprise. unknown:secret-service-unprobed is an ordinary verdict here.
+    #
+    # IT ALSO EXPOSED A NON-HERMETICITY worth naming: this arm leaves the real
+    # busctl on PATH, so its verdict depends on whether org.freedesktop.secrets
+    # is on the session bus of whatever is running it. It read missing: on the
+    # host and unknown: inside the builder toolbox, from the same commit. The
+    # arm is correct either way, but an arm whose verdict tracks the environment
+    # is one environment change away from a mystery.
+    blocked:*|missing:*|unknown:*) ok "no prior pass -> ordinary verdict, not a false expiry ($out)" ;;
     *) bad "unexpected no-stamp verdict: $out (rc=$rc)" ;;
 esac
 
