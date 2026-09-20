@@ -9511,9 +9511,14 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
 // import it and would each have had to COPY it — a second implementation of the
 // one affordance the operator's ruling says must have exactly one. All four
 // binaries already depend on tillandsias-core. Do not reintroduce a local copy.
-use tillandsias_core::reset_state::{
-    RESET_SKIPPED_LINE, announce_reset_plan, destructive_reset_allowed,
-};
+// `destructive_reset_allowed` is the gate for BOTH resets and `run_reset_guest`
+// is built on every platform, so it is imported unconditionally. The printer and
+// the skipped-case line are used only by the Linux `--reset-state` body; gating
+// them keeps the non-Linux build free of unused-import warnings, which the gate
+// treats as errors.
+use tillandsias_core::reset_state::destructive_reset_allowed;
+#[cfg(target_os = "linux")]
+use tillandsias_core::reset_state::{RESET_SKIPPED_LINE, announce_reset_plan};
 
 /// Pure scope filter: which podman object names (containers/volumes/secrets)
 /// belong to the Tillandsias guest substrate. Everything the stack creates is
@@ -9576,6 +9581,31 @@ fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
             Vec::new()
         }
     }
+}
+
+/// The non-Linux arm, and it exists because the cross-target check refused the
+/// first draft (land 30): the dispatch calls `run_reset_state` unconditionally
+/// while the body is `#[cfg(target_os = "linux")]`, so on
+/// `x86_64-pc-windows-gnu` the call found an item that was configured out.
+///
+/// It REFUSES BY NAME rather than silently succeeding, the 1276-2hc6 shape: a
+/// launcher on a platform where its lane cannot work says so on arrival and
+/// names the working command. `--reset-state` destroys a podman substrate this
+/// binary does not own anywhere but Linux; the Windows and macOS trays carry
+/// their own bodies against WSL2 and Virtualization.framework respectively, and
+/// all three share the gate, the printer and the strings from
+/// `tillandsias_core::reset_state` — which is the whole point of the core half
+/// landing first. The caller prints this and exits 1, so the refusal is
+/// non-zero without a second exit convention.
+#[cfg(not(target_os = "linux"))]
+fn run_reset_state(_debug: bool) -> Result<(), String> {
+    Err(
+        "refused:reset-state-not-this-platform:--reset-state resets the Linux \
+         podman substrate, which this binary does not own on this platform; run \
+         tillandsias-tray.exe --reset-state on Windows, or the installed tray on \
+         macOS"
+            .to_string(),
+    )
 }
 
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the

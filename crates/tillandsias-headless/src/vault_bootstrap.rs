@@ -1809,6 +1809,13 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
 /// Returns the list of things it CLEARED and the list it COULD NOT, so the
 /// caller can refuse rather than warn: 1284-jf86 is the row about a clearer
 /// that printed "the room is NOT cold" and exited 0.
+/// Linux-only, matching its single caller `run_reset_state`: it clears a
+/// host-held credential set whose locations (the Secret Service keychain, the
+/// `~/.cache/tillandsias` fallbacks, the subuid-owned `vault-data`) are Linux
+/// shapes, and it reaches for `podman unshare` and `libc::getuid`, neither of
+/// which exists on `x86_64-pc-windows-gnu`. The Windows and macOS equivalents
+/// clear Credential Manager and the keychain from their own trays.
+#[cfg(target_os = "linux")]
 pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
     let mut cleared: Vec<String> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
