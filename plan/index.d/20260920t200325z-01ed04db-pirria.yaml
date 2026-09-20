@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    field: status
+    value: completed
+    ts: "2026-09-20T20:03:25Z"
+    host: pirria
+
+events:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    event:
+      type: completed
+      ts: "2026-09-20T20:03:25Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 5f67cdfea spawn+gate step 415-1293-wka4; test-litmus-step-pipefail 6/6 incl. arm 5 pinning the known hole; independent corpus survey 2580 steps / 43 status-decided, confirming yoga's audit
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    event:
+      type: note
+      ts: "2026-09-20T20:03:25Z"
+      host: pirria
+      summary: |-
+        closed — the spawn carries pipefail where the status decides, verified independently; the grandchild hole's live exposure is zero and its two latent orphans are recorded on 660-ryhn

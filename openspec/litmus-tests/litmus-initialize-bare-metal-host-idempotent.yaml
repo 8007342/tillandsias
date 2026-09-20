@@ -1,0 +1,34 @@
+name: litmus:initialize-bare-metal-host-idempotent
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Order 1312-i6da (operator direction 2026-09-20): ./skills/initialize-bare-metal-host
+  is a standalone, idempotent, self-evolving skill that brings up, rebuilds and
+  troubleshoots THIS host's own enclave and per-project git mirror, and never
+  seeds a token. This binding runs the skill's fixture, which is hermetic where
+  it can be (a stub podman on PATH): the same host state yields the same verdict
+  line twice; an unseeded host reads not-seeded with no prompt and the checker
+  carries no seeding verb; a stopped mirror yields a todo: line naming the fix
+  with rc=1; every ## Repairs entry carries date, host, symptom, command and fix.
+  The rebuild-from-nothing arm is NOT here: it destroys podman state and runs
+  only on a pre-authorised smoke host, recorded on the row, never in a gate.
+  Bound by the coordinator when landing lenovinha's v1 by path (the fixture was
+  invoked by nothing in the salvage snapshot; an unbound fixture proves nothing).
+preconditions:
+  - workspace contains scripts/test-initialize-bare-metal-host-idempotent.sh
+  - workspace contains scripts/check-bare-metal-host-initialized.sh
+  - workspace contains skills/initialize-bare-metal-host/SKILL.md
+critical_path:
+  - step: "the checker and the fixture parse and carry their exec bits"
+    command: "bash -n scripts/check-bare-metal-host-initialized.sh && bash -n scripts/test-initialize-bare-metal-host-idempotent.sh && test -x scripts/check-bare-metal-host-initialized.sh && test -x scripts/test-initialize-bare-metal-host-idempotent.sh && echo ok:bare-metal-host-scripts-parse"
+    expected_behavior: "ok:bare-metal-host-scripts-parse"
+    assert_exit: 0
+    timeout_ms: 5000
+  - step: "the fixture's three arms and the Repairs arm hold (hermetic stub podman)"
+    command: "bash scripts/test-initialize-bare-metal-host-idempotent.sh 2>&1 | grep -E '^ok:initialize-bare-metal-host:3/3$'"
+    expected_behavior: "ok:initialize-bare-metal-host:3/3"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 60000

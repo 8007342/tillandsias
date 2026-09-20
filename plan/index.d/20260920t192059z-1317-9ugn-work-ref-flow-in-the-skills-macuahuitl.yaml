@@ -1,0 +1,66 @@
+packets:
+  - packet_id: join-the-fleet-and-advance-work-from-plan-teach-the-work-ref-and-landing-flow-so-a-bootstrapped-agent-commits-and-pushes-freely-to-its-own-branch-and-integrates-once-per-unit-of-work
+    order: 1317-9ugn
+    status: ready
+    kind: docs
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [skills, methodology, onboarding, git, coordination]
+    estimated_hours: 4
+    owned_files:
+      - skills/join-the-fleet/SKILL.md
+      - skills/advance-work-from-plan/SKILL.md
+      - skills/initialize-bare-metal-host/SKILL.md
+      - skills/coordinate-multihost-work/SKILL.md
+      - scripts/check-fleet-membership.sh
+    verifiable_closure: |
+      scripts/test-join-the-fleet-idempotent.sh prints
+      `ok:join-the-fleet-idempotent:5/5` and exits 0 (bound as
+      litmus:join-the-fleet-idempotent under methodology-accountability since
+      land 38c, 49897e337; the arm count rises from 3/3 to 5/5 with the two
+      arms named in (2) below), where, in addition:
+      (1) skills/join-the-fleet/SKILL.md §3 states the flow in this order
+      and no other: claim by order → `git switch -c work/<order>` from
+      origin/linux-next → commit and push to work/<order> as often as you
+      like (no gate, no trunk merge, warnings only) → open the PR (draft
+      until the closure evidence is on the row) → the landing queue
+      integrates once → close by order after the landing proves; and names
+      `git config rerere.enabled true` among the requirements;
+      (2) scripts/check-fleet-membership.sh prints
+      `ok:join-the-fleet:rerere` when rerere.enabled is true for the checkout
+      and `todo:join-the-fleet:rerere:git config rerere.enabled true`
+      otherwise, and prints `note:join-the-fleet:branch:work/<order>` when
+      the checkout is on a work ref (a work ref is a correct place to be, not
+      a todo); the fixture scripts/test-join-the-fleet-idempotent.sh gains an
+      arm for each and stays green; (3) skills/advance-work-from-plan/SKILL.md
+      replaces `git fetch origin && git rebase origin/<active-branch>  # ≤3
+      retries` (line ~811) and every "push to linux-next" step of the worker
+      loop with the work-ref flow, keeping the plan-only lane for claims and
+      events; (4) skills/initialize-bare-metal-host/SKILL.md §1 says that
+      the host's mirror relays work/<order> refs like any other and that a
+      push to a work ref needs no gate; (5) the words "prefer work branches"
+      appear in exactly the hook affordance line (1315-4a7j) and in
+      join-the-fleet §3, so the error and the instruction it points to agree.
+      PRE-FIX RESULT: FAILS on every arm — measured 2026-09-20: join-the-fleet
+      §3 names platform branches and the pre-push merge rule and never a
+      work ref; advance-work-from-plan teaches rebase-and-retry on the
+      shared branch; the checker has no rerere or work-ref line.
+    next_action: |
+      Operator direction 2026-09-20: "the new skills for joining the fleet
+      and bootstrapping hosts are key places for bootstrapping agents with
+      updated instructions". This row is the text; 1315-4a7j is the lane and
+      1316-bnzt the landing. Land the three together or A first; never the
+      text before the lane it describes (an instruction to push ungated to a
+      ref the hook still refuses is the phantom-order shape in prose).
+      Owner: the coordinator (macuahuitl) writes the skill text; the
+      checker arms ride on 1311-ajpm's fixture.
+
+      MIGRATION WORDING (operator, 2026-09-20 ~20:00Z): the skill text presents
+      the work-ref + PR flow as the PREFERRED workflow, names the tier a PR
+      will pay (light / scoped / full by paths), and says in one sentence that
+      direct pushes to linux-next still land today and will be refused later
+      once most landings arrive through the queue; the same affordance text
+      the hook prints (1315-4a7j) is the sentence the skill teaches, so the error
+      and the instruction agree word for word.
