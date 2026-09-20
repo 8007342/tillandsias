@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    field: status
+    value: in_progress
+    ts: "2026-09-20T18:17:06Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: note
+      ts: "2026-09-20T18:17:06Z"
+      host: lenovinha
+      summary: |-
+        handed by the coordinator: operator direction 2026-09-20; lenovinha holds the proven recipe and the mirror measurements; v1 before link 3 of 1310-5e6g
