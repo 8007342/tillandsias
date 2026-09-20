@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-20T21:03:02Z"
+      agent_id: linux-lenovinha-opus5-20260920t210302z
+      host: lenovinha-silverblue
+      summary: |-
+        THE LANE CAME UP, 2026-09-20, first time ever. Measured after an operator reboot: mirror env carries TILLANDSIAS_MIRROR_SSHD=1, TILLANDSIAS_MIRROR_ID=kvs69tkis9dfnbejbatg and TILLANDSIAS_VAULT_TOKEN_FILE=/tmp/tillandsias-vault-signer-token; /run/secrets holds BOTH documents at distinct targets (vault-approle, vault-approle-signer); the signer agent authenticated and wrote a 95-byte sink; sshd runs as '/usr/sbin/sshd -D -e -f /tmp/tillandsias-sshd/sshd_config [listener]'; the host certificate reads Principals: git-kvs69tkis9dfnbejbatg, signed by the Vault host CA, 24h validity. FROM THE HOST: 'ssh -p 2223 git@127.0.0.1' negotiates and answers 'Permission denied (publickey)' — a SUCCESSFUL connection refusing an unauthenticated client, which is AuthorizedKeysFile none plus TrustedUserCAKeys behaving exactly as designed. THE FOURTH AND LAST DEFECT WAS A MOUNT COLLISION AND IT WAS MINE. I passed the signer secret with GIT_VAULT_APPROLE_SECRET_OPTS, whose target=vault-approle is the RELAY document's path, so both AppRole documents mounted to the same file and one clobbered the other — 'ls /run/secrets' showed a single entry. I had written a comment in vault-agent-signer.hcl warning that two agents sharing any path would overwrite each other's state, AND THEN SHARED THE ONE PATH THAT COMMENT DID NOT ENUMERATE. Distinct sinks, pid files and id files are worthless if the INPUT documents collide. Fixed by GIT_VAULT_SIGNER_SECRET_OPTS (target=vault-approle-signer), pinned by an arm mutated to confirm it reds. A METHOD NOTE THAT COST ME FOUR STEPS: before finding the collision I began diagnosing a logic bug that did not exist, because the release binary was three hours older than the source. 'strings target/release/<bin> | grep -c <new-symbol>' settled it in ten seconds and belongs FIRST on any stale-binary suspicion, not fifth. KEYRING EVIDENCE, CORRECTED AND NAMED BY COMPONENT: this host runs TWO gnome-keyring daemons, '--daemonize --login' and '--start --foreground --components=secrets'. Secret Service is the SECOND. My earlier 'keyring PID unchanged' claims were measured with 'ps -C gnome-keyring-d | head -1', which can return either, so the claim was looser than I presented it. All future evidence on this row names --components=secrets explicitly. NOTED ODDITY, not a row until it costs something: 'ssh-keygen -L' on the host cert file reports 'line 2: invalid key: invalid format' while the certificate itself parses and validates — something extra is being written to that file.
