@@ -23,9 +23,17 @@ trap cleanup EXIT INT TERM HUP PIPE
 
 # Portable offsets: GNU `date -d`, else BSD `date -v`. Neither is universal and
 # this fixture runs on macOS too (osx-next pushes through the same hook).
+# VALIDATE THE OUTPUT, NEVER THE EXIT STATUS. BSD date accepts -d and SUCCEEDS
+# WITH GARBAGE, so `cmd || fallback` never reaches the fallback and the caller
+# gets nonsense that looks like a timestamp — the relay found exactly this in
+# check-fragment-ts-skew.sh the same day. Each candidate is checked against the
+# shape it must have before it is accepted.
 _at() { # $1 = signed seconds
-    date -u -d "@$(( $(date -u +%s) + $1 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null && return 0
-    date -u -v"${1}S" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null && return 0
+    local out
+    out="$(date -u -d "@$(( $(date -u +%s) + $1 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
+    case "$out" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-*Z) printf '%s\n' "$out"; return 0 ;; esac
+    out="$(date -u -v"${1}S" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
+    case "$out" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-*Z) printf '%s\n' "$out"; return 0 ;; esac
     return 1
 }
 _plant() { printf 'events:\n  - packet_id: probe\n    event:\n      type: note\n      ts: "%s"\n      agent_id: probe\n      host: probe\n      summary: probe\n' "$1" > "$PROBE"; }
