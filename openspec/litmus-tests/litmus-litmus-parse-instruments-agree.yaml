@@ -1,0 +1,79 @@
+# @trace spec:litmus-framework
+# @trace order:1303-2d5g
+#
+# Order 1303-2d5g: `run-litmus-test.sh --parse-only` answered `ok:` for a file
+# that `tillandsias-plan validate-yaml` REFUSES, because the runner's step
+# extraction is line-based and never loaded the document — it even reported a
+# step count from an unparseable file. Two instruments disagreeing about one
+# file, with the looser one the one authors reach for first, is how a broken
+# litmus reaches a gate on one host and is refused on another.
+#
+# THIS FILE EXISTS BECAUSE THE FIXTURE ALONE WAS NOT ENOUGH. v1 of that order
+# shipped scripts/test-litmus-parse-instruments-agree.sh invoked by NOTHING —
+# no litmus named it, build.sh did not call it, and nothing in the gate checks
+# that a new test-*.sh is wired. That is the 877-mynm / order 440 shape
+# (shipped, invoked by nothing), and it is the same defect family the fixture
+# itself is about: a check that cannot fail because it never runs. Caught in
+# review by macuahuitl before it landed.
+name: litmus:litmus-parse-instruments-agree
+spec: litmus-framework
+phase: pre-build
+description: >
+  Pin that the runner's --parse-only and the strict YAML reader cannot disagree
+  about whether one file is usable: a file that does not load is refused with a
+  verdict that is not `ok:`, a valid file is accepted by both, and removing the
+  document load restores the old behaviour.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-litmus-parse-instruments-agree.sh
+  - workspace contains scripts/run-litmus-test.sh
+  - a runnable tillandsias-plan is resolvable, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-litmus-parse-instruments-agree.sh && test -x scripts/test-litmus-parse-instruments-agree.sh && echo 'ok: parse-instruments-fixture-parses'"
+    expected_behavior: "ok: parse-instruments-fixture-parses"
+    assert_exit: 0
+    timeout_ms: 5000
+
+  # `grep -E` and NOT `grep -q`, deliberately. A `grep -q` behind a pipe exits
+  # on its first match and can SIGPIPE the upstream, which under pipefail
+  # inverts the verdict of the whole pipeline (the 1306-ifhv / 1307-ermc
+  # mechanism, and the shape that makes another fixture in this tree red and
+  # silent). `grep -E` reads its input to the end, so there is no early exit to
+  # invert. It also prints the matched line, which makes the step's own output
+  # the evidence.
+  #
+  # `skip:no-runnable-reader` is a LEGITIMATE outcome, not a pass dressed up:
+  # a fresh clone with no built plan binary cannot answer the question, and the
+  # fixture says so in the same words scripts/check-litmus-yaml-parses.sh uses.
+  - step: "both instruments agree, or the fixture says it cannot answer"
+    command: "bash scripts/test-litmus-parse-instruments-agree.sh 2>&1 | tail -1 | grep -E '^(ok:litmus-parse-instruments-agree:3/3|skip:no-runnable-reader)$'"
+    expected_behavior: "ok:litmus-parse-instruments-agree:3/3 (or skip:no-runnable-reader)"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 300000
+
+  - step: "--parse-only still loads the document before extracting (the fix is present)"
+    command: "grep -Fq 'ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING' scripts/run-litmus-test.sh && grep -Fq 'blocked:parse-only:not-yaml' scripts/run-litmus-test.sh && echo 'ok: load-before-extract wired'"
+    expected_behavior: "ok: load-before-extract wired"
+    assert_exit: 0
+    timeout_ms: 5000
+
+anti_regression:
+  - claim: "the verdict word may not say ok for a file that is not YAML"
+    why: >
+      Order 1274-cbk7 tried the weaker fix first — a note saying parse-only
+      answers extractability and not validity. The note printed DIRECTLY ABOVE
+      the `ok:` line and did not help, because a reader acts on the verdict
+      word. Restoring the note-only behaviour would restore the defect.
+
+  - claim: "extractability is still reported for files that load"
+    why: >
+      --parse-only's own question is whether THIS RUNNER can extract the steps,
+      and a gate checking a newly bound file must still be able to ask it. The
+      fix refuses the union of both failures rather than replacing one question
+      with the other; arm 2 of the fixture pins that a valid file still answers
+      `ok:litmus-parseable`.

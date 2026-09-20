@@ -2405,7 +2405,14 @@ main() {
         # say which was which. A green here means THIS RUNNER can extract the
         # steps; it is not a YAML validity verdict, and a file can be
         # extractable and unloadable at the same time.
-        printf 'note:parse-only answers runner-extractability, NOT YAML validity — for YAML validity run scripts/check-litmus-yaml-parses.sh\n' >&2
+        # ORDER 1303-2d5g supersedes 1274-cbk7's wording. That note told the
+        # reader to run the strict checker for YAML validity; since the load
+        # below, this flag ANSWERS that question for the named files, so the
+        # old text sent people to re-run a check this verdict had just made.
+        # What remains true, and is the only thing worth saying here, is the
+        # difference in SCOPE: this answers for the files named on the command
+        # line, and the gate answers for the whole corpus.
+        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/check-litmus-yaml-parses.sh is the corpus-wide gate\n' >&2
         # ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING FROM IT.
         #
         # 1274-cbk7 added the note above, on the theory that naming the
