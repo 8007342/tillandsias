@@ -286,15 +286,26 @@ else
     # from the REAL host — red. Both macOS gates red for that reason and for no
     # other. `sysctl -n vm.loadavg` prints `{ 0.52 0.61 0.70 }`, so the first
     # NUMBER is field 2.
+    # LC_ALL=C IS LOAD-BEARING, NOT HYGIENE. `sysctl -n vm.loadavg` formats the
+    # number through LC_NUMERIC: on a comma-decimal locale it prints
+    # `{ 1,58 1,69 1,73 }`. Measured on macbookair (fr_CH.UTF-8) and reproduced
+    # on macneo with LC_ALL=fr_CH.UTF-8, so it is a property of the LOCALE and
+    # not of one host. The consequences are the ones 1254-fdsu measured: a
+    # [0-9.] parse truncates 1,58 to 1, and an en_US read takes the comma as
+    # GROUPING and inflates it — one string, three values. The integer
+    # arithmetic below then judges the regime on a number that was never the
+    # load. Pin the locale AT THE READ, where the formatting happens.
     if [ -z "$_margin_loadavg" ]; then
-        _margin_loadavg="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' || true)"
+        _margin_loadavg="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' || true)"
     fi
-    # CPU COUNT. `nproc` is GNU coreutils and is NOT on a stock macOS — measured
-    # on macneo, where it resolves only because homebrew coreutils is installed
-    # (/opt/homebrew/bin/nproc -> Cellar/coreutils). On a stock Mac the old
-    # `|| echo 1` fallback would have reported ONE cpu on a six-core machine and
-    # the margin arithmetic would have judged the host loaded on that basis, so
-    # ask the OS before falling back to a literal.
+    # CPU COUNT. `nproc` is GNU coreutils, not a macOS built-in. It happens to be
+    # present on BOTH fleet Macs via homebrew coreutils (macneo prints 6,
+    # macbookair 10) and absent on a stock install, so its presence is a property
+    # of what someone brewed rather than of the platform. BRANCH ON WHAT ANSWERS,
+    # never on what a platform is presumed to lack: try nproc, then ask the OS,
+    # then fall back to a literal. The old `|| echo 1` would have reported ONE
+    # cpu on a six-core machine wherever coreutils was missing, and the margin
+    # arithmetic would have judged the host loaded on that basis.
     _margin_cpus="${TILLANDSIAS_TOOL_MATERIALIZE_CPUS-}"
     if [ -z "$_margin_cpus" ]; then
         _margin_cpus="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)"

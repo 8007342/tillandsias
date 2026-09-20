@@ -187,6 +187,49 @@ else
     ok "ARM 3: no step command in $STEP_FILE truncates its output (the comment above the step may name the idiom; commands may not use it)"
 fi
 
+# ---------------------------------------------------------------- ARM 4
+# ORDER 1300-q7eq. THE LOCALE PIN ON THE LOAD READ, and it is deliberately
+# TOOLBOX-INDEPENDENT: every other arm here needs a toolbox and is skipped on
+# both Macs, which is exactly where this defect lives. A guard that can only run
+# where the bug cannot appear is not a guard.
+#
+# `sysctl -n vm.loadavg` formats through LC_NUMERIC. Measured on macbookair
+# (fr_CH.UTF-8) as `{ 1,58 1,69 1,73 }` and reproduced on macneo under
+# LC_ALL=fr_CH.UTF-8, so it is a property of the LOCALE, not of one host. The
+# subject pins LC_ALL=C at the read; this asserts the pin holds and that the
+# result still matches the shape ARM 0's regex requires.
+if ! command -v sysctl >/dev/null 2>&1; then
+    skiparm "ARM 4: no sysctl on this host, so the BSD load read cannot be exercised"
+# NOT `locale -a | grep -q`: this script runs under `set -o pipefail`, and
+# `grep -q` EXITS ON THE FIRST MATCH, so `locale -a` dies on SIGPIPE and the
+# pipeline returns 141 — a SUCCESSFUL match reported as a failure. Measured
+# here: rc=141 with pipefail, rc=0 without. Capture first, then test the
+# capture, so no early-exiting reader can fabricate a failure.
+elif _a4_locales="$(locale -a 2>/dev/null || true)"; \
+     ! printf '%s\n' "$_a4_locales" | grep -Fqx "fr_CH.UTF-8"; then
+    skiparm "ARM 4: no comma-decimal locale installed, so the defect cannot be induced here"
+else
+    _a4_raw="$(LC_ALL=fr_CH.UTF-8 sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
+    _a4_pin="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
+    case "$_a4_raw" in
+        *,*)
+            case "$_a4_pin" in
+                *.*[0-9])
+                    ok "ARM 4: the comma locale DOES reform the load ($_a4_raw) and LC_ALL=C pins it to the dotted form ($_a4_pin) that ARM 0's regex requires"
+                    ;;
+                *)
+                    bad "ARM 4: LC_ALL=C did not yield a dotted decimal (got '$_a4_pin') — ARM 0's regex would not match it"
+                    ;;
+            esac
+            ;;
+        *)
+            # NEGATIVE CONTROL, inverted: if the comma form cannot even be
+            # induced, this arm proves nothing and must say so rather than pass.
+            skiparm "ARM 4: this host does not produce a comma decimal under fr_CH.UTF-8 (got '$_a4_raw'), so the pin cannot be demonstrated here"
+            ;;
+    esac
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     # ORDER 1300-q7eq. THE SKIP COUNT TRAVELS WITH THE VERDICT. Printing
