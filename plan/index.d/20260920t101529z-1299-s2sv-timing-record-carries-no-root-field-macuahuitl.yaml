@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-timing-record-carries-no-root-field-so-a-fallback-records-origin-is-answerable-only-from-the-producers-transcript
+    order: 1299-s2sv
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [metrics, instrument-defect, scripts, linux, macos, windows]
+    estimated_hours: 4
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/timing-log.sh
+      - scripts/metrics-log-path.sh
+      - build.sh
+    verifiable_closure: |
+      scripts/test-timing-record-carries-root.sh prints
+      `ok:timing-record-root:4/4` and exits 0, where arm 1: a record emitted by
+      timing_emit from a checkout whose .git is a directory answers
+      `jq -r .root` with that checkout's absolute path; arm 2: a record emitted
+      from a linked worktree (.git a file) answers `.root` with the worktree's
+      own path, never /tmp and never the absent value; arm 3: a record the
+      resolver writes through its fallback (no writable checkout) carries
+      `.root_unusable` naming the root it could not use and `.fallback_reason`
+      naming why, so `jq -r '.root // .root_unusable'` is non-empty on every
+      record written after the change; arm 4 (the negative control, the part
+      that makes this a row and not a line): every reader in owned_files, run
+      over a corpus WITHOUT the field and over the same corpus WITH it, prints
+      the same verdict line both times, and a record without the field is
+      reported as "root absent", never as a value. PRE-FIX RESULT: FAILS —
+      the four stray records of 2026-09-18 (preserved on macuahuitl as
+      drafts-macuahuitl/stray-timing-20260919T001756Z.jsonl) carry ts, host,
+      step, phase, duration_ms and exit only; `jq -r .root` prints null on
+      all four, and "where was this written from" was answered from a
+      session transcript that only one host holds.
+    title: |
+      a timing record carries no root field, so a fallback record's origin is answerable only from the producer's transcript
+    context: |
+      Measured twice. 2026-09-18: four records fell to /tmp from a detached
+      temporary worktree (.git a file; the -d test said "not a checkout";
+      1268-m2ir) and the release gate reddened two hours later on the split
+      guard, several steps from the cause. 2026-09-20: the close of 1268-m2ir
+      hung on whether gate #1's instance was a worktree, and the records could
+      not say; the answer came from this session's transcript at
+      2026-09-18T21:16:53Z (mktemp -d, git worktree add --detach, the
+      pre-build suite run inside it, worktree remove). A diagnostic that
+      depends on one host's scrollback is not reproducible by anyone else.
+      Why a row and not a line in the resolver pass (yoga's reasons, agreed):
+      it is a schema change to a record that many readers consume (the split
+      guard in build.sh, the answer-rate and flow-telemetry rungs and the
+      timing report in cycle-metrics.sh, and some twenty fixtures that parse
+      the log), none surveyed; roughly 124k existing records lack the field,
+      so every reader needs a defined answer for the absent case and "absent
+      means old" is a decision, not a default; and the useful half is the
+      fallback record, which must carry the root it could not use and the
+      reason, or the field just says /tmp and answers nothing. Note the
+      emitter is one site (cycle-metrics.sh --emit-timing, fed by
+      timing-log.sh); the readers are where the work is.
+    next_action: >
+      First survey the readers: list every consumer of the timing log
+      (grep -l for the log name under scripts/ and build.sh), and for each
+      state what an absent `root` does today; decide the absent-case rule
+      from that list before touching the emitter. Then add `root` at the
+      single emit site, add `root_unusable` and `fallback_reason` on the
+      fallback path in metrics-log-path.sh, and write the four-arm fixture
+      named in verifiable_closure with arm 4 run over the preserved stray
+      corpus as the without-field input.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from yoga's
+      scope note in 1268-m2ir's closing event (ceb013146) and this host's
+      transcript check; the pre-fix `jq -r .root` was run here on the
+      preserved records.
