@@ -1,5 +1,5 @@
 ---
-tags: [grep, awk, msys, git-bash, windows, crlf, carriage-return, false-negative, false-positive, agent-safety]
+tags: [grep, awk, msys, git-bash, windows, crlf, carriage-return, exit-status, pipefail, false-negative, false-positive, agent-safety]
 languages: [bash, awk, grep]
 since: 2026-09-20
 last_verified: 2026-09-20
@@ -92,19 +92,59 @@ this sheet the truth was `0` — `core.autocrlf=true` was set **and** overridden
 by `* text=auto eol=lf`, so the working tree was pure LF — and both grep
 readings were wrong before `od` and `tr` settled it.
 
+## The same trap in exit codes: end with the command you are reporting
+
+The CR case is about a *search* tool. The identical shape bites when a wrapper
+reports an exit status, and it cost a p1 row filed against innocent tooling
+before it was measured (1296-jutd, refuted by its own experiment).
+
+```bash
+# WRONG - the compound's status is `tail`'s, which is 0 even when cmd refused
+some-tool ... > log 2>&1; echo "EXIT=$?"; tail -40 log
+
+# WRONG - a pipeline's status is its LAST element
+some-tool ... | tail -6
+
+# RIGHT - capture on the very next line, before anything else runs
+some-tool ... > log 2>&1; rc=$?; tail -40 log; exit "$rc"
+
+# RIGHT - or let the command be the last thing in the wrapper
+some-tool ...
+```
+
+**A wrapper must end with the command whose status it reports, or capture `$?`
+on the very next line.** Measured three ways on a script that refuses with exit
+1: in the foreground it reported 1; with a trailing `echo`/`tail` it reported
+0; as the sole command it reported 1 again. The tool and the harness were both
+correct throughout - the wrapper discarded the status, and the discard was then
+read as a defect in the channel.
+
+The same `| tail` also makes a *running* command look hung: a pipeline into
+`tail` emits nothing until it ends, so a zero-byte log is what a healthy
+in-progress command looks like, not evidence of a stall.
+
 ## The class
 
-This is the third instrument in one week that answered **silently wrong on one
-platform**, and the class is worth more than the three instances:
+This is the fourth instrument in one week that answered **silently wrong**, and
+the class is worth more than any of the instances:
 
-- BSD awk and `\b` — see `awk-word-boundary.md`
-- BSD grep and `-R` — see `recursive-grep-symlinks.md`
-- MSYS grep and awk and `\r` — this sheet
+- BSD awk and `\b` - see `awk-word-boundary.md`
+- BSD grep and `-R` - see `recursive-grep-symlinks.md`
+- MSYS grep and awk and `\r` - this sheet, in both directions
+- a trailing `echo`/`tail` or a `| tail` swallowing an exit status - above
 
-A search tool that cannot express your question does not always say so. When a
-search result is about to become a claim someone else acts on, confirm it with
-a tool that works at a different level of abstraction than the one that
-produced it.
+Add to them `grep -q` inside a pipeline under `pipefail`, which inverts on
+SIGPIPE, and plain `git rev-parse <missing-ref>`, which **echoes the ref name**
+and errors rather than printing nothing - so a comparison against it reads
+DIVERGED, meaning "it landed and disagrees", when nothing landed at all. Use
+`git rev-parse --verify --quiet`.
+
+Three of these produce a **confident wrong answer** rather than an obvious
+failure, which is what makes them worth a sheet. A tool that cannot express
+your question does not always say so. When a result is about to become a claim
+someone else acts on, confirm it with a tool that works at a different level of
+abstraction than the one that produced it.
+
 
 ## Provenance
 
