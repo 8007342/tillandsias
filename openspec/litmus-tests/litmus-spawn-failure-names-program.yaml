@@ -1,0 +1,70 @@
+# @trace spec:init-command, spec:cli-diagnostics
+# @trace order:1277-g5k9
+#
+# Order 1277-g5k9: `Failed to spawn build process: program not found` named
+# neither the program nor the PATH it searched. MEASURED from the operator's
+# own transcript on esme 2026-09-19 (v56.9.19.2): eight identical lines, one
+# absent podman, and a summary naming eight IMAGES and no PROGRAM. Both facts
+# were in hand at the call site — the io::Error carried NotFound and the command
+# carried the program name — and the message printed neither. This is the
+# 1260-2qgi family: a line that reads like a diagnosis, produced by something
+# that had the answer.
+#
+# The sibling row 1276-2hc6 fixes the lane that should never have been entered
+# on Windows; this one fixes the LINE, so the next platform without podman on
+# PATH reads as "podman is not here", which is one command from the remedy
+# everywhere.
+name: litmus:spawn-failure-names-program
+spec: init-command
+phase: pre-build
+description: >
+  Pin 1277-g5k9: an image-build spawn that fails with ErrorKind::NotFound
+  reports the program and the first PATH entries it searched, a spawn that fails
+  for any OTHER reason keeps its original wording (the negative control — a
+  build that spawns and then fails is unchanged), and the per-image loop
+  collapses N identical spawn misses into ONE line naming ONE program only when
+  every required failure names the SAME program.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-spawn-failure-names-program.sh
+  - a cargo toolchain is resolvable, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-spawn-failure-names-program.sh && test -x scripts/test-spawn-failure-names-program.sh && echo 'ok: spawn-failure-fixture-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: spawn-failure-fixture-parses"
+
+  - step: "both arms pass: the NotFound mapping names program and PATH, and the collapse is strict"
+    command: "bash scripts/test-spawn-failure-names-program.sh | tail -1"
+    timeout_ms: 900000
+    expected_behavior: "ok:spawn-failure-names-program:2/2"
+
+  - step: "the program name is captured BEFORE the spawn, because the spawn borrows the command mutably"
+    command: "p=$(grep -n 'let program = command' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1); s=$(grep -n 'spawn_caller_owned_lifetime()' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1); [ -n \"$p\" ] && [ -n \"$s\" ] && [ \"$p\" -lt \"$s\" ] && echo 'ok: program captured before spawn'"
+    timeout_ms: 10000
+    expected_behavior: "ok: program captured before spawn"
+
+  - step: "the old undiagnosable literal is gone from the spawn site"
+    command: "grep -c 'Failed to spawn build process: {e}' crates/tillandsias-headless/src/main.rs | tr -d '\\n'"
+    timeout_ms: 10000
+    expected_behavior: "0"
+
+anti_regression:
+  - claim: "a non-NotFound spawn failure is NOT reworded into a PATH miss"
+    why: >
+      A permission failure, an ENOEXEC or a resource limit are different
+      problems with different remedies. Folding them into "not found on PATH"
+      would send the reader after the wrong thing, and would be this same order's
+      defect committed in the opposite direction — a confident message that is
+      not the diagnosis. Pinned by the second half of arm 1.
+
+  - claim: "a MIXED run keeps its per-image list"
+    why: >
+      The collapse deletes information whenever the failures have more than one
+      cause. It fires only when every required failure is a spawn miss naming
+      the SAME program; otherwise the image list is the information and survives
+      verbatim. Pinned by arm 2, which also refuses to treat a build's own
+      stderr as a spawn miss.
