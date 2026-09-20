@@ -92,6 +92,18 @@ YAML
 stray_before="$(_size "$STRAY")"
 kept_before="$(_size "$KEPT")"
 
+# ORDER 1273-4mak pass, at macuahuitl's request. timeout(1) is coreutils and
+# macOS does not ship it, so a diff-scope run on a macOS host touching
+# metrics-log-path.sh would fail here on the tool rather than on the property.
+# A missing tool is not a failing test — the same rule 1273-4mak's criterion 2
+# states for cosign. Named skip, and the fixture stops rather than reporting on
+# an arm it could not run.
+if ! command -v timeout >/dev/null 2>&1; then
+    printf 'skip:metrics-log-fallback:no-timeout\n'
+    printf 'note: timeout(1) is absent (coreutils); arm 1 drives the runner under it, so no arm below is exercised.\n'
+    exit 0
+fi
+
 TILLANDSIAS_LITMUS_BINDINGS="$TMP/bindings.yaml" \
 TILLANDSIAS_LITMUS_TESTS_DIR="$TMP/tests" \
     timeout 300 scripts/run-litmus-test.sh ci-release --size instant --phase pre-build --compact 2>&1 \

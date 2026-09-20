@@ -497,6 +497,115 @@ script errors, the version mismatches, or `tillandsias` is not on `PATH`
 afterward → **file a finding (capability: `release`, `install`) and STOP**;
 the rest of the smoke is invalid on a bad install.
 
+### 1s — Verify the SIGNATURE of the artifact this lane installed (1273-4mak)
+
+Until this section existed the smoke verified INTEGRITY and never AUTHENTICITY.
+`install.sh` checks the asset's SHA256 against a `SHA256SUMS` fetched from the
+same place as the asset, which is self-consistent by construction: a substituted
+asset served with a regenerated manifest passes. The `.cosign.bundle` beside
+every asset is the only artifact in the set that answers *who produced this*,
+and nothing read one — on any lane, for any release, ever. It was declared
+"NOT CHECKED" in the 08-28 Linux and Windows reports and in the 09-19 macOS
+report, three platforms, three times, and stayed open: a gap everyone declares
+and nobody closes is a missing GATE, not a missing observation.
+
+**Two facts measured on v56.9.19.2 that decide the shape of these blocks:**
+
+- **Every asset has its own `<asset>.cosign.bundle`** (32 assets). That is what
+  these blocks verify.
+- **`SHA256SUMS` and `SHA256SUMS-macos` have NO bundle; only
+  `SHA256SUMS-windows` does.** So "verify the manifest and trust it for every
+  asset it lists" is not available on the Linux or macOS lanes. Verify the
+  ARTIFACT THIS LANE INSTALLED, against its own bundle.
+
+**The precondition is probed, never inferred from an exit code.** The release's
+`verify.sh` exits 1 both when cosign is MISSING and when a signature is BAD, and
+those need opposite responses — one is "this run cannot answer the question",
+the other is "this artifact is not what it claims". A block that reads rc=1 and
+reports a failure turns a floor host without cosign into a fake security
+incident; one that swallows rc=1 turns a bad signature into a pass. So each
+block asks `command -v cosign` FIRST.
+
+**`cosign:could-not-run:<reason>` IS NOT A PASS.** It is not a failure either —
+`command -v cosign` returns nothing on macneo and on yoga today, and a host
+without the tool has not found a bad signature, it has found nothing. It is a
+THIRD verdict, and §5 requires it in the report's opening lines so a run that
+could not verify cannot be filed as an unqualified PASS. That requirement is the
+part that closes this gap rather than re-declaring it.
+
+Linux — use the release's own `verify.sh`, which ships with every release:
+
+```bash
+cd "$(mktemp -d)" || exit 1
+ASSET=tillandsias-linux-x86_64        # what install.sh actually downloads
+if ! command -v cosign >/dev/null 2>&1; then
+  echo "cosign:could-not-run:cosign-absent"
+else
+  curl -fsSL -O "$SMOKE_BASE/verify.sh" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET.cosign.bundle" || {
+         echo "cosign:could-not-run:asset-or-bundle-download-failed"; }
+  if [ -f "$ASSET.cosign.bundle" ]; then
+    if bash verify.sh "$ASSET"; then echo "cosign:verified:1/1"
+    else echo "cosign:FAILED:$ASSET"; fi
+  fi
+fi
+```
+
+macOS — its own call, NOT an inherited Linux assumption. The lane verifies the
+**tar.gz the installer consumed**, not a binary it never touched:
+
+```bash
+cd "$(mktemp -d)" || exit 1
+ASSET="tillandsias-tray-${SMOKE_VERSION}-macos-arm64.tar.gz"
+if ! command -v cosign >/dev/null 2>&1; then
+  echo "cosign:could-not-run:cosign-absent (brew install cosign)"
+else
+  curl -fsSL -O "$SMOKE_BASE/verify.sh" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET.cosign.bundle" || {
+         echo "cosign:could-not-run:asset-or-bundle-download-failed"; }
+  if [ -f "$ASSET.cosign.bundle" ]; then
+    if bash verify.sh "$ASSET"; then echo "cosign:verified:1/1"
+    else echo "cosign:FAILED:$ASSET"; fi
+  fi
+fi
+```
+
+`verify.sh` is bash and runs under macOS's bash 3.2, which is why this lane may
+call it — but it is called HERE, on this lane's own artifact, so a future change
+to the Linux block cannot silently redefine what macOS verified.
+
+Windows PowerShell — `verify.sh` is bash, so this lane calls cosign directly:
+
+```powershell
+$asset = "tillandsias-windows-x64.zip"
+if (-not (Get-Command cosign -ErrorAction SilentlyContinue)) {
+  "cosign:could-not-run:cosign-absent (winget install sigstore.cosign)"
+} else {
+  $tmp = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+  Set-Location $tmp
+  curl.exe -fsSL -O "$env:SMOKE_BASE/$asset"
+  curl.exe -fsSL -O "$env:SMOKE_BASE/$asset.cosign.bundle"
+  if (Test-Path "$asset.cosign.bundle") {
+    cosign verify-blob --bundle "$asset.cosign.bundle" `
+      --certificate-identity-regexp 'https://github\.com/8007342/tillandsias/' `
+      --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' `
+      $asset
+    if ($LASTEXITCODE -eq 0) { "cosign:verified:1/1" } else { "cosign:FAILED:$asset" }
+  } else { "cosign:could-not-run:bundle-download-failed" }
+}
+```
+
+**A `cosign:FAILED:` line is a STOP.** File a finding (capability: `release`,
+`security`) and do not continue: an artifact whose signature does not verify
+must not be exercised further, and the rest of the smoke would be reporting on
+software of unknown origin. This is the one check whose failure is not a bug
+report about Tillandsias but a question about what was downloaded.
+
+Carry whichever `cosign:` line this lane emitted into §5 verbatim.
+
+
 ---
 
 ## 2 — Full substrate reset (DESTRUCTIVE — see warning above)
@@ -1195,7 +1304,25 @@ is by design, so their ABSENCE here is the pass, not a finding.
 - run_start: <the `run_start=` value from target/smoke-e2e/00-run-start.txt>
 - evidence_dir: target/smoke-e2e   (previous runs archived under _archived-<ts>/)
 - forge_lane_outcome: <see below — required whenever §4 ran>
+- signature_verification: <the `cosign:` line §1s emitted, VERBATIM — required always>
 ```
+
+`signature_verification` carries §1s's line unchanged: `cosign:verified:<n>/<n>`,
+`cosign:could-not-run:<reason>`, or `cosign:FAILED:<asset>` (order 1273-4mak).
+
+**A run whose line is `cosign:could-not-run:` MUST NOT be reported as an
+unqualified PASS.** Write the verdict as `PASS (signatures unverified: <reason>)`.
+This is the requirement that closes the gap rather than re-declaring it: the
+08-28 Linux, 08-28 Windows and 09-19 macOS reports all recorded the missing
+signature check honestly, under "NOT CHECKED", and the gap still shipped three
+times — because declaring it cost nothing and the headline still said PASS.
+A reader who sees only the verdict must not be able to miss that authenticity
+was not established.
+
+`could-not-run` is NOT a failure. A host without cosign has not found a bad
+signature; it has found nothing, and reporting nothing as a failure would make a
+floor host look like a security incident. It is a third verdict, and it must be
+visible.
 
 `run_start` is what makes every other file in the evidence directory checkable
 (order 1189-7yvu). Without it a reader cannot tell this run's `03-init-exit.txt`
