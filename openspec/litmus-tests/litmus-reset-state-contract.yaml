@@ -1,0 +1,97 @@
+# @trace spec:ci-release
+name: litmus:reset-state-contract
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1286-4437. `--reset-state` must mean the SAME THING on Linux, macOS and
+  Windows: one flag name, one opt-out, one shared wording, and the operator is
+  shown what will be PRESERVED beside what will be DESTROYED before anything is
+  destroyed. The three arms were written by three hosts against a shared half in
+  tillandsias-core, which is precisely the shape that drifts.
+
+  WHAT THIS FIXTURE IS NOT. It is a SOURCE contract check. It boots no VM,
+  destroys nothing, and therefore proves NOTHING about whether any platform
+  actually removes what it lists — that needs a live destructive run on a smoke
+  host and is a separate row. A green run here means the three bodies agree on
+  the contract, not that the reset works.
+
+  It also deliberately does not assert that `--reset-state` destroys more than
+  `--reset-guest`. That is true on macOS, where the guest wipe never touched the
+  host-held vault credentials, and false on Windows, where the existing reset
+  already cleared them and the flag was a rename. Asserting it in either
+  direction would encode one platform's history as the cross-platform contract.
+
+  The pinned skip line is the reason the shared constant exists: it was
+  paraphrased by hand once on macOS and was already wrong in its bytes before
+  anyone compared them. ARM 3 keeps the literal in core alone. It carried one
+  path allowlist — the Windows tray predated the constant and kept a line that
+  differed from core's at both ends, with the tails differing in MEANING and
+  only the pinned middle matching, which is why a phrase grep read it clean —
+  guarded by an ARM 3b that failed the moment the divergence was fixed. It
+  fired on the run after yolanda's import landed (c73d796f2) and both it and
+  the entry were deleted together, which is the behaviour an allowlist should
+  have: it cannot outlive its reason in silence.
+
+  ARM 2 MATCHES READS, NOT MENTIONS. Its first version grepped the forbidden
+  variable's NAME and went red the moment pirria's Linux body landed carrying
+  the same warning comment core already had: three files now name that variable
+  in order to forbid it. A check that fires on its own doctrine being written
+  down teaches people to delete the doctrine, so comment lines are stripped
+  before matching, by shape rather than by a path allowlist — the set of files
+  entitled to discuss the rule grows every time a platform arm lands. ARM 2b is
+  its positive control, because an arm that ignores comments could ignore
+  everything and still print ok.
+
+  ARM 3 is an ABSENCE check and ARM 3c is its complement, because a platform
+  that stopped printing the skip line altogether would satisfy ARM 3 perfectly.
+  3c asserts each platform with a skip path actually REACHES the constant.
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/reset_state.rs
+  - workspace contains scripts/test-reset-state-contract.sh
+
+critical_path:
+  - step: "the --reset-state contract holds across every platform arm that exists (1286-4437)"
+    command: "bash scripts/test-reset-state-contract.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS"
+
+  # Kept SEPARATE from the script above. The guard that stops a destructive
+  # reset running against a live tray (order 277) is a Rust-side property and
+  # its test lives with the binary; a copy of the dispatch that drops the guard
+  # line still compiles and still passes every grep in the shell fixture.
+  - step: "--reset-state takes order 277's live-tray guard, like the alias it extends"
+    command: "grep -q 'require_no_live_tray(\"--reset-state\")' crates/tillandsias-macos-tray/src/main.rs && echo 'ok: guarded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: guarded"
+
+  # The installer half. The reset must run with the NEW app in place (so the
+  # reprovision uses the new binary) and before the tray is launched (so the
+  # live-tray guard can pass). Ordering by line number, both directions.
+  - step: "the installer resets after the swap and before it launches the tray"
+    command: "awk '/mv \\\"\\$NEW_APP\\\" \\\"\\$DEST\\\"/{sw=NR} /--reset-state$/{rs=NR} /open -a \\\"\\$DEST\\\"/{op=NR} END{ if (sw && rs && op && rs > sw && rs < op) print \"ok: reset between swap and launch\"; else print \"FAIL: swap=\" sw \" reset=\" rs \" open=\" op }' scripts/install-macos.sh"
+    timeout_ms: 3000
+    expected_behavior: "ok: reset between swap and launch"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "one flag name, one opt-out, one wording, preserved named beside destroyed"
+  log_fields:
+    spec: "ci-release"
+    test: "reset-state-contract"
+    artifact: "crates/tillandsias-core/src/reset_state.rs"
+
+rollback:
+  on_failure: >
+    A platform arm has drifted from the shared contract. Do NOT fix it by
+    editing the failing platform's string to match: import the constant from
+    tillandsias_core::reset_state instead, which is the whole reason it exists.
+    The Linux arm was a NAMED SKIP until pirria's dispatch slice landed
+    (2026-09-20); it turned into a live arm on the next run with no edit, which
+    is what a named skip is for. Re-run the fixture, whose ARM 2b positive
+    control and ARM 6 negative control together prove the probes still
+    discriminate in both directions.
+  command: "bash scripts/test-reset-state-contract.sh"

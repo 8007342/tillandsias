@@ -1292,6 +1292,30 @@ attempt_plan_only_lane() {
             printf '%s' "$out" | grep 'does not parse and was SKIPPED' | head -6 | sed 's/^/  /' >&2
             return 1
         fi
+        # ORDER 1313-w78k. A fragment written BY HAND may carry any timestamp:
+        # append-event refuses a ts more than 900s from the host's clock, and
+        # nothing on the hand-authored path asks. Measured here 2026-09-20, six
+        # in one session, five in the FUTURE, the worst by 4h49m. `ts` is what
+        # stalest-first sorts on, what claim expiry reads and what every recency
+        # claim consumes, and the records are permanent.
+        #
+        # ASYMMETRIC BY RULING: an undeclared FUTURE ts is refused (no
+        # clock-correct writer produces one, so it is never a backfill), while a
+        # PAST ts is accepted and its skew printed — a delayed push is real and
+        # common, and requiring a declaration for it would turn every relay fold
+        # into a refusal or a ritual.
+        if [[ -f scripts/check-fragment-ts-skew.sh ]]; then
+            if ! out="$(bash scripts/check-fragment-ts-skew.sh 2>&1)"; then
+                echo "plan-only lane: validation FAILED — a fragment carries a FUTURE timestamp (1313-w78k):" >&2
+                echo "$out" | head -12 | sed 's/^/  /' >&2
+                return 1
+            fi
+            # The past-skew notes are information, not a verdict: print them.
+            printf '%s\n' "$out" | grep -E '^note:fragment-ts-past:' >&2 || true
+        else
+            LANE_NOTES+=("scripts/check-fragment-ts-skew.sh absent — skipped")
+        fi
+
         if [[ -f scripts/check-fragment-status-loss.sh ]]; then
             if ! out="$(bash scripts/check-fragment-status-loss.sh 2>&1)"; then
                 echo "plan-only lane: validation FAILED — check-fragment-status-loss refused (full gate required):" >&2

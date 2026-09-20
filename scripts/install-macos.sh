@@ -230,6 +230,30 @@ _INSTALL_RESTORE_TO=""
 rm -rf "$STAGE"
 _INSTALL_STAGE=""
 
+# ── ORDER 1286-4437: reset the local state, with the NEW app in place ────
+# By default, and SYNCHRONOUSLY, before the tray is launched below. Two
+# reasons it sits exactly here and not elsewhere:
+#   * AFTER the swap, because the binary that reprovisions must be the new
+#     one — resetting first would reprovision with the outgoing version;
+#   * BEFORE `open -a`, because the reset refuses to run against a live tray
+#     (order 277) and this is the last point where none is running.
+# NO INSTALLER-LEVEL OPT-OUT. TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
+# and only escape hatch and the tray reads it itself; a second variable here
+# was proposed, agreed by three hosts and approved before anyone read the
+# source, and tillandsias-core's guard documents why it must not exist.
+# TILLANDSIAS_RESET_KEEP_MODELS is passed through by the environment for the
+# same reason: it narrows the reset, it does not skip it.
+say "resetting local state (--reset-state); TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction"
+set +e
+"$DEST/Contents/MacOS/tillandsias-tray" --reset-state
+RESET_EXIT=$?
+set -e
+# Fail LOUD. A failed reset has already destroyed the local state and left the
+# guest unprovisioned; carrying on to `open -a` would hand the operator a tray
+# booting against nothing, with the installer's last word being "Installed".
+[[ -n "${RESET_EXIT:-}" && $RESET_EXIT -eq 0 ]] || \
+    die "tillandsias-tray --reset-state failed (exit ${RESET_EXIT:-<empty>}); the local state may be cleared and the guest unprovisioned — re-run this installer"
+
 # ── login item (opt-in) ──────────────────────────────────────────────────
 if (( LOGIN_ITEM )); then
     say "registering as Login Item (--login-item)"
