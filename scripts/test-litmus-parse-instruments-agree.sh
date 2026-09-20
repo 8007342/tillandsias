@@ -56,7 +56,7 @@ trap cleanup EXIT
 # 933-4gm8's recorded shape: a plain-scalar list item carrying ": " and
 # continuing onto a second line, which YAML scans as a keyless mapping key.
 cat > "$W/bad.yaml" <<'YAML'
-name: litmus:fixture-not-yaml
+name: fixture-not-yaml
 spec: fixture-spec
 phase: pre-build
 description: >
@@ -77,7 +77,7 @@ critical_path:
 YAML
 
 cat > "$W/good.yaml" <<'YAML'
-name: litmus:fixture-valid
+name: fixture-valid
 spec: fixture-spec
 phase: pre-build
 description: >
