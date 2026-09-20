@@ -7004,12 +7004,67 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // args[0] is the subcommand itself (same convention as the `status`
             // arm's args.get(1)); skip it or the subcommand name becomes the
             // packet reference and every invocation refuses.
+            // ORDER 1285-vz27. THE PARSER USED TO SKIP `i += 2` FOR ANY TOKEN
+            // STARTING WITH `--`, which is two bugs in one line:
+            //
+            //   an UNKNOWN flag silently ate the next token, so a typo or a
+            //   flag borrowed from a sibling subcommand (--value-file, which
+            //   set-field never had) vanished along with its argument; and
+            //
+            //   a VALUELESS flag (--append/--replace/--backfill) ate the token
+            //   after it, which is normally the NEXT FLAG's name — shifting
+            //   every later token left and promoting some unrelated string to
+            //   the positional VALUE.
+            //
+            // Both then WROTE and printed a success line. Measured on macneo
+            // 2026-09-19: `next_action` on a p1 row was overwritten with the
+            // literal `tlatoanis-macbook-neo`, and `check` reported ok, ids
+            // unique, references sound — every validator passing over a field
+            // that had just been replaced by a hostname. Reproduced here on a
+            // throwaway ledger with the same command line: `--append` consumed
+            // `--ts`, and the row's next_action gained a dated attribution line
+            // whose entire content was a bare timestamp. THE PAYLOAD DEPENDS ON
+            // ARG ORDER; the defect does not.
+            //
+            // The vocabulary is declared so an unknown flag can be NAMED rather
+            // than absorbed. A flag that takes a value must be listed here when
+            // it is added, and forgetting to costs a refusal, not a silent write.
+            const VALUE_FLAGS: &[&str] = &[
+                "--ts",
+                "--host",
+                "--reason",
+                "--evidence",
+                "--reopen-evidence",
+                "--value-file",
+            ];
+            const BOOL_FLAGS: &[&str] = &["--append", "--replace", "--backfill"];
+
             let positional: Vec<String> = {
                 let mut out = Vec::new();
                 let mut i = 1;
                 while i < args.len() {
-                    if args[i].starts_with("--") {
-                        i += 2;
+                    let a = args[i].as_str();
+                    if a.starts_with("--") {
+                        if VALUE_FLAGS.contains(&a) {
+                            i += 2;
+                        } else if BOOL_FLAGS.contains(&a) {
+                            i += 1;
+                        } else {
+                            eprintln!(
+                                "error: unknown flag '{a}' for set-field — REFUSED before any write.\n\
+                                 \n\
+                                 An unknown flag used to be skipped ALONG WITH THE TOKEN AFTER IT, so the\n\
+                                 value that followed became the field value and the write reported success\n\
+                                 (order 1285-vz27: a p1 row's next_action was overwritten with a hostname).\n\
+                                 \n\
+                                 set-field accepts:\n\
+                                   with a value: --ts --host --reason --evidence --reopen-evidence --value-file\n\
+                                   on their own: --append --replace --backfill\n\
+                                 \n\
+                                 For long prose use --value-file <path>, so no shell ever sees the text."
+                            );
+                            std::process::exit(2);
+                        }
                     } else {
                         out.push(args[i].clone());
                         i += 1;
@@ -7023,7 +7078,28 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     .and_then(|i| args.get(i + 1))
                     .cloned()
             };
-            if positional.len() < 3 {
+            // ORDER 1285-vz27, criterion 2. PROSE FROM A FILE, so no shell ever
+            // sees the text. append-event has had --summary-file for exactly
+            // this reason; set-field offering only a positional <value> is what
+            // pushed long-form writes through shell quoting in the first place,
+            // and a long-form field is where a mangled value does the most harm.
+            let value_file = flagged("--value-file");
+            if let Some(ref vf) = value_file {
+                if positional.len() > 2 {
+                    eprintln!(
+                        "error: both a positional <value> and --value-file {vf} were given — REFUSED.\n\
+                         Pass the value one way or the other; guessing which the caller meant is how\n\
+                         1285-vz27 wrote a hostname into a p1 row's next_action."
+                    );
+                    std::process::exit(2);
+                }
+                if positional.len() < 2 {
+                    eprintln!("usage: tillandsias-plan set-field <id|order> <field> --value-file <path> [...]");
+                    std::process::exit(2);
+                }
+            }
+
+            if value_file.is_none() && positional.len() < 3 {
                 eprintln!(
                     "usage: tillandsias-plan set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT] [--append|--replace]\n\
                      \n\
@@ -7036,11 +7112,43 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 );
                 std::process::exit(2);
             }
-            let (target, field, value) = (
-                positional[0].clone(),
-                positional[1].clone(),
-                positional[2].clone(),
-            );
+            let (target, field) = (positional[0].clone(), positional[1].clone());
+            let value = match value_file {
+                Some(ref path) => match std::fs::read_to_string(path) {
+                    Ok(text) => text.trim_end_matches('\n').to_string(),
+                    Err(e) => {
+                        eprintln!("error: --value-file {path}: {e} — REFUSED before any write");
+                        std::process::exit(2);
+                    }
+                },
+                None => positional[2].clone(),
+            };
+
+            // ORDER 1285-vz27, criterion 3. THE OBSERVABLE SIGNATURE OF THE
+            // MISPARSE. When a flag ate the wrong token, the value that landed
+            // was byte-identical to some OTHER flag's argument on the same
+            // command line — macneo's was the --host value, and the
+            // reproduction here landed the --ts value. The parse above should
+            // make that unreachable, but this is cheap and it is the check that
+            // would have caught the original incident BEFORE the ledger was
+            // written, whatever future flag handling gets wrong.
+            if value_file.is_none() {
+                for f in VALUE_FLAGS.iter().chain(BOOL_FLAGS.iter()) {
+                    if let Some(other) = flagged(f) {
+                        if other == value && !other.is_empty() {
+                            eprintln!(
+                                "error: the value is byte-identical to the argument of {f} ('{value}') — REFUSED.\n\
+                                 \n\
+                                 That is the signature of a flag consuming the wrong token (1285-vz27): the\n\
+                                 field would be written with a timestamp, a hostname or a reason string that\n\
+                                 the caller meant for a flag. If the value is genuinely meant to equal that\n\
+                                 argument, pass it with --value-file, which is not subject to this check."
+                            );
+                            std::process::exit(2);
+                        }
+                    }
+                }
+            }
 
             // Resolve against the FOLDED ledger so a fragment-only packet is
             // reachable. A typo must refuse, never write a fragment that
