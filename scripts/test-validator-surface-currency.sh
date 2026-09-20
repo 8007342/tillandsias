@@ -11,7 +11,13 @@
 # what 1287-h6qn is about.
 set -uo pipefail
 
-BIN="${TILLANDSIAS_PLAN_BIN:-./target/release/tillandsias-plan}"
+# RESOLVE THROUGH THE SHARED PROBE (704-zcgi, 721-nyev, 751-vega), never a
+# hardcoded target/ path: inside a forge CARGO_TARGET_DIR is exported and the
+# binary is not where this script would have guessed, so a hardcoded path finds
+# nothing and the fixture skips itself into a green that means nothing. An
+# executable bit is a claim; running the binary is evidence.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+BIN="$(resolve_plan_binary)"
 pass=0; fail=0
 ok()   { pass=$((pass+1)); printf '  [OK]   %s\n' "$1"; }
 bad()  { fail=$((fail+1)); printf '  [FAIL] %s\n' "$1"; }
