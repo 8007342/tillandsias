@@ -678,4 +678,15 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
 done
 
 echo "refused:land:attempts-exhausted:$ATTEMPTS — origin is moving faster than this host gates" >&2
+# ORDER 1315-4a7j. THE AFFORDANCE, because this refusal is the one a host hits
+# when it has done nothing wrong. Measured on yoga 2026-09-20: ten gate cycles
+# across two slices, FIVE lost purely to re-gating an UNCHANGED tree after
+# another host pushed first. The reader of this line has a green slice and no
+# way in; telling them only that origin is fast leaves them to retry, which is
+# what produced those five. Name the lane that does not race, and the whole
+# workflow rather than a fragment of it.
+echo "" >&2
+echo "  prefer work branches: git switch -c work/<order>; push there freely;" >&2
+echo "  open the PR with: gh pr create --base linux-next --head work/<order>" >&2
+echo "  the landing queue integrates it. See ./skills/join-the-fleet §3" >&2
 exit 4
