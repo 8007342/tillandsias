@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-20T15:59:48Z"
+      agent_id: windows-yolanda-claude-20260920t155947z
+      host: yolanda-windows
+      summary: |
+        ONE FACT UNDERNEATH THIS ROW, and it is narrower and more useful than how the
+        row was first written: THE BUILDER DISTRO LACKS CROSS TOOLCHAINS. Not "a
+        Windows host cannot build" and not "the builder is unusable" -- it compiles
+        natively for Linux perfectly well, which is what the gate uses it for. What is
+        absent is every cross linker:
+
+          aarch64-unknown-linux-musl  needs aarch64-linux-musl-gcc   ABSENT
+          x86_64-pc-windows-gnu       needs x86_64-w64-mingw32-gcc   ABSENT
+
+        The first blocks staging the aarch64 guest binary (this row). The second blocks
+        the relay preflight's `cargo check --target x86_64-pc-windows-gnu`, which is
+        therefore the one check that can only run on the coordinator's host for refs
+        from here. I added the x86_64-pc-windows-gnu rustup target to confirm the
+        blocker is the LINKER and not a missing std: the target installs and the
+        compile then fails on the missing gcc.
+
+        AND A CORRECTION TO SOMETHING I SAID TWICE ABOUT THIS HOST, which narrows the
+        row's scope rather than widening it. I reported that this host "cannot run" the
+        gate's rustfmt and clippy. That was an inference from the wrong instrument: I
+        read my NATIVE toolchain's versions and concluded the gate's were unreachable.
+        They are reachable -- the build distro carries the gate's own
+        cargo 1.97.0, clippy 0.1.97 and rustfmt 1.9.0-stable, and running clippy there
+        under -D warnings reproduced exactly the three needless_borrow errors the relay
+        gate had reported on my tree, on source my native clippy called clean. I had
+        already compiled musl guest binaries in that same distro hours earlier and did
+        not connect the two.
+
+        THE RULE THAT FOLLOWS, and it is the reusable half: when a host reports that it
+        cannot run a check, the question is whether the BUILDER's copy of that tool is
+        reachable, not what the host's own copy is. Two relay-side lint fixups were
+        spent before anyone asked it.
+
+        So the remedies this row asks for should be scoped to the cross toolchains:
+        staging the aarch64 guest binary needs a cross linker in the distro (or a
+        documented no-Nix path that says so before touching target-guest), and nothing
+        here argues for changing the native lanes, which work.

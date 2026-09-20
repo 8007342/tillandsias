@@ -3258,7 +3258,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // rather than merely "no event key" keeps a malformed-but-intended
             // event from being reported as a lost packet.
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let paths = fragment_arg_paths(&args);
+            let paths = fragment_arg_paths(args);
             if paths.is_empty() {
                 eprintln!(
                     "usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>..."
@@ -3354,7 +3354,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // parse and the same exit 3 on an unparseable fragment, because
             // silence from a parser is not evidence of absence (787-f7dh).
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let paths = fragment_arg_paths(&args);
+            let paths = fragment_arg_paths(args);
             if paths.is_empty() {
                 eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>...");
                 std::process::exit(2);
@@ -3448,7 +3448,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // Exit 3 makes the two cases distinguishable at the point of use;
             // silence from a parser is not evidence of absence.
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let paths = fragment_arg_paths(&args);
+            let paths = fragment_arg_paths(args);
             if paths.is_empty() {
                 eprintln!(
                     "usage: tillandsias-plan fragment-terminal-events <fragment.yaml>... [--live]"
