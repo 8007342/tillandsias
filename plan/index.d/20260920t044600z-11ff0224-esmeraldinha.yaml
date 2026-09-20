@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enumerate-what-the-read-only-usr-lib-wsl-mount-actually-exposes-inside-the-inference-container-file-by-file-and-by-what-reads-it
+    field: next_action
+    value: 'THE GUEST-SIDE HALF IS DONE AND IS ON THE ROW (esmeraldinha 2026-09-20). What remains needs a CONTAINER RUNTIME, which esmeraldinha does not have: podman is absent from both its WSL2 distros and from its Windows side, so this row cannot be finished here and is deliberately NOT claimed. NEXT HOST NEEDS: a WSL2 Windows host with /dev/dxg, podman, and the inference image. THREE ARMS LEFT, in order. (1) strace an actual inference run filtered to the /usr/lib/wsl prefix and record WHAT OPENS PATHS THERE — the row predicts the Vulkan loader and dzn, that prediction is UNTESTED, and the result worth having is a third reader nobody expected. (2) Re-run questions 1 and 3 FROM INSIDE the container: the tree as the container sees it, plus a positive test that a write fails under :ro. Do not substitute the guest-side result — FINDING 3 on the row shows the two sides genuinely differ. (3) Write the fixture the closure requires, with its mutation arm. START BY READING FINDING 3: the mount sets LD_LIBRARY_PATH=/usr/lib/wsl/lib and that directory is an rw overlay writable by guest root, so the container searches a guest-writable directory for every library it loads; decide explicitly whether to narrow LD_LIBRARY_PATH or leave it pinned as a known bound. AND READ THE METHOD NOTE BEFORE MEASURING: an inline wsl.exe -- bash -lc string from Git Bash silently enumerated the wrong directory and reported 59 entries where there are 795. Stage the script as a file, absolute paths, MSYS_NO_PATHCONV=1, and check that the parts sum to the total.'
+    ts: "2026-09-20T04:46:00Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: enumerate-what-the-read-only-usr-lib-wsl-mount-actually-exposes-inside-the-inference-container-file-by-file-and-by-what-reads-it
+    event:
+      type: note
+      ts: "2026-09-20T04:46:00Z"
+      host: esmeraldinha
+      summary: |-
+        Recording the blocker and the remaining arms so the row is pickupable by a host with podman rather than held by one that cannot finish it.

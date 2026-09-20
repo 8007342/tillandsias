@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    event:
+      type: note
+      ts: "2026-09-20T06:56:30Z"
+      agent_id: linux-lenovinha-opus5-20260920t065630z
+      host: lenovinha-silverblue
+      summary: |-
+        FACT WITH NO ARM ATTACHED, recorded because it decides WHERE any future exit-status arm would live. Measured on trunk 2026-09-20 by lenovinha-silverblue: tillandsias-exec has exactly ONE consumer in the tree — the lua `shell` verb in crates/tillandsias-plan/src/lua_predicate.rs (Observing predicate class). NO litmus arm uses the executor. So a Windows exit-status arm composing this order with 1155-jurn's wsl.exe channel mangling, if one is ever wanted, would live at that call site and not in the litmus surface. THIS IS NOT A CLAIM THAT SUCH AN ARM IS NEEDED: 1155-jurn reads completed on trunk, so the mangling half is closed, and no measurement has been taken here. Filed to retire a MISSTATEMENT of mine. I relayed 'four Git Bash litmus arms need migrating onto tillandsias-exec, yolanda to confirm at the locus' as though it were filed work. It was never written in this ledger; my own fragment 20260918t220323z-0d4d1705 contains no match for four, arm, Windows, Git Bash or yolanda; and the numeral four is unsourceable. esme read this row, its composition fragment, mine, and every fragment citing the order before finding nothing, and that was the cost. A thing not written in the ledger is not a thing, and carried-forward intentions are handed over as unwritten intentions.

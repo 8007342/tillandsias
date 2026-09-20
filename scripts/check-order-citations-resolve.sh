@@ -51,11 +51,19 @@ _known="$(mktemp)"; _cited="$(mktemp)"
 trap 'rm -f "$_known" "$_cited"' EXIT INT TERM
 
 {
-    /usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: [0-9]{3,4}-[a-z0-9]{4}' \
+    # ORDER 1274-cbk7. The value may be a QUOTED scalar. `order: 1274-cbk7` and
+    # `order: "1274-cbk7"` are the same value to YAML, and the plan CLI resolves
+    # both, but this guard reads the ledger with grep and keyed on the unquoted
+    # SPELLING only. Nine filed packets (1254-47xd, 1255-rvr7, 1256-t3w8,
+    # 1257-jxu9, 1258-8wfb, 1258-u8re, 1259-dgaq, 1266-75tr, 1274-cbk7) declare
+    # a quoted order and were therefore INVISIBLE here — any @trace citing one
+    # failed the gate as "unresolvable" while `tillandsias-plan answer` returned
+    # the packet. Found by that exact contradiction on 1274-cbk7.
+    /usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: "?[0-9]{3,4}-[a-z0-9]{4}"?' \
         plan/index.yaml plan/index.d/ 2>/dev/null
-    /usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: [0-9]{3,4}-[a-z0-9]{4}' \
+    /usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: "?[0-9]{3,4}-[a-z0-9]{4}"?' \
         plan/archive/ 2>/dev/null
-} | sed -E 's/.*order: //' | sort -u > "$_known"
+} | sed -E 's/.*order: //; s/"//g' | sort -u > "$_known"
 
 if [ ! -s "$_known" ]; then
     echo "blocked:order-citations-resolve:no-ledger-orders-found — the ledger read produced nothing, which is a broken instrument rather than a clean tree"

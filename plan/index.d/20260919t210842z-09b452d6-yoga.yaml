@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: evidence
+      ts: "2026-09-19T21:08:42Z"
+      agent_id: linux-yoga-claude-20260919t210842z
+      host: yoga
+      summary: |-
+        THE 1,622 "VERDICT-PREFIXED = ENFORCED" FIGURE IN THIS ROW'S CONTEXT IS AN
+        UPPER BOUND, NOT A COUNT. Do not re-quote it as a count. Recorded as its own
+        event at macuahuitl's instruction so the correction is not buried inside a
+        criterion-closure note.
+
+        THE DEMONSTRATION, run through the real runner via TILLANDSIAS_LITMUS_TESTS_DIR
+        rather than reasoned about:
+
+          step command:       echo 'FAIL: cargo binary missing'; exit 1
+          expected_behavior:  "ok: cargo-target-dir-success"
+          ->  PASS: 1, Pass Rate 100%, Status [PASS]
+
+          the same fixture, plus assert_output_contains "ok: cargo-target-dir-success"
+          ->  assert_output_contains: literal not found -> Status [FAIL]
+
+        A step that exited 1 while printing its own FAIL line reported success. The
+        `*"cargo"*` arm matched the word inside the EXPECTATION SENTENCE, fired ahead
+        of the literal fallback, and reduced the rule to `grep -Eqi cargo` over the
+        output. The verdict token was never required and the exit code was never read.
+
+        WHY THE CENSUS CANNOT SEE THIS. It buckets steps by how the expectation LOOKS —
+        `ok:`-prefixed, short literal, long sentence. Nothing about a string says which
+        rule will read it; that is decided by first-match over the arms, on the
+        sentence. `ok: cargo-target-dir-success` is simultaneously the corpus's
+        strongest form AND an arm keyword. Seven of the eight *"cargo"* steps were in
+        exactly that position. Any of the 1,622 whose sentence contains an arm keyword
+        was being adjudicated by the keyword, and no diff anywhere would have said so.
+        The correct method is to extract the arm patterns FROM THE SOURCE and replay
+        them in their real `case` order, which is what produced the 0-of-2545 figure.
+
+        THREE THINGS THIS ROW SHOULD NOT BE READ AS CLAIMING:
+
+        1. IT DID NOT MAKE EVERY STEP AT LEAST AS STRONG AS BEFORE. mount-cleanup:18
+           runs `mount | grep tillandsias`, printing LINES, while its arm required
+           "first integer in the output >= 2" — it was adjudicating on whatever integer
+           appeared first in a device path. ">= 2 lines" is not expressible over that
+           output by any assert field, and switching the command to `grep -c` would
+           trade the diagnostic listing for countability. It took
+           assert_output_nonempty, which is WEAKER than the arm claimed to be, with the
+           gap in a seven-line comment in the step itself. One exception, stated.
+
+        2. THE BEFORE/AFTER SWEEP PROVES LESS THAN IT LOOKS. pre-build/instant was run
+           twice on the same tree — arms deleted, then arms stashed back with the
+           premise asserted first (2 occurrences live in the baseline). Both runs:
+           Total 490, executed 304, skipped 186, Pass Rate 100% across 100 specs.
+           Identical, so nothing FLIPPED. But both ends are SATURATED, and a comparison
+           between two 100% runs cannot distinguish "the deletion was inert" from "the
+           deletion broke something already failing". It is sound here only because
+           there are zero failures on either side. The load-bearing evidence is the
+           measured zero and the PASS->FAIL above.
+
+        3. THREE OF THE FOUR TIMING VALUES WERE NEVER EXECUTED BY ANYTHING.
+           litmus-build-cache-transparent and litmus-build-clean-from-scratch-works are
+           phase=retired, which runs only under an explicit --phase retired. Only the
+           vault value is live. Neither this row nor my own list of the four said so,
+           and the criterion reads as though it were fixing live assertions.
+
+        RELATED, FILED SEPARATELY: 660-ryhn gets a one-line note that
+        vm-provisioning-idempotent and vm-shutdown-drains-forges — the two steps whose
+        commands genuinely compute their own elapsed time and exit 1 — are on the
+        unbound orphan list, so those teeth have never closed on anything.
+        scan-litmus-false-pass.sh's stale limitation comment goes in my next slice.

@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: set-field-accepts-an-unknown-flag-by-silently-consuming-the-next-options-value-as-the-field-value-so-it-writes-a-hostname-into-a-long-form-field-and-prints-success
+    order: 1285-vz27
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, plan, cli, agent-safety, ledger-integrity]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan
+    title: |
+      tillandsias-plan set-field accepts an UNKNOWN flag by silently consuming the next option's value as the field value, writing a hostname into a long-form field and printing a success line — and unlike append-event it has no file input, so long prose must go through argv
+    context: |
+      FOUND BY macneo-macos 2026-09-19 while writing 1282-rkkm's next_action.
+      Filed at the coordinator's direction; it is the ledger-corrupting half of
+      what had been accumulating as instances on 1256-cqsy.
+
+      MEASURED. The command was:
+        tillandsias-plan set-field 1282-rkkm next_action \
+          --value-file <path> --append --ts <ISO> \
+          --host tlatoanis-macbook-neo --reason "<text>"
+      `--value-file` DOES NOT EXIST on set-field. Instead of refusing it, the
+      parser consumed the string that followed --host and used it as the
+      POSITIONAL FIELD VALUE, appending the literal text
+        tlatoanis-macbook-neo
+      to next_action — a long-form field whose entire purpose is to tell a
+      stranger what to do next. It then printed a success-shaped line:
+        [2026-09-20T00:18:57Z tlatoanis-macbook-neo] tlatoanis-macbook-neo (plan/index.d/<fragment>.yaml)
+      and `tillandsias-plan check` reported ok, ids unique, live references
+      sound. Every validator passed over a field that had just been overwritten
+      with a hostname.
+      The prose intended for that field — the isolation result the row exists to
+      carry — was never written at all, and nothing said so.
+
+      WHY p1 AND WHY THIS IS NOT A USABILITY NIT: this writes to the LEDGER, the
+      thing every host reads to decide what to do, and it writes SILENTLY and
+      then reports success. A caller who does not read the fragment back cannot
+      tell the difference between a correct write and this one. The fragment was
+      caught only because the writer opened the file afterwards; a host that
+      trusted the success line would have landed a next_action reading
+      "tlatoanis-macbook-neo" on a p1 row.
+
+      THE ASYMMETRY THAT KEEPS PRODUCING THIS. `append-event` HAS a file input
+      (--summary-file, added by 971-7muc) precisely because prose passed through
+      a shell gets rewritten. `set-field` does NOT, so the same prose must go
+      through argv, where a shell expands backticks and command substitutions
+      before the tool ever sees the text. Three of the seven 1256-cqsy instances
+      recorded in one evening entered through exactly that door, including one
+      where a backticked command inside a reproduction recipe was EXECUTED and
+      the field was written with the command deleted — leaving "run  WHILE the
+      machine is genuinely busy" — while every validator reported ok.
+      971-7muc already built the guard and the safe form for append-event. The
+      same protection was never given to the other writer, which is the one that
+      edits fields in place.
+
+      FAMILY: 1260-2qgi. A success line produced by something that did not
+      observe the property it claims — here, a parser reporting a completed
+      write of a value it silently invented from another flag's argument.
+    exit_criteria:
+      - 'an UNKNOWN or misparsed flag is REFUSED before any write occurs, naming the flag — PRE-FIX RESULT: `set-field <ref> next_action --value-file <path> --append --ts <ISO> --host <H> --reason <T>` writes the value "tlatoanis-macbook-neo" into next_action and prints a success line, and `check` reports ok afterwards'
+      - 'set-field accepts long prose from a FILE, as append-event already does (--summary-file), so no shell ever sees the text — PRE-FIX RESULT: set-field''s usage line offers only a positional <value>, so prose must pass through argv'
+      - 'a value that is byte-identical to the value of another flag on the same command line is refused or warned, since that is the observable signature of this misparse — PRE-FIX RESULT: the written value was exactly the --host argument and nothing noticed'
+      - 'a fixture drives the failing command line and asserts the refusal; MUTANT — restore the permissive parse and prove the fixture then observes the hostname landing in the field'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable includes the fixture, so
+      no litmus name exists to pin and 885-92iu would refuse one that does not.
+      Intended filename scripts/test-set-field-refuses-unknown-flags.sh, written
+      in the same commit as the parser change (1136-n8sh).
+    events:
+      - type: filed
+        ts: "2026-09-20T00:21:52Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260920t002152z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Split out of 1256-cqsy at the coordinator's direction: the wrapper-vs-
+          child family collects instances, but this one CORRUPTS THE LEDGER while
+          printing success, and the append-event/set-field asymmetry is where
+          three of that row's seven instances entered in a single evening.

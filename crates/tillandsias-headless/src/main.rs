@@ -8139,7 +8139,52 @@ fn is_optional_image(image_name: &str) -> bool {
     matches!(image_name, "forge-base" | "forge")
 }
 
+/// ORDER 1276-2hc6. The Windows refusal, and it is FIRST on purpose.
+///
+/// WHAT HAPPENED. The operator unzipped the Windows release, found
+/// `tillandsias.exe` beside `tillandsias-tray.exe`, and ran the one whose name
+/// matches the project. It selected the desktop-user-session lane as if podman
+/// were native, then failed eight image builds on a program it did not name.
+/// The supported Windows path is the tray, which provisions the WSL2 distro and
+/// runs podman inside it; nothing in the output said so.
+///
+/// A LAUNCHER ON A PLATFORM WHERE ITS LANE CANNOT WORK MUST REFUSE ON ARRIVAL,
+/// with the working command in the refusal — the same shape as the forge
+/// entrypoint refusing without credentials, rather than failing eight times
+/// downstream and leaving the operator to infer the cause from the wreckage.
+///
+/// SCOPE IS DELIBERATELY NARROW: this refuses the lane that builds and runs
+/// containers. `--version` and `--diagnose` do not route through here and keep
+/// working, because a host that cannot provision is exactly a host someone needs
+/// to diagnose.
+#[cfg(target_os = "windows")]
+fn windows_host_lane_refusal() -> Option<String> {
+    Some(
+        "refused:windows-host-lane:podman runs inside the WSL2 guest; \
+         run tillandsias-tray.exe --provision-once"
+            .to_string(),
+    )
+}
+
+/// Non-Windows hosts run the lane natively; there is nothing to refuse.
+///
+/// NEGATIVE CONTROL for this row: on Linux `--init` still selects its lane and
+/// builds, and this function existing as a `None` on every other platform is
+/// what makes that true by construction rather than by test.
+#[cfg(not(target_os = "windows"))]
+fn windows_host_lane_refusal() -> Option<String> {
+    None
+}
+
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
+    // BEFORE require_desktop_user_session AND before report_runtime_lane: on
+    // Windows there is no lane to select, so announcing one is already wrong.
+    // `--init --debug` must print the refusal and NO lane line and NO BUILD
+    // lines, which is only achievable from the very top of this function.
+    if let Some(refusal) = windows_host_lane_refusal() {
+        return Err(refusal);
+    }
+
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
 
@@ -8608,6 +8653,29 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         .collect();
 
     if !required_failures.is_empty() {
+        // ORDER 1277-g5k9: ONE CAUSE MUST NOT READ AS EIGHT. When every required
+        // image failed because the same program could not be spawned, the image
+        // list is noise — it names eight symptoms of one absence, and the
+        // operator's transcript on esme is exactly that: eight identical lines
+        // and a summary naming eight images and no program.
+        //
+        // COLLAPSE ONLY WHEN IT IS GENUINELY ONE CAUSE. Every failure must be a
+        // spawn-not-found AND name the SAME program; a mixed run keeps the
+        // per-image list, because there the list is the information. This is why
+        // the check is `all(...)` over a recovered program name rather than a
+        // count of lookalike strings.
+        let mut programs = required_failures
+            .iter()
+            .map(|(_, e)| spawn_not_found_program(e));
+        if let Some(Some(first)) = programs.next()
+            && programs.all(|p| p == Some(first))
+        {
+            return Err(format!(
+                "cannot spawn '{first}' — not found on PATH ({}); no image could be built",
+                path_head_for_diagnosis()
+            ));
+        }
+
         return Err(format!(
             "Failed to build {} required image(s): {}",
             required_failures.len(),
@@ -8629,6 +8697,70 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// ORDER 1277-g5k9. A spawn failure names the program and where it was looked
+/// for, because "program not found" is a message that reads like a diagnosis
+/// while withholding the only two facts that lead anywhere.
+///
+/// WHY THE `NotFound` ARM IS SPECIAL-CASED rather than widening every spawn
+/// error. Only `NotFound` means "the executable is absent"; a permission
+/// failure, an ENOEXEC or a resource limit are different problems with
+/// different remedies, and folding them into a PATH message would send the
+/// reader after the wrong thing. Those keep the original wording, unchanged, so
+/// the negative control in this row's closure (a build that spawns and then
+/// fails still reports the build's own stderr) is untouched by construction.
+fn describe_spawn_failure(program: &str, err: &std::io::Error) -> String {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        format!(
+            "cannot spawn '{program}' — not found on PATH ({})",
+            path_head_for_diagnosis()
+        )
+    } else {
+        format!("Failed to spawn build process: {err}")
+    }
+}
+
+/// The first three PATH entries, or a named absence.
+///
+/// THREE, NOT ALL: a Windows PATH runs to dozens of entries and a wall of them
+/// is the same unreadable output this order exists to remove. Three is enough to
+/// tell "PATH looks sane but podman is not installed" from "PATH is not what I
+/// think it is", which is the distinction the reader actually needs. The
+/// trailing ellipsis says the list is truncated rather than complete.
+///
+/// `PATH unset` and `PATH empty` are DIFFERENT and both are said: an unset PATH
+/// is an environment the launcher was given, an empty one is an environment
+/// something built wrong.
+fn path_head_for_diagnosis() -> String {
+    let Some(raw) = std::env::var_os("PATH") else {
+        return "PATH unset".to_string();
+    };
+    let entries: Vec<String> = std::env::split_paths(&raw)
+        .take(3)
+        .map(|e| e.display().to_string())
+        .filter(|e| !e.is_empty())
+        .collect();
+    if entries.is_empty() {
+        return "PATH empty".to_string();
+    }
+    format!("{}…", entries.join(", "))
+}
+
+/// Recover the program name from a message `describe_spawn_failure` produced.
+///
+/// This is what lets the per-image loop collapse eight identical failures into
+/// one line naming one program. It is deliberately strict — it matches BOTH the
+/// quoted program and the `not found on PATH` phrase — so that a build whose own
+/// stderr happens to contain the words cannot be mistaken for a spawn failure
+/// and silently collapsed away.
+fn spawn_not_found_program(message: &str) -> Option<&str> {
+    let rest = message.strip_prefix("cannot spawn '")?;
+    let end = rest.find('\'')?;
+    if !rest[end..].contains("not found on PATH") {
+        return None;
+    }
+    Some(&rest[..end])
 }
 
 /// Proxy environment variables that must be emptied for the build subprocess so
@@ -8720,9 +8852,18 @@ pub(crate) fn build_image_with_logging(
     // caller's own progress handling, so this one owns its child's lifetime
     // deliberately (order 714-4r6w). Counted by
     // scripts/check-podman-sync-budgets.sh so the exception cannot spread.
+    // ORDER 1277-g5k9: the program name and the PATH were both in hand here and
+    // neither reached the operator. Capture the program BEFORE the spawn, because
+    // `spawn_caller_owned_lifetime` borrows the command mutably and the error
+    // closure cannot then read it back.
+    let program = command
+        .as_std()
+        .get_program()
+        .to_string_lossy()
+        .into_owned();
     let mut child = command
         .spawn_caller_owned_lifetime()
-        .map_err(|e| format!("Failed to spawn build process: {e}"))?;
+        .map_err(|e| describe_spawn_failure(&program, &e))?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -17637,6 +17778,70 @@ pub(crate) async fn service_stop(
 
 #[cfg(test)]
 mod tests {
+    /// ORDER 1277-g5k9, ARM 1. A spawn failure names the program and where it
+    /// looked, and the two other arms pin the parts that must NOT change.
+    ///
+    /// The pre-fix line was `Failed to spawn build process: program not found`,
+    /// eight times, for one absent podman. Both facts were in hand at the call
+    /// site — the io::Error carried NotFound and the command carried the program
+    /// name — and neither was printed.
+    #[test]
+    fn a_spawn_failure_names_the_program_and_the_path() {
+        let not_found = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
+        let msg = super::describe_spawn_failure("podman", &not_found);
+        assert!(
+            msg.contains("podman"),
+            "the absent program must be named: {msg}"
+        );
+        assert!(
+            msg.contains("not found on PATH"),
+            "the message must say where it looked: {msg}"
+        );
+
+        // NEGATIVE CONTROL, and this row's closure requires it: a spawn that
+        // fails for any OTHER reason keeps its original wording, because a
+        // permission error is not a PATH problem and must not be reported as one.
+        let denied = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let msg = super::describe_spawn_failure("podman", &denied);
+        assert!(
+            msg.starts_with("Failed to spawn build process:"),
+            "a non-NotFound error keeps the original wording: {msg}"
+        );
+        assert!(
+            !msg.contains("not found on PATH"),
+            "a permission failure must not be described as a PATH miss: {msg}"
+        );
+    }
+
+    /// ORDER 1277-g5k9, ARM 2. The recovery that lets eight failures collapse
+    /// into one line is STRICT, so a build's own stderr cannot be swallowed.
+    ///
+    /// THE MUTATION THIS GUARDS: a looser match — say, on the word "spawn"
+    /// alone — would let a real build failure whose output mentions spawning be
+    /// mistaken for a missing program, and the per-image list, which is the
+    /// information in that case, would be deleted.
+    #[test]
+    fn only_a_real_spawn_miss_is_collapsible() {
+        let real = super::describe_spawn_failure(
+            "podman",
+            &std::io::Error::new(std::io::ErrorKind::NotFound, "x"),
+        );
+        assert_eq!(super::spawn_not_found_program(&real), Some("podman"));
+
+        for impostor in [
+            "Failed to spawn build process: something else",
+            "cannot spawn 'podman' — exited 1",
+            "build failed: cannot spawn a worker, not found on PATH anywhere",
+            "",
+        ] {
+            assert_eq!(
+                super::spawn_not_found_program(impostor),
+                None,
+                "must not be treated as a spawn miss: {impostor}"
+            );
+        }
+    }
+
     /// ORDER 997-e4v2. THE VERDICT THAT RENAMES A DIRECTORY MUST BE EARNED.
     ///
     /// Four arms, and the fourth is the one this order exists for. The caller

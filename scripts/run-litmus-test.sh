@@ -1238,6 +1238,12 @@ run_litmus_test_file() {
     local -a unparsed_step_names=()
     # ORDER 1252-znbn. critical_path items opened by a key other than `step:`.
     local -a malformed_items=()
+    # ORDER 1274-cbk7. Keys seen in the CURRENT critical_path item, so a key
+    # repeated inside one step can be named. A YAML loader rejects the whole
+    # document for this; the line-based parser here silently takes the last
+    # occurrence, so the file was `ok:litmus-parseable` and unloadable at once.
+    local -a duplicate_keys=()
+    local -a step_seen_keys=()
     local success_criteria=()
     local failure_criteria=()
 
@@ -1303,9 +1309,34 @@ run_litmus_test_file() {
         fi
 
         if [[ $in_critical_path -eq 1 ]]; then
+            # ORDER 1274-cbk7. A DUPLICATED MAPPING KEY inside one step. This
+            # is deliberately independent of the value branches below: it keys
+            # on the LINE, so it also catches a repeated key this parser does
+            # not otherwise read. Matched at 4+ spaces so the `- step:` opener
+            # (2 spaces + dash) and top-level keys cannot reach it, and `#`
+            # comments are skipped.
+            #
+            # SCOPE, STATED BECAUSE THE GAP IS REAL: this sees duplicates
+            # WITHIN one critical_path item only. A duplicated TOP-LEVEL key
+            # still passes --parse-only and still reds the YAML gate. Covering
+            # that needs care around folded scalars (`description: >`), whose
+            # continuation lines can look like keys, and a false red here is
+            # worse than the false green being closed (1274-cbk7 criterion 2).
+            if [[ "$line" =~ ^[[:space:]]{4,}([a-zA-Z_][a-zA-Z0-9_]*): ]]; then
+                _dupkey="${BASH_REMATCH[1]}"
+                for _seen in ${step_seen_keys[@]+"${step_seen_keys[@]}"}; do
+                    if [[ "$_seen" == "$_dupkey" ]]; then
+                        duplicate_keys+=("${current_step_name}|${_dupkey}")
+                        break
+                    fi
+                done
+                step_seen_keys+=("$_dupkey")
+            fi
+
             if [[ "$line" =~ ^[[:space:]]*-[[:space:]]step:\ \"(.+)\" ]]; then
                 append_step
                 current_step_name="${BASH_REMATCH[1]}"
+                step_seen_keys=()   # ORDER 1274-cbk7
                 current_step_command=""
                 current_step_timeout=30000
                 current_step_expected=""
@@ -1339,6 +1370,17 @@ run_litmus_test_file() {
                 # opened by `- step:` and all 2514 of their names are
                 # double-quoted, so this refusal cannot redden the corpus.
                 malformed_items+=("${BASH_REMATCH[1]}|${line}")
+                # ORDER 1274-cbk7. A NEW LIST ITEM STARTS A NEW MAPPING IN YAML,
+                # whatever key opens it — so the duplicate-key seen-set resets
+                # here too, not only on `- step:`. Without this reset the
+                # duplicate detector fires on the very file the arm above
+                # describes: a `- name:` item MERGES into the previous step in
+                # this parser, so its command:/timeout_ms:/expected_behavior:
+                # look like repeats of the predecessor's keys — while a YAML
+                # loader, which sees two separate items, accepts the file. That
+                # is a FALSE duplicate report on valid YAML, and the 1252-znbn
+                # item-opener fixture caught it.
+                step_seen_keys=()
             elif [[ "$line" =~ ^[[:space:]]*command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between
@@ -1410,6 +1452,24 @@ run_litmus_test_file() {
     # vector (31 steps skipped since authoring before the rewrite).
     # ORDER 1252-znbn. Reported BEFORE the checks below: a merged item makes
     # the step count itself wrong, so every later verdict is over the wrong set.
+    # ORDER 1274-cbk7. Reported FIRST: a duplicated key means a YAML loader
+    # rejects this document outright, so any step count taken from it describes
+    # a file that cannot be loaded. The incident this closes is an author who
+    # ran --parse-only over the corpus, read 423 ok, and hit
+    # blocked:yaml-load-failed in the gate fifteen minutes later.
+    if [[ "${#duplicate_keys[@]}" -gt 0 ]]; then
+        printf '  %b[PARSE ERROR]%b %s: duplicated mapping key in a critical_path item\n' "${RED}" "${NC}" "$test_file" >&2
+        local dk dkstep dkkey
+        for dk in "${duplicate_keys[@]}"; do
+            dkstep="${dk%%|*}"
+            dkkey="${dk#*|}"
+            printf '%s\n' "         step '${dkstep}': key '${dkkey}' appears more than once" >&2
+        done
+        printf '%s\n' "         a YAML loader REJECTS this file; this parser would silently take the last occurrence" >&2
+        printf '%s\n' "         verify with: scripts/check-litmus-yaml-parses.sh" >&2
+        return 1
+    fi
+
     if [[ "${#malformed_items[@]}" -gt 0 ]]; then
         printf '  %b[PARSE ERROR]%b %s: critical_path item not opened by `- step: "..."`\n' "${RED}" "${NC}" "$test_file" >&2
         local mi mkey mline
@@ -2194,6 +2254,7 @@ parse_args() {
             -*)
                 log_fail "Unknown option: $1"
                 echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
+                echo "     --parse-only <file>... asks whether THIS RUNNER can extract the steps; for YAML validity use scripts/check-litmus-yaml-parses.sh" >&2
                 exit 3
                 ;;
             *)
@@ -2259,6 +2320,13 @@ main() {
             printf 'blocked:parse-only:no files named\n' >&2
             exit 2
         fi
+        # ORDER 1274-cbk7. SAY WHICH QUESTION THIS ANSWERS. The defect this
+        # closes is not that an author forgot a rule — it is that two checks
+        # answer two different questions and the one authors reach for did not
+        # say which was which. A green here means THIS RUNNER can extract the
+        # steps; it is not a YAML validity verdict, and a file can be
+        # extractable and unloadable at the same time.
+        printf 'note:parse-only answers runner-extractability, NOT YAML validity — for YAML validity run scripts/check-litmus-yaml-parses.sh\n' >&2
         for parse_target in ${PARSE_ONLY_FILES[@]+"${PARSE_ONLY_FILES[@]}"}; do
             if [[ ! -f "$parse_target" ]]; then
                 printf 'blocked:parse-only:missing:%s\n' "$parse_target" >&2

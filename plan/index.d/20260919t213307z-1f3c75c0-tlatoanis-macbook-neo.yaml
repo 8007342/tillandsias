@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    field: status
+    value: in_progress
+    ts: "2026-09-19T21:33:07Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    event:
+      type: note
+      ts: "2026-09-19T21:33:07Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        macneo claims: small, and verifiable on this host

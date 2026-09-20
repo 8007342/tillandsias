@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-linux-install-path-serves-aarch64-so-a-raspberry-pi-5-curl-installs-and-runs-the-headless-binary-on-bare-metal-the-release-already-builds-the-static-aarch64-headless-but-the-installer-refuses-the-arch
+    order: 1291-38mt
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [aarch64, raspberry-pi, installer, release, headless, linux, operator-ruling]
+    estimated_hours: 8
+    owned_files:
+      - scripts/install.sh
+      - .github/workflows/release.yml
+      - flake.nix
+      - crates/tillandsias-headless/build.rs
+    verifiable_closure: |
+      litmus:aarch64-install-path passes with three arms: (1) on an aarch64
+      Linux host (a Raspberry Pi 5), `curl -fsSL <release>/install.sh | bash`
+      installs a `tillandsias` that prints the release version from
+      `--version` and whose `file` output says aarch64 static; (2) the same
+      binary's `--init` on that host brings the enclave up (the git mirror,
+      vault and router containers report healthy in `--diagnose`), which is
+      the bare-metal headless the operator named; (3) the release run's
+      Linux job publishes the aarch64 asset the installer selects and its
+      `file` assertion names aarch64, and the router sidecar the aarch64
+      headless embeds is itself aarch64 (a `file` on the embedded sidecar
+      extracted from the binary, or the Nix derivation's own assertion).
+      PRE-FIX RESULT: FAILS — install.sh line 187 dies
+      `unsupported architecture: aarch64. This installer ships x86_64 Linux only`,
+      the release publishes tillandsias-linux-x86_64 as the only host
+      launcher, and tillandsias-headless-aarch64-unknown-linux-musl (built by
+      flake target tillandsias-headless-aarch64-musl, asserted aarch64 by
+      release.yml line 241) is published only as the guest binary for the
+      macOS VM; the published router sidecar asset is x86_64 only. NEGATIVE
+      CONTROL: x86_64 hosts still receive tillandsias-linux-x86_64 and the
+      x86_64 smoke is unchanged.
+    title: |
+      the Linux install path serves aarch64 so a Raspberry Pi 5 curl-installs and runs the headless binary on bare metal — the release already builds the static aarch64 headless, but the installer refuses the arch
+    context: |
+      Operator direction 2026-09-20: "we're going to need an arm64 build of
+      the tillandsias binary, and we'll merely run tillandsias headless there,
+      it'll start the enclave and the git mirror like they all do … our
+      headless version running inside the wsl/macosVM is already the headless
+      solution we would be running on bare metal on the raspberry pi … let's
+      start just by making sure our linux binary is also built in arm64, maybe
+      macos host can deal with that." Facts at filing: the release's Nix job
+      already builds and asserts the static aarch64 headless
+      (tillandsias-headless-aarch64-musl), so the missing pieces are the
+      installer's architecture selection (`uname -m` → asset name), a decision
+      whether the aarch64 asset is published under a launcher name
+      (tillandsias-linux-aarch64) or the installer maps the headless name, and
+      proof that the headless runs `--init` on bare metal aarch64 (it does so
+      inside the Apple-silicon VM today, which is the same binary on the same
+      arch, so the open question is the host-side substrate: podman, cgroups,
+      /dev on a Pi image). The macOS hosts can exercise the binary's aarch64
+      correctness inside their VM; only a Pi exercises bare metal. This row is
+      the first step of the Pi 5 fleet server (1290-5833) and of the
+      operator's longer plan (production apps and infra services on Pi 5
+      devices), and it composes with 1286-4437 (install provisions and resets).
+    next_action: >
+      (1) install.sh: select the asset by architecture, refuse others by name;
+      (2) release.yml: publish the aarch64 binary under the name the installer
+      selects and keep the x86_64 path byte-identical; (3) a macOS host proves
+      the aarch64 binary's --version and the sidecar arch inside its VM; (4)
+      the operator brings one Pi 5 up and runs arm 1 and 2 by hand once, with
+      the output pasted to the row, before the litmus is bound to any tier.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from the
+      operator's direction; the pre-fix facts are read from scripts/install.sh,
+      .github/workflows/release.yml and the v56.9.19.2 asset list.

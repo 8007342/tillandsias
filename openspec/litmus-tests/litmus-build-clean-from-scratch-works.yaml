@@ -44,9 +44,26 @@ critical_path:
     expected_behavior: "both report identical version"
 
   - step: "initialize with test flag to verify runtime correctness"
-    command: "tillandsias --init --test 2>&1 | head -20"
+    command: "tillandsias --init --test 2>&1"
     timeout_ms: 30000
-    expected_behavior: "launches without error, init completes successfully"
+    expected_behavior: "tillandsias --init --test exits 0 and reports its own completion"
+    # ORDER 1252-znbn. TWO defects in one line, both measured on pirria 2026-09-20.
+    #
+    # 1. THE PIPE DECIDED THE VERDICT. The command was `... 2>&1 | head -20` and
+    #    `assert_exit: 0` therefore asserted HEAD's status, not tillandsias's.
+    #    Measured by reproducing the runner's own child shell exactly —
+    #    `bash -c 'source "$LITMUS_STDLIB"; <cmd> | head -20'` — with a producer
+    #    that exits 7: the pipeline returns 0. The stdlib mentions pipefail five
+    #    times and it is NOT in effect for the step's own pipeline, so reading
+    #    the script was not enough; the shape had to be run.
+    #    A `--init --test` that failed outright passed this step.
+    #
+    # 2. IT TRUNCATED ITS OWN EVIDENCE. `head -20` discarded everything past the
+    #    twentieth line, so the failure detail a reader needs was cut before it
+    #    reached the capture file. The runner captures step output to a file
+    #    already; there is nothing to protect a terminal from.
+    #
+    # The pipe is removed. `assert_exit` now means what it says.
     assert_exit: 0
     assert_output_nonempty: true
 

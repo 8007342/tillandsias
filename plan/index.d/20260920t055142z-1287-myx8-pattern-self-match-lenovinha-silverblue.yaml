@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-grep-that-counts-call-sites-matches-the-guard-written-to-forbid-those-call-sites-so-the-tripwire-reports-itself-as-the-thing-it-guards-against
+    order: 1287-myx8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, gate, agent-safety, measurement]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-credential-channel-names-a-locked-keyring.sh
+    title: |
+      a grep that counts call sites also matches the TRIPWIRE written to forbid them, and the comment that documents them — so the guard against a pattern is counted as an instance of it, and a clean tree measures as dirty
+    context: |
+      FOUND BY lenovinha-silverblue 2026-09-19 during the 1265-8qr6 removal, on
+      its own measurement rather than on the code under test.
+
+      MEASURED. After removing both `busctl get-property ... Locked` probes I
+      counted what was left:
+        grep -rl 'get-property.*Locked' scripts/ | wc -l   ->  1
+      One call site, apparently reinstated. It was not a call site. It was arm
+      5 of the fixture I had just written, whose body is
+        if grep -qE 'get-property[^|]*Locked' "$GUARD"; then
+      — the TRIPWIRE that exists to refuse exactly that call. Excluding the
+      fixture, the true count is 0.
+
+      THE SHAPE, stated generally because it is not about this pattern: a
+      guard against a textual pattern must CONTAIN that pattern to recognise
+      it, so any census of the pattern counts its own guards, and its own
+      documentation. The stronger the tree's tripwire coverage, the worse the
+      over-count — and the error is in the SAFE direction only for a census.
+      Inverted ("is the tree clean?") it answers NO on a clean tree, which is
+      the shape that gets a real removal reverted.
+
+      THIS IS THE THIRD INSTANCE OF SELF-MATCHING MEASUREMENT IN ONE SESSION,
+      which is why it is a row and not a note. The other two were `pgrep -f`
+      and `pkill -f` matching the agent's OWN command line, killing this
+      session's shell twice (exit 144) while it cleaned up processes it had
+      started. Same defect class: the instrument is inside its own search
+      space. 1252-r72q already carries pgrep/pkill -f as a measured hazard
+      shape; this is the grep-census sibling and belongs with it.
+
+      WHY IT IS NOT MERELY OPERATOR ERROR. The tree's convention is to write a
+      tripwire fixture for every removed hazard, so the tree MANUFACTURES this
+      collision by design and will do so again for the next removal. Any future
+      count of `get-property.*Locked` must exclude the fixture, and nothing
+      says so at the point where somebody would run it.
+    next_action: |
+      Nobody holds this. What is LEFT, in order:
+      1. DECIDE THE CONVENTION, which is the actual deliverable and is cheap:
+         either tripwire fixtures carry a machine-readable marker on the line
+         holding the forbidden pattern (a trailing `# tripwire-pattern` is
+         enough), or censuses are required to exclude `scripts/test-*.sh` and
+         say so. Prefer the marker: the exclusion rule is invisible at the call
+         site and will be forgotten, which is how this was found.
+      2. APPLY IT to the known instance, arm 5 of
+         scripts/test-credential-channel-names-a-locked-keyring.sh.
+      3. MEASURE THE REST. Other removed-hazard tripwires exist (795-imz3 and
+         1252-r72q families at least); count how many patterns are already
+         self-matching before deciding whether a check is worth it.
+      4. ONLY THEN consider a gate. An advisory tier first — 1251-54p3 and
+         1252-r72q both took that ordering, and a guard that reds trunk on a
+         backlog nobody owns gets disabled rather than obeyed.
+      Do NOT write the check before step 1: a checker for a convention that
+      does not exist yet will encode whichever convention its author assumed.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Step 1 of next_action is a CONVENTION
+      decision (a tripwire marker versus a census exclusion rule), and the check
+      that would score this row cannot be named before that is settled — pinning
+      a litmus nothing defines yet is refused by 885-92iu. When the convention
+      lands the guard is litmus-pattern-census-excludes-its-own-tripwires, and
+      it must be written in the same commit as the thing it tests (1136-n8sh).
+    verifiable_closure: |
+      A census command for a removed-hazard pattern returns the TRUE count of
+      live call sites on a clean tree, with the tripwire fixture and any
+      documenting comment excluded by a rule that is visible at the fixture
+      rather than remembered by the person running the census. Demonstrated on
+      `get-property.*Locked`, which must read 0 at a commit where the probe is
+      absent and the arm-5 tripwire is present.
+
+events:
+  - packet_id: a-grep-that-counts-call-sites-matches-the-guard-written-to-forbid-those-call-sites-so-the-tripwire-reports-itself-as-the-thing-it-guards-against
+    event:
+      type: note
+      ts: "2026-09-20T05:51:54Z"
+      host: lenovinha-silverblue
+      summary: |-
+        filed from a live false positive during 1265-8qr6; the count read 1 on a tree with 0 call sites
