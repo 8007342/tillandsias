@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T09:55:00Z"
+      host: yolanda-windows
+      summary: |-
+        CORRECTION to this row's WINDOWS pre-fix claim, measured by RUNNING install-windows.ps1 twice tonight (the v56.9.19.2 daily-pinned smoke and the stable-channel smoke) as well as reading it. pirria found two of the LINUX pre-fix claims stale the same way; the pattern is the row's, not either host's — its per-platform pre-fix text was written from reads, and both claims that have since been RUN were wrong.
+
+        FILED: "defers provisioning to the next launch and never unregisters an existing distro".
+
+          "never unregisters an existing distro" — TRUE on the install path. The only `wsl --unregister tillandsias` in the file is inside `if ($Purge)` (install-windows.ps1:129), the uninstall path. Confirmed by running: my second smoke began with a Stopped `tillandsias` distro present and the installer left it registered.
+
+          "defers provisioning to the next launch" — FALSE by default. The installer ends with `Start-Process -FilePath $InstalledExe` (line 504) and prints "Launching Tillandsias (WSL2 provisioning = --init will run automatically)" and "provisioning runs in the background". Deferral happens ONLY under `-NoLaunch` (line 508). Both runs left a tray process alive immediately after install; in the first, it was still running when the smoke's §2 began and had to be killed.
+
+        THE ACTUAL DEFECT IS STRICTLY WORSE THAN THE FILED ONE: the installer starts provisioning FIRE-AND-FORGET and EXITS 0 WITHOUT WAITING FOR IT OR REPORTING ITS STATUS. It cannot fail on a failed provision. An honest deferral at least tells the operator to do something; a success exit code that cannot fail tells them nothing is wrong. Same family as 1258-8wfb one layer out — a check that cannot fail.
+
+        CONSEQUENCE FOR THIS ARM'S CLOSURE, agreed with the coordinator: the criterion is that install-windows.ps1 runs `--reset-state` (which reprovisions through the init path) SYNCHRONOUSLY and exits with its status; pre-fix the installer exits 0 with a Stopped distro left registered and a tray started in the background. `-NoLaunch` keeps its meaning; the skip variable is separate and skips only the reset.
+
+        FLAG NAME AGREED as `--reset-state` on all three platforms. I refused pirria's `--reset-install` on Windows-specific evidence: the flag must PRESERVE tillandsias-vm-uuid, which the smoke runbook states "anchors the INSTALLATION, not the guest, and the in-VM Vault derives its master key from it" — so `--reset-install` would name precisely the thing the flag is forbidden to touch, and getting that wrong is 803-49re (permanently broken GitHub login). Env var `TILLANDSIAS_INSTALL_SKIP_RESET=1`, exactly one affordance, reset is the baseline.
+
+        TIMING, measured on this host and relevant to where a readiness assertion can live: cold provision 91s (daily smoke) and 79s (stable smoke); warm 7s. A one-block cold run exits 0 at 79s with --status-once reading Ready/podman_ready=true at t+85s. esme sharpened the consequence: their diagnose check at :452 runs BEFORE the launch at :504, so the distro is not merely mid-provision but unregistered, and READY there would fail EVERY first install rather than racing. Readiness is assertable only after the synchronous reprovision, which is this arm's position (4).
