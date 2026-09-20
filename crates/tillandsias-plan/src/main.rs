@@ -7136,18 +7136,19 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // written, whatever future flag handling gets wrong.
             if value_file.is_none() {
                 for f in VALUE_FLAGS.iter().chain(BOOL_FLAGS.iter()) {
-                    if let Some(other) = flagged(f) {
-                        if other == value && !other.is_empty() {
-                            eprintln!(
-                                "error: the value is byte-identical to the argument of {f} ('{value}') — REFUSED.\n\
+                    if let Some(other) = flagged(f)
+                        && other == value
+                        && !other.is_empty()
+                    {
+                        eprintln!(
+                            "error: the value is byte-identical to the argument of {f} ('{value}') — REFUSED.\n\
                                  \n\
                                  That is the signature of a flag consuming the wrong token (1285-vz27): the\n\
                                  field would be written with a timestamp, a hostname or a reason string that\n\
                                  the caller meant for a flag. If the value is genuinely meant to equal that\n\
                                  argument, pass it with --value-file, which is not subject to this check."
-                            );
-                            std::process::exit(2);
-                        }
+                        );
+                        std::process::exit(2);
                     }
                 }
             }
