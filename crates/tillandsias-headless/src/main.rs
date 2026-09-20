@@ -4509,6 +4509,13 @@ fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
 /// `None`, the mirror has no authenticated upstream credential path.
 ///
 /// @trace spec:tillandsias-vault, spec:git-mirror-service
+// ORDER 1313-prin: the eighth parameter is the mirror's SIGNER AppRole secret.
+// Suppressed rather than restructured: the tree already carries this allow in
+// nine places including this file, and grouping the two vault secrets into a
+// struct would touch seventeen call sites for a shape change nothing else
+// wants. If a ninth parameter is ever needed, group them then — that is the
+// point at which the argument list is the problem rather than the lint.
+#[allow(clippy::too_many_arguments)]
 fn build_git_run_args(
     project_name: &str,
     mirror_id: Option<&str>,
