@@ -509,6 +509,72 @@ try {
         SayWn "--diagnose ran (exit $DiagExit) but captured no JSON output."
     }
 
+    # -- Reset and reprovision the local state (order 1286-4437) --------------
+    # THE OPERATOR'S RULING: an irm|iex install is also the REPAIR for a broken
+    # local state, so the install resets and reprovisions rather than leaving a
+    # wedged guest in place. Ephemeral AND idempotent.
+    #
+    # WHY IT IS HERE AND NOT EARLIER. esme's --diagnose check above certifies
+    # the INSTALL BITS and Dies on exit 1, so a binary that cannot run aborts
+    # BEFORE anything is destroyed. This block certifies the RESULT. Two
+    # verdicts, two subjects, and the order is the safety property: never
+    # destroy on the strength of a binary you have not proven runnable.
+    #
+    # SYNCHRONOUS, AND THE INSTALLER EXITS WITH ITS STATUS. Measured on yolanda
+    # 2026-09-20 across two smokes of v56.9.19.2: before this, the installer
+    # ended by Start-Process'ing the tray and exiting 0 while provisioning ran
+    # in the background, so it could not fail on a failed provision. A success
+    # code that cannot fail is worse than an honest deferral, because it tells
+    # the operator nothing is wrong.
+    #
+    # THE BINARY OWNS THE OPT-OUT. TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
+    # documented affordance and --reset-state honors it itself, announcing the
+    # skip and provisioning the existing state. This script therefore calls the
+    # flag UNCONDITIONALLY and never reads that variable: one decision, one
+    # place, so the installer and the binary cannot disagree.
+    #
+    # cmd.exe /c is the same wrapper the --version and --diagnose checks above
+    # use, and for the same reason: the tray is a GUI-subsystem binary, so a
+    # bare call does not wait and records no exit status (see the OUTPUT NOTE
+    # in `tillandsias-tray.exe --help`).
+    Write-Host ""
+    # CAPABILITY PROBE BEFORE THE CALL, and it is not belt-and-braces. This
+    # installer always DOWNLOADS the tray, and TILLANDSIAS_VERSION can pin an
+    # older tag -- which is exactly what the release smoke does. A tray from
+    # before 1286-4437 does not know --reset-state and exits 2 with
+    # "unknown flag", so an unconditional call would turn every pinned-older
+    # install into a hard failure at a step that did not exist when that tag
+    # shipped.
+    #
+    # PROBE BY CONTENT, not by version arithmetic: ask the binary what it
+    # supports and read the answer. A version comparison would have to know
+    # which tag first carried the flag, and would be wrong for any build that
+    # is not on that line.
+    $ResetHelp = & cmd.exe /c "`"$InstalledExe`" --help 2>&1"
+    $HasResetState = ($ResetHelp -join "`n") -match '--reset-state'
+    if (-not $HasResetState) {
+        SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
+        SayWn "  the install is complete, but a broken local state was NOT repaired."
+        SayWn "  install a release that carries --reset-state to get the repair."
+    }
+    if ($HasResetState) {
+    Say "Resetting local state and reprovisioning (--reset-state)..."
+    Say "  preserved: tillandsias-vm-uuid (the installation identity)"
+    Say "  destroyed: the WSL2 distro and its disk, the two host vault credentials, the download cache"
+    Say "  set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 to skip the destructive half"
+    $ResetLog = Join-Path $env:TEMP "tillandsias-reset-state.log"
+    & cmd.exe /c "`"$InstalledExe`" --reset-state > `"$ResetLog`" 2>&1"
+    $ResetExit = $LASTEXITCODE
+    if (Test-Path $ResetLog) {
+        Get-Content $ResetLog | ForEach-Object { Write-Host "  $_" }
+        Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
+    }
+    if ($ResetExit -ne 0) {
+        Die "tillandsias-tray --reset-state failed (exit $ResetExit); the local state was not reprovisioned."
+    }
+    SayOk "reset-state: provisioned and ready (exit $ResetExit)"
+    }
+
     # -- Installed-Software registration (windows-260722-3) -------------------
     # ONE idempotent HKCU key, SAME name every install: DisplayVersion is
     # updated in place, so Settings > Apps always shows exactly the latest
