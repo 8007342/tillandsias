@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T00:49:24Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t004924z
+      host: macneo
+      summary: |
+        THE WRITER IS CAUGHT IN THE ACT. THE CONTENDED RESOURCE IS THE PROCESS-GLOBAL
+        XDG_CACHE_HOME, AND BOTH EARLIER CANDIDATES ARE REFUTED.
+
+        THE CAPTURE, from a gate that reproduced the red while instrumented:
+          SCRATCH-1282C config write FAILED kind=NotFound os=Some(2)
+          msg=No such file or directory (os error 2)
+          path=/var/folders/nn/.../T/.tmpQKECpY/tillandsias/forge-gitconfig/alpha.config
+          thread=Some("tests::forge_credential_quarantine_mounts_present")
+
+        Read the PATH. It is not the host cache root. It is
+          <a tempfile::tempdir()>/tillandsias/forge-gitconfig/alpha.config
+        i.e. the victim resolved its cache root to ANOTHER TEST'S TEMPORARY DIRECTORY,
+        and the write failed NotFound because that directory had already been DELETED.
+        Note the shape: XDG_CACHE_HOME/tillandsias/..., with no `.cache` component, so
+        the root came from XDG_CACHE_HOME and not from HOME.
+
+        THE WRITER, identified: main.rs `init_build_state_persists_to_cache_directory`.
+        It takes `crate::runtime_assets::env_lock()`, creates a `tempfile::tempdir()`
+        (which produces exactly the `.tmpXXXXXX` name seen in the failing path), calls
+        `std::env::set_var("XDG_CACHE_HOME", temp.path())`, and restores the previous
+        value in a Drop guard. It is WELL-BEHAVED BY ITS OWN CONTRACT.
+
+        THE VICTIM DOES NOT TAKE THAT LOCK. `grep env_lock` over
+        forge_credential_quarantine_mounts_present returns ZERO. So the writer holds the
+        lock correctly and the victim races it anyway. This is verbatim the sentence
+        1021-hf9e's own comment already wrote about this exact test:
+          "THE VICTIM NEVER TOOK THAT LOCK ... it raced the HOME writers: a lock
+           protects only the participants who take it. When HOME pointed at another
+           test's tempdir — or one already dropped — create_dir_all below failed."
+        The only thing that has changed since that comment is WHICH global and WHICH
+        call fails: XDG_CACHE_HOME rather than HOME, and the CONFIG WRITE rather than
+        create_dir_all. The race, the victim, and the reason are the same.
+
+        FULL CAUSAL CHAIN, every link measured:
+          1. init_build_state_persists_to_cache_directory sets XDG_CACHE_HOME to its
+             tempdir (under env_lock).
+          2. forge_credential_quarantine_mounts_present, running in parallel WITHOUT
+             that lock, resolves its cache root from the poisoned XDG_CACHE_HOME.
+          3. create_dir_all SUCCEEDS — the writer's tempdir still exists. (This is why
+             instrumenting create_dir_all caught nothing: it is not the failing call.)
+          4. the writer's TempDir DROPS and the directory is deleted.
+          5. `std::fs::write(&config_path, ...)` fails NotFound.
+          6. `.ok()?` converts that into None AT THE POINT IT HAPPENS.
+          7. no gitconfig mount is added.
+          8. the assertion "must mount forge-owned gitconfig at /home/forge/.gitconfig"
+             fails, three steps downstream of the actual error, naming an absence.
+
+        TWO CANDIDATES REFUTED ALONG THE WAY, both recorded so nobody re-runs them:
+          - the swallowed create_dir_all (this row's original hypothesis AND the source
+            comment's): instrumented, gate reproduced the red, ZERO hits. Step 3 above
+            explains why it could never have fired.
+          - `unsafe set_var("TILLANDSIAS_PROJECT_REMOTE_URL")`, which this row called
+            its "strongest candidate": at the failing call the instrumentation read
+            env_TPRU=None, env_present=false. The variable was never set. Killed by its
+            own measurement, which is why it was written down as unverified.
+          - also excluded earlier by direct test: /tmp/project's existence on disk
+            (present and absent both PASS in isolation).
+
+        THE SECOND SWALLOWED ERROR WAS UNDOCUMENTED. The source comment describes ONE
+        `.ok()?` hazard in this function, at create_dir_all. There is a SECOND, at the
+        config write, and it is the one that actually fires. A function that converts
+        two different filesystem failures into the same silent None is why this took an
+        instrumented reproduction rather than a reading.
