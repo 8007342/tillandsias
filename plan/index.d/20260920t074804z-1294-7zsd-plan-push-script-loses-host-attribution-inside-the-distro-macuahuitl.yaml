@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-fragment-push-script-derives-its-host-label-from-hostname-so-run-inside-the-tillandsias-build-distro-the-only-route-that-works-on-a-windows-host-it-commits-as-plan-unknown
+    order: 1294-7zsd
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, windows, wsl, attribution, instrument-defect]
+    estimated_hours: 1
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    verifiable_closure: |
+      scripts/push-plan-fragments-to-trunk.sh run inside the tillandsias-build
+      distro on a Windows host commits with a subject naming the host
+      (`plan(esmeraldinha): …`), the label taken from an explicit
+      TILLANDSIAS_HOST or the fleet's host-identity helper before any
+      fallback to `hostname`; and a run where no label can be derived REFUSES
+      to commit with `refused:plan-push:no-host-label` instead of committing
+      "unknown". PRE-FIX RESULT: FAILS — 4d435dc8b on trunk reads
+      `plan(unknown): 6 fragment(s) to linux-next from windows-next`; the
+      fragment filenames and every event inside carry esmeraldinha, only the
+      commit subject lost it. NEGATIVE CONTROL: a Linux host's run still
+      names the host as today.
+    title: |
+      the plan-fragment push script derives its host label from hostname, so run inside the tillandsias-build distro — the only route that works on a Windows host — it commits as plan(unknown)
+    context: |
+      Found by esme 2026-09-20 while taking the coordinator's advice to run
+      the push script inside the WSL distro (MSYS cannot fork sh at the
+      script's depth from Git Bash, so `!`-shell credential helpers and the
+      pre-push hook fail to spawn there; 759-ffh7 carries that story). Inside
+      the distro `hostname` resolves to nothing usable and the script falls
+      back to "unknown". Cosmetic in the ledger (attribution lives in the
+      fragments and events), but the commit log is what `git log` readers and
+      the loop-status audit's host derivation see, and 1012-hu7d already
+      names the cost of an unattributed bucket. Same family as yolanda's
+      `hostname -s` fix for mo_full_host, one locus over.
+    next_action: >
+      Read how HOST is derived in the script, prefer TILLANDSIAS_HOST then
+      scripts/agent-identity.sh's workstation half, then hostname, and refuse
+      rather than fall back to "unknown"; one commit, Linux gate.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from esme's
+      report; the pre-fix commit is on trunk.
