@@ -632,6 +632,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:fake-podman-direct-invocation-safety
+  - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
   - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
