@@ -25113,7 +25113,14 @@ esac
             (ForgeAgentMode::Maintenance, "terminal"),
         ] {
             let args = build_forge_agent_run_args(
-                &project, "alpha", None, &certs, "1.2.3", mode, false, false,
+                &project,
+                "alpha",
+                None,
+                &certs,
+                "1.2.3",
+                mode,
+                false,
+                false,
                 &test_cache_root(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
