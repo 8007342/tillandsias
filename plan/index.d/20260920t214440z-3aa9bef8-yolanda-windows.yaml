@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-20T21:44:40Z"
+      agent_id: windows-yolanda-claude-20260920t214439z
+      host: yolanda-windows
+      summary: |
+        FOURTH REAPED GATE ON THIS HOST, recorded with numbers so the count is a
+        number and not a feeling.
+
+        2026-09-20, gating the 1308-9ej7 slice for a work ref. The harness stopped
+        `./build.sh --check` because the SYSTEM was critically low on memory. Not a
+        gate refusal and not a defect in the change: the process was killed from
+        outside, mid-clippy on tillandsias-vault-client, 4481 bytes of log, no timing
+        file, no surviving process.
+
+        MEASURED IMMEDIATELY AFTER:
+            host free              2.77 GB of 15.16 GB   (18.3%)
+            vmmemWSL working set   4.08 GB
+            guest MemAvailable     4038440 kB of 5033620 kB   -- the guest reads HEALTHY
+
+        THAT IS THE BALLOON SHAPE, and the third number is the reason it keeps
+        surprising people: nothing measured INSIDE the distro reports a problem, so a
+        check that asks the guest how it is doing gets a clean answer while Windows is
+        at 18% free and the reaper takes the host-side job. A verdict from inside the
+        guest cannot see this, which is why the evidence has to be the host's own free
+        memory beside the guest's.
+
+        CONSEQUENCE, stated rather than worked around: a new work/ ref demands a local
+        full gate, this host cannot reliably produce one, so Windows slices go out on
+        salvage refs and are gated by the relay. That is not a workaround for a red
+        gate -- the gate here is not red, it is unfinishable -- and it is the documented
+        lane for exactly this (872-c9nd).
+
+        NOT RETRIED. A second reaped gate measures the same thing twice and teaches
+        nothing, and the harness's own note says memory may still be short.
+
+        NOT FIXED FROM HERE EITHER. The plausible remedy is this workstation's
+        .wslconfig: `memory=5GB` with NO `processors=` line, so the guest takes all 16
+        logical CPUs inside 4.8 GB, against esmeraldinha's 8GB/4 which does not see
+        this. That is a change to the operator's machine and needs `wsl --shutdown`, so
+        it is being proposed to them on their own channel rather than made here or
+        asked for by a peer.

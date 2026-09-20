@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    order: 1319-vd5h
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags:
+      - plan
+      - gate
+      - instrument
+      - fail-loud
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-scorable-obligation-added.sh
+    title: 'check-scorable-obligation-added.sh starts a new packet row at ANY two-space list item (`/^  -
+      |^    - /`), so a fragment written by a YAML dumper — whose sequences are indentless — flushes the
+      row at its first exit_criterion and every field below it, including `unscoreable:`, is never evaluated
+
+      '
+    context: "MEASURED ON PIRRIA 2026-09-20. The checker refused a fragment whose\n`unscoreable:` field\
+      \ was plainly present in the file:\n\n  violation:scorable-obligation-missing:1\n    ... packet\
+      \ '...' carries no scorable obligation — add a verifiable_closure\n    naming a litmus:<test>, or\
+      \ an explicit 'unscoreable: <reason>' (977-448j)\n\nI chased four wrong hypotheses (a missing tag\
+      \ prefix, the row indentation, the\ndiff scope, a stale read) before running the checker's OWN awk\
+      \ against the file,\nwhich answered UNSCOREABLE=no. That is the only step that found it, and it\
+      \ is the\nmethod this row asks its claimer to use rather than reading the regex.\n\nTHE MECHANISM.\
+      \ The row splitter is deliberately anchored to the list marker\nrather than to `packet_id:` — correctly,\
+      \ and for a reason its own comment gives:\nrows in plan/index.yaml are written `- order: ...` with\
+      \ packet_id a line below,\nso splitting on `- packet_id:` made them invisible (1093-hzhi). But it\
+      \ anchors on\nINDENT: `/^  - |^    - /`, \"packet rows sit at 2 spaces (fragments) or 4 (the\nbase\
+      \ index)\". A fragment written by yaml.safe_dump puts SEQUENCE ITEMS at the\nparent key's indent,\
+      \ so `exit_criteria` items also sit at exactly two spaces.\nEach one therefore matches the row marker,\
+      \ flushes the row, clears `pid`, and the\nnext rule — `pid == \"\" { next }` — discards every remaining\
+      \ line of that packet.\nThe `unscoreable:` field twelve lines below is never evaluated.\n\nThe field\
+      \ is in the file. The gate cannot see it. Both statements are true and\nthe author is the only person\
+      \ positioned to notice, because the author is looking\nat the file.\n\nTWO LANDED FRAGMENTS HAD\
+      \ IT, and are the evidence: 1313-w78k and 1314-2mdv, both\ngenerated with yaml.safe_dump, both carrying\
+      \ an `unscoreable:` the checker's own\nawk reports as absent. Three hand-written heredoc fragments\
+      \ from the same session\n(1309-q4kr, 1309-fhxb, 1310-7apk) report it correctly. The difference is\
+      \ the\nwriter, not the content. Both have since been restated through\n`tillandsias-plan set-field`,\
+      \ which writes into the LWW channel at the indent the\nfold reads (1071-adhj), so neither row is\
+      \ invisible today — but the next\npython-written fragment will be.\n\nSIBLINGS, grepped in the same\
+      \ pass and named rather than assumed:\n  scripts/check-fragment-status-loss.sh   SHARES the two-space\
+      \ marker idiom (3 sites) — check it\n  scripts/check-added-fragments-parse.sh  does NOT use it (0\
+      \ sites)\n  scripts/check-base-ledger-status-loss.sh   does NOT (0)\n  scripts/check-fragment-events-land.sh\
+      \      does NOT (0)\n\nWHY IT IS THE NIGHT'S FAMILY: a structure-aware writer and a text-aware reader\n\
+      agree about nothing except the parse. The same day produced a YAML round-trip\nthat silently dropped\
+      \ eight comments from a litmus file, and a derived cheatsheet\ntree that only a command keeps true.\
+      \ In all three the authored content was\ncorrect, the SERIALISATION was not what the next reader\
+      \ expected, and the failure\nwas invisible to the author.\n"
+    exit_criteria:
+      - 'a fragment written by a YAML dumper with indentless sequences has its `unscoreable:` and `verifiable_closure:`
+        SEEN (pre-fix result: FAILS — the 1318-3dgq fragment as first dumped is refused with the field
+        present; that file at that revision is the fixture input)'
+      - 'the row marker no longer depends on the list item''s INDENT: it keys on the `- packet_id:`/`-
+        order:` row form, or on the indent DERIVED from the `packets:` key, so a deeper- or shallower-indented
+        sequence cannot split a row'
+      - 'NEGATIVE CONTROL, and it is why the current anchor exists: rows in plan/index.yaml written `-
+        order: 873-vgyg` with `packet_id:` on a later line are STILL found (1093-hzhi). A fix that returns
+        to splitting on `- packet_id:` reintroduces the miscount that row removed.'
+      - scripts/check-fragment-status-loss.sh is checked for the same defect and the finding is recorded
+        either way — it shares the idiom at 3 sites; the other three scanners grepped in the same pass
+        do not use it
+    unscoreable: 'fixture-input-is-a-past-revision: the cleanest pre-fix input is the 1318-3dgq fragment
+      exactly as yaml.safe_dump first wrote it, which is a revision rather than a file in the tree. The
+      claimer either commits that byte sequence as a fixture input under scripts/ or regenerates it with
+      a dumper whose increase_indent goes indentless; regenerating is reproducible but couples the fixture
+      to a library''s default, and that choice is the claimer''s.
+
+      '
+    events:
+      - type: filed
+        ts: '2026-09-20T21:20:24Z'
+        agent_id: linux-pirria-claude-20260920t212500z
+        host: pirria
+        summary: 'Filed by the host whose fragment was refused, at the coordinator''s direction,
+
+          after they ruled the defect is the CHECKER''s and not the rows''. The two landed
+
+          fragments were restated through the tool rather than edited, since a fragment is
+
+          immutable; this row is about the reader.
+
+          This fragment is written with a dumper whose sequences ARE indented, so it does
+
+          not reproduce the defect it describes — which is itself worth noticing, because
+
+          the previous one did and nothing said so.'

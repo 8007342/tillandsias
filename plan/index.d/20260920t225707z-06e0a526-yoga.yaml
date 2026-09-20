@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    field: status
+    value: in_progress
+    ts: "2026-09-20T22:57:07Z"
+    host: yoga
+
+events:
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    event:
+      type: progress
+      ts: "2026-09-20T22:57:07Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: 384945ed576c4d239bcb96b3fb4776c3a51541a2
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    event:
+      type: note
+      ts: "2026-09-20T22:57:07Z"
+      host: yoga
+      summary: |-
+        claimed for cycle 2026-09-20T22:57:06Z by linux-yoga-opus5

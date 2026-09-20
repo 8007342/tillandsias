@@ -1,0 +1,53 @@
+# @trace spec:host-guest-transport
+name: litmus:macos-vsock-inference-closure
+spec: host-guest-transport
+description: >
+  Order 830-xsk2's closure: a client container on the enclave network addresses
+  http://inference:11434 and receives a body composed by a process on the macOS
+  HOST, with the PRODUCT launching the forwarder. Invokes
+  scripts/test-macos-vsock-inference-closure.sh, which carries the arms and the
+  mutation; this litmus binds it so the smoke runner can reach it by name.
+severity: critical
+size: large
+# NEVER `check`. The fixture boots a VM, ensures eight images and creates a
+# one-shot forge — roughly ten minutes. build.sh does not glob scripts/test-*.sh
+# (its own comments at :2394 and :2558 say so), and this phase keeps it out of
+# the gate deliberately rather than by that accident.
+phase: post-build
+
+preconditions:
+  - macOS host with Virtualization.framework (the fixture refuses by name elsewhere)
+  - a BUILT tray bundle at dist/Tillandsias.app whose staged guest carries the forwarder lane (scripts/build-macos-tray.sh); a bare target/release binary stages no guest and has no entitlement
+  - the guest's images exist at the current version; a version bump forces a rebuild
+
+caveats:
+  - refuses_rather_than_guesses: "Off-platform, without the app bundle, or with a bundled guest that predates the lane, the fixture prints unsupported:* and exits 0 — a skip that names what was not tested rather than a green"
+  - slow_by_nature: "~10 minutes; eight images and a one-shot forge. Not a gate fixture."
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-macos-vsock-inference-closure.sh && test -x scripts/test-macos-vsock-inference-closure.sh && echo PARSE-OK"
+    timeout_ms: 10000
+    success_pattern: "PARSE-OK"
+    failure_pattern: "syntax error|No such file"
+
+  - step: "the closure holds: client gets the host's body, and the mutation arm reds"
+    command: "scripts/test-macos-vsock-inference-closure.sh 2>&1 | grep -E '^(ok|violation|unsupported):macos-vsock-inference-closure:'"
+    timeout_ms: 2700000
+    # ASSERT THE OUTPUT, not the source. The fixture's own arms carry the
+    # meaning; this step must not re-implement them, or it would pass the moment
+    # someone weakened an arm while leaving its name in place.
+    success_pattern: "ok:macos-vsock-inference-closure:4"
+    failure_pattern: "violation:macos-vsock-inference-closure"
+
+observability:
+  traces:
+    - "@trace spec:host-guest-transport"
+  expected_log: "A client container reaches inference:11434 and receives a body composed on the macOS host; the same forwarder pointed at a dead host port yields no body"
+  log_fields:
+    spec: "host-guest-transport"
+    test: "macos-vsock-inference-closure"
+
+rollback:
+  on_failure: "read the per-arm product logs the fixture leaves on the home-src share (.vsock-closure-sc-LIVE.log, .vsock-closure-sc-DEAD.log); a DEAD arm reporting forwarder=absent means the lane never ran and the arm isolated nothing"
+  command: "grep -n 'try_start_vsock_forwarder' crates/tillandsias-headless/src/main.rs"

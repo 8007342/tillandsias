@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-audit-gate-step-reds-intermittently-on-its-disclaimer-arm-while-the-same-capture-satisfies-the-ref-count-arm-so-a-run-cut-short-reads-as-an-assertion-failure
+    event:
+      type: implemented
+      ts: "2026-09-20T22:57:03Z"
+      agent_id: linux-yoga-opus5-20260920t225703z
+      host: yoga
+      summary: |
+        FIX BUILT AND GATED: work/1306-ifhv at 80bf3acc1, ./build.sh --check GATE_EXIT=0,
+        verified on origin by artifact (line_matches present 8x, zero remaining
+        `printf | grep -q` assertions). scripts/test-salvage-audit.sh now prints
+        PASS: salvage-audit 14/14 inside the real gate run.
+
+        THE FLAKE IS REPRODUCIBLE ON DEMAND, which it has never been, and the reason it
+        was not is the correction this event exists to record. The mechanism note of
+        2026-09-20T13:36Z was right about the defect and wrong about its trigger: it
+        needs a SMALL PIPE, not load. Build load only ever reached the defect by
+        incidentally exhausting pipe pages, which is exactly why 40 replays on
+        macuahuitl and 6 here were all clean while the gate kept reddening. Holding 1400
+        pipes open takes a fresh pipe from 65536 to 8192 bytes on this host
+        (/proc/sys/fs/pipe-user-pages-soft = 16384 pages) and the 15569-byte capture
+        stops fitting one write:
+
+          pre-fix,  20 runs at pipe=8192: 2 RED (ARM 1b), 18 pass
+          post-fix, 20 runs at pipe=8192: 0 red, 20/20
+          either version at pipe=65536:   clean, as every prior replay was
+
+        The old spelling measured directly, GNU grep 3.12, pattern PRESENT:
+        pipe=65536 gives rc=0 at 15000 and 60000 bytes and rc=141 at 200000 and 1000000;
+        pipe=8192 gives rc=141 at 15000.
+
+        THE ROW'S PREDICTION HELD, and it is why all three early-exiting matchers were
+        converted rather than the two observed failing: which arm loses is a property of
+        the machine, not of the arm. macuahuitl's reds were ARM 3, the disclaimer.
+        Reproduced here on the same file and the same commit it was ARM 1b, the header.
+
+        THE CLOSURE'S LOAD WAS SUBSTITUTED, DELIBERATELY, AND IS NOT WEAKER. The
+        criterion asks for 20 runs under a concurrent ./build.sh --check. Driving the
+        pipe size directly is the mechanism that load was only reaching by accident; it
+        reproduces in six runs instead of never, and the gate runs this fixture under
+        real build load anyway (it did, above, green).
+
+        TWO ARMS ADDED, 12/12 -> 14/14. ARM 7 opens with its NEGATIVE CONTROL: it runs
+        the OLD spelling over a payload whose pattern is unquestionably present, and if
+        that still passes, the hazard is unreachable on that host and the arm SKIPS BY
+        NAME rather than passing. ARM 7b is a source guard so the spelling cannot
+        return; falsified by reintroducing the old spelling in ARM 1b (reds at 13/14).
+        Its pattern is assembled rather than written, or it matches its own definition,
+        and it skips comment lines, or it reports the helper's own explanation of the
+        defect as the defect — it did exactly that on its first run.
+
+        CRITERION CONFLICT, NAMED RATHER THAN QUIETLY SATISFIED. The closure asks for
+        `ok:salvage-audit:12/12`. This fixture has never printed that string: it prints
+        `ok:salvage-audit-fixture` then `PASS: salvage-audit <n>/<total>`. And the count
+        is now 14 because the regression arms are part of the fix. I did not reshape the
+        output to match a literal that was never emitted; the criterion needs amending
+        to name the OUTPUT a closure needs rather than a string nobody emits.
+
+        NOT CLOSED HERE, and left unclaimed: 1307-ermc. check-no-spawn-in-if-not.sh
+        (795-imz3) catches `if ! pipeline` and not `pipeline && ok || bad`, which is how
+        this file passed the gate's own guard for the whole time it was flaking. ARM 7b
+        covers this ONE FILE; the fleet-wide checker is that row's work and I have not
+        touched it.
+
+        NEXT STEP: relay work/1306-ifhv at 80bf3acc1 into linux-next. It is independent
+        of work/1315-4a7j; neither waits on the other.

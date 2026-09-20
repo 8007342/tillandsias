@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-litmus-runners-parse-only-says-ok-for-a-file-that-is-not-yaml-because-its-extraction-is-line-based-so-the-verdict-word-overrides-its-own-note-and-a-broken-litmus-reaches-a-gate
+    field: status
+    value: completed
+    ts: "2026-09-20T20:01:27Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: the-litmus-runners-parse-only-says-ok-for-a-file-that-is-not-yaml-because-its-extraction-is-line-based-so-the-verdict-word-overrides-its-own-note-and-a-broken-litmus-reaches-a-gate
+    event:
+      type: completed
+      ts: "2026-09-20T20:01:27Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: Relay-landed as ok:land-adopts-valid-stamp:2026-09-20T19:59:38Z; source commit 89159db4f (v4, containing v3 6508f63dc, v2 bcecaba4b and v1 407d90a5c) is an ancestor of origin/linux-next at 266f692fc. VERIFIED BY CONTENT, not ancestry alone: the landed scripts/run-litmus-test.sh carries the LOAD-GATE-1303 anchor and the blocked:parse-only:not-yaml verdict; scripts/test-litmus-parse-only-duplicate-key.sh carries the two-site ARM 1 sed; litmus:litmus-parse-instruments-agree is bound in openspec/litmus-bindings.yaml; and the expression-pinning step 3 is absent. TWO REGIMES, both required because a host-dependent verdict verified on one host is the defect this family keeps producing: macuahuitl (Fedora, one binary, NO override) 9/9 in 16s plus this fixture 3/3, expression-pinning, pin-claims and bash-dialect green; esmeraldinha (shared Windows/WSL checkout) 9/9 and 3/3 only with TILLANDSIAS_PLAN_BIN pinned to the ELF, because unpinned the fixture's ARM 0 resolves the PATH ELF while the runner's probe prefers ./target/release/tillandsias-plan.exe and the PE cannot read a Linux /tmp path (os error 3) — that is 1258-tpkz's two-binary artifact and is filed there, not here. FOUR ATTEMPTS RETURNED rc=0 BEFORE ONE EXECUTED THE FIXTURE (no reader on PATH, an inline wsl.exe string that ate its variables, a non-login shell missing ~/.local/bin, then PATH plus the pin): rc=0 and 'the test passed' are different claims and the skip line is the only thing between them, which is this row's own subject met inside its own verification. Full evidence, including the two-fixture coupling the repair exposed, is on the events of 2026-09-20.
+  - packet_id: the-litmus-runners-parse-only-says-ok-for-a-file-that-is-not-yaml-because-its-extraction-is-line-based-so-the-verdict-word-overrides-its-own-note-and-a-broken-litmus-reaches-a-gate
+    event:
+      type: note
+      ts: "2026-09-20T20:01:27Z"
+      host: esmeraldinha
+      summary: |-
+        --parse-only now loads the document before extracting, refuses non-YAML with a verdict that is not ok: and passes the loader's own file-and-line through; the fixture is bound and executes; and the repair keeps 1274-cbk7's ARM 1 able to reproduce its defect. Verified on two regimes.

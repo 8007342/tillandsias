@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-preflight-front-door-runs-its-roster-serially-so-half-its-wall-is-fourteen-skipped-guards-each-paying-a-full-deadline-in-turn-and-the-door-a-host-should-run-before-every-push-costs-two-and-a-half-minutes
+    field: unscoreable
+    value: |-
+      concurrency-width-not-chosen: the right number of guards in flight depends on
+      the floor host's cores and on how many of the 108 are IO-bound rather than CPU-
+      bound, and nothing here measures that split. Picking a width before measuring it
+      is how a fast door becomes a door that thrashes a two-core control unit.
+    ts: "2026-09-20T21:03:36Z"
+    host: pirria
+
+events:
+  - packet_id: the-preflight-front-door-runs-its-roster-serially-so-half-its-wall-is-fourteen-skipped-guards-each-paying-a-full-deadline-in-turn-and-the-door-a-host-should-run-before-every-push-costs-two-and-a-half-minutes
+    event:
+      type: note
+      ts: "2026-09-20T21:03:36Z"
+      host: pirria
+      summary: |-
+        restated through the tool so the fold reads it at the indent check-scorable-obligation-added scans: the original fragment was generated with yaml.safe_dump, whose indentless sequences put exit_criteria items at the checker's packet-row marker, hiding every field after the first criterion
