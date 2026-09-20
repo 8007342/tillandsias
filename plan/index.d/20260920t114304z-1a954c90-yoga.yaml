@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-accepts-an-unknown-flag-by-silently-consuming-the-next-options-value-as-the-field-value-so-it-writes-a-hostname-into-a-long-form-field-and-prints-success
+    field: status
+    value: in_progress
+    ts: "2026-09-20T11:43:04Z"
+    host: yoga
+
+events:
+  - packet_id: set-field-accepts-an-unknown-flag-by-silently-consuming-the-next-options-value-as-the-field-value-so-it-writes-a-hostname-into-a-long-form-field-and-prints-success
+    event:
+      type: note
+      ts: "2026-09-20T11:43:04Z"
+      host: yoga
+      summary: |-
+        handed by the coordinator 2026-09-20: yoga reproduced it live this morning (a --dry-run probe on set-field wrote a stray noop note); bundled with 1299-s2sv

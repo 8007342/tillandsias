@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    event:
+      type: note
+      ts: "2026-09-20T08:08:38Z"
+      agent_id: linux-macuahuitl-fable5-20260920t080838z
+      host: macuahuitl
+      summary: |-
+        DECIDED by yolanda's paired comparison (2026-09-20, same checkout, same wrapper bash images/default/config-overlay/mcp/forge-plan.sh, same TILLANDSIAS_PLAN_INDEX, same request, minutes apart): the ELF (/root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan, built during the gate) answers NON-EMPTY for id 2 with the first element carrying "experts" and v0.5, matching macuahuitl; the Windows .exe (./target/release/tillandsias-plan.exe, rebuilt and stamped the same day) answers "[]". Isolated to ONE argument through the .exe: the same request without capability_tags is non-empty; capability_tags=["experts"] alone with no other constraint is []. So the subject is the capability_tags predicate in the Windows build of the plan crate matching nothing where the Linux build matches; every other constraint folds correctly; the schema check (ids 5 and 6) is upstream of the predicate and passes on both, which is why only the positive arm empties. PRIMARY CRITERION now: the Windows binary's plan_query with capability_tags returns the same projection as the ELF for the same request on the same checkout (pre-fix result: "[]" versus a non-empty list); the id-based selection stays a secondary hardening. NOT a CRLF issue: refuted at byte level on yolanda (0 CR bytes in plan/index.yaml and three sampled fragments; .gitattributes `* text=auto eol=lf` overrides core.autocrlf=true), and the refutation rests on TWO instruments, od -c and tr -cd, because MSYS awk on BOTH Windows hosts never receives the CR (`awk '{print length($0)}'` on `alpha\r` prints 5; /\r/ matches nothing; GNU Awk 5.4.0) and MSYS grep strips it from argv and pattern files; agreement between yolanda and esmeraldinha, a shared property of the host class, not a host difference. Next reader: diff the capability_tags predicate's code path between the two builds (a cfg(windows) branch, a path or case difference in the fold, or serde on the tag list), reproducing with the two probes above.

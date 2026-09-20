@@ -1,0 +1,51 @@
+# Gate step 1273-4mak — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The curl-install smoke — the acceptance gate a release is
+# promoted to stable on — verified INTEGRITY and never AUTHENTICITY. Measured by
+# the row's author 2026-09-19: `grep -ci 'cosign|verify.sh' SKILL.md` returned
+# ZERO on every lane. Each release publishes a .cosign.bundle beside every asset
+# (v56.9.19.2: 32 assets, each bundled, plus verify.sh and its own bundle) and
+# nothing read one, ever.
+#
+# WHY A HASH IS NOT A SIGNATURE, which ARM 3 exists to make concrete rather than
+# argue: install.sh checks the asset's SHA256 against a SHA256SUMS fetched from
+# the same place as the asset. Substitute the asset, regenerate the manifest
+# entry, and the pair is self-consistent — `sha256sum -c` PASSES. ARM 3 builds
+# exactly that pair, proves the hash check passes on it, and requires the lane to
+# refuse on the signature.
+#
+# MEASURED WHILE WRITING THIS, and it sharpened the fix: SHA256SUMS and
+# SHA256SUMS-macos have NO cosign bundle; only SHA256SUMS-windows does. So
+# "verify the manifest and trust every asset it lists" is unavailable on two of
+# three lanes, and the blocks verify THE ARTIFACT THE LANE INSTALLED against its
+# own bundle instead.
+#
+# THE FIXTURE RUNS THE RUNBOOK'S OWN TEXT. It extracts the Linux block from §1s
+# of SKILL.md and executes it against a fake release over file:// with a stub
+# cosign. A fixture that re-implemented the block would verify its own paraphrase
+# and let the runbook rot underneath it; ARM 0 fails loudly if the block cannot
+# be extracted or stops probing for cosign.
+#
+# THE STUB MODELS A SIGNATURE, NOT A VERDICT: it records the signed bytes at
+# setup and exits 0 only while the artifact still matches them. ARM 3 therefore
+# fails for the reason a real signature fails, not because a stub was told to.
+# ARM 2 is its counterweight — a genuine artifact must still verify, or a block
+# that refused everything would pass ARMs 1 and 3 and be useless.
+#
+# NO REAL-COSIGN ARM, AND THAT IS NOT AN OVERSIGHT. cosign is absent on this
+# host, in the toolbox, and from dnf (yoga, 2026-09-20); macneo measured the same
+# absence on macOS. The row's own criterion 2 is that could-not-run is never a
+# pass, and that applies to its test: ARM 1 pins the could-not-run path, which is
+# the path EVERY host in this fleet takes today. When a host gains cosign, a real
+# arm belongs here and ARM 1 stays.
+#
+# COST, MEASURED HERE 2026-09-20: 0.05 / 0.05 s. No network — the fake release is
+# served over file:// — no container, no compile.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the smoke verifies a signature and never reads could-not-run as a pass (1273-4mak)"
+STEP_SCRIPT="scripts/test-smoke-verifies-a-signature.sh"
+STEP_ERROR="the release acceptance smoke can again promote a release without verifying any signature, or a host without cosign can report a verified one (1273-4mak) — read which arm failed above; ARM 0 failing means §1s was removed from the runbook and no lane verifies anything"
+STEP_OK="The smoke verifies a signature; could-not-run is not a pass"

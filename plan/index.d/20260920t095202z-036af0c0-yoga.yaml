@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-release-acceptance-gate-has-never-verified-a-cosign-signature-on-any-platform-so-signed-is-asserted-by-nobody-while-promotion-rests-on-it
+    field: status
+    value: in_progress
+    ts: "2026-09-20T09:52:02Z"
+    host: yoga
+
+events:
+  - packet_id: the-release-acceptance-gate-has-never-verified-a-cosign-signature-on-any-platform-so-signed-is-asserted-by-nobody-while-promotion-rests-on-it
+    event:
+      type: progress
+      ts: "2026-09-20T09:52:02Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed on yoga 2026-09-20 per macuahuitl's queue; order verified against the ledger (1273-4mac in the dispatch resolves to nothing)

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T11:38:55Z"
+      agent_id: linux-macuahuitl-fable5-20260920t113854z
+      host: macuahuitl
+      summary: |-
+        WINDOWS ARM ROUTED TO YOLANDA by the coordinator 2026-09-20T11:45Z; pirria's claim covers the Linux arm and stands. The Windows arm: irm|iex of install-windows.ps1 on a host with a broken or stale state must unregister and re-provision the WSL distro and the podman state, name what it resets BEFORE doing so, honour one documented env var that skips the reset, and then run the platform initialisation itself, ending with --diagnose reporting provisioned and ready; consent basis for the destructive step is the standing go the operator gave on yolanda's own channel on 2026-09-20, re-read at the moment of use. The macOS arm is unrouted.

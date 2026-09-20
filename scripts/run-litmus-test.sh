@@ -74,6 +74,13 @@ fi
 # ============================================================================
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ORDER 1268-m2ir. EXPORTED so child processes resolve metrics logs against the
+# checkout this runner KNOWS it is in, rather than guessing from their own path.
+# A step shells out to cycle-metrics.sh --emit-timing, which resolves the timing
+# log itself; without this it can decide "not in a checkout" for a tree the
+# runner is standing in, and the records land in /tmp where the split guard then
+# reds the next release gate.
+export PROJECT_ROOT
 
 # Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
 # times the litmus suite; a timing failure must NEVER change the runner's exit.
@@ -1022,6 +1029,52 @@ structured_assert_matches() { # <output> <exit_code> <a_exit> <a_contains> <a_ma
     return 0
 }
 
+# ORDER 1293-wka4. DOES THIS STEP'S TOP-LEVEL PIPELINE END IN A CONSUMER THAT
+# SWALLOWS ITS PRODUCER'S STATUS? Returns 0 when it does.
+#
+# WHY SHAPE-GATED AND NOT A BLANKET. `set -o pipefail` for every step would
+# change the verdict of steps whose pipeline ends in the ASSERTION itself.
+# Measured on this corpus: 25 steps declaring assert_exit have a top-level pipe,
+# but only 3 end in a status-swallowing consumer. The other 22 end in `grep -q`,
+# where grep IS the adjudicator — and several are negated (`! producer | grep`),
+# where pipefail INVERTS the verdict: a failing producer currently makes the
+# pipeline 0 and the negation 1 (fail), while under pipefail it becomes non-zero
+# and the negation 0 (pass). A blanket would silently flip those.
+#
+# THE LIST IS THE CLAIM. A consumer here is one that reports its OWN success
+# regardless of what fed it. grep is deliberately ABSENT: a step ending in grep
+# is asserting on the match, which is a real verdict.
+step_pipeline_swallows_status() {
+    local cmd="$1"
+
+    # Remove $(...) substitutions — a pipe inside one is not the adjudicated
+    # pipeline. Repeat until stable so nested substitutions collapse too.
+    local prev=""
+    while [[ "$cmd" != "$prev" ]]; do
+        prev="$cmd"
+        cmd="$(printf '%s' "$cmd" | sed 's/\$([^()]*)//g')"
+    done
+
+    # `||` is not a pipeline.
+    cmd="${cmd//||/ }"
+    [[ "$cmd" == *"|"* ]] || return 1
+
+    local tail_seg="${cmd##*|}"
+    # First bare word of the last segment, minus quotes and a leading path.
+    tail_seg="${tail_seg#"${tail_seg%%[![:space:]]*}"}"
+    tail_seg="${tail_seg//\'/}"
+    tail_seg="${tail_seg//\"/}"
+    local consumer="${tail_seg%%[[:space:]]*}"
+    consumer="${consumer##*/}"
+
+    case "$consumer" in
+        head|tail|tee|wc|cat|sort|uniq|tr|awk|sed|jq|column|fold|nl)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 behavior_matches_output() {
     local output="$1"
     local expected="$2"
@@ -1561,7 +1614,32 @@ run_litmus_test_file() {
         # tool) drained the rest of its spec's list: measured 2026-09-02, the
         # instant sweep executed 1 of the 29 tests bound to ci-release, and
         # reported PASS. Two born-red tests sat unobserved in that gap.
-        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+        # ORDER 1293-wka4. THE SPAWNED SHELL DOES NOT INHERIT pipefail FROM THIS
+        # RUNNER. run-litmus-test.sh runs under `set -uo pipefail`, but that is a
+        # property of THIS shell; the `bash -c` below starts clean, so
+        # `producer | head` returned 0 when the producer exited non-zero and
+        # assert_exit adjudicated head's status instead. Reproduction from the
+        # row, which returned 0 before this line existed:
+        #   bash -c 'sh -c "echo out; exit 7" 2>&1 | head -20'; echo $?
+        #
+        # APPLIED ONLY WHERE A STATUS-SWALLOWING CONSUMER WOULD OTHERWISE
+        # ADJUDICATE — see step_pipeline_swallows_status for why a blanket is
+        # wrong and which 22 steps it would invert.
+        # NARROWED TO STEPS WHOSE VERDICT THE EXIT STATUS ACTUALLY DECIDES.
+        # The shape test alone matches 206 of 2553 corpus steps, but most of
+        # those are adjudicated by a pattern or a literal and never consult the
+        # status — turning pipefail on for them changes nothing they read while
+        # widening the blast radius for no gain. The status decides only when
+        # the step declares assert_exit, or when it declares NO expectation at
+        # all and falls to the strict-exit arm below. Anything else keeps the
+        # shell it has always had.
+        local step_shell_prelude=""
+        if [[ -n "$step_assert_exit" \
+              || ( -z "$step_structured" && -z "$step_success_pattern" && -z "$step_expected" ) ]] \
+           && step_pipeline_swallows_status "${step_command}"; then
+            step_shell_prelude="set -o pipefail; "
+        fi
+        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"

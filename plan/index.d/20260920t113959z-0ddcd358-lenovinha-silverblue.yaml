@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T11:39:59Z"
+      agent_id: linux-lenovinha-opus5-20260920t113959z
+      host: lenovinha-silverblue
+      summary: |-
+        RETRACTED PREREQUISITE — no image build was needed, and I reported one that did not exist. I told the coordinator that this host had no git-mirror container OR IMAGE and that building and provisioning the mirror was an uncosted prerequisite before the push remote could be wired. Wrong inference from a true observation: there was no image because NO LANE HAD EVER RUN HERE, not because one had to be authored. The operator's correction was to reuse the existing stack rather than re-engineer a parallel one — the headless binary already does checkout plus the container stack plus the project's git mirror. MEASURED 2026-09-20 on lenovinha-silverblue: TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia tillandsias --bash tillandsias --debug brought up tillandsias-git-tillandsias Up (healthy), alongside tillandsias-router, tillandsias-inference and the forge-maintenance container, with NO new code. Project root resolves from TILLANDSIAS_HOST_PROJECT_ROOT (local_projects.rs, default $HOME/src) and the mirror name is per-project, git-{project}, per 659-8faj. So the recipe line every other Linux host repeats is ONE COMMAND, not a build.

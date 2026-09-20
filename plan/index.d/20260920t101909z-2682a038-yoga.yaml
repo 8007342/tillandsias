@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-release-acceptance-gate-has-never-verified-a-cosign-signature-on-any-platform-so-signed-is-asserted-by-nobody-while-promotion-rests-on-it
+    event:
+      type: decision
+      ts: "2026-09-20T10:19:09Z"
+      agent_id: linux-yoga-claude-20260920t101909z
+      host: yoga
+      summary: |-
+        THE DESIGN DECISION macneo left and the coordinator delegated, made and named
+        here rather than left to be inferred from the diff.
+
+        THE PROBLEM. The release's own verify.sh exits 1 for BOTH "cosign is missing"
+        and "this signature is bad". Those need opposite responses. A lane that reads
+        rc=1 as a failure turns every floor host without cosign into a fake security
+        incident and blocks promotion on nothing; a lane that swallows rc=1 turns a bad
+        signature into a pass. Neither is acceptable and the exit code cannot tell them
+        apart.
+
+        DECISION 1 — THE LANE PROBES THE PRECONDITION ITSELF. Each block asks
+        command -v cosign BEFORE calling anything, so an exit code is only consulted
+        once it can mean one thing. This is the same rule this milestone has been
+        applying all week from the other side: do not infer a premise from a verdict
+        that is also produced by the premise being false.
+
+        DECISION 2 — could-not-run IS A THIRD VERDICT, AND A RUN CARRYING IT MAY NOT BE
+        FILED AS AN UNQUALIFIED PASS. This is the half that required a decision.
+
+          It is NOT a failure. cosign is absent on macneo, absent on yoga, absent from
+          the builder toolbox and not in dnf. A host without the tool has not found a
+          bad signature; it has found nothing, and reporting nothing as a failure would
+          make every host in this fleet look compromised.
+
+          It is NOT a pass either, and saying only that would have repeated the exact
+          history this row is about. The gap was DECLARED honestly three times — the
+          08-28 Linux report, the 08-28 Windows report and the 09-19 macOS report, all
+          under "NOT CHECKED" — and it still shipped, because declaring it was free
+          while the headline still read PASS. A third verdict that lives only in a
+          "not checked" list is the thing that already failed.
+
+          So §5 now REQUIRES the cosign line in the report's opening lines, beside
+          run_start and evidence_dir, and requires the verdict itself to read
+          PASS (signatures unverified: <reason>). A reader who sees only the verdict
+          cannot miss that authenticity was not established. That is the difference
+          between recording a gap and gating on it.
+
+        TWO THINGS MEASURED WHILE IMPLEMENTING, both material and neither in the row:
+
+          1. THE INTEGRITY MANIFEST IS UNSIGNED ON TWO OF THREE LANES. On v56.9.19.2,
+             SHA256SUMS and SHA256SUMS-macos have NO cosign bundle; only
+             SHA256SUMS-windows does. So the obvious design — verify the manifest once
+             and trust every asset it lists — is unavailable on Linux and macOS, and the
+             blocks verify the ARTIFACT THE LANE INSTALLED against its own bundle
+             instead. It also sharpens the row's thesis: on those lanes the manifest the
+             installer trusts is itself unauthenticated, so integrity rests entirely on
+             the transport.
+
+          2. install.sh SILENTLY SKIPS THE CHECKSUM when the asset is not listed. Its
+             own text: "SHA256SUMS did not contain <asset>; skipping checksum
+             verification." Same could-not-run-read-as-ok family as this row, one layer
+             down, in the installer real users run. Not fixed here — it is outside this
+             row's owned_files and deserves its own row rather than a drive-by.
+
+        WHAT THE FIXTURE DOES NOT PROVE, stated so nobody reads 5/5 as more than it is:
+        there is no real-cosign arm, because cosign exists nowhere reachable from this
+        host. The arms use a stub that models a signature by binding to content, and
+        ARM 1 — the could-not-run path — is the only arm exercising the behaviour every
+        host in this fleet will actually take today. When a host gains cosign, a real
+        verification arm belongs beside these.

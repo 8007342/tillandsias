@@ -1,0 +1,119 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-no-python-policy-matches-a-list-of-spellings-rather-than-the-runtime-so-a-bare-command-v-python3-and-an-env-prefixed-command-substitution-both-pass
+    order: 1301-ie39
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, policy, developer-loop]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-policy/src/main.rs
+      - scripts/check-no-python-scripts.sh
+    unscoreable: ""
+    verifiable_closure: |
+      OUTPUT. `scripts/check-no-python-scripts.sh` prints a violation naming the
+      file and line for BOTH of these, each in an executed position in a file
+      the scan already covers:
+
+        command -v python3 >/dev/null 2>&1 || { echo no-python; exit 0; }
+        derived="$(IN="$IN" python3 "$script")"
+
+      and its fixture carries both as named arms.
+
+      PRE-FIX RESULT: BOTH PASS — that is the defect, not a gap in the fixture.
+      Measured 2026-09-20: scripts/derive-vsock-seccomp.sh contains both lines
+      verbatim (46 and 129), invokes a python runtime at runtime in the guest,
+      and `check-no-python-scripts.sh` reports
+      `ok: no Python runtime references in scripts/harness files`.
+
+      NEGATIVE CONTROL, so the fix is not "match python3 anywhere": a line that
+      merely NAMES the runtime in a non-executed position must still pass —
+      e.g. the string `echo "unsupported:no-python3"`, and a comment. The
+      existing matcher already honours comments (`trimmed.starts_with('#')`
+      returns false) and that behaviour must survive.
+    title: |
+      has_python_runtime_reference is a denylist of spellings, not a check for the runtime, so `command -v python3` at line start and `$(VAR=x python3 …)` both evade it — and a script that does exactly that shipped in v56.9.19.1
+    context: |
+      FOUND 2026-09-20 by reading the matcher after the gate refused a DIFFERENT
+      file for the same rule.
+
+      THE MATCHER, crates/tillandsias-policy/src/main.rs
+      (fn has_python_runtime_reference), is a fixed list of substrings and
+      prefixes: `#!/usr/bin/env python`, `#!/usr/bin/python`, `python `/`python3 `
+      as a line PREFIX, `python -c`/`python3 -c`, `python /tmp/`, `$(python `,
+      `` `python ``, ` command -v python` and `if command -v python`.
+
+      TWO SPELLINGS THAT WALK THROUGH IT, both live in the tree today:
+
+        command -v python3 >/dev/null 2>&1 || {
+          the two `command -v` patterns require a LEADING SPACE or a leading
+          `if`. A trimmed line beginning `command` matches neither.
+
+        derived="$(IN="$IN" python3 "$_PY")"
+          `$(python3 ` requires the interpreter IMMEDIATELY after `$(`. An env
+          assignment in between defeats it.
+
+      Both are in scripts/derive-vsock-seccomp.sh, which LANDED IN v56.9.19.1
+      and invokes the runtime in the guest on every call.
+
+      WHY A SPELLING DENYLIST FAILS IN EXACTLY THIS WAY, and it is the general
+      point rather than a complaint about two patterns: IT TEACHES THE AUTHOR
+      THE SPELLINGS IT KNOWS. The author of the offending script learned the
+      rule existed only when the gate refused a LATER, UNRELATED file for a
+      spelling the list does cover — and having learned it there, had no reason
+      to re-examine the file that had already passed. A check that catches the
+      obvious form trains people to believe the obvious form is the rule.
+
+      NOT A CRITICISM OF THE RULE ITSELF. 1087-h2z9's intent is sound and the
+      surrounding machinery is careful — it already exempts comments, honours
+      `@tombstone`, and scopes itself to scripts and harness files. The defect
+      is in one predicate.
+
+      FAMILY: 1260-2qgi, one axis over. There a status was emitted and handled
+      by nobody; here a rule is enforced for the shapes someone enumerated and
+      silent for the rest, and the silence reads identically to compliance.
+    deliverable: |
+      The check answers "does this line execute a python interpreter" rather
+      than "does this line match one of eleven strings", and both spellings in
+      `verifiable_closure` are refused while the negative control still passes.
+
+      DO NOT WIDEN THIS INTO A REGEX ZOO. Adding two more patterns for the two
+      spellings found here reproduces the defect with a longer list, and the
+      next author will find the twelfth. The discriminator worth aiming at is
+      structural: a token that RESOLVES TO A PYTHON INTERPRETER standing in an
+      EXECUTED POSITION — the head of a command, the head of a command
+      substitution (after any env assignments), the target of `command -v`,
+      `exec`, `xargs`, a shebang. How to implement that against shell text is
+      the implementer's decision and may well be a small parser rather than a
+      matcher; the row does not prescribe it.
+
+      IF A SMALL PARSER IS JUDGED TOO MUCH, the honest fallback is to say so in
+      the checker's own output: a verdict that names what it did NOT inspect is
+      better than one that reads as total coverage. That is a real option, not a
+      consolation prize — an enumerated check that ADMITS it is enumerated does
+      not train the author to trust it.
+    next_action: >
+      Reproduce first, and it needs no build beyond the policy crate: put the
+      two lines from verifiable_closure into any file under scripts/ and run
+      scripts/check-no-python-scripts.sh — expect
+      `ok: no Python runtime references in scripts/harness files`. Then read
+      fn has_python_runtime_reference in crates/tillandsias-policy/src/main.rs;
+      the whole predicate is about twenty lines. DECIDE BETWEEN the structural
+      discriminator and the admit-the-limits fallback BEFORE writing anything,
+      because the two produce very different artefacts and the tempting middle
+      (add two patterns, keep the shape) is the option this row exists to refuse.
+      Whichever is chosen, keep the comment exemption and the @tombstone
+      handling — both are deliberate and neither is implicated.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-20 at the coordinator's request,
+      after self-reporting that a script this host authored and landed in
+      v56.9.19.1 violates the rule while passing the check. The matcher source,
+      the two evading lines, their line numbers and the passing verdict were all
+      read on this host today. The guest-interpreter survey that makes the
+      offending script unfixable in place (perl ABSENT, jq ABSENT, python3
+      present) was measured on this host's guest the same day and is recorded on
+      830-xsk2.

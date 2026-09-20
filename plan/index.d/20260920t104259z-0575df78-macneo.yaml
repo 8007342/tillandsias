@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: note
+      ts: "2026-09-20T10:42:59Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t104259z
+      host: macneo
+      summary: |
+        A FALSE NAMED SKIP — THE ONE FAILURE A NAMED SKIP IS SUPPOSED TO MAKE
+        IMPOSSIBLE. Found on macneo 2026-09-20 in the guard being written FOR this row,
+        and recorded here at the coordinator's direction because the shape matters more
+        than the instance.
+
+        ARM 4's locale detection first read:
+            elif ! locale -a 2>/dev/null | grep -qi '^fr_CH.UTF-8$'; then
+                skiparm "ARM 4: no comma-decimal locale installed, so the defect cannot
+                         be induced here"
+        and it SKIPPED — on a host where `locale -a` lists fr_CH.UTF-8 four ways.
+
+        MECHANISM, measured both directions rather than reasoned:
+            set -o pipefail; locale -a | grep -qi '^fr_CH.UTF-8$'  -> rc=141
+            (no pipefail);   locale -a | grep -qi '^fr_CH.UTF-8$'  -> rc=0
+        `grep -q` EXITS ON THE FIRST MATCH. That closes the pipe, `locale -a` dies on
+        SIGPIPE (128+13=141), and under this script's `set -uo pipefail` the pipeline
+        carries 141. So A SUCCESSFUL MATCH IS REPORTED AS A FAILURE, and the more
+        efficient the reader, the more reliably it happens: `grep -c`, which must read
+        every line, cannot trigger it. The debug probe that proved the locale WAS
+        visible used `grep -c` and passed, which is why the two readings disagreed.
+
+        WHY IT BELONGS ON THIS ROW RATHER THAN BEING QUIETLY FIXED. A named skip exists
+        to make an absence of evidence LEGIBLE — 965-sxec's rule, that a check which
+        could not run must never claim what it would have found. A FALSE named skip
+        inverts that guarantee: it is indistinguishable from an honest one, it asserts a
+        fact about the host ("no comma-decimal locale installed") that is FALSE, and it
+        does so in the one construct a reader is trained to trust as conservative. It
+        was caught only because the writer knew the locale was installed and refused to
+        accept the skip; a reader without that knowledge would have taken it as a
+        measurement and concluded the defect could not be exercised on macOS.
+
+        REMEDY, and it is the fleet's existing trap (1076-kft9, "capture then match"):
+            _a4_locales="$(locale -a 2>/dev/null || true)"
+            ! printf '%s\n' "$_a4_locales" | grep -Fqx "fr_CH.UTF-8"
+        Capture first, test the capture, so no early-exiting reader can fabricate a
+        failure. Note the rule is not "avoid grep -q" — it is that a pipeline under
+        pipefail must not have a reader that can exit before the writer finishes.
+
+        SIBLINGS ALREADY ON THE LEDGER, same family, different instrument: a wrapper's
+        exit 0 masking a child's exit 1; `$?` after a pipeline being the last stage's;
+        `\b` in awk silently matching nothing on BSD; `grep -r` not descending symlinks
+        and exiting 0. Each is a reader reporting success or absence for a reason
+        unconnected to the thing being asked about.

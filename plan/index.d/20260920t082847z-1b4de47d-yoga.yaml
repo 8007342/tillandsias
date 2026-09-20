@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    event:
+      type: evidence
+      ts: "2026-09-20T08:28:47Z"
+      agent_id: linux-yoga-claude-20260920t082847z
+      host: yoga
+      summary: |-
+        LIVE EXPOSURE IS ONE STEP. The other two in the hazard class are grandfathered
+        orphans that have never run, so their exposure is LATENT and arrives the moment
+        they are bound.
+
+          litmus-cross-platform-terminal-attach   LIVE (phase 4, e2e, needs a GUI terminal)
+          litmus-vm-provisioning-idempotent       ORPHAN — on unbound-grandfathered.txt
+          litmus-vm-shutdown-drains-forges        ORPHAN — on unbound-grandfathered.txt
+
+        That file's own header states its names "have NEVER been run by any suite"
+        (660-ryhn owns the ratchet). So this row repairs one executing step today and
+        pre-empts two that 660-ryhn intends to bind. Anyone scoring the closure by
+        watching a corpus red disappear will see nothing move, because the one live
+        step is at phase 4 behind a GUI terminal.
+
+        BOTH ORPHANS ARE ALSO THE GRANDCHILD SHAPE ARM 5 PINS AS UNCOVERED. Their
+        pipelines live inside bash -lc, so even once bound they are NOT repaired by this
+        fix — the prelude is set in the spawned shell and a grandchild does not inherit
+        it (measured: rc=0; SHELLOPTS is readonly here, so that propagation route is
+        closed). Binding them without closing the grandchild hole would bind two steps
+        that still cannot fail on a producer's status. That is the useful hand-off to
+        660-ryhn and it is why ARM 5 asserts the hole rather than omitting it: when
+        someone closes it, the arm FAILS and forces the limitation to be re-recorded
+        instead of passing quietly into a fixture that overstates its coverage.
+
+        THE DESIGN NOTE WORTH KEEPING, since the one-line fix is the least of it: a
+        blanket set -o pipefail would have repaired 3 steps and silently INVERTED 22.
+        The negated shape flips outright — a failing producer today makes the pipeline 0
+        and the negation 1 (fail); under pipefail the pipeline is non-zero and the
+        negation 0 (pass). Opposite verdicts with no diff saying the test now checks
+        something else, which is the exact failure this milestone exists to remove. The
+        detector therefore requires BOTH a self-succeeding consumer at the top level AND
+        the exit status actually deciding that step's verdict. Condition one alone
+        matched 206 of 2553 steps; both together, 5 in 5 files.

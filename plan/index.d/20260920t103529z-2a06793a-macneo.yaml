@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    field: status
+    value: in_progress
+    ts: "2026-09-20T10:35:29Z"
+    host: macneo
+
+events:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: note
+      ts: "2026-09-20T10:35:29Z"
+      host: macneo
+      summary: |-
+        handed by the coordinator 2026-09-20: the failing regime is on macneo (three gates, 4-failed-of-5, ARM 0 the regime probe); macbookair verifies the second BSD regime after the land

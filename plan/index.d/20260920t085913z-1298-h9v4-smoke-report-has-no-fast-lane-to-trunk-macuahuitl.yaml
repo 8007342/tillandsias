@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-curl-install-smoke-report-under-plan-issues-has-no-fast-lane-to-trunk-from-a-host-that-cannot-win-the-pre-push-race-although-the-report-is-the-promotion-input
+    order: 1298-h9v4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, release, smoke, multi-host, windows, instrument-defect]
+    estimated_hours: 3
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+      - scripts/hooks/pre-push-local-gate.sh
+    verifiable_closure: |
+      scripts/test-push-plan-fragments-report-lane.sh prints
+      `ok:fragments-to-trunk:report-lane:2/2` and exits 0, where arm 1: from a Windows host whose gate cannot win the pre-push race, a new
+      `plan/issues/smoke-e2e-findings-<tag>-<date>-<platform>-<host>.md`
+      (and only that file) pushed through scripts/push-plan-fragments-to-trunk.sh
+      lands on origin/linux-next without a gate and without a coordinator,
+      with the lane printing `ok:fragments-to-trunk:report:<file>`; arm 2: a file
+      under plan/issues/ that is NOT a smoke or findings report is still
+      refused as today. PRE-FIX RESULT: FAILS — on 2026-09-20 yolanda's
+      v56.9.19.2 Windows smoke report was refused
+      `refused:fragments-to-trunk:scope:…` because the lane admits only
+      plan/index.d and plan/loop_status.d fragments, so the promotion's own
+      input went to a work ref (work/380-smoke-windows-v56-9-19-2, b1786ac66)
+      and waited for a coordinator relay, exactly as code does. NEGATIVE
+      CONTROL: the pre-push hook's plan-only lane already admits top-level
+      plan/issues/*.md when the pushing branch has a base; the gap is the
+      fragment script's scope on hosts that must use it.
+    title: |
+      a curl-install smoke report under plan/issues has no fast lane to trunk from a host that cannot win the pre-push race, although the report is the promotion input
+    context: |
+      scripts/promote-stable.sh requires the per-platform PASS evidence as a
+      file under plan/ (888-p3kt), and the Windows and macOS hosts are the
+      ones whose gates lose the race to a busy trunk (1259-kn83; yolanda's
+      ~2 h gate against a ~3 min inter-commit interval). The fragment push
+      script exists so those hosts can land plan-only work without a gate,
+      but its scope excludes the one plan/issues file the release path
+      depends on. Found by yolanda while pushing the third of three
+      promotion inputs for v56.9.19.2; macneo's two macOS reports went in
+      through osx-next's plan-only lane instead, which needs a levelled
+      platform branch and is not available from a work/ lane.
+    next_action: >
+      Widen the fragment script's scope by an explicit pattern for
+      plan/issues/smoke-e2e-findings-*.md (not all of plan/issues), print the
+      admitted file's path in the verdict line, add the negative-control arm
+      to scripts/test-push-plan-fragments-to-trunk.sh or its sibling, and
+      note in skills/smoke-curl-install-and-test-e2e/SKILL.md §5 that the
+      report goes through that lane on Windows hosts.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from
+      yolanda-windows's refusal line and work ref; nothing run here.
