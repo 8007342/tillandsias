@@ -12,14 +12,19 @@
 # own litmus. This one pins the LANE: a launcher on a platform where its lane
 # cannot work must refuse on arrival, naming the command that does work.
 #
-# WHY THE ORDER IS THE PROPERTY AND NOT THE TEXT. A refusal placed after lane
-# selection still prints a lane line and still enters the lane; it converts
-# eight failures into one message and leaves the defect. So the fixture asserts
-# POSITION — the refusal precedes require_desktop_user_session and
-# report_runtime_lane inside run_init — and a sabotage that merely MOVES the
-# call down passes every text assertion while failing this one. Measured: that
-# exact sabotage leaves "the refusal carries its grammar token" and "the
-# refusal names the working command" both green.
+# WHY POSITION IS THE PROPERTY AND NOT THE TEXT. A refusal placed after lane
+# selection still announces a lane and still enters it; it converts eight
+# failures into one message and leaves the defect. So the fixture asserts that
+# the refusal call precedes require_desktop_user_session and
+# report_runtime_lane inside run_init — and control 2 below demonstrates that a
+# sabotage which merely MOVES the call down passes every text assertion.
+#
+# THE CONTROLS ARE A SCRIPT, NOT INLINE `command:` TEXT, and that is a measured
+# decision. The move sabotage needs a multi-line awk program; embedding one in a
+# double-quoted YAML scalar produced a file that check-litmus-yaml-parses.sh
+# rejected while the runner's own --parse-only still reported ok. An earlier
+# version used `python3 -c`, which the no-Python-runtime policy (1087-h2z9)
+# refuses and the gate caught, refusing the land.
 name: litmus:windows-host-lane-refusal
 spec: init-command
 phase: pre-build
@@ -28,34 +33,31 @@ description: >
   any lane is selected or announced — with a refusal naming
   `tillandsias-tray.exe --provision-once`, and produces no image-build lines;
   on every other platform the refusal is a None and the lane is unchanged,
-  which is the negative control.
+  which is the negative control. Both positive controls sabotage a copy of the
+  source and require the fixture to go red for the stated reason.
 severity: high
 size: instant
 
 preconditions:
   - workspace contains scripts/test-windows-host-lane-refusal.sh
+  - workspace contains scripts/test-windows-host-lane-refusal-controls.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
   - the behavioural arm additionally needs a native tillandsias.exe at this
     locus; it SKIPS BY NAME elsewhere, so a green run off-msys must not be read
     as a behavioural pass
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-windows-host-lane-refusal.sh && test -x scripts/test-windows-host-lane-refusal.sh && echo 'ok: windows-host-lane-fixture-parses'"
-    timeout_ms: 5000
-    expected_behavior: "ok: windows-host-lane-fixture-parses"
+  - step: "both fixtures parse and carry their exec bits"
+    command: "bash -n scripts/test-windows-host-lane-refusal.sh && bash -n scripts/test-windows-host-lane-refusal-controls.sh && test -x scripts/test-windows-host-lane-refusal.sh && test -x scripts/test-windows-host-lane-refusal-controls.sh && echo 'ok: windows-host-lane-fixtures-parse'"
+    timeout_ms: 10000
+    expected_behavior: "ok: windows-host-lane-fixtures-parse"
 
   - step: "every arm passes against the real source: the refusal precedes lane selection, both cfg arms exist, the refusal names the working command, and the non-Windows arm returns None"
     command: "bash scripts/test-windows-host-lane-refusal.sh"
     timeout_ms: 120000
     expected_behavior: "ok:windows-host-lane-refusal:all"
 
-  - step: "POSITIVE CONTROL: the fixture goes RED when the refusal call is removed from run_init (the pre-fix state)"
-    command: "d=$(mktemp -d); sed 's|    if let Some(refusal) = windows_host_lane_refusal() {|    if false {|' crates/tillandsias-headless/src/main.rs > \"$d/s.rs\"; cmp -s crates/tillandsias-headless/src/main.rs \"$d/s.rs\" && { echo 'FAIL: the sabotage changed nothing — this control proves nothing'; rm -rf \"$d\"; exit 1; }; out=$(TILLANDSIAS_HEADLESS_SRC=\"$d/s.rs\" bash scripts/test-windows-host-lane-refusal.sh 2>&1); rc=$?; rm -rf \"$d\"; test \"$rc\" -ne 0 || { echo \"FAIL: the fixture passed a sabotaged source (rc=$rc)\"; exit 1; }; printf '%s' \"$out\" | grep -q 'does not call windows_host_lane_refusal' || { echo \"FAIL: red for the wrong reason: $out\"; exit 1; }; echo 'ok: control-red-when-refusal-removed'"
-    timeout_ms: 120000
-    expected_behavior: "ok: control-red-when-refusal-removed"
-
-  - step: "POSITIVE CONTROL: the fixture goes RED when the refusal is MOVED below lane selection — the text arms stay green, which is why position is asserted"
-    command: "d=$(mktemp -d); python3 -c \"import io,sys; p='crates/tillandsias-headless/src/main.rs'; s=io.open(p,encoding='utf-8').read(); call='    if let Some(refusal) = windows_host_lane_refusal() {\n        return Err(refusal);\n    }\n'; a='    report_runtime_lane(\\\"--init\\\", debug);\n'; sys.exit(9) if s.count(call)!=1 or s.count(a)<1 else None; m=s.replace(call,'',1); m=m.replace(a,a+call,1); io.open(sys.argv[1],'w',encoding='utf-8',newline='').write(m)\" \"$d/s.rs\" || { echo 'FAIL: could not build the move sabotage'; rm -rf \"$d\"; exit 1; }; cmp -s crates/tillandsias-headless/src/main.rs \"$d/s.rs\" && { echo 'FAIL: the sabotage changed nothing'; rm -rf \"$d\"; exit 1; }; out=$(TILLANDSIAS_HEADLESS_SRC=\"$d/s.rs\" bash scripts/test-windows-host-lane-refusal.sh 2>&1); rc=$?; rm -rf \"$d\"; test \"$rc\" -ne 0 || { echo \"FAIL: a refusal below lane selection passed (rc=$rc)\"; exit 1; }; printf '%s' \"$out\" | grep -q 'comes AFTER' || { echo \"FAIL: red for the wrong reason: $out\"; exit 1; }; printf '%s' \"$out\" | grep -q 'names the working command' || { echo 'FAIL: expected the TEXT arms to stay green under a move sabotage'; exit 1; }; echo 'ok: control-red-when-refusal-moved-below-lane-selection'"
-    timeout_ms: 120000
-    expected_behavior: "ok: control-red-when-refusal-moved-below-lane-selection"
+  - step: "POSITIVE CONTROLS: the fixture goes RED when the refusal call is removed, and RED on position when it is merely moved below lane selection while its text arms stay green"
+    command: "bash scripts/test-windows-host-lane-refusal-controls.sh"
+    timeout_ms: 180000
+    expected_behavior: "ok:windows-host-lane-refusal-controls:2/2"
