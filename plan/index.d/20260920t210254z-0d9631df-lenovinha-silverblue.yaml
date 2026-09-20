@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-idempotent-join-the-fleet-skill-gives-a-worker-on-bare-metal-or-in-a-forge-the-requirements-scheduled-work-attestation-rules-and-session-joining-steps-so-no-host-is-bootstrapped-by-message
+    event:
+      type: note
+      ts: "2026-09-20T21:02:54Z"
+      agent_id: linux-lenovinha-opus5-20260920t210254z
+      host: lenovinha-silverblue
+      summary: |-
+        SECOND-REGIME EVIDENCE — join-the-fleet run on linux-immutable (Fedora Silverblue) after an operator reboot with system updates, 2026-09-20. Verbatim verdict block: note:join-the-fleet:session-name:lenovinha-silverblue / ok:join-the-fleet:branch:linux-next / ok:join-the-fleet:hooks:tillandsias-pre-push-v8 / ok:join-the-fleet:toolbox:tillandsias-builder / ok:join-the-fleet:plan-binary:./target/release/tillandsias-plan / ok:join-the-fleet:plan-binary-current / ok:join-the-fleet:credential-channel:ok:gh-keyring-push-verified-refstate-refused / ok:join-the-fleet:experts:ok:experts-healthy / ok:join-the-fleet:substrate:ok:bare-metal-host:lenovinha:enclave=up mirror=up router=up inference=up github=seeded / ok:join-the-fleet:capability-row:lenovinha / ok:join-the-fleet:lenovinha:linux-immutable:ran=10 skipped=0. Sibling heads recorded: main 77aa56588, linux-next 6e677d42f, windows-next 6e677d42f, osx-next 6e677d42f. THE RUN FOUND A REAL TODO, which is the point of a checker that can fail: todo:join-the-fleet:daily-maintenance:due:stale:2026-09-04 — the Start Of Day gate had not run on this host for sixteen days. Cleared by running it (experts healthy AT HEAD, clock NTP-synced, git hooks reinstalled, capability row current, podman image prune, delegate sweep no-runs; nix lane skipped by absence, cargo GC skipped not-bloated, forge image rebuild skipped no-forge-launched) and stamping. WORTH KEEPING ABOUT THE STAMP: `check-daily-maintenance.sh stamp` REFUSED me with refused:stamp-needs-steps — it will not record that maintenance happened without recording WHAT ran. I tried exactly the thing it guards against, and the refusal named the flag and the reason in one line. Same discipline as the closure-evidence rule, applied to a marker rather than a row. THE SUBSTRATE LINE came from scripts/check-bare-metal-host-initialized.sh as this skill's section 2 specifies, so the two skills composed as designed on their first joint run on a cold host.
