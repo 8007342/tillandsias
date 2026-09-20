@@ -27,6 +27,13 @@ mod installation_uuid;
 mod main_thread;
 #[cfg(target_os = "macos")]
 mod pty_vsock_bridge;
+// THE ATTRIBUTE IS LOAD-BEARING and every sibling above carries it. Without it
+// this module compiles on EVERY target while diagnose/installation_uuid do not,
+// so it references siblings that are not there (E0433) and reaches for
+// std::os::unix on Windows. A macOS gate cannot see any of it: here the
+// siblings are present and the module compiles. Found by the Linux workspace
+// compile on relay (656-spux shape).
+#[cfg(target_os = "macos")]
 mod reset_state;
 #[cfg(target_os = "macos")]
 mod status_item;
@@ -637,6 +644,75 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    /// A MODULE THAT REACHES FOR ITS SIBLINGS OR FOR UNIX MUST BE GATED.
+    ///
+    /// Most of this crate's modules are macOS-only and carry
+    /// `#[cfg(target_os = "macos")]`. A declaration WITHOUT it compiles on every
+    /// target — fine for a genuinely portable module (menu_disabled_v2 and
+    /// terminal_attach are, and the latter gates the macOS parts internally),
+    /// and fatal for one that names `crate::` siblings which are themselves
+    /// gated, or touches `std::os::unix`. Those fail with E0433 on a Linux or
+    /// Windows workspace check.
+    ///
+    /// A macOS GATE CANNOT SEE ANY OF IT: here the siblings are present and it
+    /// all compiles. That asymmetry is why this is a test and not a convention —
+    /// the host most likely to add a module to this crate is the one host whose
+    /// gate is blind to the mistake.
+    ///
+    /// MEASURED: `mod reset_state;` landed on osx-next at 5b10d4a22 without the
+    /// attribute, after a green macOS gate, and the Linux workspace compile on
+    /// relay produced three E0433s with two more on the Windows cross-check
+    /// (`std::os::unix`, `Permissions::mode`) — one missing line, 656-spux
+    /// shape. It was inserted by a text replace anchored on `mod diagnose;`,
+    /// which landed the new line below THAT module's attribute instead of below
+    /// a copy of it.
+    ///
+    /// The rule is deliberately narrower than "gate everything": a blanket rule
+    /// fails on the two portable modules above, and a guard that must be
+    /// allowlisted on first contact teaches people to allowlist.
+    #[test]
+    fn modules_touching_siblings_or_unix_are_gated_on_macos() {
+        let source = include_str!("main.rs");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let lines: Vec<&str> = source.lines().collect();
+        let mut bad: Vec<String> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if !line.starts_with("mod ") || !line.trim().ends_with(';') {
+                continue;
+            }
+            let name = line.trim_start_matches("mod ").trim_end_matches(';').trim();
+            let body = match std::fs::read_to_string(dir.join(format!("{name}.rs"))) {
+                Ok(b) => b,
+                Err(_) => continue, // a directory module; not the shape this guards
+            };
+            let needs_macos = body.contains("crate::") || body.contains("std::os::unix");
+            if !needs_macos {
+                continue;
+            }
+            // Walk back over comments to the nearest real line.
+            let mut k = i;
+            let gated = loop {
+                if k == 0 {
+                    break false;
+                }
+                k -= 1;
+                let prev = lines[k].trim();
+                if prev.starts_with("//") || prev.is_empty() {
+                    continue;
+                }
+                break prev == "#[cfg(target_os = \"macos\")]";
+            };
+            if !gated {
+                bad.push(format!("line {}: mod {name};", i + 1));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "these modules name `crate::` siblings or `std::os::unix` but are NOT gated on \
+             macOS, so they compile on every target and will fail there: {bad:?}"
+        );
+    }
+
     #[test]
     fn singleton_guard_applies_only_to_appkit_tray_mode() {
         let source = include_str!("main.rs");
