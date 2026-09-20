@@ -490,17 +490,26 @@ _lane_staleness_check() { # $1 = binary path
     # A 4, or a binary too old to have the subcommand, falls through to the
     # stamp-and-mtime ladder below, so a mid-upgrade fleet keeps the old
     # behaviour rather than being vouched for by a question nobody answered.
-    if _rc="$("$_bin" validator-surface-hash --check 2>&1)"; then
-        _LANE_STALE_VIA="embedded validator-surface hash — this binary was built from these bytes (1287-h6qn)"
-        return 1
-    else
-        case "$_rc" in
-            stale:validator-surface*)
-                _LANE_STALE_VIA="embedded validator-surface hash — ${_rc#stale:validator-surface } (1287-h6qn); a rebase that rewrote a file without changing it would NOT have triggered this"
-                return 0
-                ;;
-        esac
-    fi
+    # A ZERO EXIT IS NOT A VERDICT — REQUIRE THE ANSWER LINE. The first draft of
+    # this block took `exit 0` as "current", and 851-cduu's fixture caught it in
+    # the gate: its lane stub answers `exit 0` to EVERY argument, so a binary
+    # that has never heard of this subcommand was vouched for and the lane
+    # accepted a validator it had refused a moment before. That is cannot-ask
+    # read as fresh, in the one direction that matters — it opens the lane rather
+    # than closing it — and every old binary, wrapper or stub in the fleet has
+    # exactly that shape. Only the literal `ok:validator-surface:<hash>` line is
+    # a pass; anything else falls through to the ladder below.
+    _rc="$("$_bin" validator-surface-hash --check 2>&1)"
+    case "$_rc" in
+        ok:validator-surface:*)
+            _LANE_STALE_VIA="embedded validator-surface hash — this binary was built from these bytes (1287-h6qn)"
+            return 1
+            ;;
+        stale:validator-surface*)
+            _LANE_STALE_VIA="embedded validator-surface hash — ${_rc#stale:validator-surface } (1287-h6qn); a rebase that rewrote a file without changing it would NOT have triggered this"
+            return 0
+            ;;
+    esac
 
     _validator_surface_verdict "$_bin"; _rc=$?
     case $_rc in
