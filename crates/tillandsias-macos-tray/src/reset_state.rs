@@ -94,7 +94,14 @@ pub fn run_reset_state() -> Result<(), String> {
         ));
     }
 
-    let image_root = crate::diagnose::image_root();
+    // ORDER 1315-d4qd — BEFORE the announcement, not merely before the deletion.
+    // With HOME unset the root resolves to /tmp/Library/..., and the announcement
+    // below is built from the SAME root as the removals: it would name /tmp
+    // paths, do exactly what it named, exit 0, and leave the operator told that
+    // the local state was cleared while it sat untouched at the real root. The
+    // two halves agreeing is what makes that unreadable as a failure, so the
+    // refusal has to precede the first thing the operator is shown.
+    let image_root = crate::diagnose::image_root_for_destruction()?;
     let caches = caches_dir();
     let cache_root = tillandsias_core::cache_root::cache_root();
 

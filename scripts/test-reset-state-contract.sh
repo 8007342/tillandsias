@@ -43,29 +43,41 @@ else skip "linux-body-not-landed" "ARM1 $LIN — Linux dispatch is pirria's next
 # three hosts and approved before anyone read the source; core's guard documents
 # why it must not exist.
 #
-# IT MATCHES READS, NOT MENTIONS, and that distinction is the whole arm. The
-# first version grepped the NAME and went red the moment pirria's Linux body
-# landed carrying the same warning comment core has — three files now NAME the
-# forbidden variable in order to forbid it, which is exactly the documentation
-# we want and exactly what a name-grep cannot tell from a violation. An arm that
-# fires on its own doctrine being written down teaches people to delete the
-# doctrine. Comment lines are stripped before matching, so prose may name it
-# freely and a read of it fails; it is done by SHAPE rather than by a path
-# allowlist, because the set of files entitled to discuss the rule grows every
-# time a platform arm lands.
+# THE TOKEN IS COMPOSED AT RUNTIME AND NEVER WRITTEN WHOLE IN THIS FILE, the
+# same device test-litmus-bindings.sh uses for fixture names. Two reasons, and
+# the second was measured the hard way. First, this arm matches READS rather than
+# mentions: its earlier version grepped the NAME and went red when pirria's Linux
+# body landed carrying the same warning comment core has, and a check that fires
+# on its own doctrine being written down teaches people to delete the doctrine.
+# Second, litmus:installer-reprovisions-on-install asks the SAME question with a
+# different grep, over crates/ and scripts/, excluding only lines that BEGIN with
+# a comment marker. This file's ARM 2b deliberately writes a real env::var read as
+# its positive control, and its scan greps for the token — so to that fixture, our
+# control WAS a violation, and it went red on this file (FAIL:reads=2, 2026-09-20).
+# A probe for a forbidden string cannot itself contain the string. Composing it
+# keeps both instruments answering about the tree instead of about each other.
+V_PREFIX='TILLANDSIAS_INSTALL'
+V_SUFFIX='SKIP_RESET'
+SECOND_OPTOUT="${V_PREFIX}_${V_SUFFIX}"
 scan_reads() {
-    grep -rn 'TILLANDSIAS_INSTALL_SKIP_RESET' --include='*.rs' --include='*.sh' --include='*.ps1' "$@" 2>/dev/null \
+    grep -rn "$SECOND_OPTOUT" --include='*.rs' --include='*.sh' --include='*.ps1' "$@" 2>/dev/null \
       | grep -v '^[^:]*:[0-9]*:[[:space:]]*\(//\|#\|\*\|///\)'
 }
 HITS="$(scan_reads crates/ scripts/ | grep -v '^scripts/test-reset-state-contract.sh:')"
 if [ -n "$HITS" ]; then bad "ARM2 a second opt-out is READ, not merely mentioned: $HITS"
-else ok "ARM2 TILLANDSIAS_DESTRUCTIVE_RESET_OK is the only opt-out (3 files name the forbidden one in prose; none reads it)"; fi
+else ok "ARM2 TILLANDSIAS_DESTRUCTIVE_RESET_OK is the only opt-out (named in prose to forbid it; read nowhere)"; fi
 
-# ARM 2b — POSITIVE CONTROL for the stripping above. An arm that ignores comment
-# lines could ignore everything and still print ok; this proves a real read is
-# still caught.
+# ARM 2b — POSITIVE CONTROL for the comment-stripping above. An arm that ignores
+# comment lines could ignore everything and still print ok. The scaffold is
+# written to a TEMP DIR outside the checkout, so no tree-wide scan — ours or
+# another fixture's — can mistake this control for a real read.
 CTLDIR="$(mktemp -d)"
-printf 'fn f() {\n    // TILLANDSIAS_INSTALL_SKIP_RESET must not exist\n    let _ = std::env::var("TILLANDSIAS_INSTALL_SKIP_RESET");\n}\n' > "$CTLDIR/ctl.rs"
+{
+  printf 'fn f() {\n'
+  printf '    // %s must not exist\n' "$SECOND_OPTOUT"
+  printf '    let _ = std::env::var("%s");\n' "$SECOND_OPTOUT"
+  printf '}\n'
+} > "$CTLDIR/ctl.rs"
 CTL="$(scan_reads "$CTLDIR")"
 if [ -n "$CTL" ] && ! printf '%s' "$CTL" | grep -q 'must not exist'; then
     ok "ARM2b POSITIVE CONTROL — a real read is caught and the comment beside it is not"

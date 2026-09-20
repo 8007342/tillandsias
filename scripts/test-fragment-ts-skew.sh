@@ -32,7 +32,18 @@ _at() { # $1 = signed seconds
     local out
     out="$(date -u -d "@$(( $(date -u +%s) + $1 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
     case "$out" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-*Z) printf '%s\n' "$out"; return 0 ;; esac
-    out="$(date -u -v"${1}S" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
+    # BSD `date -v` REQUIRES AN EXPLICIT SIGN. `-v7200S` is not "+7200 seconds",
+    # it is a parse error ("7200S: Cannot apply date adjustment"), so the two
+    # non-negative callers below (+7200 and 0) both produced an empty string and
+    # the `[ -n ... ]` guard skipped the whole fixture on every macOS host —
+    # MEASURED on macneo 2026-09-20, before and after the epoch-shape hardening:
+    # `skip:fragment-ts-skew:no-portable-date`, so 1313-w78k's guard had NO macOS
+    # coverage at all. The negative caller worked, which is why it reads as a
+    # date-support problem rather than a sign problem. GNU `date -d` needs no
+    # sign, so the first arm above is unaffected.
+    local _off="$1"
+    case "$_off" in -*|+*) : ;; *) _off="+$_off" ;; esac
+    out="$(date -u -v"${_off}S" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
     case "$out" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-*Z) printf '%s\n' "$out"; return 0 ;; esac
     return 1
 }
