@@ -104,7 +104,7 @@ impl Drop for ImageRootGuard {
 /// Where the .app installer materializes VM artifacts on a macOS host.
 /// Mirrors `status_item::default_image_root` so `--diagnose` reads the
 /// same paths the live tray writes/reads.
-fn image_root() -> PathBuf {
+pub(crate) fn image_root() -> PathBuf {
     // The override exists ONLY under `cfg(test)`; a release build has exactly
     // the HOME-derived path it always had (order 1127-xm3m's negative
     // control: the real tray must keep writing the real file).

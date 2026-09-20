@@ -32,13 +32,39 @@ scaffold() {
     printf 'specs:\n- spec_id: fix\n  litmus_tests:\n  - %s:fix-bound\n' "$LP" > "$d/openspec/litmus-bindings.yaml"
 }
 
-# --- case 1: the live tree passes ------------------------------------------
-out="$(bash "$GATE")" || fail "case 1: live tree must pass, got '$out'"
+# --- case 1: the ok-verdict grammar, on a THROWAWAY CORPUS ----------------
+# THIS CASE USED TO RUN THE GATE OVER THE LIVE TREE, and that is why it is a
+# corpus case now. check-litmus-bindings.sh has two costs: it skips its advisory
+# runnability sweep when no litmus file changed against the base, and runs it
+# when one did. MEASURED — macneo (workstation) 3.2s skipped / 36.6s swept;
+# esmeraldinha (floor tier) 83s cold and 95s/93s warm skipped, 693s swept. The
+# fixture's budget is 30s. On macneo that budget sat BETWEEN the two paths, so
+# it stopped asserting cost and started asserting WHICH PATH RAN — green for any
+# change touching no litmus file, killed at budget for any change touching one,
+# i.e. red on exactly the changes it exists to check. On esme the budget is below
+# BOTH paths, so excluding the sweep would have made this green on the
+# workstation tier and left it red on the floor: the same defect the row is
+# about — a verdict that depends on which host ran it — at a new address.
+#
+# Neither raising the budget nor excluding the sweep is the fix. Case 1 asserts
+# the reconciliation RULE, not the live tree's size, so it runs against a corpus
+# of a few files: bounded, and the same cost on every tier. THE LIVE TREE IS NOT
+# LOSING COVERAGE — build.sh:3654 runs this same checker over it as its own gate
+# step, which is where the sweep's cost belongs and where it stays.
+#
+# WHAT A CORPUS CANNOT REACH, said rather than silently dropped: with
+# LITMUS_BINDINGS_ROOT pointing outside a git checkout, the checker's
+# `git rev-parse --verify "$BASE_REF"` fails and the whole runnability block —
+# the gating bound-but-unrunnable arm AND the advisory sweep — is skipped. This
+# fixture therefore does not exercise either. scripts/test-bound-litmus-is-
+# runnable.sh and the gate step own that.
+d="$WORK/grammar"; scaffold "$d"
+out="$(LITMUS_BINDINGS_ROOT="$d" bash "$GATE")" || fail "case 1: corpus must reconcile, got '$out'"
 case "$out" in
-    ok:litmus-bindings:files=*) ;;
-    *) fail "case 1: unexpected verdict '$out'" ;;
+    ok:${LP}-bindings:files=[0-9]*\ bound=[0-9]*\ retired=[0-9]*\ grandfathered=[0-9]*) ;;
+    *) fail "case 1: verdict grammar wrong, got '$out'" ;;
 esac
-echo "ok: case 1 — live tree reconciles ($out)"
+echo "ok: case 1 — the ok verdict carries all four counts, on a bounded corpus"
 
 # --- case 2: a clean fixture tree passes with the right counts --------------
 d="$WORK/clean"; scaffold "$d"

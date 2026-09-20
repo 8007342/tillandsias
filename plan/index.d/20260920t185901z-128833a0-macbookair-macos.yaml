@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: evidence
+      ts: "2026-09-20T18:59:01Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        CLOSURE MET ON THE PRODUCT'S OWN PATH. A client container on the enclave network addressed http://inference:11434 and received a body composed by a process on the macOS host, with THE PRODUCT launching the forwarder and no probe script starting it. tlatoanis-macbook-air 2026-09-20T18:56:49Z, tray in continuous-runloop mode, guest headless v56.9.19.2.
+
+        BOTH SIDES REPORT:
+
+          GUEST (boot-triggered oneshot, reporting through the home-src share):
+            status-check rc=0
+            forwarder: running
+            inference: absent
+            client-body=[{"version": "host-native-metal-stub"}]
+            VERDICT=CLOSURE-MET
+
+          HOST-NATIVE HTTP SERVER (plain python on 127.0.0.1:9999, OUTSIDE the VM):
+            18:56:48 HOST-HTTP-SAW: b'GET /api/version HTTP/1.1'
+            18:56:49 HOST-HTTP-SAW: b'GET /api/version HTTP/1.1'
+
+          TRAY:
+            [vz] host vsock: listening on port 42421 — a guest may now connect to CID 2
+            [vz] host vsock: forwarding accepted connections to 127.0.0.1:9999
+            [vz] host vsock: ACCEPTED a guest-initiated connection (fd 14) — the guest reached the host
+
+        THE PRODUCT LAUNCHED IT, which is the part the criterion turns on: the trigger was `tillandsias-headless --status-check`, a real entry point, which reached the status-inference site and took try_start_vsock_forwarder's lane. `forwarder: running` WITH `inference: absent` is the mutual exclusion holding in production code rather than in a source-shape test, and /run/tillandsias/vsock-seccomp.json was written by ensure_vsock_seccomp_profile — so the derivation ran in its real position and crun ACCEPTED it. That is exactly the coverage the retired shell fixture had and the Rust unit tests cannot give: a well-formed profile that crun rejects would have stopped the container here, and it did not.
+
+        THE ONE SEAM, named so it is not mistaken for the product: /run/tillandsias/vsock-forward was written by the probe, standing in for the tray-side writer that 1309-rb3p will build. Everything downstream of that file is product code. When 1309-rb3p lands, the same probe with that one line removed is the unchanged closure.
+
+        PREREQUISITES THIS TURNED UP, both real and both cleared:
+          1. THE GUEST COULD NOT RUN THE LANE. The installed headless was v56.9.13.1 and contained no forwarder lane at all — measured `grep -ac tillandsias-vsock-forwarder` = 0 against a positive control of 46 for tillandsias-inference. Cleared by scripts/build-macos-tray.sh (v56.9.19.2, signed, verified), which stages the guest binary; a bare target/release tray stages nothing (701-kgvk).
+             I NEARLY REPORTED THAT WRONG: my first probe used `strings`, which is ABSENT in the guest, so subject AND control both read 0. A control that matches the subject is a broken instrument, not evidence.
+          2. THE VERSION BUMP FORCES AN IMAGE REBUILD. Every guest image must exist at the new version; chromium-core, chromium-framework, forge-base and inference all rebuilt at v56.9.19.2. `forge` failed once with podman exit 125 and succeeded on retry — transient, and noted because a reader hitting it once should retry before investigating.
+          3. /run IS tmpfs, so the config does not survive a reboot. That is the design working (nothing persists, nothing goes stale) and it is why the probe must be boot-triggered.
+
+        REPORTING CHANNEL: the home-src share (~/src), NOT the model cache. Earlier probes on this row used the model cache and a dotfile there trips test-macos-model-share-writable.sh's empty-cache precondition — a defect in anything permanent. The result file was removed after capture.
+
+        WHAT REMAINS ON THIS ROW: package this run as a committed fixture with a mutation arm (point the config at a dead port, or remove the lane, and require the client NOT to receive a host body), and 1309-rb3p for the writer. The transport itself is done.
