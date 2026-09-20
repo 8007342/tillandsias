@@ -2332,7 +2332,8 @@ parse_args() {
             -*)
                 log_fail "Unknown option: $1"
                 echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
-                echo "     --parse-only <file>... asks whether THIS RUNNER can extract the steps; for YAML validity use scripts/check-litmus-yaml-parses.sh" >&2
+                echo "     --parse-only <file>... loads each file as YAML and REFUSES if it does not load, then reports whether THIS RUNNER can extract its steps (order 1303-2d5g)" >&2
+                echo "                            scripts/check-litmus-yaml-parses.sh is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
                 exit 3
                 ;;
             *)
@@ -2405,11 +2406,49 @@ main() {
         # steps; it is not a YAML validity verdict, and a file can be
         # extractable and unloadable at the same time.
         printf 'note:parse-only answers runner-extractability, NOT YAML validity — for YAML validity run scripts/check-litmus-yaml-parses.sh\n' >&2
+        # ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING FROM IT.
+        #
+        # 1274-cbk7 added the note above, on the theory that naming the
+        # question was enough. It is not: MEASURED on esmeraldinha 2026-09-20,
+        # a file that `tillandsias-plan validate-yaml` REFUSES (rc=1,
+        # `blocked:yaml-load-failed: could not find expected ':'`) came back
+        # from here as `ok:litmus-parseable:<f>:1 step(s)` — it even reported a
+        # step count, because this runner's extraction is LINE-BASED and never
+        # loads the document. The note was printed directly above that line and
+        # did not help, because A READER ACTS ON THE VERDICT WORD. Two
+        # instruments disagreeing about one file, with the looser one the one
+        # authors reach for first, is how a broken litmus reaches a gate on one
+        # host and is refused on another twenty minutes later (land 25).
+        #
+        # So the verdict may not say `ok:` for a file that is not YAML. The
+        # load runs FIRST and its own message is passed through verbatim, so
+        # this refusal names the same file and line the strict checker names
+        # and the two instruments cannot disagree about the same file again.
+        #
+        # NO READER IS ITS OWN NAMED STATE, not a pass — and the wording and
+        # the stand-aside both match scripts/check-litmus-yaml-parses.sh
+        # deliberately, because two instruments answering the same question
+        # must not differ on what "cannot answer" looks like. Extractability is
+        # still reported, since that is this flag's own question and a fresh
+        # clone must still be able to ask it.
+        local parse_reader="${LITMUS_PLAN_BIN:-}"
+        if [[ -z "$parse_reader" || ! -x "$parse_reader" ]]; then
+            printf 'skip:parse-only:yaml-load-unchecked:no-runnable-reader (run scripts/cycle-preflight.sh) — the lines below answer extractability ONLY\n' >&2
+        fi
         for parse_target in ${PARSE_ONLY_FILES[@]+"${PARSE_ONLY_FILES[@]}"}; do
             if [[ ! -f "$parse_target" ]]; then
                 printf 'blocked:parse-only:missing:%s\n' "$parse_target" >&2
                 parse_rc=1
                 continue
+            fi
+            if [[ -n "$parse_reader" && -x "$parse_reader" ]]; then
+                local parse_yaml_out=""
+                if ! parse_yaml_out="$("$parse_reader" validate-yaml "$parse_target" 2>&1)"; then
+                    printf 'blocked:parse-only:not-yaml:%s\n' "$parse_target" >&2
+                    [[ -n "$parse_yaml_out" ]] && printf '%s\n' "$parse_yaml_out" >&2
+                    parse_rc=1
+                    continue
+                fi
             fi
             run_litmus_test_file "$parse_target" "parse-only" || parse_rc=1
         done
