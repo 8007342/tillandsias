@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: evidence
+      ts: "2026-09-20T12:28:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        SECOND-REGIME RUN OF THE 416 FIX, AND THE MEASUREMENT THAT MATTERS IS NOT THAT IT PASSED. tlatoanis-macbook-air, detached checkout of 54613b0f2, scripts/test-smoke-verifies-a-signature.sh run twice.
+
+          RUN 1, ambient PATH (sha256sum resolves at /sbin/sha256sum):
+            ok:   ARM 2: an artifact matching its signature emits cosign:verified:1/1
+            ok:   ARM 3: a substituted asset whose SHA256SUMS entry was regenerated PASSES the hash check and is REFUSED on the signature (cosign:FAILED:tillandsias-linux-x86_64)
+            ok:smoke-verifies-a-signature:5/5
+
+          RUN 2, PATH="/usr/bin:/bin:/usr/sbin" so sha256sum is hidden (sha256sum ABSENT, shasum at /usr/bin/shasum):
+            ok:   ARM 2: an artifact matching its signature emits cosign:verified:1/1
+            ok:   ARM 3: a substituted asset whose SHA256SUMS entry was regenerated PASSES the hash check and is REFUSED on the signature (cosign:FAILED:tillandsias-linux-x86_64)
+            ok:smoke-verifies-a-signature:5/5
+
+        THE TWO OUTPUTS ARE BYTE-IDENTICAL. I diffed them. Two runs that exercised two DIFFERENT digest tools produced indistinguishable artefacts, so a green 5/5 — in a log, in a gate record, in a land attestation — cannot tell a reader which candidate was proved. That is the precise thing this row is about, arriving one layer in: the fix made the step work in both regimes, and the step still cannot REPORT which regime it ran in. A recorded second-regime run is only evidence if the recording distinguishes the regimes; two identical greens are one green written twice.
+
+        HOW I ESTABLISHED WHICH CANDIDATE EACH RUN TOOK, since the fixture prints no resolved-tool line: I replicated its own selection loop under each PATH rather than asserting it from the platform.
+
+          run 2 PATH:  sha256sum -> <no output>;  "shasum -a 256" -> e3b0c442…b855   SELECTED: shasum -a 256
+          run 1 PATH:  sha256sum -> e3b0c442…b855                                    SELECTED: sha256sum
+
+        So the shasum branch — the one a stock Mac actually takes — is now exercised for the first time on any host, and it is green. Before yoga's fix, ARM 2 FAILED here with cosign:FAILED because the stub could not reach its digest under the narrowed PATH, and ARM 3 passed VACUOUSLY: the stub refused everything, so ARM 3's expected refusal arrived whatever it substituted. Both are now earned.
+
+        A TRAP IN THE INSTRUCTION ITSELF, worth the row's notes because it is the same class as the defect: narrowing PATH to hide sha256sum also hid `timeout`, which on this host is homebrew coreutils and not under /usr/bin:/bin. My first attempt at run 2 died rc=127 before reaching the fixture. A PATH-narrowing instruction can silently remove the HARNESS's own tools, and the failure looks like the subject failing.
+
+        WHAT I AM NOT CLAIMING: I have not measured the openssl candidate. It is third in the list and unreachable on this host while shasum is present, so a third regime would need a box with neither sha256sum nor shasum.
