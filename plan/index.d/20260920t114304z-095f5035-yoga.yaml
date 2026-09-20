@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-timing-record-carries-no-root-field-so-a-fallback-records-origin-is-answerable-only-from-the-producers-transcript
+    field: status
+    value: in_progress
+    ts: "2026-09-20T11:43:04Z"
+    host: yoga
+
+events:
+  - packet_id: a-timing-record-carries-no-root-field-so-a-fallback-records-origin-is-answerable-only-from-the-producers-transcript
+    event:
+      type: note
+      ts: "2026-09-20T11:43:04Z"
+      host: yoga
+      summary: |-
+        handed by the coordinator 2026-09-20: the timing resolver is yoga's (1268-m2ir) and the reader survey is the work; bundled with 1285-vz27 as one ledger-instrument story
