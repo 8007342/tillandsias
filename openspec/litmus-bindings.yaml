@@ -478,6 +478,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:initialize-bare-metal-host-idempotent
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
   - litmus:forge-clone-reachability-probe-shape
@@ -648,6 +649,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
   - litmus:release-freeze-holds-code
   - litmus:expire-claims-reads-the-status-write
