@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    field: status
+    value: completed
+    ts: "2026-09-20T16:18:17Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: completed
+      ts: "2026-09-20T16:18:17Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 07f397fd5 (status-loss batching), b91b4f353 (hook + gate-stamp movers); post-fix measured: a trunk push returns in 50s rc=1 with a named refusal against a tree that never returned under 1800s; guards: test-hook-mover-enumeration-is-batched, test-gate-stamp-movers-batching-is-equivalent, test-fragment-batch-never-collapses-verdicts, each with a sabotage control measured red
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: note
+      ts: "2026-09-20T16:18:17Z"
+      host: yolanda-windows
+      summary: |-
+        all three costs the closure names are on trunk; the fourth push-path cost pirria measured is 1310-7apk and is not part of this closure

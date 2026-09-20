@@ -173,6 +173,7 @@ specs:
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
   - litmus:installer-swap-atomicity
+  - litmus:installer-reprovisions-on-install
   - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
@@ -482,6 +483,7 @@ specs:
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
+  - litmus:ssh-lane-refuses-when-unwired
   - litmus:git-mirror-startup-per-ref-tolerance
   - litmus:git-mirror-unborn-head-repair
   - litmus:git-mirror-stale-reconcile

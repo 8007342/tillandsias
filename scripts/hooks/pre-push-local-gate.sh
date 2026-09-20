@@ -972,7 +972,13 @@ attempt_plan_only_lane() {
         # the regime class this packet chain has hit seven times tonight.
         # `ls -t` is POSIX and picks the newest without any -printf.
         _newer="$(find crates/tillandsias-plan Cargo.lock -type f -newer "$plan_bin" -print 2>/dev/null \
-                  | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | head -1)"
+                  | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | awk 'NR == 1')"
+        # 1307-kic6: `awk 'NR == 1'`, not `head -1`. `head` exits at its first
+        # line and SIGPIPEs `ls`/`xargs`, which under this file's `set -uo
+        # pipefail` (:60) inverts the pipeline's status -- the same shape as
+        # the mover enumeration below, and latent for the same reason (the
+        # substitution's status is never tested). awk reads to EOF, so there
+        # is no signal to invert. Output is identical.
         # A fresher build of the SAME binary anywhere the probe could have
         # looked. CARGO_TARGET_DIR first, because that is where a redirected
         # host's current copy actually lives.
@@ -1616,10 +1622,55 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                 # per-path digests and it points straight at a live writer.
                 _gs="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-gate-stamp"
                 _changed=""
+                _changed_n=0
                 if [[ -f "$_gs" ]]; then
-                    _changed="$(git ls-files -z --cached --others --exclude-standard 2>/dev/null \
-                        | xargs -0 -r -I{} sh -c '[ -f "{}" ] && [ "{}" -nt "'"$_gs"'" ] && printf "%s\n" "{}"' 2>/dev/null \
-                        | head -12)"
+                    # ORDER 1307-kic6 -- BATCHES, NOT ONE SHELL PER FILE. This
+                    # was `xargs -0 -r -I{} sh -c '[ -f {} ] && [ {} -nt $_gs ]'`,
+                    # which spawns a SHELL PER TRACKED FILE. Measured over the
+                    # same 7073-file tree, same stamp, same mover list (141):
+                    #
+                    #   per-file spawn, yolanda (Windows 11, MSYS)  ~18 min
+                    #                   (7070 x ~155 ms per spawn, extrapolated;
+                    #                    five bounds of 120-240 s all killed it)
+                    #   per-file spawn, macuahuitl (Fedora 44, NVMe)  3.9 s
+                    #   THIS FORM,      yolanda                       2.3 s
+                    #                   16 sh spawns for 7073 files
+                    #
+                    # So it cost Linux four seconds on EVERY push and Windows
+                    # eighteen minutes -- long enough that a bounded caller kills
+                    # a push that is working, and whether the ref had already
+                    # moved depended only on how long the caller waited. That is
+                    # how landed work came to be reported as unlanded.
+                    #
+                    # WHY `xargs ... sh -c '... "$@"'` AND NOT `-I{}`: without
+                    # -I, xargs BATCHES -- 16 invocations here instead of 7073 --
+                    # and `find` takes the paths as ARGUMENTS, so one find
+                    # process stats a whole batch. The paths stay NUL-delimited
+                    # end to end, so this is safe for paths containing newlines,
+                    # which a `tr '\0' '\n'` form would not be.
+                    #
+                    # WHY NOT `find . -newer`: it walks the whole working tree,
+                    # including target/ and everything else gitignored, which is
+                    # both wrong (the stamp covers `ls-files --cached --others`,
+                    # so an ignored file moving invalidates nothing) and slow --
+                    # measured at 132 s here against this form's 2.3 s.
+                    #
+                    # WHY NOT `stat -c`: GNU-only.
+                    # scripts/check-portability-idioms.sh flags it, and this hook
+                    # runs on every platform. `find -newer` is POSIX.
+                    _movers="$(
+                        git ls-files -z --cached --others --exclude-standard 2>/dev/null \
+                            | xargs -0 -r sh -c 'find "$@" -maxdepth 0 -newer "$0" -type f -print' "$_gs" 2>/dev/null
+                    )"
+                    # TRUNCATE AFTER CAPTURE, never inside the pipeline. The old
+                    # form ended in `head -12`, a truncating consumer, under this
+                    # file's `set -uo pipefail` (:60): past twelve movers the
+                    # producers take SIGPIPE and the pipeline's status is
+                    # inverted BY ITS OWN SUCCESS. Latent only because the
+                    # substitution's status is never tested -- one line from
+                    # guards that do test statuses (795-imz3).
+                    _changed_n="$(printf '%s' "$_movers" | awk 'NF {n++} END {print n+0}')"
+                    _changed="$(printf '%s' "$_movers" | awk 'NF && NR <= 12')"
                 fi
                 # ORDER 970-7fqk — NAME THE CAUSE ON THE AXIS THE DECISION USES.
                 # The staleness verdict is made on CONTENT (gate-stamp.sh

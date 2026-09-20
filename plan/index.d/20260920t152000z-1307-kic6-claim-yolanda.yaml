@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: claim
+      ts: "2026-09-20T15:20:00Z"
+      agent_id: windows-yolanda-opus5-20260920t152000z
+      host: yolanda-windows
+      summary: |
+        Claimed by yolanda-windows, the host that measured it, on the
+        coordinator's assignment. Committed and pushed BEFORE any code.
+
+        SCOPE, as ruled:
+          1. Replace the per-file `xargs -0 -r -I{} sh -c ...` at
+             scripts/hooks/pre-push-local-gate.sh:1620-1622 with a single
+             process over the same ls-files set -- `find -newer <stamp>` or one
+             awk/stat pass; anything that removes the per-file spawn meets the
+             closure.
+          2. FIX the second hazard in the same line rather than noting it: that
+             pipeline ends in `head -12` under `set -uo pipefail` (:60), so past
+             twelve movers its own success inverts its status. Capture the list
+             first, truncate for display afterwards.
+          3. A fixture, which runs on LINUX too -- the hook is shared by every
+             host, so a Windows-only guard would leave the other platforms
+             unpinned against the same shape.
+
+        CLOSURE, as the output: on this host a trunk push RETURNS within its
+        step budget with the SAME verdict the current hook gives, measured
+        against the same 7070-file tree; and the enumeration names the same
+        movers for a planted-newer file on Linux and on MSYS. Pre-fix result:
+        ~1095 s extrapolated (7070 files x 155 ms per sh -c spawn), and the five
+        bounds it beat -- 120, 150, 180, 200 and 240 s.
+
+        NOT A PERFORMANCE TIDY-UP, and the reason is on the row: while the step
+        costs eighteen minutes, a bounded caller kills a push that is working,
+        and whether the ref moved depends on how long the caller waited. That is
+        how I came to report landed work as unlanded, twice, to the coordinator.

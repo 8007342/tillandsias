@@ -17,6 +17,7 @@ pub mod icons;
 pub mod image_builder;
 pub mod preflight;
 pub mod project;
+pub mod reset_state;
 pub mod secrets;
 pub mod singleton;
 pub mod state;

@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    order: 1309-qc95
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, credentials, agent-safety, gate, dogfooding]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    verifiable_closure: |
+      litmus:ssh-lane-refuses-when-unwired. With TILLANDSIAS_MIRROR_SSHD=1 and
+      the host-CA cache REMOVED, a push exits NON-ZERO and the refusal names the
+      missing cache path and the variable; the generated gitconfig carries a
+      pushInsteadOf to the unroutable lane URL and NOT the anonymous git://
+      redirect. MUTATION ARM: restore the pre-fix wording ("Pushes fall back to
+      the anonymous mirror redirect above") or drop the pushInsteadOf, and the
+      fixture must RED — an absent push redirect is the failure, not the fix,
+      because the anonymous insteadOf already covers push.
+      PRE-FIX RESULT, AND HOW IT WAS ESTABLISHED — READ FROM SOURCE, NOT RUN.
+      The coordinator's brief recorded it as "your push succeeded over git://
+      with the warning printed". I did not run that push. The defect was
+      established by reading the call site in
+      crates/tillandsias-headless/src/main.rs: the `_ =>` arm of the host-CA
+      match printed a stderr warning, wrote "Pushes fall back to the anonymous
+      mirror redirect above" into the artifact, and emitted no pushInsteadOf,
+      while the anonymous `insteadOf` written earlier in the same function
+      covers push as well as fetch. THE END-TO-END PRE-FIX RUN IS STILL OWED and
+      is part of this closure; until it exists the behavioural claim rests on
+      source reading alone, which is weaker evidence and is labelled as such.
+    title: |
+      the authenticated SSH push lane falls open to the anonymous git:// path when it is ENABLED but its host-CA cache is absent — loud on stderr, silent in outcome, so the flag being set is not evidence the lane is in use
+    context: |
+      FOUND BY lenovinha-silverblue 2026-09-20 while dogfooding this lane as
+      1288-5qpn's first authenticated client. Origin of the lane: 749-54pv /
+      749-6uby (design T4-T10, dark until the T11 default flip). Reason it was
+      found: 1288-5qpn, which requires the relay and hooks to FAIL HARD with no
+      direct-push fallback.
+
+      THE DEFECT. With TILLANDSIAS_MIRROR_SSHD=1 and the host-CA cache absent,
+      the lane does not fail. It prints
+        [tillandsias] WARNING: TILLANDSIAS_MIRROR_SSHD=1 but no host-CA cache
+        exists for '<project>' — the SSH push lane was NOT wired into its
+        gitconfig (did ensure_ssh_lane_sidecar run?).
+      writes into the generated gitconfig
+        # SSH push lane ENABLED but NOT wired: host-CA cache missing.
+        # Pushes fall back to the anonymous mirror redirect above.
+      and the push then SUCCEEDS over the anonymous git:// path.
+
+      WHY IT IS p1 AND NOT A MIGRATION DETAIL. This is a fallback from the
+      AUTHENTICATED transport to the UNAUTHENTICATED one, taken on precisely the
+      failure where it is least wanted — the credential material being missing.
+      It is loud on stderr and SILENT IN OUTCOME: the push works, so no gate, no
+      hook and no downstream reader ever learns the transport changed under it.
+
+      THE SECOND CONSEQUENCE OUTLIVES THE FIX and must be written down: THE FLAG
+      BEING SET IS NOT EVIDENCE THE LANE IS IN USE. An operator can enable
+      TILLANDSIAS_MIRROR_SSHD=1, observe no error at the push, and have every
+      push travelling the anonymous path. Any future claim that a host is "on
+      the authenticated lane" must be evidenced by the TRANSPORT ACTUALLY USED,
+      never by the flag or by the absence of an error.
+
+      WHY OMITTING THE REDIRECT IS NOT THE FIX, recorded because it is the
+      obvious wrong answer and the pre-fix test ASSERTED it: the anonymous
+      `insteadOf` written earlier in the same function covers PUSH as well as
+      fetch, so an absent push redirect means the anonymous path silently wins.
+      The old test required that no pushInsteadOf appear without the CA, which
+      sounds fail-safe and is the exact opposite. Failing closed needs a push
+      redirect that cannot route.
+    next_action: |
+      Held by lenovinha-silverblue; the code fix is written and its unit arms
+      are green (5/5 in write_forge_gitconfig). What is LEFT:
+      1. THE PRE-FIX END-TO-END RUN, which is owed and is not optional: with the
+         flag on and the cache removed, at the pre-fix commit, push and record
+         that it SUCCEEDS over git://. Without it the defect is evidenced by
+         source reading only.
+      2. The litmus named in verifiable_closure, with the mutation arm.
+      3. Land through a full gate — this is headless code, so the plan-only lane
+         does not apply.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-20 on the coordinator's ruling that
+      a defect found by dogfooding a dark lane is fixed by the dogfooder.
+
+events:
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    event:
+      type: note
+      ts: "2026-09-20T14:45:35Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260920t144535z
+      summary: |-
+        fix written and unit-green; the pre-fix end-to-end run is owed and the closure says so

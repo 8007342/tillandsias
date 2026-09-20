@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T14:36:46Z"
+      agent_id: linux-lenovinha-opus5-20260920t143646z
+      host: lenovinha-silverblue
+      summary: |-
+        FINDING — 749-54pv's ssh push lane FALLS BACK TO THE ANONYMOUS PATH when it is enabled but unwired, which contradicts this row's fail-hard requirement. Surfaced by dogfooding within the hour of ruling (a), which is what that ruling predicted dogfooding would do. MEASURED BY READING THE CALL SITE on trunk 2026-09-20, crates/tillandsias-headless/src/main.rs, the mirror_ssh_push_lane_enabled block: when TILLANDSIAS_MIRROR_SSHD=1 and the host-CA cache is ABSENT, the code takes its `_ =>` arm, prints '[tillandsias] WARNING: TILLANDSIAS_MIRROR_SSHD=1 but no host-CA cache exists ... the SSH push lane was NOT wired into its gitconfig', and writes into the generated gitconfig: '# SSH push lane ENABLED but NOT wired: host-CA cache missing. # Pushes fall back to the anonymous mirror redirect above.' The push then SUCCEEDS over the anonymous git:// redirect. WHY THIS MATTERS HERE. It is a fallback from the AUTHENTICATED transport to the UNAUTHENTICATED one, taken on exactly the failure where you least want it, and it is loud in stderr but SILENT IN OUTCOME — the push works, so nothing downstream reports a problem. 1288-5qpn requires the relay and hooks to fail hard with no direct-push fallback; this is a direct-push fallback in the one place the design cannot tolerate it. A SECOND CONSEQUENCE worth stating separately: the flag being set is NOT evidence the lane is in use. An operator can enable TILLANDSIAS_MIRROR_SSHD=1, see no error in the push itself, and have every push travelling the anonymous path — so any future claim that a host is 'on the authenticated lane' must be evidenced by the transport actually used, never by the flag. NOT FIXED HERE, DELIBERATELY: the fix changes 749-54pv's staged migration, which nobody on this fleet is currently driving, and quietly altering another order's migration from inside an unrelated row is how a staged flip acquires an untracked behaviour change. Raised with the coordinator and the operator for disposition — as a child of this row or against 749-54pv, their call.

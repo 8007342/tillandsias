@@ -1,0 +1,65 @@
+# Gate step 1285-vz27 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. tillandsias-plan set-field's positional scan skipped `i += 2`
+# for ANY token starting with `--`, which is two defects in one line:
+#
+#   an UNKNOWN flag silently ate the next token, so a typo — or a flag borrowed
+#   from a sibling subcommand — vanished along with its argument; and
+#
+#   a VALUELESS flag (--append/--replace/--backfill) ate the token after it,
+#   normally the NEXT FLAG'S NAME, shifting every later token left and promoting
+#   some unrelated string to the positional VALUE.
+#
+# Both then WROTE, and printed a success-shaped line. Measured on macneo
+# 2026-09-19: a p1 row's next_action was overwritten with the literal
+# `tlatoanis-macbook-neo`, and `tillandsias-plan check` reported ok, ids unique,
+# references sound — every validator passing over a field that had just been
+# replaced by a hostname. The prose the field existed to carry was never written
+# and nothing said so.
+#
+# IT HAPPENED TWICE, THE SECOND TIME HERE. On 2026-09-20 this host ran a
+# `--dry-run` probe against set-field to read the status vocabulary; --dry-run is
+# not a set-field flag, it was absorbed in silence, and a note fragment was
+# written against a row that was not being edited. Caught only by looking at
+# `git status` afterwards. A caller who trusts the success line cannot tell that
+# from a correct write — which is why this guards the LEDGER and is not a
+# usability nit.
+#
+# PRE-FIX / POST-FIX, measured against a throwaway ledger copy:
+#   pre-fix  set-field <ref> notes "probe" --append --host H --ts T --dry-run
+#            -> "[ts H] probe (…fragment.yaml)"   fragments 1266 -> 1267
+#   post-fix -> "error: unknown flag '--dry-run' … REFUSED before any write"
+#               fragments unchanged
+#
+# EVERY ARM WRITES TO A COPY. The fixture copies plan/ to a temp dir and passes
+# --index; the real ledger is never touched. A test for a tool whose defect is an
+# unwanted write must not be able to produce one.
+#
+# ARM 5 IS THE MUTANT AND IS OPT-IN. Restoring the permissive parse needs a
+# ~40s rebuild and patches a source file, which a gate step must not do to a
+# working tree. It is skipped BY NAME rather than silently, and the pre-fix
+# measurement above is recorded on the row instead of asserted every run. Set
+# TILLANDSIAS_SET_FIELD_MUTANT=1 to drive it.
+#
+# SECOND REGIME (order 1302-7j8p): NONE REQUIRED, and this is the whole answer
+# rather than a deferral. The fixture's default path shells out only to
+# cp date dirname env grep head ls mkdir mktemp printf rm tail wc — POSIX
+# spellings with no GNU-only name and no GNU-only flag, all of them already
+# exercised on every platform by steps 411 and 413 — plus the plan binary THIS
+# REPO BUILDS, which is the subject under test. There is no external tool whose
+# absence or dialect could change the verdict. The opt-in mutant arm
+# additionally needs perl and cargo, and skips by name when they are missing.
+# If that list ever grows, this step needs a recorded run on a second regime
+# before it stays in --check.
+#
+# COST, MEASURED HERE 2026-09-20: 1.65 / 1.58 s. It copies a 95k-line ledger and
+# its 1263 fragments to a temp dir and runs the built binary six times. No
+# compile in the default path, no container, no network.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking set-field refuses an unknown flag instead of absorbing it and writing (1285-vz27)"
+STEP_SCRIPT="scripts/test-set-field-refuses-unknown-flags.sh"
+STEP_ERROR="tillandsias-plan set-field can again absorb an unknown flag, consume the next option's value as the field value, WRITE it to the ledger and print success (1285-vz27) — read which arm failed above; ARM 1 failing means the ledger-corrupting path is open"
+STEP_OK="set-field refuses unknown flags before writing"

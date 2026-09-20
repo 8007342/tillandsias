@@ -3032,6 +3032,83 @@ fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
     }
 }
 
+/// ORDER 1307-kic6. The positional paths of a `fragment-*` subcommand.
+///
+/// Flags are skipped rather than assumed absent: `fragment-terminal-events`
+/// already takes `--live`, and a path list that swallowed it would read a flag
+/// as a filename and report it `unreadable`.
+fn fragment_arg_paths(args: &[String]) -> Vec<String> {
+    args.iter()
+        .skip(1)
+        .filter(|a| !a.starts_with("--"))
+        .cloned()
+        .collect()
+}
+
+/// ORDER 1307-kic6. One framed line per input file, so a batch NEVER collapses
+/// per-file verdicts into one process exit.
+///
+/// `<status>\t<path>\t<payload>`, where status is `ok`, `unparseable` or
+/// `unreadable`. A readable fragment with nothing to report still gets one `ok`
+/// line with an empty payload -- that is the difference between "read it, found
+/// nothing" and "never read it", which is exactly the distinction 787-f7dh was
+/// filed about when empty-stdout-exit-0 meant both.
+fn emit_fragment_frame(status: &str, path: &str, payload: &str) {
+    println!("{status}\t{path}\t{payload}");
+}
+
+/// The misplaced-definition signature, extracted so the single-path and
+/// multi-path modes cannot drift. See the arm below for why this shape is the
+/// one that matters (812-d45t).
+fn fragment_misplaced_ids(doc: &serde_yaml::Value, out: &mut Vec<String>) {
+    if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+        for e in evs {
+            if e.get("event").is_some() {
+                continue;
+            }
+            let looks_like_definition = ["order", "title", "kind", "deliverable"]
+                .iter()
+                .any(|k| e.get(*k).is_some());
+            if !looks_like_definition {
+                continue;
+            }
+            let pid = e
+                .get("packet_id")
+                .and_then(serde_yaml::Value::as_str)
+                .unwrap_or("<no packet_id>");
+            out.push(pid.to_string());
+        }
+    }
+}
+
+/// The event-addressing signature (797-qm4t), extracted for the same reason.
+fn fragment_event_packet_ids(doc: &serde_yaml::Value, out: &mut Vec<String>) {
+    if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+        for pk in pkts {
+            let Some(pid) = pk.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            if pk
+                .get("events")
+                .and_then(serde_yaml::Value::as_sequence)
+                .is_some_and(|evs| !evs.is_empty())
+            {
+                out.push(pid.to_string());
+            }
+        }
+    }
+    if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+        for e in evs {
+            let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                continue;
+            };
+            if e.get("event").is_some() {
+                out.push(pid.to_string());
+            }
+        }
+    }
+}
+
 fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
         "experts-probe" => {
@@ -3181,44 +3258,69 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // rather than merely "no event key" keeps a malformed-but-intended
             // event from being reported as a lost packet.
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>");
+            let paths = fragment_arg_paths(args);
+            if paths.is_empty() {
+                eprintln!(
+                    "usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>..."
+                );
                 std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!(
-                        "unparseable:{path}: {e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
+            }
+            // ORDER 1307-kic6. MULTI-PATH MODE, AND IT NEVER COLLAPSES A
+            // VERDICT. check-fragment-status-loss.sh called this once per
+            // fragment; on a host where a process spawn costs 134 ms that is
+            // 1302 spawns for one of three passes. Handed every path at once it
+            // is ONE spawn -- but only if a bad fragment among good ones is
+            // still named individually, which is what the framed output is for.
+            // Collapsing 1302 answers into one exit code would turn a
+            // parse-error detector into a silent pass, which is the failure the
+            // caller's own comment forbids ("checking NOTHING is not [acceptable]").
+            let framed = paths.len() > 1 || args.iter().any(|a| a == "--files");
             let mut ids: Vec<String> = Vec::new();
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    if e.get("event").is_some() {
-                        continue;
+            for path in &paths {
+                let path = path.as_str();
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if framed {
+                            emit_fragment_frame("unreadable", path, &format!("read {path}: {e}"));
+                            continue;
+                        }
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
                     }
-                    let looks_like_definition = ["order", "title", "kind", "deliverable"]
-                        .iter()
-                        .any(|k| e.get(*k).is_some());
-                    if !looks_like_definition {
-                        continue;
+                };
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let why = format!(
+                            "{e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
+                        );
+                        if framed {
+                            emit_fragment_frame("unparseable", path, &why);
+                            continue;
+                        }
+                        eprintln!("unparseable:{path}: {why}");
+                        std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
                     }
-                    let pid = e
-                        .get("packet_id")
-                        .and_then(serde_yaml::Value::as_str)
-                        .unwrap_or("<no packet_id>");
-                    ids.push(pid.to_string());
+                };
+                let mut file_ids: Vec<String> = Vec::new();
+                fragment_misplaced_ids(&doc, &mut file_ids);
+                file_ids.sort_unstable();
+                file_ids.dedup();
+                if framed {
+                    if file_ids.is_empty() {
+                        emit_fragment_frame("ok", path, "");
+                    } else {
+                        for id in &file_ids {
+                            emit_fragment_frame("ok", path, id);
+                        }
+                    }
+                } else {
+                    ids.extend(file_ids);
                 }
+            }
+            if framed {
+                return true;
             }
             ids.sort_unstable();
             ids.dedup();
@@ -3252,55 +3354,60 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // parse and the same exit 3 on an unparseable fragment, because
             // silence from a parser is not evidence of absence (787-f7dh).
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>");
+            let paths = fragment_arg_paths(args);
+            if paths.is_empty() {
+                eprintln!("usage: tillandsias-plan fragment-event-packets <fragment.yaml>...");
                 std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!(
-                        "unparseable:{path}: {e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
+            }
+            // ORDER 1307-kic6. Multi-path mode; see fragment-misplaced-definitions
+            // above for why the output is framed per file rather than collapsed.
+            let framed = paths.len() > 1 || args.iter().any(|a| a == "--files");
             let mut ids: Vec<String> = Vec::new();
-            // Inline: packets: [{packet_id, events: [...]}]. A pid here also
-            // CREATES the packet, so it can never be unknown — collected anyway
-            // so the caller sees one consistent set and decides for itself.
-            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
-                for p in pkts {
-                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if p.get("events")
-                        .and_then(serde_yaml::Value::as_sequence)
-                        .is_some_and(|evs| !evs.is_empty())
-                    {
-                        ids.push(pid.to_string());
+            for path in &paths {
+                let path = path.as_str();
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if framed {
+                            emit_fragment_frame("unreadable", path, &format!("read {path}: {e}"));
+                            continue;
+                        }
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
                     }
+                };
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let why = format!(
+                            "{e} — the unknown-packet pass cannot read this fragment, so any event it addresses is UNEXAMINED (797-qm4t)"
+                        );
+                        if framed {
+                            emit_fragment_frame("unparseable", path, &why);
+                            continue;
+                        }
+                        eprintln!("unparseable:{path}: {why}");
+                        std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                    }
+                };
+                let mut file_ids: Vec<String> = Vec::new();
+                fragment_event_packet_ids(&doc, &mut file_ids);
+                file_ids.sort_unstable();
+                file_ids.dedup();
+                if framed {
+                    if file_ids.is_empty() {
+                        emit_fragment_frame("ok", path, "");
+                    } else {
+                        for id in &file_ids {
+                            emit_fragment_frame("ok", path, id);
+                        }
+                    }
+                } else {
+                    ids.extend(file_ids);
                 }
             }
-            // Top-level: events: [{packet_id, event: {...}}] — the shape that
-            // declares WITHOUT creating, and therefore the one that can address
-            // a packet nobody has ever filed.
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                        continue;
-                    };
-                    if e.get("event").is_some() {
-                        ids.push(pid.to_string());
-                    }
-                }
+            if framed {
+                return true;
             }
             ids.sort_unstable();
             ids.dedup();
@@ -3341,161 +3448,195 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // Exit 3 makes the two cases distinguishable at the point of use;
             // silence from a parser is not evidence of absence.
             const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
-            let Some(path) = args.get(1) else {
-                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
+            let paths = fragment_arg_paths(args);
+            if paths.is_empty() {
+                eprintln!(
+                    "usage: tillandsias-plan fragment-terminal-events <fragment.yaml>... [--live]"
+                );
                 std::process::exit(2);
-            };
-            let raw = match std::fs::read_to_string(path) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(d) => d,
-                Err(e) => {
-                    // Distinguishable, and stdout stays EMPTY so no caller can
-                    // mistake a parse failure for a set of declarations.
-                    eprintln!(
-                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
-                    );
-                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
-                }
-            };
-            // A `declares` entry: the event carries `type: completed`, or nests
-            // `event: completed` / `event: {type: completed}` (the shapes the old
-            // awk reached via `/type: completed/ || /event: completed/`).
-            let declares_terminal = |event: &serde_yaml::Value| -> bool {
-                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
-                    return true;
-                }
-                if let Some(inner) = event.get("event")
-                    && (inner.as_str() == Some("completed")
-                        || inner.get("type").and_then(serde_yaml::Value::as_str)
-                            == Some("completed"))
-                {
-                    return true;
-                }
-                false
-            };
-            // ORDER 751-i9mb. Packets do not only live at `doc["packets"]`.
-            // Compaction folds every fragment INTO plan/index.yaml, where they
-            // live at `plan_index.steps[]` — so this subcommand, pointed at the
-            // base ledger, parsed all 3.4MB and printed NOTHING with exit 0.
-            // Empty-and-zero is indistinguishable from "declares no terminal
-            // events", so a checker built on that answer reports clean on a
-            // ledger it never examined: this guard's OWN failure class
-            // (785-sqe6, 787-f7dh), and the mechanical reason packet 532 sat
-            // claimable with its exit criterion already green while
-            // `./build.sh --check` printed ok:no-fragment-status-loss.
-            //
-            // The walk stops descending at any mapping carrying `packet_id` —
-            // the same rule the fold itself uses — so it is shape-independent
-            // by construction and a future ledger layout cannot silently
-            // re-blind it. Fragments (top-level `packets:`) and the base
-            // (`plan_index.steps[]`) both fall out of the one rule.
-            fn collect_packet_nodes(v: &serde_yaml::Value, out: &mut Vec<serde_yaml::Value>) {
-                if v.get("packet_id").is_some() {
-                    out.push(v.clone());
-                    return;
-                }
-                if let Some(map) = v.as_mapping() {
-                    for (_k, val) in map {
-                        collect_packet_nodes(val, out);
-                    }
-                } else if let Some(seq) = v.as_sequence() {
-                    for item in seq {
-                        collect_packet_nodes(item, out);
-                    }
-                }
             }
-
-            // ORDER 751-i9mb. `--live` additionally applies the WITHDRAWAL rule:
-            // a closure that a later `falsified` event retracted is not a live
-            // declaration. Opt-in, so the existing gate's syntactic question —
-            // "does this events block DECLARE a terminal event?" — is unchanged
-            // and its callers keep their exact semantics. The advisory base pass
-            // asks the different, semantic question, and the packet requires the
-            // negative control: "a packet ... whose closure was later falsified"
-            // must NOT be flagged.
-            //
-            // Timestamps are ISO-8601 Zulu, which orders correctly under plain
-            // lexicographic comparison; an event with no ts sorts as empty and
-            // therefore never wins against a stamped one.
-            let live_only = args.iter().any(|a| a == "--live");
-            let event_ts = |e: &serde_yaml::Value| -> String {
-                e.get("ts")
-                    .and_then(serde_yaml::Value::as_str)
-                    .or_else(|| e.get("event").and_then(|i| i.get("ts")?.as_str()))
-                    .unwrap_or("")
-                    .to_string()
-            };
-            let declares_falsified = |event: &serde_yaml::Value| -> bool {
-                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("falsified") {
-                    return true;
-                }
-                if let Some(inner) = event.get("event")
-                    && (inner.as_str() == Some("falsified")
-                        || inner.get("type").and_then(serde_yaml::Value::as_str)
-                            == Some("falsified"))
-                {
-                    return true;
-                }
-                false
-            };
-
-            let mut ids: Vec<String> = Vec::new();
-            // Inline: a node carrying packet_id and events: [{type: completed}],
-            // at ANY depth.
-            let mut packet_nodes: Vec<serde_yaml::Value> = Vec::new();
-            collect_packet_nodes(&doc, &mut packet_nodes);
-            for p in &packet_nodes {
-                let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
-                    continue;
+            // ORDER 1307-kic6. MULTI-PATH MODE, AND THE PER-FILE VERDICT IS THE
+            // WHOLE POINT HERE. This subcommand's EXIT CODE is how
+            // check-fragment-status-loss.sh detects an unparseable fragment --
+            // 787-f7dh exists because "declares no terminal events" and "could
+            // not be read" were once the same answer. Batching 1302 fragments
+            // into one process must therefore NOT collapse 1302 verdicts into
+            // one exit code, so framed mode reports each file's verdict on
+            // stdout and an unparseable fragment among good ones is still named
+            // by name. Single-path callers keep the old exit codes exactly.
+            let framed = paths.len() > 1 || args.iter().any(|a| a == "--files");
+            for path in &paths {
+                let path = path.as_str();
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if framed {
+                            emit_fragment_frame("unreadable", path, &format!("read {path}: {e}"));
+                            continue;
+                        }
+                        eprintln!("error: read {path}: {e}");
+                        std::process::exit(2);
+                    }
                 };
-                let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
-                    continue;
+                let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let why = format!(
+                            "{e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
+                        );
+                        if framed {
+                            emit_fragment_frame("unparseable", path, &why);
+                            continue;
+                        }
+                        eprintln!("unparseable:{path}: {why}");
+                        std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                    }
                 };
-                if !evs.iter().any(declares_terminal) {
-                    continue;
-                }
-                if live_only {
-                    let newest_closure = evs
-                        .iter()
-                        .filter(|e| declares_terminal(e))
-                        .map(event_ts)
-                        .max()
-                        .unwrap_or_default();
-                    let newest_withdrawal = evs
-                        .iter()
-                        .filter(|e| declares_falsified(e))
-                        .map(event_ts)
-                        .max()
-                        .unwrap_or_default();
-                    // A withdrawal only counts when it POSTDATES the closure it
-                    // retracts; a later re-closure wins again.
-                    if !newest_withdrawal.is_empty() && newest_withdrawal > newest_closure {
-                        continue;
+                // A `declares` entry: the event carries `type: completed`, or nests
+                // `event: completed` / `event: {type: completed}` (the shapes the old
+                // awk reached via `/type: completed/ || /event: completed/`).
+                let declares_terminal = |event: &serde_yaml::Value| -> bool {
+                    if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
+                        return true;
+                    }
+                    if let Some(inner) = event.get("event")
+                        && (inner.as_str() == Some("completed")
+                            || inner.get("type").and_then(serde_yaml::Value::as_str)
+                                == Some("completed"))
+                    {
+                        return true;
+                    }
+                    false
+                };
+                // ORDER 751-i9mb. Packets do not only live at `doc["packets"]`.
+                // Compaction folds every fragment INTO plan/index.yaml, where they
+                // live at `plan_index.steps[]` — so this subcommand, pointed at the
+                // base ledger, parsed all 3.4MB and printed NOTHING with exit 0.
+                // Empty-and-zero is indistinguishable from "declares no terminal
+                // events", so a checker built on that answer reports clean on a
+                // ledger it never examined: this guard's OWN failure class
+                // (785-sqe6, 787-f7dh), and the mechanical reason packet 532 sat
+                // claimable with its exit criterion already green while
+                // `./build.sh --check` printed ok:no-fragment-status-loss.
+                //
+                // The walk stops descending at any mapping carrying `packet_id` —
+                // the same rule the fold itself uses — so it is shape-independent
+                // by construction and a future ledger layout cannot silently
+                // re-blind it. Fragments (top-level `packets:`) and the base
+                // (`plan_index.steps[]`) both fall out of the one rule.
+                fn collect_packet_nodes(v: &serde_yaml::Value, out: &mut Vec<serde_yaml::Value>) {
+                    if v.get("packet_id").is_some() {
+                        out.push(v.clone());
+                        return;
+                    }
+                    if let Some(map) = v.as_mapping() {
+                        for (_k, val) in map {
+                            collect_packet_nodes(val, out);
+                        }
+                    } else if let Some(seq) = v.as_sequence() {
+                        for item in seq {
+                            collect_packet_nodes(item, out);
+                        }
                     }
                 }
-                ids.push(pid.to_string());
-            }
-            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
-            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
-                for e in evs {
-                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+
+                // ORDER 751-i9mb. `--live` additionally applies the WITHDRAWAL rule:
+                // a closure that a later `falsified` event retracted is not a live
+                // declaration. Opt-in, so the existing gate's syntactic question —
+                // "does this events block DECLARE a terminal event?" — is unchanged
+                // and its callers keep their exact semantics. The advisory base pass
+                // asks the different, semantic question, and the packet requires the
+                // negative control: "a packet ... whose closure was later falsified"
+                // must NOT be flagged.
+                //
+                // Timestamps are ISO-8601 Zulu, which orders correctly under plain
+                // lexicographic comparison; an event with no ts sorts as empty and
+                // therefore never wins against a stamped one.
+                let live_only = args.iter().any(|a| a == "--live");
+                let event_ts = |e: &serde_yaml::Value| -> String {
+                    e.get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .or_else(|| e.get("event").and_then(|i| i.get("ts")?.as_str()))
+                        .unwrap_or("")
+                        .to_string()
+                };
+                let declares_falsified = |event: &serde_yaml::Value| -> bool {
+                    if event.get("type").and_then(serde_yaml::Value::as_str) == Some("falsified") {
+                        return true;
+                    }
+                    if let Some(inner) = event.get("event")
+                        && (inner.as_str() == Some("falsified")
+                            || inner.get("type").and_then(serde_yaml::Value::as_str)
+                                == Some("falsified"))
+                    {
+                        return true;
+                    }
+                    false
+                };
+
+                let mut ids: Vec<String> = Vec::new();
+                // Inline: a node carrying packet_id and events: [{type: completed}],
+                // at ANY depth.
+                let mut packet_nodes: Vec<serde_yaml::Value> = Vec::new();
+                collect_packet_nodes(&doc, &mut packet_nodes);
+                for p in &packet_nodes {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
                         continue;
                     };
-                    if e.get("event").is_some_and(declares_terminal) {
-                        ids.push(pid.to_string());
+                    let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                        continue;
+                    };
+                    if !evs.iter().any(declares_terminal) {
+                        continue;
+                    }
+                    if live_only {
+                        let newest_closure = evs
+                            .iter()
+                            .filter(|e| declares_terminal(e))
+                            .map(event_ts)
+                            .max()
+                            .unwrap_or_default();
+                        let newest_withdrawal = evs
+                            .iter()
+                            .filter(|e| declares_falsified(e))
+                            .map(event_ts)
+                            .max()
+                            .unwrap_or_default();
+                        // A withdrawal only counts when it POSTDATES the closure it
+                        // retracts; a later re-closure wins again.
+                        if !newest_withdrawal.is_empty() && newest_withdrawal > newest_closure {
+                            continue;
+                        }
+                    }
+                    ids.push(pid.to_string());
+                }
+                // Top-level: events: [{packet_id, event: {type: completed, ...}}]
+                if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                    for e in evs {
+                        let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str)
+                        else {
+                            continue;
+                        };
+                        if e.get("event").is_some_and(declares_terminal) {
+                            ids.push(pid.to_string());
+                        }
                     }
                 }
-            }
-            ids.sort_unstable();
-            ids.dedup();
-            for id in ids {
-                emit(&id);
+                ids.sort_unstable();
+                ids.dedup();
+                if framed {
+                    if ids.is_empty() {
+                        emit_fragment_frame("ok", path, "");
+                    } else {
+                        for id in &ids {
+                            emit_fragment_frame("ok", path, id);
+                        }
+                    }
+                } else {
+                    for id in ids {
+                        emit(&id);
+                    }
+                }
             }
             true
         }
@@ -7004,12 +7145,67 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // args[0] is the subcommand itself (same convention as the `status`
             // arm's args.get(1)); skip it or the subcommand name becomes the
             // packet reference and every invocation refuses.
+            // ORDER 1285-vz27. THE PARSER USED TO SKIP `i += 2` FOR ANY TOKEN
+            // STARTING WITH `--`, which is two bugs in one line:
+            //
+            //   an UNKNOWN flag silently ate the next token, so a typo or a
+            //   flag borrowed from a sibling subcommand (--value-file, which
+            //   set-field never had) vanished along with its argument; and
+            //
+            //   a VALUELESS flag (--append/--replace/--backfill) ate the token
+            //   after it, which is normally the NEXT FLAG's name — shifting
+            //   every later token left and promoting some unrelated string to
+            //   the positional VALUE.
+            //
+            // Both then WROTE and printed a success line. Measured on macneo
+            // 2026-09-19: `next_action` on a p1 row was overwritten with the
+            // literal `tlatoanis-macbook-neo`, and `check` reported ok, ids
+            // unique, references sound — every validator passing over a field
+            // that had just been replaced by a hostname. Reproduced here on a
+            // throwaway ledger with the same command line: `--append` consumed
+            // `--ts`, and the row's next_action gained a dated attribution line
+            // whose entire content was a bare timestamp. THE PAYLOAD DEPENDS ON
+            // ARG ORDER; the defect does not.
+            //
+            // The vocabulary is declared so an unknown flag can be NAMED rather
+            // than absorbed. A flag that takes a value must be listed here when
+            // it is added, and forgetting to costs a refusal, not a silent write.
+            const VALUE_FLAGS: &[&str] = &[
+                "--ts",
+                "--host",
+                "--reason",
+                "--evidence",
+                "--reopen-evidence",
+                "--value-file",
+            ];
+            const BOOL_FLAGS: &[&str] = &["--append", "--replace", "--backfill"];
+
             let positional: Vec<String> = {
                 let mut out = Vec::new();
                 let mut i = 1;
                 while i < args.len() {
-                    if args[i].starts_with("--") {
-                        i += 2;
+                    let a = args[i].as_str();
+                    if a.starts_with("--") {
+                        if VALUE_FLAGS.contains(&a) {
+                            i += 2;
+                        } else if BOOL_FLAGS.contains(&a) {
+                            i += 1;
+                        } else {
+                            eprintln!(
+                                "error: unknown flag '{a}' for set-field — REFUSED before any write.\n\
+                                 \n\
+                                 An unknown flag used to be skipped ALONG WITH THE TOKEN AFTER IT, so the\n\
+                                 value that followed became the field value and the write reported success\n\
+                                 (order 1285-vz27: a p1 row's next_action was overwritten with a hostname).\n\
+                                 \n\
+                                 set-field accepts:\n\
+                                   with a value: --ts --host --reason --evidence --reopen-evidence --value-file\n\
+                                   on their own: --append --replace --backfill\n\
+                                 \n\
+                                 For long prose use --value-file <path>, so no shell ever sees the text."
+                            );
+                            std::process::exit(2);
+                        }
                     } else {
                         out.push(args[i].clone());
                         i += 1;
@@ -7023,7 +7219,30 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     .and_then(|i| args.get(i + 1))
                     .cloned()
             };
-            if positional.len() < 3 {
+            // ORDER 1285-vz27, criterion 2. PROSE FROM A FILE, so no shell ever
+            // sees the text. append-event has had --summary-file for exactly
+            // this reason; set-field offering only a positional <value> is what
+            // pushed long-form writes through shell quoting in the first place,
+            // and a long-form field is where a mangled value does the most harm.
+            let value_file = flagged("--value-file");
+            if let Some(ref vf) = value_file {
+                if positional.len() > 2 {
+                    eprintln!(
+                        "error: both a positional <value> and --value-file {vf} were given — REFUSED.\n\
+                         Pass the value one way or the other; guessing which the caller meant is how\n\
+                         1285-vz27 wrote a hostname into a p1 row's next_action."
+                    );
+                    std::process::exit(2);
+                }
+                if positional.len() < 2 {
+                    eprintln!(
+                        "usage: tillandsias-plan set-field <id|order> <field> --value-file <path> [...]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+
+            if value_file.is_none() && positional.len() < 3 {
                 eprintln!(
                     "usage: tillandsias-plan set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT] [--append|--replace]\n\
                      \n\
@@ -7036,11 +7255,44 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 );
                 std::process::exit(2);
             }
-            let (target, field, value) = (
-                positional[0].clone(),
-                positional[1].clone(),
-                positional[2].clone(),
-            );
+            let (target, field) = (positional[0].clone(), positional[1].clone());
+            let value = match value_file {
+                Some(ref path) => match std::fs::read_to_string(path) {
+                    Ok(text) => text.trim_end_matches('\n').to_string(),
+                    Err(e) => {
+                        eprintln!("error: --value-file {path}: {e} — REFUSED before any write");
+                        std::process::exit(2);
+                    }
+                },
+                None => positional[2].clone(),
+            };
+
+            // ORDER 1285-vz27, criterion 3. THE OBSERVABLE SIGNATURE OF THE
+            // MISPARSE. When a flag ate the wrong token, the value that landed
+            // was byte-identical to some OTHER flag's argument on the same
+            // command line — macneo's was the --host value, and the
+            // reproduction here landed the --ts value. The parse above should
+            // make that unreachable, but this is cheap and it is the check that
+            // would have caught the original incident BEFORE the ledger was
+            // written, whatever future flag handling gets wrong.
+            if value_file.is_none() {
+                for f in VALUE_FLAGS.iter().chain(BOOL_FLAGS.iter()) {
+                    if let Some(other) = flagged(f)
+                        && other == value
+                        && !other.is_empty()
+                    {
+                        eprintln!(
+                            "error: the value is byte-identical to the argument of {f} ('{value}') — REFUSED.\n\
+                                 \n\
+                                 That is the signature of a flag consuming the wrong token (1285-vz27): the\n\
+                                 field would be written with a timestamp, a hostname or a reason string that\n\
+                                 the caller meant for a flag. If the value is genuinely meant to equal that\n\
+                                 argument, pass it with --value-file, which is not subject to this check."
+                        );
+                        std::process::exit(2);
+                    }
+                }
+            }
 
             // Resolve against the FOLDED ledger so a fragment-only packet is
             // reachable. A typo must refuse, never write a fragment that

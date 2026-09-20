@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    event:
+      type: closure
+      ts: "2026-09-20T15:42:31Z"
+      agent_id: windows-yolanda-claude-20260920t154231z
+      host: yolanda-windows
+      summary: |-
+        CLOSED by pinning. esme's fix 9b7180a9c made the Windows host lane refuse on arrival; the row waited on a guard, and litmus:windows-host-lane-refusal is it - spec init-command, phase pre-build, size instant, bound in openspec/litmus-bindings.yaml, on trunk in land 27 (319c1e7e0), running in 5.1-7.7s. WHAT IT PINS IS THE ORDER, not the text: windows_host_lane_refusal() is called BEFORE require_desktop_user_session and report_runtime_lane inside run_init, with exactly two cfg-gated definitions, the refused:windows-host-lane token, the named tray command, and None on not(windows) so Linux keeps its lane by construction. BOTH CONTROLS MEASURED RED FIRST: removing the call goes red naming the pre-fix state, and MOVING the call below lane selection goes red on POSITION while the text arms stay GREEN - that second one is why this fixture is worth having, because a text-only litmus passes a refusal that merely moved and the defect survives it. BEHAVIOURAL ARM, run on yolanda: native tillandsias.exe --init exits 1, prints the refusal, names tillandsias-tray.exe --provision-once, and emits ZERO image-build lines against the operator's pre-fix signature of eight; off msys it skips BY NAME so a green run elsewhere cannot be read as a behavioural pass. THREE REFUSALS ON THE WAY, all mine and all correct: a python3 -c control under 1087-h2z9, three grep -q-in-a-pipeline guards under 795-imz3 in the controls file, and a binding placed in the ci-release block where the runner silently never discovered it - zero mentions, not even a skip line.
