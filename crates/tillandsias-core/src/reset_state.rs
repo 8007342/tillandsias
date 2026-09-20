@@ -49,14 +49,12 @@ pub fn destructive_reset_allowed() -> bool {
 /// The exact line every platform prints when the opt-out above suppressed the
 /// reset. A shared constant rather than three string literals so it is
 /// greppable across the fleet and cannot drift.
-pub const RESET_SKIPPED_LINE: &str =
-    "[tillandsias] --reset-state: reset SKIPPED by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \
+pub const RESET_SKIPPED_LINE: &str = "[tillandsias] --reset-state: reset SKIPPED by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \
      — reprovisioning through the platform's plain init instead.";
 
 /// The exact prefix of the refusal every platform prints when its reprovision
 /// path is absent. See [`announce_reset_plan`]'s note on the pre-flight guard.
-pub const RESET_NO_REPROVISION_PATH: &str =
-    "[tillandsias] --reset-state: REFUSING to destroy anything — the reprovision \
+pub const RESET_NO_REPROVISION_PATH: &str = "[tillandsias] --reset-state: REFUSING to destroy anything — the reprovision \
      path is missing or not executable:";
 
 /// Print the reset plan BEFORE anything is touched.

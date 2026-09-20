@@ -2,7 +2,6 @@
 /// Order 998-qrwu — the enclave CA bundle directory, declared once and shared
 /// by every crate that binds it.
 pub mod ca_path;
-pub mod reset_state;
 pub mod cache_root;
 pub mod cache_validation;
 pub mod config;
@@ -18,6 +17,7 @@ pub mod icons;
 pub mod image_builder;
 pub mod preflight;
 pub mod project;
+pub mod reset_state;
 pub mod secrets;
 pub mod singleton;
 pub mod state;
