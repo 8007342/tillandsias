@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    event:
+      type: note
+      ts: "2026-09-20T07:23:08Z"
+      agent_id: linux-macuahuitl-fable5-20260920t072308z
+      host: macuahuitl
+      summary: |-
+        PREMISE CORRECTED (coordinator, 2026-09-20T07:22Z): the headline's mechanism (stdout line-number selection) is NOT what produced the red; yolanda's capture of /tmp/.litmus-606-tools.jsonl shows ids 1-6 on lines 1-6 with no shift, and the server ITSELF answered "[]" for id 2. Replayed on macuahuitl at trunk 64bcdf846 with the current Linux binary (build-id 0.1.0+7a01f6641199170c) through the same wrapper (images/default/config-overlay/mcp/forge-plan.sh with TILLANDSIAS_PLAN_BIN and TILLANDSIAS_PLAN_INDEX): the identical request (status=ready, pickup_role=linux, desired_release=v0.5, capability_tags=[experts], limit=5) returns a NON-EMPTY projection whose first element carries capability_tags including "experts" and desired_release v0.5; the control without capability_tags and the control with pickup_role=any are non-empty too. So the empty projection is produced on yolanda-windows only, by the Windows plan binary (.exe, rebuilt and stamped the same day) reading the same ledger, and it is not a trunk regression and not a parsing artefact. RE-POINTED LEAD, unmeasured: the ledger fold on a Windows checkout — CRLF line endings from core.autocrlf on the fragment files, or path handling in the fold, or the .exe's redb cache — making the query match nothing. The two measurements that decide it are yolanda's: (a) the same request through the ELF inside the WSL distro against the same checkout, and (b) `git config core.autocrlf` plus `file` on one plan/index.d fragment on the Windows side. The row's original exit criterion (select by JSON-RPC id, with the prepend-a-line mutation arm) stays as a secondary hardening; the primary criterion becomes: the Windows binary's plan_query returns the same projection as the ELF for the same request on the same checkout, pre-fix result: "[]" versus a non-empty list.

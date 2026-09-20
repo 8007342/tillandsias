@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: note
+      ts: "2026-09-20T07:48:04Z"
+      agent_id: linux-macuahuitl-fable5-20260920t074804z
+      host: macuahuitl
+      summary: |-
+        Per-attempt cost MEASURED on esmeraldinha (esme, 2026-09-20; recorded here by the coordinator so the floor host does not spend another attempt to file it): ONE attempt of the plan-only push lane costs 783 seconds (thirteen minutes) on that host, and that round did not even push (it fetched, selected paths, ran the trunk-fold check over drvfs, found everything already on trunk and returned skip:nothing-new), so ~13 minutes is the FIXED overhead per attempt before any push, dominated by the fold check over drvfs. Against the retry budget of three, a full run of the lane spans about forty minutes of wall clock, during which a busy trunk moves several times, so `refused:fragments-to-trunk:raced:3` is the EXPECTED outcome on this tier, not bad luck; the row's "the loop terminates only if trunk stays quiet for one attempt" must read "one attempt" as thirteen minutes. esme raced twice and landed on the third run. Not measured: the per-attempt cost with the fold check served from a distro-native path instead of drvfs, which is the obvious remedy candidate.

@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: enumerate-what-the-read-only-usr-lib-wsl-mount-actually-exposes-inside-the-inference-container-file-by-file-and-by-what-reads-it
+    event:
+      type: note
+      ts: "2026-09-20T04:45:00Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        THE BOUNDARY, MEASURED: /usr/lib/wsl IS TWO MOUNTS WITH DIFFERENT SAFETY PROPERTIES, AND THE ONE THE CODE SETS LD_LIBRARY_PATH INTO IS WRITABLE IN THE GUEST. Measured on esmeraldinha 2026-09-20 against the mount as it stands in trunk at b2a3e0ab8. This answers questions 1 and 3 of the closure in full FROM THE GUEST SIDE, and does NOT answer question 2 or the in-container half of 1 and 3 — the reason and what would close them are stated at the end. Measurement only; nothing was changed.
+
+        WHAT THE MOUNT IS, from crates/tillandsias-headless/src/main.rs:5007 (wsl2_dxg_container_args): --device /dev/dxg, -v /usr/lib/wsl:/usr/lib/wsl:ro, and --env LD_LIBRARY_PATH=/usr/lib/wsl/lib. The third element is not mentioned in this row's context and it matters; see FINDING 3.
+
+        === 1. WHAT IS THERE ===
+
+        /usr/lib/wsl has exactly TWO top-level entries, and they are different kinds of object:
+
+          drivers/  2,353,628,107 bytes (2.35 GB) — mount: 9p, ro,nosuid,nodev,noatime, aname=drivers, fmask=222, dmask=222
+          lib/          8,624,232 bytes (8.6 MB) — mount: OVERLAY, rw,nosuid,nodev,noatime, lowerdir=/gpu_lib_packaged:/gpu_lib_inbox, upperdir=/gpu_lib/rw/upper
+
+        lib/ IN FULL — three files, all mode -r-xr-xr-x, nothing else:
+          libd3d12.so        801,840   (Oct 20 2023)
+          libd3d12core.so  6,880,344   (Oct 20 2023)
+          libdxcore.so       942,048   (Mar 31 2024)
+
+        drivers/ TOP LEVEL — 795 entries, and the parts sum to the total (verified: dirs 759 + files 36 + links 0 + other 0 = 795):
+          759 directories: 757 matching <name>.inf_amd64_<16 hex>, 2 matching <name>.inf_x86_<16 hex>
+          36 regular files: ALL are .ini, all mode -r-xr-xr-x, 291 to 19,527 bytes
+           0 symlinks, 0 sockets, 0 fifos, 0 device nodes
+
+        THE THIRD CATEGORY — the row asked for anything that is neither a driver-store directory nor a shared library to be listed individually. It is those 36 .ini files, plus the 2 x86 directories. Named in full: the .ini set is alderlakepch-ndmasecextension, alderlakepch-nsystem, alderlakesystem, "benq pd3200u", bertreader, cui_dch (x2), dal, hdbusext, heci, hideventfilter, ialpss2_gpio2_adl_n, ialpss2_i2c_adl_n, ialpss2_spi_adl_n, ialpss2_uart2_adl_n, iclsclient, igs, iigd_dch, intcdaud, ipf_acpi, ipf_cpu, ipf_smbus, ish, ishheci, ishheciextensiontemplate, ishhidbus, ishhidmini, ishoed, mewmiprov, mshdadac, mxc6655angle, prnms009, rtkfilter, rtucx22x64, rtux64w10, voiceclarityep_audio_component. The two x86 directories are ntprint.inf_x86_3f3acf80221b4fbb and prnms003.inf_x86_075066381e43ab43 — print drivers.
+
+        WHOLE-TREE CENSUS (walks all of drivers/, 5 seconds warm): 1,930 files across 788 directories. By extension: 759 inf, 426 sys, 297 dll, 119 bin, 52 ini, 52 cat, 28 mof, 26 xml, 25 gpd, 24 exe, 20 pnf, 13 vp, 11 dat, 8 so, 8 gdl, 7 txt, 6 wmv, 6 elf, 5 ppd, 5 hlp, 4 ntf, 3 cpa, 2 msc, 2 json, 2 cty.
+
+        === 2. WHAT READS IT — NOT ANSWERED, AND NOT GUESSED ===
+
+        No container runtime exists on this host: podman is absent from BOTH WSL2 distros (tillandsias-build and tillandsias) and from the Windows side, and docker is absent from the Windows side. So the strace-during-an-inference-run that question 2 requires could not be performed here, and no substitute observation was made. THE EXPECTED ANSWER IS STILL ONLY AN EXPECTATION: the row predicts "the Vulkan loader and dzn", and this audit neither confirms nor refutes it. Anyone closing this row must run that arm; the interesting result is the one that finds a THIRD reader, and nothing here has looked. Recording the expectation as if it were a result is precisely the literal-in-place-of-evidence shape this row was filed to avoid.
+
+        === 3. WHAT IS REACHABLE THAT SHOULD NOT BE ===
+
+        FINDING 1 — NO ESCAPE BY SYMLINK. NEGATIVE, with the command. find /usr/lib/wsl -type l returns ZERO symlinks anywhere in the tree, so no path under the mount redirects outside it. Also negative: find /usr/lib/wsl -perm /6000 finds no setuid or setgid file, and find /usr/lib/wsl ! -type f ! -type d ! -type l finds no device node, socket or fifo. The tree is regular files and directories only.
+
+        FINDING 2 — drivers/ IS GENUINELY READ-ONLY, IN THE GUEST, BEFORE THE CONTAINER :ro EVEN APPLIES. Established by attempting it as guest root, not by reading the flags: touch /usr/lib/wsl/drivers/.probe fails with "Read-only file system", and appending to an existing driver file (acpi.inf) fails the same way. The 9p mount carries fmask=222/dmask=222, so no write bit exists to begin with. Two independent barriers, and the container :ro is a third.
+
+        FINDING 3 — lib/ IS WRITABLE BY GUEST ROOT, AND IT IS THE DIRECTORY THE CONTAINER IS POINTED AT VIA LD_LIBRARY_PATH. This is the one finding that is not reassuring, and it is asserted POSITIVELY with the command: as root in tillandsias-build, touch /usr/lib/wsl/lib/.tillandsias-1267-probe SUCCEEDED, the file appeared mode -rw-r--r-- owned by root, and it was removed again (verified absent). That is the guest-side mount, which is an rw overlay with upperdir=/gpu_lib/rw/upper — writable by construction, unlike drivers/.
+          WHY IT MATTERS RATHER THAN BEING A CURIOSITY. The container args set LD_LIBRARY_PATH=/usr/lib/wsl/lib, so the dynamic loader in EVERY process in the inference container searches that directory for EVERY library it resolves, not only for the three d3d12 objects. A library planted there by a guest-side writer would be found by that search. The container :ro stops the CONTAINER from writing the tree; it does nothing about what the GUEST writes into a directory the container then loads from.
+          THE HONEST BOUND ON THIS, so it is not over-claimed. It requires root in the WSL2 guest. Anyone with guest root can already do considerably worse to this host, so this is NOT a privilege escalation and it is NOT an argument to revert the mount. What it is: the mount trust boundary is wider than ":ro" suggests to a reader, and the widening comes from LD_LIBRARY_PATH rather than from the bind. Worth pinning deliberately rather than leaving implied — a narrower LD_LIBRARY_PATH, or pointing it at a copy the container owns, would close it if someone judges it worth closing.
+
+        FINDING 4 — WHAT THE TREE DISCLOSES, which is the operator stated unknown ("we're not entirely sure what that surface exposes besides those drivers"). It exposes considerably more than the GPU driver, and the extra is not executable risk but INVENTORY. The 759 driver directories are the host whole projected Windows driver store, and their names disclose the machine hardware and configuration: an attached BenQ PD3200U monitor, Intel Alder Lake-N platform drivers, Intel CSME/HECI and PTT/TPM provisioning services, Realtek Bluetooth, a Qualcomm WLAN driver, and printer drivers. Any process in the inference container can read all of it.
+
+        FINDING 5 — LINUX-LOADABLE CODE IN THE TREE, enumerated because "it is only Windows drivers" would have been the comfortable wrong answer. 8 ELF shared objects, ALL in the Intel iGPU directory iigd_dch.inf_amd64_046f5bd4083e9122, totalling ~125 MB: libigc.so (67.7 MB), libLLVM-14.so (34.7 MB), libigd12dxva64.so (12.1 MB), libigd12um64xel.so (8.9 MB), libigdfcl.so, libwsl_compute_helper.so, libUniversalAdapter64.so, libigd12umd64.so. These are x86-64 ELF and genuinely loadable in the container — libLLVM-14.so in particular means a full LLVM 14 is reachable inside the enclave. There are also 6 ELF files under qcwlan64.inf_amd64_*, which are 32-bit ARM statically-linked firmware images — not executable on this host, and named here so the next reader does not have to re-establish it.
+          THE 24 .exe ARE NOT A LINUX CONCERN BUT THEIR MODE IS WORTH KNOWING: every one is mode -r-xr-xr-x, i.e. the execute bit IS set, on PE binaries including vulkaninfo-64.exe, several Intel graphics services, jhi_service.exe, TPMProvisioningService.exe and PlatformLicenseManagerService.exe. They cannot execute in a container without WSL interop or a binfmt handler; whether the inference container has either was NOT tested, and that is part of question 2 unrun arm.
+
+        === METHOD, AND AN INSTRUMENT DEFECT THAT PRODUCED FALSE NUMBERS FIRST ===
+
+        All counts above come from absolute-path find under bash <script> executed in the guest, with the script staged as a FILE. That is deliberate. An earlier pass of this same audit, written as inline wsl.exe -d <distro> -- bash -lc '<multi-line string>' from Git Bash on the Windows side, produced CONFIDENTLY WRONG counts: it reported 59 top-level entries, 27 directories, 43 files and 1 symlink for the drivers tree. The true values are 795 / 759 / 36 / 0. The cause is MSYS path and argument mangling across the wsl.exe boundary — shell variables set inside the string did not expand, so find $D became find with no path and silently enumerated the REPO ROOT instead, and a /mnt/c/... script path was rewritten to C:/Program Files/Git/mnt/c/.... cd also appeared to fail (rc=0, $PWD unchanged) while actually working, which sent me chasing the mount instead of the invocation. THE GENERAL RULE, which is why this is recorded rather than quietly fixed: on a Windows host, a sweep driven by an inline string through wsl.exe can report a plausible number for the wrong directory with no error anywhere. Stage the script as a file, use absolute paths, set MSYS_NO_PATHCONV=1, and make the parts sum to the total — the sum check is what caught this. An enumeration is only as good as its enumerator, and this one lied first.
+
+        === WHAT REMAINS, STATED SO THE ROW IS NOT READ AS DONE ===
+
+        This is the guest-side half. It does NOT close 1267-fj2z. Outstanding:
+          (a) Question 2 entirely — strace, or equivalent, filtered to the /usr/lib/wsl prefix during a representative inference run, to find out what actually opens paths there and whether anything beyond the Vulkan loader and dzn does.
+          (b) The in-container re-run of questions 1 and 3: the tree AS SEEN FROM INSIDE the container, and a positive test that a write from inside fails under :ro. The guest-side result does not stand in for it — FINDING 3 shows the two sides differ.
+          (c) The fixture the closure requires: the mount is read-only from inside the container, and absent entirely where /usr/lib/wsl does not exist, WITH the mutation arm showing the second assertion fails if the host check is removed. Not written; this pass was measurement only per the coordinator instruction.
+        BLOCKER FOR (a) AND (b) ON THIS HOST: no container runtime is installed, in either distro or on Windows. A host with podman and the inference image can do all three; this host cannot today.

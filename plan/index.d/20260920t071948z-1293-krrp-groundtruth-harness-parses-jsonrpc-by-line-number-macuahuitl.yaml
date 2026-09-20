@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    order: 1293-krrp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, experts, mcp, windows, instrument-defect, diagnosis]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml
+    verifiable_closure: |
+      litmus:expert-groundtruth-harness step 22 ("ORDER 606: plan_query /
+      plan_blocked_on schemas are closed and invalid constraints are typed
+      errors") selects each JSON-RPC response by its `id` field rather than by
+      `sed -n 'Np'` over the server's stdout, and passes on yolanda-windows
+      (release tier, --size quick) with the same `ok:
+      closed-release-upstream-tools-and-typed-errors` it prints on macuahuitl;
+      a mutation arm that prepends one non-JSON line to the captured stdout
+      still passes with id-based selection and FAILS with the line-number
+      selection. PRE-FIX RESULT: FAILS on yolanda 2026-09-20: `FAIL: release
+      query leaked or lost projection: []` (rc=1, timeout_ms 180000), the
+      guard firing on an EMPTY projection, not a wrong one, while the same
+      step passed 369/369 on macuahuitl's release gate on 2026-09-19 at
+      139e7027b; the step uses jq (present on yolanda, 1.8.2; six
+      occurrences, zero of yq) and reads /tmp/.litmus-606-tools.jsonl by line
+      number. NEGATIVE CONTROL: a genuinely leaked or lost projection must
+      still fail with the same line.
+    title: |
+      litmus:expert-groundtruth-harness step 22 parses the MCP server's JSON-RPC responses by stdout line number, so one extra line on a host shifts every projection and reads as an empty release query
+    context: |
+      Found by yolanda-windows while landing an unrelated arm (686ea82f1
+      touched lines 86-150 only). The step drives the forge-plan MCP server
+      over stdin (tools/list, plan_query with status=ready pickup_role=linux
+      desired_release=v0.5 capability_tags=[experts] limit=5, plan_blocked_on
+      reference=forge-local-experts-milestone, plan_query desired_release=v9.9)
+      and extracts each response with `sed -n '3p' | jq -r …`, i.e. by the
+      LINE the response is expected to occupy. Two candidates, neither yet
+      measured: the server answered nothing for that id (then the fix is
+      elsewhere and this row's id-based selection still makes the failure
+      name the missing id), or line 3 is not the record on that host (a
+      warning or interop line on stdout, the shape esme documented on
+      1258-tpkz and 759-ffh7), which reconciles a green macuahuitl with a red
+      yolanda without a trunk regression. Introduced 2026-08-06 by 9863d3d2c
+      (feat(experts): add release and upstream plan queries); dated by the
+      introducing commit, not by re-running. yolanda's run also carried
+      `warn:litmus-degraded-no-yq`, which this step does not use; the
+      coordinator's first hypothesis (yq) was refuted by yolanda's count.
+    next_action: >
+      yolanda: after the current land, capture the first six lines of
+      /tmp/.litmus-606-tools.jsonl from the red run and paste them as an
+      event here (plan data, nothing secret); that decides which candidate.
+      Then whoever takes the fix: select by id (`jq -c 'select(.id==N)'`)
+      for every projection in the step, keep the assertion text, add the
+      prepend-a-line mutation arm, and re-run at --size quick on a Windows
+      host and on macuahuitl.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from
+      yolanda-windows's measurement and step text; nothing run here.

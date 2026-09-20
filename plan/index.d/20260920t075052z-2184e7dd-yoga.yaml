@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-tool-materialization-s-arms-step-pipes-the-fixture-through-tail-1-so-a-red-prints-only-tool-materialize-fail-and-the-failing-arm-and-its-regime-are-discarded
+    event:
+      type: evidence
+      ts: "2026-09-20T07:50:52Z"
+      agent_id: linux-yoga-claude-20260920t075052z
+      host: yoga
+      summary: |-
+        THREE DEVIATIONS FROM THIS ROW'S LITERAL TEXT, recorded so whoever scores the
+        closure reads what was DELIVERED rather than a literal written before the
+        mechanism it names existed.
+
+        1. assert_output_contains, NOT success_pattern. next_action says "match the
+           verdict with a success_pattern on the ok:tool-materialize:all token". The row
+           was filed 2026-09-19, before 1252-znbn landed structured assertions. Both
+           mechanisms would work here; the structured field is adjudicated BEFORE the
+           prose arms, so the sentence beside it cannot change the rule that decides the
+           verdict — which is the property that milestone exists to establish. Choosing
+           the older mechanism to match the text would have re-introduced the exact
+           coupling 1252-znbn removed. The choice is named in the YAML beside the step,
+           not only here.
+
+        2. THE TOKEN IS arm-surfaced:5/5, NOT THE LITERAL 2/2 THE CLOSURE NAMES. The
+           grammar `ok:tool-materialize-litmus:arm-surfaced:<n>/<n>` is preserved and
+           the fixture exits 0, but ANYTHING GREPPING FOR THE LITERAL `2/2` WILL NOT
+           MATCH. Stated plainly because a closure check that keys on the literal will
+           read this row as unmet. The five arms are the two the closure requires plus:
+             ARM 0   the regime probe reads REAL host values with nothing injected
+             ARM 1b  the red carries its measurements, not just an arm label
+             ARM 3   no step command truncates (regression on the idiom itself)
+           ARM 0 is not padding: arms 1 and 2 drive the guard by INJECTING the probe's
+           inputs, so without an uninjected run the production reading path
+           (/proc/loadavg, df on the extraction dir) could break or vanish and both arms
+           would still pass. The count was kept honest rather than trimmed to 2/2.
+
+        3. COST 27.80 / 27.57 s standalone, 29.0 s in the gate — the most expensive step
+           in gate-steps.d, against a ~1125s gate (~2.5%). It executes the real subject
+           fixture THREE times under three regimes and each run materializes a tool from
+           the toolbox. There is no cheaper honest form: collapsing ARM 0 turns arms 1-2
+           into injected-input-reaches-injected-branch. IF GATE TIME BECOMES THE BINDING
+           CONSTRAINT THIS STEP IS THE FIRST CANDIDATE FOR THE ADVISORY TIER — not the
+           sub-second deciders — because the defect it guards is release-tier-only and
+           the release tier would still catch it. Recorded now so that decision is made
+           on a measurement rather than on a stopwatch during a slow gate.
+
+        WHY IT IS A GATE STEP AT ALL, and the land tool made the case better than I
+        could: pushing this slice printed "NOTICE — 4 litmus spec(s) assert on the files
+        you are pushing, and ./build.sh --check ran NONE of them". Those are the specs
+        covering the two files this row edits. Without step 414 the change would have
+        reached trunk with nothing having exercised the fixture it modifies, first
+        execution at release time — which is precisely the condition that let an
+        unreadable red live here undetected.

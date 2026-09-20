@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-plan-binary-locus-native-asserts-probe-ORDERING-but-an-inherited-tillandsias-plan-bin-override-short-circuits-the-probe-by-design-so-the-fixture-reds-a-healthy-tree-on-exactly-the-hosts-that-must-set-it
+    event:
+      type: note
+      ts: "2026-09-20T06:53:03Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        INSIDE tillandsias-build THE PROBE RESOLVED THE WINDOWS .exe THROUGH WSL INTEROP AND FED IT A LINUX PATH, WHICH IS THE OPPOSITE OF WHAT THE PROBE'S OWN HEADER SAYS IT DOES. Measured on esmeraldinha 2026-09-20, running scripts/push-plan-fragments-to-trunk.sh inside the build distro against the shared /mnt/c checkout.
+
+        THE SYMPTOM, and it is a good one because it names its own locus if you read it:
+
+          error: read /mnt/c/Users/bullo/claudia/tillandsias/target/plan-scratch/fragments-to-trunk.jkTwrU/fold/plan/index.yaml: The system cannot find the path specified. (os error 3)
+          refused:fragments-to-trunk:trunk-fold:...
+
+        `The system cannot find the path specified` with `os error 3` is a WINDOWS error string, surfacing in a Linux distro, about a Linux path. Nothing else produces that combination: a Linux binary would have said `No such file or directory (os error 2)`. So the thing that ran was the PE, executed via WSL interop, handed `/mnt/c/...` which it cannot resolve as a Windows path.
+
+        AGAINST THE HEADER'S CLAIM. scripts/plan-binary-probe.sh documents at lines 77-95 that the ordering was deliberately changed FOR THIS EXACT HAZARD — "These used to try `.exe` before the ELF. Inside the tillandsias-build WSL2 [distro] ... with WSL interop enabled the .exe RUNS there — so this probe resolved the .exe while ensure_fresh_plan_binary rebuilt and touched the ELF. The thing touched was not the thing resolved, the .exe stayed stale forever" — and states the intended behaviour: "Inside a Linux distro the ELF runs and the .exe is skipped". On this host, in that distro, it did not. Either the claim or the behaviour is wrong, and which one is the measurement someone needs to take; I have not read the resolution order closely enough to say whether the candidate list, the probe-by-running, or the caller's own resolution is at fault. Note the header also asserts interop is "disabled in that distro today (a .exe there exits 126, Exec format error)" — that assertion is FALSE on esmeraldinha, and it is probably the load-bearing wrong premise.
+
+        THE WORKAROUND, which is this row's own subject and therefore worth being careful about. Setting
+
+          TILLANDSIAS_PLAN_BIN=/root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan
+
+        made the fold check pass immediately. But THIS ROW EXISTS because an inherited TILLANDSIAS_PLAN_BIN short-circuits the probe by design and reds test-plan-binary-locus-native on exactly the hosts that must set it. So the remedy for the defect above is the thing this row is about, and a host that adopts it to get work done is walking into the fixture failure this row describes. That composition is the finding: on a Windows host with a shared checkout, the probe misresolves without the override and the fixture reds with it. There is no setting that is correct for both today.
+
+        WHAT THIS DOES NOT SAY. It does not say the ELF was stale or fresh — that was a separate and independently real problem in the same session, and the two are easy to confuse because both surface at the same call site. It also does not establish whether the misresolution happens outside the fragments-to-trunk path; I only observed it there.

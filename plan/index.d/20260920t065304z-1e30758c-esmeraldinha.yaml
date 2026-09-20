@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-keyring-push-authorization-probe
+    event:
+      type: note
+      ts: "2026-09-20T06:53:04Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        A WINDOWS HOST'S PUSH CHANNEL FAILED IN THREE INDEPENDENT WAYS AT ONCE, AND EVERY KEYRING-SIDE PROBE STAYED GREEN THROUGH ALL OF IT. Measured on esmeraldinha 2026-09-20, start to finish, with the operator in the loop. Recorded here because this row is about probing push authorization from the host keyring, and the headline is that the keyring was never the problem and never could have told us.
+
+        WHAT EVERY PROBE SAID, while pushes were failing:
+          gh auth status                                   -> live fine-grained PAT, account 8007342, keyring
+          gh api repos/8007342/tillandsias --jq .permissions -> {"admin":true,...,"push":true}
+          git ls-remote                                     -> linux-next in under a second
+          gh auth git-credential get (invoked directly)     -> returned a correct username and password
+        All four green. All four irrelevant. The token was valid the entire time.
+
+        FAULT 1 — THE STORED CREDENTIAL WAS STALE, AND THE FAILURE STRING FOR THAT IS A THIRD ONE THIS FAMILY HAS NOT RECORDED.
+
+          remote: No anonymous write access.
+          fatal: Authentication failed for 'https://github.com/8007342/tillandsias.git/'
+
+        `No anonymous write access` means git presented NOTHING — not a rejected token, no token. That is distinct from the 401 (authentication failed, and git's store is ERASED) and the 403 (authorization failed, store INTACT) already on the esme credential notes. Here the store file was intact at 121 bytes and still nothing was sent, because what it held no longer satisfied the helper. Re-seeding it from the live token fixed it, and the direct push then reached `! [rejected] (non-fast-forward)` — a CONTENT refusal, which is the proof of authentication. DIAGNOSTIC RULE: on `No anonymous write access`, do not debug the token; the token is not being offered.
+
+        FAULT 2 — `!`-SHELL HELPERS WORK STANDALONE AND CANNOT NEST HERE. The operator ran `gh auth setup-git`, which writes URL-scoped helpers `!'C:\Program Files\GitHub CLI\gh.exe' auth git-credential` for github.com and gist.github.com. Those work from an interactive-depth git invocation and fail inside the push script. Two further traps found on the way: (a) this repo's LOCAL .git/config carries its own EMPTY `credential.helper` reset followed by `store --file=.git/.gh-credentials`, and git reads local AFTER global, so the reset WIPES the global gh helper the operator just installed — `gh auth setup-git` alone changes nothing in this repo; (b) passing the helper through GIT_CONFIG_COUNT/GIT_CONFIG_VALUE_* with the QUOTED FULL PATH does not survive the environment round-trip and the helper silently returns nothing (`could not read Username`), while `!gh.exe auth git-credential` — PATH-based, no spaces, no backslashes — does survive. Two different silent-nothing failures from the same intended configuration.
+
+        FAULT 3 — THE ROOT CAUSE, AND IT IS NOT A CREDENTIAL FAULT AT ALL. MSYS cannot fork `sh.exe` at the process depth the push script reaches. The logs carry, on every run:
+
+          0 [main] sh 1983 C:\Program Files\Git\usr\bin\sh.exe: *** fatal error - error while loading shared libraries: C: cannot open shared object file: No such file or directory
+
+        Git runs `!`-prefixed helpers THROUGH A SHELL, so when that fork fails the helper cannot run, git falls back to an anonymous push, and the failure is reported as an authentication problem. The pre-push hook, also a shell script, fails to spawn in the same breath. The depth is the variable: harness bash -> script bash -> git -> sh fails, while harness bash -> git -> sh succeeds. THIS IS WHY IT RESISTED DIAGNOSIS FOR AN HOUR: every direct `git push --dry-run` I ran to test the credential PASSED, because each was one level shallower than the thing that was failing. A probe that does not reproduce the caller's process depth is not testing the caller's channel.
+
+        THE FIX THAT ACTUALLY WORKS, and every Windows host on this fleet will need it: run the push INSIDE the WSL distro rather than from Git Bash.
+
+          MSYS_NO_PATHCONV=1 wsl.exe -d tillandsias-build -- bash -lc \
+            'cd /mnt/c/<checkout> && export TILLANDSIAS_PLAN_BIN=<the ELF> && bash scripts/push-plan-fragments-to-trunk.sh'
+
+        In the distro the helper chain reduces to the plain `store` helper, which is a binary and needs no shell, and MSYS is not in the path at all. That landed four fragments as ok:fragments-on-trunk:d582f0b29...:4.
+
+        WHAT THIS ROW SHOULD TAKE FROM IT. A host-keyring push-authorization probe that asks the KEYRING is testing the wrong end. Every keyring answer here was correct and the push still could not authenticate, because the failure was in the DELIVERY of the credential — helper chain composition, helper-value transport, and shell availability at spawn depth. A sound probe has to exercise the same helper chain, from the same process depth, as the push it is vouching for; anything else certifies a token that git will never be asked for. The one-shot `git push --dry-run --no-verify` to a real remote remains the only ground truth, and even that is only valid at the depth it is run.
+
+        OPERATIONAL RESIDUE: each hung attempt leaves `git-remote-https.exe` processes alive, and enough of them plus the harness's own bash processes make the MSYS fork failures MORE likely — so a retry loop degrades its own chances. Kill them between attempts.

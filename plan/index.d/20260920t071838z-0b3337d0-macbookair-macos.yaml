@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-20T07:18:38Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        CONFIG-CHANNEL DECISION, WITH A CORRECTION TO THE MECHANISM IT WAS PROPOSED ON. Writing this before the code, as instructed, because the reason is the part that has to survive.
+
+        THE PROPOSED SHAPE DOES NOT HOLD AS STATED, and I checked before building on it. The suggestion was that "the tray launches headless, so the forwarder's configuration travels as headless launch arguments". THE TRAY DOES NOT LAUNCH HEADLESS — systemd does, from a unit whose ExecStart is fixed:
+
+            ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+
+        and that unit is written by provision_user_data (vz.rs:761), i.e. FIRST BOOT ONLY. So launch arguments are baked at provision time and are exactly the channel this row already rejected twice — the same trap the model-cache work paid for. Environment= lines in the same unit fail for the identical reason.
+
+        WHAT IS ACTUALLY AVAILABLE, measured in the tree:
+          * `ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh` runs on EVERY boot before headless — but the script itself is provision-written, so it is a per-boot HOOK whose CONTENT is still first-boot.
+          * The control wire is live once the guest reaches Ready, and the tray already acts at that moment: it binds the host vsock listener there (vz.rs ~2447) under TILLANDSIAS_HOST_VSOCK_PORT.
+          * The three virtiofs shares are unsuitable on their own terms: home-src is a user directory, guest-bin is read-only, and the model cache is the wrong semantics AND a file there trips test-macos-model-share-writable.sh's empty-cache precondition (found the hard way by my own probe).
+
+        THE DECISION: the forwarder's configuration is PUSHED BY THE TRAY OVER THE CONTROL WIRE AT VM START, at the same point and from the same env the host listener is already bound, and READ BY HEADLESS AT CONTAINER-START TIME. Never persisted in the guest.
+
+        WHY THIS ONE, and each reason is a property rather than a preference:
+          1. SYMMETRY WITH THE HALF THAT ALREADY EXISTS. The host listener is opt-in from TILLANDSIAS_HOST_VSOCK_PORT / _FORWARD_TO, read by the tray at start. The guest half now opts in from the same place at the same moment, so the two cannot disagree about whether the lane is on — which is the failure a second, independent switch would invite.
+          2. IT CANNOT GO STALE, because nothing stores it. A reprovisioned guest gets it from the next VM start like any other; there is no persisted copy to diverge from the tray's view, and no migration path to forget.
+          3. IT IS NOT FIRST-BOOT. That is the whole point, and it is the property the two rejected candidates lack.
+          4. IT COSTS NOTHING WHEN OFF. With the env unset the tray pushes nothing, headless finds nothing, and the forwarder never starts — byte-identical behaviour to today, which is the same discipline the host listener's own comment insists on ("registering a port on every VM start would change startup for every user to serve a path nothing uses yet").
+
+        WHAT I AM NOT CLAIMING, so the next reader does not inherit an assumption: I have NOT yet established the exact ordering guarantee between the tray's push and headless's first container start. Containers are started from forge-launch paths rather than at boot, which suggests a comfortable window, but "suggests" is not a measurement and a race here would be the silent-success shape this milestone exists to remove. ESTABLISHING THAT ORDERING IS PART OF THE IMPLEMENTATION, not a detail to be assumed: if the window is not guaranteed, the read must be at container-start with a defined behaviour when the config is absent, rather than a read-once at headless start.
+
+        THE OTHER CONSTRAINTS STAND AND ARE NOT NEGOTIABLE BY THIS DECISION: the forwarder sits behind local_inference_disabled() as 620-ca7g requires of every inference start site, mutual exclusion with the inference container holds at ALL FIVE build_inference_run_args call sites, and the builder lands WITH its caller so -D dead-code is satisfied by use rather than by an allow.
+
+        CLOSURE IS UNCHANGED AND IS THE PRODUCT'S OWN PATH: a client container on the enclave network addressing http://inference:11434 receives a body composed on the macOS host, with THE PRODUCT launching the forwarder and no probe script involved. The probe harness that proved the capability is not evidence for this criterion.

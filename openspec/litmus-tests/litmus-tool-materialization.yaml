@@ -51,9 +51,25 @@ critical_path:
     expected_behavior: "ok: walk-up resolver"
 
   - step: "all materialization arms pass (curated PATH, no self-symlinks, decline-when-host-has-it, private library closure, corrupt-cache re-extraction, identical pilot verdict on three tool paths, measured margin)"
-    command: "bash scripts/test-tool-materialize.sh 2>&1 | tail -1"
+    # ORDER 1269-gfdi. The `| tail -1` that used to end this command threw away
+    # every FAIL: line the fixture prints and kept only its summary `tool-
+    # materialize: FAIL`, which names no arm and no regime. Inside a 900s
+    # release-tier step that discarded line is the ONLY thing a reader ever
+    # gets: measured on macuahuitl 2026-09-19, the captured output was that one
+    # line, while the same fixture standalone seconds later printed
+    # ok:tool-materialize:all with the margin arm at 1929ms vs 20473ms.
+    #
+    # assert_output_contains, NOT success_pattern, and the deviation is
+    # deliberate. The row's next_action says success_pattern because it was
+    # filed before 1252-znbn landed structured assertions. Both would work here;
+    # the structured field is adjudicated BEFORE the prose arms, so the sentence
+    # beside it cannot change the rule, which is the property that milestone
+    # exists to establish. Naming the choice rather than silently following the
+    # older mechanism.
+    command: "bash scripts/test-tool-materialize.sh 2>&1"
     timeout_ms: 900000
-    expected_behavior: "ok:tool-materialize:all"
+    expected_behavior: "the fixture's whole output is captured and it ends in its verdict token"
+    assert_output_contains: "ok:tool-materialize:all"
 
 evidence:
   artifact: "scripts/lib/tool-materialize.sh + scripts/lib/no-tool-path.sh + scripts/test-tool-materialize.sh + the pilot scripts/loop-success-probe.sh"

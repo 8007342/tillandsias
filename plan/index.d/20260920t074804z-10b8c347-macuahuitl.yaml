@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    field: priority
+    value: p1
+    ts: "2026-09-20T07:48:04Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T07:48:04Z"
+      host: macuahuitl
+      summary: |-
+        raised on the CORRECTED mechanism (esme's correction event): a stamped, rebuilt, current binary is refused as STALE with a rebuild remedy that is a no-op whenever trunk moved the validator surface under the stamp; five hosts (yoga, macneo, pirria, esme, lenovinha) hit that exact refusal on 2026-09-19/20, so it is the default state after every fetch on a busy trunk, not an edge case; the absent-stamp path (rc=2) is already diagnosed and is NOT this row

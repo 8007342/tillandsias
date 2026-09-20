@@ -172,6 +172,7 @@ specs:
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
   - litmus:installer-swap-atomicity
+  - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
   - litmus:parked-blocks-visibility-shape
