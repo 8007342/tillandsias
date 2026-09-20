@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-20T21:44:40Z"
+      agent_id: windows-yolanda-claude-20260920t214439z
+      host: yolanda-windows
+      summary: |
+        THE PRESENCE PROBE IS DISPROVED BY MEASUREMENT. Recorded so nobody re-proposes
+        it, including me.
+
+        The proposal was to assert a staged guest binary CONTAINS a token only a
+        listen-vsock build carries. Measured on yolanda 2026-09-20, a listen-vsock
+        build against a feature-less control compiled from the same source at the same
+        commit, same target (x86_64-unknown-linux-musl), counted with strings:
+
+            token             listen-vsock build    feature-less control
+            ---------------   ------------------    --------------------
+            tokio_vsock                        2                       2
+            tokio-vsock                        4                       2
+            VsockListener                      3                       3
+            vsock_loopback                     2                       2
+            AF_VSOCK                          14                      16
+            vsock                            206                     206
+
+        Only one of six differs in a usable direction, and only by a count. AF_VSOCK
+        appears MORE often in the control. The reason is structural rather than
+        incidental: the vsock vocabulary is linked into both binaries, and the feature
+        gates the LISTENER, not the words. So a probe asserting any of these tokens is
+        PRESENT would have passed the exact binary it was written to catch -- a false
+        pass on a check whose whole purpose is preventing one.
+
+        WHAT DISCRIMINATES IS THE BINARY'S OWN SELF-DECLARATION: the runtime refusal it
+        carries when the feature is absent, measured good 0 / control 1. The check
+        therefore asserts that string is ABSENT. This is stronger than any presence
+        probe, because the binary is stating what it is rather than being inferred
+        from linked symbols, and it is the same string that caught the original
+        524-second failure -- moved from the far end of a provision to the moment the
+        file is staged. Verified in both directions against the real pair: rc=0 on the
+        listen-vsock build, rc=1 on the control with the remedy named.
+
+        A NOTE ON WHY THE CONTROL WAS NECESSARY. The presence probe is plausible on
+        inspection and I would have shipped it; the source really does gate vsock code
+        behind the feature. What it does not gate is the vocabulary. Nothing short of
+        building the feature-less binary and counting would have shown that, which is
+        the general case for any probe that asserts a symptom rather than reading a
+        verdict the subject states about itself.
