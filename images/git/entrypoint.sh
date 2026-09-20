@@ -441,7 +441,70 @@ echo "$(date -Is) [git-service] daemon listening on 9418 (clones available; star
 # default. Failure is LOUD but non-fatal: the anonymous mirror lane above must
 # keep serving clones; an absent ssh lane means pushes have no authenticated
 # path, which the T13 litmus makes a named failure rather than a fallback.
+# ── Order 1313-prin: the mirror's SECOND Vault identity (host-cert signer) ──
+#
+# sshd-identity.sh requests a host certificate from
+# ssh-host-signer/sign/host-<mid>. The RELAY identity (git-mirror-agent) is
+# refused there by design — its token carries only git-mirror-policy, and the
+# per-mirror signer policy is deliberately NOT attached to that shared role,
+# because one role carrying every mirror's policy would let project A's mirror
+# sign project B's host certificates (D12). So signing needs its own identity,
+# its own agent and its own sink, and the launcher points
+# TILLANDSIAS_VAULT_TOKEN_FILE at that sink.
+#
+# MEASURED BEFORE THIS EXISTED (lenovinha 2026-09-20): the signer answered
+# http=403 permission denied, and auth/token/lookup-self inside this container
+# returned policies ["default","git-mirror-policy"].
+#
+# FAILS CLOSED BY CONSTRUCTION: if the signer material is absent, no signer
+# sink is written, sshd-identity.sh finds no token at the path it was given and
+# the lane stays ABSENT with the existing loud warning. It does NOT silently
+# borrow the relay token — that would hand certificate-minting power to the
+# identity that reaches GitHub.
+start_signer_vault_agent() {
+    _signer_doc="${TILLANDSIAS_SIGNER_APPROLE_DOCUMENT:-/run/secrets/vault-approle-signer}"
+    if [ ! -r "$_signer_doc" ]; then
+        echo "[vault-agent-signer] no signer AppRole material at $_signer_doc; the ssh push lane will stay ABSENT (1313-prin)" >&2
+        return 1
+    fi
+    [ -x "$VAULT_AGENT_BOOTSTRAP" ] || {
+        echo "[vault-agent-signer] bootstrap missing or not executable: $VAULT_AGENT_BOOTSTRAP" >&2
+        return 1
+    }
+    _signer_sink="${TILLANDSIAS_VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-signer-token}"
+    rm -f "$_signer_sink"
+    # The bootstrap takes every path from the environment, so the SAME script
+    # drives both agents and nothing about it needed changing for this.
+    VAULT_APPROLE_DOCUMENT="$_signer_doc" \
+    VAULT_AGENT_CONFIG=/etc/tillandsias/vault-agent-signer.hcl \
+    VAULT_ROLE_ID_FILE=/tmp/tillandsias-vault-signer-role-id \
+    VAULT_SECRET_ID_FILE=/tmp/tillandsias-vault-signer-secret-id \
+        "$VAULT_AGENT_BOOTSTRAP" &
+    SIGNER_AGENT_PID=$!
+
+    _waited=0
+    while [ "$_waited" -lt "$VAULT_AGENT_START_TIMEOUT" ]; do
+        if [ -s "$_signer_sink" ]; then
+            echo "$(date -Is) [git-service] signer Vault Agent ready (pid=$SIGNER_AGENT_PID; sink=$_signer_sink)" >> "$SLOG"
+            return 0
+        fi
+        # CAPTURE THE DEATH, do not assume the wait will end: an agent that
+        # exits before writing its sink must be reported as that, not as a
+        # timeout, because the two have different causes and different fixes.
+        if ! kill -0 "$SIGNER_AGENT_PID" 2>/dev/null; then
+            wait "$SIGNER_AGENT_PID" || true
+            echo "[vault-agent-signer] exited before writing its client-token sink" >&2
+            return 1
+        fi
+        sleep 1
+        _waited=$((_waited + 1))
+    done
+    echo "[vault-agent-signer] timed out after ${VAULT_AGENT_START_TIMEOUT}s waiting for its sink" >&2
+    return 1
+}
+
 if [ "${TILLANDSIAS_MIRROR_SSHD:-0}" = "1" ]; then
+    start_signer_vault_agent || true
     if ! /usr/local/bin/sshd-identity.sh ensure; then
         echo "WARNING: fail:sshd-identity:ensure — authenticated push lane ABSENT; anonymous mirror continues (749-54pv; lane flip is T11)" >&2
         echo "$(date -Is) [git-service] WARNING sshd-identity ensure failed; ssh push lane absent" >> "$SLOG"
