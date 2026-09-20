@@ -25,7 +25,7 @@ become `plan/issues/` work packets so they flow through the normal
 |---|---|---|---|
 | immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
-| macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
+| macOS | `scripts/install-macos.sh` via release curl URL — **launches the tray and begins VM provisioning; not a download test (1281-pgit)** | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
 | Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose — implemented by the §3 "Windows" block (`--provision-once`, `--status-once --json` polled to Ready, `--diagnose --json` LAST) |
 
 This is the only e2e install skill allowed on immutable Linux.
@@ -363,6 +363,33 @@ grep -qE "(^|[^0-9.])${SMOKE_TAG#v}([^0-9.]|\$)" target/smoke-e2e/01-version.txt
 > the clean-room test of a PUBLISHED release never once confirmed it was running
 > the release it claimed to be testing: a stale binary already on PATH would
 > answer `--version` and pass.
+
+**`install-macos.sh` is not a download test either — it launches the tray and
+provisions a VM (1281-pgit).** The hazard above is written for `install.sh` and
+Linux; the macOS installer does the platform equivalent and had no equivalent
+warning. MEASURED on macneo during the v56.9.19.1 and v56.9.19.2 smokes: §1 ends
+with "Launching Tillandsias (--init / VM provisioning runs automatically on
+first launch)", leaves a `tillandsias-tray` process running that §2 must then
+stop, and provisioning downloads a ~528 MB Fedora Cloud image in the background.
+
+WHY THE ASYMMETRY MATTERED, and why it is now stated on both paths: most of the
+fleet's macOS hosts are OPERATORS' WORKSTATIONS rather than dedicated smoke
+hosts, and this runbook has already recorded once that the distinction was
+missed (1004-vsh2 — "this section read as though every host running it were a
+smoke host"). A reader who has internalised "§1 is the safe download step, §2 is
+the destructive one" is correct on Linux by documentation and wrong on macOS.
+Say what §1 actually does before running it on a machine whose guest holds work
+someone has not finished with.
+
+AND AN INTERRUPTED INSTALL USED TO COST THE EXISTING APP. Until 1281-pgit the
+installer removed the previous backup and moved the live app aside BEFORE
+extracting, so a kill between those steps left `/Applications` with neither the
+app nor a backup — measured here when the installer was piped through `head` to
+read its first lines and died on SIGPIPE. The swap is now staged-extract,
+rename, rename, with the old backup dropped last and a trap that restores it, so
+the destination always holds a runnable app; `litmus:installer-swap-atomicity`
+pins that. A SIGKILL is still untrappable, so do not pipe the installer into
+something that closes early just to read its output — run it and read the log.
 
 macOS:
 
