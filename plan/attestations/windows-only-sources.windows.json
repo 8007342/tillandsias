@@ -1,15 +1,15 @@
 {
   "scope": "windows-only",
   "host": "windows",
-  "attested_at": "2026-08-28T23:05:43Z",
-  "commit": "4c22d6ca2a48aed338bd89fafbaef1b83cc87142",
+  "attested_at": "2026-09-19T17:07:48Z",
+  "commit": "e2c5fbe712d97cb21c4d5d6c7d0623bc4c391a2c",
   "command": "cargo test -p tillandsias-windows-tray --bins",
-  "result": "test result: ok. 106 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 31.59s",
+  "result": "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 32.24s;test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
   "sources": {
-    "crates/tillandsias-windows-tray/src/hvsocket.rs": "fd7788072fafa8622cd67c2cd354c0b9202219f1",
-    "crates/tillandsias-windows-tray/src/installation_uuid.rs": "8c75223416466ff92e19b8d1bf881e5b5030cae1",
-    "crates/tillandsias-windows-tray/src/notify_icon.rs": "e408a9e358bdc42409e65db8ded7bdf5ae3a7d8f",
-    "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs": "3761ebe12afc6ac0cb10fa3c007cc172ddfb463d"
+    "crates/tillandsias-windows-tray/src/hvsocket.rs": "7243768e50ebbacb42dac7b049edd53965c38cfa",
+    "crates/tillandsias-windows-tray/src/installation_uuid.rs": "383ba7529821bb21b9a393c70647fd0dc6c0ee0d",
+    "crates/tillandsias-windows-tray/src/notify_icon.rs": "ac3d45901be27186ba209fdd66f9901ad3949959",
+    "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs": "09c3a8e80db91254455d530c3c43e8e2cae417ca"
   },
   "known_red": ["# Tests allowed to be red when stamping Windows-only sources (order 716-f5kc).", "# Each entry needs a filed issue; an unexplained name here is how a stamp stops", "# meaning anything.", "#", "# Fails whenever the build counter moves without the committed guest asset being", "# rebuilt. Filed:", "# plan/issues/research-windows-tray-embedded-guest-binary-staleness-2026-08-13.md", "embedded_guest_headless_matches_workspace_version"]
 }
