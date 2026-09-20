@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fleet-topology-and-federated-identity-the-operator-s-homework-a-design-exploration-with-per-host-deploy-keys-now-a-github-app-later-the-pi-as-cache-never-on-the-push-path-and-no-meta-repository
+    order: 1292-mzr8
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [design, identity, github-app, git-mirror, topology, raspberry-pi, multi-host, operator-ruling]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/fleet-topology-and-federated-identity-2026-09-20.md
+    unscoreable: |
+      A design exploration the operator asked for as "homework" ("start
+      thinking of topology and federated identities"); it closes when the
+      operator has answered the note's open questions (at most five) and the
+      follow-on implementation packets exist, each with its own scorable
+      closure. Scored by reading the note and the operator's decisions.
+    title: |
+      fleet topology and federated identity — the operator's homework: a design exploration with per-host deploy keys now, a GitHub App later, the Pi as cache never on the push path, and no meta-repository
+    context: |
+      The note (owned file) is the panel's synthesis with the coordinator's
+      annotations. Its recommendation in one paragraph: three principals,
+      three credentials, each with the smallest home that works — the host to
+      its own mirror needs none (1288-5qpn), the mirror to GitHub uses a
+      per-host ed25519 deploy key minted at provision and held in that host's
+      Vault, the operator to GitHub is a one-time act on the release host; per-
+      host mirrors are permanent, the Pi joins as an ordinary enclave host and
+      earns a cache role that is never on any host's push path; a GitHub App
+      is worth building later for short-lived, centrally revocable installation
+      tokens, and when it is built its private key lives on the Pi with an
+      off-Pi backup, not on the operator's desktop; no browser popup login (it
+      would be a recurring manual step unreachable on headless members); no
+      `.tillandsias` meta-repository (git gives permanent history and merge
+      semantics to disposable high-churn state, adds a second credentialed
+      GitHub surface, and duplicates the plan ledger's authority) — ephemeral
+      coordination state goes to a small rebuildable LAN-local store on the Pi
+      instead. Verdict grammar for --github-status: ok / missing / locked /
+      rejected / unreachable, with rejected distinct from missing. Discovery
+      by mDNS with a static host-registry fallback that names itself. Vault
+      stays one per enclave, never centralised. The panel's disagreement on
+      where the GitHub credential sits (broker on macuahuitl / on the Pi / on
+      every host) is resolved in the note as "no broker on the operator's
+      desktop", and the operator may overrule it.
+    next_action: >
+      Operator: read the note, answer its open questions (the Pi's unseal path
+      without a desktop keychain; whether to overrule the popup-login and
+      meta-repository recommendations; deploy keys per host versus a GitHub
+      App first; where the App key lives and its backup; whether the Pi is one
+      board or several), then the coordinator files the implementation
+      packets per stage and closes this row citing them. 1288-5qpn proceeds
+      meanwhile on the Linux hosts and is unchanged by any answer here.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from the
+      operator's plan and a four-agent design panel; the panel's sketches are
+      in the session's workflow journal, the synthesis is the owned file.
