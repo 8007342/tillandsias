@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-idempotent-initialize-bare-metal-host-skill-that-brings-the-container-stack-up-and-deliberately-does-not-seed-prompt-for-or-copy-a-github-token
+    order: 1311-kmyk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [skills, containers, onboarding, multi-host, operator-ruling]
+    estimated_hours: 5
+    owned_files:
+      - skills/initialize-bare-metal-host
+    verifiable_closure: |
+      litmus:initialize-bare-metal-host-is-idempotent-and-seedless, three arms,
+      all failing on the pre-skill tree because the skill does not exist:
+      (1) IDEMPOTENT — run the skill twice on a Linux host; the SECOND run
+      creates NOTHING and reports every expected container up
+      (tillandsias-vault, tillandsias-proxy, and the per-project mirror), exit 0.
+      (2) SEEDLESS — run it on a host with no GitHub token in Vault; it prints
+      the not-seeded status and exits 0 WITHOUT prompting, without reading a
+      token from anywhere, and without writing to secret/github/token. Mutation
+      arm: add any token seeding, prompt, or copy to the skill and this arm REDS.
+      (3) HONEST ENDING — the skill's last action is
+      `tillandsias --github-status`, so a host without a seed reads
+      "not seeded" and STOPS rather than believing the stack is ready to push.
+      NEGATIVE CONTROL: on a seeded host the same ending reports seeded and the
+      skill still exits 0.
+    title: |
+      an idempotent ./skills/initialize-bare-metal-host that brings the container stack up — and deliberately does NOT seed, prompt for, or copy a GitHub token
+    context: |
+      OPERATOR PROPOSAL 2026-09-20, decided by the coordinator with lenovinha's
+      read taken as input. The recipe collapsed to almost nothing once the
+      operator corrected the approach from "re-engineer a parallel solution" to
+      "reuse the existing stack and be our own dogfooders":
+        tillandsias --ensure-enclave                       # vault + proxy
+        TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia \
+          tillandsias --bash <project>                     # per-project mirror,
+                                                           # router, inference
+      Both commands are ensure-shaped, so the skill is idempotent BY
+      CONSTRUCTION rather than by a check the skill performs. Measured on
+      lenovinha 2026-09-20: that second command brought up
+      tillandsias-git-tillandsias healthy with NO new code.
+
+      THE SCOPE IS "BRING THE STACK UP", NOT "CREDENTIAL-FREE PUSHES", and the
+      distinction is the whole reason this row exists separately from 1288-5qpn.
+      A skill that reads as the latter would teach every Linux host a procedure
+      whose payoff exists NOWHERE — host-to-mirror does not work yet
+      (1310-5e6g, link 3 unbuilt, the signer answers 403). Shipping the
+      procedure before the payoff is how a recipe gets followed, half-work, and
+      blamed for the wrong thing.
+
+      IT MUST NOT TOUCH A TOKEN, and this is a fleet-shape decision the operator
+      raised themselves: every host running a seeding step ends with a copy of
+      the SAME credential in its own Vault, so revoking one revokes all. That is
+      the operator's per-host call, written on 1288-5qpn as their decision, and
+      NOT a step any recipe performs on their behalf. The skill therefore ends
+      by PRINTING `tillandsias --github-status` and stopping, so an unseeded
+      host learns it is unseeded instead of proceeding as though ready.
+
+      NOTE THE DEPENDENCY IN THAT ENDING: --github-status does not exist yet; it
+      is a deliverable of 1288-5qpn. Until it does, the skill's ending is the
+      best available equivalent and the row says so rather than pretending the
+      flag is there.
+    next_action: |
+      Nobody holds this. It is lenovinha's NAMED FALLBACK, not a detour: it is
+      taken up only when 1310-5e6g blocks on something unresolvable in-session,
+      because link 3 is the primary. What is LEFT:
+      1. Write skills/initialize-bare-metal-host with the two ensure-shaped
+         commands and NO token handling of any kind.
+      2. End it with the github-status read, or the closest honest equivalent
+         until 1288-5qpn ships --github-status, and make an unseeded host STOP
+         there rather than report success.
+      3. The litmus in verifiable_closure, with the seeding mutation arm — a
+         skill that COULD seed is the failure this row is written against, so
+         the arm that reds on added seeding is the one that matters.
+      4. Do NOT widen the scope to credential-free pushes here. That is a
+         FOLLOW-UP row, filed when the lane works end to end, and it is the same
+         moment the fleet-wide instruction goes out, Linux first.
+    provenance: |
+      Operator proposal 2026-09-20; scope and exit criteria ruled by
+      macuahuitl-fedora the same day, with lenovinha's recommendation against
+      shipping it fleet-wide before the lane works taken as input. Recipe
+      measured on lenovinha. Related: 1288-5qpn, 1310-5e6g, 1310-rec6.
+
+events:
+  - packet_id: an-idempotent-initialize-bare-metal-host-skill-that-brings-the-container-stack-up-and-deliberately-does-not-seed-prompt-for-or-copy-a-github-token
+    event:
+      type: note
+      ts: "2026-09-20T18:05:36Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260920t180536z
+      summary: |-
+        filed as the named fallback behind 1310-5e6g; scoped to bring-the-stack-up and explicitly seedless

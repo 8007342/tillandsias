@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    field: status
+    value: completed
+    ts: "2026-09-20T18:19:57Z"
+    host: pirria
+
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: completed
+      ts: "2026-09-20T18:19:57Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 9b023d006 plan-only-lane-structural 14/14; plan-binary-freshness 21/21; validator-surface-currency 8/8; litmus:validator-surface-currency PASS
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T18:19:57Z"
+      host: pirria
+      summary: |-
+        completed — the content hash landed (v1 22cefe116, v2 4c84fbc62, v3 6657efcd3, trunk 9b023d006); self-demonstration, esme filing, five correct refusals and the retraction at 861745b are on the row as events

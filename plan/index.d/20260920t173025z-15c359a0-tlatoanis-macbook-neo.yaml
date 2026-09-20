@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: mechanism
+      ts: "2026-09-20T17:30:25Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260920t173025z
+      host: tlatoanis-macbook-neo
+      summary: |-
+        MECHANISM CONFIRMED for the digest moving with no content change (macneo, 2026-09-20). Reproduced deliberately, both directions, tree restored after each step. It is NOT a chmod moving the digest, which was the offered read; it is the STAGING of a mode. The offered read was one layer off and its own discriminator could not have found it.
+
+        THE SOURCE. compute() takes each path's mode from the INDEX, not the worktree: `git ls-files -s | sed -n 's/^100755 [0-9a-f]* [0-9]*\t//p'` (order 889-8tcb, per-path forks avoided after 675-dkif). So the digest folds in "is this path 100755 IN THE INDEX", and an untracked path has no index entry and records a constant `-`. The script says so itself: "a bare unstaged chmod -x no longer moves the stamp... Untracked files have no index entry and record `-`... Staging it gives it a real mode."
+
+        EXPERIMENT A, worktree mode versus staged mode, on a tracked 100755 file, content byte-identical throughout (md5 checked):
+          baseline                              -> ok:gate-fresh
+          chmod -x (worktree only)              -> ok:gate-fresh
+          git add (index now 100644)            -> stale:tree-changed-since-gate
+          chmod +x, git add (index 100755)      -> ok:gate-fresh
+        Reversibility is the control: the stamp returns to fresh when the mode record returns, so the digest is tracking the mode record and nothing else moved.
+
+        EXPERIMENT B, the case that actually caused the refusal — a path entering the index:
+          tracked 100755                        -> ok:gate-fresh
+          git rm --cached (untracked, record -) -> stale:tree-changed-since-gate
+          git add (record - -> 100755)          -> ok:gate-fresh
+        Same bytes, same path, same worktree mode at every step; only the index record changed.
+
+        WHY THIS REFUSED MY PUSH. The slice adds a NEW EXECUTABLE FILE, scripts/test-reset-state-contract.sh, 755. ./build.sh --check ran while it was still untracked, so the stamp recorded it as `-`. `git add -A` then wrote 100755 and the digest moved. Every instrument was right and none could say so: movers is content-only and correctly reported nothing; git diff --summary was empty because after the add the index and worktree agree; git status --untracked-files=all was empty for the same reason; no symlink or temp path was involved.
+
+        WHAT IS WRONG, AND IT IS THE DOCUMENTATION, NOT THE DIGEST. compute()'s header states the property as "staging is invisible, committing is invisible, editing is not". That sentence is FALSE in two cases, both of which move the digest with zero content change: staging a worktree mode change, and staging a previously-untracked file (record `-` to a real mode). The later note in the same function acknowledges the second case exactly, so the function contradicts its own header, and the header is what a reader reaches for when a push is refused.
+
+        THE FLEET-WIDE COST, which is why this is worth more than a note. Any host adding a NEW EXECUTABLE FILE -- a test script, which is most slices that add a guard -- gates, stages, and is refused, then pays a second full gate. On this host that is ~34 minutes; on the floor tier it is the 20-26x of that. The refusal is correct and the work is real, but the sequence the skills teach (gate, then add, then push) walks into it every time. Staging BEFORE the gate avoids it entirely, and nothing currently says so.
+
+        A SEPARATE ROW FOR THE DIAGNOSTIC (970-7fqk's territory): the refusal text names "a mode change" as one of three possible causes, and no diagnostic in the tree can confirm or exclude it. movers answers content only, by design, and correctly returns "nothing moved" here -- a true answer to a different question, which reads as a contradiction of the refusal. A mode-record comparison against the stamp would have named this in one command; the stamp stores a digest, not per-path modes, so nothing can be reconstructed after the fact.
+
+        METHOD NOTE, since two probes failed before this worked. The first discriminator used `! -newer <stamp>`, which excluded every file whose mtime moved -- and git stash pop had rewritten all of them, so it printed nothing and would have been reported as a refutation; a deliberate chmod as positive control is what exposed it. On BSD find, `-newerct` takes an absolute time string, not a file; comparing a file's ctime to the stamp's mtime is `-newercm`. A second attempt sourced gate-stamp.sh to call compute() directly and silently got the verify string instead, which made two unequal states compare equal; it was discarded rather than reported.

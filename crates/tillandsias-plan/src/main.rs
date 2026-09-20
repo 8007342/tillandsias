@@ -29,6 +29,10 @@ use tillandsias_plan::{
 // @trace order:984-i4k2
 #[path = "source_revision.rs"]
 mod source_revision;
+// ORDER 1287-h6qn — the same file build.rs include!s, so the embedded hash and
+// the runtime hash are one implementation.
+#[path = "validator_surface.rs"]
+mod validator_surface;
 
 const CAPABILITY_MANIFEST: &str = include_str!("../capabilities.txt");
 
@@ -102,6 +106,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology-index",
     "next",
     "next-order",
+    "validator-surface-hash",
     "parked-blocks",
     "pipeline",
     "query",
@@ -246,6 +251,9 @@ const USAGE: &str = concat!(
     "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
     "                                     the fold could not read.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
+    "           validator-surface-hash    what this binary was BUILT from; --current what the\n",
+    "                                     checkout holds now; --check compares them (0 same,\n",
+    "                                     3 different, 4 cannot ask) — 1287-h6qn\n",
     "           build-id                  which SOURCES this binary was compiled from (984-i4k2)\n",
     "           source-revision [dir]     what a rebuild from a checkout would bake (984-i4k2)\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
@@ -2576,6 +2584,67 @@ fn find_repo_root() -> Option<PathBuf> {
     }
 }
 
+/// ORDER 1287-h6qn. The hash of the validator surface this binary was BUILT
+/// from, embedded by build.rs. Empty when the build could not compute one.
+fn embedded_validator_surface() -> &'static str {
+    env!("TILLANDSIAS_PLAN_VALIDATOR_SURFACE")
+}
+
+/// Compare what this binary was built from against what the checkout holds now.
+///
+/// Returns None when the question cannot be asked — an installed binary with no
+/// checkout above it (find_repo_root -> None), or a manifest that names nothing.
+/// "Cannot ask" is never "fresh"; the callers say so in their own words.
+fn validator_surface_drift() -> Option<(String, String)> {
+    let root = find_repo_root()?;
+    let current = validator_surface::validator_surface_hash(&root)?;
+    let embedded = embedded_validator_surface();
+    if embedded.is_empty() || embedded != current {
+        return Some((embedded.to_string(), current));
+    }
+    None
+}
+
+/// ORDER 1287-h6qn, output (2). Is the binary that is about to hand out an
+/// identifier one the plan-only lane will refuse minutes later?
+///
+/// WHY THE MINT IS THE PLACE TO ASK. The lane asks this question at PUSH time,
+/// when the work is already written. The sharpest instance on record is a binary
+/// that allocated an order number and was then refused by the lane, for that
+/// number's own fragment, minutes later in the same shell — so the identifier
+/// came from a binary the lane had already decided it would not trust. Asking
+/// here moves the discovery to before the row is written, where the remedy costs
+/// a rebuild instead of a rebuild plus a rebase plus a re-push.
+///
+/// IT COMPARES CONTENT, NOT mtimes, so it is EXACT rather than conservative: a
+/// rebase that rewrites a surface file with identical bytes changes nothing and
+/// mints normally, while a real edit refuses. The first draft of this function
+/// compared mtimes against the whole crate and would have refused every mint
+/// after every rebase — the defect this row is about, reintroduced inside its
+/// own fix.
+fn plan_binary_currency_complaint() -> Option<String> {
+    let (embedded, current) = validator_surface_drift()?;
+    let built = if embedded.is_empty() {
+        "unknown (this binary embeds no surface hash — built before 1287-h6qn, \
+         or built where the manifest was unreadable)"
+            .to_string()
+    } else {
+        embedded
+    };
+    Some(format!(
+        "refused:next-order:stale-plan-binary — this binary's validator surface \
+         does not match the checkout's (1287-h6qn).\n  \
+         built from: {built}\n  \
+         checkout:   {current}\n\
+         The plan-only lane will refuse the fragment this identifier is for. \
+         Rebuild first:\n  \
+         cargo build --release -p tillandsias-plan\n\
+         Refusing BEFORE minting on purpose: an identifier handed out by a binary \
+         the lane will not accept costs a rebuild, a rebase and a re-push once the \
+         row is written, instead of a rebuild now."
+    ))
+}
+
 /// ORDER 706-jmi7, path corrected by 1125-92xa. Record direct CLI invocations to
 /// the shared telemetry channel
 /// (${TILLANDSIAS_EXPERT_USAGE_LOG:-<checkout>/.cache/metrics/forge-expert-usage.jsonl}).
@@ -3974,6 +4043,72 @@ fn main() {
         return;
     }
 
+    // ORDER 1287-h6qn. The currency question, answerable by anyone, with no
+    // stamp file to be absent, lagging or orphaned under a redirected
+    // CARGO_TARGET_DIR — the failure class the stamp had and this does not.
+    //
+    //   validator-surface-hash             what this binary was BUILT from
+    //   validator-surface-hash --current   what the checkout holds NOW
+    //   validator-surface-hash --check     exit 0 same, 3 different, 4 unknown
+    //
+    // --check is what the plan-only lane calls, so the comparison lives in ONE
+    // place and the hook does not reimplement it in shell.
+    //
+    // BEFORE THE LEDGER LOAD, with the methodology subcommands and for the same
+    // reason: this answers a question about the BINARY, and it must answer it
+    // from any directory. The first draft sat in the main match and inherited
+    // the ledger read, so running it outside a checkout failed with
+    // "read plan/index.yaml: No such file or directory" — a currency probe
+    // reporting a missing ledger, which is a wrong answer that a caller
+    // treating non-zero as stale would have believed.
+    if args[0] == "validator-surface-hash" {
+        let want_current = args.iter().any(|a| a == "--current");
+        let want_check = args.iter().any(|a| a == "--check");
+        let current = find_repo_root().and_then(|r| validator_surface::validator_surface_hash(&r));
+        if want_check {
+            match current {
+                None => {
+                    eprintln!(
+                        "unknown:validator-surface — no checkout above this binary, or the \
+                         manifest names nothing. This is NOT a freshness verdict."
+                    );
+                    std::process::exit(4);
+                }
+                Some(cur) => {
+                    let embedded = embedded_validator_surface();
+                    if !embedded.is_empty() && embedded == cur {
+                        println!("ok:validator-surface:{cur}");
+                        return;
+                    }
+                    let built = if embedded.is_empty() {
+                        "unknown"
+                    } else {
+                        embedded
+                    };
+                    eprintln!("stale:validator-surface built-from={built} checkout={cur}");
+                    std::process::exit(3);
+                }
+            }
+        }
+        if want_current {
+            match current {
+                Some(h) => println!("{h}"),
+                None => {
+                    eprintln!("unknown:validator-surface");
+                    std::process::exit(4);
+                }
+            }
+            return;
+        }
+        let embedded = embedded_validator_surface();
+        if embedded.is_empty() {
+            eprintln!("unknown:validator-surface — this binary embeds no hash");
+            std::process::exit(4);
+        }
+        println!("{embedded}");
+        return;
+    }
+
     // ORDER 394c. The methodology corpus is a DIFFERENT corpus from the plan
     // ledger, so these subcommands run before (and independently of) the
     // ledger load — a checkout with a broken or absent plan/index.yaml must
@@ -5060,6 +5195,13 @@ fn main() {
             return;
         }
         "next-order" => {
+            // ORDER 1287-h6qn output (2): refuse to mint from a binary the lane
+            // will refuse. Checked BEFORE any parsing, so a stale binary cannot
+            // hand out a token even on the flag paths.
+            if let Some(complaint) = plan_binary_currency_complaint() {
+                eprintln!("{complaint}");
+                std::process::exit(3);
+            }
             // Mint a collision-free order token for a NEW packet.
             //
             // Replaces "read the ledger, add one" — which is computed from a

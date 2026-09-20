@@ -1,0 +1,57 @@
+# @trace spec:ci-release, order:1287-h6qn
+name: litmus:validator-surface-currency
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1287-h6qn. The plan-only lane decides whether the resolved plan binary
+  may validate the bytes being pushed. It used to decide by mtime — "was this
+  rebuilt after these files were touched" — when the question it needs answered
+  is "was this built FROM THESE BYTES". `git rebase` rewrites every file it
+  touches with a fresh mtime and identical content, so the two questions
+  disagree for free and a byte-for-byte correct binary is condemned, costing a
+  66s rebuild that produces a functionally identical binary. 1172-dyvd already
+  ruled this for the fleet: currency is a content probe, never an mtime.
+
+  build.rs now embeds the validator surface's content hash, read from the ONE
+  manifest the runtime also reads, so the binary answers for itself and the
+  stamp file's whole failure class (absent, lagging, orphaned under a
+  redirected CARGO_TARGET_DIR) is gone.
+
+  THIS ARM IS BOUND, and that is deliberate rather than routine: on 2026-09-20
+  this host shipped a seven-step litmus that had never executed once because it
+  was written into openspec/litmus-tests/ and never bound here. A fixture that
+  is not bound is not a fixture.
+preconditions:
+  - workspace contains scripts/test-validator-surface-currency.sh
+  - workspace contains crates/tillandsias-plan/validator-surface.manifest
+
+critical_path:
+  - step: "the currency probe reads content, not mtimes, in both directions"
+    command: "bash scripts/test-validator-surface-currency.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok:validator-surface-currency"
+    # Eight arms, including the two mutation controls the row demands: a touch
+    # with identical content must NOT move the hash (the rebase case), and a
+    # real content edit MUST move it and must refuse both --check and next-order.
+    # Arm 5 copies the binary OUTSIDE the checkout, because find_repo_root
+    # anchors on the executable — the first draft ran it from / and passed on
+    # "read plan/index.yaml: No such file or directory", which is a missing
+    # LEDGER, not a missing checkout: green while testing nothing it claimed to.
+
+  - step: "the surface has exactly ONE definition, and both consumers read it"
+    command: "b=$(grep -c '^file \\|^lock-dep ' crates/tillandsias-plan/validator-surface.manifest); i=$(grep -c 'validator_surface.rs' crates/tillandsias-plan/build.rs crates/tillandsias-plan/src/main.rs | grep -vc ':0$'); if [ \"$b\" -ge 2 ] && [ \"$i\" -eq 2 ]; then echo ok:one-definition; else echo \"FAIL:entries=$b consumers=$i\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:one-definition"
+    # build.rs include!s the same file main.rs compiles as a module, the
+    # source_revision.rs pattern from 984-i4k2. Two implementations would drift
+    # and a drifted comparison reports skew forever or never.
+
+  - step: "the lane asks the binary before falling back to the stamp ladder"
+    command: "grep -c 'validator-surface-hash --check' scripts/hooks/pre-push-local-gate.sh scripts/check-plan-binary-current.sh | grep -vc ':0$'"
+    timeout_ms: 5000
+    expected_behavior: "2"
+    # Both consumers call the ONE comparison rather than reimplementing it in
+    # shell. The stamp ladder stays beneath it for binaries predating this row,
+    # so a mid-upgrade fleet keeps exactly the behaviour it had.

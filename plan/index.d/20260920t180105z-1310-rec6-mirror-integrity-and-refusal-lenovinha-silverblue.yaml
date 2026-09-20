@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    order: 1310-rec6
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, reliability, fail-loud, agent-safety, operator-ruling]
+    estimated_hours: 12
+    owned_files:
+      - images/git/relay-refs.sh
+      - images/git/entrypoint.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a REFUSAL surface
+      that does not exist yet, so a litmus name pinned now would be refused by
+      885-92iu. When it lands the guard is
+      litmus-mirror-refuses-to-advertise-when-broken, written in the same commit
+      as the thing it tests (1136-n8sh).
+    verifiable_closure: |
+      A mirror that cannot relay REFUSES TO ADVERTISE ITSELF, and the two agent
+      classes diverge correctly: an agent on BARE METAL is told the mirror is
+      broken and that fixing it is the work; an agent inside a FORGE stops hard
+      and is told to ask for a tillandsias upgrade and a forge rebuild, because
+      it cannot fix the mirror from inside. Plus: a successful relay sweep emits
+      NO fatal-shaped lines, so a broken sweep is distinguishable from a healthy
+      one by reading the log. Negative control: a healthy mirror advertises and
+      neither class stops.
+    title: |
+      the git mirror must be rock solid at the atomic forward-upstream, and must REFUSE TO ADVERTISE ITSELF when broken — so agents stop on a broken mirror instead of trusting one that is silently failing, with bare-metal agents shifting to fixing it and forge agents stopping hard
+    context: |
+      OPERATOR DIRECTION 2026-09-20, given while authorising mirror restarts on
+      lenovinha: "we should have discipline on when we can restart it, but for
+      the current implementation level which is each-host-has-its-own-git-mirror
+      that means it should be safe for each host to restart their own mirrors.
+      We might want to ensure the git mirror is rock solid at the atomic forward
+      upstream, and rock solid at identifying when something is broken and
+      refusing to continue advertising agents to stop on a broken mirror. Agents
+      running on bare metal might instead shift to fixing the mirror, while
+      agents running inside a forge with a broken mirror should instead stop hard
+      and ask for a tillandsias upgrade and a forge rebuild."
+
+      RESTART DISCIPLINE, settled by the same direction: while each host owns its
+      OWN mirror, a host restarting its own mirror is SAFE and needs no
+      coordination. That stops being true the day a mirror is shared (1290-5833's
+      fleet server), and this row's refusal surface is what makes the shared case
+      survivable.
+
+      THE MEASUREMENT THAT PROMPTED THE SECOND HALF, taken on lenovinha the same
+      day. After the operator seeded secret/github/token, a mirror restart
+      relayed the whole backlog successfully — origin went 150 -> 155 refs and
+      ZERO refs remained in the mirror but not on origin. The same sweep emitted
+      FIFTY-NINE lines reading 'fatal: the remote end hung up unexpectedly',
+      interleaved with 23 'Startup retry-push OK'. Those fatals were retries that
+      succeeded. A LOG THAT PRINTS 59 FATALS WHILE DOING EXACTLY THE RIGHT THING
+      IS THE PROBLEM: it makes a broken mirror and a healthy one indistinguishable
+      from their output, which is precisely the state the operator's second
+      requirement is about. Before the token existed the same sweep printed
+      'fatal: Authentication failed' — a genuine failure, in the same shape as
+      the noise.
+
+      WHY ADVERTISEMENT IS THE RIGHT LEVER and not a health flag nobody reads:
+      agents discover the mirror by its per-project DNS identity (659-8faj) and
+      address it over git://. A mirror that knows it cannot relay but keeps
+      answering is a trap — work lands in it and never reaches upstream, which is
+      the 0-findings-lost class. Withdrawing the advertisement converts a silent
+      data-stranding failure into a loud unreachable one.
+
+      THE TWO AGENT CLASSES ARE NOT SYMMETRIC, which is the operator's insight
+      and the reason this is one row and not two: a bare-metal agent CAN repair
+      the mirror and should be told to; an in-forge agent CANNOT (it has no
+      podman, no host, and its own image may be the stale thing) and must stop
+      hard rather than retry, with the remedy named as a tillandsias upgrade plus
+      a forge rebuild. An in-forge agent that merely retries burns a cycle
+      against a wall.
+    next_action: |
+      Nobody holds this. What is LEFT, in order:
+      1. SEPARATE NOISE FROM FAILURE FIRST, because every later step depends on
+         being able to tell them apart. Find why a succeeding retry emits
+         'fatal: the remote end hung up unexpectedly' (59 occurrences in one
+         successful sweep on lenovinha 2026-09-20) and either suppress the line
+         on the retry path or mark it as an attempt rather than a fatal. Until a
+         healthy sweep is quiet, no refusal rule can be trusted.
+      2. DEFINE BROKEN, narrowly and in the mirror's own terms: refs held that
+         could not be relayed after N bounded attempts, distinguishing
+         credential failure, transport failure and upstream rejection — they
+         need different remedies and 894-scxy is about naming the layer that
+         FAILED rather than the one observed.
+      3. WITHDRAW THE ADVERTISEMENT on broken, restore it on recovery, and prove
+         both directions.
+      4. THE TWO CLASSES: bare-metal is told to fix it; in-forge stops hard and
+         names the upgrade + forge rebuild. The forge path must be a REFUSAL, not
+         a warning it can push past.
+      5. The litmus named in unscoreable, with its negative control.
+      Do NOT start at step 3: a refusal rule built on a signal that cannot
+      distinguish 59 successful retries from a real failure will either never
+      fire or never stop firing.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-20 from the operator's direction,
+      with the 59-fatals-in-a-successful-sweep measurement taken on this host
+      the same day. Related: 1288-5qpn (the credential-free push design this
+      mirror serves), 1290-5833 (the shared fleet mirror, where restart
+      discipline stops being local), 894-scxy (name the layer that failed).
+
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: note
+      ts: "2026-09-20T18:01:05Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260920t180105z
+      summary: |-
+        filed from operator direction; the prompting measurement is 59 fatal-shaped lines in a fully successful relay sweep
