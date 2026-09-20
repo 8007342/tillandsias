@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T21:45:00Z"
+      agent_id: "linux-pirria-claude-20260920t214500z"
+      host: pirria
+      summary: |-
+        RETRACTION OF THIS HOST'S OWN CLAIM AT 09911b325, filed as the first step
+        of claiming this row rather than discovered later in a fixture.
+
+        WHAT I CLAIMED: that the push loop which finally landed 1310-7apk won
+        "by running check-plan-binary-current.sh AFTER each rebase", and that the
+        checker was the only difference between one attempt and five.
+
+        WHAT THE LOGS SAY. The loop that landed it (br7fv0hfq) has NO checker
+        step: attempt 1 refused, attempt 2 pushed, with only a fetch and a rebase
+        between them. The loop WITH the checker (bf5xto4jj) was stopped as
+        redundant and never reported. So the mechanism was asserted from two
+        samples with another variable moving, and nothing in that run
+        demonstrates it. The coordinator repeated the claim as "today's proof"
+        and has retracted it in the same words; it is recorded against both of us.
+
+        WHAT WAS ACTUALLY TRUE, AND IT MAKES THOSE REFUSALS CORRECT. The plan
+        crate moved on trunk inside that push window — 02a2b9543 (the status-loss
+        batching, 15:40Z) and 71ec243a7 (its clippy follow-up, 15:56Z) — and this
+        host's binary predated both. The lane was right every time, the 66s
+        rebuild was genuinely required, and this host's five-attempt push is
+        therefore NOT evidence for any change to the lane's verdict. Anyone
+        reaching for it as a pre-fix RUN should not: under a lane that ran the
+        remedy's cheap half itself, that push would have been refused exactly as
+        it was.
+
+        THE MECHANISM THE ROW IS ACTUALLY ABOUT, measured here 2026-09-20.
+        scripts/check-plan-binary-current.sh mints the validator-surface stamp
+        only inside `if ... && ! plan_binary_is_stale "$BIN"` — gated on the same
+        mtime predicate whose verdict the stamp exists to refine. Constructed
+        directly: rebuild the binary, remove the stamp, then `touch` a crate
+        source WITHOUT changing its content, which is exactly what `git rebase`
+        does to every file it rewrites. Result:
+
+          bash scripts/check-plan-binary-current.sh
+            -> ok:plan-binary-write-is-opt-in+role-satisfies:...
+            -> stamp written? NO
+
+        So a binary that is byte-for-byte correct for the current sources is
+        condemned, and no instrument on the push path can say otherwise. The
+        mtime predicate answers "was this rebuilt after these files were
+        touched"; the question the lane needs answered is "was this built from
+        these bytes". A rebase makes those two questions disagree for free, which
+        is why the refusals read as spurious even when, as in this host's five,
+        they are formally correct.

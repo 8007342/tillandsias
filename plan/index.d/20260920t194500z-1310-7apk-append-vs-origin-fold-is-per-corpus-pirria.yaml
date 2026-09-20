@@ -1,0 +1,161 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    order: 1310-7apk
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, low-end, instrument, plan, builder]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-append-vs-origin-fold.sh
+    title: |
+      `check-append-vs-origin-fold.sh` derives its (packet_id, field) pairs from `plan/index.d/*.yaml` — the WHOLE corpus, not the push's diff — and folds each pair TWICE through the plan binary, so the plan-only lane costs 116s on a floor Linux host for a ONE-LINE fragment, pays the same for a hundred, and gets slower every time anyone files anything
+    context: |
+      MEASURED ON PIRRIA 2026-09-20 at trunk 8d06f5cd7, with b91b4f353 (mover
+      enumeration + gate-stamp movers hashing) already live in the checkout.
+      pirria is a control unit: modest hardware, no accelerated GPU or NPU, run
+      so the fleet can see what slow hosts pay.
+
+      PER-PHASE, one valid single-fragment push, ref list supplied on stdin
+      exactly as git supplies it:
+
+        pre-push-no-stale-base-revert      0.0s
+        pre-push-main-branch-affordance    0.0s
+        pre-push-linux-next-merged         0.0s
+        pre-push-version-guard             0.0s
+        pre-push-local-gate              135.8s
+
+      Inside the local gate, by timestamped trace, the three steps over 1s:
+
+        116.0s  check-append-vs-origin-fold.sh
+         12.6s  check-fragment-status-loss.sh
+          5.1s  release-preflight.sh
+
+      Standalone confirmation: `bash scripts/check-append-vs-origin-fold.sh`
+      takes 116.0s and answers `ok:append-vs-origin:checked:100`.
+
+      THE MECHANISM, AND WHY IT IS NOT THE MOVER FAMILY. The pair list is built
+      by an awk over `"$FRAG_DIR"/*.yaml` — every fragment in plan/index.d/,
+      currently 1,309 files — and NOT over the fragments this push adds. Each of
+      the resulting 100 long-form (packet_id, field) pairs is then folded TWICE
+      through the plan binary, once against an extraction of origin and once
+      against the worktree, so one push spawns roughly 200 plan-binary
+      invocations at ~0.58s each. The work is therefore proportional to the
+      LEDGER, not to the diff: a one-line fragment pays 116s, a hundred fragments
+      pay 116s, and a push that adds no fragments at all still pays it because
+      the lane runs the checker unconditionally.
+
+      IT IS THE CHEAP LANE THAT PAYS IT. This check lives inside the plan-only
+      lane path in pre-push-local-gate.sh — the lane whose entire justification
+      is letting a floor host land a ledger row without a 33-minute gate. The
+      lane is doing its job (it accepted the fragment without a build stamp) and
+      still costs two minutes before it can say so.
+
+      SECOND HOST, AND IT IS WHY THIS IS p1 RATHER THAN p2. macuahuitl timed
+      the same checker read-only on its current tree (1,314 fragments):
+      61.4s, rc=0, `ok:append-vs-origin:checked:100`. Against pirria's 116.0s
+      that is a 2x ratio between a control unit and the fleet leader, where the
+      hardware gap is far wider — so the cost is dominated by the ~200
+      plan-binary spawns times the ledger load per spawn, NOT by the host. It is
+      therefore not a floor-host tax that faster hosts escape: macuahuitl makes
+      more plan pushes than any other host in the fleet and pays a minute inside
+      the lane on every one of them.
+
+      WHOSE ROW IT IS: a Linux builder's, not a floor host's. It touches the lane
+      every host pushes through, and the fix shape is the one the status-loss row
+      just used — one batched fold call over the pair list instead of two per
+      pair, scoped to the fragments the push adds, under the negative control
+      below. Filed from the floor because that is where it was visible; it should
+      be taken where the lane can be changed safely.
+
+      IT GROWS. 100 pairs today from 1,309 fragments. Every row anyone files on
+      any host adds to the corpus this check re-derives, so the cost rises
+      monotonically for every host on every push, and fastest for the hosts
+      least able to absorb it.
+
+      WHAT IT COST ALREADY: a 115-second bound around a push on this host killed
+      it mid-hook with no ref movement. That read as a network or credential
+      problem and was reported as one; it was this check, 1 second over the bound.
+
+      THE CORRECTNESS OF THE CHECK IS NOT IN QUESTION (1261-bn7v): a long-form
+      field whose outgoing fold drops a line origin's fold carries is a silent
+      deletion of another host's writing, set-field's own guard cannot catch it
+      because it compares against the fold the WRITING host holds, and the lane
+      is the right place to make the comparison. The defect is the scope of the
+      work, not the existence of it.
+
+      METHOD NOTE, because the first measurement was wrong and nearly filed. My
+      first probe used a scratch fragment with an invented packet_id; the gate
+      refused it at `blocked:plan-ledger-incomplete` from release-preflight in
+      1.8s, short-circuiting before the per-file work. 1.8s would have been
+      reported as the floor-Linux regime and would have said b91b4f353 had fixed
+      everything. A fragment whose packet_id resolves takes 135.8s. A refusal
+      that arrives fast is not a measurement of the path that passes.
+    exit_criteria:
+      - 'the pair list is derived from the fragments the PUSH adds, not from the whole of plan/index.d/ (pre-fix result: FAILS — awk reads "$FRAG_DIR"/*.yaml, 1,309 files, yielding checked:100 regardless of push size)'
+      - 'a single-fragment plan-only push on a floor Linux host completes the local gate in under 30s (pre-fix result: FAILS — 135.8s total, 116.0s of it this checker, measured on pirria at trunk 8d06f5cd7)'
+      - 'NEGATIVE CONTROL, AND IT IS THE POINT OF THE ROW: 1261-bn7v still holds. A push whose outgoing fold DROPS a line origin''s fold carries is still refused, and the arm proving it must exercise a dropped line that the narrowed scope still sees — narrowing what is checked must not narrow what is caught. A pair touched by the push must be folded against origin exactly as today.'
+      - 'the cost does not grow with the corpus: adding fragments for packets this push does not touch leaves the push''s gate time unchanged'
+    unscoreable: |
+      remedy-not-chosen: scoping the awk to the push's own fragments is the
+      obvious fix and is probably right, but the check exists precisely because
+      another host's append may be invisible to the writing host, and someone
+      must confirm that a pair the push does not name cannot be dropped by a fold
+      the push produces. If it can, the fix is caching or batching the fold calls
+      rather than narrowing the pair list, and those have different shapes. The
+      measurement is complete and reproducible on this host; the choice is the
+      claimer's.
+    events:
+      - type: filed
+        ts: "2026-09-20T19:45:00Z"
+        agent_id: "linux-pirria-claude-20260920t194500z"
+        host: pirria
+        summary: |-
+          Filed from pirria at the coordinator's direction to measure the hook's
+          phases after b91b4f353 reached trunk, having predicted a fourth
+          per-file cost. It is not per-file: it is per-corpus, paid per push, and
+          it dwarfs the three costs already found. Numbers are from a timestamped
+          bash -x trace of the real hook with git's own ref list on stdin, and
+          the standalone run agrees with the trace to 0.1s.
+
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: note
+      ts: "2026-09-20T19:45:00Z"
+      agent_id: "linux-pirria-claude-20260920t194500z"
+      host: pirria
+      summary: |-
+        THE FLOOR-LINUX REGIME, measured on pirria 2026-09-20 at trunk
+        8d06f5cd7 with b91b4f353 live in the checkout, as asked. It is NOT
+        under a minute: one valid single-fragment push spends 135.8s in the
+        hook, of which 116.0s is check-append-vs-origin-fold.sh, 12.6s is
+        check-fragment-status-loss.sh and 5.1s is release-preflight.sh. The
+        four guards before the local gate are 0.0s each.
+
+        So b91b4f353 holds — the mover costs are gone from this trace — and a
+        FOURTH cost dominates what remains. It is filed as 1310-7apk rather
+        than here because it is not the per-file family: the fold check derives
+        its pairs from the whole of plan/index.d/ (1,309 files, 100 long-form
+        pairs, folded twice each through the plan binary) rather than from the
+        push, so it is per-CORPUS, paid per push, and it grows as the ledger
+        grows. The status-loss checker's three plan-binary calls per fragment,
+        in land 33b, are the 12.6s line and remain in this family.
+
+        ON THE HOOK-STALENESS TRAP, and this host is the opposite case:
+        .git/hooks/pre-push here is a 1,427-byte shim (tillandsias-pre-push-v8,
+        generated by scripts/install-hooks.sh) that resolves HOOK_ROOT from
+        `git rev-parse --show-toplevel` and delegates to
+        $HOOK_ROOT/scripts/hooks/*.sh, baking in no host path and no logic. A
+        fix on trunk is therefore live as soon as the WORKTREE is updated and
+        no reinstall is needed; the installed version string matches the
+        installer's. What can still be stale is the checkout: my own branch at
+        f3f625822 lacked b91b4f353 while trunk carried it.
+
+        The earlier two-minute push on this host that a 115s bound killed
+        mid-hook was this, not the network and not a credential: 135.8s against
+        a 115s bound.
