@@ -5014,6 +5014,292 @@ fn wsl2_dxg_container_args(dxg_present: bool, wsl_tree_present: bool) -> Vec<Str
     ]
 }
 
+/// Start the host-native forwarder INSTEAD of the inference container, when the
+/// tray has configured one. Returns true when it took the lane.
+///
+/// MUTUAL EXCLUSION IS THE CONTRACT. Both containers claim `--network-alias
+/// inference`, and two containers on one alias is a coin flip rather than a
+/// transport. Every caller therefore uses this as an `else if` between the
+/// kill switch and the inference start, so the two can never both run.
+///
+/// ORDER 620-ca7g's INVARIANT APPLIES TO THIS TOO: callers place it INSIDE the
+/// `local_inference_disabled()` else-branch, so the forwarder is behind the same
+/// switch as the container it replaces. It serves the same purpose on the same
+/// alias; a lane that ignored the switch would restore on the N100 field host
+/// exactly the cost the switch exists to prevent.
+///
+/// A CONFIGURED-BUT-BROKEN FORWARDER IS LOUD, not silent. If the profile cannot
+/// be derived the lane is refused with the reason and the caller falls through
+/// to the normal inference container, because a forwarder that starts and
+/// answers nothing is indistinguishable, from inside the guest, from a service
+/// that is merely quiet — the shape this milestone exists to remove.
+async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, debug: bool) -> bool {
+    // THE FORWARDER'S IMAGE IS NOT THE INFERENCE IMAGE, and this is measured
+    // rather than assumed: `localhost/tillandsias-inference` carries ONLY `sh`
+    // — no socat, nc, python3 or perl — while `tillandsias-forge-base` has
+    // socat. Resolved here rather than passed in, so no caller can hand this
+    // the image it happens to have in scope; four of them have the inference
+    // tag, and the resulting container would exec-fail with a message about
+    // socat rather than about the lane.
+    let image = versioned_image_tag("forge-base", VERSION.trim());
+    let image = image.as_str();
+    let Some((cid, port)) = vsock_forward_target() else {
+        return false;
+    };
+    let profile = match ensure_vsock_seccomp_profile() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] host-native inference was configured (cid {cid}, port {port}) but \
+                 the vsock seccomp profile could not be derived: {e}. NOT starting the forwarder; \
+                 falling back to the in-guest inference container so the lane is not silently \
+                 absent."
+            );
+            return false;
+        }
+    };
+    // The inference container claims the same alias. Stand it down first rather
+    // than racing it.
+    let _ = client.remove_container("tillandsias-inference").await;
+    match client
+        .run_container_observed(
+            "vsock-forwarder",
+            VSOCK_FORWARDER_NAME,
+            &build_vsock_forwarder_run_args(image, &profile, cid, port),
+            debug,
+        )
+        .await
+    {
+        Ok(_) => {
+            eprintln!(
+                "[tillandsias] inference:11434 is forwarded to the host over vsock \
+                 (cid {cid}, port {port}) — the in-guest inference container is not started"
+            );
+            true
+        }
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] the vsock forwarder failed to start: {e}. Falling back to the \
+                 in-guest inference container."
+            );
+            false
+        }
+    }
+}
+
+/// AF_VSOCK's address family number, as the kernel and the seccomp profile
+/// both spell it. Named because `40` on its own in an arg comparison is
+/// unreadable, and misreading it is how the wrong rule gets edited.
+const AF_VSOCK: u64 = 40;
+
+/// Container name for the guest→host vsock forwarder (order 830-xsk2).
+///
+/// Deliberately NOT `tillandsias-inference`, though the two are mutually
+/// exclusive on the `inference` network alias: one name plus `--replace` would
+/// make starting either silently stop the other, hiding a tier decision inside
+/// a container-lifecycle detail.
+const VSOCK_FORWARDER_NAME: &str = "tillandsias-vsock-forwarder";
+
+/// Where the tray leaves the forwarder's configuration, and where the derived
+/// seccomp profile is written.
+///
+/// UNDER /run ON PURPOSE — it is tmpfs, so both die with the boot. That is the
+/// property the config-channel decision rests on: nothing persists, so nothing
+/// can go stale, and a reprovisioned guest is configured by the next VM start
+/// exactly like any other. A file under /etc or /var would reintroduce the
+/// first-boot problem this row rejected twice.
+const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
+
+/// The host endpoint an in-guest forwarder should relay to, or None when the
+/// lane is off.
+///
+/// READ AT CONTAINER-START, not once at process start: the tray writes this
+/// after the guest reaches Ready, and headless is already running by then.
+/// Reading it early would sample before the writer and cache a `None` for the
+/// life of the process — the silent-success shape, since the forwarder would
+/// simply never appear and nothing would say why.
+///
+/// The env var is the test seam and the operator override; the file is how the
+/// tray actually delivers it.
+fn vsock_forward_target() -> Option<(u32, u32)> {
+    fn parse(raw: &str) -> Option<(u32, u32)> {
+        let (cid, port) = raw.trim().split_once(':')?;
+        Some((cid.trim().parse().ok()?, port.trim().parse().ok()?))
+    }
+    if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
+        return parse(&v);
+    }
+    let path = Path::new(VSOCK_FORWARD_DIR).join("vsock-forward");
+    parse(&std::fs::read_to_string(path).ok()?)
+}
+
+/// Materialise the derived seccomp profile and return its path.
+///
+/// Rewritten on every call rather than cached: the derivation is cheap, the
+/// installed default can change under us across a podman upgrade, and a stale
+/// profile is the failure this whole approach exists to avoid.
+fn ensure_vsock_seccomp_profile() -> Result<PathBuf, String> {
+    const DEFAULT_PROFILE: &str = "/usr/share/containers/seccomp.json";
+    let src = std::fs::read_to_string(DEFAULT_PROFILE)
+        .map_err(|e| format!("cannot read {DEFAULT_PROFILE}: {e}"))?;
+    let derived = derive_vsock_seccomp(&src)?;
+    let dir = Path::new(VSOCK_FORWARD_DIR);
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    let out = dir.join("vsock-seccomp.json");
+    std::fs::write(&out, derived).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+    Ok(out)
+}
+
+/// Run-args for the guest→host vsock forwarder (order 830-xsk2).
+///
+/// PROVEN END TO END 2026-09-19 on tlatoanis-macbook-air with the tray in
+/// continuous-runloop mode: a separate container on this network ran
+/// `curl http://inference:11434/api/version` and received a body composed by a
+/// process on the macOS host, while the tray logged `ACCEPTED a guest-initiated
+/// connection` and the host-side server logged the GET. Both sides reported,
+/// because either alone is a lie by omission.
+///
+/// THE ALIAS IS THE DELIVERABLE, not the bytes. Agents address
+/// `http://inference:11434`, and the transparency criterion is that this keeps
+/// working while the process behind it moves to the host. A relay that works and
+/// does not answer to that name does not satisfy it.
+///
+/// THE IMAGE MUST CARRY socat. Measured: `localhost/tillandsias-inference` has
+/// ONLY `sh` — no socat, nc, python3 or perl — while `tillandsias-forge-base`
+/// has socat. Do not assume a tool is present because a sibling image has it.
+///
+/// @trace spec:vsock-transport
+fn build_vsock_forwarder_run_args(
+    image: &str,
+    profile: &Path,
+    host_cid: u32,
+    host_port: u32,
+) -> Vec<String> {
+    vec![
+        "--detach".into(),
+        "--replace".into(),
+        "--name".into(),
+        VSOCK_FORWARDER_NAME.into(),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        // The whole point: without this the relay is reachable only by IP and
+        // every agent addressing the name still lands on nothing.
+        "--network-alias".into(),
+        "inference".into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        // NOT seccomp=unconfined, which was the right instrument to ISOLATE the
+        // cause and is the wrong one to fix it: it disables the whole filter to
+        // permit one socket family, on the container bridging the VM boundary.
+        format!("--security-opt=seccomp={}", profile.display()),
+        "--entrypoint".into(),
+        "socat".into(),
+        // Order 524's invariant: everything after the image is the CONTAINER's
+        // argv, so every flag must precede it.
+        image.into(),
+        // `fork` because each agent request is its own connection; `reuseaddr`
+        // so a restart does not wait out TIME_WAIT on a fixed port.
+        "TCP-LISTEN:11434,fork,reuseaddr".into(),
+        format!("VSOCK-CONNECT:{host_cid}:{host_port}"),
+    ]
+}
+
+/// Derive podman's default seccomp profile with exactly one change: the rule
+/// denying `socket(AF_VSOCK, …)` becomes an allow (order 830-xsk2).
+///
+/// WHY THIS IS RUST AND NOT A SCRIPT. It was a shell script
+/// (scripts/derive-vsock-seccomp.sh, shipped v56.9.19.1) that shelled out to a
+/// python interpreter for the JSON. That violated 1087-h2z9, and it could not
+/// be fixed in place: measured in the guest 2026-09-20, `perl` is ABSENT, `jq`
+/// is ABSENT and the only interpreter present is the one the policy bars. So
+/// there is no compliant shell rewrite. Here there is no interpreter at all,
+/// and headless already runs inside the guest — which also removes the problem
+/// of staging a script there in the first place.
+///
+/// WHY DERIVE RATHER THAN SHIP A COPY: a static fork of a ~17 KB vendor profile
+/// silently stops tracking podman's default the day podman updates it, and a
+/// stale ALLOW list is the kind nobody notices. Deriving costs one file read.
+///
+/// REFUSES RATHER THAN GUESSES. If the expected deny rule is absent, the
+/// platform's profile is not the shape this was written against, and emitting
+/// *something* would hand back a filter nobody verified — worse than none,
+/// because it reads as one.
+fn derive_vsock_seccomp(default_profile: &str) -> Result<String, String> {
+    let mut root: serde_json::Value = serde_json::from_str(default_profile)
+        .map_err(|e| format!("input is not a seccomp profile: {e}"))?;
+
+    let blocks = root
+        .get_mut("syscalls")
+        .and_then(|v| v.as_array_mut())
+        .ok_or_else(|| "profile has no `syscalls` array".to_string())?;
+
+    // Match on the ARGUMENT rather than on the block's position: podman is free
+    // to reorder its own profile, and a positional match would not survive it.
+    let mut flipped = 0usize;
+    for block in blocks.iter_mut() {
+        let denies = block
+            .get("action")
+            .and_then(|a| a.as_str())
+            .is_some_and(|a| matches!(a, "SCMP_ACT_ERRNO" | "SCMP_ACT_KILL" | "SCMP_ACT_TRAP"));
+        let names_socket = block
+            .get("names")
+            .and_then(|n| n.as_array())
+            .is_some_and(|n| n.iter().any(|x| x.as_str() == Some("socket")));
+        let on_vsock = block
+            .get("args")
+            .and_then(|a| a.as_array())
+            .is_some_and(|args| {
+                args.iter().any(|arg| {
+                    arg.get("index").and_then(serde_json::Value::as_u64) == Some(0)
+                        && arg.get("value").and_then(serde_json::Value::as_u64) == Some(AF_VSOCK)
+                        && arg.get("op").and_then(|o| o.as_str()) == Some("SCMP_CMP_EQ")
+                })
+            });
+        if !(denies && names_socket && on_vsock) {
+            continue;
+        }
+        let Some(obj) = block.as_object_mut() else {
+            continue;
+        };
+        obj.insert(
+            "action".into(),
+            serde_json::Value::String("SCMP_ACT_ALLOW".into()),
+        );
+        // THE ERRNO FIELDS MUST GO WITH THE ACTION. crun refuses a block that
+        // carries an errno value under SCMP_ACT_ALLOW outright —
+        // "OCI runtime error: crun: errno value specified for action
+        // SCMP_ACT_ALLOW" — and the JSON stays perfectly well-formed while
+        // every container using it fails to start. Measured in the live guest
+        // 2026-09-19; a shape check on the output would not have caught it.
+        obj.remove("errnoRet");
+        obj.remove("errno");
+        flipped += 1;
+    }
+
+    if flipped == 0 {
+        return Err(
+            "no rule denying socket(AF_VSOCK) found — podman's default profile is not the \
+             shape this derivation was written against, so nothing was emitted"
+                .to_string(),
+        );
+    }
+
+    // Record why this file differs from the vendor default, INSIDE the artefact,
+    // so a reader who finds it on a running host need not diff ~17 KB to learn
+    // what moved. The OCI seccomp schema ignores unknown top-level keys.
+    if let Some(obj) = root.as_object_mut() {
+        obj.insert(
+            "tillandsiasChange".into(),
+            serde_json::Value::String(format!(
+                "order 830-xsk2: {flipped} rule(s) denying socket(AF_VSOCK) flipped to \
+                 SCMP_ACT_ALLOW, errno fields dropped; nothing else altered"
+            )),
+        );
+    }
+
+    serde_json::to_string_pretty(&root).map_err(|e| format!("could not serialise profile: {e}"))
+}
+
 // @trace spec:inference-engine-slots: Stable enclave inference endpoint (http://inference:11434) and engine slot run args.
 fn build_inference_run_args(
     certs_dir: &Path,
@@ -9571,6 +9857,9 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
                  status-check runs without tillandsias-inference"
             );
+        } else if try_start_vsock_forwarder(&client, debug).await {
+            // Host-native lane took it. The forwarder claims the `inference`
+            // alias, so the container below must NOT also run (830-xsk2).
         } else {
             client
                 .run_container_observed(
@@ -12987,6 +13276,9 @@ fn run_opencode_mode(
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
                  OpenCode lane launches without tillandsias-inference"
             );
+        } else if try_start_vsock_forwarder(&client, debug).await {
+            // Host-native lane took it. The forwarder claims the `inference`
+            // alias, so the container below must NOT also run (830-xsk2).
         } else {
             client
                 .run_container_observed(
@@ -14125,6 +14417,9 @@ pub(crate) fn run_opencode_web_mode(
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
                  OpenCode Web lane launches without tillandsias-inference"
             );
+        } else if try_start_vsock_forwarder(&client, debug).await {
+            // Host-native lane took it. The forwarder claims the `inference`
+            // alias, so the container below must NOT also run (830-xsk2).
         } else {
             client
                 .run_container_observed(
@@ -14910,6 +15205,9 @@ async fn ensure_shared_git_and_inference_for_launch(
         if debug {
             eprintln!("[tillandsias] inference already running; reusing (order 443)");
         }
+    } else if try_start_vsock_forwarder(client, debug).await {
+        // Host-native lane took it. The forwarder claims the `inference`
+        // alias, so the container below must NOT also run (830-xsk2).
     } else {
         client
             .run_container_observed(
@@ -18800,6 +19098,220 @@ mod tests {
         assert_eq!(
             script_args, rust_args,
             "script do_ensure and Rust ensure must launch flag-for-flag identically"
+        );
+    }
+
+    /// The alias IS the deliverable, so pin it: a forwarder that relays
+    /// correctly and is reachable only by IP leaves every agent addressing
+    /// `http://inference:11434` landing on nothing, and nothing in the relay's
+    /// own behaviour would show it.
+    #[test]
+    fn vsock_forwarder_claims_the_inference_alias_on_the_enclave_network() {
+        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let pairs: Vec<_> = args.windows(2).collect();
+        assert!(
+            pairs
+                .iter()
+                .any(|w| w[0] == "--network-alias" && w[1] == "inference"),
+            "the forwarder must answer to the name agents already use"
+        );
+        assert!(
+            pairs
+                .iter()
+                .any(|w| w[0] == "--network" && w[1] == ENCLAVE_NET),
+            "the alias resolves only for containers on the enclave network"
+        );
+    }
+
+    /// "AF_VSOCK works" is equally true of `seccomp=unconfined`, which is the
+    /// thing not to ship — it disables the whole filter to permit one socket
+    /// family on the container bridging the VM boundary.
+    #[test]
+    fn vsock_forwarder_is_confined_by_the_derived_profile() {
+        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        assert!(
+            args.iter()
+                .any(|a| a == "--security-opt=seccomp=/run/p.json")
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("unconfined")),
+            "never unconfined: it was the right instrument to isolate the cause and the \
+             wrong one to fix it"
+        );
+        assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
+        assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
+    }
+
+    /// Order 524's invariant: everything after the image is the CONTAINER's
+    /// argv. Its original instance silently never set an env var.
+    #[test]
+    fn vsock_forwarder_places_flags_before_the_image_and_socat_args_after() {
+        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let at = args
+            .iter()
+            .position(|a| a == "img:v1")
+            .expect("image present");
+        assert_eq!(args[at + 1], "TCP-LISTEN:11434,fork,reuseaddr");
+        assert_eq!(args[at + 2], "VSOCK-CONNECT:2:42421");
+        for flag in [
+            "--network",
+            "--network-alias",
+            "--cap-drop=ALL",
+            "--entrypoint",
+        ] {
+            let i = args.iter().position(|a| a == flag).expect("flag present");
+            assert!(i < at, "{flag} must precede the image");
+        }
+        assert_ne!(VSOCK_FORWARDER_NAME, "tillandsias-inference");
+    }
+
+    /// ORDER 830-xsk2, MUTUAL EXCLUSION, and a SOURCE-SHAPE test on purpose —
+    /// the failure mode is a site that starts the forwarder ALONGSIDE the
+    /// inference container rather than instead of it, and both containers claim
+    /// `--network-alias inference`. Two containers on one alias is a coin flip,
+    /// not a transport, and it would pass every unit test of either builder.
+    ///
+    /// Each forwarder lane must therefore be an `else if` whose else-branch is
+    /// the inference start, so the two are unreachable together by construction.
+    #[test]
+    fn every_vsock_forwarder_lane_excludes_the_inference_container() {
+        let whole = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        // SCAN PRODUCTION CODE ONLY. The needle below appears in this very test
+        // as a string literal, and a self-match has no `else if` before it — so
+        // an unscoped scan fails against correct code, which is a fixture that
+        // reds for a reason unrelated to its subject.
+        //
+        // The needle stops at the open paren on purpose: one site passes
+        // `client` and three pass `&client`, because at that site it is already
+        // a reference and clippy's needless_borrow refuses the extra `&`. A
+        // needle carrying the borrow would count 3 and report a MISSING LANE
+        // for what is only a spelling difference. It keeps the leading `if `
+        // so the function's own DEFINITION is not matched — that has no
+        // `else if` before it and would fail the first assertion below.
+        // Split on the TEST MODULE's own header, not on the first `#[cfg(test)]`
+        // — there are several earlier ones on individual helpers, and splitting
+        // there truncates the scan to before any production lane exists. That
+        // mistake made this fixture report "found 0" against correct code.
+        let source = whole.split("\nmod tests {").next().unwrap_or(whole);
+        let mut lanes = 0;
+        for (idx, _) in source.match_indices("if try_start_vsock_forwarder(") {
+            lanes += 1;
+            let before = &source[idx.saturating_sub(120)..idx];
+            // The needle STARTS at `if`, so the window before it ends at
+            // `} else ` — asserting it contains "} else if " can never hold and
+            // would red against correct code. Check what actually precedes.
+            assert!(
+                before.trim_end().ends_with("} else"),
+                "a forwarder lane must be an `else if` on the inference branch, \
+                 not a separate start; found preceding text: {:?}",
+                &before[before.len().saturating_sub(40)..]
+            );
+            // The inference container must follow in the else-branch, i.e. the
+            // lane sits BETWEEN the kill switch and the container it replaces.
+            let after = &source[idx..(idx + 700).min(source.len())];
+            assert!(
+                after.contains("\"tillandsias-inference\""),
+                "the forwarder lane must guard the inference start it replaces"
+            );
+        }
+        assert!(
+            lanes >= 4,
+            "expected the forwarder lane at every production inference site, found {lanes}"
+        );
+    }
+
+    /// A miniature of podman's real default: the AF_VSOCK deny we flip, the
+    /// AF_NETLINK/NETLINK_AUDIT deny we must NOT touch, and an unrelated allow.
+    /// Shaped from the live profile read in the guest 2026-09-19, including the
+    /// errnoRet/errno fields, because those are what crun rejects under ALLOW.
+    fn sample_default_profile() -> &'static str {
+        r#"{"defaultAction":"SCMP_ACT_ERRNO",
+            "syscalls":[
+              {"names":["read"],"action":"SCMP_ACT_ALLOW"},
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":1,"errno":"EPERM",
+               "args":[{"index":0,"value":40,"valueTwo":0,"op":"SCMP_CMP_EQ"}]},
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":22,"errno":"EINVAL",
+               "args":[{"index":0,"value":16,"valueTwo":0,"op":"SCMP_CMP_EQ"},
+                       {"index":2,"value":9,"valueTwo":0,"op":"SCMP_CMP_EQ"}]}]}"#
+    }
+
+    /// The one transformation, asserted field by field rather than by eyeballing
+    /// a diff: action flips, and the errno fields go WITH it.
+    #[test]
+    fn vsock_seccomp_flips_only_the_af_vsock_deny() {
+        let out = derive_vsock_seccomp(sample_default_profile()).expect("derives");
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid json");
+        let blocks = v["syscalls"].as_array().expect("syscalls");
+        assert_eq!(blocks.len(), 3, "no block may be added or removed");
+
+        let vsock = &blocks[1];
+        assert_eq!(vsock["action"], "SCMP_ACT_ALLOW");
+        // crun REFUSES a block carrying an errno under SCMP_ACT_ALLOW; the JSON
+        // stays well-formed and every container using it fails to start, so this
+        // is load-bearing rather than tidiness.
+        assert!(
+            vsock.get("errnoRet").is_none(),
+            "errnoRet must be dropped with the flip"
+        );
+        assert!(
+            vsock.get("errno").is_none(),
+            "errno must be dropped with the flip"
+        );
+        assert_eq!(
+            vsock["args"], blocks[1]["args"],
+            "args must not be rewritten"
+        );
+
+        // The negative that makes this a narrowing rather than an unconfining:
+        // the other socket deny is untouched. Without this, a derivation that
+        // relaxed every socket rule would pass a test that only looked at
+        // AF_VSOCK — which is exactly what `seccomp=unconfined` would also do.
+        assert_eq!(blocks[2]["action"], "SCMP_ACT_ERRNO");
+        assert_eq!(blocks[2]["errnoRet"], 22);
+        assert_eq!(
+            blocks[0]["action"], "SCMP_ACT_ALLOW",
+            "unrelated rules unchanged"
+        );
+    }
+
+    /// Absent rule means the platform profile is not the shape this was written
+    /// against. Emitting anything there would hand back a filter nobody
+    /// verified, which reads as one — worse than emitting nothing.
+    #[test]
+    fn vsock_seccomp_refuses_a_profile_without_the_deny_rule() {
+        let err = derive_vsock_seccomp(
+            r#"{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[{"names":["read"],"action":"SCMP_ACT_ALLOW"}]}"#,
+        )
+        .expect_err("must refuse");
+        assert!(
+            err.contains("AF_VSOCK"),
+            "the refusal must name what was missing: {err}"
+        );
+    }
+
+    #[test]
+    fn vsock_seccomp_refuses_input_that_is_not_a_profile() {
+        assert!(derive_vsock_seccomp("not json").is_err());
+        assert!(derive_vsock_seccomp(r#"{"defaultAction":"SCMP_ACT_ERRNO"}"#).is_err());
+    }
+
+    /// Matching on the argument rather than the position: podman may reorder
+    /// its own profile, and a positional match would not survive it.
+    #[test]
+    fn vsock_seccomp_finds_the_rule_wherever_it_sits() {
+        let reordered = r#"{"defaultAction":"SCMP_ACT_ERRNO",
+            "syscalls":[
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":22,"errno":"EINVAL",
+               "args":[{"index":0,"value":16,"valueTwo":0,"op":"SCMP_CMP_EQ"}]},
+              {"names":["write"],"action":"SCMP_ACT_ALLOW"},
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":1,"errno":"EPERM",
+               "args":[{"index":0,"value":40,"valueTwo":0,"op":"SCMP_CMP_EQ"}]}]}"#;
+        let out = derive_vsock_seccomp(reordered).expect("derives");
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["syscalls"][2]["action"], "SCMP_ACT_ALLOW");
+        assert_eq!(
+            v["syscalls"][0]["action"], "SCMP_ACT_ERRNO",
+            "the AF_NETLINK deny stays"
         );
     }
 
