@@ -1264,7 +1264,6 @@ pub fn reset_state_once() -> i32 {
     })
 }
 
-
 /// Alias kept for the name operators and scripts already use. It delegates
 /// rather than duplicating, so the two cannot drift.
 pub fn reset_guest_once() -> i32 {
