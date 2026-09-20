@@ -28,6 +28,26 @@
 # incident, verbatim, relayed from macuahuitl. Synthesising a field-less record
 # would have tested this author's idea of one rather than what the fleet wrote.
 #
+# FOR WHOEVER WRITES THE NEXT EMITTER, because this cost the first version of
+# this one and the symptom is silence rather than an error:
+#
+#   A GLOBAL SET INSIDE A COMMAND SUBSTITUTION IS DISCARDED.
+#
+# metrics_default_log's result is consumed as `p="$(metrics_default_log …)"`,
+# and $(...) runs in a SUBSHELL. The first version had that function set
+# METRICS_LOG_ROOT / METRICS_LOG_ROOT_UNUSABLE / METRICS_LOG_FALLBACK_REASON for
+# the caller to read; every one of them came back EMPTY, in the resolved case and
+# the fallback case alike, because the subshell that set them had already exited.
+# Nothing errors. The caller simply sees blank values and, if it does not check,
+# writes records with a missing field or an empty one.
+#
+# The shape generalises past this file: any helper whose ANSWER is taken through
+# a command substitution can return exactly one thing — its stdout. Side effects
+# it performs for the caller's benefit do not survive. metrics_root_fields() is
+# therefore a PURE function the caller evaluates in its own shell, deriving what
+# it needs from the resolved path rather than from state the resolver tried to
+# leave behind.
+#
 # ARM 2 CONSTRUCTS A WORKTREE AS A DIRECTORY WHOSE .git IS A FILE — what
 # `git worktree add` produces, and the exact condition that broke the resolver in
 # 1268-m2ir. A real worktree would prove the same property while mutating the
