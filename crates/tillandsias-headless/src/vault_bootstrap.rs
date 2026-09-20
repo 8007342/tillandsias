@@ -1879,10 +1879,15 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
     } else if fs::remove_dir_all(&vd).is_ok() && !vd.exists() {
         cleared.push("dir:vault-data".to_string());
     } else {
-        let unshared = std::process::Command::new("podman")
+        // Bounded, not bare (order 714-4r6w): a synchronous podman call with no
+        // deadline is indistinguishable from slow work when the substrate is
+        // wedged, and `podman unshare` takes the storage lock. Container's
+        // budget is the right class — this removes a data tree, not an image —
+        // and it is a deadlock detector, not a performance target.
+        let unshared = podman_cmd_sync()
             .args(["unshare", "rm", "-rf"])
             .arg(&vd)
-            .status()
+            .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
             .map(|st| st.success())
             .unwrap_or(false);
         if unshared && !vd.exists() {
