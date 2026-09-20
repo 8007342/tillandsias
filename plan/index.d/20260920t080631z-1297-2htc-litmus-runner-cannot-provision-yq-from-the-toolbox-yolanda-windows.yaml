@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-runner-on-a-windows-host-cannot-provision-yq-from-the-builder-toolbox-so-every-verdict-from-that-host-carries-a-degraded-warning
+    order: 1297-2htc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [tooling, litmus, windows, toolbox, measurement]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/with-tillandsias-builder.sh
+    title: |
+      the litmus runner on a Windows host cannot provision yq from the builder toolbox, so it announces its own verdicts as untrustworthy — and the tree's rule is that a toolbox carries the tool, never the host
+    context: |
+      MEASURED on yolanda-windows 2026-09-19/20. Every litmus invocation on
+      this host — every run, including the ones used to verify a fix before a
+      land — opens with:
+
+        warn:litmus-degraded-no-yq — yq is not on PATH and could not be
+        provisioned from the tillandsias-builder toolbox. Steps whose commands
+        call yq will fail or return empty. (The runner's OWN metadata reads use
+        the compiled tillandsias-plan reader when one resolves — order
+        746-htj9 — and fall back to grep only without it.) Install yq on the
+        host, or create the toolbox (see scripts/with-tillandsias-builder.sh),
+        before trusting a verdict from this run.
+
+      The warning is CORRECT and well-written: it names the instrument, says
+      what it cannot answer, and names both remedies. The defect is that one of
+      those two remedies is the tree's rule and does not work here, and the
+      other is the one the tree forbids.
+
+      THE TREE'S RULE IS TOOLBOX-FIRST. A toolbox carries the tool so that a
+      host does not have to, which is the whole reason with-tillandsias-builder.sh
+      exists. "Install yq on the host" makes every host's verdict depend on
+      what its operator happened to install, which is the condition this
+      project already refuses for cargo, jq and the plan binary.
+
+      WHAT IS AND IS NOT AFFECTED, measured rather than assumed:
+        jq  IS present and working — /c/Users/bullo/AppData/Local/Microsoft/
+            WinGet/Links/jq, jq-1.8.2. Steps calling jq are sound.
+        yq  ABSENT, and not provisionable from the toolbox on this host.
+      So the blast radius is exactly the steps that call yq, and a reader
+      cannot tell from a green run which steps those were.
+
+      THE REAL COST IS SILENT SCOPE. A degraded run still prints per-step OK
+      lines. Nothing in the summary says "N steps were skipped or vacuous
+      because their projector was missing", so a verdict from this host is
+      trustworthy for some steps and worthless for others, with no way to tell
+      which from the output. That is the same shape as a positive control that
+      only catches TOTAL blindness: partial blindness prints a clean run.
+
+      SECOND WINDOWS HOST: esmeraldinha reports its own toolbox state
+      separately; the two Windows hosts are converging on one regime (see the
+      .wslconfig comparison this cycle), and this row should be closed for the
+      CLASS rather than for yolanda, or the fleet acquires two different
+      answers to "can this host measure?".
+    next_action: |
+      Nobody holds this; it is yolanda's or esme's, and should be taken by
+      whichever of the two Windows hosts picks it up first — with the other's
+      numbers, not alone.
+      1. MEASURE WHY THE TOOLBOX PATH FAILS. Run
+         scripts/with-tillandsias-builder.sh on a Windows host and record
+         whether the toolbox is absent, present-but-missing-yq, or present and
+         unreachable from the runner. Those are three different fixes and the
+         warning does not distinguish them.
+      2. FIX TOOLBOX-FIRST. Make the toolbox carry yq and make the runner
+         resolve it from there on this host class. Host installation is the
+         fallback, not the remedy.
+      3. MAKE DEGRADATION COUNTABLE, which is the part worth more than yq
+         itself: a degraded run must report HOW MANY steps its missing
+         projector touched, so a reader can tell a sound green from a partial
+         one. A warning at the top of a long run is not a control.
+      Do NOT close this by installing yq on one host: that answers for one
+      machine and leaves the class exactly as it was.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Two different fixes are in scope —
+      resolving yq from the toolbox, and making a degraded run COUNT the steps
+      its missing projector touched — and next_action step 1 decides which the
+      host needs. When it lands the guard is
+      litmus-litmus-runner-resolves-yq-from-the-toolbox, asserting no degraded
+      banner on a Windows host with no host-level yq AND a step count on a
+      genuinely degraded run; same commit as the fix (1136-n8sh).
+    verifiable_closure: |
+      On a Windows host with no yq on PATH, scripts/run-litmus-test.sh resolves
+      yq from the tillandsias-builder toolbox and emits NO degraded warning,
+      and a run whose projector is unavailable reports the COUNT of steps
+      affected rather than a single banner. Pre-fix result: the warning quoted
+      above on every invocation, with yq absent and the toolbox unable to
+      supply it.
+
+events:
+  - packet_id: the-litmus-runner-on-a-windows-host-cannot-provision-yq-from-the-builder-toolbox-so-every-verdict-from-that-host-carries-a-degraded-warning
+    event:
+      type: note
+      ts: "2026-09-20T08:35:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed after every litmus run this cycle opened with the degraded banner; jq is present and working, so the blast radius is the yq steps alone and a reader cannot tell which those were
