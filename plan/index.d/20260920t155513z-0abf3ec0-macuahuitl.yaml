@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: note
+      ts: "2026-09-20T15:55:13Z"
+      agent_id: linux-macuahuitl-fable5-20260920t155513z
+      host: macuahuitl
+      summary: |
+        SCOPE ADDED by the coordinator (2026-09-20T15:45Z), from six relay refusals in one day: give the fast-refusals tier a FRONT DOOR. Today the coordinator's relay lane refused or was refused on six one-second deciders, each at about minute twenty of a gate: the no-Python check (1087-h2z9, gate step 155), the if-not pipeline guard (795-imz3, build.sh inline after the compile phase), the enclave membership guard (245 P8, the last line of the gate), the cross-target compile (656-spux), plan-orders uniqueness (a phantom packet from a hand-typed id), and the bounded-podman check (714-4r6w). The relay lane now runs each of them by hand on the merged tree before launching a land, as a list that grew one refusal at a time, and every peer who lands through their own gate pays the same twenty minutes to learn what a one-second check would have said. build.sh has no flag that runs the fast tier alone (read 2026-09-20: nothing between build.sh:1794 and 2011 is reachable without the full --check). So this row's closure gains one output: `./build.sh --preflight` (or the name the implementer prefers) runs exactly the fast-refusals tier on the working tree and nothing else, prints each decider's verdict line, and exits non-zero on the first red, in seconds; the relay lane and every host run it before a gate or a salvage push, and the tier is the single list that both the gate and the preflight read, so a decider added to one is added to both. The six deciders above are the first candidates to move into the tier if they are not already there (the no-Python check and the if-not guard were named in the row's title; the other four are this event's addition), with 1303-2d5g's document-loading parse and 1304-wbb2's binding cross-check to follow when they land.
