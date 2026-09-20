@@ -1,0 +1,57 @@
+# Gate step 1293-wka4 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. run-litmus-test.sh runs under `set -uo pipefail`, but that is
+# a property of THAT shell. Each step is spawned with a fresh `bash -c`, which
+# does not inherit it — so `producer | head` returned 0 when the producer exited
+# non-zero, and a step declaring `assert_exit: 0` adjudicated HEAD's status
+# rather than the producer's. The row's reproduction returned 0 and now returns 7.
+#
+# THE DESIGN IS THE GATING, NOT THE PIPEFAIL. A blanket would have been one line
+# and wrong. Measured on this corpus: 25 steps declaring assert_exit have a
+# top-level pipe, but only 3 end in a status-swallowing consumer; the other 22
+# end in `grep -q`, where grep IS the adjudicator, and several are NEGATED — for
+# those, pipefail INVERTS the verdict (a failing producer today makes the
+# pipeline 0 and the negation 1/fail; under pipefail it becomes non-zero and the
+# negation 0/pass). So the prelude is applied only where the shape swallows a
+# status AND the status actually decides the verdict (the step declares
+# assert_exit, or declares no expectation at all and falls to the strict-exit
+# arm). Shape alone matched 206 of 2553 steps; with the second condition it is
+# 5, in 5 files. ARM 4b is the regression guard for the 22.
+#
+# THE TWO CONDITIONS ARE BOTH LOAD-BEARING and neither is obvious from the
+# defect report, which is why they are written here rather than inferred later.
+#
+# WHAT IT DOES NOT COVER, PINNED BY ARM 5 RATHER THAN OMITTED: a step whose
+# command is `bash -lc '... | tee ...'` runs its pipeline in a GRANDCHILD, and
+# the prelude set in the spawned shell does not reach it (measured: rc=0) — this
+# row's own defect one level down. SHELLOPTS is the usual propagation route and
+# is READONLY here, so that route is closed. ARM 5 ASSERTS THE HOLE, so if
+# someone later closes it the arm FAILS and demands the limitation be
+# re-recorded instead of quietly passing. Two of the three corpus steps in the
+# hazard class have that shape, and both are on unbound-grandfathered.txt —
+# they have never been run by any suite, so their exposure is latent and will
+# arrive when 660-ryhn binds them.
+#
+# ARM 3 IS THE PRE-FIX CONTROL: it neutralises the prelude in a COPY of the
+# runner and requires the false green to return, asserting the mutation LANDED
+# (live >= 1 occurrence, mutant 0) before reading any verdict — a sed that
+# matched nothing yields a copy identical to the subject, and "the defect did
+# not reproduce" would then be indistinguishable from "the mutation never
+# applied".
+#
+# VERIFIED BEYOND THE FIXTURE: the two reachable corpus tests whose steps now
+# carry the prelude were executed and PASS (litmus:plan-engine-invariants-shape,
+# litmus:podman-idiomatic-error-discrimination). The third is phase 4 / e2e and
+# needs a GUI terminal; the remaining two are the orphans named above.
+#
+# COST, MEASURED HERE 2026-09-20: 0.37 / 0.37 s. It runs the real runner against
+# a throwaway corpus in a temp dir — no compile, no container, no network, and
+# it never writes into openspec/litmus-tests.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking a step's producer failing into a filter reaches the verdict (1293-wka4)"
+STEP_SCRIPT="scripts/test-litmus-step-pipefail.sh"
+STEP_ERROR="a litmus step's producer can again fail into head/tee/wc and be reported green, or the pipefail gating has widened into a blanket that inverts grep-adjudicated steps (1293-wka4) — read which arm failed above; ARM 4b failing means the blanket was applied, ARM 3 failing means the fixture can no longer reproduce the defect"
+STEP_OK="A step's producer failure reaches its verdict"
