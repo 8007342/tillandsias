@@ -86,9 +86,63 @@ critical_path:
     # The `rm -f` is load-bearing, not tidiness: every later step reads these
     # files, so a stale copy from a previous run would let them all pass while
     # nothing at all executed.
-    command: "rm -f /tmp/.litmus-394d-bin /tmp/.litmus-394d-*.yaml /tmp/.litmus-394d-*.json /tmp/.litmus-394d-*.txt; b=''; if cargo build -q --release -p tillandsias-plan 2>/dev/null; then b=\"$(cargo metadata --format-version 1 2>/dev/null | jq -r .target_directory)/release/tillandsias-plan\"; test -x \"$b\" || b=\"$PWD/target/release/tillandsias-plan\"; else for c in \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do if [ -x \"$c\" ]; then b=\"$c\"; break; fi; done; fi; test -n \"$b\" && test -x \"$b\" || { echo 'FAIL: no tillandsias-plan binary, and no cargo to build one from the checkout'; exit 1; }; printf '%s' \"$b\" > /tmp/.litmus-394d-bin; echo 'ok: harness-binary-resolved'"
+    command: "rm -f /tmp/.litmus-394d-bin /tmp/.litmus-394d-*.yaml /tmp/.litmus-394d-*.json /tmp/.litmus-394d-*.txt; cargo build -q --release -p tillandsias-plan 2>/dev/null || true; b=''; . ./scripts/plan-binary-probe.sh >/dev/null 2>&1 && b=\"$(resolve_plan_binary 2>/dev/null || true)\"; if [ -z \"$b\" ]; then for c in \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do if \"$c\" capabilities >/dev/null 2>&1; then b=\"$c\"; break; fi; done; fi; test -n \"$b\" && \"$b\" capabilities >/dev/null 2>&1 || { echo 'FAIL: no RUNNABLE tillandsias-plan resolved by the shared probe or the installed-copy search'; exit 1; }; printf '%s' \"$b\" > /tmp/.litmus-394d-bin; echo 'ok: harness-binary-resolved'"
     timeout_ms: 300000
     expected_behavior: "ok: harness-binary-resolved"
+
+  # ORDER 1267-uafx, FIFTH INSTANCE of the re-derived-resolution class that
+  # 704-zcgi centralised scripts/plan-binary-probe.sh to end. This step used to
+  # build its own candidate from cargo metadata's target_directory and judge it
+  # with test -x. Measured on yolanda 2026-09-19 at MINGW64_NT-10.0-26200:
+  #
+  #   target_directory came back as a WINDOWS path with BACKSLASH separators,
+  #   concatenated with a forward-slash tail -> test -x FAIL on the mix;
+  #   the fallback $PWD/target/release/tillandsias-plan -> test -x FAIL,
+  #     because that file is the Linux ELF and Git Bash does not call it
+  #     executable; running it gives "cannot execute binary file";
+  #   target/release/tillandsias-plan.exe EXISTS and RUNS (build-id answered).
+  #
+  # So the arm reported "no tillandsias-plan binary" while a working binary sat
+  # in the tree. MEASURED DIRECTION: test -x is FALSE for the extensionless
+  # ELF that exists. The converse -- a bit TRUE for something that cannot run
+  # -- is NOT reproducible at this locus: Git Bash derives executability from
+  # the extension, so a chmod +x text file is still rejected by test -x. An
+  # earlier draft of the mutation arm below asserted that converse and failed,
+  # which is why this paragraph states only what was measured. 704-zcgi's rule
+  # stands either way -- an executable BIT is a claim; RUNNING is evidence --
+  # but on THIS locus the bit's lie is a false negative, not a false positive.
+  #
+  # A SKIP WAS PROPOSED AND REJECTED ON MEASUREMENT. The routing assumed "a
+  # locus with neither binary nor cargo" and asked for a named skip. The locus
+  # had both. A skip would have been a well-formed verdict about the wrong
+  # subject (1260-2qgi) -- recording a capability as absent while holding the
+  # binary in hand -- and would have hidden this defect instead of fixing it.
+  # The disagreement is recorded rather than smoothed over.
+  - step: "NEGATIVE CONTROL: an unrunnable candidate is SKIPPED, not resolved -- a bit is a claim, running is evidence (704-zcgi, 1267-uafx)"
+    # The control does NOT use TILLANDSIAS_PLAN_BIN. That override is honoured
+    # on EXISTENCE ALONE by design -- probing it would turn stale-plan-binary
+    # into no-plan-binary, which 704-zcgi's own corpus caught -- and an
+    # inherited override short-circuits the probe, which is 1258-tpkz's defect.
+    # So the control stages an unrunnable artefact on the NON-override path,
+    # where the probe is run-don't-stat, and asserts the probe steps over it.
+    command: "d=$(mktemp -d); mkdir -p \"$d/release\"; printf 'not a binary\\n' > \"$d/release/tillandsias-plan.exe\"; printf 'not a binary\\n' > \"$d/release/tillandsias-plan\"; chmod +x \"$d/release/tillandsias-plan.exe\" \"$d/release/tillandsias-plan\"; . ./scripts/plan-binary-probe.sh >/dev/null 2>&1; r=$(CARGO_TARGET_DIR=\"$d\" resolve_plan_binary 2>/dev/null || true); rm -rf \"$d\"; case \"$r\" in *\"$d\"*) echo \"FAIL: the probe resolved the unrunnable staged candidate: $r\"; exit 1;; esac; test -z \"$r\" || \"$r\" capabilities >/dev/null 2>&1 || { echo \"FAIL: resolved a candidate that does not run: $r\"; exit 1; }; echo 'ok: unrunnable-candidate-skipped'"
+    timeout_ms: 60000
+    expected_behavior: "ok: unrunnable-candidate-skipped"
+
+  - step: "SOURCE PIN: the PRE-FIX bit test REJECTS the artefact the probe resolves -- the original failure still reproduces on the real artefacts, so the control above is not vacuous (msys only)"
+    # LOCUS-GATED AND SKIPPING LOUDLY, because this mutation has no subject off
+    # MSYS: on Linux the extensionless ELF both exists and runs, so the pre-fix
+    # test was correct there and the defect was invisible -- which is precisely
+    # how the class survived. A silent pass on Linux would be a control that
+    # cannot fail, so it says skip: and names why.
+    #
+    # It asserts the MEASURED direction: test -x REJECTS target/release/
+    # tillandsias-plan (the ELF) while the shared probe resolves a candidate
+    # that actually runs. If test -x ever starts accepting it, this arm has
+    # lost its subject and says so rather than passing.
+    command: "case $(uname -s) in MINGW*|MSYS*) ;; *) echo 'skip: mutation-has-no-subject-off-msys (the extensionless ELF runs here, so the pre-fix test was correct)'; exit 0;; esac; test -e target/release/tillandsias-plan || { echo 'skip: no extensionless artefact staged at this locus'; exit 0; }; if test -x target/release/tillandsias-plan; then echo 'FAIL: test -x ACCEPTED the extensionless ELF; this mutation has lost its subject'; exit 1; fi; r=$(mf_plan_binary 2>/dev/null || true); test -n \"$r\" || { echo 'FAIL: the probe resolved nothing where the pre-fix test also failed'; exit 1; }; \"$r\" capabilities >/dev/null 2>&1 || { echo \"FAIL: the probe resolved a candidate that does not run: $r\"; exit 1; }; echo 'ok: bit-rejects-what-the-probe-resolves'"
+    timeout_ms: 60000
+    expected_behavior: "ok: bit-rejects-what-the-probe-resolves"
 
   - step: "ORDER 888-miiy: report the spec-index branch BEFORE grading, never after a red"
     # ADVISORY, never a gate. The point is that the log states which branch this

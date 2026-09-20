@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-refused-land-and-a-refused-push-both-reach-the-windows-harness-as-exit-zero-so-a-status-that-says-refused-arrives-as-success
+    field: status
+    value: completed
+    ts: "2026-09-20T08:59:45Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-refused-land-and-a-refused-push-both-reach-the-windows-harness-as-exit-zero-so-a-status-that-says-refused-arrives-as-success
+    event:
+      type: completed
+      ts: "2026-09-20T08:59:45Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 937904b26 (yolanda's correction event) + arms A/B/C of the row's own experiment: refused land exits 1 foreground and as the sole backgrounded command; the zero was the wrapper's trailing command
+  - packet_id: a-refused-land-and-a-refused-push-both-reach-the-windows-harness-as-exit-zero-so-a-status-that-says-refused-arrives-as-success
+    event:
+      type: note
+      ts: "2026-09-20T08:59:45Z"
+      host: macuahuitl
+      summary: |-
+        REFUTED BY MEASUREMENT (yolanda, 2026-09-20, correction event 937904b26): the row's own three-arm experiment shows the land script exits 1 on a refusal in the foreground (arm A) and in the background as the sole command (arm C, the harness recorded exit 1, status failed); the two original zeroes came from the reporter's own compound command ending in tail or echo (arm B), whose status is the last command's. Not 1155-jurn's family, no status lost at a boundary, land-on-platform-branch.sh owes nothing. Both hosts that saw the zero had the same cause in their own wrappers: yolanda's land-then-echo-then-tail, and yoga's toolbox-run-then-echo-piped-to-tee (reproducible on Linux with a false command followed by an echo of the status through tee: the caller sees 0). Closed as refuted, recorded with the completed status because the ledger has no refuted status.
