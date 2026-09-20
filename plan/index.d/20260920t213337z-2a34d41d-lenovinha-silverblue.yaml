@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-20T21:33:37Z"
+      agent_id: linux-lenovinha-opus5-20260920t213337z
+      host: lenovinha-silverblue
+      summary: |-
+        METHOD FAILURE, recorded because it reached another host's decision within the hour. TWO PRODUCERS WRITE 'Connection from' INTO TWO DIFFERENT FILES WITH DIFFERENT MEANINGS, and I matched on the text without asking which process wrote it. The mirror's container log carries the GIT DAEMON's lines — 'Connection from 127.0.0.1:<port>', 934 of them, produced by the container's own healthcheck ('nc -w 1 127.0.0.1 9418' every 2 seconds; measured as 2 new lines in 5 idle seconds). sshd writes somewhere else entirely: /tmp/tillandsias-sshd/sshd.err inside the container, which I had not read. WHAT I CLAIMED AND WHAT IS TRUE. I told the coordinator that sshd sees a host connection as 127.0.0.1 and recommended narrowing the host cert's source-address to 127.0.0.1/32, calling it a tightening. They ruled on it. sshd.err actually reads 'Connection from 10.0.42.14 port 46984 on 10.0.42.14 port 2222' — 10.0.42.14 is INSIDE the enclave subnet 10.0.42.0/24, because rootless podman SNATs the published-port connection onto the container network. So the EXISTING default_critical_options.source-address = enclave_subnet works unchanged for host pushes, and 127.0.0.1/32 would have REFUSED every one of them at authentication, reading as a bad key — the exact failure I claimed to be preventing. The 'strictly narrower than the forge's' sentence is FALSE and must not be written on this row: host and forge certs have the same address scope because they arrive the same way. THE TEN-SECOND CHECK THAT SETTLES THIS CLASS: make ONE connection, look for ONE new line; if it does not appear in the stream you are reading, find the stream that does have it — then cite the FILE, not the text. Evidence of this kind names its log file from now on. The coordinator's acceptance was the same error one step later; neither of us asked which process wrote the line.
