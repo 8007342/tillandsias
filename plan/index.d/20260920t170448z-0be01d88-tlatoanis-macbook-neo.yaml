@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: observation
+      ts: "2026-09-20T17:04:48Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260920t170448z
+      host: tlatoanis-macbook-neo
+      summary: |-
+        SECOND OBSERVATION of the digest moving on a stamp-excluded change (macneo, 2026-09-20). Not a mechanism: one occurrence, not deliberately reproduced, and this refusal's own history includes a host spending 25 minutes and three gates designing against a false mechanism read off this same message (970-7fqk).
+
+        EXACT SEQUENCE between a PASSING verify and the refusal. gate ./build.sh --check green, GATE_RC=0 read from a file rather than a wrapper line; scripts/gate-stamp.sh verify printed ok:gate-fresh; git fetch showed trunk moved to 16b1fd1d4, a PLAN-FRAGMENT-ONLY commit (one file, plan/index.d/20260920t162544z-2f479786-pirria.yaml); git stash -q -u; git merge --no-edit origin/linux-next; git stash pop -q; gate-stamp verify AGAIN printed ok:gate-fresh, correctly, because compute() excludes plan/index.d/*.yaml; git add -A; git commit (9c798dd5d); git push origin HEAD:osx-next REFUSED. So the only operations between the last passing verify and the refusal were git add -A and git commit.
+
+        THE REFUSAL CANNOT NAME ITS CAUSE AND EVERY INSTRUMENT CONTRADICTS IT. Hook text: "CONTENT DIFFERS FROM THE STAMPED TREE: no path's content differs, so the digest moved for a reason the manifest cannot show -- a mode change, a symlink target, or a path set change." Against that: gate-stamp.sh movers exits 0 with NO output, which its own comment defines as "the content matches"; git diff --summary is empty, so no path's mode differs from the index; no symlink under the checkout is newer than the stamp; the commit contains exactly the 9 intended files, so the pre-commit hook added nothing.
+
+        RULED OUT, on macuahuitl's read (the digest is computed over git ls-files --cached --others --exclude-standard, which includes untracked non-ignored paths, and the newest writer in the tree is a fixture that builds a throwaway corpus): git status --porcelain --untracked-files=all returns ZERO untracked non-ignored paths. Both fixtures that create directories use mktemp -d, which resolves to TMPDIR=/var/folders/... on this host, outside the checkout. .cache/ is ignored at .gitignore:146, so the metrics writes are outside the path set.
+
+        WHAT MAKES IT WORTH A ROW RATHER THAN A SHRUG. compute()'s own documentation states the property directly: "staging is invisible, committing is invisible, editing is not." The observed behaviour contradicts that sentence, and the diagnostic built so a refusal can name its cause returns the answer "nothing moved" while the refusal insists something did. Two instruments answering different questions, one of them silent in the direction that reads as a pass.
+
+        NEXT STEP, stated as a task and not a doubt: re-gate on the committed tree per the hook's own advice, no override. If that gate goes green and the push then succeeds with no other change, the trigger lived in the add/commit transition and is worth a deliberate reproduction in a clean room -- stage and commit a known-good tree with nothing else running and verify before and after each operation.

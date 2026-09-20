@@ -25,6 +25,31 @@ preconditions:
 
 critical_path:
   - step: "the five-case fixture passes"
+    # BUDGET STAYS AT 30s, AND CASE 1 NO LONGER TOUCHES THE LIVE TREE.
+    # check-litmus-bindings.sh has two costs — it skips its advisory runnability
+    # sweep when no litmus file changed against the base and runs it when one
+    # did. MEASURED: macneo (workstation) 3.2s skipped / 36.6s swept;
+    # esmeraldinha (floor tier) 83s cold, 95s/93s warm skipped, 693s swept — the
+    # usual 20-26x floor ratio, so both tiers are behaving normally.
+    #
+    # THE BUDGET SAT BETWEEN macneo's TWO PATHS, so it stopped asserting cost and
+    # started asserting WHICH PATH RAN: green for every change that touched no
+    # litmus file, killed at budget for every change that touched one — red on
+    # exactly the changes this fixture exists to check. A budget kill is still a
+    # FAIL (820-c8q8).
+    #
+    # TWO REMEDIES WERE WRONG AND ARE RECORDED SO THEY ARE NOT RETRIED.
+    # Raising the budget hides the next slowness and reads as understood when it
+    # is merely accommodated (1282-trqp: budgets read as verdicts). Excluding the
+    # sweep fixes only the tier where the budget falls between the paths — on
+    # esme it is below BOTH, so that remedy would have been green here and red
+    # there, which is this row's own defect (a verdict that depends on which host
+    # ran it) at a new address.
+    #
+    # Case 1 asserts the reconciliation RULE, not the live tree's size, so it now
+    # runs against a throwaway corpus via LITMUS_BINDINGS_ROOT: bounded, ~0.2s,
+    # the same on every tier. The live tree keeps its coverage at build.sh:3654,
+    # where the sweep's cost belongs.
     command: "bash scripts/test-litmus-bindings.sh 2>&1 | tail -1 | grep -qx 'PASS: litmus bindings reconciliation (5/5)' && echo 'ok: fixture 5/5'"
     timeout_ms: 30000
     expected_behavior: "ok: fixture 5/5"
