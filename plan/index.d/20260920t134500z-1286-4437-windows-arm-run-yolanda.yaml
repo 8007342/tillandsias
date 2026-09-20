@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T13:45:00Z"
+      host: yolanda-windows
+      summary: |-
+        WINDOWS ARM EXIT CRITERION MET, RUN end to end on yolanda 2026-09-20 under the operator's standing consent for the destructive step, re-read at the moment of use. Every claim below is RUN unless it says otherwise.
+
+        RUN, the criterion itself: from a DELIBERATELY BROKEN WSL state to provisioned and ready.
+          PRE  (RUN): --diagnose --json exit 2, distro_running=False, wire.reachable=False, guest_version='' (empty)
+          RESET(RUN): tillandsias-tray.exe --reset-state, exit 0, elapsed 68s COLD (distro unregistered, rootfs re-downloaded)
+          POST (RUN): --diagnose --json exit 0, version=56.9.19.2, guest_version=56.9.19.2, distro_registered=True, distro_running=True, ready_history=observed-ready, wire.reachable=True, wire.phase=Ready, wire.podman_ready=True
+
+        RUN, the announcement, in order and before anything was destroyed:
+          [reset-state] PRESERVED: tillandsias-vm-uuid (the installation identity; the in-VM Vault derives its master key from it)
+          [reset-state] DESTROYED: the WSL2 distro and its disk, the host credentials vault-shamir-share-v1 and vault-root-token-v1, and the download cache.
+          [reset-state] removed download cache C:\Users\bullo\AppData\Local\tillandsias\cache
+          [reset-state] RESULT: VM Ready -- control wire up
+
+        RUN, the preservation invariants, read from Credential Manager AFTER the reset (echo-count predicate, 1004-vsh2):
+          vault-shamir-share-v1 present=False
+          vault-root-token-v1   present=False
+          tillandsias-vm-uuid   present=True
+        RUN, 1295-b4i8's invariant: the BUILDER distro's disk is untouched, 154388135936 bytes still present at %LOCALAPPDATA%\tillandsias\wsl-build\ext4.vhdx. The purge named cache_root(), the child, not the shared parent.
+
+        RUN, the guard path, in a separate earlier run: with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 the binary printed PRESERVED, then "reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0", and the distro SURVIVED (Stopped to Running, never unregistered).
+
+        HOW THE STATE WAS BROKEN, and it took three attempts because the first two BREAKS DID NOT LAND — recorded because a no-op break produces a passing test that proves nothing:
+          1. cp from /mnt/c into the runtime distro: FAILED, /mnt/c is not mounted there. Guest still ran v56.9.19.2.
+          2. overwrite the guest agent in place: FAILED, "Text file busy" — the service held it.
+          3. stop the service, unlink, then write a 58-byte stub: LANDED, md5 changed fa4bc933->3c88fd15, agent reported "0.0.0-BROKEN".
+        Each attempt compared md5 before and after and refused to continue on no change, which is the only reason 1 and 2 were caught.
+
+        NOT VERIFIED, AND NOT CLAIMED: the DOWNLOAD step of install-windows.ps1. That installer always fetches from GitHub releases and has no local-artifact path, and the published 56.9.19.2 tray predates --reset-state, so the tree's installer cannot be run against a binary that carries the flag until a release ships it. What was exercised is everything the installer's new block does — the same cmd.exe-wrapped synchronous call, with its exit read — against a locally staged build of the arm's own code.
+
+        THAT GAP PRODUCED A REAL FIX, added after this run: install-windows.ps1 now PROBES the installed tray's --help for --reset-state and skips loudly when absent. Without it, any install pinned to an older TILLANDSIAS_VERSION — which is exactly what the release smoke does — would have died on "unknown flag --reset-state" at a step that did not exist when that tag shipped. Probe by content, not by version arithmetic.
+
+        A FINDING ABOUT THE STAGED BUILD, which macuahuitl asked be recorded as such rather than used to loosen the criterion: scripts/build-guest-binaries.sh CANNOT RUN ON THIS HOST. It requires Nix, and nix is MISSING both on the Windows host and inside the tillandsias-build distro. `strings` is also absent on the host, so the script's own --verify reports verify:skip-stale-staging before it reaches anything else. The documented fallback in build-windows-tray.ps1 (a rustup musl toolchain staged into target-guest/) does work for x86_64. The aarch64 half does NOT: cargo fails with `failed to find tool "aarch64-linux-musl-gcc"`, a cross-gcc that is not installed, which is presumably why CI uses Nix. The aarch64 staged binary was therefore left at its Aug 30 state, untouched.
+
+        MY OWN ERROR IN THAT STAGING, recorded because the binary caught it and a lesser error message would not have: my first guest build omitted `--features listen-vsock`. The reprovision then failed after 524s with a control-wire handshake timeout, and the guest's own journal said exactly why -- "this binary was built WITHOUT the listen-vsock feature ... Refusing to run as a control-wire guest that cannot serve the wire. Rebuild with --features listen-vsock (scripts/build-guest-binaries.sh does this)". A refusal that names its own remedy, which is the quality 1276-2hc6 is about. Rebuilt with the feature, restaged (md5 86f81aea->6ca4928b, and the WITHOUT-feature string absent from the new binary), tray rebuilt, and the run above is the result. The 524s failure was mine, not the arm's.
+
+        Also cleared by the restage: wsl_lifecycle::tests::embedded_guest_headless_matches_workspace_version, which had been failing on the stale staged artifact and passes now. That confirms the earlier attribution — it was host staging state, not the arm's code.

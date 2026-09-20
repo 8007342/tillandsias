@@ -538,6 +538,26 @@ try {
     # bare call does not wait and records no exit status (see the OUTPUT NOTE
     # in `tillandsias-tray.exe --help`).
     Write-Host ""
+    # CAPABILITY PROBE BEFORE THE CALL, and it is not belt-and-braces. This
+    # installer always DOWNLOADS the tray, and TILLANDSIAS_VERSION can pin an
+    # older tag -- which is exactly what the release smoke does. A tray from
+    # before 1286-4437 does not know --reset-state and exits 2 with
+    # "unknown flag", so an unconditional call would turn every pinned-older
+    # install into a hard failure at a step that did not exist when that tag
+    # shipped.
+    #
+    # PROBE BY CONTENT, not by version arithmetic: ask the binary what it
+    # supports and read the answer. A version comparison would have to know
+    # which tag first carried the flag, and would be wrong for any build that
+    # is not on that line.
+    $ResetHelp = & cmd.exe /c "`"$InstalledExe`" --help 2>&1"
+    $HasResetState = ($ResetHelp -join "`n") -match '--reset-state'
+    if (-not $HasResetState) {
+        SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
+        SayWn "  the install is complete, but a broken local state was NOT repaired."
+        SayWn "  install a release that carries --reset-state to get the repair."
+    }
+    if ($HasResetState) {
     Say "Resetting local state and reprovisioning (--reset-state)..."
     Say "  preserved: tillandsias-vm-uuid (the installation identity)"
     Say "  destroyed: the WSL2 distro and its disk, the two host vault credentials, the download cache"
@@ -553,6 +573,7 @@ try {
         Die "tillandsias-tray --reset-state failed (exit $ResetExit); the local state was not reprovisioned."
     }
     SayOk "reset-state: provisioned and ready (exit $ResetExit)"
+    }
 
     # -- Installed-Software registration (windows-260722-3) -------------------
     # ONE idempotent HKCU key, SAME name every install: DisplayVersion is
