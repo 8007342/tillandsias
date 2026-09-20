@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: set-field-accepts-an-unknown-flag-by-silently-consuming-the-next-options-value-as-the-field-value-so-it-writes-a-hostname-into-a-long-form-field-and-prints-success
+    event:
+      type: evidence
+      ts: "2026-09-20T14:23:53Z"
+      agent_id: linux-yoga-claude-20260920t142353z
+      host: yoga
+      summary: |-
+        CLOSED. Landed by relay at ef0446001 after seven gate cycles on this host, and
+        the breakdown by cause is the useful part of the record rather than the count.
+
+          3  REAL DEFECTS IN MY OWN WORK, each caught by the gate before it landed
+               rustfmt wrapped an over-long eprintln!
+               clippy::collapsible_if under -D warnings, in the byte-identical guard
+               violation:plan-binary-probe-usage — the fixture resolved the plan binary
+                 from a hardcoded target/ path, which CANNOT see the binary inside a
+                 forge, because every forge exports CARGO_TARGET_DIR and ./target does
+                 not exist in the mounted checkout at all (783-jdeh). Now resolved
+                 through scripts/plan-binary-probe.sh.
+          2  the salvage-audit SIGPIPE flake, unrelated to this slice and now diagnosed
+             and owned as 1306-ifhv
+          2  integrate races at push time, trunk moving at ~one commit per six minutes
+             against a ~19 minute gate
+          0  the parser change itself, which was correct from its first commit
+
+        A gate refusing seven times for six different reasons, only three of them the
+        author's, is a gate working. The flake and the races are the pure cost and both
+        now have rows. Stopped at three consecutive lost races and handed the slice to
+        the coordinator's relay rather than choosing an eighth gate unilaterally; it
+        landed there on attempt 1 with no race.
+
+        THE FIRST OF THOSE THREE DEFECTS IS THE ONE WORTH CARRYING FORWARD. A hardcoded
+        target/ path is true on the host in front of you and false in another runtime —
+        the same class as the two portability failures this author shipped into gate
+        steps earlier the same day. The difference is that this one was caught by a
+        guard that runs on every host before it could wall anyone.
+
+        WHAT LANDED
+          the parser declares its flag vocabulary: VALUE_FLAGS takes an argument,
+          BOOL_FLAGS does not, anything else is REFUSED BY NAME before any write, and
+          the refusal prints both accepted sets. Forgetting to register a future flag
+          costs a refusal, not a silent write — the failure mode points at the safe side.
+          --value-file carries long prose with no shell in the path, closing the
+          asymmetry with append-event's --summary-file that pushed long-form writes
+          through shell quoting in the first place.
+          A value byte-identical to another flag's argument is refused: that is the
+          observable FINGERPRINT of the misparse and it stays useful whatever a future
+          parse gets wrong, independent of the vocabulary being correct today.
+
+        FIXTURE 6/6 (1 skipped), gate step 417. Every arm writes to a COPY of plan/ via
+        --index, so a test for a tool whose defect is an unwanted write cannot produce
+        one. ARM 5, the mutant, is opt-in and skipped BY NAME: restoring the permissive
+        parse needs a rebuild and patches a source file, which a gate step must not do
+        to a working tree, so the pre-fix measurement is recorded rather than re-run.
+
+        STEP 417 DECLARES NO SECOND REGIME REQUIRED (1302-7j8p), as an answer and not a
+        deferral: the fixture's default path shells out only to cp date dirname env grep
+        head ls mkdir mktemp printf rm tail wc — POSIX spellings with no GNU-only name
+        and no GNU-only flag, all already exercised on every platform by steps 411 and
+        413 — plus the plan binary this repo builds, which is the subject under test. No
+        external tool's absence or dialect can change its verdict. The opt-in mutant arm
+        additionally needs perl and cargo and skips by name without them. If that list
+        ever grows, the step needs a recorded second-regime run before it stays in
+        --check.
+
+        THE REPRODUCTION THIS ROW ASKED FOR WAS THE AUTHOR'S OWN INCIDENT: a --dry-run
+        probe against set-field, run to read the status vocabulary, was absorbed in
+        silence and wrote a note fragment against a row that was not being edited,
+        caught only by looking at git status afterwards. macneo's instance overwrote a
+        p1 row's next_action with a hostname while every validator reported ok. Two
+        hosts, one line of parser, both silent.
