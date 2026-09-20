@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    order: 1307-ermc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, scripts, instrument-defect, linux, floor]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-no-spawn-in-if-not.sh
+      - scripts/test-if-not-pipeline-guard.sh
+      - scripts/test-salvage-audit.sh
+    verifiable_closure: |
+      scripts/test-if-not-pipeline-guard.sh gains arms and prints its verdict
+      with them counted: arm A: a script line of the form
+      `producer | grep -q pattern && ok … || bad …` under `set -o pipefail`
+      (with or without a leading `if`) is NAMED by
+      scripts/check-no-spawn-in-if-not.sh with the file and line, the same
+      way `if ! producer | grep -q` is named today; arm B: the same line with
+      `# sigpipe-ok: <reason>` appended is accepted; arm C (mutation): with
+      the new pattern removed from the checker, arm A passes, i.e. the fixture
+      reds; and scripts/test-salvage-audit.sh itself passes the checker
+      clean after its greps over `$out` are rewritten capture-then-match
+      (1306-ifhv's fix), so the two rows close together or this one names
+      the remaining lines. PRE-FIX RESULT: FAILS — measured 2026-09-20:
+      scripts/test-salvage-audit.sh uses `printf '%s' "$out" | grep -q … &&
+      ok || bad` throughout under `set -uo pipefail`, passed the checker on
+      every gate (the checker prints ok:no-spawn-in-if-not), and its arms
+      flaked under gate load on exactly that inversion (yoga: PIPESTATUS
+      printf=141 grep=0 with the pattern present, payload above the pipe
+      size); the checker refused land 26 the same day on the `elif !` form
+      of the same defect in a different file, so it knows the class and one
+      of its spellings.
+    title: |
+      the if-not pipeline guard catches `if ! pipeline` and not `pipeline && ok || bad`, the same SIGPIPE inversion in the spelling the salvage-audit fixture uses throughout
+    context: |
+      795-imz3's guard exists because pipefail plus SIGPIPE inverts a
+      `grep -q` verdict when the producer is still writing; it names the
+      `if ! <pipeline>` spelling and its remedy (capture the exit first, or
+      `# sigpipe-ok`). The and-or spelling is the same inversion: under
+      pipefail the pipeline's status is 141 with the match present, `&& ok`
+      is skipped and `|| bad` fires. A guard that catches one spelling of the
+      defect it was written for is the shape this milestone keeps finding
+      (1301-ie39 for the no-python policy the same day). The gate refused a
+      relay on the `elif !` form at 13:0xZ and passed the fixture that flakes
+      on the and-or form in the same hour. Floor-tier: a text check over
+      scripts/, runs in a second on any host.
+    next_action: >
+      Extend the checker's matcher to the and-or spelling (a pipeline whose
+      last stage is a `-q`-style early-exit reader, followed by `&&` or `||`
+      on the same logical line), keep `# sigpipe-ok:` as the escape with a
+      reason, add arms A, B and C to scripts/test-if-not-pipeline-guard.sh,
+      then run the checker over scripts/ once and list every new hit on this
+      row before fixing any; fix scripts/test-salvage-audit.sh's greps under
+      1306-ifhv and let this row's arm assert the file passes clean.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from yoga's
+      isolated confirmation of 1306-ifhv's mechanism and the gate's own
+      refusal of land 26 on the other spelling; nothing run here.

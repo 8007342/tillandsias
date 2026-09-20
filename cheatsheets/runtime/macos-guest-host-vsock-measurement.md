@@ -6,7 +6,7 @@ last_verified: 2026-09-19
 sources:
   - order 830-xsk2 (macos-guest-cannot-reach-a-host-native-service)
   - tlatoanis-macbook-air runs 2026-09-19T19:03:01Z and 2026-09-19T19:09:17Z
-  - v56.9.19.1 (scripts/derive-vsock-seccomp.sh)
+  - v56.9.19.1 (scripts/derive-vsock-seccomp.sh, since retired — see below)
 authority: high
 status: current
 tier: bundled
@@ -96,11 +96,19 @@ explicit `SCMP_ACT_ERRNO`. Measured four ways on 2026-09-14: with `/dev/vsock`
 **present** in the container the socket is still refused; with the filter relaxed
 and **no** device passed it is created.
 
-Use `scripts/derive-vsock-seccomp.sh` (shipped v56.9.19.1), which emits the
-installed default with that one rule flipped — never `seccomp=unconfined`, which
-disables the whole filter to permit one socket family. Deriving rather than
-forking matters: a static copy of the 17,705-byte vendor profile silently stops
-tracking podman's default the day podman updates it.
+The derivation lives in **headless**, as `derive_vsock_seccomp()` — a pure
+function over `serde_json` that emits the installed default with that one rule
+flipped. Never `seccomp=unconfined`, which disables the whole filter to permit
+one socket family. Deriving rather than forking matters: a static copy of the
+17,705-byte vendor profile silently stops tracking podman's default the day
+podman updates it.
+
+> It was a shell script (`scripts/derive-vsock-seccomp.sh`) in v56.9.19.1, since
+> **retired**: it shelled out to a python interpreter, which 1087-h2z9 bars, and
+> it could not be fixed in place — the guest has `perl` ABSENT, `jq` ABSENT and
+> only the barred interpreter present. If you are reading an older release, that
+> is the script you will find. Headless already runs inside the guest, so the
+> port also removed the problem of staging a script there at all.
 
 Two failure modes that cost real time:
 

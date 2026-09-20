@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-20T13:40:01Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        THE ORDERING QUESTION IS ANSWERED AND THE CHANNEL IS BIGGER THAN THE DECISION ASSUMED. Both matter for whoever takes the tray-side writer; the second changes the size of the job.
+
+        ORDERING, SETTLED BY SOURCE READ. I recorded on 2026-09-20T07:18Z that I had NOT established when the tray could push relative to headless's first container start. Now established:
+          * The host vsock listener binds INSIDE VzRuntime::start() (vz.rs, the TILLANDSIAS_HOST_VSOCK_PORT block). At that moment the guest is NOT Ready and the control wire is not usable, so the push cannot ride along with the bind.
+          * The usable point is after `wait_phase_ready`, which is where every tray path opens its control-wire stream (diagnose.rs exec_guest_main; action_host.rs poll_vm_status_once, poll_cloud_projects_once, poll_github_login_once).
+          * headless starts inference containers from FORGE-LAUNCH paths, not at boot, so there is a real window between Ready and the first container start.
+          * And the design already covers the window from the other side: vsock_forward_target() reads AT CONTAINER-START rather than caching at process start, so a config that arrives any time before a forge launch is seen. The ordering is comfortable rather than racy, and it is comfortable BY CONSTRUCTION rather than by luck.
+
+        THE CHANNEL, AND THIS IS THE FINDING: THE CONTROL WIRE HAS NO GENERIC FILE-WRITE OR EXEC MESSAGE. I enumerated ControlMessage's variants (crates/tillandsias-control-wire/src/lib.rs): Hello/HelloAck, IssueWebSession, IssueAck, Error, EvictProject, McpFrame, VmStatus{Request,Reply,Push}, VmShutdownRequest, CloudRefresh{Request,Reply}, CloudProjectsPush, Pty{Open,Data,Resize,Close,Heartbeat,StdinEof}, DeliverCredentials{,Reply}, GetVaultHandover, VaultHandoverReply, GithubLoginStatus{Request,Reply}, Subscribe, LoginStatePush, MetricsSnapshot{Request,Reply}. Every one is a NAMED, TYPED operation. There is no "run this" and no "write this file".
+
+        SO "the tray pushes the config over the control wire" IS A WIRE-PROTOCOL CHANGE, not a wiring job: a new ControlMessage variant, a guest-side handler in headless's control dispatch, capability negotiation so an older guest and a newer tray still interoperate, and tests on both halves. That is a different size from what my own decision event implied, and I would rather say so than discover it half-implemented.
+
+        WHAT I AM NOT PROPOSING, with reasons, so the next reader does not spend the time:
+          * Overloading DeliverCredentials. It is credentials-shaped and has a Reply contract; smuggling a transport config through it would make a security-relevant message mean two things.
+          * A file on one of the three shares. Already ruled out on this row: home-src is a user directory, guest-bin is read-only, and the model cache is the wrong semantics AND trips test-macos-model-share-writable.sh's empty-cache precondition.
+          * Having the guest infer it. CID 2 is always the host, but the PORT is the host's choice (TILLANDSIAS_HOST_VSOCK_PORT) and nothing in the guest can know it.
+
+        THE DECISION ITSELF STILL STANDS — push at VM start from the tray's env, read at container-start, never persisted. Every reason it was chosen for is intact; only the cost of implementing it is now known, and it is a typed message rather than a file write. A smaller alternative may exist that I have not found, and whoever takes this should look for one before writing a protocol variant.
+
+        UNCHANGED AND STILL THE OTHER HALF: the closure test that restores the container coverage the retired fixture had (a client container on the enclave network reaching http://inference:11434 and receiving a body composed on the host, with THE PRODUCT launching the forwarder). That one does not depend on this decision and can be built first.

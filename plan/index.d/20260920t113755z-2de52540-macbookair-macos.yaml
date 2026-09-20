@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-20T11:37:55Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        RESTATEMENT: THE SHELL SCRIPT THIS ROW'S next_action TELLS YOU TO RUN NO LONGER EXISTS. Read this before the next_action, which predates the port and names a retired artefact in three places.
+
+        RETIRED IN THIS PASS: scripts/derive-vsock-seccomp.sh and scripts/test-vsock-seccomp-derivation.sh, both shipped in v56.9.19.1. The script invoked a python interpreter at runtime, which 1087-h2z9 bars, and it passed the checker only because the matcher is a denylist of spellings (filed as 1301-ie39). It could not be fixed in place: measured in the guest 2026-09-20, `perl` is ABSENT, `jq` is ABSENT, and the only interpreter present is the one the policy bars. Releases are fixed forward — v56.9.19.1 shipped it, the next cut ships the Rust path.
+
+        REPLACING IT: `derive_vsock_seccomp()` in crates/tillandsias-headless/src/main.rs, a pure function over serde_json with four unit tests. Same single transformation, same refusal on an unexpected profile shape, same dropping of errnoRet/errno with the flip because crun refuses an errno under SCMP_ACT_ALLOW. headless already runs inside the guest, so the staging problem the script had — getting itself into the guest at all — disappears with it.
+
+        WHAT IS GENUINELY LOST, AND WHERE IT GOES, because "ported" would overstate it. The retired fixture's runtime arms ran CONTAINERS in the live guest and proved a 2x3 matrix: DEFAULT denies NETLINK_AUDIT and AF_VSOCK, DERIVED denies NETLINK_AUDIT and allows AF_VSOCK, UNCONFINED allows both. The Rust unit tests do NOT reproduce that. They assert the JSON transformation; they cannot tell you crun will ACCEPT the file, which is exactly the defect that bit once already (a well-formed profile that made every container fail to start). That coverage moves to this row's own closure: the client container reaching http://inference:11434 and receiving a body composed on the host EXERCISES the profile in its real position — if crun rejects it the forwarder never starts and no body arrives. So the end-to-end test subsumes the matrix, and until that fixture exists the matrix coverage is genuinely absent rather than relocated. Do not close this row believing the unit tests cover it.
+
+        ALSO NOT YET WIRED, stated so the lane is not read as live: the tray-side writer does not exist. `vsock_forward_target()` reads /run/tillandsias/vsock-forward, and nothing writes that file yet, so the lane is currently reachable ONLY through TILLANDSIAS_GUEST_VSOCK_FORWARD_TO. That env var is the test seam, not the product path. The tray push at VM start — decided and recorded in the 2026-09-20T07:18Z event — is the remaining piece.
+
+        WHAT IS NOW IN THE TREE AND NEEDS NO REDOING: the derivation (Rust, 4 tests); build_vsock_forwarder_run_args with its three tests (alias claimed on the enclave network, confined by the derived profile and never unconfined, flags before the image with socat's argv after); try_start_vsock_forwarder wired at ALL FOUR production inference sites as an `else if` INSIDE the local_inference_disabled() else-branch, so 620-ca7g's invariant still holds and its source-shape test still passes; and a source-shape test of its own for mutual exclusion, mutation-verified — removing one lane reds it with "found 3".
