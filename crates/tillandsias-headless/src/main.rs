@@ -17787,8 +17787,7 @@ mod tests {
     /// name — and neither was printed.
     #[test]
     fn a_spawn_failure_names_the_program_and_the_path() {
-        let not_found =
-            std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
+        let not_found = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
         let msg = super::describe_spawn_failure("podman", &not_found);
         assert!(
             msg.contains("podman"),
@@ -17802,8 +17801,7 @@ mod tests {
         // NEGATIVE CONTROL, and this row's closure requires it: a spawn that
         // fails for any OTHER reason keeps its original wording, because a
         // permission error is not a PATH problem and must not be reported as one.
-        let denied =
-            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let denied = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
         let msg = super::describe_spawn_failure("podman", &denied);
         assert!(
             msg.starts_with("Failed to spawn build process:"),
