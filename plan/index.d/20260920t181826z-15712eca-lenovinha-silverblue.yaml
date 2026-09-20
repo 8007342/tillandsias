@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-idempotent-initialize-bare-metal-host-skill-that-brings-the-container-stack-up-and-deliberately-does-not-seed-prompt-for-or-copy-a-github-token
+    event:
+      type: note
+      ts: "2026-09-20T18:18:26Z"
+      agent_id: linux-lenovinha-opus5-20260920t181826z
+      host: lenovinha-silverblue
+      summary: |-
+        OBSOLETED AS A DUPLICATE OF 1312-i6da, and the duplication is mine. I filed this row on the coordinator's instruction to file the skill; within the hour the operator overruled the scope ('It might be a standalone skill... agents running on bare metal rebuilding and troubleshooting the mirror itself should have standalone instructions, and we can let this instructions be self evolving') and the coordinator filed 1312-i6da carrying the wider scope — bring up, REBUILD and TROUBLESHOOT this host's own enclave and mirror, plus a self-evolving Repairs section under a checker. 1312-i6da is claimed to lenovinha and is the live row; nothing here is lost, because everything this row specified is contained in it. WHAT THIS ROW CONTRIBUTED AND 1312-i6da KEEPS, so the content is not re-derived from scratch: the scope boundary 'bring the stack up', NOT 'credential-free pushes'; the SEEDLESS requirement with a mutation arm that reds on any added seeding, prompting or copying, because every host running a seeding step ends with a copy of ONE credential where revoking one revokes all — the operator's own fleet-shape concern; and the ending that prints the github status so an unseeded host STOPS rather than believing the stack is ready to push. Also carried forward: --github-status does not exist yet, it is a 1288-5qpn deliverable, so v1's ending must be the closest honest equivalent and must say so rather than pretending the flag is there.
