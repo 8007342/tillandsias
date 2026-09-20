@@ -4371,6 +4371,57 @@ async fn mint_git_mirror_vault_auto_auth(
     }
 }
 
+/// ORDER 1310-5e6g. Mint the mirror's SIGNING identity — separate from the
+/// relay identity above, deliberately.
+///
+/// ONE TOKEN NEVER CARRIES BOTH AUTHORITIES. The mirror keeps
+/// `git-mirror-agent` for relaying (reading `secret/github/token`, pushing
+/// upstream) and gets a SECOND, per-mirror identity whose single policy permits
+/// exactly `ssh-host-signer/sign/host-<mid>`. Merging the two would mean the
+/// token that reaches GitHub also mints host certificates, and the token that
+/// mints certificates can read the GitHub credential — neither is needed by the
+/// other, and a per-mirror policy on the shared role would additionally grant
+/// cross-project signing (see `provision_host_signer_approle`).
+///
+/// Bound to the MIRROR container (828-k3mq), like the relay material: a lane
+/// exiting must not destroy the SecretID of a mirror kept running for a sibling.
+async fn mint_git_mirror_host_signer_auto_auth(
+    project_name: &str,
+    mirror_id: &str,
+    debug: bool,
+) -> Result<String, String> {
+    #[cfg(feature = "vault")]
+    {
+        // Policy before role before material: a half-provisioned signer fails
+        // CLOSED at login rather than open at sign time.
+        let role = vault_bootstrap::provision_host_signer_approle_for_launch(mirror_id, debug)
+            .await
+            .map_err(|e| format!("host-signer AppRole provisioning failed: {e}"))?;
+        let instance = format!("{project_name}-signer-{}", std::process::id());
+        let owning_container = format!("tillandsias-git-{project_name}");
+        vault_bootstrap::mint_approle_auto_auth_for_container(
+            &role,
+            &instance,
+            Some(owning_container.as_str()),
+            debug,
+        )
+        .await
+        .map_err(|e| {
+            format!(
+                "vault AppRole auto-auth mint for the mirror's HOST-SIGNER identity failed: \
+                 {e}. The ssh push lane cannot come up without it: sshd-identity.sh requests a \
+                 host certificate from ssh-host-signer/sign/host-{mirror_id}, and the relay \
+                 identity is refused there by design (1310-5e6g)."
+            )
+        })
+    }
+    #[cfg(not(feature = "vault"))]
+    {
+        let _ = (project_name, mirror_id, debug);
+        Err("built without the vault feature: no host-signer backend".to_string())
+    }
+}
+
 /// Podman `--secret` mount options for a direct per-launch Vault token.
 ///
 /// `uid=1000,gid=1000` is REQUIRED, not cosmetic. The git image runs its
@@ -4466,6 +4517,7 @@ fn build_git_run_args(
     project_remote_url: Option<&str>,
     project_default_branch: Option<&str>,
     vault_approle_secret: Option<&str>,
+    host_signer_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
     // restarts so the mirror's "startup retry-push" loop has stranded commits
@@ -4602,6 +4654,19 @@ fn build_git_run_args(
         // listener that authenticates nothing.
         args.push("--publish".into());
         args.push(format!("127.0.0.1:{MIRROR_SSHD_HOST_PORT}:2222"));
+        // THE SIGNING IDENTITY, mounted as a SECOND AppRole document and
+        // consumed by a SECOND Vault Agent writing its own sink. sshd-identity.sh
+        // is pointed at that sink through TILLANDSIAS_VAULT_TOKEN_FILE, so the
+        // certificate request is made with the per-mirror signer token and the
+        // relay keeps git-mirror-agent. One token never carries both authorities.
+        if let Some(signer_secret) = host_signer_secret {
+            args.push("--secret".into());
+            args.push(format!("{signer_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+            args.push("--env".into());
+            args.push(format!(
+                "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
+            ));
+        }
     }
     if let Some(secret_name) = vault_approle_secret {
         // @trace spec:tillandsias-vault — Vault Agent consumes launch-scoped
@@ -10054,6 +10119,8 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                     None,
                     None,
                     git_vault_secret.as_deref(),
+
+                    None,
                 ),
                 debug,
             )
@@ -11364,6 +11431,14 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 /// resolves there.
 pub(crate) const MIRROR_SSHD_HOST_PORT: u16 = 2223;
 
+
+/// ORDER 1310-5e6g. The sink the mirror's SECOND Vault Agent writes its
+/// signing token to, and the path `sshd-identity.sh` is pointed at via
+/// TILLANDSIAS_VAULT_TOKEN_FILE. Distinct from the relay agent's
+/// `/tmp/tillandsias-vault-token` on purpose: two identities, two sinks, so
+/// "one token never carries both authorities" is structural rather than a
+/// convention someone has to remember.
+pub(crate) const MIRROR_SIGNER_TOKEN_SINK: &str = "/tmp/tillandsias-vault-signer-token";
 /// ORDER 1288-5qpn. The unroutable URL a push is redirected to when the SSH
 /// lane is ENABLED but its host-CA cache is absent. It exists so the failure
 /// happens at the push rather than being absorbed by the anonymous git://
