@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: note
+      ts: "2026-09-20T10:43:44Z"
+      agent_id: linux-macuahuitl-fable5-20260920t104344z
+      host: macuahuitl
+      summary: |
+        RELAYED macneo's v2 (salvage/tlatoanis-macbook-neo/20260920-1300-q7eq-locale-pin @ 9121afb55, which contains v1 4fc065d13) through the coordinator's gate on macuahuitl. CRITERION AS IT NOW STANDS (supersedes the 2/2 wording in the previous event, written before v2 added a toolbox-independent arm): on a host WITHOUT a toolbox the fixture prints `ok:tool-materialize-litmus:arm-surfaced:3/3 (3 skipped: no toolbox on this host, margin arm not exercised here)` and exits 0; on a host WITH one, 5/5 with ARM 0 carrying real values. WHAT V2 CARRIES: ARM 0 accepts the subject's named toolbox skip and names what is untested; arms 1, 1b, 2 skipped by name on a toolbox-less host and counted apart from pass and fail; the BSD probe arm (LC_ALL=C sysctl -n vm.loadavg field 2; nproc when present else sysctl -n hw.ncpu; named skip skip:tool-materialize-margin:no-regime-probe when no source answers), kept on merit because the old `nproc || echo 1` reports one cpu on a stock six-core Mac; a NEW ARM 4, toolbox-independent, that induces the comma locale (macneo reproduced macbookair's finding: LC_ALL=fr_CH.UTF-8 sysctl -n vm.loadavg prints `{ 1,28 1,64 2,04 }` on macneo too, so it is the locale, not the host) and asserts the LC_ALL=C read yields the dotted form, skipping by name if the comma form cannot be induced; and a fix to ARM 4's own first version, where `locale -a | grep -q` under pipefail returned 141 on a successful match (1076-kft9 class) and produced a false named skip on a host with fr_CH installed, now capture-then-match. VERIFIED ON MACNEO (v2 tree, both fixtures): `ok:tool-materialize:all`; `ok: ARM 4: the comma locale DOES reform the load (1,81) and LC_ALL=C pins it to the dotted form (1.81) that ARM 0's regex requires`; `ok:tool-materialize-litmus:arm-surfaced:3/3 (3 skipped: no toolbox on this host, margin arm not exercised here)`. STILL OWED before close: macbookair's post-relay run (ARM 0, ARM 4, last line; 5/5 there is a defect) as the second BSD regime with the real fr_CH locale, the Linux 5/5 from this relay's gate log, and yoga's review of ARM 0's acceptance of the skip against 1269-gfdi's purpose on the Linux regime. nproc is present on BOTH Macs via Homebrew (6 and 10), so the earlier "absent on stock macOS" premise in the title and first event is wrong about this fleet; the branch on what answers is right on both.
