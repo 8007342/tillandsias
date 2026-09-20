@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    field: status
+    value: ready
+    ts: "2026-09-20T07:52:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T07:52:24Z"
+      host: macuahuitl
+      summary: |-
+        coordinator release for hand-off: macneo's own event states the fix (criterion 1) 'belongs to whoever removes the global; I have not claimed that work, and it is in tillandsias-headless rather than anything macOS-specific, so it is not naturally macneo's'; the claim on this row came from their investigation, which is complete (criterion 2 met). Split recorded: yoga takes the FIX half (caller-resolved cache root, global read removed, config write naming its failure, never a lock on the victim); macneo keeps the MEASUREMENT half by name (N-of-N green under real gate load on macneo, the only host that reproduces). yoga claims next.
