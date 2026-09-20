@@ -30,12 +30,29 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 ROOT="$PWD"
 
-pass=0; fail=0; skipped=0
+pass=0; fail=0; skipped=0; skip_reasons=""
 ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
 # ORDER 1300-q7eq. A NAMED SKIP IS NOT A PASS AND IS NOT A FAILURE. It counts
 # separately so the verdict can never imply an arm ran when it could not.
-skiparm() { printf 'skip: %s\n' "$1"; skipped=$((skipped + 1)); }
+# ORDER 1300-q7eq v3. THE REASON TRAVELS WITH THE COUNT. The first version
+# printed a hardcoded "no toolbox on this host" in the verdict whatever had
+# actually been skipped — and on yoga, which HAS a toolbox and skipped only
+# ARM 4 for a missing locale, the count was honest and the SENTENCE WAS NOT.
+# That is this row's own defect in miniature: a message asserting a cause it
+# never observed. Accumulate what each skip actually said.
+# $1 = the full skip line (what a reader needs). $2 = a SHORT reason for the
+# verdict. They are separate so the per-arm line can explain and the verdict can
+# stay legible; identical short reasons are collapsed, so three arms skipped for
+# one cause read as that one cause and not as three.
+skiparm() {
+    printf 'skip: %s\n' "$1"
+    skipped=$((skipped + 1))
+    case ";$skip_reasons;" in
+        *";$2;"*) : ;;
+        *) if [ -z "$skip_reasons" ]; then skip_reasons="$2"; else skip_reasons="$skip_reasons;$2"; fi ;;
+    esac
+}
 # Set by ARM 0 when the subject skipped its toolbox-dependent arms.
 NO_TOOLBOX=0
 
@@ -53,18 +70,34 @@ STEP_FILE="openspec/${LIT}-tests/${LIT}-tool-materialization.yaml"
 # /proc/loadavg and df could be broken or absent.
 if ! bash "$SUBJECT" > "$TMP/real.out" 2>&1; then
     bad "ARM 0: the subject fixture is RED on this host with nothing injected — every arm below would be measuring a broken baseline; see $TMP/real.out"
-elif grep -q 'skip: arms 4-7 need a toolbox on this host' "$TMP/real.out"; then
-    # ORDER 1300-q7eq. THE MARGIN ARM IS ARM 7, AND ARMS 4-7 NEED A TOOLBOX.
-    # macOS and Windows hosts have no toolbox and the subject fixture SKIPS them
-    # by design — its own comment says they "legitimately have neither; they SKIP
-    # rather than fail". So on those hosts the regime line can NEVER be printed,
-    # whatever the probe reads, and requiring it made ARM 0 demand a measurement
-    # the platform cannot produce. That is what red both macOS gates: not a
-    # broken probe, but an arm asserting a precondition it never checked.
-    # A check that could not run must not claim what it would have found
-    # (965-sxec). Accept the subject's own named skip and say what is untested.
-    NO_TOOLBOX=1
-    ok "ARM 0: no toolbox on this host, so the subject SKIPPED arms 4-7 by design and the regime probe could not run — arms 1, 1b and 2 are skipped by name below for the same reason, so NOTHING in this run exercises the margin arm; that coverage lives on a host with a toolbox"
+elif _tms_skip="$(printf '%s' "$(sed -n 's/.*\(arms 4-7 need [^"]*\)/\1/p' "$TMP/real.out" | head -1)")"; [ -n "$_tms_skip" ]; then
+    # ORDER 1300-q7eq v3. TWO SUBJECT SKIPS, ONE STATE, AND ONE PLATFORM WHERE
+    # NEITHER IS ACCEPTABLE.
+    #
+    # The subject skips arms 4-7 for two different reasons and says so in two
+    # different sentences: "arms 4-7 need a toolbox on this host" when
+    # `command -v toolbox` fails, and "arms 4-7 need the tillandsias-builder
+    # toolbox to carry jq" when the nested `toolbox run` fails. Measured by yoga:
+    # `command -v toolbox` SUCCEEDS inside tillandsias-builder, so a nested run
+    # never takes the first branch and always lands on the second. A v3 keyed on
+    # the first string alone would go VACUOUSLY GREEN on a bare-metal host whose
+    # builder had lost jq — which is the likelier failure, since a toolbox
+    # surviving while its jq does not is ordinary image drift. So match the
+    # family, not one sentence, and carry which one it was.
+    #
+    # THE DISCRIMINATOR IS CONTAINER-NESS, NOT `uname`. Forge lanes are Linux
+    # CONTAINERS with no toolbox and must keep the named skip, or step 414 reds
+    # every forge gate. Bare metal is where a missing toolbox is an anomaly worth
+    # refusing. /run/.containerenv is absent on bare metal and present inside the
+    # builder (yoga verified); TILLANDSIAS_HOST_KIND is the forge's own variable.
+    if [ "$(uname -s)" = "Linux" ] \
+       && [ ! -e /run/.containerenv ] && [ ! -e /.dockerenv ] \
+       && [ "${TILLANDSIAS_HOST_KIND:-}" != "forge" ]; then
+        bad "ARM 0: on BARE-METAL LINUX the subject skipped its toolbox arms ($_tms_skip) — that is an anomaly, not a platform fact: this host is expected to have a working tillandsias-builder carrying jq, and without it step 414 would go green while guarding nothing"
+    else
+        NO_TOOLBOX=1
+        ok "ARM 0: the subject SKIPPED arms 4-7 ($_tms_skip), so the regime probe could not run — arms 1, 1b and 2 are skipped by name below for the same reason, so NOTHING in this run exercises the margin arm; that coverage lives on a host with a working builder"
+    fi
 elif grep -q 'skip:tool-materialize-margin:no-regime-probe' "$TMP/real.out"; then
     # ORDER 1300-q7eq. A host with NO readable probe source — no /proc/loadavg
     # and no sysctl vm.loadavg — cannot print a measured regime, and demanding
@@ -90,9 +123,9 @@ fi
 # not happen (965-sxec: a check that could not run must not claim what it would
 # have found).
 if [ "$NO_TOOLBOX" -eq 1 ]; then
-    skiparm "ARM 1: needs a toolbox — the subject skips its margin arm on this host, so a forced failure never reaches it"
-    skiparm "ARM 1b: needs a toolbox — same reason as ARM 1"
-    skiparm "ARM 2: needs a toolbox — an injected load cannot reach a margin arm that does not run"
+    skiparm "ARM 1: needs a toolbox — the subject skips its margin arm on this host, so a forced failure never reaches it" "no toolbox, margin arm not exercised"
+    skiparm "ARM 1b: needs a toolbox — same reason as ARM 1" "no toolbox, margin arm not exercised"
+    skiparm "ARM 2: needs a toolbox — an injected load cannot reach a margin arm that does not run" "no toolbox, margin arm not exercised"
 else
 # ---------------------------------------------------------------- ARM 1
 # A RED NAMES ITS ARM, AND THE VERDICT SURVIVES TOO. Driven through the REAL
@@ -199,7 +232,7 @@ fi
 # subject pins LC_ALL=C at the read; this asserts the pin holds and that the
 # result still matches the shape ARM 0's regex requires.
 if ! command -v sysctl >/dev/null 2>&1; then
-    skiparm "ARM 4: no sysctl on this host, so the BSD load read cannot be exercised"
+    skiparm "ARM 4: no sysctl on this host, so the BSD load read cannot be exercised" "no sysctl"
 # NOT `locale -a | grep -q`: this script runs under `set -o pipefail`, and
 # `grep -q` EXITS ON THE FIRST MATCH, so `locale -a` dies on SIGPIPE and the
 # pipeline returns 141 — a SUCCESSFUL match reported as a failure. Measured
@@ -207,7 +240,7 @@ if ! command -v sysctl >/dev/null 2>&1; then
 # capture, so no early-exiting reader can fabricate a failure.
 elif _a4_locales="$(locale -a 2>/dev/null || true)"; \
      ! printf '%s\n' "$_a4_locales" | grep -Fqx "fr_CH.UTF-8"; then
-    skiparm "ARM 4: no comma-decimal locale installed, so the defect cannot be induced here"
+    skiparm "ARM 4: no comma-decimal locale installed, so the defect cannot be induced here" "no comma-decimal locale"
 else
     _a4_raw="$(LC_ALL=fr_CH.UTF-8 sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
     _a4_pin="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
@@ -225,7 +258,7 @@ else
         *)
             # NEGATIVE CONTROL, inverted: if the comma form cannot even be
             # induced, this arm proves nothing and must say so rather than pass.
-            skiparm "ARM 4: this host does not produce a comma decimal under fr_CH.UTF-8 (got '$_a4_raw'), so the pin cannot be demonstrated here"
+            skiparm "ARM 4: this host does not produce a comma decimal under fr_CH.UTF-8 (got '$_a4_raw'), so the pin cannot be demonstrated here" "comma form not inducible"
             ;;
     esac
 fi
@@ -237,8 +270,8 @@ if [ "$fail" -eq 0 ]; then
     # and the next reader would take a green here as "the margin arm is
     # exercised on this host" when nothing exercised it. Name the absence.
     if [ "$skipped" -gt 0 ]; then
-        printf 'ok:tool-materialize-%s:arm-surfaced:%d/%d (%d skipped: no toolbox on this host, margin arm not exercised here)\n' \
-            "$LIT" "$pass" "$((pass + fail))" "$skipped"
+        printf 'ok:tool-materialize-%s:arm-surfaced:%d/%d (%d skipped: %s)\n' \
+            "$LIT" "$pass" "$((pass + fail))" "$skipped" "$(printf '%s' "$skip_reasons" | tr ';' ',' )"
         exit 0
     fi
     printf 'ok:tool-materialize-%s:arm-surfaced:%d/%d\n' "$LIT" "$pass" "$((pass + fail))"
