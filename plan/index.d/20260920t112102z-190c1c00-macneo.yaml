@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: completed
+      ts: "2026-09-20T11:21:02Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t112102z
+      host: macneo
+      summary: |
+        CLOSED. READ THIS FIRST: THE MECHANISM WAS THE TOOLBOX SKIP OF ARMS 4-7, NOT
+        THE REGIME PROBE. This row's title and its first two events name a probe that
+        read /proc/loadavg and nproc only; that is not what red the macOS gates. Titles
+        are immutable, so this event is the correction a reader will find.
+
+        WHAT ACTUALLY HAPPENED. The margin arm IS arm 7 of scripts/test-tool-materialize.sh,
+        and arms 4-7 need a toolbox. macOS and Windows have none, and the subject SKIPS
+        those arms BY DESIGN — its own comment says such hosts "legitimately have neither;
+        they SKIP rather than fail". So the regime line could never be printed there
+        whatever the probe read, and ARM 0 of the surfaces fixture REQUIRED that line.
+        Arms 1, 1b and 2 failed for the same reason: they inject into an arm that never
+        runs. The defect was AN ARM ASSERTING A PRECONDITION IT NEVER CHECKED. Fixing
+        the probe alone would have left all four red.
+        Evidence that decided it: the subject's own output line `skip: arms 4-7 need a
+        toolbox on this host`, present in every failing macneo gate.
+
+        THE PROBE WORK WAS STILL REAL, and is kept for hosts that reach the arm:
+          - LC_ALL=C pinned at the load read. `sysctl -n vm.loadavg` formats through
+            LC_NUMERIC: macbookair (fr_CH.UTF-8) prints `{ 1,58 1,69 1,73 }`, reproduced
+            on macneo under LC_ALL=fr_CH.UTF-8, so it is a property of the LOCALE, not of
+            one host. Consequences are 1254-fdsu's: one string, three values.
+          - A BSD arm for load (sysctl vm.loadavg) and cores (sysctl hw.ncpu), branching
+            on WHAT ANSWERS rather than on what a platform is presumed to lack.
+          - `nproc` is present on BOTH Macs via Homebrew and absent stock, so its
+            presence is a property of what someone brewed. The row's premise that it was
+            absent on macneo was wrong and is corrected here.
+          - When no source is readable the probe emits a NAMED skip rather than an
+            unfounded red.
+
+        EVIDENCE, every line verbatim.
+
+        macneo (macOS 27.0, arm64) on v2 @ 9121afb55:
+          ok:tool-materialize:all
+          ok:   ARM 4: the comma locale DOES reform the load (1,81) and LC_ALL=C pins it to the dotted form (1.81) that ARM 0's regex requires
+          ok:tool-materialize-litmus:arm-surfaced:3/3 (3 skipped: no toolbox on this host, margin arm not exercised here)
+
+        macneo on v4 @ b05f66260 (final shape):
+          ok:tool-materialize:all
+          ok:tool-materialize-litmus:arm-surfaced:3/3 (3 skipped: no toolbox, margin arm not exercised)
+
+        macbookair (macOS, LC_NUMERIC=fr_CH.UTF-8 NATIVELY) at 66e2aa860, exit 0 —
+        the second BSD regime, and note the comma reading is its AMBIENT environment,
+        not an induced one:
+          ok:   ARM 0: the subject SKIPPED arms 4-7 (arms 4-7 need a toolbox on this host), so the regime probe could not run — arms 1, 1b and 2 are skipped by name below for the same reason, so NOTHING in this run exercises the margin arm; that coverage lives on a host with a working builder
+          ok:   ARM 4: the comma locale DOES reform the load (1,55) and LC_ALL=C pins it to the dotted form (1.55) that ARM 0's regex requires
+          ok:tool-materialize-litmus:arm-surfaced:3/3 (3 skipped: no toolbox, margin arm not exercised)
+
+        yoga, bare-metal Linux with a toolbox, step 414 under the gate's own regime on v4:
+          ok:   ARM 0: the regime probe read REAL host values with nothing injected (load 1.31 on 12 cpus, 7661088kB free)
+          skip: ARM 4: no comma-decimal locale installed, so the defect cannot be induced here
+          ok:tool-materialize-litmus:arm-surfaced:5/5 (1 skipped: no comma-decimal locale)
+
+        yoga's four paths, two of them unreachable from any Mac:
+          bare metal + toolbox           -> 5/5, regime measured
+          bare metal, toolbox absent     -> REFUSED, ARM 0 names "need a toolbox on this host"
+          bare metal, builder without jq -> REFUSED, ARM 0 names "to carry jq"
+          container, either anomaly      -> ACCEPTED as a named skip, tag derived from which fired
+
+        THE BEFORE/AFTER PAIR, and it is the single clearest line on this row. Same
+        platform class, same arm skipped, same 5/5:
+          pre-fix  (land 23's relay gate, v2): 5/5 (1 skipped: no toolbox on this host, margin arm not exercised here)
+          post-fix (yoga, v4):                 5/5 (1 skipped: no comma-decimal locale)
+        ONLY THE REASON CHANGED. The pre-fix line named a cause that did not occur, on a
+        host that HAS a toolbox and DID run the margin arm. The count was honest and the
+        sentence was not.
+
+        THREE DEFECTS FOUND INSIDE THE FIX FOR THIS ONE, all the same shape as the row:
+          1. v2's verdict hardcoded "no toolbox on this host" whatever had been skipped.
+             Caught by yoga EXECUTING it on a host where only ARM 4 skipped. v3 derives
+             the sentence from what actually happened.
+          2. v3 still passed a hardcoded "no toolbox" tag from arms 1/1b/2, so a host
+             whose builder had lost jq would summarise as "no toolbox" while ARM 0
+             correctly named the jq skip — the summary coarser than the evidence. v4
+             derives the tag, with a neutral fallback for an unanticipated skip string.
+          3. ARM 4's own locale detection used `locale -a | grep -q` under
+             `set -o pipefail`: grep -q exits on first match, locale -a dies on SIGPIPE,
+             the pipeline returns 141, and A SUCCESSFUL MATCH IS REPORTED AS A FAILURE.
+             Measured rc=141 with pipefail, rc=0 without. It produced a FALSE NAMED SKIP
+             on a host where the locale is installed — the one thing a named skip is
+             supposed to make impossible. Fixed by capture-then-match (1076-kft9).
+
+        NEITHER PLATFORM COULD HAVE FOUND THE OTHER'S HALF, which is the transferable
+        part. On macneo the pre-fix sentence "no toolbox on this host" is TRUE, so no
+        amount of careful reading here would have exposed defect 1; it is visible only
+        where the margin arm runs. On Linux the margin arm runs, so the macOS red cannot
+        appear at all. The row needed both hosts, and the fix needed yoga executing what
+        macneo could only write.
+
+        LIMITS, stated rather than assumed away: macneo never executed the bare-metal
+        refusal branch or the jq-tag path — it is Darwin and takes the else arm and the
+        no-toolbox tag every time. Those two paths rest entirely on yoga's induced runs.
+        ARM 4 on macneo used an INDUCED comma locale; macbookair's is ambient, which is
+        the stronger of the two readings.
