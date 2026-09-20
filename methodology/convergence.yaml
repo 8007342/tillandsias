@@ -84,6 +84,21 @@ drift_control:
     - spec_change_must_increase_or_preserve_verification_level:
         reason: "A spec update should add validation, never weaken it"
 
+    - a_green_gate_MUST_NOT_be_read_as_the_litmus_assertions_having_run:
+        reason: >
+          ./build.sh --check does NOT execute the litmus tier, deliberately. The
+          release tier runs it. So a green gate says nothing about whether the
+          litmus specs asserting on the changed files were exercised, and the
+          land tool prints exactly that on every push that touches them:
+          "NOTICE — N litmus spec(s) assert on the files you are pushing, and
+          ./build.sh --check ran NONE of them". Anyone citing a green --check as
+          evidence that a change satisfies its litmus assertions MUST instead run
+          those specs (scripts/run-litmus-test.sh <spec> --phase pre-build) or
+          say plainly that they did not. Measured repeatedly in the
+          fail-loud-diagnosis milestone: 63 mentions and 0 executions on two
+          hosts, and a 1269-gfdi slice whose own fixture would have first
+          executed at release time had a gate step not been added for it.
+
   detection:
     - compare_previous_and_current_spec: "Diff old and new spec versions"
     - flag_if_uncertainty_increases: "Fail if ambiguity_score rises"

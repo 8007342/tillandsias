@@ -11133,7 +11133,31 @@ pub(crate) fn write_forge_gitconfig(
     cache_root: &Path,
 ) -> Option<PathBuf> {
     let forge_git_dir = cache_root.join("forge-gitconfig");
-    std::fs::create_dir_all(&forge_git_dir).ok()?;
+    // ORDER 1282-rkkm. NAME THE FAILURE WHERE IT HAPPENS. This was
+    // `create_dir_all(&forge_git_dir).ok()?`, which turned "the cache root does
+    // not exist and cannot be created" into a well-formed `None`. The caller
+    // then omitted the gitconfig mount, and forge_credential_quarantine_mounts_
+    // present failed several frames away with "must mount credential-quarantine
+    // tmpfs at /home/forge/.gitconfig" — an ABSENCE, reported as if the mount
+    // list were wrong, when the real cause was an unusable directory.
+    //
+    // macneo lost a gating session to that gap on 2026-09-19: the assertion
+    // named the missing mount and nothing named the cause. The mount is still
+    // omitted (this function cannot invent a directory), but the reason now
+    // travels with the failure, so a reader is not left inferring it from an
+    // assertion that is three frames from the truth. cargo captures this per
+    // test and prints it with the failing test's output.
+    if let Err(err) = std::fs::create_dir_all(&forge_git_dir) {
+        eprintln!(
+            "[tillandsias] forge gitconfig NOT written for project '{project_name}': the cache \
+             root '{}' could not be created ({err}). The gitconfig mount will be ABSENT from the \
+             forge argv; a test asserting that mount will fail on the absence, and THIS is the \
+             cause. If this appears during a test run, the cache root was redirected by another \
+             test's process-global write (order 1021-hf9e).",
+            forge_git_dir.display()
+        );
+        return None;
+    }
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
 
@@ -15056,6 +15080,10 @@ pub(crate) fn build_forge_agent_run_args(
     // ORDER 1021-hf9e: explicit, so a test exercising either lane needs no
     // process-global write. Production callers pass forge_uses_host_mount().
     host_mount: bool,
+    // ORDER 1282-rkkm. Threaded, not resolved here — see the note on
+    // build_forge_agent_run_args_with_vault. The victim test reaches the cache
+    // root THROUGH this function, so this is where it must be injectable.
+    cache_root: &Path,
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
@@ -15073,6 +15101,7 @@ pub(crate) fn build_forge_agent_run_args(
         None,
         None,
         host_mount,
+        cache_root,
     )
 }
 
@@ -15112,6 +15141,14 @@ fn build_forge_agent_run_args_with_vault(
     // than serialise around it. A #[serial] or a wider env_lock() would hide the
     // race and leave the global readable by anything else in the process.
     host_mount: bool,
+    // ORDER 1282-rkkm. THREADED ONE FRAME FURTHER THAN 1021-hf9e REACHED.
+    // That order made write_forge_gitconfig take the root, but this builder
+    // still resolved it from the process-global here — and the victim,
+    // forge_credential_quarantine_mounts_present, reaches the read THROUGH this
+    // function. Relocating a global read is not removing it: the test that races
+    // is the one that CALLS the reader, so the seam has to sit where that caller
+    // can inject it.
+    cache_root: &Path,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
@@ -15423,7 +15460,7 @@ fn build_forge_agent_run_args_with_vault(
         host_checkout,
         resolved_remote_url,
         // ORDER 1021-hf9e: production resolves the root; tests pass their own.
-        &tillandsias_core::cache_root::cache_root(),
+        cache_root,
     ) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
@@ -15557,6 +15594,10 @@ pub(crate) fn build_forge_agent_run_argv(
     // kept failing in 2 of 10 parallel runs. Moving a global read one level up
     // is not removing it. It is now the caller's to resolve.
     host_mount: bool,
+    // ORDER 1282-rkkm. Threaded, not resolved here — see the note on
+    // build_forge_agent_run_args_with_vault. The victim test reaches the cache
+    // root THROUGH this function, so this is where it must be injectable.
+    cache_root: &Path,
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
@@ -15592,6 +15633,7 @@ pub(crate) fn build_forge_agent_run_argv(
         mode,
         debug,
         host_mount,
+        cache_root,
     ));
     argv
 }
@@ -15777,6 +15819,7 @@ fn run_forge_agent_cli_mode(
         prompt,
         // ORDER 1021-hf9e: read the process env HERE, in the production lane.
         forge_uses_host_mount(),
+        &tillandsias_core::cache_root::cache_root(),
     );
 
     let rt = podman_runtime()?;
@@ -15926,6 +15969,7 @@ pub(crate) fn launch_forge_agent(
             // ORDER 1021-hf9e: the process env is read HERE, in the production
             // launcher, and nowhere a test can reach concurrently.
             forge_uses_host_mount(),
+            &tillandsias_core::cache_root::cache_root(),
         )
     };
 
@@ -17777,7 +17821,37 @@ pub(crate) async fn service_stop(
 }
 
 #[cfg(test)]
+/// ORDER 1282-rkkm. A cache root THIS TEST OWNS, so no test in this module
+/// reaches the process-global resolver through the forge argv builders.
+///
+/// The race this removes: another test set XDG_CACHE_HOME (or HOME) under
+/// env_lock() to redirect where its own artefacts land;
+/// forge_credential_quarantine_mounts_present took only the podman seam
+/// lock, reached the global read through three builders, and got a
+/// directory belonging to — or already dropped by — that other test. A lock
+/// protects only the participants who take it, and the victim never took
+/// this one.
+///
+/// DELIBERATELY NOT `tempfile::tempdir()`. A TempDir bound to nothing is
+/// dropped at the end of the statement that creates it, so the directory
+/// would be gone before the code under test used the path — which is
+/// EXACTLY the failure this row exists to fix. A plain created directory
+/// has no drop semantics to get wrong.
+fn test_cache_root() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "tillandsias-test-cache-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).expect("create a test-owned cache root");
+    dir
+}
+
+#[cfg(test)]
 mod tests {
+
     /// ORDER 1277-g5k9, ARM 1. A spawn failure names the program and where it
     /// looked, and the two other arms pin the parts that must NOT change.
     ///
@@ -20594,6 +20668,7 @@ mod tests {
             ForgeAgentMode::Maintenance,
             true,
             false,
+            &test_cache_root(),
         );
 
         assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
@@ -21009,6 +21084,7 @@ mod tests {
                 mode,
                 false,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -21086,6 +21162,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
 
         // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
@@ -21184,6 +21261,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
 
         let mut found_ssh = false;
@@ -21263,6 +21341,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -21298,6 +21377,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -21355,6 +21435,7 @@ mod tests {
             ForgeAgentMode::Claude,
             true,
             false,
+            &test_cache_root(),
         );
         eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
         for (i, a) in argv.iter().enumerate() {
@@ -23364,6 +23445,7 @@ mod tests {
             None,
             Some("delegated codex"),
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", opencode), ("codex", codex)] {
             assert!(
@@ -23476,6 +23558,7 @@ mod tests {
             None,
             None,
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23516,6 +23599,7 @@ mod tests {
             None,
             None,
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23617,6 +23701,7 @@ mod tests {
             None,
             None,
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -24833,6 +24918,7 @@ esac
             ForgeAgentMode::Codex,
             false,
             false,
+            &test_cache_root(),
         );
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
@@ -24869,6 +24955,7 @@ esac
                 Some("provider-forge-lease"),
                 None,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -24896,6 +24983,7 @@ esac
                 Some("must-not-mount"),
                 None,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
@@ -24927,6 +25015,7 @@ esac
             Some("codex-forge-lease"),
             Some(prompt),
             false,
+            &test_cache_root(),
         );
         assert!(
             has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
@@ -24952,6 +25041,7 @@ esac
             Some("codex-forge-lease"),
             None,
             false,
+            &test_cache_root(),
         );
         assert!(
             has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
@@ -25024,6 +25114,7 @@ esac
         ] {
             let args = build_forge_agent_run_args(
                 &project, "alpha", None, &certs, "1.2.3", mode, false, false,
+                &test_cache_root(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -25085,6 +25176,7 @@ esac
             ForgeAgentMode::Codex,
             true,
             false,
+            &test_cache_root(),
         );
 
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
@@ -25127,6 +25219,7 @@ esac
                 mode,
                 false,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 has_arg(&args, "--tty"),
@@ -25439,6 +25532,7 @@ esac
             None,                 // vault_secret
             Some("do the thing"), // prompt — this is the arg that matters,
             false,
+            &test_cache_root(),
         );
         assert!(
             !has_arg(&args, "--tty"),
@@ -26208,6 +26302,7 @@ esac
             // the opt-in host-mount lane, and it used to say so by setting a
             // process-global that every concurrently-running test could read.
             true,
+            &test_cache_root(),
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
@@ -26286,6 +26381,7 @@ esac
             false,
             // ORDER 1021-hf9e: host_mount — this whole test exercises the opt-in lane.
             true,
+            &test_cache_root(),
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
@@ -28488,6 +28584,7 @@ esac
             None,
             None,
             false,
+            &test_cache_root(),
         );
 
         let args_str = args.join(" ");
