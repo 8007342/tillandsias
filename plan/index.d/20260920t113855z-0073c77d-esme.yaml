@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    field: status
+    value: in_progress
+    ts: "2026-09-20T11:38:55Z"
+    host: esme
+
+events:
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    event:
+      type: note
+      ts: "2026-09-20T11:38:55Z"
+      host: esme
+      summary: |-
+        handed by the coordinator 2026-09-20: floor-tier instrument defect (the Windows installer lost its post-install --diagnose check and the litmus passed on non-empty output); esme is the floor Windows host and the fixture must fail on the pre-fix installer
