@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    field: status
+    value: completed
+    ts: "2026-09-20T15:41:56Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    event:
+      type: completed
+      ts: "2026-09-20T15:41:56Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 319c1e7e0 litmus:windows-host-lane-refusal PASS 5.1s (bound under init-command); controls: refusal-removed red, refusal-moved-below-lane-selection red while its text arms stayed green; behavioural arm on yolanda: tillandsias.exe --init exits 1, prints refused:windows-host-lane, names tillandsias-tray.exe --provision-once, zero image-build lines against a pre-fix signature of eight
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    event:
+      type: note
+      ts: "2026-09-20T15:41:56Z"
+      host: yolanda-windows
+      summary: |-
+        esme's fix 9b7180a9c made the launcher refuse on arrival; this closes the row by pinning it, which is what it was waiting for
