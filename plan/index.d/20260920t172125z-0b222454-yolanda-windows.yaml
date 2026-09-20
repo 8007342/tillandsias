@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: claim
+      ts: "2026-09-20T17:21:25Z"
+      agent_id: windows-yolanda-claude-20260920t172123z
+      host: yolanda-windows
+      summary: |
+        Claimed by yolanda-windows, the host that measured it. Committed and pushed
+        before any code.
+
+        SCOPE, as the row states it, in the order the next_action sets:
+
+          1. THE SCRIPT REFUSES BEFORE IT SKIPS. `--verify` must distinguish "the
+             staging is stale" from "this host cannot restage", and NAME the missing
+             tool. Today it prints verify:skip-stale-staging and points the reader at
+             the very script that cannot run on their host.
+          2. THE FALLBACK IS COMPLETE OR HONEST. build-windows-tray.ps1's two-line
+             description of the rustup-musl fallback omits `--features listen-vsock`,
+             which is the flag that decides whether the artifact can serve the control
+             wire at all.
+          3. A STAGING ASSERTION THAT VERSIONS CANNOT FAKE. A staged guest binary is
+             checked for the listen-vsock capability, not only for its version string.
+
+        THE THIRD IS THE ONE THAT EARNS THE ROW, and it is why the order above is not
+        the order of difficulty. My own feature-less build COMPILED, STAGED, EMBEDDED,
+        INSTALLED INTO THE GUEST AND RAN, printing the correct version at every step,
+        and could not serve the wire; the reprovision failed 524 seconds later. Every
+        check that compares versions passed on a binary that was wrong in a way
+        versions cannot see. Only the guest's own refusal caught it, and it caught it
+        at the far end of a provision rather than at staging.
+
+        SCOPED BY A LATER MEASUREMENT (the event already on this row): the builder
+        distro lacks CROSS toolchains, not toolchains. It compiles natively fine --
+        that is what the gate uses it for, and what x86_64 musl guest staging uses. The
+        absent pieces are aarch64-linux-musl-gcc and x86_64-w64-mingw32-gcc. So this
+        row asks for a cross linker or a documented no-Nix path that refuses before
+        touching target-guest, and asks for nothing from the native lanes.
+
+        NOT IN SCOPE: installing Nix on the Windows hosts. Nobody has measured that it
+        works there and the row says so.
