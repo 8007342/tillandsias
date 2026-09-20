@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    field: status
+    value: completed
+    ts: "2026-09-20T19:44:49Z"
+    host: pirria
+
+events:
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    event:
+      type: completed
+      ts: "2026-09-20T19:44:49Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 4897877b7 fixture 9/9; litmus:fragment-ts-skew 3/3 PASS; both arms measured against the same trunk
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    event:
+      type: note
+      ts: "2026-09-20T19:44:49Z"
+      host: pirria
+      summary: |-
+        closed — future ts refused by the lane and the gate's fast tier, past ts accepted and printed; the six future-dated fragments left standing and named in one place

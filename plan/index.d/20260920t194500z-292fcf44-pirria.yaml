@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    field: status
+    value: completed
+    ts: "2026-09-20T19:45:00Z"
+    host: pirria
+
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: completed
+      ts: "2026-09-20T19:45:00Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: linux ef88b9406+5d299ef14 litmus:installer-reprovisions-on-install 7/7 PASS on trunk; macos 66f952eed 137 tests + litmus:reset-state-contract 11 arms; windows yolanda's tray body and run event
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T19:45:00Z"
+      host: pirria
+      summary: |-
+        closed on all three platform arms, each with its own evidence line; one contract, three bodies, gate and printer shared from tillandsias-core
