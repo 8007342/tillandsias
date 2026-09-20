@@ -482,6 +482,7 @@ specs:
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
+  - litmus:ssh-lane-refuses-when-unwired
   - litmus:git-mirror-startup-per-ref-tolerance
   - litmus:git-mirror-unborn-head-repair
   - litmus:git-mirror-stale-reconcile
