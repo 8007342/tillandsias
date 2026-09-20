@@ -11296,6 +11296,15 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 // gating the mirror's sshd — until the T11 staged migration flips defaults.
 // ---------------------------------------------------------------------------
 
+/// ORDER 1288-5qpn. The unroutable URL a push is redirected to when the SSH
+/// lane is ENABLED but its host-CA cache is absent. It exists so the failure
+/// happens at the push rather than being absorbed by the anonymous git://
+/// redirect, and so git's own error text names the lane: git reports "Unable
+/// to find remote helper for 'tillandsias-ssh-lane-unwired'". Deliberately not
+/// a real scheme — anything routable would be a second fallback.
+pub(crate) const SSH_LANE_UNWIRED_REFUSAL_URL: &str =
+    "tillandsias-ssh-lane-unwired://host-ca-cache-missing";
+
 /// One flag flips the whole ssh push lane (mirror sshd + sidecar + forge
 /// wiring): T4-T10 land dark and T11 (749-y8xx) owns the default flip.
 pub(crate) fn mirror_ssh_push_lane_enabled() -> bool {
@@ -11766,18 +11775,63 @@ pub(crate) fn write_forge_gitconfig(
                 }
             }
             _ => {
-                // Fail loud in the artifact AND on stderr, never silent:
-                // the lane is explicitly enabled but its CA cache is
-                // absent — pushes will still take the git:// path.
+                // ORDER 1288-5qpn. FAIL CLOSED. This arm used to warn and then
+                // let the push take the anonymous git:// redirect written
+                // above, which is a fallback from the AUTHENTICATED transport
+                // to the UNAUTHENTICATED one, taken on exactly the failure
+                // where it is least wanted. It was loud on stderr and SILENT
+                // IN OUTCOME: the push succeeded, so nothing downstream ever
+                // reported a problem, and an operator who had enabled the lane
+                // could believe they were on it while every push travelled
+                // git://. THE FLAG BEING SET IS NOT EVIDENCE THE LANE IS IN USE.
+                //
+                // Found by dogfooding this lane on lenovinha as 1288-5qpn's
+                // first authenticated client, which is what that row's ruling
+                // (a) was for. The operator's requirement it violates is
+                // "fail hard, no direct-push fallback".
+                //
+                // THE MECHANISM, and why it is a refusing URL rather than an
+                // omission. Omitting a push redirect does NOT fail closed: the
+                // anonymous `insteadOf` above already covers push as well as
+                // fetch, so silence here means the anonymous path wins. A
+                // `pushInsteadOf` to an unroutable scheme is what actually
+                // stops it — git refuses with "Unable to find remote helper
+                // for 'tillandsias-ssh-lane-unwired'", which names the lane at
+                // the point of failure. The exact cache path and the variable
+                // travel in the comment and on stderr, because a URL cannot
+                // carry a filesystem path cleanly.
+                let ca_display = ssh_lane_host_ca_cache_path(project_name)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "<cache path unresolvable>".to_string());
                 eprintln!(
-                    "[tillandsias] WARNING: TILLANDSIAS_MIRROR_SSHD=1 but no host-CA cache \
-                         exists for '{project_name}' — the SSH push lane was NOT wired into \
-                         its gitconfig (did ensure_ssh_lane_sidecar run?)."
+                    "[tillandsias] REFUSING the SSH push lane for '{project_name}': \
+                     TILLANDSIAS_MIRROR_SSHD=1 but the host-CA cache is absent at {ca_display}. \
+                     Pushes are redirected to an unroutable URL and WILL FAIL — they do NOT fall \
+                     back to the anonymous git:// mirror path (1288-5qpn). Run the launch that \
+                     populates the cache (ensure_ssh_lane_sidecar), or unset \
+                     TILLANDSIAS_MIRROR_SSHD to use the anonymous lane deliberately."
                 );
+                config.push('\n');
                 config.push_str(
-                    "\n# SSH push lane ENABLED but NOT wired: host-CA cache missing.\n\
-                         # Pushes fall back to the anonymous mirror redirect above.\n",
+                    "# SSH push lane ENABLED but NOT wired: host-CA cache missing.\n\
+                     # Pushes REFUSE. The anonymous mirror redirect above is NOT used in their\n\
+                     # place — an authenticated transport must not fall open to an\n\
+                     # unauthenticated one when its credential material is absent (1288-5qpn).\n",
                 );
+                config.push_str(&format!("# missing host-CA cache: {ca_display}\n"));
+                config.push_str(
+                    "# remedy: run the launch that populates it (ensure_ssh_lane_sidecar), or\n\
+                     # unset TILLANDSIAS_MIRROR_SSHD to choose the anonymous lane deliberately.\n",
+                );
+                config.push_str(&format!("[url \"{SSH_LANE_UNWIRED_REFUSAL_URL}\"]\n"));
+                config.push_str(&format!("\tpushInsteadOf = {origin}\n"));
+                if origin.starts_with("git@github.com:") {
+                    let nwo = origin
+                        .strip_prefix("git@github.com:")
+                        .and_then(|s| s.strip_suffix(".git"))
+                        .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
+                    config.push_str(&format!("\tpushInsteadOf = https://github.com/{nwo}.git\n"));
+                }
             }
         }
     }
@@ -26429,9 +26483,45 @@ esac
             text.contains("SSH push lane ENABLED but NOT wired"),
             "missing CA cache with the lane on must be stated in the artifact; got:\n{text}"
         );
+        // ORDER 1288-5qpn. THE ASSERTION INVERTED, and the reason is the whole
+        // point of the change. This used to require that NO pushInsteadOf
+        // appear without the CA — which sounds fail-safe and is the opposite.
+        // The anonymous git:// `insteadOf` written earlier in this same file
+        // covers PUSH as well as fetch, so an absent push redirect means the
+        // anonymous path silently wins: the push SUCCEEDS, unauthenticated,
+        // with only a stderr warning nobody downstream sees. Failing closed
+        // requires a push redirect that cannot route.
         assert!(
-            !text.contains("pushInsteadOf"),
-            "no half-wired push redirect may appear without the CA; got:\n{text}"
+            text.contains("pushInsteadOf"),
+            "the lane on with no CA must REFUSE the push, which needs a pushInsteadOf to an \
+             unroutable URL; an absent redirect lets the anonymous git:// path win (1288-5qpn); \
+             got:\n{text}"
+        );
+        assert!(
+            text.contains(SSH_LANE_UNWIRED_REFUSAL_URL),
+            "the refusing push redirect must point at the unroutable lane URL so git's own error \
+             names the lane; got:\n{text}"
+        );
+        assert!(
+            text.contains("Pushes REFUSE"),
+            "the artifact must say the push refuses, not that it falls back; got:\n{text}"
+        );
+        assert!(
+            !text.contains("fall back to the anonymous mirror redirect"),
+            "MUTATION GUARD: the pre-1288-5qpn wording announced a fallback from the \
+             authenticated transport to the unauthenticated one. If this string returns, the \
+             fallback has been reintroduced; got:\n{text}"
+        );
+        // The refusal must NAME the missing cache, or the operator is told the
+        // lane is unwired without being told what to populate.
+        assert!(
+            text.contains("# missing host-CA cache:"),
+            "the refusal must name the cache path it could not find; got:\n{text}"
+        );
+        assert!(
+            text.contains("TILLANDSIAS_MIRROR_SSHD"),
+            "the refusal must name the variable that turned the lane on, since unsetting it is \
+             one of the two remedies; got:\n{text}"
         );
     }
 
