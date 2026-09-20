@@ -37,11 +37,14 @@ if cmp -s "$SRC" "$D/removed.rs"; then
 else
     out="$(TILLANDSIAS_HEADLESS_SRC="$D/removed.rs" bash "$FIXTURE" 2>&1)"; rc=$?
     if [ "$rc" -eq 0 ]; then
-        echo "FAIL: control-1 — the fixture PASSED a source with no refusal call"; fail=1
-    elif printf '%s' "$out" | grep -q 'does not call windows_host_lane_refusal'; then
-        echo "ok: control-1 red when the refusal call is removed"
+        echo "FAIL: control-1 -- the fixture PASSED a source with no refusal call"; fail=1
     else
-        echo "FAIL: control-1 red for the wrong reason: $out"; fail=1
+        case "$out" in
+            *'does not call windows_host_lane_refusal'*)
+                echo "ok: control-1 red when the refusal call is removed" ;;
+            *)
+                echo "FAIL: control-1 red for the wrong reason: $out"; fail=1 ;;
+        esac
     fi
 fi
 
@@ -64,13 +67,23 @@ if cmp -s "$SRC" "$D/moved.rs"; then
 else
     out="$(TILLANDSIAS_HEADLESS_SRC="$D/moved.rs" bash "$FIXTURE" 2>&1)"; rc=$?
     if [ "$rc" -eq 0 ]; then
-        echo "FAIL: control-2 — a refusal BELOW lane selection passed"; fail=1
-    elif ! printf '%s' "$out" | grep -q 'comes AFTER'; then
-        echo "FAIL: control-2 red for the wrong reason: $out"; fail=1
-    elif ! printf '%s' "$out" | grep -q 'names the working command'; then
-        echo "FAIL: control-2 — expected the TEXT arms to stay GREEN under a move sabotage; if they went red this control no longer isolates position"; fail=1
+        echo "FAIL: control-2 -- a refusal BELOW lane selection passed"; fail=1
     else
-        echo "ok: control-2 red on position while the text arms stay green"
+        case "$out" in
+            *'comes AFTER'*) _pos=red ;;
+            *)               _pos=notred ;;
+        esac
+        case "$out" in
+            *'names the working command'*) _text=green ;;
+            *)                             _text=notgreen ;;
+        esac
+        if [ "$_pos" != red ]; then
+            echo "FAIL: control-2 red for the wrong reason: $out"; fail=1
+        elif [ "$_text" != green ]; then
+            echo "FAIL: control-2 -- expected the TEXT arms to stay GREEN under a move sabotage; if they went red this control no longer isolates position"; fail=1
+        else
+            echo "ok: control-2 red on position while the text arms stay green"
+        fi
     fi
 fi
 

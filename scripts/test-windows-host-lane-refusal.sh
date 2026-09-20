@@ -36,7 +36,7 @@ _fail() { echo "FAIL: $1"; fail=1; }
 # ARM 1 — THE ORDER, which is the whole defect. A refusal that runs AFTER lane
 # selection still prints a lane line and still enters the lane; the row is
 # about refusing ON ARRIVAL. Line numbers come from the comment-stripped copy.
-run_init_ln=$(grep -n '^fn run_init' "$CODE" | head -1 | cut -d: -f1)
+run_init_ln=$(grep -n '^fn run_init' "$CODE" | head -1 | cut -d: -f1)  # sigpipe-ok: value-only capture, the pipeline's status is never read
 if [ -z "$run_init_ln" ]; then
     _fail "no 'fn run_init' in $SRC — the function this row is about is gone or renamed"
 else
@@ -125,7 +125,7 @@ case "$(uname -s)" in
             *) _fail "BEHAVIOURAL: the output does not name the tray command" ;;
         esac
         # The pre-fix signature was eight BUILD failures. Zero is the fix.
-        builds=$(printf '%s\n' "$out" | grep -ciE 'building image|failed to spawn build' || true)
+        builds=$(printf '%s\n' "$out" | grep -ciE 'building image|failed to spawn build' || true)  # sigpipe-ok: grep -c consumes all input and prints 0; || true keeps that value, it does not append a second one
         [ "${builds:-0}" -eq 0 ] && _ok "BEHAVIOURAL: no image-build lines (pre-fix: eight)" \
                                  || _fail "BEHAVIOURAL: $builds image-build line(s) — the lane was entered"
     fi
