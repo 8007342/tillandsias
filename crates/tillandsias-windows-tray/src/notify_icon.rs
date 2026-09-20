@@ -1131,29 +1131,56 @@ pub fn reset_state_once() -> i32 {
         }
     };
 
-    let wipe = destructive_reset_allowed();
+    // ORDER 1286-4437 -- THE CONTRACT IS IMPORTED, NOT RE-TYPED. The guard, the
+    // skipped-line wording and the announcement's shape all come from
+    // tillandsias_core::reset_state so the three platforms cannot drift. They
+    // already had: macneo measured this file's own line against core's constant
+    // on the day core landed -- the pinned middle phrase matched, so every grep
+    // and core's own pinning test read clean, while the prefix and the TAIL
+    // differed, and the tails differed in MEANING. That is precisely the
+    // divergence the constant exists to prevent, so the local strings are gone
+    // rather than corrected.
+    //
+    // THE PRE-FLIGHT GUARD IS PART OF THAT CONTRACT and is not vacuous here
+    // either. On Windows the reprovision is IN-PROCESS -- this binary is the
+    // reprovisioner -- so the path to check is our own image: an install
+    // interrupted between the swap and the reset can leave the process running
+    // from a file that no longer exists. macneo measured the macOS shape of it
+    // (the .app gone while 1.2 GiB of VM state survived). A repair tool that
+    // assumes the thing it repairs with is present is not a repair tool.
+    match std::env::current_exe() {
+        Ok(exe) if exe.is_file() => {}
+        Ok(exe) => {
+            eprintln!(
+                "{} {}",
+                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH,
+                exe.display()
+            );
+            return 1;
+        }
+        Err(err) => {
+            eprintln!(
+                "{} could not resolve this executable: {err}",
+                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH
+            );
+            return 1;
+        }
+    }
 
-    // ANNOUNCE BEFORE DESTROYING, AND NAME WHAT SURVIVES FIRST. An operator
-    // reading a destructive banner wants to know what they keep before what
-    // they lose, and the installation UUID is the one that matters: the in-VM
-    // Vault derives its master key from it.
-    println!(
-        "[reset-state] PRESERVED: {} (the installation identity; the in-VM Vault derives its master key from it)",
-        crate::installation_uuid::TARGET_NAME
-    );
+    let wipe = tillandsias_core::reset_state::destructive_reset_allowed();
+
     if wipe {
-        println!(
-            "[reset-state] DESTROYED: the WSL2 distro and its disk, the host credentials {} and {}, and the download cache.",
-            crate::installation_uuid::VAULT_SHARE_TARGET,
-            crate::installation_uuid::VAULT_ROOT_TOKEN_TARGET
-        );
-        println!(
-            "[reset-state] Everything else lives in the cloud \u{2014} you will re-authenticate once."
+        tillandsias_core::reset_state::announce_reset_plan(
+            &[
+                "the WSL2 distro and its disk",
+                crate::installation_uuid::VAULT_SHARE_TARGET,
+                crate::installation_uuid::VAULT_ROOT_TOKEN_TARGET,
+                "the download cache",
+            ],
+            &[crate::installation_uuid::TARGET_NAME],
         );
     } else {
-        println!(
-            "[reset-state] reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \u{2014} nothing will be destroyed; provisioning the existing state."
-        );
+        eprintln!("{}", tillandsias_core::reset_state::RESET_SKIPPED_LINE);
     }
 
     runtime.block_on(async {
@@ -1237,13 +1264,6 @@ pub fn reset_state_once() -> i32 {
     })
 }
 
-/// Whether a destructive reset may proceed. Mirrors the Linux launcher's
-/// `destructive_reset_allowed()` in meaning exactly: the variable is an
-/// opt-OUT, so an unset variable allows the reset and only the exact string
-/// "0" forbids it. One contract, one spelling, three platforms.
-fn destructive_reset_allowed() -> bool {
-    std::env::var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").map_or(true, |v| v != "0")
-}
 
 /// Alias kept for the name operators and scripts already use. It delegates
 /// rather than duplicating, so the two cannot drift.
