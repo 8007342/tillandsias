@@ -1206,6 +1206,7 @@ specs:
   - litmus:secure-control-wire-guest-responder-shape
   - litmus:psk-input-parity-shape
   - litmus:host-guest-no-cfg-transport-selection
+  - litmus:macos-vsock-inference-closure
   coverage_ratio: 67
   last_verified: '2026-07-06'
 - spec_id: vm-provisioning-lifecycle
