@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T07:51:14Z"
+      host: yoga
+      summary: |-
+        claimed on yoga per macuahuitl's queue 2026-09-20; 1282-rkkm is mine, lenovinha is inside 1288-5qpn
