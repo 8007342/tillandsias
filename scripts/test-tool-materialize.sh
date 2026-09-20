@@ -263,6 +263,61 @@ else
         ok "pilot verdict identical on all three tool paths (host / materialized / per-call): $_host_out"
     fi
 
+    # ORDER 1269-gfdi. THE REGIME PROBE. The margin arm compares a ratio, and a
+    # ratio is only meaningful when the host is not fighting for the CPU or the
+    # extraction dir. Under a parallel cargo build the materialized run and the
+    # per-call run are both slowed, but not equally — extraction is I/O and
+    # dispatch is process spawn — so the ratio collapses for a reason that has
+    # nothing to do with the mechanism this arm pins. That is what happened on
+    # macuahuitl 2026-09-19: red inside the pre-build suite, 10x margin
+    # standalone in the same toolbox seconds later.
+    #
+    # ITS INPUTS ARE OVERRIDABLE, ITS DECISION IS NOT. The env vars below inject
+    # the MEASUREMENTS so a fixture can drive this logic; the branch that reads
+    # them is the same branch that runs in production. Stubbing the verdict
+    # instead would test the stub. See test-tool-materialize-litmus-surfaces-arm.sh.
+    _margin_loadavg="${TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG-}"
+    if [ -z "$_margin_loadavg" ] && [ -r /proc/loadavg ]; then
+        _margin_loadavg="$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || true)"
+    fi
+    _margin_cpus="$(nproc 2>/dev/null || echo 1)"
+    _margin_avail_kb="${TILLANDSIAS_TOOL_MATERIALIZE_AVAIL_KB-}"
+    if [ -z "$_margin_avail_kb" ]; then
+        _margin_avail_kb="$(df -Pk "${CACHE:-/tmp}" 2>/dev/null | awk 'NR==2{print $4}' || true)"
+    fi
+
+    # Names the regime on stdout, or prints nothing when the host is quiet and
+    # roomy. Integer arithmetic only: loadavg is a decimal and bash has no
+    # floats, so it is scaled by 100 with the fractional part taken as text.
+    _margin_regime=""
+    case "$_margin_loadavg" in
+        ''|*[!0-9.]*) : ;;
+        *)
+            _ld_int="${_margin_loadavg%%.*}"
+            _ld_frac="${_margin_loadavg#*.}00"
+            [ "$_ld_frac" = "${_margin_loadavg}00" ] && _ld_frac="00"
+            _ld_x100=$(( _ld_int * 100 + 10#${_ld_frac:0:2} ))
+            # Busy = 1-minute load at or above 75% of the core count.
+            if [ "$_ld_x100" -ge $(( _margin_cpus * 75 )) ]; then
+                _margin_regime="loaded-host:load=${_margin_loadavg}:cpus=${_margin_cpus}"
+            fi
+            ;;
+    esac
+    case "$_margin_avail_kb" in
+        ''|*[!0-9]*) : ;;
+        *)
+            # 256 MiB on the extraction dir. Below that, a concurrent extraction
+            # can hit the tmpfs usrquota and the timing says nothing.
+            if [ "$_margin_avail_kb" -lt 262144 ]; then
+                if [ -n "$_margin_regime" ]; then
+                    _margin_regime="${_margin_regime},low-space:availkb=${_margin_avail_kb}"
+                else
+                    _margin_regime="low-space:availkb=${_margin_avail_kb}"
+                fi
+            fi
+            ;;
+    esac
+
     # 7. THE MEASURED BOUND exit criterion 2 asks for. Stated as a RATIO against
     #    the per-call path measured in the same run, never as an absolute
     #    millisecond figure: absolute numbers are a property of the machine and
@@ -276,10 +331,23 @@ else
         skip "arm 7 needs GNU date (+%s%N) to time the runs — BSD date prints a literal N and would compare garbage"
     elif [ "$_mat_ms" -le 0 ] || [ "$_pc_ms" -le 0 ]; then
         skip "arm 7 could not time the runs"
-    elif [ $(( _mat_ms * 4 )) -lt "$_pc_ms" ]; then
-        ok "materialized run is >4x faster than per-call dispatch (${_mat_ms}ms vs ${_pc_ms}ms; host jq ${_host_ms}ms) — cold cache, extraction included"
+    # TILLANDSIAS_TOOL_MATERIALIZE_FORCE_MARGIN_FAIL fails the MEASUREMENT only.
+    # It does not choose the outcome: the regime probe below still decides
+    # between a named skip and a red, exactly as it does when the ratio fails on
+    # its own. A knob that jumped straight to the verdict would let a fixture
+    # confirm a branch production never takes.
+    elif [ $(( _mat_ms * 4 )) -lt "$_pc_ms" ] \
+         && [ -z "${TILLANDSIAS_TOOL_MATERIALIZE_FORCE_MARGIN_FAIL-}" ]; then
+        ok "materialized run is >4x faster than per-call dispatch (${_mat_ms}ms vs ${_pc_ms}ms; host jq ${_host_ms}ms) — cold cache, extraction included; regime quiet (load ${_margin_loadavg:-?} on ${_margin_cpus} cpus, ${_margin_avail_kb:-?}kB free)"
+    elif [ -n "$_margin_regime" ]; then
+        # ORDER 1269-gfdi. A NAMED SKIP, NEVER A BARE RED. The numbers travel
+        # with it: a reader needs the ratio AND the regime to tell "the
+        # mechanism broke" from "the host was busy". This does NOT set fail, so
+        # the run still ends in its verdict token — a skip is an absence of
+        # evidence, not evidence of absence.
+        echo "skip:tool-materialize-margin:${_margin_regime} (${_mat_ms}ms vs ${_pc_ms}ms, ratio under 4x; host jq ${_host_ms}ms) — ratio not meaningful in this regime, re-run on a quiet host to verify the mechanism"
     else
-        bad "materialization bought less than 4x over per-call dispatch (${_mat_ms}ms vs ${_pc_ms}ms) — the mechanism is not working; check that the toolbox is reachable and the cache is writable"
+        bad "ARM 7: materialization bought less than 4x over per-call dispatch (${_mat_ms}ms vs ${_pc_ms}ms; host jq ${_host_ms}ms) — the mechanism is not working; check that the toolbox is reachable and the cache is writable. Regime probe found the host QUIET (load ${_margin_loadavg:-?} on ${_margin_cpus} cpus, ${_margin_avail_kb:-?}kB free), so load is not the explanation"
     fi
 fi
 fi
