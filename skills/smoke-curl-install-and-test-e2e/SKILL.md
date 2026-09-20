@@ -1177,13 +1177,29 @@ before committable work":
 {
   echo "git_status_empty=$([ -z "$(git status --porcelain)" ] && echo yes || echo no)"
   echo "head_matches_origin=$([ "$(git rev-parse HEAD)" = "$(git rev-parse origin/linux-next)" ] && echo yes || echo no)"
-  echo "mo_full_marker_present=$(grep -qE '^MO-FULL: ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
+  # ORDER 1190-swen, CORRECTED 2026-09-20. This greped `^MO-FULL: `
+  # GENERICALLY and was WRONG: a guard-stopped cycle is SUPPOSED to emit
+  # `MO-FULL: BLOCKED`. The meta-orchestration skill sanctions it explicitly
+  # (`MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self`, and "BLOCKED
+  # is exempt: a cycle saying it did not finish must still be able to say so").
+  # MEASURED on pirria 2026-09-20: a lane that behaved exactly as designed —
+  # enclave up, `blocked:upstream-no-credential`, nothing claimed or pushed —
+  # emitted `MO-FULL: BLOCKED 7e33445f9 linux-next 7e33445f9` and this check
+  # flagged it, which would send the next reader to investigate a correct run.
+  # What must be absent is a COMPLETE marker: that is the claim a guard-stopped
+  # cycle has no right to make.
+  echo "mo_full_complete_present=$(grep -qE '^MO-FULL: COMPLETE ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
+  echo "mo_full_blocked_present=$(grep -qE '^MO-FULL: BLOCKED ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
 } | tee target/smoke-e2e/04a-cold-host-residue.txt
 ```
 
-Expected on a cold host: `yes`, `yes`, **`no`**. The ABSENT marker is correct
-and loud — a lane that stopped at the guard has not completed its exit contract
-and must not claim it did.
+Expected on a cold host: `yes`, `yes`, **`no`** for COMPLETE, and either value
+for BLOCKED. The absent COMPLETE marker is correct and loud — a lane that
+stopped at the guard has not completed its exit contract and must not claim it
+did. A `BLOCKED` marker is NOT a finding: it is the cycle correctly saying it
+did not finish, and a run that emits one has behaved better than a run that
+emits nothing, because the disposition is then on the record rather than
+inferred from silence.
 
 MEASURED on pirria 2026-09-14 (`04-opencode.log:848-862`): the guard answered
 `blocked:upstream-no-credential` (exit 1); the mirror published
