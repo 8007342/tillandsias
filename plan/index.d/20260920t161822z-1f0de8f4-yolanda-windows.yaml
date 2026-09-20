@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: closure
+      ts: "2026-09-20T16:18:22Z"
+      agent_id: windows-yolanda-claude-20260920t161821z
+      host: yolanda-windows
+      summary: |
+        CLOSED. The closure was "a trunk push RETURNS within its step budget, zero when
+        the ref moved and a named refusal when it did not". Measured post-fix on
+        yolanda: a push through scripts/push-plan-fragments-to-trunk.sh returned in
+        50 SECONDS, rc=1, with
+          pre-push refused: the tree changed since ./build.sh --check last passed
+        against the same 7073-file tree that never returned under bounds of 120, 150,
+        180, 200, 240, 575 or 1800 seconds. The refusal is correct and is the hook
+        working: the tree carried code the last gate had not covered, so the stamp was
+        legitimately stale.
+
+        THE THREE COSTS THIS ROW NAMES, all measured, all now on trunk:
+
+          1. the hook's mover enumeration -- a SHELL PER FILE at
+             pre-push-local-gate.sh:1620, 7070 files at ~155 ms a spawn
+               ~18 min  ->  2.3 s   (batched: xargs hands paths to find as arguments,
+                                     16 spawns instead of 7070, NUL-safe end to end)
+          2. gate-stamp.sh movers -- TWO spawns per path (sha256sum then cut),
+             675 ms per path over 30 real files
+               ~4774 s  ->  7 s     (the file's own :560 idiom, which already said
+                                     "One xargs, not a hash per file")
+          3. check-fragment-status-loss.sh -- THREE plan-binary calls per fragment,
+             3 x 134 ms x 1302
+               ~523 s   ->  9 s     (three batched calls with per-file framed output)
+
+        Linux was paying for all three too -- 3.9 s, 4.7 s and seconds respectively on
+        macuahuitl -- so none of this was a Windows accommodation; the Windows spawn
+        cost only made it visible.
+
+        WHAT THIS ROW SHOULD BE REMEMBERED FOR IS NOT THE SPEEDUP. It is that EACH OF
+        THE FIRST TWO FIXES WAS REAL AND INSUFFICIENT, and only a closure naming the
+        OUTPUT caught that. After fix 1 the push still did not return. After fix 2 it
+        still did not. A closure phrased as a mechanism -- "remove the per-file spawn"
+        -- would have been satisfied twice by changes that left the push unusable. The
+        same criterion also rejected my first attempt at fix 1, a find over the working
+        tree that removed the per-file spawn honestly and still cost 132 s because it
+        walked everything git ignores.
+
+        AND THE THIRD FIX CONTAINED A FOURTH COST OF THE SAME CLASS, mine: an IFS
+        command substitution inside a while header, evaluated once per iteration,
+        forking roughly 3900 subshells and leaving 250 s AFTER the batching had removed
+        3906 plan-binary calls. The timestamped trace counted 3941 printf spawns against
+        25 plan-binary invocations. Having removed the obvious per-item spawn I had
+        introduced a second one inside its own remedy. That is the transferable lesson:
+        after removing a per-item spawn, trace the fix again.
+
+        WHY THE POST-FIX IS 50 SECONDS AND NOT 5: pirria measured a fourth push-path
+        cost outside the per-file family -- check-append-vs-origin-fold.sh scanning the
+        whole ledger and folding each pair twice through the plan binary, 116 s on
+        their host and 61 s on macuahuitl -- filed as 1310-7apk and routed to a Linux
+        builder. It is included in the 50 s above and is not part of this closure.
+
+        GUARDS LEFT BEHIND, both with sabotage controls measured red before they were
+        trusted:
+          scripts/test-hook-mover-enumeration-is-batched.sh -- pins the SHAPE (no
+            per-file xargs -I{} spawn, no truncating consumer inside the pipeline,
+            truncation after capture) plus a behavioural arm; runs on Linux too,
+            because the hook is shared and the defect was live on every host.
+          scripts/test-gate-stamp-movers-batching-is-equivalent.sh -- requires the
+            batched digest to be BYTE-IDENTICAL to the per-file one, and it caught a
+            real bug in my own change on its first run: MSYS sha256sum prints
+            binary-mode "digest *path", and matching only the two-space separator left
+            an asterisk glued to every path, which would have made every path read as
+            modified and refused every host's push.
+          scripts/test-fragment-batch-never-collapses-verdicts.sh -- plants one
+            unparseable fragment among good ones and asserts it is still named, that
+            every good file keeps its own verdict, and the CARDINALITY (a frame per
+            input, not merely a non-empty answer), plus two arms pinning the unchanged
+            single-path contract.
+
+        A LEDGER-HYGIENE NOTE for the next writer on this row: its CLAIM fragment
+        carries an agent_id with a model name in the backend slot. The shape is
+        platform-workstation-BACKEND-timestamp where backend is the harness type
+        (claude, codex, opencode, gemini; order 570), not the model. The claim is spent
+        and immutable; the rule is recorded so the shape is not copied.
