@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T12:46:23Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t124623z
+      host: macneo
+      summary: |
+        MACOS ARM — SURVEY OF WHAT THE EXISTING RESET ALREADY DOES, before adding
+        anything. Same form as yolanda's Windows survey. Claims tagged READ (from the
+        source) or RUN (measured on macneo, 2026-09-20).
+
+        WHAT THE macOS TRAY'S RESET DOES TODAY, step by step:
+          [READ] crates/tillandsias-macos-tray/src/main.rs:250  parses `--reset-guest`
+          [READ] main.rs:251                                    require_no_live_tray("--reset-guest")
+          [READ] main.rs:252                                    std::process::exit(diagnose::reset_guest_main())
+          [READ] diagnose.rs:1280  reset_guest_main() -> i32
+          [READ] diagnose.rs:1281-1284  eprintln: "This discards the local guest and its
+                 cached credentials. Everything lives in the cloud — you'll re-authenticate once."
+          [READ] diagnose.rs:1285  VzRuntime::new(3, image_root())
+          [READ] diagnose.rs:1286  vz.wipe_provisioned_artifacts()  — hard-fails on Err
+          [READ] diagnose.rs:1290  remove_file(crashloop_state_path())  — best effort
+          [READ] diagnose.rs:1291  eprintln "guest wiped — reprovisioning from scratch…"
+          [READ] diagnose.rs:1292  provision_main()   — SYNCHRONOUS, and its i32 is the exit status
+
+          [READ] vz.rs:326 wipe_provisioned_artifacts removes exactly:
+                 required (error unless NotFound): rootfs image, kernel, initrd
+                 best effort: rootfs.qcow2, console.log, cidata.iso
+
+        SO THREE OF THE CONTRACT'S CLAUSES ARE ALREADY MET ON macOS:
+          * reprovisions SYNCHRONOUSLY through provision_main (diagnose.rs:1292)
+          * exits with that status (main.rs:252 exits the i32 directly)
+          * announces BEFORE destroying (the eprintln precedes the wipe)
+        Like Windows, the macOS arm is therefore installer wiring plus a small number of
+        gaps — NOT a new flag.
+
+        GAP 1 — THE GUARD IS NOT READ AT ALL.
+          [RUN] grep -rc TILLANDSIAS_DESTRUCTIVE_RESET_OK crates/tillandsias-macos-tray/src/
+                -> the ONLY hits are in my own unwired reset_state.rs. The shipped tray
+                has ZERO. Identical to yolanda's Windows finding.
+
+        GAP 2 — THE ANNOUNCEMENT NAMES NEITHER LIST.
+          [READ] The existing line says what is discarded in prose ("the local guest and
+          its cached credentials") and NEVER names what is PRESERVED. On macOS the
+          preserved thing is installation-uuid-v1, the counterpart of Windows'
+          tillandsias-vm-uuid and the same 803-49re reason. The contract requires
+          preserved named beside destroyed, before anything is destroyed.
+
+        GAP 3 — THE CREDENTIALS ARE NOT ACTUALLY CLEARED, THOUGH THE MESSAGE SAYS THEY ARE.
+          [READ] reset_guest_main calls NO credential clearing. wipe_provisioned_artifacts
+          touches six file paths and no keychain item. Yet the user-facing line claims it
+          "discards the local guest AND ITS CACHED CREDENTIALS".
+          [READ] The helper exists and is public and unused here:
+          installation_uuid.rs:173 `pub fn delete_credential_string(target: &str)`.
+          This is the macOS counterpart of the Windows credential clause, except Windows
+          already does it and macOS only SAYS it. A message asserting an action the code
+          does not take is the 1260-2qgi family, and it is the most consequential gap
+          here: a host reset on that promise keeps its Vault share.
+
+        GAP 4 — RUNTIME STATE LEFT UNTOUCHED, the macOS counterpart of the Windows
+        download-cache gap. Measured rather than reasoned:
+          [RUN] ~/Library/Application Support/tillandsias holds: console.log, nvram.bin,
+                provision, rootfs.img, rootfs.qcow2
+                The wipe removes rootfs.img, rootfs.qcow2 and console.log. It LEAVES
+                nvram.bin and provision/.
+          [RUN] ~/Library/Caches/tillandsias (12K) holds: models/, three .lock files
+                (test-signal-SIGINT.lock, test-signal-SIGTERM.lock,
+                tillandsias-macos-tray.lock). NONE of it is touched by the reset.
+          [READ] Also untouched: <cache_root>/vault-data and the fallback_* pair, which
+                scripts/clear-vault-host-credentials.sh clears on the smoke path.
+
+        SO THE macOS ARM IS: installer wiring (install-macos.sh calling the flag
+        synchronously AFTER the app swap) plus gaps 1-4. The body I had already written
+        covers 1-4; on this evidence it should be recast as a DELTA over
+        reset_guest_main rather than a parallel implementation, so the two do not drift
+        — --reset-guest stays as the alias the contract allows.
+
+        NOT MEASURED, stated so it is not assumed: whether `provision/` under the VM
+        state dir is regenerated by provision_main, and whether nvram.bin surviving a
+        reset is deliberate (VM identity) or an oversight. Both change what GAP 4's fix
+        should destroy, and I will not guess at them.
