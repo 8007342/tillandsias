@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    order: 1304-wbb2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, scripts, instrument-defect, windows, floor]
+    estimated_hours: 4
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/check-litmus-bindings.sh
+      - openspec/litmus-bindings.yaml
+    verifiable_closure: |
+      scripts/test-litmus-binding-truth.sh prints
+      `ok:litmus-binding-truth:4/4` and exits 0, with two SEPARATE criteria
+      because a fix for one can leave the other: (2a, misattribution) arm 1: a
+      litmus whose file declares `spec: X` and is listed under block Y in
+      openspec/litmus-bindings.yaml is REFUSED by the bindings check with the
+      filename and both spec ids
+      (`violation:binding-spec-mismatch:<file>:declared=X:bound-under=Y`) and
+      the unfiltered run does not credit Y with it; arm 2 (mutation): with the
+      cross-check removed, arm 1 passes, i.e. the fixture reds. (2b,
+      invisibility) arm 3: a litmus file present in the tests directory and
+      bound under NO block is REFUSED by the same check
+      (`violation:litmus-unbound-file:<file>`) and the unfiltered run prints a
+      named line for it rather than nothing; arm 4 (mutation): with the
+      every-file-bound-exactly-once check removed, arm 3 passes. Plus: a bound
+      litmus the runner filters out by spec or tier prints a named skip line,
+      never nothing. PRE-FIX RESULT: FAILS — measured on esme 2026-09-20 with
+      TILLANDSIAS_LITMUS_BINDINGS and TILLANDSIAS_LITMUS_TESTS_DIR on a
+      throwaway corpus: (2a) misbound file: rc=0, `Executing
+      litmus:fixture-misbound`, PASS 1, `Coverage: 100% [2/2 specs]`, the
+      declared spec shown covered while holding zero tests; (2b) unbound
+      file: rc=0, ZERO mentions, PASS 0 / FAIL 0 / SKIP 0, `Coverage: 100%`;
+      the only existing guard is the explicit-filter path
+      (`run-litmus-test.sh intended-spec` gives rc=1 `no litmus tests matched
+      filter`), which is loud exactly where nobody looks. yolanda's instance
+      the same night: litmus:windows-host-lane-refusal (spec init-command)
+      bound under the ci-release block produced zero mentions in the
+      pre-build run and executed once moved.
+    title: |
+      nothing compares a litmus file's own spec field with the block it is bound under, so a misbound litmus runs misattributed and an unbound file is invisible to the unfiltered gate run
+    context: |
+      A binding is what a row's closure depends on and what the gate checks
+      for; a litmus bound under the wrong block satisfies the gate and lies
+      about coverage (the declared spec reads covered with zero tests, the
+      wrong spec takes credit), and a litmus file bound under no block never
+      appears in an unfiltered run at all, which in a corpus of hundreds is
+      a normal green with high coverage. One missing cross-check, the file's
+      `spec:` against the block, is the root of both halves (esme). Another
+      guard-that-cannot-fail family: both new arms need a mutation showing
+      they red, or the check is the same defect one layer out. Found by
+      yolanda binding 1276-2hc6's litmus; reproduced and split by esme.
+    next_action: >
+      Add the cross-check to scripts/check-litmus-bindings.sh (or wherever
+      both files are already read): every file in the tests directory is
+      bound exactly once, and its block equals its own spec field; refuse with
+      the filename and both ids; make the runner print a named skip when it
+      filters a bound litmus out by spec or tier; write the four-arm fixture
+      with its two mutation arms using the 1252-znbn overrides on a throwaway
+      corpus; then audit the real openspec/litmus-bindings.yaml once and list
+      any existing mismatches or unbound files on this row before fixing
+      them.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from
+      yolanda-windows's finding and esme-windows's two-mode reproduction;
+      nothing run here.

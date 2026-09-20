@@ -39,6 +39,37 @@ bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# ORDER 1285-vz27 pass / the 416 second-regime fix. A DIGEST RESOLVED BY WHAT
+# ANSWERS, not by what platform this is.
+#
+# The first version hardcoded sha256sum. On macbookair that binary lives under
+# /sbin, which is NOT on the narrow PATH the stub runs with, so `command -v
+# sha256sum` found nothing, the stub's digest came back EMPTY, every artifact
+# compared unequal, ARM 2 reported cosign:FAILED on a genuine artifact and ARM 3
+# went VACUOUSLY GREEN — its expected refusal arrives whatever it substitutes.
+# This fixture's own ARM 2 text predicts that exact failure; predicting it is not
+# the same as testing the condition that produces it.
+#
+# Resolution is by EXECUTION: each candidate is run against a known input and
+# kept only if it emits a 64-hex digest. A `command -v` probe would accept a
+# binary that exists and cannot run, and a uname switch would encode the guess
+# this defect was made of. PATH is deliberately NOT widened — that would repair
+# reachability while leaving the GNU-name assumption in place for the next host.
+DIGEST_CMD=""
+for _cand in "sha256sum" "shasum -a 256" "openssl dgst -sha256"; do
+    _probe="$($_cand /dev/null 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1)"
+    if [ -n "$_probe" ]; then DIGEST_CMD="$_cand"; break; fi
+done
+if [ -z "$DIGEST_CMD" ]; then
+    printf 'skip:smoke-verifies-a-signature:no-sha256-tool (tried sha256sum, shasum -a 256, openssl dgst -sha256)\n'
+    exit 0
+fi
+# The stub runs under a NARROW PATH, so it needs an absolute program.
+DIGEST_BIN="$(command -v "${DIGEST_CMD%% *}")"
+DIGEST_ARGS=""
+case "$DIGEST_CMD" in *" "*) DIGEST_ARGS="${DIGEST_CMD#* }" ;; esac
+_digest() { "$DIGEST_BIN" $DIGEST_ARGS "$1" 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1; }
+
 SKILL="skills/smoke-curl-install-and-test-e2e/SKILL.md"
 
 # ---------------------------------------------------------------- ARM 0
@@ -77,12 +108,12 @@ printf 'bundle for the genuine bytes\n' > "$REL/tillandsias-linux-x86_64.cosign.
 
 # The stub: a signature binds to CONTENT. Records the signed bytes once.
 STUBDIR="$TMP/stub"; mkdir -p "$STUBDIR"
-sha256sum "$REL/tillandsias-linux-x86_64" | awk '{print $1}' > "$TMP/signed.sha"
+_digest "$REL/tillandsias-linux-x86_64" > "$TMP/signed.sha"
 cat > "$STUBDIR/cosign" <<STUB
 #!/usr/bin/env bash
 # stub cosign: exits 0 only when the artifact still matches the signed bytes.
 art="\${@: -1}"
-have="\$(sha256sum "\$art" 2>/dev/null | awk '{print \$1}')"
+have="\$("$DIGEST_BIN" $DIGEST_ARGS "\$art" 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1)"
 want="\$(cat "$TMP/signed.sha")"
 [ "\$have" = "\$want" ]
 STUB
@@ -120,10 +151,14 @@ fi
 # Substitute the asset AND regenerate its SHA256SUMS entry so the hash check is
 # self-consistent. The lane must still REFUSE, on the signature.
 printf 'SUBSTITUTED payload\n' > "$REL/tillandsias-linux-x86_64"
-sha256sum "$REL/tillandsias-linux-x86_64" | awk '{print $1"  tillandsias-linux-x86_64"}' > "$REL/SHA256SUMS"
+printf '%s  tillandsias-linux-x86_64\n' "$(_digest "$REL/tillandsias-linux-x86_64")" > "$REL/SHA256SUMS"
 
 # First prove the premise: the integrity check PASSES on the substituted pair.
-if ( cd "$REL" && sha256sum -c SHA256SUMS >/dev/null 2>&1 ); then
+# Compared here rather than via `sha256sum -c`: openssl has no -c at all, so a
+# host that resolved to it would skip the premise instead of checking it.
+_want="$(awk '{print $1}' "$REL/SHA256SUMS" 2>/dev/null | head -1)"
+_have="$(_digest "$REL/tillandsias-linux-x86_64")"
+if [ -n "$_want" ] && [ "$_want" = "$_have" ]; then
     line="$(run_block "$STUBDIR:/usr/bin:/bin")"
     if printf '%s' "$line" | grep -q '^cosign:FAILED:'; then
         ok "ARM 3: a substituted asset whose SHA256SUMS entry was regenerated PASSES the hash check and is REFUSED on the signature ($line)"

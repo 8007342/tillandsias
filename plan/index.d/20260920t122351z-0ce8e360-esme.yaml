@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    field: status
+    value: in_progress
+    ts: "2026-09-20T12:23:51Z"
+    host: esme
+
+events:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    event:
+      type: note
+      ts: "2026-09-20T12:23:51Z"
+      host: esme
+      summary: |-
+        handed by the coordinator 2026-09-20: floor-tier litmus-harness instrument work from yolanda's measurements, one story of two rows
