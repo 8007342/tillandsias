@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    field: status
+    value: in_progress
+    ts: "2026-09-20T17:21:24Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: progress
+      ts: "2026-09-20T17:21:24Z"
+      host: yolanda-windows
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: yolanda measurements on this row: nix absent on host and in tillandsias-build, strings absent on host, verify:skip-stale-staging naming only staleness, rustup-musl fallback stages x86_64 and fails aarch64 on aarch64-linux-musl-gcc, and a feature-less staged binary that ran with the correct version and failed a provision 524s later
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-20T17:21:24Z"
+      host: yolanda-windows
+      summary: |-
+        claimed for cycle 20260920t162x by windows-yolanda-claude-20260920t172123z
