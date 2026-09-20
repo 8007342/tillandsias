@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    event:
+      type: note
+      ts: "2026-09-20T20:03:24Z"
+      agent_id: linux-pirria-claude-20260920t200000z
+      host: pirria
+      summary: |
+        CLOSED. The fix landed from yoga at 5f67cdfea — the spawn carries `set -o
+        pipefail` for steps whose verdict the exit status actually decides, a gate step
+        at 415-1293-wka4.step, and scripts/test-litmus-step-pipefail.sh, which is 6/6
+        here including arm 5, a KNOWN HOLE pinned rather than hidden.
+
+        THIS EVENT IS AN INDEPENDENT CONFIRMATION, and it contains a retraction of its
+        own intermediate finding, because the retraction is the useful part.
+
+        MY COUNTS, method stated so they can be falsified rather than believed: walk
+        every step in openspec/litmus-tests/**/*.yaml, strip `$(...)` repeatedly until
+        stable, replace `||`, and ask whether a pipe remains at top level; a step's
+        verdict is decided by its STATUS when it declares assert_exit, or when it
+        declares no expectation at all and falls to the strict-exit arm.
+
+          corpus steps                : 2580
+            with a pipeline           : 814
+            declaring assert_exit     :  78
+            assert_exit AND piped     :  27
+            piped, NO expectation     :  16
+          -> 43 steps whose verdict the exit status decides: the population the landed
+             gating condition covers.
+
+        WHAT I GOT WRONG FIRST, and it nearly contradicted yoga's audit. Chasing arm 5's
+        hole (a wrapped `bash -lc` grandchild still does not inherit pipefail) I counted
+        27 steps, then 4 after filtering for a status-swallowing last element. One of the
+        4 was litmus:forge-as-only-runtime, which IS bound and NOT on
+        unbound-grandfathered.txt — which would have meant yoga's "live exposure is one
+        step" was wrong.
+
+        It is not wrong. That step's pipeline is inside `$(...)`, guarded by
+        `&& [ -n "$FORGE_IMG" ]`, and is correctly written. My scanner stripped command
+        substitutions at the OUTER level and then failed to strip them INSIDE the
+        wrapper's payload — precisely the limitation yoga disclosed in their own method
+        note ("cannot see inside nested bash -lc beyond the first level"), reproduced one
+        level down by the host checking their work. Stripping substitutions inside the
+        payload too gives TWO at-risk steps:
+
+          litmus:vm-provisioning-idempotent   (tee)   ORPHAN
+          litmus:vm-shutdown-drains-forges    (tee)   ORPHAN
+
+        both already named in yoga's audit, both on unbound-grandfathered.txt. So the
+        grandchild hole's LIVE exposure is zero and its LATENT exposure is two orphans
+        that arrive the day 660-ryhn's ratchet binds them. Recorded there as one event
+        rather than as a row of its own: a row per latent hole in files nothing runs is
+        how a ready queue reaches six hundred.
+
+        WHAT THE ROW IS REALLY ABOUT, restated because the fix is one line and the design
+        is the work: a blanket `set -o pipefail` would have repaired 3 steps and silently
+        INVERTED 22. "Pipefail is set" and "pipefail is set where it matters" are
+        different claims, and only the second one is true here.
+
+        AND THE ROW'S OWN WARNING HELD: reading the script disproves the defect and
+        running it confirms it. run-litmus-test.sh:44 sets `set -eo pipefail`,
+        litmus-stdlib.sh mentions pipefail five times, and the runner's comment quotes a
+        `bash -c 'set -eo pipefail; ...'` idiom — everything on the page says the option
+        is in force, and it was not in force for the step's own pipeline.

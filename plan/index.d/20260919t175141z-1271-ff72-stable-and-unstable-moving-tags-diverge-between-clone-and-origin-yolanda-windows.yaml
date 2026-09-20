@@ -1,0 +1,97 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-stable-and-unstable-moving-tags-diverge-silently-between-a-clone-and-origin-because-git-fetch-refuses-to-clobber-them-so-a-host-resolving-a-release-channel-locally-can-read-a-months-old-commit-and-be-told-nothing
+    order: 1271-ff72
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: credential-lifecycle-audit-milestone
+    pickup_role: any
+    capability_tags: [release, integrity, fail-loud, false-negative]
+    estimated_hours: 3
+    owned_files:
+      - .github/workflows/release.yml
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a
+      CHANNEL-INTEGRITY CHECK THAT DOES NOT YET EXIST — nothing in the tree
+      compares a locally resolved `stable`/`unstable` against origin's — so any
+      litmus named now resolves to nothing and 885-92iu refuses the row.
+      Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-release-channel-tags-agree-with-origin.sh — assert that
+      resolving a channel tag either matches origin or REFUSES by name; the
+      NEGATIVE CONTROL stages a deliberately stale local channel tag and
+      asserts the refusal fires, so the check cannot pass vacuously on a clone
+      that happens to be current. Wire it in the same commit and name the route
+      (1068-cxmf).
+    title: |
+      the `stable` and `unstable` MOVING tags diverge silently between a clone and origin — `git fetch --tags` REFUSES to update them ("would clobber existing tag") and reports it as a rejected ref, not as a stale release channel — so a host resolving a channel locally can read a months-old commit and be told nothing
+    context: |
+      MEASURED ON YOLANDA 2026-09-19, incidental to fetching the v56.9.19.1 tag:
+
+        $ git fetch origin --tags
+         ! [rejected]  stable    -> stable    (would clobber existing tag)
+         ! [rejected]  unstable  -> unstable  (would clobber existing tag)
+         * [new tag]   v56.9.19.1 -> v56.9.19.1
+
+      The immutable version tag arrived; both MOVING tags were refused. Then:
+
+        origin  refs/tags/stable    69e4519da1d57cd34e3340d13576b5ce5e436635
+        local         stable        920ab10275affdaac55f7b3e7624be46d0fbb51d
+        origin  refs/tags/unstable  a64e9abc4237746fd42733c3c4912fdbf7a02ff2
+        local         unstable      a58e7423009eeaafb03d104852571b090d030ba2
+
+      Both diverged. Neither matches. This host has been carrying stale release
+      channels for an unknown period and nothing in any cycle said so.
+
+      THE MECHANISM IS GIT'S DEFAULT AND IT IS CORRECT IN ISOLATION: a tag is
+      immutable by convention, so `fetch --tags` will not move one that already
+      exists locally. That default is exactly wrong for a tag used as a MOVING
+      CHANNEL POINTER, and the refusal is printed as one line among many in a
+      fetch, in the same visual register as "new tag", so it reads as noise.
+
+      WHY THIS IS p1 AND NOT HOUSEKEEPING. A release channel is a thing hosts
+      RESOLVE in order to decide what to install, verify or compare against. A
+      silently stale `stable` does not fail — it answers, confidently, with an
+      old commit. Every consequence of that is a false negative somewhere else:
+      a smoke that passes against the wrong build, a comparison that finds no
+      drift because both sides are old, an install that reproduces a fixed bug.
+      It is this fleet's recurring shape — a channel carrying something TRUE
+      (that commit really is tagged `stable` here) which answers a different
+      question than the consumer asked (what is `stable` NOW). See 1260-2qgi.
+
+      WHAT I DID NOT ESTABLISH, stated so nobody inherits it as fact: I did not
+      determine WHO writes these tags, whether the divergence is this clone
+      being stale or origin having been rewound, how long it has held, or
+      whether any consumer in this tree actually resolves them. The measurement
+      is the divergence itself. Whoever takes this row establishes the writer
+      and the consumers FIRST — if nothing resolves them, the remedy is to stop
+      publishing them rather than to sync them, and that is the cheaper answer.
+    deliverable: |
+      A host cannot silently resolve a stale release channel.
+
+        * Resolving a channel tag either agrees with origin or REFUSES BY NAME,
+          stating both shas. Silence on disagreement is the defect.
+        * The fetch path for moving tags is explicit — `--force` for exactly
+          the channel tags, or channels moved off tags onto refs whose update
+          semantics match their meaning (a branch or a custom ref namespace
+          fetches without objection).
+        * NEGATIVE CONTROL: a deliberately stale local channel tag makes the
+          check FIRE. Without it the check passes on every already-current
+          clone and proves nothing.
+        * If no consumer resolves these tags, the sanctioned close is to STOP
+          PUBLISHING them and record that, rather than to build machinery for
+          an unused channel.
+    exit_criteria:
+      - 'OUTPUT: on a clone whose `stable` or `unstable` disagrees with origin, the release tooling REFUSES by name and prints both shas. PRE-FIX RESULT: FAILS — `git fetch origin --tags` prints `! [rejected] stable -> stable (would clobber existing tag)` and nothing else; local stable 920ab1027 vs origin 69e4519da, local unstable a58e7423 vs origin a64e9abc4, measured on yolanda 2026-09-19 with no warning from any cycle.'
+      - 'NEGATIVE CONTROL: with the local channel tag deliberately set stale, the check FIRES; with it current, the check passes. A check that cannot be made to fail is decoration.'
+      - 'the WRITER and the CONSUMERS of these two tags are established and named on this row before any remedy lands — if nothing resolves them, closing by retiring the tags is preferred to syncing them.'
+    provenance: |
+      Found by yolanda-windows 2026-09-19 as an incidental of fetching a
+      release tag during the v56.9.19.1 Windows tray investigation; filed at
+      macuahuitl's direction, who classed it a release-channel integrity
+      question for the release runbook's family. The divergence was measured
+      against origin with git ls-remote at the time of filing rather than
+      inferred from the fetch message.

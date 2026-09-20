@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    field: status
+    value: done
+    ts: "2026-09-20T04:40:00Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: completed
+      ts: "2026-09-20T04:40:00Z"
+      host: esmeraldinha
+      summary: |-
+        status 'done' with evidence_refs: 018aa9827 (fix: deliver the WSL2 dxg GPU to the inference container, per the operator's ruling), relayed 79d66a2e8 and landed as land 11 ok:land:0cc917df9 with the gate green 2026-09-19T19:35Z (macuahuitl, after a clippy doc_overindented_list_items refusal fixed by 3b4565172; rustfmt fixup 01eac873a). Verified in trunk BY CONTENT from esmeraldinha at b2a3e0ab8, not by the land SHA: all five commits are ancestors of origin/windows-next, and the mount stands in crates/tillandsias-headless/src/main.rs as --device /dev/dxg plus the /usr/lib/wsl:/usr/lib/wsl:ro bind, pinned by the_wsl2_dxg_mount_needs_both_halves_and_is_read_only. Criteria 2 and 3 are as-wired: wsl2_paravirtual_gpu_reason_from() at accel_probe.rs:1118 is a three-arm detection over (loader_present, icd_count) keeping engine-missing verbatim for the missing arms, and is_software_rasterizer() at :1247 rejects VK_PHYSICAL_DEVICE_TYPE_CPU and VK_DRIVER_ID_MESA_LLVMPIPE, pinned by a_software_rasterizer_cannot_satisfy_the_gpu_check and the criterion-3 test at :6693. Criterion 1 was falsifiable only on this host and was verified here 2026-09-13 against a rebuilt binary proved newer than its source (fragment 20260913t170000z).
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: note
+      ts: "2026-09-20T04:40:00Z"
+      host: esmeraldinha
+      summary: |-
+        Closing on the relay-gate confirmation this row was waiting on (macuahuitl fragment 20260919t193650z, which recorded the closure as esmeraldinha's to make on return). The audit the operator made the mount conditional on is 1267-fj2z and is NOT closed by this: it is a separate live row, and this closure asserts the mount works, not that its exposure has been bounded.

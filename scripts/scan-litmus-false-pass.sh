@@ -21,13 +21,28 @@
 #      it is a refusal to run podman resets, installers, and network calls to
 #      find out. A future version could sandbox them; this one says what it did
 #      not look at rather than quietly reporting over a subset.
-#   2. IT APPROXIMATES THE MATCHER. It applies only the FINAL fallback of
-#      run-litmus-test.sh's behavior_matches_output — case-insensitive
-#      fixed-string containment — and not the special-case arms above it. So it
-#      can report a step the real runner would judge differently. Confirm every
-#      hit against the real runner before believing it: the first run produced
-#      two such artifacts (stdlib steps that need LITMUS_STDLIB sourced, which
-#      this harness does not do) and both pass legitimately in the runner.
+#   2. IT APPROXIMATES THE MATCHER — NO LONGER TRUE OF THE ARMS, STILL TRUE OF
+#      THE ASSERTS. This said it applies only the FINAL fallback of
+#      run-litmus-test.sh's behavior_matches_output and not the special-case
+#      arms above it. Order 1252-znbn DELETED those arms (2026-09-19): the
+#      natural-language `case` interpreter is gone and the fallback —
+#      case-insensitive fixed-string containment — is all that remains of it, so
+#      this harness now matches that part of the runner EXACTLY.
+#
+#      What replaced them is a new divergence, and it runs the other way. Steps
+#      may now declare assert_exit / assert_output_contains /
+#      assert_output_matches / assert_output_nonempty, and the runner
+#      adjudicates those fields BEFORE reaching behavior_matches_output at all.
+#      This harness does not read them. So for a step carrying a structured
+#      assertion it models a rule the runner no longer applies — it may report a
+#      false-pass the runner would catch, or miss one the runner would too.
+#      101 of 2553 steps carried an assert when measured on 2026-09-20; the
+#      corpus grows, so treat that as a dated sample and not a constant —
+#      it had already drifted from 100/2545 the previous day.
+#
+#      Confirm every hit against the real runner before believing it: the first
+#      run produced two artifacts (stdlib steps that need LITMUS_STDLIB sourced,
+#      which this harness does not do) and both pass legitimately in the runner.
 #
 # Read-only and idempotent: it executes candidate commands but writes nothing to
 # the tree. Advisory — no caller gates on it.

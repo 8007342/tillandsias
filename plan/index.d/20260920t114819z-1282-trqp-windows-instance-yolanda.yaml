@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-green-assertion-killed-at-its-budget-on-a-slow-tier-is-reported-as-FAIL-and-will-be-read-as-a-red-by-the-next-person-who-does-not-scroll-to-the-budget-line
+    event:
+      type: note
+      ts: "2026-09-20T09:56:00Z"
+      host: yolanda-windows
+      summary: |-
+        WINDOWS INSTANCE of this shape, recorded here rather than filed anew (coordinator's routing). Measured 2026-09-20 on yolanda while running spec init-command at phase pre-build, size instant:
+
+          litmus:image-build-convergence-shape
+          [STEP 1/4] "wrapper convergence sequence has one build per digest and explicit force" (timeout: 30s) -> [TIMEOUT]
+          warn: Test timeout after 30s in step: wrapper convergence sequence has one build per digest and explicit force
+          [FAIL] spec=init-command test=litmus:image-build-convergence-shape
+          timing line: 30.9s litmus:image-build-convergence-shape (killed at budget — censored; the true time is longer)
+
+        Budget 30s, elapsed 30.9s, killed. NO assertion failed: the step never reached a verdict. The summary counts it as FAIL and the runner's own BUDGET line says so — "1 of those FAILs were killed at their budget, not failed assertions (still FAIL — 820-c8q8)" — which is the row's point exactly: the correct information is present and the headline still reads red.
+
+        WHY IT MATTERS ON THIS HOST SPECIFICALLY: yolanda's checkout is on drvfs/9p, where this tree measures ~20x slower than ext4 on the same files, so a 30s budget calibrated elsewhere is not a budget here. A Windows host will hit this on steps a Linux host never does, and the reader who does not scroll sees a red that belongs to the filesystem.
+
+        The runner also reported, in the same breath and to its credit:
+          warn: cpu.pressure unavailable in this cgroup — cause UNCLASSIFIED (slow step vs starved step); no fallback instrument, because none measures this step's contention
+        So the instrument correctly declines to attribute the kill. That is the honest half; the dishonest half is the FAIL in the summary line above it.
+
+        NOT ATTRIBUTED TO ANY CHANGE OF MINE: I did not touch image-build-convergence-shape or its fixture. It was already in this state when my own litmus (litmus:windows-host-lane-refusal, 1276-2hc6) was added to the same spec and passed in 5.1s in the same run.

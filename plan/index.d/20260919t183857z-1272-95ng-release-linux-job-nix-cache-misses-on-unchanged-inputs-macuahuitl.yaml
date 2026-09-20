@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-release-workflow-s-linux-job-misses-its-nix-cache-on-every-cut-with-unchanged-flake-inputs-two-cuts-in-one-day-rebuilt-for-57-and-32-minutes-and-the-step-that-calls-it-a-regression-is-advisory
+    order: 1272-95ng
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [ci-release, nix, build, cost, instrument-defect]
+    estimated_hours: 4
+    owned_files:
+      - .github/workflows/release.yml
+      - flake.nix
+    verifiable_closure: |
+      Two consecutive release runs whose `flake.lock` and `flake.nix` are
+      byte-identical (asserted with `git diff --stat <tagA> <tagB> -- flake.lock flake.nix` empty)
+      show, in the second run's Linux job log, NO `Nix Cache Miss` line from
+      the "Record Nix Build Duration and Assert Cache Performance" step, and
+      that step reports the build as cache-served with a duration under 10
+      minutes; the step's own output names which cache key it looked up and
+      whether it hit. PRE-FIX RESULT: FAILS — measured 2026-09-19 on runs
+      35453526671 (v56.9.19.1, Linux job 57m, 15:59:55Z→16:57:09Z) and
+      35459238928 (v56.9.19.2, Linux job 33m16s, `! Nix Cache Miss: rebuild
+      took 32m 17s. If flake.lock is unchanged, this is a cache regression!`),
+      with flake.lock and flake.nix unchanged between the two tags. NEGATIVE
+      CONTROL: a run whose flake.lock DID change must still rebuild and must
+      say so in the same step.
+    unscoreable: |
+      No local fixture can drive the hosted release workflow's cache; the
+      evidence is the Linux job's own step log on the NEXT two cuts with
+      unchanged flake inputs (the closure above says what those logs must
+      say). Scored by reading, not by a litmus.
+    title: |
+      the release workflow's Linux job misses its Nix cache on every cut with unchanged flake inputs — two cuts in one day rebuilt for 57 and 32 minutes, and the step that calls it a regression is advisory
+    context: |
+      The workflow's own assertion step prints the diagnosis and then exits
+      green, so the miss costs 30-60 minutes of hosted minutes per cut and is
+      visible only to someone reading the job log. Two samples in one day
+      under identical Nix inputs is enough to say the cache is not serving
+      cuts; it is NOT enough to say why (a key that varies with VERSION or the
+      tag, a cache that evicted, a store path that differs by an unpinned
+      input), and this row deliberately names the OUTPUT it wants and not the
+      mechanism. What IS known from the workflow: the cache step is
+      nix-community/cache-nix-action@v7 with
+      `primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}`, so
+      the KEY did not change between the two runs; the miss is in what was
+      saved or restored under it, not in the key. Relevant: 765-8hc3 (crane deps derivations asserted
+      source-stable in the same job, which passed on both runs — so the
+      derivations are stable and the CACHE is what misses). The regime: the
+      operator's directive is that only the release may spend hosted minutes,
+      which makes a 32-57 minute rebuild per cut the largest single cost line
+      of the release path.
+    next_action: >
+      Read the two runs' "Nix Cache" and "Record Nix Build Duration and Assert
+      Cache Performance" step logs side by side and record the cache key each
+      looked up (or that the action prints none — then that absence is the
+      first fix). Then make the assertion step fail the job, or at least emit
+      a `blocked:nix-cache-miss:<key>` line the coordinator's dispatch stage
+      greps, once the cause is fixed; never before, or every cut goes red on a
+      cost line.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-19 from the
+      v56.9.19.1 and v56.9.19.2 release runs; both durations are from the
+      runs' job records, the warning text is verbatim from the .2 log.

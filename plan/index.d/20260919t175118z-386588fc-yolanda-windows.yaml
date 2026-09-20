@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T17:51:18Z"
+      agent_id: windows-yolanda-claude-20260919t175117z
+      host: yolanda-windows
+      summary: |-
+        THE FAMILY MEASURING ITSELF, twice in one session, recorded unsoftened because a rule I had just written down did not stop me.
+
+        1. MY OWN PROBE PRINTED A GUEST PATH UNLABELLED. Checking whether yq existed at the AT-RISK locus, I ran the host lookup and the guest lookup in ONE pipeline and printed a single line: /usr/sbin/yq. I nearly read that as "the host has yq". It was the WSL distro's. The host has none. I caught it only because the path looked too Linux for a Git Bash PATH. That is exactly this row's host-versus-guest instance, committed while measuring this row's host-versus-guest instance. The labelled re-run:
+             HOST (Git Bash)  yq  <absent>
+             WSL distro       yq  /usr/sbin/yq
+           RULE: a probe that reads two namespaces must LABEL EVERY LINE WITH ITS NAMESPACE, even when you are about to read the output yourself. An unlabelled value from a two-namespace probe is not a measurement, it is a coin flip you will resolve in favour of whatever you expected.
+
+        2. THE THIRD PIPE-EATEN VERDICT. Three times this session a verdict line was destroyed by my own `| tail -N` before I could read it: a refused plan-fragment push, a refused windows-next push, and a 500-second litmus run whose failing arm names I lost entirely. I NAMED THIS MISTAKE TO THE COORDINATOR AFTER THE FIRST ONE, called it the don't-tail-a-guard shape, and then did it twice more. Naming a rule does not make one follow it; the fix is mechanical — write the full output to a file and grep the file — and I only adopted it after the third.
+           The third was recoverable without re-running, which is the useful part: .cache/metrics/tillandsias-timing.jsonl carries per-test exit codes, and exit 124 distinguishes a budget kill from an assertion failure. The compact summary reports that only as an aggregate count.
+           RULE, in the same shape as the one above: never pipe a guard's output through a truncating filter. The verdict line is not reliably at the end — a refusal often prints its remedy AFTER its verdict, so `tail` keeps the advice and discards the finding.
+
+        BOTH ARE THE SAME UNDERLYING ERROR AS THE ROW ITSELF: I destroyed or conflated the information that names the subject, and was left holding something true about the wrong question. The discipline that works is not vigilance, it is refusing to build the lossy pipeline in the first place.

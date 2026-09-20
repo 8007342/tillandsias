@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    field: status
+    value: in_progress
+    ts: "2026-09-20T07:53:51Z"
+    host: yoga
+
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: progress
+      ts: "2026-09-20T07:53:51Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed on yoga 2026-09-20 per macuahuitl's release; yoga takes the FIX half (caller-resolved cache root, global read removed, config write naming its failure), macneo keeps the MEASUREMENT half (N-of-N green under real gate load, the only reproducing host)

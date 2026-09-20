@@ -291,10 +291,29 @@ else
 fi
 
 echo ""
-say "Running tillandsias --init (sets up local runtime — may take a minute)..."
-"$INSTALL_PATH" --init --debug
+# ORDER 1286-4437 (operator ruling 2026-09-20): an install RESETS and
+# reprovisions the local state, so a curl|bash install is also the repair for a
+# broken one. `--reset-state` announces what it will destroy AND what it
+# preserves before touching anything, honours the single opt-out
+# (TILLANDSIAS_DESTRUCTIVE_RESET_OK=0, which makes it reprovision through plain
+# --init instead), and exits with the reprovision's status.
+#
+# THE ORDER IS THE CONTRACT, not a detail, and all three installers state it
+# identically: THE RESET RUNS ONLY AFTER THE NEW BINARY IS IN PLACE AND
+# EXECUTABLE, NEVER BEFORE. An install interrupted between the fetch and the
+# swap would otherwise destroy the local state with nothing left to reprovision
+# with — and that broken host is exactly the one this flag exists to repair.
+# macneo measured the sharp version of this on 2026-09-20: an installed
+# /Applications/Tillandsias.app GONE while 1.2 GiB of VM state survived, cause
+# unidentified and recorded as unknown. A repair tool that assumes the thing it
+# repairs with is present is not a repair tool.
+if [ ! -x "$INSTALL_PATH" ]; then
+    die "install: $INSTALL_PATH is missing or not executable after the fetch — refusing to reset local state, because there would be nothing left to reprovision with."
+fi
+say "Running tillandsias --reset-state (resets local state, then reprovisions — may take a minute)..."
+"$INSTALL_PATH" --reset-state --debug
 echo ""
-say "Init complete. Launch the tray with:"
+say "Reset and reprovision complete. Launch the tray with:"
 if path_has_dir "$INSTALL_DIR"; then
     say "  tillandsias --tray"
 else

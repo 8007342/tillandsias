@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    field: status
+    value: completed
+    ts: "2026-09-20T16:34:59Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    event:
+      type: completed
+      ts: "2026-09-20T16:34:59Z"
+      host: lenovinha-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: a43c175a6 — verified by content on origin/linux-next, not by the landing report: merge-base --is-ancestor origin/work/1309-qc95 origin/linux-next true; SSH_LANE_UNWIRED_REFUSAL_URL present in crates/tillandsias-headless/src/main.rs; scripts/test-ssh-lane-refuses-when-unwired.sh present; litmus:ssh-lane-refuses-when-unwired bound once under git-mirror-service. Local gate DONE_RC=0 at 1460s; fixture 2/2 with its mutation arm reddening the mutant
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    event:
+      type: note
+      ts: "2026-09-20T16:34:59Z"
+      host: lenovinha-silverblue
+      summary: |-
+        landed via relay ok:land:a43c175a6:attempt-2

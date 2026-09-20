@@ -1,0 +1,128 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: regenerate-cheatsheet-index-derives-verification-markers-from-a-gitignored-locally-absent-sources-index-so-running-it-on-a-host-without-that-cache-silently-rewrites-other-sheets-verification-status-in-a-committable-file
+    packet_kind: defect
+    order: 1295-c4tn
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [cheatsheets, tooling, fail-loud, locus-dependent, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - scripts/regenerate-cheatsheet-index.sh
+      - crates/tillandsias-policy/src/main.rs
+    unscoreable: ""
+    verifiable_closure: |
+      On a host where the inputs the verification markers are derived from are
+      MISSING, `scripts/regenerate-cheatsheet-index.sh` REFUSES with a named
+      line and WRITES NOTHING:
+
+        refused:cheatsheet-index:no-sources-index:<path> (markers would be
+        recomputed from an absent cache; run scripts/refresh-cheatsheet-sources.sh
+        or regenerate on a host that has it)
+
+      distinct from a successful regeneration, and exit non-zero.
+
+      TWO ARMS, and the second is the one that makes this more than a guard:
+        1. sources index ABSENT -> the refusal above, and
+           `git diff --stat cheatsheets/INDEX.md` is EMPTY afterwards.
+        2. sources index PRESENT -> regeneration proceeds and is byte-identical
+           to today's output for the same inputs.
+
+      A MUTATION ARM must show arm 1 FAILS if the guard is removed — i.e. that
+      without it the tool really does rewrite markers — otherwise the fixture
+      proves only that a file happened not to change on the test machine.
+
+      PRE-FIX RESULT: FAILS — measured on esmeraldinha 2026-09-20; the tool
+      exited 0, rewrote cheatsheets/INDEX.md, and downgraded a sheet it was not
+      asked to touch. See context.
+    title: |
+      scripts/regenerate-cheatsheet-index.sh derives each sheet's verification marker from cheatsheet-sources/INDEX.json, which is gitignored and absent on a fresh checkout, so running it on a host without that cache silently rewrites OTHER sheets' verification status into a committable file and exits 0
+    context: |
+      MEASURED on esmeraldinha (Windows) 2026-09-20, after adding two tooling
+      cheatsheets and running the regenerator to pick up their index lines.
+
+      WHAT IT DID BESIDES THE JOB ASKED OF IT. The run added my two entries and
+      ALSO changed an unrelated sheet:
+
+        -- macos-guest-host-vsock-measurement.md  — measuring a guest→host vsock hop on macOS: why `--exec-guest` cannot prove it, the boot-oneshot + virtiofs side-channel method, and the seccomp shape. [bundled, verified]
+        ++ macos-guest-host-vsock-measurement.md  — anything inside the macOS guest has to reach a host-native [bundled, partial-verify]
+
+      That is someone else's sheet losing its curated description AND being
+      DOWNGRADED from `verified` to `partial-verify`. Two further lines
+      reordered (forge-standalone.md, podman.md). `git diff --stat` reported
+      14 insertions, 11 deletions; only 2 of those insertions were mine.
+
+      The tool exited 0. Nothing in its output said an unrelated entry had been
+      rewritten. I reverted rather than committing it, and this row exists
+      because the next person may not look at the diff.
+
+      THE MECHANISM, as far as I established it by reading rather than guessing.
+      `regen_build_verify_lookup()` in crates/tillandsias-policy/src/main.rs:4531
+      builds the marker table from `cheatsheet-sources/INDEX.json`, mapping each
+      sheet's source URLs to fetched entries. The label is computed at :4586-4616:
+      any URL not present in that fetched index yields `partial-verify`, and only
+      a fully-fetched sheet with a content hash yields `verified:<sha8>`. So THE
+      MARKER IS A FUNCTION OF LOCAL CACHE STATE, not of the sheet.
+
+      AND THAT CACHE IS GITIGNORED AND ABSENT HERE. `.gitignore:70` ignores
+      `cheatsheet-sources/`, and `cheatsheet-sources/INDEX.json` does not exist
+      on this checkout. When it cannot be read the function EARLY-RETURNS AN
+      EMPTY LOOKUP (:4538) — a missing cache is indistinguishable from a cache
+      that verified nothing, and neither is reported.
+
+      So the committed INDEX.md records verification facts that only a host with
+      a populated source cache can reproduce, while the tool that rewrites it is
+      runnable anywhere and rewrites the whole file every time.
+
+      WHAT I DID NOT ESTABLISH, AND IT MATTERS: the empty-lookup path predicts
+      that EVERY marker would be stripped, and that is NOT what happened — most
+      entries kept `partial-verify` and exactly one changed. So either the
+      lookup was not empty, or the markers have a second source, or the
+      description text and the marker are computed separately and only the
+      description path is locus-sensitive. I did not chase it further. THE
+      OBSERVED REWRITE IS REAL AND REPRODUCIBLE; the causal story above explains
+      the SHAPE of the defect but not yet the exact selection of one entry, and
+      whoever takes this row should start by reproducing on a host with the
+      cache absent and diffing the whole file rather than trusting my reading.
+
+      A SEPARATE, COSMETIC OBSERVATION, recorded so it is not mistaken for the
+      defect. The run also printed, four times:
+
+        -z: The system cannot find the file specified.
+
+      That is the binary probe in scripts/plan-binary-probe.sh, which resolves
+      `tillandsias-policy` by EXECUTING candidates (order 770-ifeg's
+      run-don't-stat rule) and so necessarily execs the wrong-platform artifact
+      on a shared Windows/WSL checkout. It is noise from a probe working as
+      designed, NOT the cause of the rewrite, and chasing it is a dead end.
+      Whether the probe should suppress that stderr is a different question and
+      not this row.
+    next_action: >
+      Reproduce first, because the causal story in context is incomplete by its
+      author's own admission: on any host, move cheatsheet-sources/INDEX.json
+      aside, run scripts/regenerate-cheatsheet-index.sh, and diff
+      cheatsheets/INDEX.md in full. Establish whether the marker rewrite is
+      driven by the absent index, by the description-extraction path, or by
+      both, and whether it degrades every verified sheet or only some. THEN add
+      the refusal in the closure — at the point the lookup is built, so the tool
+      refuses before writing rather than after, and writes nothing. DO NOT fix
+      this by defaulting a missing cache to `verified`: that would invent a
+      verification nobody performed, which is worse than the downgrade. DO NOT
+      fix it by committing the cache either without a separate decision — it is
+      gitignored deliberately and this row is not the place to reverse that.
+    provenance: |
+      Filed by esmeraldinha (windows) 2026-09-20 at the coordinator's request,
+      from its own transcript. The before/after INDEX lines, the diffstat and
+      the probe output are this host's, observed while adding
+      cheatsheets/tooling/msys-grep-cannot-count-carriage-returns.md and
+      git-bash-cannot-fork-or-enumerate.md (salvage ref 024d979c6). The
+      regeneration was REVERTED and is not in that commit; the two sheets were
+      handed off without index lines, which the coordinator is regenerating on
+      a Linux host instead. The mechanism in context comes from reading
+      crates/tillandsias-policy/src/main.rs:4528-4616 and .gitignore:70, not
+      from instrumenting the run, and the row says where that reading stops
+      short of the observation.

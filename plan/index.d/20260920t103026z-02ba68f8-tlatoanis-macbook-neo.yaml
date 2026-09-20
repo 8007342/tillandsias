@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    field: status
+    value: completed
+    ts: "2026-09-20T10:30:26Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: completed
+      ts: "2026-09-20T10:30:26Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        status 'completed' with evidence_refs: yoga's fix 950d8b248 verified on the tree; measured on macneo, the only host that reproduced it: the racing arm that was 2-RED-of-3 pre-fix is 0-RED-of-6 post-fix; two consecutive clean ./build.sh --check runs green on forge_credential_quarantine_mounts_present with ok:test-baseline:ran=2457 new-red=0 (pre-fix in-gate rate was 3 RED of 6); one loaded gate also green; no entry in scripts/test-known-red.txt. Nine green observations. NOT claimed: that the failure is impossible — it was probabilistic and this bounds the rate. Macneo's gate remains RC=1 on 1269-gfdi's tool-materialization fixture, which is a separate blocker and reproduces identically without racing load
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T10:30:26Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        measurement half complete on the only reproducing host

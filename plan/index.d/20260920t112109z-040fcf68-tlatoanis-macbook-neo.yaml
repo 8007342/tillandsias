@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    field: status
+    value: completed
+    ts: "2026-09-20T11:21:09Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: completed
+      ts: "2026-09-20T11:21:09Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        status 'completed' with evidence_refs: v2 9121afb55 (land 23, ok:land:6b68420ed), v3 e2ced1463 and v4 b05f66260 (yoga, ok:land:66e2aa860), all verified on trunk BY CONTENT: LC_ALL=C pin, derived jq tag, spaced separator, bare-metal refusal. Verdicts: macneo 3/3 (3 skipped: no toolbox, margin arm not exercised); macbookair 3/3 at 66e2aa860 with an AMBIENT fr_CH comma locale (ARM 4 pinned 1,55 -> 1.55); yoga 5/5 (1 skipped: no comma-decimal locale) under the gate's own regime, plus four induced paths including both bare-metal refusals. BEFORE/AFTER on the same platform class: pre-fix '5/5 (1 skipped: no toolbox on this host, margin arm not exercised here)' on a host that HAS a toolbox, post-fix '5/5 (1 skipped: no comma-decimal locale)'. MECHANISM WAS THE TOOLBOX SKIP OF ARMS 4-7, NOT THE PROBE — the row's title and first two events name the wrong cause. NOT verified from macneo: the bare-metal refusal branch and the jq-tag path, which rest on yoga's induced runs
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: note
+      ts: "2026-09-20T11:21:09Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        three regimes, four paths, before/after pair; mechanism corrected in the closing event

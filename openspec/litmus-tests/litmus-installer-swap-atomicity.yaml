@@ -1,0 +1,63 @@
+# @trace spec:ci-release
+name: litmus:installer-swap-atomicity
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1281-pgit. An install interrupted at ANY point between download and
+  launch must leave EITHER the old app OR the new app runnable at the
+  destination — never neither. install-macos.sh used to `rm -rf` the previous
+  backup, `mv` the LIVE app aside, and only then extract, which left the
+  destination EMPTY for the whole extraction. MEASURED on macneo 2026-09-19:
+  the installer was piped through `head` to read its first lines, SIGPIPE
+  killed it mid-swap, and /Applications held NEITHER Tillandsias.app NOR
+  Tillandsias.app.bak — the host had no application until it was re-installed.
+  The order is now: extract into a staging directory on the same filesystem,
+  swap with two adjacent renames, and remove the previous backup LAST. A trap
+  on EXIT/INT/TERM/HUP/PIPE restores the backup if the script dies between the
+  renames. SIGKILL cannot be trapped; that residual window is two renames on
+  one filesystem and the backup survives it in every case.
+preconditions:
+  - workspace contains scripts/install-macos.sh
+  - workspace contains scripts/test-install-macos-swap-is-interruptible.sh
+
+critical_path:
+  # The fixture kills the sequence at each step boundary in a SCRATCH PREFIX —
+  # it never touches /Applications and never downloads, because a guard that
+  # installs is a guard nobody runs in a gate.
+  - step: "an interrupted install always leaves a runnable app at the destination (1281-pgit)"
+    command: "bash scripts/test-install-macos-swap-is-interruptible.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: install-macos-swap-is-interruptible 6/6 (1281-pgit)"
+
+  # The structural half: the destructive step must come AFTER the new app is in
+  # place. A future edit that restores the old ordering would pass the fixture's
+  # clean-run arm and fail here, and vice versa, so both are kept.
+  - step: "the previous backup is removed only after the swap, never before the extract"
+    command: "awk '/mv \\\"\\$NEW_APP\\\" \\\"\\$DEST\\\"/{sw=NR} /rm -rf \\\"\\$PREV_BACKUP\\\"/{rm=NR} END{ if (sw && rm && rm > sw) print \"ok: deferred backup removal\"; else print \"FAIL: swap=\" sw \" rm=\" rm }' scripts/install-macos.sh"
+    timeout_ms: 3000
+    expected_behavior: "ok: deferred backup removal"
+
+  - step: "the interrupt trap covers the signals that killed the measured incident"
+    command: "grep -q 'trap _install_cleanup EXIT INT TERM HUP PIPE' scripts/install-macos.sh && echo 'ok: trap covers PIPE'"
+    timeout_ms: 3000
+    expected_behavior: "ok: trap covers PIPE"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "installer swap leaves either the old or the new app in place"
+  log_fields:
+    spec: "ci-release"
+    test: "installer-swap-atomicity"
+    artifact: "scripts/install-macos.sh"
+
+rollback:
+  on_failure: >
+    The swap ordering regressed. The destination must never be empty: extract
+    to a staging directory beside it, move the live app to .bak, move the new
+    app into place, and only then remove the older backup. Restore the order
+    from git history and re-run the fixture, whose ARM 5 negative control
+    reproduces the defect against the old ordering.
+  command: "bash scripts/test-install-macos-swap-is-interruptible.sh"

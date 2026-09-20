@@ -1,0 +1,78 @@
+# @trace spec:ci-release, order:1286-4437
+name: litmus:installer-reprovisions-on-install
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  Order 1286-4437 (operator ruling 2026-09-20): an install resets and
+  reprovisions the local state and then runs the platform initialisation
+  itself, so a curl|bash or irm|iex install is also the REPAIR for a broken
+  local state.
+
+  THIS ARM ASSERTS THE CONTRACT, NOT A DELTA BETWEEN FLAGS, and that is a
+  correction rather than a style choice. The three bodies differ in kind: on
+  Windows the pre-existing `--reset-guest` ALREADY had these semantics, so
+  `--reset-state` there is a rename plus the env guard plus the announcement
+  order; on macOS credential clearing is genuinely absent in production (no
+  caller of delete_credential_string outside tests); on Linux the body is new.
+  So "--reset-state does strictly more than --reset-guest" is a LINUX fact, and
+  an arm asserting it would go red on Windows for being CORRECT there. What is
+  true on all three is the contract below.
+
+  The Linux arm runs the LOCAL scripts/install.sh, not a curl of the published
+  artifact, because the published installer is whatever the last release cut —
+  only the NEXT cut proves the published path. That limit is stated here rather
+  than left for a reader to infer from a passing arm.
+critical_path:
+
+  - step: "the flag exists under the agreed name on the Linux surface"
+    command: "n=$(grep -c -- '--reset-state' crates/tillandsias-headless/src/main.rs || true); if [ \"$n\" -ge 4 ]; then echo ok:flag-surface; else echo \"FAIL:flag-surface=$n\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:flag-surface"
+    # parse, dispatch, usage and help lines; >=4 rather than =N so adding a help line is not a red.
+
+  - step: "nothing READS a second opt-out variable"
+    command: "n=$(grep -rn 'TILLANDSIAS_INSTALL_SKIP_RESET' crates/ scripts/ 2>/dev/null | grep -vE '^scripts/test-[a-z0-9-]+\\.sh:' | grep -vcE '^[^:]+:[0-9]+: *(//|#)' || true); if [ \"$n\" -eq 0 ]; then echo ok:no-second-optout; else echo \"FAIL:reads=$n\"; fi"
+    timeout_ms: 30000
+    expected_behavior: "ok:no-second-optout"
+    # zero READS, not zero mentions: the first draft asserted zero OCCURRENCES and failed against 2 doc comments recording the rejection, which are exactly what stops reintroduction.
+
+    # A FIXTURE THAT GUARDS THE NAME IS NOT A READ OF IT. macneo's
+    # scripts/test-reset-state-contract.sh both greps for this variable and PLANTS
+    # it in fixture text, so this step counted its guard as the violation — a false
+    # RED on trunk from the moment 66f952eed landed, on the arm whose own note warns
+    # that asserting the MENTION would force deleting the warnings that prevent the
+    # defect. Excluding scripts/test-*.sh keeps the property (no code CONSULTS the
+    # variable) and lets the fixtures that defend it exist.
+
+  - step: "the guard and the announcement live in core, importable by all three binaries"
+    command: "n=$(grep -cE 'pub fn destructive_reset_allowed|pub fn announce_reset_plan|pub const RESET_SKIPPED_LINE|pub const RESET_NO_REPROVISION_PATH' crates/tillandsias-core/src/reset_state.rs || true); if [ \"$n\" -eq 4 ]; then echo ok:core-public-items; else echo \"FAIL:core-public-items=$n\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:core-public-items"
+    # four public items in tillandsias-core; the original gate was a private fn in a crate with no [lib] target, so each tray would have copied it.
+
+  - step: "the Linux body does not keep a private copy of the gate"
+    command: "n=$(grep -c 'fn destructive_reset_allowed' crates/tillandsias-headless/src/main.rs || true); if [ \"$n\" -eq 0 ]; then echo ok:no-local-gate-copy; else echo \"FAIL:local-copies=$n\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:no-local-gate-copy"
+    # headless imports core's gate; it does not define its own.
+
+  - step: "the skipped-case line is the byte-exact shared phrase"
+    command: "n=$(grep -c 'reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0' crates/tillandsias-core/src/reset_state.rs || true); if [ \"$n\" -ge 1 ]; then echo ok:byte-exact-phrase; else echo FAIL:phrase-absent-or-recased; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:byte-exact-phrase"
+    # lowercase, byte for byte: operators and litmus grep this phrase across three platforms, so a casing change is a silent divergence on two of them.
+
+  - step: "the installer refuses to destroy state when its reprovision path is absent"
+    command: "n=$(grep -c 'refusing to reset local state' scripts/install.sh || true); if [ \"$n\" -ge 1 ]; then echo ok:preflight-guard; else echo FAIL:preflight-guard-absent; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:preflight-guard"
+    # not vacuous: an install can be interrupted between the fetch and the swap. A repair tool that assumes the thing it repairs with is present is not a repair tool.
+
+  - step: "the installer calls the flag AFTER the binary is in place, not before"
+    command: "g=$(grep -nF -- '! -x \"$INSTALL_PATH\"' scripts/install.sh | head -1 | cut -d: -f1); r=$(grep -n -- '--reset-state' scripts/install.sh | grep INSTALL_PATH | head -1 | cut -d: -f1); if [ -n \"$g\" ] && [ -n \"$r\" ] && [ \"$g\" -lt \"$r\" ]; then echo ok:ordered; else echo \"FAIL:guard=$g reset=$r\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:ordered"
+    # the order IS the contract. Two earlier drafts reported UNORDERED against a correctly ordered file - first awk's GNU-only \\s, then a BRE containing $ and a leading ! matching nothing. grep -F fixes it; both drafts were false REDs from the matcher, not the tree.
+

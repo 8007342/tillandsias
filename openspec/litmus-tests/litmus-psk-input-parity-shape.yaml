@@ -28,6 +28,7 @@ critical_path:
     command: "if grep -rF 'channel_psk(env!(\"CARGO_PKG_VERSION\")' crates/ --include='*.rs' >/dev/null 2>&1; then echo 'FAIL: PSK derived from CARGO_PKG_VERSION'; exit 1; else echo 'ok: no cargo-pkg-version psk drift'; fi"
     timeout_ms: 5000
     expected_behavior: "ok: no cargo-pkg-version psk drift"
+    assert_output_contains: "ok: no cargo-pkg-version psk drift"
 
   - step: "every known channel_psk call site uses the workspace VERSION source"
     # 1084-x8ya (2026-09-12): the keyed API is `channel_psk_for_guest(digest,

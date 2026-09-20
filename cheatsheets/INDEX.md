@@ -160,6 +160,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - forge-paths-ephemeral-vs-persistent.md    — You're an agent (or human) writing files inside the forge container and need to… [pull-on-demand: stub]
 - forge-shared-cache-via-nix.md             — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
 - forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]
+- macos-guest-host-vsock-measurement.md        — measuring a guest→host vsock hop on macOS: why `--exec-guest` cannot prove it, the boot-oneshot + virtiofs side-channel method, and the seccomp shape. [bundled, verified]
 - forge-standalone-runner.md [DRAFT]        — is `cheatsheets/runtime/forge-standalone.md`. [bundled, partial-verify]
 - forge-transparency.md                     — Understanding which infrastructure services are transparently [bundled, partial-verify]
 - gpu-tier-detection.md [DRAFT]             — Determining which LLM models to pre-pull or lazy-load based on GPU VRAM, select… [bundled, partial-verify]

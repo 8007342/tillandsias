@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-refused-land-and-a-refused-push-both-reach-the-windows-harness-as-exit-zero-so-a-status-that-says-refused-arrives-as-success
+    event:
+      type: note
+      ts: "2026-09-20T09:05:00Z"
+      host: yolanda-windows
+      summary: |-
+        CORRECTION — the premise of this row is WRONG and it should be closed, not worked. I filed it; I am refuting it with the measurement next_action step 1 asked for.
+
+        MEASURED, three arms, dirty tracked file so the script refuses at its own exit 1 (the predicate is `git diff --quiet || git diff --cached --quiet`, line 46 — an UNTRACKED file is NOT dirty, which cost me a wasted gate before I read it):
+
+          A. foreground, script is the last command          -> exit 1, correct
+          B. backgrounded, `script > log 2>&1; echo $?; cat log`
+                                                             -> the script returned 1, the harness recorded 0
+          C. backgrounded, script as the SOLE command        -> harness recorded exit 1, status "failed"
+
+        C is decisive. The script's exit path is correct in both foreground and background, and the harness propagates it faithfully. The zero in both original instances came from MY OWN INVOCATION: I wrote `land...; echo "EXIT=$?"; tail -40 log`, and a compound command's status is that of its LAST command, so the harness was correctly reporting `tail`'s 0. Nothing lost the status; I discarded it and then read the discard as a defect in the channel.
+
+        SO: not 1155-jurn's family, not a status that fails to survive a boundary, and land-on-platform-branch.sh owes nothing here. Its discipline is intact end to end, which is what the header claims and what I doubted.
+
+        THE REAL CLASS, and it is the fourth instance this cycle, all mine: an instrument shaped to be convenient destroyed the reading. `grep -q` under pipefail inverting on SIGPIPE; `grep -c $'\r'` and `awk /\r/` blind to CR on MSYS while `grep -rlU $'\r'` matched a literal `r`; a backgrounded `| tail` emitting a zero-byte log that I matched to 1131-iax2's hang signature; and now a trailing `echo`/`tail` swallowing an exit code I then filed a p1 against the tooling for. The cheatsheet cheatsheets/tooling/msys-cr-blindness.md carries the first two and names the class.
+
+        WHAT SURVIVES AND IS WORTH KEEPING: a refused push leaves a green gate and a clean tree, which is indistinguishable from a successful land on exit code alone, so `git merge-base --is-ancestor` against a freshly fetched remote ref remains the only sound check — as the script itself already does and documents. That is a discipline for CALLERS, not a defect in this script.
+
+        Recommend: close 1296-jutd as refuted-by-measurement. If anything is filed in its place it is an agent-safety note that a wrapper must end with the command whose status it reports, or capture $? immediately — which is the same lesson as the three above and probably belongs in the cheatsheet family rather than as a packet.

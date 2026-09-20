@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    order: 1309-fhxb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, instrument, low-end, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-bash-composition-hazards-advisory-shape.yaml
+      - openspec/litmus-tests/litmus-spawn-failure-names-program.yaml
+    title: |
+      Two ci-release litmus steps report FAIL while asserting nothing: one emits `advisory:…` against a success_pattern of `^(ok|skip):bash-hazards`, the other emits `skip:no-cargo` on a host that has no cargo — a declared advisory and a named skip both scored as defects, so a floor host's pass rate carries two permanent reds that mean "this host is a floor host"
+    context: |
+      MEASURED ON PIRRIA 2026-09-20 during the 1286-4437 work. `scripts/run-litmus-test.sh
+      ci-release --phase pre-build --size instant` reported 37 PASS / 3 FAIL,
+      pass rate 92%. Verbatim, two of the three:
+
+        litmus:bash-composition-hazards-advisory-shape
+          [STEP 1/2] the advisory lint runs and reports a verdict
+          (ok on a host with the release binary, skip:no-binary elsewhere —
+           both are valid advisory outcomes) ... [FAIL] rc=0
+                 success_pattern=^(ok|skip):bash-hazards
+                 output=advisory:bash-hazards:pgrep-f-literal:pipelines=4:files=3
+
+        litmus:spawn-failure-names-program
+          [STEP 2/4] both arms pass: the NotFound mapping names program and PATH,
+          and the collapse is strict ... [FAIL] rc=0
+                 expected=ok:spawn-failure-names-program:2/2
+                 output=skip:no-cargo
+
+      BOTH STEPS EXITED ZERO. Neither asserted anything and found it false.
+
+      THE FIRST STEP CONTRADICTS ITSELF IN ITS OWN TITLE. It says "both are valid
+      advisory outcomes" and then holds a success_pattern that admits only `ok:`
+      and `skip:` — while the lint it runs is named "advisory" and emits
+      `advisory:`. The verdict it actually produced (four pipelines in three
+      files carrying the pgrep -f literal hazard) is real, useful, and the thing
+      the lint exists to report; it is scored as a failure of the lint to run.
+
+      THE SECOND IS THE FLOOR-HOST SHAPE, and it is the one that matters for this
+      fleet's purpose. pirria and esme are control units: modest hardware, no
+      accelerated GPU or NPU, run precisely so the fleet can see what slow and
+      small hosts pay. This host has no cargo outside the `tillandsias-builder`
+      toolbox, so a step that needs cargo emits `skip:no-cargo` — a correct,
+      named, could-not-run answer under 1273-4mak. Scored as FAIL, it means the
+      floor hosts cannot ever reach a clean litmus run, and their pass rate
+      encodes their hardware rather than the tree's health.
+
+      WHY THIS IS WORTH A ROW RATHER THAN TWO EDITS. A permanent red is a red
+      that stops being read. This host's ci-release run has carried 3 FAIL long
+      enough that I looked straight past the number while hunting a different
+      problem — and on the same run, my own new litmus was silently absent from
+      BOTH the pass and the fail count because it was unbound (see the sibling
+      1304-wbb2 material on the reconciliation guard). A suite whose failure
+      count contains steps that assert nothing teaches its readers that the
+      failure count is noise, which is the precondition for the absence going
+      unnoticed.
+
+      NOT IN SCOPE: the third FAIL in the same run,
+      `litmus:litmus-bindings-reconciliation-shape` (rc=1, EMPTY output where
+      `ok: fixture 5/5` is expected). That is the guard whose job is to catch
+      unbound litmus files; it belongs to esme with 1304-wbb2 and is recorded
+      here only because it appeared in the same pre-fix run.
+    exit_criteria:
+      - 'a step whose command emits a DECLARED advisory verdict is reported as an advisory and not as FAIL (pre-fix result: FAILS — `advisory:bash-hazards:pgrep-f-literal:pipelines=4:files=3` scored FAIL against success_pattern `^(ok|skip):bash-hazards`, rc=0)'
+      - 'a step whose command emits a NAMED could-not-run skip is reported as a skip and not as FAIL (pre-fix result: FAILS — `skip:no-cargo` scored FAIL against expected `ok:spawn-failure-names-program:2/2`, rc=0, on a host whose cargo lives only inside the builder toolbox)'
+      - 'NEGATIVE CONTROL, AND IT IS THE WHOLE RISK OF THIS ROW: a step that genuinely asserted something and found it false STILL reports FAIL, and a step that emits `skip:` for a reason the host could have satisfied is not thereby excused — widening what counts as a non-failure must not widen what counts as a pass. An arm that fabricates `skip:` must be refused.'
+      - 'the ci-release run on a floor host with no cargo can reach zero FAIL without any step being weakened, and the run''s summary distinguishes passed / advisory / skipped / failed rather than folding the middle two into either end'
+    unscoreable: |
+      remedy-not-chosen: this can be fixed in the two litmus files (widen each
+      success_pattern to admit the verdict its own step documents) or in the
+      runner (a shared grammar where `advisory:` and `skip:` are terminal
+      non-failure verdicts for every step). The second is the one that stops the
+      next arm from reintroducing it and is the reason this is one row rather
+      than two edits, but it changes every spec's reported numbers at once and
+      that is not a change to make from a floor host's measurement alone.
+    events:
+      - type: filed
+        ts: "2026-09-20T18:35:00Z"
+        agent_id: "linux-pirria-claude-20260920t183500z"
+        host: pirria
+        summary: |-
+          Filed at the coordinator's direction from the 2026-09-20 ci-release run
+          on pirria (37 PASS / 3 FAIL, 92%) taken while landing 1286-4437. Both
+          steps are quoted with their rc, their pattern and their actual output,
+          because the distinguishing fact — that each exited ZERO and asserted
+          nothing — is invisible in the pass-rate line.

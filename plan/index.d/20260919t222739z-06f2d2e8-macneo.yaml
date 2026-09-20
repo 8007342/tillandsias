@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: install-macos-announces-channel-stable-and-resolving-latest-release-while-installing-a-pinned-prerelease-so-its-own-log-describes-a-resolution-path-it-did-not-take
+    event:
+      type: completed
+      ts: "2026-09-19T22:27:39Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t222739z
+      host: macneo
+      summary: |-
+        CLOSED on two trunk SHAs, each verified BY CONTENT on origin/linux-next rather
+        than by the landing report: ec1a8244a (the fix and its fixture, land 17) and
+        e7235a57e (the binding, land 18). Verified that install-macos.sh on trunk
+        contains the pinned announcement, that scripts/test-install-macos-announces-its-pin.sh
+        is present on trunk, and that litmus-smoke-release-channel-shape.yaml on trunk
+        binds the fixture BY COMMAND and cites this order three times.
+
+        EXIT CRITERIA, each against its recorded pre-fix result:
+        1. "with TILLANDSIAS_RELEASE_BASE set, prints a line naming the pin and NEVER
+           prints 'resolving latest release'" — MET, verified on the REAL script and not
+           only on the extracted block: a pinned run prints
+           "channel: pinned https://.../v56.9.19.2-nonexistent" and no resolving-latest
+           line. PRE-FIX: both the v56.9.19.1 and v56.9.19.2 install logs opened
+           "channel: stable" then "resolving latest release" under a pinned base whose
+           release GitHub reports isPrerelease=true, which /releases/latest/download
+           cannot serve at all.
+        2. "with it unset, output unchanged so a real operator sees no difference" —
+           MET. This is the regression guard rather than the feature, verified on the
+           real script with --channel unstable: today's lines in today's order.
+        3. "the unstable-channel warning block is unaffected in both cases" — MET,
+           observed intact in that same unpinned run.
+
+        THE GUARD IS BOUND, WHICH IS WHY THIS DID NOT CLOSE ON THE FIRST SHA.
+        scripts/test-install-macos-announces-its-pin.sh passes 6/6 with a MUTANT arm
+        (remove the branch and the pinned arm reproduces the defect, so arm 1 has teeth)
+        and an explicit regression arm for the unpinned path. It ran in the runner as
+        [STEP 14/14] ... [OK], so the spec ENUMERATES it rather than merely parsing it —
+        a byte-identical expected_behavior proves the assertion is right, not that the
+        step runs, and the two were checked separately.
+        Between land 17 and land 18 the fixture was ON TRUNK and nothing called it.
+        Closing then would have marked this row complete while its own guard sat in the
+        885-92iu state the row's work existed to remove: a test no spec binds runs in no
+        suite and is as inert as a missing one. Held one land deliberately.
+
+        FOUND WHILE VERIFYING, and filed rather than folded in: 1281-pgit, that
+        install-macos.sh launches the tray and provisions a VM so section 1 of the smoke
+        is not a download test on macOS either — a hazard documented for the Linux
+        installer only. It carries evidence measured by accident on this host: an
+        install interrupted mid-swap left /Applications with NO app and NO backup,
+        because the installer removes the old backup before moving the live app aside.
+        That is an installer design question and is deliberately not closed here.

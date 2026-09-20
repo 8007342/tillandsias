@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T00:18:48Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t001848z
+      host: macneo
+      summary: |
+        THE MECHANISM IS NAMED, AND IT IS NOT THE ONE THIS ROW AND THE SOURCE COMMENT
+        BOTH EXPECTED. The swallowed create_dir_all is NOT the cause.
+
+        METHOD: instrumented the gitconfig cache root's create_dir_all in a local,
+        uncommitted edit (marked NOT FOR COMMIT, reverted byte-exactly afterwards from a
+        pristine copy) to print io::ErrorKind, errno, the path, what exists at that path,
+        and whether the parent exists — then reproduced under real gate load.
+
+        RESULT: the gate REPRODUCED the failure (fail:test-baseline ran=2455 new-red=1)
+        and THE INSTRUMENTATION NEVER FIRED — zero SCRATCH lines in the gate log.
+        So create_dir_all did not fail. The hypothesis this row carried, and the one the
+        source's own comment describes ("create_dir_all below failed, `.ok()?` turned
+        that into None AT THE POINT IT HAPPENED, the gitconfig mount silently vanished"),
+        is REFUTED for this failure.
+
+        THE ACTUAL PATH, from the failing run's own transcript:
+          [tillandsias] WARNING: cannot determine the git origin for project 'alpha'
+          (git config --get remote.origin.url exited Some(128)).
+          [tillandsias]   This is NOT the same as a project with no remote — resolution
+          failed. Fix the checkout or install git on this host.
+          thread 'tests::forge_credential_quarantine_mounts_present' panicked:
+          must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)
+        So: origin resolution ran `git -C <path> config --get remote.origin.url`, got
+        exit 128 (a FATAL git error, not the exit 1 that means "key not found"), became
+        OriginResolution::Unresolvable, which maps to origin_url = None, and the
+        gitconfig mount is then not added. The assertion reports an absent mount; the
+        cause is a failed subprocess three steps upstream.
+
+        THE SECOND LINE IS THE KEY EVIDENCE. "This is NOT the same as a project with no
+        remote" is printed ONLY `if host_checkout.is_some()`. The test calls
+        build_forge_agent_run_argv with host_mount=false and a project_path of
+        /tmp/project. So in the failing run host_checkout was SOME — meaning something
+        outside this test's arguments supplied it. That is the contended state.
+
+        DIRECTLY TESTED AND EXCLUDED: /tmp/project's mere existence. Created it as a
+        plain non-git directory and ran the test in isolation — PASSES, and no warning
+        fires. Removed it — PASSES. So the shared filesystem path is not the trigger by
+        itself, and the state is process-internal rather than on disk.
+
+        WHAT THE SOURCE ALREADY SAYS, and it is the strongest corroboration here. The
+        host_mount parameter of build_forge_agent_run_argv carries this comment:
+          "ORDER 1021-hf9e. The FIRST pass moved the env read out of the two arg builders
+           and into THIS function's body, which left it still inside a function eight
+           tests call — so forge_credential_quarantine_mounts_present kept failing in
+           2 of 10 parallel runs. Moving a global read one level up is not removing it.
+           It is now the caller's to resolve."
+        THIS EXACT TEST is named in the source as a KNOWN 2-in-10 parallel failure caused
+        by a GLOBAL READ that 1021-hf9e's first pass did not remove. The rate matches
+        what macneo measured (2 of 3 under heavy load, 0 of many when idle). So this is
+        not a new macOS defect: it is a documented, unfinished residual that macneo's
+        load makes frequent enough to hit the ratchet.
+
+        A LIVE PROCESS-GLOBAL WRITE EXISTS in the same file:
+          unsafe { std::env::set_var("TILLANDSIAS_PROJECT_REMOTE_URL", &remote_url) }
+        and another comment warns about "TILLANDSIAS_PROJECT_REMOTE_URL's mere presence
+        in the process". An env write is process-global and unsynchronised across test
+        threads, which is the right shape for a 2-in-10 parallel flake.
+        NOT CLAIMED: that this specific set_var is the writer that flips this specific
+        test. It is the strongest candidate and it is UNVERIFIED — proving it needs the
+        writer caught in the act (log the env var's value and the setting thread at the
+        moment resolution runs), not an argument from shape. Recorded as the next step,
+        not as the finding.

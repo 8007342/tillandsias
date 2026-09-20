@@ -21,11 +21,13 @@ critical_path:
     command: "find ~/.cache/tillandsias -type s 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 sockets"
+    assert_output_matches: "^[[:space:]]*0$"
 
   - step: "verify no orphaned socket files"
     command: "find ~/.cache/tillandsias -type f -name '*.sock' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 socket files"
+    assert_output_matches: "^[[:space:]]*0$"
 
 observability:
   traces:

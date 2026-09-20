@@ -44,16 +44,102 @@
 # the call harmless.
 TILLANDSIAS_TIMING_LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd)"
 
-# Portable millisecond clock. `date +%s%3N` is GNU-only; on a host without it
-# (macOS/BSD) the %3N is emitted literally, so detect a non-numeric result and
-# fall back to whole seconds * 1000. Always prints a bare integer.
-timing_now_ms() {
+# Portable millisecond clock. Always prints a bare integer.
+#
+# ORDER 1279-a7b6. THE SECONDS FALLBACK IS NOT A DEGRADED MEASUREMENT, IT IS AN
+# AMBIGUOUS ONE, which is why this now tries harder before reaching it.
+#
+# `date +%s%3N` is GNU-only. BSD date does not REJECT %3N — it emits the literal
+# characters, measured on tlatoanis-macbook-air 2026-09-19:
+#
+#     $ date +%s%3N
+#     17898506753N
+#
+# The non-digit guard below catches that stray `N` and works exactly as written.
+# What it cannot do is invent resolution the source never had, so the old
+# fallback stapled three zeros onto whole seconds and every step faster than a
+# second measured 0.
+#
+# AND 0 ALREADY MEANS SOMETHING ELSE. `timing_emit` skips a record whose `_t0`
+# is 0 because that is the signature of the path-skew stub (693-tf79) — i.e.
+# "there was no instrument". On a BSD-date host a REAL sub-second measurement
+# emitted that identical value, so two opposite conditions became one number and
+# the exit code did not separate them either (both 0, measured by macneo). The
+# lane that exists so FLOOR hosts contribute timings (1013-qv7c) was collecting
+# zeroes from an entire platform.
+#
+# THE CLOCK WAS NEVER BROKEN, ONLY ITS RESOLUTION — established by a contrast
+# run that produced 42000 and 0 together on one host with one clock. That is why
+# the remedy is a better SOURCE rather than a correction to the arithmetic.
+#
+# ORDER OF SOURCES, cheapest-and-most-precise first. `date` stays first so the
+# Linux lanes, which are the overwhelming majority of calls, keep their existing
+# zero-subprocess-beyond-date path and are unaffected. The perl arm is only
+# reached where date has already failed, and was measured present on this host
+# (returning 1789850676020, a real millisecond value).
+#
+# `timing_clock_resolution` reports which arm won, so a caller can tell a coarse
+# measurement from a precise one instead of inferring it from a suspicious
+# trailing "000". It is the honest half: if a host has none of the three
+# millisecond sources we still answer, but we no longer answer as though the
+# number means what it does elsewhere.
+# NO SHARED STATE BETWEEN THE VALUE AND ITS RESOLUTION, and that is not a style
+# choice. Every caller invokes `timing_now_ms` through `$(...)`, which is a
+# SUBSHELL, so a variable the function sets is discarded on return. A first cut
+# of this order recorded the winning arm in a global and shipped a reporter that
+# would have answered empty forever — caught only by calling it. The probe
+# therefore RETURNS both facts on one line and the two public helpers slice it.
+#
+# Prints: "<resolution> <epoch_ms>", resolution in {ms, s}.
+_timing_clock_probe() {
     local _n
-    _n="$(date +%s%3N 2>/dev/null)" # gnu-date: ok (digit-validated by the case below; degrades to seconds*1000)
+
+    _n="$(date +%s%3N 2>/dev/null)" # gnu-date: ok (digit-validated below)
     case "$_n" in
-        '' | *[!0-9]*) date +%s 2>/dev/null | awk '{printf "%d000", $1}' 2>/dev/null || echo 0 ;;
-        *) printf '%s' "$_n" ;;
+        '' | *[!0-9]*) ;;
+        *) printf 'ms %s' "$_n"; return 0 ;;
     esac
+
+    # THE OTHER OBVIOUS INTERPRETER IS REFUSED BY POLICY, not overlooked.
+    # 1087-h2z9 bars that runtime anywhere in the harness ("rewrite in Rust or
+    # get Tlatoani approval") and the gate enforces it — measured: this file was
+    # refused on the first attempt for naming it, in a comment as well as in
+    # code, because the scan matches the token. perl carries no such rule,
+    # ships with macOS, and is already relied on by scripts/check-bash-dialect.sh,
+    # so it adds no dependency this repo does not already have.
+    #
+    # NOT a Rust helper either, which is what the policy nudges toward: this is
+    # a shell library sourced BY the build, so it cannot assume a built binary
+    # exists — the first thing it would time is the build that produces it.
+    _n="$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000' 2>/dev/null)"
+    case "$_n" in
+        '' | *[!0-9]*) ;;
+        *) printf 'ms %s' "$_n"; return 0 ;;
+    esac
+
+    # LAST RESORT, marked as such rather than disguised. A caller that cares
+    # consults timing_clock_resolution; one that does not is no worse off than
+    # before this order.
+    _n="$(date +%s 2>/dev/null | awk '{printf "%d000", $1}' 2>/dev/null)"
+    case "$_n" in
+        '' | *[!0-9]*) _n=0 ;;
+    esac
+    printf 's %s' "$_n"
+}
+
+timing_now_ms() {
+    local _p
+    _p="$(_timing_clock_probe)"
+    printf '%s' "${_p#* }"
+}
+
+# Resolution of the clock available to timing_now_ms RIGHT NOW: `ms` or `s`.
+# Probes rather than presumes — the platform's advertised capability and what
+# actually answers diverge exactly on the hosts this order is about.
+timing_clock_resolution() {
+    local _p
+    _p="$(_timing_clock_probe)"
+    printf '%s' "${_p%% *}"
 }
 
 # timing_emit <step> <phase> <t0_ms> <exit_code>

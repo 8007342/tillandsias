@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-20T13:42:20Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        CLOSURE-TEST DESIGN, every constraint established by source read or measurement rather than assumed. Recording before building so the next person does not re-derive it; the build is the remaining work.
+
+        THE TRIGGER MUST BE A PRODUCT PATH, because the closure says "with THE PRODUCT launching the forwarder and no probe script involved". The four production sites and the entry point that reaches each, read from the tree:
+
+          status-inference        run_status_check              reached by `--status-check`
+          opencode-inference      run_opencode_mode             a full OpenCode launch
+          opencode-web-inference  monitor_and_cleanup_browser   the web lane
+          forge-launch-inference  ensure_shared_git_and_inference_for_launch   a forge launch
+
+        `--status-check` is the LIGHTEST of the four and is still not light: run_status_check ensures the CA bundle, the enclave network, and the images proxy/git/inference/chromium-core/chromium-framework/forge/router/web, and creates a one-shot forge of its own. So the closure test is a SLOW fixture in the smoke family, not a gate fixture, and it must not be wired into build.sh --check.
+
+        THE SESSION-LANE GUARD IS THE SEAM, and it already exists rather than needing one invented: run_status_check opens with require_desktop_user_session, which refuses the HeadlessServiceAccount and DevTest lanes — and returns Ok early when LITMUS_PODMAN_MODE is set (tillandsias-podman/src/lib.rs:147-152). That is the sanctioned way for a fixture to drive this path.
+
+        THE HARNESS SHAPE IS FORCED BY A CONSTRAINT THIS ROW ALREADY ESTABLISHED: --exec-guest cannot be used while the measurement runs, because the tray must be pumping CFRunLoop for a guest-initiated vsock connect to complete, and the tray OWNS the VM so there is no second control-wire session. The shape that works, used for both earlier proofs on this row:
+
+          1. BEFORE the run, via --exec-guest: install a boot-triggered systemd oneshot that
+             (a) writes /run/tillandsias/vsock-forward with "2:<port>" — the env/file seam
+                 vsock_forward_target() reads, standing in for the tray-side writer that
+                 does not exist yet;
+             (b) runs `tillandsias-headless --status-check` with LITMUS_PODMAN_MODE set;
+             (c) runs a CLIENT container on tillandsias-enclave doing
+                 `curl -sS http://inference:11434/api/version`;
+             (d) writes the outcome where the host can read it.
+          2. Start the tray normally with TILLANDSIAS_HOST_VSOCK_PORT and
+             TILLANDSIAS_HOST_VSOCK_FORWARD_TO pointing at a host-native HTTP responder.
+          3. The host reads the outcome and asserts the CLIENT SAW THE HOST'S BODY.
+
+        REPORTING CHANNEL — DO NOT USE THE MODEL CACHE. Both earlier proofs reported through /root/.cache/tillandsias/models because it is the one share the tray does not own, and a dotfile there trips test-macos-model-share-writable.sh's empty-cache precondition. For a PERMANENT fixture that is a defect, not a shortcut: pick another host-readable path or have the fixture clean up and assert the cache is empty afterwards.
+
+        WHAT THE ASSERTION MUST BE, restating it because it is the whole point: the CLIENT CONTAINER SEES A BODY COMPOSED ON THE HOST. Not that the forwarder container started; not that the seccomp profile derived; not that a vsock connect was accepted. A forwarder that starts and answers nothing is indistinguishable from inside the guest from a service that is merely quiet, which is the silent-success shape this milestone exists to remove — and it is exactly how the retired fixture's ARM 3 went vacuous on a sibling row.
+
+        WHAT THIS RESTORES: the container-level coverage the retired shell fixture had. The Rust unit tests assert the JSON transformation and CANNOT tell you crun will ACCEPT the profile — the defect that already bit once, where a well-formed profile made every container fail to start. This fixture exercises the profile in its real position, so that gap closes when it lands and not before.
+
+        NOT YET BUILT. The design above is settled; the fixture script, a run against the live guest, and a mutation arm (remove the forwarder lane, or point the config at a dead port, and require the client to NOT receive a host body) remain.

@@ -27,6 +27,14 @@ mod installation_uuid;
 mod main_thread;
 #[cfg(target_os = "macos")]
 mod pty_vsock_bridge;
+// THE ATTRIBUTE IS LOAD-BEARING and every sibling above carries it. Without it
+// this module compiles on EVERY target while diagnose/installation_uuid do not,
+// so it references siblings that are not there (E0433) and reaches for
+// std::os::unix on Windows. A macOS gate cannot see any of it: here the
+// siblings are present and the module compiles. Found by the Linux workspace
+// compile on relay (656-spux shape).
+#[cfg(target_os = "macos")]
+mod reset_state;
 #[cfg(target_os = "macos")]
 mod status_item;
 
@@ -175,6 +183,13 @@ fn main() {
              --reset-guest EPHEMERAL RESET: wipe the guest disk (and with it the\n                  \
              in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
              you'll re-authenticate once\n    \
+             --reset-state FULL LOCAL RESET (order 1286-4437): everything\n                  \
+             --reset-guest destroys, plus the host-held vault credentials and\n                  \
+             the app caches, then reprovisions. PRESERVES the installation\n                  \
+             identity. The installer runs it by default after an upgrade.\n                  \
+             TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction (and only\n                  \
+             the destruction); TILLANDSIAS_RESET_KEEP_MODELS=1 spares the model\n                  \
+             cache\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
              the control wire, print its output + exit, then stop. An ABSOLUTE\n                  \
              argv[0] is sent as a verbatim argv vector with no shell in the\n                  \
@@ -250,6 +265,28 @@ fn main() {
     if args.iter().any(|a| a == "--reset-guest") {
         require_no_live_tray("--reset-guest");
         std::process::exit(diagnose::reset_guest_main());
+    }
+    // ORDER 1286-4437 — the same flag name and the same meaning on all three
+    // platforms. It is a DELTA over --reset-guest, not a rename of it: the guest
+    // wipe above is reused verbatim, and the host-held credentials and caches
+    // that macOS never cleared are this body's own steps.
+    //
+    // IT TAKES THE SAME ORDER-277 GUARD AS --reset-guest AND MUST. It destroys
+    // strictly more than the alias does, so a version that skipped the live-tray
+    // check would pull the disk out from under a running VM in exactly the case
+    // the guard was written for.
+    //
+    // Err => exit 1, one convention across the fleet. See reset_state.rs's note
+    // on why this returns Result while its three siblings return i32.
+    if args.iter().any(|a| a == "--reset-state") {
+        require_no_live_tray("--reset-state");
+        match reset_state::run_reset_state() {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
     }
     // Headless guest-exec smoke: boot the provisioned VM, run a command in the
     // guest over the control wire (VzRuntime::exec path), print its output +
@@ -607,6 +644,75 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    /// A MODULE THAT REACHES FOR ITS SIBLINGS OR FOR UNIX MUST BE GATED.
+    ///
+    /// Most of this crate's modules are macOS-only and carry
+    /// `#[cfg(target_os = "macos")]`. A declaration WITHOUT it compiles on every
+    /// target — fine for a genuinely portable module (menu_disabled_v2 and
+    /// terminal_attach are, and the latter gates the macOS parts internally),
+    /// and fatal for one that names `crate::` siblings which are themselves
+    /// gated, or touches `std::os::unix`. Those fail with E0433 on a Linux or
+    /// Windows workspace check.
+    ///
+    /// A macOS GATE CANNOT SEE ANY OF IT: here the siblings are present and it
+    /// all compiles. That asymmetry is why this is a test and not a convention —
+    /// the host most likely to add a module to this crate is the one host whose
+    /// gate is blind to the mistake.
+    ///
+    /// MEASURED: `mod reset_state;` landed on osx-next at 5b10d4a22 without the
+    /// attribute, after a green macOS gate, and the Linux workspace compile on
+    /// relay produced three E0433s with two more on the Windows cross-check
+    /// (`std::os::unix`, `Permissions::mode`) — one missing line, 656-spux
+    /// shape. It was inserted by a text replace anchored on `mod diagnose;`,
+    /// which landed the new line below THAT module's attribute instead of below
+    /// a copy of it.
+    ///
+    /// The rule is deliberately narrower than "gate everything": a blanket rule
+    /// fails on the two portable modules above, and a guard that must be
+    /// allowlisted on first contact teaches people to allowlist.
+    #[test]
+    fn modules_touching_siblings_or_unix_are_gated_on_macos() {
+        let source = include_str!("main.rs");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let lines: Vec<&str> = source.lines().collect();
+        let mut bad: Vec<String> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if !line.starts_with("mod ") || !line.trim().ends_with(';') {
+                continue;
+            }
+            let name = line.trim_start_matches("mod ").trim_end_matches(';').trim();
+            let body = match std::fs::read_to_string(dir.join(format!("{name}.rs"))) {
+                Ok(b) => b,
+                Err(_) => continue, // a directory module; not the shape this guards
+            };
+            let needs_macos = body.contains("crate::") || body.contains("std::os::unix");
+            if !needs_macos {
+                continue;
+            }
+            // Walk back over comments to the nearest real line.
+            let mut k = i;
+            let gated = loop {
+                if k == 0 {
+                    break false;
+                }
+                k -= 1;
+                let prev = lines[k].trim();
+                if prev.starts_with("//") || prev.is_empty() {
+                    continue;
+                }
+                break prev == "#[cfg(target_os = \"macos\")]";
+            };
+            if !gated {
+                bad.push(format!("line {}: mod {name};", i + 1));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "these modules name `crate::` siblings or `std::os::unix` but are NOT gated on \
+             macOS, so they compile on every target and will fail there: {bad:?}"
+        );
+    }
+
     #[test]
     fn singleton_guard_applies_only_to_appkit_tray_mode() {
         let source = include_str!("main.rs");
@@ -685,6 +791,11 @@ mod tests {
             // windows-260717-4: the destructive reset must never wipe the
             // disk out from under a running tray's VM.
             ("--reset-guest", "diagnose::reset_guest_main()"),
+            // 1286-4437: --reset-state destroys strictly MORE than the alias
+            // above, so order 277's guard applies to it a fortiori. Asserted
+            // here rather than trusted, because the two dispatches sit side by
+            // side and a copy that drops the guard line still compiles.
+            ("--reset-state", "reset_state::run_reset_state()"),
         ] {
             let guard_call = format!("require_no_live_tray(\"{mode}\")");
             let g = source

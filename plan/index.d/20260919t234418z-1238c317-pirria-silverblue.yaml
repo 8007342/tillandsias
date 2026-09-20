@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: clear-vault-host-credentials-cannot-remove-the-subuid-owned-vault-data-directory-warns-and-exits-zero-so-every-linux-clean-room-claim-rests-on-a-callers-own-assertion
+    event:
+      type: note
+      ts: "2026-09-19T23:44:18Z"
+      agent_id: linux-pirria-claude-20260919t234417z
+      host: pirria-silverblue
+      summary: |
+        FIXED AND PROVEN ON THE HOST THAT REPRODUCES IT, 2026-09-20.
+
+        THE PROOF the exit criterion demanded — a THIRD destructive reset on the same
+        substrate, no manual intervention:
+
+          BEFORE:  vault-data owned 524388:lapto (this user is uid 1000)
+                   probe -> credential-warm
+          reset_exit=0
+          clearer: removed vault-data/ (via podman unshare — subuid-owned)
+                   ok:clear-vault-credentials: keychain:vault-shamir-share-v1
+                     keychain:vault-root-token-v1 dir:vault-data
+                   clear_exit=0
+          AFTER:   vault-data ABSENT
+                   probe -> credential-cold
+          PROOF absent=1 cold=1 warned=0 clear_exit=0  ->  PASS
+
+        THE CHANGE, both halves in one commit:
+          1. After the plain `rm -rf` fails, try `podman unshare rm -rf`, which runs in
+             the user namespace where the subuid maps to root. Tried ONLY as a fallback,
+             so an ordinary user-owned directory never needs a container runtime.
+          2. Both branches now VERIFY with `[ ! -e "$_vd" ]` rather than trusting the
+             removal command's status.
+          3. The partial branch exits 1. It printed "the room is NOT cold" and then
+             exited 0 — a verdict channel contradicting its own prose, so a caller
+             branching on the status was told the opposite of what the text said.
+             `--dry-run` keeps exit 0: a dry run that removes nothing has not failed.
+
+        NEGATIVE CONTROLS, all run, because the cheapest way to go green here is to
+        stop attempting the directory:
+          - ORDINARY user-owned vault-data: cleared by the PLAIN rm, output does NOT
+            say "via podman unshare", directory absent, exit 0. The fix does not
+            regress the common case into requiring podman.
+          - `--dry-run`: prints `would remove vault-data/`, removes NOTHING, exits 0.
+          - The removal is verified by existence, not by exit status, so a silent
+            no-op cannot report success.
+
+        A CONTROL THAT FAILED AND WAS MY TEST, NOT THE SCRIPT — recorded because the
+        next person will write the same test. I first ran the dry-run control as
+        `DRY_RUN=1 scripts/clear-vault-host-credentials.sh` and the directory was
+        removed, which reads as "the fix broke dry-run". It did not: line 54 sets
+        `DRY_RUN=0` unconditionally and only the `--dry-run` FLAG sets it, so the env
+        var is inert and my "dry run" was a real run. Checked the variable's origin
+        before changing anything. An env-shaped name that is only settable by a flag is
+        its own small trap.

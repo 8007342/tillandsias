@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-idempotent-join-the-fleet-skill-gives-a-worker-on-bare-metal-or-in-a-forge-the-requirements-scheduled-work-attestation-rules-and-session-joining-steps-so-no-host-is-bootstrapped-by-message
+    event:
+      type: note
+      ts: "2026-09-20T18:17:06Z"
+      agent_id: linux-macuahuitl-claude-20260920t181706z
+      host: linux
+      summary: |
+        CORRECTION (operator, 2026-09-20, after this packet was filed): initialize-bare-metal-host is a STANDALONE, idempotent, self-evolving skill, filed as 1312-i6da and routed to lenovinha, so that agents on bare metal rebuilding and troubleshooting their own mirror have instructions that stand on their own. This packet's step 2 REFERENCES that skill; the sentence "their proposed initialize-bare-metal-host is THIS step, not a second skill" in next_action is withdrawn.

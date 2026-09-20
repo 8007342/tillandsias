@@ -417,6 +417,24 @@ fn main() {
     // the inference model cache) and re-initialize from scratch.
     let reset_guest = user_args.iter().any(|a| a == "--reset-guest");
 
+    // ORDER 1286-4437 (operator ruling 2026-09-20). `--reset-state` is a
+    // SUPERSET of `--reset-guest`: it additionally clears the HOST-HELD
+    // credentials (keychain entries, the fallback_* files), vault-data and the
+    // images, then reprovisions through the same `--init` path. Name and
+    // semantics are IDENTICAL on all three platforms (agreed with yolanda, who
+    // holds the Windows arm, and macneo, who holds the macOS arm); the
+    // per-platform internals differ.
+    //
+    // It PRESERVES THE INSTALLATION IDENTITY, and that is the contract's other
+    // half rather than a detail: `installation-uuid-v1` here,
+    // `tillandsias-vm-uuid` on Windows, `INSTALL_ANCHOR_V1` on macOS. The
+    // in-VM/in-guest Vault derives its master key from it, so clearing it makes
+    // the next vault UNDERIVABLE rather than re-initialised — order 803-49re,
+    // permanently broken GitHub login. yolanda rejected the name
+    // `--reset-install` on exactly this ground: it would have named the one
+    // thing the flag is forbidden to touch.
+    let reset_state = user_args.iter().any(|a| a == "--reset-state");
+
     // @trace spec:enclave-service-catalog
     // `--publish-local <project>` — order 364 e2e closure: bring up the
     // service catalog and publish a local project's WEB container, returning
@@ -911,6 +929,18 @@ fn main() {
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     if reset_guest {
         if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // ORDER 1286-4437. Same dispatch shape as `--reset-guest` deliberately: one
+    // convention, exit 1 on any Err. macneo asked for exact numeric propagation
+    // and then withdrew the request for this reason — one imperfect convention
+    // beats two correct-looking ones.
+    if reset_state {
+        if let Err(e) = run_reset_state(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1424,6 +1454,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cache-verify [--debug]");
     println!("       tillandsias --cache-clear [--debug]");
     println!("       tillandsias --reset-guest [--debug]");
+    println!("       tillandsias --reset-state [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
@@ -1461,6 +1492,13 @@ fn print_usage(version: &str) {
         "  --reset-guest  EPHEMERAL RESET: wipe the guest substrate (vault + enclave \
          containers/volumes/secrets; keeps the model cache) and re-initialize. \
          Destructive by design; you'll re-authenticate once"
+    );
+    println!(
+        "  --reset-state  FULL LOCAL RESET: everything --reset-guest wipes PLUS the \
+         host-held vault credentials, the Vault store and ALL podman images, then \
+         reprovisions. PRESERVES the installation anchor (installation-uuid-v1). \
+         Same name and semantics on Linux, macOS and Windows (order 1286-4437). \
+         Skip with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0."
     );
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!(
@@ -4333,6 +4371,57 @@ async fn mint_git_mirror_vault_auto_auth(
     }
 }
 
+/// ORDER 1313-prin. Mint the mirror's SIGNING identity — separate from the
+/// relay identity above, deliberately.
+///
+/// ONE TOKEN NEVER CARRIES BOTH AUTHORITIES. The mirror keeps
+/// `git-mirror-agent` for relaying (reading `secret/github/token`, pushing
+/// upstream) and gets a SECOND, per-mirror identity whose single policy permits
+/// exactly `ssh-host-signer/sign/host-<mid>`. Merging the two would mean the
+/// token that reaches GitHub also mints host certificates, and the token that
+/// mints certificates can read the GitHub credential — neither is needed by the
+/// other, and a per-mirror policy on the shared role would additionally grant
+/// cross-project signing (see `provision_host_signer_approle`).
+///
+/// Bound to the MIRROR container (828-k3mq), like the relay material: a lane
+/// exiting must not destroy the SecretID of a mirror kept running for a sibling.
+async fn mint_git_mirror_host_signer_auto_auth(
+    project_name: &str,
+    mirror_id: &str,
+    debug: bool,
+) -> Result<String, String> {
+    #[cfg(feature = "vault")]
+    {
+        // Policy before role before material: a half-provisioned signer fails
+        // CLOSED at login rather than open at sign time.
+        let role = vault_bootstrap::provision_host_signer_approle_for_launch(mirror_id, debug)
+            .await
+            .map_err(|e| format!("host-signer AppRole provisioning failed: {e}"))?;
+        let instance = format!("{project_name}-signer-{}", std::process::id());
+        let owning_container = format!("tillandsias-git-{project_name}");
+        vault_bootstrap::mint_approle_auto_auth_for_container(
+            &role,
+            &instance,
+            Some(owning_container.as_str()),
+            debug,
+        )
+        .await
+        .map_err(|e| {
+            format!(
+                "vault AppRole auto-auth mint for the mirror's HOST-SIGNER identity failed: \
+                 {e}. The ssh push lane cannot come up without it: sshd-identity.sh requests a \
+                 host certificate from ssh-host-signer/sign/host-{mirror_id}, and the relay \
+                 identity is refused there by design (1313-prin)."
+            )
+        })
+    }
+    #[cfg(not(feature = "vault"))]
+    {
+        let _ = (project_name, mirror_id, debug);
+        Err("built without the vault feature: no host-signer backend".to_string())
+    }
+}
+
 /// Podman `--secret` mount options for a direct per-launch Vault token.
 ///
 /// `uid=1000,gid=1000` is REQUIRED, not cosmetic. The git image runs its
@@ -4420,6 +4509,13 @@ fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
 /// `None`, the mirror has no authenticated upstream credential path.
 ///
 /// @trace spec:tillandsias-vault, spec:git-mirror-service
+// ORDER 1313-prin: the eighth parameter is the mirror's SIGNER AppRole secret.
+// Suppressed rather than restructured: the tree already carries this allow in
+// nine places including this file, and grouping the two vault secrets into a
+// struct would touch seventeen call sites for a shape change nothing else
+// wants. If a ninth parameter is ever needed, group them then — that is the
+// point at which the argument list is the problem rather than the lint.
+#[allow(clippy::too_many_arguments)]
 fn build_git_run_args(
     project_name: &str,
     mirror_id: Option<&str>,
@@ -4428,6 +4524,7 @@ fn build_git_run_args(
     project_remote_url: Option<&str>,
     project_default_branch: Option<&str>,
     vault_approle_secret: Option<&str>,
+    host_signer_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
     // restarts so the mirror's "startup retry-push" loop has stranded commits
@@ -4504,6 +4601,79 @@ fn build_git_run_args(
     {
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_DEFAULT_BRANCH={branch}"));
+    }
+
+    // ORDER 1313-prin (1288-5qpn dogfooding). THE WIRE THAT WAS MISSING. The mirror
+    // half of 749-54pv's ssh push lane is gated in images/git/entrypoint.sh on
+    // `[ "${TILLANDSIAS_MIRROR_SSHD:-0}" = "1" ]` — a variable the container was
+    // NEVER GIVEN. So setting the flag on the host launched the sidecar half and
+    // wired the forge gitconfig while the mirror's sshd never started: T4 (the
+    // Vault-signed host certificate) and T5 (the sshd_config trusting only the
+    // client CA) could not execute no matter what the host set.
+    //
+    // MEASURED before the fix on lenovinha 2026-09-20: with TILLANDSIAS_MIRROR_SSHD=1
+    // on the host, tillandsias-ssh-sidecar-tillandsias reported
+    // `ok:ssh-lane-sidecar:ready fingerprint=SHA256:/t7KfL/... mirror=kvs69tkis9dfnbejbatg`,
+    // while inside tillandsias-git-tillandsias the variable read <unset>,
+    // `pgrep -a sshd` reported sshd NOT running, and only 9418/tcp was exposed.
+    // A lane whose two halves read different switches — which is the same defect
+    // shape as an authenticated transport falling open (1309-qc95), one address
+    // along.
+    //
+    // ONE READ FEEDS BOTH HALVES, deliberately. This derives from
+    // mirror_ssh_push_lane_enabled(), the SAME function the sidecar launch
+    // calls, so the two halves cannot disagree. Do not re-read the environment
+    // here: a second source drifts, and the drift is invisible until someone
+    // enables the lane and watches only one side come up.
+    //
+    // NOT in container_profile.rs, and that is not an oversight. That module
+    // declares the mirror's env and NOTHING CONSUMES IT — every `.env_vars`
+    // reference outside its own definition is in its own unit tests, and the
+    // launcher builds these args here. A wire added there would read like the
+    // fix, pass those tests, and change nothing the container receives. The
+    // module's status is filed separately.
+    if mirror_ssh_push_lane_enabled() {
+        args.push("--env".into());
+        args.push("TILLANDSIAS_MIRROR_SSHD=1".into());
+        // SECOND HALF OF THE SAME ASYMMETRY, found by the same measurement.
+        // sshd-identity.sh dies at require_mid with fail:sshd-identity:no-mirror-id
+        // unless the mirror knows its OWN id — and the SIDECAR was given
+        // TILLANDSIAS_MIRROR_ID while the mirror was not. The flag alone gets
+        // the entrypoint past its gate and straight into that refusal, so
+        // wiring one without the other just moves where the lane stops.
+        if let Some(mid) = mirror_id {
+            args.push("--env".into());
+            args.push(format!("TILLANDSIAS_MIRROR_ID={mid}"));
+        }
+        // PUBLISH THE AUTHENTICATED LISTENER ONLY, on loopback, so a native
+        // rootless host can reach it — it cannot route to the enclave bridge
+        // (the same constraint vault_host_publish_arg documents for Vault).
+        //
+        // THIS IS NOT THE PUBLISH RETRACTED ON 1288-5qpn. That one was 9418,
+        // the anonymous git daemon: --export-all --enable=receive-pack with NO
+        // authentication, whose entire safety argument is that it is
+        // enclave-INTERNAL. Publishing it would let any local process push refs
+        // that the privileged relay carries to GitHub with the Vault-held
+        // credential — a confused deputy. 2222 is sshd with AuthorizedKeysFile
+        // none, TrustedUserCAKeys, a single authorized principal and a
+        // ForceCommand. An authenticated listener on loopback is the Vault
+        // analogy applied correctly; 9418 was that analogy applied to a
+        // listener that authenticates nothing.
+        args.push("--publish".into());
+        args.push(format!("127.0.0.1:{MIRROR_SSHD_HOST_PORT}:2222"));
+        // THE SIGNING IDENTITY, mounted as a SECOND AppRole document and
+        // consumed by a SECOND Vault Agent writing its own sink. sshd-identity.sh
+        // is pointed at that sink through TILLANDSIAS_VAULT_TOKEN_FILE, so the
+        // certificate request is made with the per-mirror signer token and the
+        // relay keeps git-mirror-agent. One token never carries both authorities.
+        if let Some(signer_secret) = host_signer_secret {
+            args.push("--secret".into());
+            args.push(format!("{signer_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+            args.push("--env".into());
+            args.push(format!(
+                "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
+            ));
+        }
     }
     if let Some(secret_name) = vault_approle_secret {
         // @trace spec:tillandsias-vault — Vault Agent consumes launch-scoped
@@ -4946,6 +5116,360 @@ async fn wait_for_git_mirror_ready(
     ))
 }
 
+/// The host tree WSL2 projects into the guest: the Windows driver store plus
+/// the WSL userspace libraries. Named once because it appears in the mount
+/// spec, the existence check, and the boundary note below.
+const WSL_HOST_TREE: &str = "/usr/lib/wsl";
+
+/// ORDER 793-zumy. The podman flags that make the WSL2 paravirtual GPU
+/// reachable from the inference container — pure, so every combination is
+/// testable on a host that has none of this.
+///
+/// ═══ THE BOUNDARY OF THIS MOUNT ═══════════════════════════════════════════
+/// Authorised by the operator on 2026-09-19 as a QUALIFIED yes, and the
+/// qualification is load-bearing: they approved it while stating that the
+/// exposed surface is not fully known, and required the boundary be written
+/// down and the surface audited. THAT AUDIT IS ORDER 1267-fj2z. Do not widen
+/// this mount, and do not copy it into another container, without reading it.
+///
+///   WHAT IT IS:  `/usr/lib/wsl/drivers`, the projected Windows driver store
+///                (thousands of .inf directories), and `/usr/lib/wsl/lib`,
+///                holding libd3d12.so, libd3d12core.so and libdxcore.so.
+///   WHAT IT IS NOT:  no user data, and no writable surface — `:ro`.
+///   WHAT IS UNKNOWN:  everything else under that tree. Nobody has enumerated
+///                it. "Only drivers" is what was NEEDED, not what is present.
+///
+/// ═══ WHY THE WHOLE TREE, AND NOT JUST `lib` ═══════════════════════════════
+/// Because binding only `lib` does not work, and the failure is silent in the
+/// worst way. MEASURED on esmeraldinha 2026-09-19, three arms:
+///
+/// ```text
+///   --device /dev/dxg alone          → llvmpipe ONLY
+///   + /usr/lib/wsl/lib               → dzn loads, then
+///        `ID3D12DeviceFactory::CreateDevice failed`; llvmpipe ONLY
+///   + all of /usr/lib/wsl            → the host's two devices: Dozen
+///        INTEGRATED_GPU driverID=23 beside llvmpipe CPU driverID=13
+/// ```
+///
+/// dzn resolves the real D3D12 device out of the driver store. Without it the
+/// loader does not fail — it SUCCEEDS and offers lavapipe, i.e. a software
+/// rasterizer standing where the GPU should be, which is exactly what
+/// 793-zumy criterion 3 exists to refuse.
+///
+/// ═══ WHY IT CANNOT FIRE OFF WSL2 ══════════════════════════════════════════
+/// Both conditions are read from the filesystem and BOTH are required.
+/// `/dev/dxg` does not exist on bare-metal Linux and `/usr/lib/wsl` is created
+/// by WSL's own projection, so neither a native Linux host nor macOS can
+/// satisfy this — there is no OS check to get wrong, only two paths that are
+/// absent everywhere else.
+///
+/// `LD_LIBRARY_PATH` is set because that is what the measurement used: the
+/// WSL libraries are not on the image's default search path, and the arm that
+/// enumerated the real device had it set.
+fn wsl2_dxg_container_args(dxg_present: bool, wsl_tree_present: bool) -> Vec<String> {
+    // NEITHER HALF IS SUFFICIENT AND THE PARTIAL CASE IS THE DANGEROUS ONE:
+    // the node without the tree is the arm that yields a software rasterizer
+    // while looking like success. If the host is only half-equipped, deliver
+    // nothing and let the probe report the GPU unreachable, which is true.
+    if !(dxg_present && wsl_tree_present) {
+        return Vec::new();
+    }
+    vec![
+        "--device".into(),
+        "/dev/dxg".into(),
+        "-v".into(),
+        format!("{WSL_HOST_TREE}:{WSL_HOST_TREE}:ro"),
+        "--env".into(),
+        format!("LD_LIBRARY_PATH={WSL_HOST_TREE}/lib"),
+    ]
+}
+
+/// Start the host-native forwarder INSTEAD of the inference container, when the
+/// tray has configured one. Returns true when it took the lane.
+///
+/// MUTUAL EXCLUSION IS THE CONTRACT. Both containers claim `--network-alias
+/// inference`, and two containers on one alias is a coin flip rather than a
+/// transport. Every caller therefore uses this as an `else if` between the
+/// kill switch and the inference start, so the two can never both run.
+///
+/// ORDER 620-ca7g's INVARIANT APPLIES TO THIS TOO: callers place it INSIDE the
+/// `local_inference_disabled()` else-branch, so the forwarder is behind the same
+/// switch as the container it replaces. It serves the same purpose on the same
+/// alias; a lane that ignored the switch would restore on the N100 field host
+/// exactly the cost the switch exists to prevent.
+///
+/// A CONFIGURED-BUT-BROKEN FORWARDER IS LOUD, not silent. If the profile cannot
+/// be derived the lane is refused with the reason and the caller falls through
+/// to the normal inference container, because a forwarder that starts and
+/// answers nothing is indistinguishable, from inside the guest, from a service
+/// that is merely quiet — the shape this milestone exists to remove.
+async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, debug: bool) -> bool {
+    // THE FORWARDER'S IMAGE IS NOT THE INFERENCE IMAGE, and this is measured
+    // rather than assumed: `localhost/tillandsias-inference` carries ONLY `sh`
+    // — no socat, nc, python3 or perl — while `tillandsias-forge-base` has
+    // socat. Resolved here rather than passed in, so no caller can hand this
+    // the image it happens to have in scope; four of them have the inference
+    // tag, and the resulting container would exec-fail with a message about
+    // socat rather than about the lane.
+    let image = versioned_image_tag("forge-base", VERSION.trim());
+    let image = image.as_str();
+    let Some((cid, port)) = vsock_forward_target() else {
+        return false;
+    };
+    let profile = match ensure_vsock_seccomp_profile() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] host-native inference was configured (cid {cid}, port {port}) but \
+                 the vsock seccomp profile could not be derived: {e}. NOT starting the forwarder; \
+                 falling back to the in-guest inference container so the lane is not silently \
+                 absent."
+            );
+            return false;
+        }
+    };
+    // The inference container claims the same alias. Stand it down first rather
+    // than racing it.
+    let _ = client.remove_container("tillandsias-inference").await;
+    match client
+        .run_container_observed(
+            "vsock-forwarder",
+            VSOCK_FORWARDER_NAME,
+            &build_vsock_forwarder_run_args(image, &profile, cid, port),
+            debug,
+        )
+        .await
+    {
+        Ok(_) => {
+            eprintln!(
+                "[tillandsias] inference:11434 is forwarded to the host over vsock \
+                 (cid {cid}, port {port}) — the in-guest inference container is not started"
+            );
+            true
+        }
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] the vsock forwarder failed to start: {e}. Falling back to the \
+                 in-guest inference container."
+            );
+            false
+        }
+    }
+}
+
+/// AF_VSOCK's address family number, as the kernel and the seccomp profile
+/// both spell it. Named because `40` on its own in an arg comparison is
+/// unreadable, and misreading it is how the wrong rule gets edited.
+const AF_VSOCK: u64 = 40;
+
+/// Container name for the guest→host vsock forwarder (order 830-xsk2).
+///
+/// Deliberately NOT `tillandsias-inference`, though the two are mutually
+/// exclusive on the `inference` network alias: one name plus `--replace` would
+/// make starting either silently stop the other, hiding a tier decision inside
+/// a container-lifecycle detail.
+const VSOCK_FORWARDER_NAME: &str = "tillandsias-vsock-forwarder";
+
+/// Where the tray leaves the forwarder's configuration, and where the derived
+/// seccomp profile is written.
+///
+/// UNDER /run ON PURPOSE — it is tmpfs, so both die with the boot. That is the
+/// property the config-channel decision rests on: nothing persists, so nothing
+/// can go stale, and a reprovisioned guest is configured by the next VM start
+/// exactly like any other. A file under /etc or /var would reintroduce the
+/// first-boot problem this row rejected twice.
+const VSOCK_FORWARD_DIR: &str = "/run/tillandsias";
+
+/// The host endpoint an in-guest forwarder should relay to, or None when the
+/// lane is off.
+///
+/// READ AT CONTAINER-START, not once at process start: the tray writes this
+/// after the guest reaches Ready, and headless is already running by then.
+/// Reading it early would sample before the writer and cache a `None` for the
+/// life of the process — the silent-success shape, since the forwarder would
+/// simply never appear and nothing would say why.
+///
+/// The env var is the test seam and the operator override; the file is how the
+/// tray actually delivers it.
+fn vsock_forward_target() -> Option<(u32, u32)> {
+    fn parse(raw: &str) -> Option<(u32, u32)> {
+        let (cid, port) = raw.trim().split_once(':')?;
+        Some((cid.trim().parse().ok()?, port.trim().parse().ok()?))
+    }
+    if let Ok(v) = std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
+        return parse(&v);
+    }
+    let path = Path::new(VSOCK_FORWARD_DIR).join("vsock-forward");
+    parse(&std::fs::read_to_string(path).ok()?)
+}
+
+/// Materialise the derived seccomp profile and return its path.
+///
+/// Rewritten on every call rather than cached: the derivation is cheap, the
+/// installed default can change under us across a podman upgrade, and a stale
+/// profile is the failure this whole approach exists to avoid.
+fn ensure_vsock_seccomp_profile() -> Result<PathBuf, String> {
+    const DEFAULT_PROFILE: &str = "/usr/share/containers/seccomp.json";
+    let src = std::fs::read_to_string(DEFAULT_PROFILE)
+        .map_err(|e| format!("cannot read {DEFAULT_PROFILE}: {e}"))?;
+    let derived = derive_vsock_seccomp(&src)?;
+    let dir = Path::new(VSOCK_FORWARD_DIR);
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    let out = dir.join("vsock-seccomp.json");
+    std::fs::write(&out, derived).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+    Ok(out)
+}
+
+/// Run-args for the guest→host vsock forwarder (order 830-xsk2).
+///
+/// PROVEN END TO END 2026-09-19 on tlatoanis-macbook-air with the tray in
+/// continuous-runloop mode: a separate container on this network ran
+/// `curl http://inference:11434/api/version` and received a body composed by a
+/// process on the macOS host, while the tray logged `ACCEPTED a guest-initiated
+/// connection` and the host-side server logged the GET. Both sides reported,
+/// because either alone is a lie by omission.
+///
+/// THE ALIAS IS THE DELIVERABLE, not the bytes. Agents address
+/// `http://inference:11434`, and the transparency criterion is that this keeps
+/// working while the process behind it moves to the host. A relay that works and
+/// does not answer to that name does not satisfy it.
+///
+/// THE IMAGE MUST CARRY socat. Measured: `localhost/tillandsias-inference` has
+/// ONLY `sh` — no socat, nc, python3 or perl — while `tillandsias-forge-base`
+/// has socat. Do not assume a tool is present because a sibling image has it.
+///
+/// @trace spec:vsock-transport
+fn build_vsock_forwarder_run_args(
+    image: &str,
+    profile: &Path,
+    host_cid: u32,
+    host_port: u32,
+) -> Vec<String> {
+    vec![
+        "--detach".into(),
+        "--replace".into(),
+        "--name".into(),
+        VSOCK_FORWARDER_NAME.into(),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        // The whole point: without this the relay is reachable only by IP and
+        // every agent addressing the name still lands on nothing.
+        "--network-alias".into(),
+        "inference".into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        // NOT seccomp=unconfined, which was the right instrument to ISOLATE the
+        // cause and is the wrong one to fix it: it disables the whole filter to
+        // permit one socket family, on the container bridging the VM boundary.
+        format!("--security-opt=seccomp={}", profile.display()),
+        "--entrypoint".into(),
+        "socat".into(),
+        // Order 524's invariant: everything after the image is the CONTAINER's
+        // argv, so every flag must precede it.
+        image.into(),
+        // `fork` because each agent request is its own connection; `reuseaddr`
+        // so a restart does not wait out TIME_WAIT on a fixed port.
+        "TCP-LISTEN:11434,fork,reuseaddr".into(),
+        format!("VSOCK-CONNECT:{host_cid}:{host_port}"),
+    ]
+}
+
+/// Derive podman's default seccomp profile with exactly one change: the rule
+/// denying `socket(AF_VSOCK, …)` becomes an allow (order 830-xsk2).
+///
+/// WHY THIS IS RUST AND NOT A SCRIPT. It was a shell script
+/// (scripts/derive-vsock-seccomp.sh, shipped v56.9.19.1) that shelled out to a
+/// python interpreter for the JSON. That violated 1087-h2z9, and it could not
+/// be fixed in place: measured in the guest 2026-09-20, `perl` is ABSENT, `jq`
+/// is ABSENT and the only interpreter present is the one the policy bars. So
+/// there is no compliant shell rewrite. Here there is no interpreter at all,
+/// and headless already runs inside the guest — which also removes the problem
+/// of staging a script there in the first place.
+///
+/// WHY DERIVE RATHER THAN SHIP A COPY: a static fork of a ~17 KB vendor profile
+/// silently stops tracking podman's default the day podman updates it, and a
+/// stale ALLOW list is the kind nobody notices. Deriving costs one file read.
+///
+/// REFUSES RATHER THAN GUESSES. If the expected deny rule is absent, the
+/// platform's profile is not the shape this was written against, and emitting
+/// *something* would hand back a filter nobody verified — worse than none,
+/// because it reads as one.
+fn derive_vsock_seccomp(default_profile: &str) -> Result<String, String> {
+    let mut root: serde_json::Value = serde_json::from_str(default_profile)
+        .map_err(|e| format!("input is not a seccomp profile: {e}"))?;
+
+    let blocks = root
+        .get_mut("syscalls")
+        .and_then(|v| v.as_array_mut())
+        .ok_or_else(|| "profile has no `syscalls` array".to_string())?;
+
+    // Match on the ARGUMENT rather than on the block's position: podman is free
+    // to reorder its own profile, and a positional match would not survive it.
+    let mut flipped = 0usize;
+    for block in blocks.iter_mut() {
+        let denies = block
+            .get("action")
+            .and_then(|a| a.as_str())
+            .is_some_and(|a| matches!(a, "SCMP_ACT_ERRNO" | "SCMP_ACT_KILL" | "SCMP_ACT_TRAP"));
+        let names_socket = block
+            .get("names")
+            .and_then(|n| n.as_array())
+            .is_some_and(|n| n.iter().any(|x| x.as_str() == Some("socket")));
+        let on_vsock = block
+            .get("args")
+            .and_then(|a| a.as_array())
+            .is_some_and(|args| {
+                args.iter().any(|arg| {
+                    arg.get("index").and_then(serde_json::Value::as_u64) == Some(0)
+                        && arg.get("value").and_then(serde_json::Value::as_u64) == Some(AF_VSOCK)
+                        && arg.get("op").and_then(|o| o.as_str()) == Some("SCMP_CMP_EQ")
+                })
+            });
+        if !(denies && names_socket && on_vsock) {
+            continue;
+        }
+        let Some(obj) = block.as_object_mut() else {
+            continue;
+        };
+        obj.insert(
+            "action".into(),
+            serde_json::Value::String("SCMP_ACT_ALLOW".into()),
+        );
+        // THE ERRNO FIELDS MUST GO WITH THE ACTION. crun refuses a block that
+        // carries an errno value under SCMP_ACT_ALLOW outright —
+        // "OCI runtime error: crun: errno value specified for action
+        // SCMP_ACT_ALLOW" — and the JSON stays perfectly well-formed while
+        // every container using it fails to start. Measured in the live guest
+        // 2026-09-19; a shape check on the output would not have caught it.
+        obj.remove("errnoRet");
+        obj.remove("errno");
+        flipped += 1;
+    }
+
+    if flipped == 0 {
+        return Err(
+            "no rule denying socket(AF_VSOCK) found — podman's default profile is not the \
+             shape this derivation was written against, so nothing was emitted"
+                .to_string(),
+        );
+    }
+
+    // Record why this file differs from the vendor default, INSIDE the artefact,
+    // so a reader who finds it on a running host need not diff ~17 KB to learn
+    // what moved. The OCI seccomp schema ignores unknown top-level keys.
+    if let Some(obj) = root.as_object_mut() {
+        obj.insert(
+            "tillandsiasChange".into(),
+            serde_json::Value::String(format!(
+                "order 830-xsk2: {flipped} rule(s) denying socket(AF_VSOCK) flipped to \
+                 SCMP_ACT_ALLOW, errno fields dropped; nothing else altered"
+            )),
+        );
+    }
+
+    serde_json::to_string_pretty(&root).map_err(|e| format!("could not serialise profile: {e}"))
+}
+
 // @trace spec:inference-engine-slots: Stable enclave inference endpoint (http://inference:11434) and engine slot run args.
 fn build_inference_run_args(
     certs_dir: &Path,
@@ -5100,6 +5624,18 @@ fn build_inference_run_args(
         }
         _ => {}
     }
+
+    // ORDER 793-zumy, and it is NOT part of the tier match above on purpose:
+    // WSL2's GPU arrives through /dev/dxg, which is neither a DRM render node
+    // nor a CDI device, so `detect_inference_tier()` classifies such a host
+    // cpu-only and always will until the probe's own verdict changes. The
+    // delivery is orthogonal to the tier, so it is decided on its own
+    // evidence.
+    args.extend(wsl2_dxg_container_args(
+        Path::new("/dev/dxg").exists(),
+        Path::new(WSL_HOST_TREE).exists(),
+    ));
+
     args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={tier}")]);
     // The tier reported to the container must reflect DELIVERABILITY, not just
     // hardware: a gpu-cuda host without a CDI spec runs CPU-only. The container
@@ -8059,7 +8595,52 @@ fn is_optional_image(image_name: &str) -> bool {
     matches!(image_name, "forge-base" | "forge")
 }
 
+/// ORDER 1276-2hc6. The Windows refusal, and it is FIRST on purpose.
+///
+/// WHAT HAPPENED. The operator unzipped the Windows release, found
+/// `tillandsias.exe` beside `tillandsias-tray.exe`, and ran the one whose name
+/// matches the project. It selected the desktop-user-session lane as if podman
+/// were native, then failed eight image builds on a program it did not name.
+/// The supported Windows path is the tray, which provisions the WSL2 distro and
+/// runs podman inside it; nothing in the output said so.
+///
+/// A LAUNCHER ON A PLATFORM WHERE ITS LANE CANNOT WORK MUST REFUSE ON ARRIVAL,
+/// with the working command in the refusal — the same shape as the forge
+/// entrypoint refusing without credentials, rather than failing eight times
+/// downstream and leaving the operator to infer the cause from the wreckage.
+///
+/// SCOPE IS DELIBERATELY NARROW: this refuses the lane that builds and runs
+/// containers. `--version` and `--diagnose` do not route through here and keep
+/// working, because a host that cannot provision is exactly a host someone needs
+/// to diagnose.
+#[cfg(target_os = "windows")]
+fn windows_host_lane_refusal() -> Option<String> {
+    Some(
+        "refused:windows-host-lane:podman runs inside the WSL2 guest; \
+         run tillandsias-tray.exe --provision-once"
+            .to_string(),
+    )
+}
+
+/// Non-Windows hosts run the lane natively; there is nothing to refuse.
+///
+/// NEGATIVE CONTROL for this row: on Linux `--init` still selects its lane and
+/// builds, and this function existing as a `None` on every other platform is
+/// what makes that true by construction rather than by test.
+#[cfg(not(target_os = "windows"))]
+fn windows_host_lane_refusal() -> Option<String> {
+    None
+}
+
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
+    // BEFORE require_desktop_user_session AND before report_runtime_lane: on
+    // Windows there is no lane to select, so announcing one is already wrong.
+    // `--init --debug` must print the refusal and NO lane line and NO BUILD
+    // lines, which is only achievable from the very top of this function.
+    if let Some(refusal) = windows_host_lane_refusal() {
+        return Err(refusal);
+    }
+
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
 
@@ -8528,6 +9109,29 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         .collect();
 
     if !required_failures.is_empty() {
+        // ORDER 1277-g5k9: ONE CAUSE MUST NOT READ AS EIGHT. When every required
+        // image failed because the same program could not be spawned, the image
+        // list is noise — it names eight symptoms of one absence, and the
+        // operator's transcript on esme is exactly that: eight identical lines
+        // and a summary naming eight images and no program.
+        //
+        // COLLAPSE ONLY WHEN IT IS GENUINELY ONE CAUSE. Every failure must be a
+        // spawn-not-found AND name the SAME program; a mixed run keeps the
+        // per-image list, because there the list is the information. This is why
+        // the check is `all(...)` over a recovered program name rather than a
+        // count of lookalike strings.
+        let mut programs = required_failures
+            .iter()
+            .map(|(_, e)| spawn_not_found_program(e));
+        if let Some(Some(first)) = programs.next()
+            && programs.all(|p| p == Some(first))
+        {
+            return Err(format!(
+                "cannot spawn '{first}' — not found on PATH ({}); no image could be built",
+                path_head_for_diagnosis()
+            ));
+        }
+
         return Err(format!(
             "Failed to build {} required image(s): {}",
             required_failures.len(),
@@ -8549,6 +9153,70 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// ORDER 1277-g5k9. A spawn failure names the program and where it was looked
+/// for, because "program not found" is a message that reads like a diagnosis
+/// while withholding the only two facts that lead anywhere.
+///
+/// WHY THE `NotFound` ARM IS SPECIAL-CASED rather than widening every spawn
+/// error. Only `NotFound` means "the executable is absent"; a permission
+/// failure, an ENOEXEC or a resource limit are different problems with
+/// different remedies, and folding them into a PATH message would send the
+/// reader after the wrong thing. Those keep the original wording, unchanged, so
+/// the negative control in this row's closure (a build that spawns and then
+/// fails still reports the build's own stderr) is untouched by construction.
+fn describe_spawn_failure(program: &str, err: &std::io::Error) -> String {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        format!(
+            "cannot spawn '{program}' — not found on PATH ({})",
+            path_head_for_diagnosis()
+        )
+    } else {
+        format!("Failed to spawn build process: {err}")
+    }
+}
+
+/// The first three PATH entries, or a named absence.
+///
+/// THREE, NOT ALL: a Windows PATH runs to dozens of entries and a wall of them
+/// is the same unreadable output this order exists to remove. Three is enough to
+/// tell "PATH looks sane but podman is not installed" from "PATH is not what I
+/// think it is", which is the distinction the reader actually needs. The
+/// trailing ellipsis says the list is truncated rather than complete.
+///
+/// `PATH unset` and `PATH empty` are DIFFERENT and both are said: an unset PATH
+/// is an environment the launcher was given, an empty one is an environment
+/// something built wrong.
+fn path_head_for_diagnosis() -> String {
+    let Some(raw) = std::env::var_os("PATH") else {
+        return "PATH unset".to_string();
+    };
+    let entries: Vec<String> = std::env::split_paths(&raw)
+        .take(3)
+        .map(|e| e.display().to_string())
+        .filter(|e| !e.is_empty())
+        .collect();
+    if entries.is_empty() {
+        return "PATH empty".to_string();
+    }
+    format!("{}…", entries.join(", "))
+}
+
+/// Recover the program name from a message `describe_spawn_failure` produced.
+///
+/// This is what lets the per-image loop collapse eight identical failures into
+/// one line naming one program. It is deliberately strict — it matches BOTH the
+/// quoted program and the `not found on PATH` phrase — so that a build whose own
+/// stderr happens to contain the words cannot be mistaken for a spawn failure
+/// and silently collapsed away.
+fn spawn_not_found_program(message: &str) -> Option<&str> {
+    let rest = message.strip_prefix("cannot spawn '")?;
+    let end = rest.find('\'')?;
+    if !rest[end..].contains("not found on PATH") {
+        return None;
+    }
+    Some(&rest[..end])
 }
 
 /// Proxy environment variables that must be emptied for the build subprocess so
@@ -8640,9 +9308,18 @@ pub(crate) fn build_image_with_logging(
     // caller's own progress handling, so this one owns its child's lifetime
     // deliberately (order 714-4r6w). Counted by
     // scripts/check-podman-sync-budgets.sh so the exception cannot spread.
+    // ORDER 1277-g5k9: the program name and the PATH were both in hand here and
+    // neither reached the operator. Capture the program BEFORE the spawn, because
+    // `spawn_caller_owned_lifetime` borrows the command mutably and the error
+    // closure cannot then read it back.
+    let program = command
+        .as_std()
+        .get_program()
+        .to_string_lossy()
+        .into_owned();
     let mut child = command
         .spawn_caller_owned_lifetime()
-        .map_err(|e| format!("Failed to spawn build process: {e}"))?;
+        .map_err(|e| describe_spawn_failure(&program, &e))?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -8961,9 +9638,19 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
 /// extra ceremony; an explicit `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` (harness
 /// policy: plan/archive/podman-reset-harness-policy-2026-06-16.md) refuses
 /// loudly instead of silently proceeding.
-fn destructive_reset_allowed() -> bool {
-    std::env::var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").map_or(true, |v| v != "0")
-}
+// ORDER 1286-4437: THE GATE MOVED TO `tillandsias_core::reset_state`. It was a
+// private fn in this bin-only crate, so the macOS and Windows trays could not
+// import it and would each have had to COPY it — a second implementation of the
+// one affordance the operator's ruling says must have exactly one. All four
+// binaries already depend on tillandsias-core. Do not reintroduce a local copy.
+// `destructive_reset_allowed` is the gate for BOTH resets and `run_reset_guest`
+// is built on every platform, so it is imported unconditionally. The printer and
+// the skipped-case line are used only by the Linux `--reset-state` body; gating
+// them keeps the non-Linux build free of unused-import warnings, which the gate
+// treats as errors.
+use tillandsias_core::reset_state::destructive_reset_allowed;
+#[cfg(target_os = "linux")]
+use tillandsias_core::reset_state::{RESET_SKIPPED_LINE, announce_reset_plan};
 
 /// Pure scope filter: which podman object names (containers/volumes/secrets)
 /// belong to the Tillandsias guest substrate. Everything the stack creates is
@@ -9028,9 +9715,109 @@ fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
     }
 }
 
+/// The non-Linux arm, and it exists because the cross-target check refused the
+/// first draft (land 30): the dispatch calls `run_reset_state` unconditionally
+/// while the body is `#[cfg(target_os = "linux")]`, so on
+/// `x86_64-pc-windows-gnu` the call found an item that was configured out.
+///
+/// It REFUSES BY NAME rather than silently succeeding, the 1276-2hc6 shape: a
+/// launcher on a platform where its lane cannot work says so on arrival and
+/// names the working command. `--reset-state` destroys a podman substrate this
+/// binary does not own anywhere but Linux; the Windows and macOS trays carry
+/// their own bodies against WSL2 and Virtualization.framework respectively, and
+/// all three share the gate, the printer and the strings from
+/// `tillandsias_core::reset_state` — which is the whole point of the core half
+/// landing first. The caller prints this and exits 1, so the refusal is
+/// non-zero without a second exit convention.
+#[cfg(not(target_os = "linux"))]
+fn run_reset_state(_debug: bool) -> Result<(), String> {
+    Err(
+        "refused:reset-state-not-this-platform:--reset-state resets the Linux \
+         podman substrate, which this binary does not own on this platform; run \
+         tillandsias-tray.exe --reset-state on Windows, or the installed tray on \
+         macOS"
+            .to_string(),
+    )
+}
+
 /// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
 /// same end state as a pristine `--init` + vault bring-up, with every prior
 /// guest credential discarded (the honest UX: you'll re-authenticate once).
+/// ORDER 1286-4437 (operator ruling 2026-09-20). A SUPERSET of
+/// `--reset-guest`: the guest substrate PLUS the host-held credentials,
+/// vault-data and the images, then reprovision through the same `--init` path.
+///
+/// `--reset-guest` is deliberately NOT changed. It documents "images are
+/// preserved, so this is fast when they still exist" and callers rely on that;
+/// this flag is the stronger sibling, not a redefinition.
+#[cfg(target_os = "linux")]
+fn run_reset_state(debug: bool) -> Result<(), String> {
+    announce_reset_plan(
+        &[
+            "every Tillandsias podman container, volume, secret and network",
+            "ALL podman images on this host (podman system reset --force)",
+            "the host keychain entries vault-shamir-share-v1 and vault-root-token-v1",
+            "the host fallback files fallback_vault-shamir-share-v1 and fallback_vault-root-token-v1",
+            "<cache>/tillandsias/vault-data (the Vault store)",
+        ],
+        &[
+            "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the \
+             in-guest Vault derives its master key from it, so clearing it would \
+             make the next vault underivable rather than re-initialised (803-49re)",
+            "the installed tillandsias binary itself",
+            "~/.cache/tillandsias/models (the podman reset does not reach it)",
+        ],
+    );
+
+    // ONE affordance, and it already existed: `--reset-guest` has honoured
+    // TILLANDSIAS_DESTRUCTIVE_RESET_OK since it was written, and the smoke
+    // runbook names it "the only supported opt-out". A new
+    // TILLANDSIAS_INSTALL_SKIP_RESET was proposed, agreed by three hosts and
+    // approved, before anyone read this line — it would have been the second
+    // "keep my state" affordance the same ruling forbade.
+    if !destructive_reset_allowed() {
+        eprintln!("{RESET_SKIPPED_LINE}");
+        return run_init(debug, false);
+    }
+
+    // ORDER: podman reset FIRST, then the host credentials. Not arbitrary —
+    // clearing vault-data needs `podman unshare`, which needs a working podman,
+    // and the smoke's §2 has run this order since 900-z3kv.
+    // THROUGH THE SHARED LAYER. The first draft built the process command
+    // directly and `tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer`
+    // caught it: "headless runtime must not construct podman commands directly".
+    // That is a real invariant — the shared layer carries the operation budgets
+    // and the debug tracing every other podman call in this binary gets.
+    //
+    // NOTE FOR THE NEXT EDITOR: that test is a raw SOURCE SCAN of this file, so
+    // it fails on the forbidden constructor appearing ANYWHERE — including in a
+    // comment quoting it to explain the rule. This paragraph therefore describes
+    // the constructor instead of spelling it, which is why it reads indirectly.
+    eprintln!("[tillandsias] --reset-state: podman system reset --force ...");
+    let mut reset_cmd = podman_command();
+    reset_cmd.args(["system", "reset", "--force"]);
+    run_podman_command(reset_cmd, debug)
+        .map_err(|e| format!("podman system reset --force failed: {e}"))?;
+
+    let (cleared, failed) = vault_bootstrap::clear_host_vault_credentials(debug);
+    eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
+    if !failed.is_empty() {
+        // REFUSE, do not warn. 1284-jf86 is the row about a clearer that
+        // printed "the room is NOT cold" and exited 0; a reset that cannot
+        // clear the credentials has not produced the state the caller asked
+        // for, and reprovisioning on top of it would recover the old share.
+        return Err(format!(
+            "--reset-state could not clear: {} — the local state is NOT reset, so \
+             reprovisioning now would recover the old Vault share. Nothing further \
+             was attempted.",
+            failed.join(" ")
+        ));
+    }
+
+    eprintln!("[tillandsias] --reset-state: local state reset \u{2713} — reprovisioning ...");
+    run_init(debug, false)
+}
+
 fn run_reset_guest(debug: bool) -> Result<(), String> {
     if !destructive_reset_allowed() {
         return Err(
@@ -9339,6 +10126,8 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                     None,
                     None,
                     git_vault_secret.as_deref(),
+                    // Status-check mirror never signs: throwaway bare repo, no lane.
+                    None,
                 ),
                 debug,
             )
@@ -9350,6 +10139,9 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
                  status-check runs without tillandsias-inference"
             );
+        } else if try_start_vsock_forwarder(&client, debug).await {
+            // Host-native lane took it. The forwarder claims the `inference`
+            // alias, so the container below must NOT also run (830-xsk2).
         } else {
             client
                 .run_container_observed(
@@ -10638,6 +11430,30 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 // gating the mirror's sshd — until the T11 staged migration flips defaults.
 // ---------------------------------------------------------------------------
 
+/// ORDER 1313-prin (1288-5qpn). The loopback port the mirror's AUTHENTICATED sshd is
+/// published on, so a native rootless Linux host — which cannot route to the
+/// enclave bridge — can reach the ssh push lane. Deliberately distinct from the
+/// in-container 2222 so a host-side collision is a config change here rather
+/// than a container change. In-VM launches do not need it; the enclave alias
+/// resolves there.
+pub(crate) const MIRROR_SSHD_HOST_PORT: u16 = 2223;
+
+/// ORDER 1313-prin. The sink the mirror's SECOND Vault Agent writes its
+/// signing token to, and the path `sshd-identity.sh` is pointed at via
+/// TILLANDSIAS_VAULT_TOKEN_FILE. Distinct from the relay agent's
+/// `/tmp/tillandsias-vault-token` on purpose: two identities, two sinks, so
+/// "one token never carries both authorities" is structural rather than a
+/// convention someone has to remember.
+pub(crate) const MIRROR_SIGNER_TOKEN_SINK: &str = "/tmp/tillandsias-vault-signer-token";
+/// ORDER 1288-5qpn. The unroutable URL a push is redirected to when the SSH
+/// lane is ENABLED but its host-CA cache is absent. It exists so the failure
+/// happens at the push rather than being absorbed by the anonymous git://
+/// redirect, and so git's own error text names the lane: git reports "Unable
+/// to find remote helper for 'tillandsias-ssh-lane-unwired'". Deliberately not
+/// a real scheme — anything routable would be a second fallback.
+pub(crate) const SSH_LANE_UNWIRED_REFUSAL_URL: &str =
+    "tillandsias-ssh-lane-unwired://host-ca-cache-missing";
+
 /// One flag flips the whole ssh push lane (mirror sshd + sidecar + forge
 /// wiring): T4-T10 land dark and T11 (749-y8xx) owns the default flip.
 pub(crate) fn mirror_ssh_push_lane_enabled() -> bool {
@@ -10912,7 +11728,31 @@ pub(crate) fn write_forge_gitconfig(
     cache_root: &Path,
 ) -> Option<PathBuf> {
     let forge_git_dir = cache_root.join("forge-gitconfig");
-    std::fs::create_dir_all(&forge_git_dir).ok()?;
+    // ORDER 1282-rkkm. NAME THE FAILURE WHERE IT HAPPENS. This was
+    // `create_dir_all(&forge_git_dir).ok()?`, which turned "the cache root does
+    // not exist and cannot be created" into a well-formed `None`. The caller
+    // then omitted the gitconfig mount, and forge_credential_quarantine_mounts_
+    // present failed several frames away with "must mount credential-quarantine
+    // tmpfs at /home/forge/.gitconfig" — an ABSENCE, reported as if the mount
+    // list were wrong, when the real cause was an unusable directory.
+    //
+    // macneo lost a gating session to that gap on 2026-09-19: the assertion
+    // named the missing mount and nothing named the cause. The mount is still
+    // omitted (this function cannot invent a directory), but the reason now
+    // travels with the failure, so a reader is not left inferring it from an
+    // assertion that is three frames from the truth. cargo captures this per
+    // test and prints it with the failing test's output.
+    if let Err(err) = std::fs::create_dir_all(&forge_git_dir) {
+        eprintln!(
+            "[tillandsias] forge gitconfig NOT written for project '{project_name}': the cache \
+             root '{}' could not be created ({err}). The gitconfig mount will be ABSENT from the \
+             forge argv; a test asserting that mount will fail on the absence, and THIS is the \
+             cause. If this appears during a test run, the cache root was redirected by another \
+             test's process-global write (order 1021-hf9e).",
+            forge_git_dir.display()
+        );
+        return None;
+    }
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
 
@@ -11084,18 +11924,63 @@ pub(crate) fn write_forge_gitconfig(
                 }
             }
             _ => {
-                // Fail loud in the artifact AND on stderr, never silent:
-                // the lane is explicitly enabled but its CA cache is
-                // absent — pushes will still take the git:// path.
+                // ORDER 1288-5qpn. FAIL CLOSED. This arm used to warn and then
+                // let the push take the anonymous git:// redirect written
+                // above, which is a fallback from the AUTHENTICATED transport
+                // to the UNAUTHENTICATED one, taken on exactly the failure
+                // where it is least wanted. It was loud on stderr and SILENT
+                // IN OUTCOME: the push succeeded, so nothing downstream ever
+                // reported a problem, and an operator who had enabled the lane
+                // could believe they were on it while every push travelled
+                // git://. THE FLAG BEING SET IS NOT EVIDENCE THE LANE IS IN USE.
+                //
+                // Found by dogfooding this lane on lenovinha as 1288-5qpn's
+                // first authenticated client, which is what that row's ruling
+                // (a) was for. The operator's requirement it violates is
+                // "fail hard, no direct-push fallback".
+                //
+                // THE MECHANISM, and why it is a refusing URL rather than an
+                // omission. Omitting a push redirect does NOT fail closed: the
+                // anonymous `insteadOf` above already covers push as well as
+                // fetch, so silence here means the anonymous path wins. A
+                // `pushInsteadOf` to an unroutable scheme is what actually
+                // stops it — git refuses with "Unable to find remote helper
+                // for 'tillandsias-ssh-lane-unwired'", which names the lane at
+                // the point of failure. The exact cache path and the variable
+                // travel in the comment and on stderr, because a URL cannot
+                // carry a filesystem path cleanly.
+                let ca_display = ssh_lane_host_ca_cache_path(project_name)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "<cache path unresolvable>".to_string());
                 eprintln!(
-                    "[tillandsias] WARNING: TILLANDSIAS_MIRROR_SSHD=1 but no host-CA cache \
-                         exists for '{project_name}' — the SSH push lane was NOT wired into \
-                         its gitconfig (did ensure_ssh_lane_sidecar run?)."
+                    "[tillandsias] REFUSING the SSH push lane for '{project_name}': \
+                     TILLANDSIAS_MIRROR_SSHD=1 but the host-CA cache is absent at {ca_display}. \
+                     Pushes are redirected to an unroutable URL and WILL FAIL — they do NOT fall \
+                     back to the anonymous git:// mirror path (1288-5qpn). Run the launch that \
+                     populates the cache (ensure_ssh_lane_sidecar), or unset \
+                     TILLANDSIAS_MIRROR_SSHD to use the anonymous lane deliberately."
                 );
+                config.push('\n');
                 config.push_str(
-                    "\n# SSH push lane ENABLED but NOT wired: host-CA cache missing.\n\
-                         # Pushes fall back to the anonymous mirror redirect above.\n",
+                    "# SSH push lane ENABLED but NOT wired: host-CA cache missing.\n\
+                     # Pushes REFUSE. The anonymous mirror redirect above is NOT used in their\n\
+                     # place — an authenticated transport must not fall open to an\n\
+                     # unauthenticated one when its credential material is absent (1288-5qpn).\n",
                 );
+                config.push_str(&format!("# missing host-CA cache: {ca_display}\n"));
+                config.push_str(
+                    "# remedy: run the launch that populates it (ensure_ssh_lane_sidecar), or\n\
+                     # unset TILLANDSIAS_MIRROR_SSHD to choose the anonymous lane deliberately.\n",
+                );
+                config.push_str(&format!("[url \"{SSH_LANE_UNWIRED_REFUSAL_URL}\"]\n"));
+                config.push_str(&format!("\tpushInsteadOf = {origin}\n"));
+                if origin.starts_with("git@github.com:") {
+                    let nwo = origin
+                        .strip_prefix("git@github.com:")
+                        .and_then(|s| s.strip_suffix(".git"))
+                        .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
+                    config.push_str(&format!("\tpushInsteadOf = https://github.com/{nwo}.git\n"));
+                }
             }
         }
     }
@@ -12720,6 +13605,15 @@ fn run_opencode_mode(
         .await
         .map_err(|e| format!("[OpenCode] mirror service-identity provisioning failed: {e}"))?;
         let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
+        // ORDER 1313-prin: the SIGNING identity, minted only when the lane is on.
+        let git_signer_secret = if mirror_ssh_push_lane_enabled() {
+            Some(
+                mint_git_mirror_host_signer_auto_auth(project_name, &opencode_mirror_id, debug)
+                    .await?,
+            )
+        } else {
+            None
+        };
         client
             .run_container_observed(
                 "opencode-git",
@@ -12732,6 +13626,7 @@ fn run_opencode_mode(
                     project_remote_url.as_deref(),
                     project_default_branch.as_deref(),
                     git_vault_secret.as_deref(),
+                    git_signer_secret.as_deref(),
                 ),
                 debug,
             )
@@ -12742,6 +13637,9 @@ fn run_opencode_mode(
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
                  OpenCode lane launches without tillandsias-inference"
             );
+        } else if try_start_vsock_forwarder(&client, debug).await {
+            // Host-native lane took it. The forwarder claims the `inference`
+            // alias, so the container below must NOT also run (830-xsk2).
         } else {
             client
                 .run_container_observed(
@@ -13852,6 +14750,15 @@ pub(crate) fn run_opencode_web_mode(
         .await
         .map_err(|e| format!("[OpenCode Web] mirror service-identity provisioning failed: {e}"))?;
         let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
+        // ORDER 1313-prin: the SIGNING identity, minted only when the lane is on.
+        let git_signer_secret = if mirror_ssh_push_lane_enabled() {
+            Some(
+                mint_git_mirror_host_signer_auto_auth(project_name, &opencode_web_mirror_id, debug)
+                    .await?,
+            )
+        } else {
+            None
+        };
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -13864,6 +14771,7 @@ pub(crate) fn run_opencode_web_mode(
                     project_remote_url.as_deref(),
                     project_default_branch.as_deref(),
                     git_vault_secret.as_deref(),
+                    git_signer_secret.as_deref(),
                 ),
                 debug,
             )
@@ -13880,6 +14788,9 @@ pub(crate) fn run_opencode_web_mode(
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
                  OpenCode Web lane launches without tillandsias-inference"
             );
+        } else if try_start_vsock_forwarder(&client, debug).await {
+            // Host-native lane took it. The forwarder claims the `inference`
+            // alias, so the container below must NOT also run (830-xsk2).
         } else {
             client
                 .run_container_observed(
@@ -14614,6 +15525,19 @@ async fn ensure_shared_git_and_inference_for_launch(
                 })?;
             let git_vault_secret =
                 Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
+            // ORDER 1313-prin: the SIGNING identity, minted only when the lane is on.
+            let git_signer_secret = if mirror_ssh_push_lane_enabled() {
+                Some(
+                    mint_git_mirror_host_signer_auto_auth(
+                        project_name,
+                        &forge_launch_mirror_id,
+                        debug,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
             client
                 .run_container_observed(
                     "forge-launch-git",
@@ -14626,6 +15550,7 @@ async fn ensure_shared_git_and_inference_for_launch(
                         project_remote_url,
                         project_default_branch,
                         git_vault_secret.as_deref(),
+                        git_signer_secret.as_deref(),
                     ),
                     debug,
                 )
@@ -14665,6 +15590,9 @@ async fn ensure_shared_git_and_inference_for_launch(
         if debug {
             eprintln!("[tillandsias] inference already running; reusing (order 443)");
         }
+    } else if try_start_vsock_forwarder(client, debug).await {
+        // Host-native lane took it. The forwarder claims the `inference`
+        // alias, so the container below must NOT also run (830-xsk2).
     } else {
         client
             .run_container_observed(
@@ -14835,6 +15763,10 @@ pub(crate) fn build_forge_agent_run_args(
     // ORDER 1021-hf9e: explicit, so a test exercising either lane needs no
     // process-global write. Production callers pass forge_uses_host_mount().
     host_mount: bool,
+    // ORDER 1282-rkkm. Threaded, not resolved here — see the note on
+    // build_forge_agent_run_args_with_vault. The victim test reaches the cache
+    // root THROUGH this function, so this is where it must be injectable.
+    cache_root: &Path,
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
@@ -14852,6 +15784,7 @@ pub(crate) fn build_forge_agent_run_args(
         None,
         None,
         host_mount,
+        cache_root,
     )
 }
 
@@ -14891,6 +15824,14 @@ fn build_forge_agent_run_args_with_vault(
     // than serialise around it. A #[serial] or a wider env_lock() would hide the
     // race and leave the global readable by anything else in the process.
     host_mount: bool,
+    // ORDER 1282-rkkm. THREADED ONE FRAME FURTHER THAN 1021-hf9e REACHED.
+    // That order made write_forge_gitconfig take the root, but this builder
+    // still resolved it from the process-global here — and the victim,
+    // forge_credential_quarantine_mounts_present, reaches the read THROUGH this
+    // function. Relocating a global read is not removing it: the test that races
+    // is the one that CALLS the reader, so the seam has to sit where that caller
+    // can inject it.
+    cache_root: &Path,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
@@ -15202,7 +16143,7 @@ fn build_forge_agent_run_args_with_vault(
         host_checkout,
         resolved_remote_url,
         // ORDER 1021-hf9e: production resolves the root; tests pass their own.
-        &tillandsias_core::cache_root::cache_root(),
+        cache_root,
     ) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
@@ -15336,6 +16277,10 @@ pub(crate) fn build_forge_agent_run_argv(
     // kept failing in 2 of 10 parallel runs. Moving a global read one level up
     // is not removing it. It is now the caller's to resolve.
     host_mount: bool,
+    // ORDER 1282-rkkm. Threaded, not resolved here — see the note on
+    // build_forge_agent_run_args_with_vault. The victim test reaches the cache
+    // root THROUGH this function, so this is where it must be injectable.
+    cache_root: &Path,
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
@@ -15371,6 +16316,7 @@ pub(crate) fn build_forge_agent_run_argv(
         mode,
         debug,
         host_mount,
+        cache_root,
     ));
     argv
 }
@@ -15556,6 +16502,7 @@ fn run_forge_agent_cli_mode(
         prompt,
         // ORDER 1021-hf9e: read the process env HERE, in the production lane.
         forge_uses_host_mount(),
+        &tillandsias_core::cache_root::cache_root(),
     );
 
     let rt = podman_runtime()?;
@@ -15705,6 +16652,7 @@ pub(crate) fn launch_forge_agent(
             // ORDER 1021-hf9e: the process env is read HERE, in the production
             // launcher, and nowhere a test can reach concurrently.
             forge_uses_host_mount(),
+            &tillandsias_core::cache_root::cache_root(),
         )
     };
 
@@ -17556,7 +18504,101 @@ pub(crate) async fn service_stop(
 }
 
 #[cfg(test)]
+/// ORDER 1282-rkkm. A cache root THIS TEST OWNS, so no test in this module
+/// reaches the process-global resolver through the forge argv builders.
+///
+/// The race this removes: another test set XDG_CACHE_HOME (or HOME) under
+/// env_lock() to redirect where its own artefacts land;
+/// forge_credential_quarantine_mounts_present took only the podman seam
+/// lock, reached the global read through three builders, and got a
+/// directory belonging to — or already dropped by — that other test. A lock
+/// protects only the participants who take it, and the victim never took
+/// this one.
+///
+/// DELIBERATELY NOT `tempfile::tempdir()`. A TempDir bound to nothing is
+/// dropped at the end of the statement that creates it, so the directory
+/// would be gone before the code under test used the path — which is
+/// EXACTLY the failure this row exists to fix. A plain created directory
+/// has no drop semantics to get wrong.
+fn test_cache_root() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "tillandsias-test-cache-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).expect("create a test-owned cache root");
+    dir
+}
+
+#[cfg(test)]
 mod tests {
+
+    /// ORDER 1277-g5k9, ARM 1. A spawn failure names the program and where it
+    /// looked, and the two other arms pin the parts that must NOT change.
+    ///
+    /// The pre-fix line was `Failed to spawn build process: program not found`,
+    /// eight times, for one absent podman. Both facts were in hand at the call
+    /// site — the io::Error carried NotFound and the command carried the program
+    /// name — and neither was printed.
+    #[test]
+    fn a_spawn_failure_names_the_program_and_the_path() {
+        let not_found = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
+        let msg = super::describe_spawn_failure("podman", &not_found);
+        assert!(
+            msg.contains("podman"),
+            "the absent program must be named: {msg}"
+        );
+        assert!(
+            msg.contains("not found on PATH"),
+            "the message must say where it looked: {msg}"
+        );
+
+        // NEGATIVE CONTROL, and this row's closure requires it: a spawn that
+        // fails for any OTHER reason keeps its original wording, because a
+        // permission error is not a PATH problem and must not be reported as one.
+        let denied = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let msg = super::describe_spawn_failure("podman", &denied);
+        assert!(
+            msg.starts_with("Failed to spawn build process:"),
+            "a non-NotFound error keeps the original wording: {msg}"
+        );
+        assert!(
+            !msg.contains("not found on PATH"),
+            "a permission failure must not be described as a PATH miss: {msg}"
+        );
+    }
+
+    /// ORDER 1277-g5k9, ARM 2. The recovery that lets eight failures collapse
+    /// into one line is STRICT, so a build's own stderr cannot be swallowed.
+    ///
+    /// THE MUTATION THIS GUARDS: a looser match — say, on the word "spawn"
+    /// alone — would let a real build failure whose output mentions spawning be
+    /// mistaken for a missing program, and the per-image list, which is the
+    /// information in that case, would be deleted.
+    #[test]
+    fn only_a_real_spawn_miss_is_collapsible() {
+        let real = super::describe_spawn_failure(
+            "podman",
+            &std::io::Error::new(std::io::ErrorKind::NotFound, "x"),
+        );
+        assert_eq!(super::spawn_not_found_program(&real), Some("podman"));
+
+        for impostor in [
+            "Failed to spawn build process: something else",
+            "cannot spawn 'podman' — exited 1",
+            "build failed: cannot spawn a worker, not found on PATH anywhere",
+            "",
+        ] {
+            assert_eq!(
+                super::spawn_not_found_program(impostor),
+                None,
+                "must not be treated as a spawn miss: {impostor}"
+            );
+        }
+    }
+
     /// ORDER 997-e4v2. THE VERDICT THAT RENAMES A DIRECTORY MUST BE EARNED.
     ///
     /// Four arms, and the fourth is the one this order exists for. The caller
@@ -18444,6 +19486,220 @@ mod tests {
         );
     }
 
+    /// The alias IS the deliverable, so pin it: a forwarder that relays
+    /// correctly and is reachable only by IP leaves every agent addressing
+    /// `http://inference:11434` landing on nothing, and nothing in the relay's
+    /// own behaviour would show it.
+    #[test]
+    fn vsock_forwarder_claims_the_inference_alias_on_the_enclave_network() {
+        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let pairs: Vec<_> = args.windows(2).collect();
+        assert!(
+            pairs
+                .iter()
+                .any(|w| w[0] == "--network-alias" && w[1] == "inference"),
+            "the forwarder must answer to the name agents already use"
+        );
+        assert!(
+            pairs
+                .iter()
+                .any(|w| w[0] == "--network" && w[1] == ENCLAVE_NET),
+            "the alias resolves only for containers on the enclave network"
+        );
+    }
+
+    /// "AF_VSOCK works" is equally true of `seccomp=unconfined`, which is the
+    /// thing not to ship — it disables the whole filter to permit one socket
+    /// family on the container bridging the VM boundary.
+    #[test]
+    fn vsock_forwarder_is_confined_by_the_derived_profile() {
+        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        assert!(
+            args.iter()
+                .any(|a| a == "--security-opt=seccomp=/run/p.json")
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("unconfined")),
+            "never unconfined: it was the right instrument to isolate the cause and the \
+             wrong one to fix it"
+        );
+        assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
+        assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
+    }
+
+    /// Order 524's invariant: everything after the image is the CONTAINER's
+    /// argv. Its original instance silently never set an env var.
+    #[test]
+    fn vsock_forwarder_places_flags_before_the_image_and_socat_args_after() {
+        let args = build_vsock_forwarder_run_args("img:v1", Path::new("/run/p.json"), 2, 42421);
+        let at = args
+            .iter()
+            .position(|a| a == "img:v1")
+            .expect("image present");
+        assert_eq!(args[at + 1], "TCP-LISTEN:11434,fork,reuseaddr");
+        assert_eq!(args[at + 2], "VSOCK-CONNECT:2:42421");
+        for flag in [
+            "--network",
+            "--network-alias",
+            "--cap-drop=ALL",
+            "--entrypoint",
+        ] {
+            let i = args.iter().position(|a| a == flag).expect("flag present");
+            assert!(i < at, "{flag} must precede the image");
+        }
+        assert_ne!(VSOCK_FORWARDER_NAME, "tillandsias-inference");
+    }
+
+    /// ORDER 830-xsk2, MUTUAL EXCLUSION, and a SOURCE-SHAPE test on purpose —
+    /// the failure mode is a site that starts the forwarder ALONGSIDE the
+    /// inference container rather than instead of it, and both containers claim
+    /// `--network-alias inference`. Two containers on one alias is a coin flip,
+    /// not a transport, and it would pass every unit test of either builder.
+    ///
+    /// Each forwarder lane must therefore be an `else if` whose else-branch is
+    /// the inference start, so the two are unreachable together by construction.
+    #[test]
+    fn every_vsock_forwarder_lane_excludes_the_inference_container() {
+        let whole = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        // SCAN PRODUCTION CODE ONLY. The needle below appears in this very test
+        // as a string literal, and a self-match has no `else if` before it — so
+        // an unscoped scan fails against correct code, which is a fixture that
+        // reds for a reason unrelated to its subject.
+        //
+        // The needle stops at the open paren on purpose: one site passes
+        // `client` and three pass `&client`, because at that site it is already
+        // a reference and clippy's needless_borrow refuses the extra `&`. A
+        // needle carrying the borrow would count 3 and report a MISSING LANE
+        // for what is only a spelling difference. It keeps the leading `if `
+        // so the function's own DEFINITION is not matched — that has no
+        // `else if` before it and would fail the first assertion below.
+        // Split on the TEST MODULE's own header, not on the first `#[cfg(test)]`
+        // — there are several earlier ones on individual helpers, and splitting
+        // there truncates the scan to before any production lane exists. That
+        // mistake made this fixture report "found 0" against correct code.
+        let source = whole.split("\nmod tests {").next().unwrap_or(whole);
+        let mut lanes = 0;
+        for (idx, _) in source.match_indices("if try_start_vsock_forwarder(") {
+            lanes += 1;
+            let before = &source[idx.saturating_sub(120)..idx];
+            // The needle STARTS at `if`, so the window before it ends at
+            // `} else ` — asserting it contains "} else if " can never hold and
+            // would red against correct code. Check what actually precedes.
+            assert!(
+                before.trim_end().ends_with("} else"),
+                "a forwarder lane must be an `else if` on the inference branch, \
+                 not a separate start; found preceding text: {:?}",
+                &before[before.len().saturating_sub(40)..]
+            );
+            // The inference container must follow in the else-branch, i.e. the
+            // lane sits BETWEEN the kill switch and the container it replaces.
+            let after = &source[idx..(idx + 700).min(source.len())];
+            assert!(
+                after.contains("\"tillandsias-inference\""),
+                "the forwarder lane must guard the inference start it replaces"
+            );
+        }
+        assert!(
+            lanes >= 4,
+            "expected the forwarder lane at every production inference site, found {lanes}"
+        );
+    }
+
+    /// A miniature of podman's real default: the AF_VSOCK deny we flip, the
+    /// AF_NETLINK/NETLINK_AUDIT deny we must NOT touch, and an unrelated allow.
+    /// Shaped from the live profile read in the guest 2026-09-19, including the
+    /// errnoRet/errno fields, because those are what crun rejects under ALLOW.
+    fn sample_default_profile() -> &'static str {
+        r#"{"defaultAction":"SCMP_ACT_ERRNO",
+            "syscalls":[
+              {"names":["read"],"action":"SCMP_ACT_ALLOW"},
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":1,"errno":"EPERM",
+               "args":[{"index":0,"value":40,"valueTwo":0,"op":"SCMP_CMP_EQ"}]},
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":22,"errno":"EINVAL",
+               "args":[{"index":0,"value":16,"valueTwo":0,"op":"SCMP_CMP_EQ"},
+                       {"index":2,"value":9,"valueTwo":0,"op":"SCMP_CMP_EQ"}]}]}"#
+    }
+
+    /// The one transformation, asserted field by field rather than by eyeballing
+    /// a diff: action flips, and the errno fields go WITH it.
+    #[test]
+    fn vsock_seccomp_flips_only_the_af_vsock_deny() {
+        let out = derive_vsock_seccomp(sample_default_profile()).expect("derives");
+        let v: serde_json::Value = serde_json::from_str(&out).expect("valid json");
+        let blocks = v["syscalls"].as_array().expect("syscalls");
+        assert_eq!(blocks.len(), 3, "no block may be added or removed");
+
+        let vsock = &blocks[1];
+        assert_eq!(vsock["action"], "SCMP_ACT_ALLOW");
+        // crun REFUSES a block carrying an errno under SCMP_ACT_ALLOW; the JSON
+        // stays well-formed and every container using it fails to start, so this
+        // is load-bearing rather than tidiness.
+        assert!(
+            vsock.get("errnoRet").is_none(),
+            "errnoRet must be dropped with the flip"
+        );
+        assert!(
+            vsock.get("errno").is_none(),
+            "errno must be dropped with the flip"
+        );
+        assert_eq!(
+            vsock["args"], blocks[1]["args"],
+            "args must not be rewritten"
+        );
+
+        // The negative that makes this a narrowing rather than an unconfining:
+        // the other socket deny is untouched. Without this, a derivation that
+        // relaxed every socket rule would pass a test that only looked at
+        // AF_VSOCK — which is exactly what `seccomp=unconfined` would also do.
+        assert_eq!(blocks[2]["action"], "SCMP_ACT_ERRNO");
+        assert_eq!(blocks[2]["errnoRet"], 22);
+        assert_eq!(
+            blocks[0]["action"], "SCMP_ACT_ALLOW",
+            "unrelated rules unchanged"
+        );
+    }
+
+    /// Absent rule means the platform profile is not the shape this was written
+    /// against. Emitting anything there would hand back a filter nobody
+    /// verified, which reads as one — worse than emitting nothing.
+    #[test]
+    fn vsock_seccomp_refuses_a_profile_without_the_deny_rule() {
+        let err = derive_vsock_seccomp(
+            r#"{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[{"names":["read"],"action":"SCMP_ACT_ALLOW"}]}"#,
+        )
+        .expect_err("must refuse");
+        assert!(
+            err.contains("AF_VSOCK"),
+            "the refusal must name what was missing: {err}"
+        );
+    }
+
+    #[test]
+    fn vsock_seccomp_refuses_input_that_is_not_a_profile() {
+        assert!(derive_vsock_seccomp("not json").is_err());
+        assert!(derive_vsock_seccomp(r#"{"defaultAction":"SCMP_ACT_ERRNO"}"#).is_err());
+    }
+
+    /// Matching on the argument rather than the position: podman may reorder
+    /// its own profile, and a positional match would not survive it.
+    #[test]
+    fn vsock_seccomp_finds_the_rule_wherever_it_sits() {
+        let reordered = r#"{"defaultAction":"SCMP_ACT_ERRNO",
+            "syscalls":[
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":22,"errno":"EINVAL",
+               "args":[{"index":0,"value":16,"valueTwo":0,"op":"SCMP_CMP_EQ"}]},
+              {"names":["write"],"action":"SCMP_ACT_ALLOW"},
+              {"names":["socket"],"action":"SCMP_ACT_ERRNO","errnoRet":1,"errno":"EPERM",
+               "args":[{"index":0,"value":40,"valueTwo":0,"op":"SCMP_CMP_EQ"}]}]}"#;
+        let out = derive_vsock_seccomp(reordered).expect("derives");
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["syscalls"][2]["action"], "SCMP_ACT_ALLOW");
+        assert_eq!(
+            v["syscalls"][0]["action"], "SCMP_ACT_ERRNO",
+            "the AF_NETLINK deny stays"
+        );
+    }
+
     #[test]
     fn inference_run_args_place_every_flag_before_the_image() {
         // Order 524. The generated arg VECTOR is the only observable form of the
@@ -18628,6 +19884,74 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    /// ORDER 793-zumy: the WSL2 dxg delivery, pinned as a pure function so
+    /// every arm runs on every host — none of this is reachable on the CI
+    /// machines that have neither /dev/dxg nor /usr/lib/wsl.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn the_wsl2_dxg_mount_needs_both_halves_and_is_read_only() {
+        // THE ONLY ARM THAT DELIVERS ANYTHING.
+        let args = wsl2_dxg_container_args(true, true);
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--device" && w[1] == "/dev/dxg"),
+            "the device node must be passed: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a == "/usr/lib/wsl:/usr/lib/wsl:ro"),
+            "the WSL tree must be bound: {args:?}"
+        );
+        // READ-ONLY IS A BOUNDARY THE OPERATOR SET, not a default to drift.
+        // A `:rw` here would silently widen an approved surface, so it is
+        // asserted rather than assumed.
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with("/usr/lib/wsl:") && !a.ends_with(":ro")),
+            "the WSL tree must never be mounted writable: {args:?}"
+        );
+
+        // NEITHER HALF ALONE, and the node-without-tree arm is the important
+        // one: that is the measured configuration where dzn fails at
+        // CreateDevice and the loader hands back lavapipe instead. Delivering
+        // it would put a software rasterizer where the GPU should be, which
+        // is what criterion 3 refuses.
+        assert!(
+            wsl2_dxg_container_args(true, false).is_empty(),
+            "the device node without the driver store must deliver NOTHING"
+        );
+        assert!(
+            wsl2_dxg_container_args(false, true).is_empty(),
+            "the WSL tree without the device node must deliver nothing"
+        );
+
+        // AND THE OFF-WSL2 CASE, which is every other host in the fleet.
+        assert!(
+            wsl2_dxg_container_args(false, false).is_empty(),
+            "a host with neither path must get no dxg flags at all"
+        );
+    }
+
+    /// 793-zumy: the production caller must read BOTH paths, or the gating
+    /// above is decorative. A source-window assertion for the same reason the
+    /// neighbours use one — the caller builds real podman args and cannot be
+    /// invoked in a unit test.
+    #[test]
+    fn the_dxg_delivery_is_gated_on_both_paths_in_production() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("wsl2_dxg_container_args("),
+            "the production argument builder must call the dxg delivery"
+        );
+        assert!(
+            window.contains("Path::new(\"/dev/dxg\").exists()")
+                && window.contains("Path::new(WSL_HOST_TREE).exists()"),
+            "both halves must be read from the filesystem at the call site"
         );
     }
 
@@ -20241,6 +21565,7 @@ mod tests {
             ForgeAgentMode::Maintenance,
             true,
             false,
+            &test_cache_root(),
         );
 
         assert_eq!(argv.first().map(|s| s.as_str()), Some("podman"));
@@ -20656,6 +21981,7 @@ mod tests {
                 mode,
                 false,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 !has_arg(&argv, "--replace"),
@@ -20733,6 +22059,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
 
         // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
@@ -20831,6 +22158,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
 
         let mut found_ssh = false;
@@ -20910,6 +22238,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -20945,6 +22274,7 @@ mod tests {
             ForgeAgentMode::Claude,
             false,
             false,
+            &test_cache_root(),
         );
         let joined = argv.join(" ");
         assert!(
@@ -21002,6 +22332,7 @@ mod tests {
             ForgeAgentMode::Claude,
             true,
             false,
+            &test_cache_root(),
         );
         eprintln!("=== SAMPLE ARGV (Claude, tillandsias project) ===");
         for (i, a) in argv.iter().enumerate() {
@@ -21258,6 +22589,7 @@ mod tests {
             None,
             &certs,
             "tillandsias-git:v1",
+            None,
             None,
             None,
             None,
@@ -22438,6 +23770,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
         assert!(
             has_arg(&git, "--replace"),
@@ -22479,6 +23812,7 @@ mod tests {
             None,
             &certs,
             "tillandsias-git:v1",
+            None,
             None,
             None,
             None,
@@ -22590,6 +23924,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         // No `--base-path=...` override appended after the image — confirms
@@ -22619,6 +23954,7 @@ mod tests {
             None,
             &certs,
             "tillandsias-git:v1",
+            None,
             None,
             None,
             None,
@@ -22675,6 +24011,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
         assert!(
             has_arg(&with_mirror_id, &format!("git-{opaque}")),
@@ -22705,6 +24042,7 @@ mod tests {
             Some(url),
             None,
             None,
+            None,
         );
         assert!(
             with_url
@@ -22718,6 +24056,7 @@ mod tests {
             None,
             &certs,
             "tillandsias-git:v1",
+            None,
             None,
             None,
             None,
@@ -22741,6 +24080,7 @@ mod tests {
             Some("https://host-user:host-secret@github.com/example/repo.git"),
             Some("main"),
             Some("tillandsias-vault-approle-git-mirror-agent-alpha-1"),
+            None,
         );
         assert!(
             has_arg(
@@ -22769,6 +24109,7 @@ mod tests {
             None,
             None,
             Some(secret),
+            None,
         );
 
         // Vault Agent's reusable AppRole document must be mounted at the
@@ -22836,6 +24177,7 @@ mod tests {
             None,
             &certs,
             "tillandsias-git:v1",
+            None,
             None,
             None,
             None,
@@ -23011,6 +24353,7 @@ mod tests {
             None,
             Some("delegated codex"),
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", opencode), ("codex", codex)] {
             assert!(
@@ -23123,6 +24466,7 @@ mod tests {
             None,
             None,
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23163,6 +24507,7 @@ mod tests {
             None,
             None,
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -23264,6 +24609,7 @@ mod tests {
             None,
             None,
             false,
+            &test_cache_root(),
         );
         for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
             assert!(
@@ -24480,6 +25826,7 @@ esac
             ForgeAgentMode::Codex,
             false,
             false,
+            &test_cache_root(),
         );
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
@@ -24516,6 +25863,7 @@ esac
                 Some("provider-forge-lease"),
                 None,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -24543,6 +25891,7 @@ esac
                 Some("must-not-mount"),
                 None,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
@@ -24574,6 +25923,7 @@ esac
             Some("codex-forge-lease"),
             Some(prompt),
             false,
+            &test_cache_root(),
         );
         assert!(
             has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
@@ -24599,6 +25949,7 @@ esac
             Some("codex-forge-lease"),
             None,
             false,
+            &test_cache_root(),
         );
         assert!(
             has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
@@ -24670,7 +26021,15 @@ esac
             (ForgeAgentMode::Maintenance, "terminal"),
         ] {
             let args = build_forge_agent_run_args(
-                &project, "alpha", None, &certs, "1.2.3", mode, false, false,
+                &project,
+                "alpha",
+                None,
+                &certs,
+                "1.2.3",
+                mode,
+                false,
+                false,
+                &test_cache_root(),
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -24732,6 +26091,7 @@ esac
             ForgeAgentMode::Codex,
             true,
             false,
+            &test_cache_root(),
         );
 
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
@@ -24774,6 +26134,7 @@ esac
                 mode,
                 false,
                 false,
+                &test_cache_root(),
             );
             assert!(
                 has_arg(&args, "--tty"),
@@ -25086,6 +26447,7 @@ esac
             None,                 // vault_secret
             Some("do the thing"), // prompt — this is the arg that matters,
             false,
+            &test_cache_root(),
         );
         assert!(
             !has_arg(&args, "--tty"),
@@ -25315,9 +26677,157 @@ esac
             text.contains("SSH push lane ENABLED but NOT wired"),
             "missing CA cache with the lane on must be stated in the artifact; got:\n{text}"
         );
+        // ORDER 1288-5qpn. THE ASSERTION INVERTED, and the reason is the whole
+        // point of the change. This used to require that NO pushInsteadOf
+        // appear without the CA — which sounds fail-safe and is the opposite.
+        // The anonymous git:// `insteadOf` written earlier in this same file
+        // covers PUSH as well as fetch, so an absent push redirect means the
+        // anonymous path silently wins: the push SUCCEEDS, unauthenticated,
+        // with only a stderr warning nobody downstream sees. Failing closed
+        // requires a push redirect that cannot route.
         assert!(
-            !text.contains("pushInsteadOf"),
-            "no half-wired push redirect may appear without the CA; got:\n{text}"
+            text.contains("pushInsteadOf"),
+            "the lane on with no CA must REFUSE the push, which needs a pushInsteadOf to an \
+             unroutable URL; an absent redirect lets the anonymous git:// path win (1288-5qpn); \
+             got:\n{text}"
+        );
+        assert!(
+            text.contains(SSH_LANE_UNWIRED_REFUSAL_URL),
+            "the refusing push redirect must point at the unroutable lane URL so git's own error \
+             names the lane; got:\n{text}"
+        );
+        assert!(
+            text.contains("Pushes REFUSE"),
+            "the artifact must say the push refuses, not that it falls back; got:\n{text}"
+        );
+        assert!(
+            !text.contains("fall back to the anonymous mirror redirect"),
+            "MUTATION GUARD: the pre-1288-5qpn wording announced a fallback from the \
+             authenticated transport to the unauthenticated one. If this string returns, the \
+             fallback has been reintroduced; got:\n{text}"
+        );
+        // The refusal must NAME the missing cache, or the operator is told the
+        // lane is unwired without being told what to populate.
+        assert!(
+            text.contains("# missing host-CA cache:"),
+            "the refusal must name the cache path it could not find; got:\n{text}"
+        );
+        assert!(
+            text.contains("TILLANDSIAS_MIRROR_SSHD"),
+            "the refusal must name the variable that turned the lane on, since unsetting it is \
+             one of the two remedies; got:\n{text}"
+        );
+    }
+
+    /// ORDER 1313-prin (1288-5qpn dogfooding). BOTH HALVES OF THE SSH LANE COME FROM
+    /// ONE READ. The mirror half was gated in the container's entrypoint on
+    /// TILLANDSIAS_MIRROR_SSHD, a variable the container was never given, so the
+    /// host could enable the lane and watch only the sidecar half come up. This
+    /// pins the wire AND pins that it derives from the same predicate the
+    /// sidecar uses, because a second environment read here would drift and the
+    /// drift is invisible until someone enables the lane.
+    #[test]
+    fn git_run_args_pass_the_ssh_lane_flag_into_the_mirror() {
+        let _env = env_guard();
+        let _guard = crate::runtime_assets::env_lock();
+        let old_flag = std::env::var_os("TILLANDSIAS_MIRROR_SSHD");
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.0.take() {
+                        Some(v) => std::env::set_var("TILLANDSIAS_MIRROR_SSHD", v),
+                        None => std::env::remove_var("TILLANDSIAS_MIRROR_SSHD"),
+                    }
+                }
+            }
+        }
+        let _restore = Restore(old_flag);
+
+        let certs = std::path::Path::new("/tmp/does-not-matter");
+        let args_with = {
+            unsafe { std::env::set_var("TILLANDSIAS_MIRROR_SSHD", "1") };
+            build_git_run_args(
+                "proj",
+                Some("mid123"),
+                certs,
+                "img",
+                None,
+                None,
+                None,
+                Some("signer-sec"),
+            )
+        };
+        assert!(
+            args_with.iter().any(|a| a == "TILLANDSIAS_MIRROR_SSHD=1"),
+            "with the lane enabled on the host the MIRROR must receive the flag, or its \
+             entrypoint never starts sshd and only the sidecar half comes up (1288-5qpn); \
+             got:\n{args_with:?}"
+        );
+
+        // THE FLAG ALONE IS NOT ENOUGH, and pinning only the flag would have
+        // shipped a lane that stops one step later: sshd-identity.sh dies with
+        // fail:sshd-identity:no-mirror-id unless the mirror knows its own id,
+        // and the SIDECAR was given it while the mirror was not. Measured on
+        // lenovinha 2026-09-20 with the flag wired and the id not.
+        assert!(
+            args_with
+                .iter()
+                .any(|a| a == "TILLANDSIAS_MIRROR_ID=mid123"),
+            "the mirror must receive its own id alongside the flag, or the entrypoint clears \
+             its gate and stops at require_mid instead (1288-5qpn); got:\n{args_with:?}"
+        );
+
+        // ORDER 1313-prin: AND the SIGNING identity. Without it the entrypoint
+        // clears both earlier gates and stops at the signer with http=403 —
+        // the third link of the same chain. The token-file env is what points
+        // sshd-identity.sh at the signer sink instead of the relay token, which
+        // is how "one token never carries both authorities" is ENFORCED rather
+        // than merely intended.
+        assert!(
+            args_with.iter().any(|a| a.starts_with("signer-sec,")),
+            "the mirror must receive the SIGNER AppRole material when the lane is on; \
+             got:\n{args_with:?}"
+        );
+        assert!(
+            args_with
+                .iter()
+                .any(|a| a == "TILLANDSIAS_VAULT_TOKEN_FILE=/tmp/tillandsias-vault-signer-token"),
+            "sshd-identity.sh must be pointed at the SIGNER sink, not the relay token; \
+             got:\n{args_with:?}"
+        );
+
+        // NEGATIVE CONTROL. Without it the arm above would pass on a builder
+        // that passes the flag unconditionally, which would turn the lane on
+        // for every host and defeat the T11 staged flip.
+        let args_without = {
+            unsafe { std::env::remove_var("TILLANDSIAS_MIRROR_SSHD") };
+            build_git_run_args("proj", Some("mid123"), certs, "img", None, None, None, None)
+        };
+        assert!(
+            !args_without
+                .iter()
+                .any(|a| a.contains("TILLANDSIAS_MIRROR_SSHD")),
+            "with the lane OFF the mirror must not receive the flag — the T11 default flip is \
+             what turns this on, not the launcher; got:\n{args_without:?}"
+        );
+    }
+
+    /// ORDER 1313-prin. The two halves must read ONE predicate, not two environment
+    /// lookups that can drift. Source-level because that is the property: a
+    /// behavioural test cannot tell one `std::env::var` from another.
+    #[test]
+    fn ssh_lane_flag_has_a_single_source_of_truth() {
+        let src = include_str!("main.rs");
+        let direct_reads = src
+            .matches("std::env::var(\"TILLANDSIAS_MIRROR_SSHD\")")
+            .count();
+        assert_eq!(
+            direct_reads, 1,
+            "TILLANDSIAS_MIRROR_SSHD must be read in exactly ONE place \
+             (mirror_ssh_push_lane_enabled); every other site calls that predicate. Found \
+             {direct_reads} direct reads — a second read is how the lane's two halves came to \
+             disagree in the first place (1288-5qpn)."
         );
     }
 
@@ -25855,6 +27365,7 @@ esac
             // the opt-in host-mount lane, and it used to say so by setting a
             // process-global that every concurrently-running test could read.
             true,
+            &test_cache_root(),
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
@@ -25933,6 +27444,7 @@ esac
             false,
             // ORDER 1021-hf9e: host_mount — this whole test exercises the opt-in lane.
             true,
+            &test_cache_root(),
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
@@ -28135,6 +29647,7 @@ esac
             None,
             None,
             false,
+            &test_cache_root(),
         );
 
         let args_str = args.join(" ");

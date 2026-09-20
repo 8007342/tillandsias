@@ -74,6 +74,13 @@ fi
 # ============================================================================
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ORDER 1268-m2ir. EXPORTED so child processes resolve metrics logs against the
+# checkout this runner KNOWS it is in, rather than guessing from their own path.
+# A step shells out to cycle-metrics.sh --emit-timing, which resolves the timing
+# log itself; without this it can decide "not in a checkout" for a tree the
+# runner is standing in, and the records land in /tmp where the split guard then
+# reds the next release gate.
+export PROJECT_ROOT
 
 # Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
 # times the litmus suite; a timing failure must NEVER change the runner's exit.
@@ -944,13 +951,18 @@ check_signal() {
 # ORDER 1252-znbn. STRUCTURED ADJUDICATION — the replacement for
 # behavior_matches_output's natural-language `case` arms.
 #
-# WHY. behavior_matches_output is a natural-language interpreter written in
-# bash `case` arms: `*"multiple"*` means "grep the first integer and require
-# >= 2", `*"succeeds"*` means "ignore the output and honour the exit code",
-# `*"cargo"*` means "grep the output for cargo". REWORDING AN ENGLISH SENTENCE
-# CHANGES THE RULE THAT DECIDES THE VERDICT, with no diff anywhere saying the
-# test now checks something else. 64 steps carry a sentence containing
-# "succeeds" whose content is therefore decorative.
+# WHY. behavior_matches_output WAS a natural-language interpreter written in
+# bash case arms. One arm meant "grep the first integer out of the output and
+# require it to be at least two"; another meant "ignore the output entirely and
+# honour the exit code"; another meant "grep the output for the word cargo".
+# Which arm fired depended on which English words the sentence happened to
+# contain, so REWORDING A SENTENCE CHANGED THE RULE THAT DECIDED THE VERDICT,
+# with no diff anywhere saying the test now checked something else.
+#
+# Those arms are now DELETED (not bypassed) and every step that depended on one
+# declares its rule below. The arms are deliberately not quoted verbatim
+# anywhere in this file: the row closes on a grep for them returning nothing,
+# and a comment reciting them would answer that grep forever.
 #
 # The fields here name the OUTPUT they check instead of describing it in prose:
 #   assert_exit: <n>                exact exit status
@@ -1017,6 +1029,52 @@ structured_assert_matches() { # <output> <exit_code> <a_exit> <a_contains> <a_ma
     return 0
 }
 
+# ORDER 1293-wka4. DOES THIS STEP'S TOP-LEVEL PIPELINE END IN A CONSUMER THAT
+# SWALLOWS ITS PRODUCER'S STATUS? Returns 0 when it does.
+#
+# WHY SHAPE-GATED AND NOT A BLANKET. `set -o pipefail` for every step would
+# change the verdict of steps whose pipeline ends in the ASSERTION itself.
+# Measured on this corpus: 25 steps declaring assert_exit have a top-level pipe,
+# but only 3 end in a status-swallowing consumer. The other 22 end in `grep -q`,
+# where grep IS the adjudicator — and several are negated (`! producer | grep`),
+# where pipefail INVERTS the verdict: a failing producer currently makes the
+# pipeline 0 and the negation 1 (fail), while under pipefail it becomes non-zero
+# and the negation 0 (pass). A blanket would silently flip those.
+#
+# THE LIST IS THE CLAIM. A consumer here is one that reports its OWN success
+# regardless of what fed it. grep is deliberately ABSENT: a step ending in grep
+# is asserting on the match, which is a real verdict.
+step_pipeline_swallows_status() {
+    local cmd="$1"
+
+    # Remove $(...) substitutions — a pipe inside one is not the adjudicated
+    # pipeline. Repeat until stable so nested substitutions collapse too.
+    local prev=""
+    while [[ "$cmd" != "$prev" ]]; do
+        prev="$cmd"
+        cmd="$(printf '%s' "$cmd" | sed 's/\$([^()]*)//g')"
+    done
+
+    # `||` is not a pipeline.
+    cmd="${cmd//||/ }"
+    [[ "$cmd" == *"|"* ]] || return 1
+
+    local tail_seg="${cmd##*|}"
+    # First bare word of the last segment, minus quotes and a leading path.
+    tail_seg="${tail_seg#"${tail_seg%%[![:space:]]*}"}"
+    tail_seg="${tail_seg//\'/}"
+    tail_seg="${tail_seg//\"/}"
+    local consumer="${tail_seg%%[[:space:]]*}"
+    consumer="${consumer##*/}"
+
+    case "$consumer" in
+        head|tail|tee|wc|cat|sort|uniq|tr|awk|sed|jq|column|fold|nl)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 behavior_matches_output() {
     local output="$1"
     local expected="$2"
@@ -1032,111 +1090,13 @@ behavior_matches_output() {
 
     [[ -z "$expected_lc" ]] && return 0
 
-    if [[ "$expected_lc" =~ ([0-9]+)\+\ env\ vars ]]; then
-        local threshold="${BASH_REMATCH[1]}"
-        local count
-        count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-        [[ -n "$count" ]] || return 1
-        [[ "$count" -ge "$threshold" ]]
-        return $?
-    fi
-
-    case "$expected_lc" in
-        *"0 directories"*|*"0 mounts"*|*"0 sockets"*|*"0 files"*|*"0 matches"*|*"0 log files"*|*"0 token files"*|*"0 socket files"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ "${count:-}" == "0" ]]
-            return $?
-            ;;
-        *"1 or more"*|*"at least one"*|*"multiple"*|*"several"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ -n "$count" ]] || return 1
-            if [[ "$expected_lc" == *"multiple"* || "$expected_lc" == *"several"* ]]; then
-                [[ "$count" -ge 2 ]]
-            else
-                [[ "$count" -ge 1 ]]
-            fi
-            return $?
-            ;;
-        *"3-10 env vars"*|*"3 to 10 env vars"*|*"3-10 env vars only"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ -n "$count" ]] || return 1
-            [[ "$count" -ge 3 && "$count" -le 10 ]]
-            return $?
-            ;;
-        *"readable file with size > 0"*|*"size > 0 bytes"*|*"size > 0"*)
-            local size
-            size="$(grep -Eo '[0-9]+' <<<"$output" | tail -1 || true)"
-            [[ -n "$size" ]] || return 1
-            [[ "$size" -gt 0 ]]
-            return $?
-            ;;
-        *"no such file"*|*"file not found"*|*"directory not found"*|*"not found error"*)
-            grep -Eqi 'no such file|not found|directory_not_found|directory not found' <<<"$output"
-            return $?
-            ;;
-        *"timeout or connection refused"*|*"connection refused"*|*"network unreachable"*|*"could not resolve"*)
-            grep -Eqi 'failed to connect|connection refused|network unreachable|timeout|could not resolve|curl_exit=[1-9]' <<<"$output"
-            return $?
-            ;;
-        # These name a SPECIFIC artefact the step must print, so silence really is
-        # a failure for them. Listed first: `case` takes the first match, and
-        # "shutdown command succeeds" would otherwise fall into the generic
-        # exit-code branch below and stop requiring its output.
-        # "grep succeeds" is a claim about a MATCH, so it means output, not exit
-        # status — a step may chain several greps and end on a non-zero one while
-        # the match it cares about was printed. Listed before the generic
-        # "succeeds" branch, which honours the exit code instead.
-        *"grep succeeds"*|*"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*)
-            [[ -n "$output" ]]
-            return $?
-            ;;
-        # Order 661-nm73. A bare "succeeds" is a claim about the step's OUTCOME,
-        # not about it printing something. Requiring non-empty output made ABSENCE
-        # assertions unpassable by construction: the canonical form is a negated
-        # grep (`! grep -E '<forbidden>' file`), which — when the property HOLDS —
-        # matches nothing, prints nothing, and exits 0. Correct behaviour, empty
-        # output, and the runner called it FAIL.
-        #
-        # That punished exactly the tests that check something is NOT there, which
-        # are the negative controls this project relies on. litmus:no-raw-error-in-
-        # status-chip failed this way while the property it asserts was true.
-        #
-        # It honours the EXIT CODE ONLY — deliberately, and `output || exit_code`
-        # was tried first and is wrong. With `! grep`, a VIOLATION prints the
-        # offending lines and exits 1, so any condition that accepts non-empty
-        # output passes the very case the step exists to catch. That is how
-        # litmus:no-raw-error-in-status-chip came to be inverted in BOTH
-        # directions: silent-and-correct read as FAIL, loud-and-violating read as
-        # PASS. Caught by injecting a violation and watching the step stay green.
-        #
-        # "succeeds" is a claim about the outcome. The exit code IS the outcome.
-        *"succeeds"*)
-            [[ "$exit_code" -eq 0 ]]
-            return $?
-            ;;
-        *"path is correctly set"*|*"cargo"*)
-            grep -Eqi 'cargo' <<<"$output"
-            return $?
-            ;;
-        *"token file exists in git-service"*)
-            grep -q 'TOKEN_MOUNTED' <<<"$output"
-            return $?
-            ;;
-        *"token files are present"*|*"token files are readable"*)
-            local count
-            count="$(grep -Eo '[0-9]+' <<<"$output" | head -1 || true)"
-            [[ -n "$count" ]] || return 1
-            [[ "$count" -ge 1 ]]
-            return $?
-            ;;
-        *"minimal env vars"*|*"minimal necessary vars present"*)
-            grep -Eqi '^(PATH|HOME|USER)=' <<<"$output"
-            return $?
-            ;;
-    esac
+    # ORDER 1252-znbn. The natural-language case arms that used to sit here are
+    # DELETED, not bypassed — see the note above structured_assert_matches for
+    # what they did and why it was wrong. Every step that depended on one now
+    # declares assert_exit / assert_output_contains / assert_output_matches /
+    # assert_output_nonempty, which structured_assert_matches adjudicates
+    # BEFORE this function is reached. What remains is the honest fallback the
+    # interpreter always ended in: case-insensitive fixed-string containment.
 
     if grep -Fqi "$expected" <<<"$output" || grep -Fqi "$expected_lc" <<<"$output_lc"; then
         return 0
@@ -1331,6 +1291,12 @@ run_litmus_test_file() {
     local -a unparsed_step_names=()
     # ORDER 1252-znbn. critical_path items opened by a key other than `step:`.
     local -a malformed_items=()
+    # ORDER 1274-cbk7. Keys seen in the CURRENT critical_path item, so a key
+    # repeated inside one step can be named. A YAML loader rejects the whole
+    # document for this; the line-based parser here silently takes the last
+    # occurrence, so the file was `ok:litmus-parseable` and unloadable at once.
+    local -a duplicate_keys=()
+    local -a step_seen_keys=()
     local success_criteria=()
     local failure_criteria=()
 
@@ -1396,9 +1362,34 @@ run_litmus_test_file() {
         fi
 
         if [[ $in_critical_path -eq 1 ]]; then
+            # ORDER 1274-cbk7. A DUPLICATED MAPPING KEY inside one step. This
+            # is deliberately independent of the value branches below: it keys
+            # on the LINE, so it also catches a repeated key this parser does
+            # not otherwise read. Matched at 4+ spaces so the `- step:` opener
+            # (2 spaces + dash) and top-level keys cannot reach it, and `#`
+            # comments are skipped.
+            #
+            # SCOPE, STATED BECAUSE THE GAP IS REAL: this sees duplicates
+            # WITHIN one critical_path item only. A duplicated TOP-LEVEL key
+            # still passes --parse-only and still reds the YAML gate. Covering
+            # that needs care around folded scalars (`description: >`), whose
+            # continuation lines can look like keys, and a false red here is
+            # worse than the false green being closed (1274-cbk7 criterion 2).
+            if [[ "$line" =~ ^[[:space:]]{4,}([a-zA-Z_][a-zA-Z0-9_]*): ]]; then
+                _dupkey="${BASH_REMATCH[1]}"
+                for _seen in ${step_seen_keys[@]+"${step_seen_keys[@]}"}; do
+                    if [[ "$_seen" == "$_dupkey" ]]; then
+                        duplicate_keys+=("${current_step_name}|${_dupkey}")
+                        break
+                    fi
+                done
+                step_seen_keys+=("$_dupkey")
+            fi
+
             if [[ "$line" =~ ^[[:space:]]*-[[:space:]]step:\ \"(.+)\" ]]; then
                 append_step
                 current_step_name="${BASH_REMATCH[1]}"
+                step_seen_keys=()   # ORDER 1274-cbk7
                 current_step_command=""
                 current_step_timeout=30000
                 current_step_expected=""
@@ -1432,6 +1423,17 @@ run_litmus_test_file() {
                 # opened by `- step:` and all 2514 of their names are
                 # double-quoted, so this refusal cannot redden the corpus.
                 malformed_items+=("${BASH_REMATCH[1]}|${line}")
+                # ORDER 1274-cbk7. A NEW LIST ITEM STARTS A NEW MAPPING IN YAML,
+                # whatever key opens it — so the duplicate-key seen-set resets
+                # here too, not only on `- step:`. Without this reset the
+                # duplicate detector fires on the very file the arm above
+                # describes: a `- name:` item MERGES into the previous step in
+                # this parser, so its command:/timeout_ms:/expected_behavior:
+                # look like repeats of the predecessor's keys — while a YAML
+                # loader, which sees two separate items, accepts the file. That
+                # is a FALSE duplicate report on valid YAML, and the 1252-znbn
+                # item-opener fixture caught it.
+                step_seen_keys=()
             elif [[ "$line" =~ ^[[:space:]]*command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between
@@ -1503,6 +1505,24 @@ run_litmus_test_file() {
     # vector (31 steps skipped since authoring before the rewrite).
     # ORDER 1252-znbn. Reported BEFORE the checks below: a merged item makes
     # the step count itself wrong, so every later verdict is over the wrong set.
+    # ORDER 1274-cbk7. Reported FIRST: a duplicated key means a YAML loader
+    # rejects this document outright, so any step count taken from it describes
+    # a file that cannot be loaded. The incident this closes is an author who
+    # ran --parse-only over the corpus, read 423 ok, and hit
+    # blocked:yaml-load-failed in the gate fifteen minutes later.
+    if [[ "${#duplicate_keys[@]}" -gt 0 ]]; then
+        printf '  %b[PARSE ERROR]%b %s: duplicated mapping key in a critical_path item\n' "${RED}" "${NC}" "$test_file" >&2
+        local dk dkstep dkkey
+        for dk in "${duplicate_keys[@]}"; do
+            dkstep="${dk%%|*}"
+            dkkey="${dk#*|}"
+            printf '%s\n' "         step '${dkstep}': key '${dkkey}' appears more than once" >&2
+        done
+        printf '%s\n' "         a YAML loader REJECTS this file; this parser would silently take the last occurrence" >&2
+        printf '%s\n' "         verify with: scripts/check-litmus-yaml-parses.sh" >&2
+        return 1
+    fi
+
     if [[ "${#malformed_items[@]}" -gt 0 ]]; then
         printf '  %b[PARSE ERROR]%b %s: critical_path item not opened by `- step: "..."`\n' "${RED}" "${NC}" "$test_file" >&2
         local mi mkey mline
@@ -1594,7 +1614,32 @@ run_litmus_test_file() {
         # tool) drained the rest of its spec's list: measured 2026-09-02, the
         # instant sweep executed 1 of the 29 tests bound to ci-release, and
         # reported PASS. Two born-red tests sat unobserved in that gap.
-        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+        # ORDER 1293-wka4. THE SPAWNED SHELL DOES NOT INHERIT pipefail FROM THIS
+        # RUNNER. run-litmus-test.sh runs under `set -uo pipefail`, but that is a
+        # property of THIS shell; the `bash -c` below starts clean, so
+        # `producer | head` returned 0 when the producer exited non-zero and
+        # assert_exit adjudicated head's status instead. Reproduction from the
+        # row, which returned 0 before this line existed:
+        #   bash -c 'sh -c "echo out; exit 7" 2>&1 | head -20'; echo $?
+        #
+        # APPLIED ONLY WHERE A STATUS-SWALLOWING CONSUMER WOULD OTHERWISE
+        # ADJUDICATE — see step_pipeline_swallows_status for why a blanket is
+        # wrong and which 22 steps it would invert.
+        # NARROWED TO STEPS WHOSE VERDICT THE EXIT STATUS ACTUALLY DECIDES.
+        # The shape test alone matches 206 of 2553 corpus steps, but most of
+        # those are adjudicated by a pattern or a literal and never consult the
+        # status — turning pipefail on for them changes nothing they read while
+        # widening the blast radius for no gain. The status decides only when
+        # the step declares assert_exit, or when it declares NO expectation at
+        # all and falls to the strict-exit arm below. Anything else keeps the
+        # shell it has always had.
+        local step_shell_prelude=""
+        if [[ -n "$step_assert_exit" \
+              || ( -z "$step_structured" && -z "$step_success_pattern" && -z "$step_expected" ) ]] \
+           && step_pipeline_swallows_status "${step_command}"; then
+            step_shell_prelude="set -o pipefail; "
+        fi
+        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
@@ -2287,6 +2332,8 @@ parse_args() {
             -*)
                 log_fail "Unknown option: $1"
                 echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
+                echo "     --parse-only <file>... loads each file as YAML and REFUSES if it does not load, then reports whether THIS RUNNER can extract its steps (order 1303-2d5g)" >&2
+                echo "                            scripts/check-litmus-yaml-parses.sh is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
                 exit 3
                 ;;
             *)
@@ -2352,11 +2399,80 @@ main() {
             printf 'blocked:parse-only:no files named\n' >&2
             exit 2
         fi
+        # ORDER 1274-cbk7. SAY WHICH QUESTION THIS ANSWERS. The defect this
+        # closes is not that an author forgot a rule — it is that two checks
+        # answer two different questions and the one authors reach for did not
+        # say which was which. A green here means THIS RUNNER can extract the
+        # steps; it is not a YAML validity verdict, and a file can be
+        # extractable and unloadable at the same time.
+        # ORDER 1303-2d5g supersedes 1274-cbk7's wording. That note told the
+        # reader to run the strict checker for YAML validity; since the load
+        # below, this flag ANSWERS that question for the named files, so the
+        # old text sent people to re-run a check this verdict had just made.
+        # What remains true, and is the only thing worth saying here, is the
+        # difference in SCOPE: this answers for the files named on the command
+        # line, and the gate answers for the whole corpus.
+        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/check-litmus-yaml-parses.sh is the corpus-wide gate\n' >&2
+        # ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING FROM IT.
+        #
+        # 1274-cbk7 added the note above, on the theory that naming the
+        # question was enough. It is not: MEASURED on esmeraldinha 2026-09-20,
+        # a file that `tillandsias-plan validate-yaml` REFUSES (rc=1,
+        # `blocked:yaml-load-failed: could not find expected ':'`) came back
+        # from here as `ok:litmus-parseable:<f>:1 step(s)` — it even reported a
+        # step count, because this runner's extraction is LINE-BASED and never
+        # loads the document. The note was printed directly above that line and
+        # did not help, because A READER ACTS ON THE VERDICT WORD. Two
+        # instruments disagreeing about one file, with the looser one the one
+        # authors reach for first, is how a broken litmus reaches a gate on one
+        # host and is refused on another twenty minutes later (land 25).
+        #
+        # So the verdict may not say `ok:` for a file that is not YAML. The
+        # load runs FIRST and its own message is passed through verbatim, so
+        # this refusal names the same file and line the strict checker names
+        # and the two instruments cannot disagree about the same file again.
+        #
+        # NO READER IS ITS OWN NAMED STATE, not a pass — and the wording and
+        # the stand-aside both match scripts/check-litmus-yaml-parses.sh
+        # deliberately, because two instruments answering the same question
+        # must not differ on what "cannot answer" looks like. Extractability is
+        # still reported, since that is this flag's own question and a fresh
+        # clone must still be able to ask it.
+        local parse_reader="${LITMUS_PLAN_BIN:-}"
+        if [[ -z "$parse_reader" || ! -x "$parse_reader" ]]; then
+            printf 'skip:parse-only:yaml-load-unchecked:no-runnable-reader (run scripts/cycle-preflight.sh) — the lines below answer extractability ONLY\n' >&2
+        fi
         for parse_target in ${PARSE_ONLY_FILES[@]+"${PARSE_ONLY_FILES[@]}"}; do
             if [[ ! -f "$parse_target" ]]; then
                 printf 'blocked:parse-only:missing:%s\n' "$parse_target" >&2
                 parse_rc=1
                 continue
+            fi
+            if [[ -n "$parse_reader" && -x "$parse_reader" ]]; then
+                local parse_yaml_out=""
+                # MUTATION ANCHOR, and it is load-bearing for a fixture that is
+                # not this order's. scripts/test-litmus-parse-only-duplicate-key.sh
+                # (order 1274-cbk7) proves its defect by building a PRE-FIX COPY
+                # of this runner with the duplicate-key detector neutralised and
+                # requiring the false green to come back. Once 1303-2d5g added
+                # the document load above that detector, the load rejected the
+                # duplicate first and that arm stopped reproducing anything —
+                # TWO FIXES FOR ONE FILE, with the older fixture's mutation
+                # mutating something no longer reachable.
+                #
+                # So the load is switched by a line of its own, which that
+                # fixture seds to 0 alongside its own mutation. Keep this line
+                # a single assignment on one line: a sed anchored on it is
+                # matching text, and reflowing this breaks an arm in another
+                # file that will not be obvious from here.
+                local _parse_load_enabled=1  # LOAD-GATE-1303 (ARM 1 anchor)
+                if [[ "$_parse_load_enabled" == "1" ]] \
+                   && ! parse_yaml_out="$("$parse_reader" validate-yaml "$parse_target" 2>&1)"; then
+                    printf 'blocked:parse-only:not-yaml:%s\n' "$parse_target" >&2
+                    [[ -n "$parse_yaml_out" ]] && printf '%s\n' "$parse_yaml_out" >&2
+                    parse_rc=1
+                    continue
+                fi
             fi
             run_litmus_test_file "$parse_target" "parse-only" || parse_rc=1
         done

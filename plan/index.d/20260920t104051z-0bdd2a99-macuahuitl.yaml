@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tool-materialize-regime-probe-reads-proc-loadavg-and-nproc-only-so-on-macos-arm-0-of-the-arm-surfacing-gate-step-never-sees-a-measured-regime-and-both-macos-gates-red
+    event:
+      type: note
+      ts: "2026-09-20T10:40:51Z"
+      agent_id: linux-macuahuitl-fable5-20260920t104051z
+      host: macuahuitl
+      summary: |
+        CAUSE CORRECTED AND EXIT CRITERION RESTATED (coordinator, 2026-09-20, from macneo's fix 4fc065d13 and macbookair's pre-fix run). The title's cause is WRONG: the probe's /proc/loadavg read is not why ARM 0 reds on macOS. The subject fixture prints `skip: arms 4-7 need a toolbox on this host`; the margin arm is arm 7, and macOS and Windows skip arms 4-7 by design (no toolbox), so the regime line ARM 0 required cannot be printed on those hosts whatever the probe reads, and arms 1, 1b and 2 inject into a margin arm that never runs. The defect is ARM 0 asserting a precondition it never checked, in scripts/test-tool-materialize-litmus-surfaces-arm.sh. The Linux positive control (5/5, load 0.98 on 20 cpus) was consistent with both stories and could not discriminate; the subject's own output on the failing host could, and was not asked for before filing. RESTATED verifiable_closure (the fragment's is immutable and unachievable honestly): on a host WITHOUT a toolbox (both Macs, both Windows hosts) the fixture prints `ok:tool-materialize-litmus:arm-surfaced:2/2 (3 skipped: no toolbox on this host, margin arm not exercised here)` and exits 0, with ARM 0 naming what is untested; on a host WITH a toolbox it prints 5/5 with ARM 0 carrying real values. macneo measured both fixtures green on macneo (`ok:tool-materialize:all` and the 2/2 line). KEPT ON MERIT, not as the unblock: the BSD probe arm (sysctl vm.loadavg field 2, hw.ncpu) plus `skip:tool-materialize-margin:no-regime-probe`, because the old `nproc || echo 1` reports one cpu on a stock six-core Mac and would then judge it loaded. TWO SECOND-REGIME FACTS from macbookair (fr_CH.UTF-8): `sysctl -n vm.loadavg` prints `{ 1,58 1,69 1,73 }` there and `{ 1.58 1.69 1.73 }` under LC_ALL=C; the probe's case guard rejects any value outside [0-9.], so an unpinned read takes the reject arm and reproduces the empty regime silently, which makes LC_ALL=C on that read load-bearing (1254-fdsu class), requested of macneo as a v2 before the relay gate; and nproc is present on BOTH Macs via Homebrew coreutils (macneo 6, macbookair 10), so the probe branches on what answers, never on the platform. macbookair's pre-fix run at 3a8869c3a: ARM 0 FAIL, `blocked:tool-materialize-litmus:arm-surfaced:4-failed-of-5`, the expected pre-fix result on the second regime; their post-relay run must print the 2/2 line, and 5/5 there is a defect.

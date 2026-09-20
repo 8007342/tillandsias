@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    order: 1293-wka4
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, gate, fail-loud, agent-safety, instrument]
+    estimated_hours: 3
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/litmus-stdlib.sh
+    title: |
+      `run-litmus-test.sh` sets `set -eo pipefail` at its top, but the CHILD shell it spawns per step (`bash -c 'source "$LITMUS_STDLIB"; <cmd>'`) does not inherit it — so a step whose producer fails into a pipe returns 0 and `assert_exit` adjudicates the CONSUMER's status
+    context: |
+      FOUND under 1252-znbn's step 5 on pirria 2026-09-20 and split out because
+      it is not about that step: **every piped step in the corpus is affected.**
+      THE REPRODUCTION, which is the whole row. Run the runner's child shell
+      exactly as `run-litmus-test.sh:1564` spawns it:
+
+        LITMUS_STDLIB=scripts/litmus-stdlib.sh \
+        bash -c 'source "$LITMUS_STDLIB"; sh -c "echo out; exit 7" 2>&1 | head -20'
+        echo $?     ->  0          MEASURED
+
+        without the pipe:
+        sh -c "echo out; exit 7"; echo $?   ->  7
+
+      **READING THE SCRIPT DISPROVES THIS. RUNNING IT CONFIRMS IT.** That is why
+      this row insists on the reproduction rather than a citation:
+        - `scripts/run-litmus-test.sh:44` sets `set -eo pipefail`
+        - `scripts/litmus-stdlib.sh` mentions pipefail FIVE times
+        - the runner's own comment at :86 quotes a `bash -c 'set -eo pipefail; …'`
+          idiom
+      Everything on the page says the option is in force. It is not in force for
+      the step's own pipeline, because `bash -c` starts a fresh shell and the
+      `-o` option is not exported through the environment. A reader who checks
+      by inspection closes this as a false alarm; I nearly did.
+      WHAT IT COSTS. `assert_exit: 0` on a piped step asserts the LAST stage's
+      status. The instance that surfaced it: `tillandsias --init --test 2>&1 |
+      head -20` — a `--init --test` that failed outright passed the step,
+      because `head` succeeded. The step was the runtime-correctness check of
+      `litmus-build-clean-from-scratch-works`. Fixed there by removing the pipe
+      (537473647); the class is untouched.
+      RELATED, SAME FAMILY: 1076-kft9. Also 1137-da83, which is this shape one
+      layer up — an agent reading `$?` after a pipe and reporting the consumer's
+      status as the command's. The fleet has now met it in a shell wrapper, in
+      an agent's own command line, and in the litmus runner.
+      WHY p1: it is not one step. Any corpus step of the form `producer | filter`
+      with `assert_exit: 0` is currently unable to fail for the reason it names,
+      and the corpus is what the release tiers are adjudicated on.
+    exit_criteria:
+      - 'the exact reproduction returns 7 — `LITMUS_STDLIB=scripts/litmus-stdlib.sh bash -c ''source "$LITMUS_STDLIB"; sh -c "echo out; exit 7" 2>&1 | head -20''; echo $?` — PRE-FIX RESULT: returns 0, measured on pirria 2026-09-20'
+      - 'A MUTATION ARM PROVES A PIPED STEP NOW REDS: take a real corpus step of the form `producer | filter` with `assert_exit: 0`, break the producer so it exits non-zero, and show the step FAILS. Before the fix it passes. This is the criterion that distinguishes "pipefail is set" from "pipefail is set where it matters"'
+      - 'NEGATIVE CONTROL: a step whose pipeline genuinely succeeds still passes, and a step that legitimately relies on a filter masking a producer''s status — if the corpus has one — is identified rather than silently reded. Turning on pipefail corpus-wide can RED STEPS THAT WERE CORRECT; the fix must survey for those, not discover them in the release gate'
+      - 'the fix is in the SPAWN or the stdlib, not in each step: rewriting N steps to avoid pipes leaves the next author free to reintroduce it, which is the habit-shaped remedy this fleet rejects (1238-u84w'
+      - 'the corpus is surveyed for `assert_exit` on piped steps, and the count is recorded — one instance was found by tripping over it under another order, which is not a search'
+    unscoreable: |
+      blast-radius-unmeasured: enabling pipefail for step shells may red steps
+      that pass today for reasons nobody has enumerated. The defect and its
+      reproduction are fully measured; how many steps change verdict is not,
+      and that survey is exit criterion 5's job before the fix lands.
+    events:
+      - type: filed
+        ts: "2026-09-20T04:10:00Z"
+        agent_id: "linux-pirria-claude-20260920t041000z"
+        host: pirria-silverblue
+        summary: |-
+          Split from 1252-znbn's step 5 at the coordinator's direction. Recorded
+          with the reproduction first because the citation trail argues the
+          opposite: the runner sets pipefail, the stdlib names it five times,
+          and the option is still absent from the child shell. This is a defect
+          that survives code review and dies to one command.

@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: completed
+      ts: "2026-09-20T10:30:20Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t103020z
+      host: macneo
+      summary: |
+        MEASUREMENT HALF CLOSED. THE RACE IS FIXED, MEASURED ON THE ONLY HOST THAT
+        REPRODUCED IT, USING THE CONDITION THAT REPRODUCED IT.
+
+        FIX UNDER TEST: yoga's 950d8b248, verified present on this tree by ancestry and
+        by content (the config write now names its failure; 4 references).
+
+        EVIDENCE — NINE OBSERVATIONS, ALL GREEN, under conditions that were ~50% and 67%
+        failing before:
+
+          A. THE SENSITIVE ARM, the exact condition that reproduced pre-fix: workspace
+             suites raced against a live ./build.sh --check.
+               PRE-FIX: 2 RED of 3
+               POST-FIX: 0 RED of 6
+             This arm is MORE severe than the closure criterion asks for, and it is the
+             one that matters: it is where the failure was reliably producible.
+
+          B. THE CRITERION AS WRITTEN: two consecutive ./build.sh --check runs on macneo,
+             with NO racing load, green on forge_credential_quarantine_mounts_present.
+               clean gate 1: victim_FAILED=0, ok:test-baseline:ran=2457 new-red=0
+               clean gate 2: victim_FAILED=0, ok:test-baseline:ran=2457 new-red=0
+             PRE-FIX in-gate rate on this host was 3 RED of 6 gates.
+
+          C. THE LOADED GATE from arm A: victim_FAILED=0, baseline new-red=0.
+
+          NO KNOWN-RED ENTRY: `grep -c forge_credential_quarantine_mounts_present
+          scripts/test-known-red.txt` returns 0. The green is not suppression.
+          Note ran=2457 against the pre-fix 2455 — yoga's change added two tests, so the
+          suite grew rather than the victim being removed from it.
+
+        WHY THIS MEASUREMENT IS WORTH ANYTHING, since a green elsewhere would not be:
+        macneo is the only host that reproduced this. Idle hosts never did (0 of many),
+        and synthetic CPU load never did (0 of 4 instrumented runs). A verification run
+        on a host that cannot produce the failure is a green with no content. That is
+        why the measurement half stayed here while the fix went to a Linux host.
+
+        WHAT IS NOT CLAIMED: that the failure is impossible. It was probabilistic, and
+        nine green observations bound the rate rather than proving zero. What they do
+        establish is that the condition which produced it 2-in-3 now produces it 0-in-6,
+        and the in-gate condition which produced it 3-in-6 now produces it 0-in-3.
+
+        SEPARATE BLOCKER, NOT THIS ROW AND NOT THIS HOST'S LOAD: macneo's gate is still
+        RC=1, on 1269-gfdi's tool-materialization fixture, 4-failed-of-5, IDENTICALLY in
+        both clean gates and in the loaded one:
+          blocked:tool-materialize-litmus:arm-surfaced:4-failed-of-5
+          FAIL: ARM 0: the margin arm did not report a measured regime from the real host
+        Its own verdict text says "ARM 0 failing means the regime probe's real reading
+        path is broken and arms 1-2 prove nothing", so the other three FAIL lines are
+        not independent evidence. I first suspected my racing load caused it — the arm
+        text mentions a loaded host — and REFUTED that: it reproduces identically with no
+        racing load at all. It is reported to the coordinator as its own blocker.

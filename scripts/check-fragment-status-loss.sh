@@ -202,45 +202,86 @@ if plan_binary_has "$PLAN" fragment-misplaced-definitions; then _misdef_capable=
 _misdef_seen=""
 if plan_binary_has "$PLAN" fragment-terminal-events; then
     _events_seen=""
-    for f in "$FRAG_DIR"/*.yaml; do
-        [ -f "$f" ] || continue
-        _ev_out="$("$PLAN" fragment-terminal-events "$f")"
-        _ev_rc=$?
-        if [ "$_ev_rc" -eq 0 ] && [ "$_anyev_capable" = yes ]; then
-            # Same file, already known parseable — so this call cannot add a
-            # second unparseable count for one fragment.
-            _any_out="$("$PLAN" fragment-event-packets "$f" 2>/dev/null)"
-            [ -n "$_any_out" ] && _anyev_seen="${_anyev_seen}${_any_out}
-"
-            # ORDER 812-d45t. A packet DEFINITION written under `events:`
-            # instead of `packets:` is accepted by every gate and dropped
-            # entirely by the fold — no packet_id is claimed, so the
-            # unknown-packet pass above cannot see it either.
-            if [ "$_misdef_capable" = yes ]; then
-                _mis_out="$("$PLAN" fragment-misplaced-definitions "$f" 2>/dev/null)"
-                # Prefix each id with its file HERE rather than joining with a
-                # separator and splitting later. The first version used "\t",
-                # which inside double quotes is a literal backslash-t, so the
-                # reader's tab-IFS split never fired, every line was skipped,
-                # and the advisory this block exists to print was silently
-                # suppressed — the same shape as the defect being reported.
-                if [ -n "$_mis_out" ]; then
-                    _misdef_seen="${_misdef_seen}$(printf '%s\n' "$_mis_out" | sed "s|^|${f}: |")
-"
-                fi
-            fi
-        fi
-        case "$_ev_rc" in
-            0) [ -n "$_ev_out" ] && _events_seen="${_events_seen}${_ev_out}
+    # ORDER 1307-kic6. THREE BATCHED CALLS, NOT THREE PER FRAGMENT.
+    #
+    # This loop used to run `fragment-terminal-events`, `fragment-event-packets`
+    # and `fragment-misplaced-definitions` once EACH per fragment. Measured on
+    # yolanda: 134 ms per plan-binary invocation, 1302 fragments, 3 calls =
+    # ~523 s per push, which is why a trunk push never returned there. On Linux
+    # the same shape costs seconds and nobody saw it.
+    #
+    # THE VERDICTS ARE STILL PER FILE. The binary's framed mode prints
+    # `<status>\t<path>\t<payload>` for every input, so an unparseable fragment
+    # among good ones is still named BY NAME. That is not a nicety: this
+    # checker's whole reason for existing is that "declares nothing" and "could
+    # not be read" must not be the same answer (787-f7dh), and collapsing 1302
+    # verdicts into one process exit would have rebuilt that defect inside its
+    # own fix.
+    #
+    # XARGS BATCHES, IT DOES NOT PASS ALL 1302 AT ONCE: Windows caps a command
+    # line at ~32k characters and 1302 paths is roughly 91k, so a single
+    # invocation would be truncated or refused. xargs splits into a handful of
+    # calls; `--files` forces framed mode so a trailing batch of ONE path does
+    # not silently fall back to the legacy single-path output and exit code.
+    _frag_list() {
+        LC_ALL=C find "$FRAG_DIR" -maxdepth 1 -type f -name '*.yaml' -print0 2>/dev/null \
+            | LC_ALL=C sort -z
+    }
+    # ORDER 1307-kic6, and this was MY OWN bug of the class this row is
+    # about. An IFS assignment with a command substitution in a `while`
+    # header is evaluated ONCE PER ITERATION, so a 1302-line frame stream
+    # forked ~3900 subshells and cost ~240 s on this host -- AFTER the
+    # batching had already removed 3906 plan-binary calls. The trace that
+    # found it counted 3941 printf spawns against 25 plan-binary
+    # invocations. Having fixed the obvious per-item spawn, I had
+    # introduced a second one inside the fix. Hoisted to one assignment.
+    _FRAME_TAB="$(printf '\t')"
+    _frames_for() {
+        _frag_list | xargs -0 -r "$PLAN" "$1" --files 2>/dev/null
+    }
+
+    _events_seen=""
+    _anyev_seen=""
+    _misdef_seen=""
+    _ev_frames="$(_frames_for fragment-terminal-events)"
+    [ "$_anyev_capable" = yes ] && _anyev_frames="$(_frames_for fragment-event-packets)" || _anyev_frames=""
+    [ "$_misdef_capable" = yes ] && _misdef_frames="$(_frames_for fragment-misplaced-definitions)" || _misdef_frames=""
+
+    # Unparseable / unreadable fragments, named by file, from the pass whose
+    # exit code used to carry that verdict.
+    while IFS="$_FRAME_TAB" read -r _st _f _payload; do
+        [ -n "$_st" ] || continue
+        case "$_st" in
+            ok) [ -n "$_payload" ] && _events_seen="${_events_seen}${_payload}
 " ;;
-            # 3 is the typed unparseable verdict; anything else non-zero (a
-            # read error, a killed process) is equally an unread fragment.
-            # Both are counted, because the property that matters is "this
-            # fragment was not examined", not why.
-            *) unparseable_fragments="${unparseable_fragments}  ${f} (exit ${_ev_rc})
-" ;;
+            unparseable|unreadable)
+                unparseable_fragments="${unparseable_fragments}${_f}
+"
+                echo "  $_st: $_f: $_payload" >&2
+                ;;
         esac
-    done
+    done <<EOF_FRAMES
+$_ev_frames
+EOF_FRAMES
+
+    while IFS="$_FRAME_TAB" read -r _st _f _payload; do
+        [ "$_st" = ok ] || continue
+        [ -n "$_payload" ] && _anyev_seen="${_anyev_seen}${_payload}
+"
+    done <<EOF_ANYEV
+$_anyev_frames
+EOF_ANYEV
+
+    # The misplaced-definition advisory prefixes each id with its FILE, which is
+    # why the framed output carries the path: the old code did that prefixing
+    # itself because it knew which file it had just called.
+    while IFS="$_FRAME_TAB" read -r _st _f _payload; do
+        [ "$_st" = ok ] || continue
+        [ -n "$_payload" ] && _misdef_seen="${_misdef_seen}${_f}: ${_payload}
+"
+    done <<EOF_MISDEF
+$_misdef_frames
+EOF_MISDEF
     declared_events="$(printf '%s' "$_events_seen" | sort -u)"
     event_packets="$(printf '%s' "$_anyev_seen" | sort -u)"
 else

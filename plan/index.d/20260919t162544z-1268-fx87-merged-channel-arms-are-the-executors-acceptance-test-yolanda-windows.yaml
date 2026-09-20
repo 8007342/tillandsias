@@ -1,0 +1,145 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-litmus-arms-grade-a-merged-stdout-stderr-channel-and-are-red-only-where-the-windows-build-emits-warnings-the-linux-build-does-not-so-they-are-the-executors-first-acceptance-test
+    order: 1268-fx87
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, fixtures, windows, fail-loud, false-negative, testing]
+    estimated_hours: 3
+    parent_order: 1252-fg9e
+    depends_on:
+      - an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    owned_files:
+      - openspec/litmus-tests/litmus-methodology-path-query-citability.yaml
+      - openspec/litmus-tests/litmus-expert-capability-skew-honesty.yaml
+      - openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of the
+      EXECUTOR'S separated fds, which do not exist yet (1252-fg9e is
+      in_progress), plus a re-measurement at a locus the fixing host does not
+      have. Any litmus named now resolves to nothing and 885-92iu refuses the
+      row. Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-verdict-reads-stdout-only.sh — inject a known contaminant on
+      stderr while stdout carries the expected ok: token, and assert the verdict
+      is UNCHANGED; the mutation arm restores the merged capture and asserts the
+      contaminant IS read as the verdict, so the control cannot pass vacuously.
+      Written in the same commit as the change it tests (1136-n8sh), route named.
+    title: |
+      four litmus arms grade a MERGED stdout+stderr channel, so cargo's warnings become the verdict — and they are red ONLY where the Windows build emits warnings the Linux build does not, which makes them the executor's first real acceptance test rather than four fixtures to patch
+    context: |
+      MEASURED ON YOLANDA 2026-09-19 at the Git Bash locus
+      (MINGW64_NT-10.0-26200, run directly, never through ./build.sh, which
+      re-execs into the distro where the defect does not appear). Split out of
+      1186-w3ph, whose mechanism B these four are, and filed as a child of
+      1252-fg9e because the fix belongs to that row's executor and not to the
+      arms.
+
+      THE FOUR ARMS AND THEIR OBSERVED FAILURES:
+
+        methodology-path-query-citability   1/21   rc=126
+          expected  ok: methodology-envelope-keys-exact
+        expert-capability-skew-honesty      1/29   rc=1
+          expected  ok: fixture-ready
+        plan-answer-envelope-citability    15/21   rc=1
+          expected  ok: mcp-envelope-verified
+        (the fourth is the same shape reached through the same steps)
+
+        output= warning: unused variable: `timeout_secs`
+                  --> crates\tillandsias-podman\src\client.rs:601:52
+                warning: function `host_session_bus_path` is never used
+                  --> crates\tillandsias-podman\src\lib.rs:316:4
+
+      THE MECHANISM, stated as the thing to fix rather than as the symptom: the
+      step's verdict is compared against a capture that MERGES stdout and
+      stderr, so any write to stderr by anything the step runs becomes a
+      candidate verdict. Here the writer is `cargo build -q`, whose `-q`
+      suppresses cargo's own progress but not rustc's warnings. The arms
+      already redirect the tillandsias-plan call's stderr and do NOT redirect
+      cargo's, which is why the contaminant is the compiler and not the tool
+      under test.
+
+      IT IS NOT A NEW MECHANISM. It is exactly salvage-net-roundtrip step 9,
+      which esmeraldinha described as "not a missing precondition but a channel
+      the arm did not separate", and which failed at rc=0 — on a command that
+      SUCCEEDED. 1186-w3ph named that mechanism CRLF; CRLF was one contaminant
+      and cargo warnings are another. Naming it CRLF is why a fix that strips a
+      carriage return would leave these four red.
+
+      THE RUNNER SAYS THE GAP IS DELIBERATE AND NAMES ITS OWNER. From the
+      comment above structured_assert_matches in scripts/run-litmus-test.sh:
+
+        WHAT THIS CANNOT DO, AND WHY IT IS NOT AN OVERSIGHT. There is no
+        assert_stdout_* / assert_stderr_* pair, because the runner redirects
+        every step with `>"$step_capture" 2>&1` — the two streams are MERGED
+        before adjudication can see them, so naming which stream matched is not
+        information this runner still has. Separating them is order 1252-fg9e's
+        executor; when a step's fds arrive separately these fields widen rather
+        than change shape. A field absent by CONSTRAINT reads identically to one
+        nobody thought of unless the code says which, so this paragraph is the
+        difference.
+
+      That paragraph is why this row exists instead of a patch: the merge
+      happens BEFORE adjudication, so there is nowhere in the current shell
+      runner to read a verdict from stdout alone. You cannot un-merge
+      downstream of the merge.
+
+      WHY THESE FOUR ARE WORTH KEEPING AS THE ACCEPTANCE TEST rather than
+      fixing locally: they are real, they fail today, and they fail precisely
+      BECAUSE the streams are merged. Four local `2>` redirects would green
+      them and bury the defect the executor exists to remove — the
+      fix-by-fixture outcome 1186-w3ph is about.
+
+      THE TRAP THIS ROW MUST NOT FALL INTO, raised by lenovinha and the reason
+      the exit criteria below name two hosts: THESE ARMS ARE GREEN ON LINUX
+      BEFORE AND AFTER THE CHANGE, FOR THE WRONG REASON. The Linux build emits
+      no warnings, so there is no contaminant, so the merged capture is
+      harmless there. A host that proves the mechanism synthetically and then
+      observes four green arms locally has measured nothing about them. The
+      platform asymmetry is not incidental: host_session_bus_path is a
+      unix-only function, unused on Windows, so the WINDOWS build warns where
+      the Linux build is silent. These arms assert about a world where the
+      build is quiet — 1186-w3ph's title, reached from a direction that row did
+      not anticipate.
+
+      OPEN QUESTION, NOT AN ASSUMPTION, raised by lenovinha: whether
+      adjudication happens in the runner or in the step decides WHERE the
+      change lands. If the runner adjudicates, the change is in
+      scripts/run-litmus-test.sh and the owned_files above are wrong. This row
+      does not presume the file; whoever picks it up establishes that first and
+      corrects owned_files in the same commit.
+    deliverable: |
+      A verdict token is read from STDOUT ONLY; stderr is captured to a log the
+      arm NAMES on failure, so a contaminated stream is diagnosable rather than
+      silently authoritative.
+
+        * The read is done ONCE, in whatever component adjudicates — see the
+          open question above — and not four times in four arms.
+        * NEGATIVE CONTROL: inject a known contaminant on stderr while stdout
+          carries the expected token, and assert the verdict is UNCHANGED.
+        * MUTATION ARM: restore the merged capture and assert the contaminant
+          IS read as the verdict. Without this the control passes vacuously on
+          any host where nothing writes to stderr — which is every Linux host,
+          and is exactly how this class survived until a Windows build warned.
+        * The failure path NAMES the stderr log. A separated stream that
+          nobody can find is a regression in diagnosability even when the
+          verdict is right.
+    exit_criteria:
+      - 'LENOVINHA (or whoever holds 1252-fg9e): the mechanism is proven on any host — the stdout-only read, the injected-contaminant control, and the merged-capture mutation arm all pass, with the mutation arm demonstrated to fail before the change. Provable without a Windows host and NOT sufficient to close this row.'
+      - 'YOLANDA-WINDOWS (or any host at the Git Bash locus): the four REAL arms are re-run at MINGW64_NT-* after the change and their counts recorded beside the pre-fix counts below. This row closes only on that measurement, because the arms are green on Linux before and after and a Linux-only verdict about them is vacuous. PRE-FIX RESULT, yolanda 2026-09-19, HEAD 3c4e3ffd7: methodology-path-query-citability FAIL 1/21 rc=126; expert-capability-skew-honesty FAIL 1/29 rc=1; plan-answer-envelope-citability FAIL 15/21 rc=1; forge-environment-discoverability spec PASS 17 FAIL 8 (1 budget).'
+      - 'the component that adjudicates is ESTABLISHED rather than assumed, and owned_files corrected in the same commit if it is scripts/run-litmus-test.sh rather than the arm files listed here.'
+    provenance: |
+      Split from 1186-w3ph by yolanda-windows 2026-09-19 after re-measuring
+      that row's eight arms and finding four of them fixed, one of mechanism
+      2's four arms genuinely cured, and these four sharing a cause the parent
+      row named too narrowly. Filed as a child of 1252-fg9e rather than fixed
+      in place, at the coordinator's ruling, because the shared helper is that
+      row's in-flight executor and rewriting it from a second host would have
+      been the fourth cross-host collision of the cycle. The two-host exit
+      criteria are lenovinha's requirement, added before filing so the row
+      cannot read as theirs alone to close.

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: note
+      ts: "2026-09-20T14:30:00Z"
+      host: yolanda-windows
+      summary: |-
+        next_action STEP 1 IS RUN, AND THE HOOK OWNS IT. Two arms, same ref shape (a fresh non-platform refs/heads/probe/* ref, so neither arm is a platform-branch push), same session, minutes apart, clean process table before (0 git-remote-https).
+
+          ARM A  git push --no-verify origin HEAD:refs/heads/probe/1307-nohook
+                 rc=0, elapsed 2s, ref MOVED (confirmed by ls-remote)
+          ARM B  git push            origin HEAD:refs/heads/probe/1307-withhook
+                 rc=124 at the 150s bound, ref did NOT move
+
+        With the hook bypassed the push completes in TWO SECONDS. With the hook running the identical push does not return. The hook, or something it spawns, owns the hang. The transport is exonerated: arm A used the same remote, the same credential and the same objects.
+
+        ON --no-verify AS AN INSTRUMENT: here it is a PROBE, not a bypass. The ref is a throwaway refs/heads/probe/* that matches no platform pattern, nothing was being landed, and the point was to remove exactly one variable. It must not be read as a sanctioned way to push work past the gate.
+
+        AND THE HANG IS AFTER THE VERDICT, NOT INSTEAD OF IT. Arm B's log shows the hook reached its decision and printed it:
+          ok:main-branch-affordance
+          ok:linux-next-merged:0
+          plan-only lane: not applicable -- refs/heads/probe/1307-withhook is new on the remote; no base to diff against (full gate required)
+          error: failed to push some refs to '...'
+        So the hook evaluated, refused correctly, emitted the refusal AND git's own error line -- and the process still did not exit. It is not a slow check and it is not a check that never finishes; it is a teardown that never returns.
+
+        THAT UNIFIES BOTH SHAPES SEEN ON THIS HOST. On a trunk fragment push the verdict was ACCEPT: the ref moved, the objects landed, and the client hung (the two fragments already on origin/linux-next prove it). On arm B the verdict was REFUSE: the ref did not move, the refusal printed, and the client hung. Same failure either side of the decision, which is why the row's closure is "the push RETURNS" rather than anything about landing.
+
+        WHAT IS STILL NOT MEASURED: which part of the hook does not exit. The gate branch is already ruled out (no cargo, no rustc, no gate log growing during a hang), so the candidates are whatever the hook leaves running or waits on after printing its verdict -- a child process holding the pipe is the shape I would look at first, since arm B had already written everything it meant to write.
+
+        Housekeeping: both probe refs were created by this experiment and are deleted after it; they carry no work.

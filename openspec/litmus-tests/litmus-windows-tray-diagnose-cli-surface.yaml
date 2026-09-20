@@ -30,11 +30,17 @@ critical_path:
   - step: "all seven CLI modes wired in main.rs (plus --bak for --logs rotation backup)"
     command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--logs' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--bak' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--help' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--version' crates/tillandsias-windows-tray/src/main.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "--provision-once"
     timeout_ms: 3000
 
   - step: "DiagnoseFormat enum + Human/Json variants pinned"
     command: "grep -F 'pub enum DiagnoseFormat' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'DiagnoseFormat::Human' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'DiagnoseFormat::Json' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "pub enum DiagnoseFormat"
     timeout_ms: 3000
 
   # Order 624-cf9f. Seven steps here used to `grep -F 'fn <name>'` for the unit
@@ -59,24 +65,75 @@ critical_path:
   - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)"
     command: "grep -F 'fn version_line_has_workspace_version_and_commit' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn help_text_includes_all_documented_surfaces' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_json_has_all_17_top_level_keys' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_human_includes_pinned_section_labels' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn status_once_json_has_all_7_keys_and_exit_code_matches' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_no_flags_reads_live_log_and_exits_0' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_bak_when_missing_exits_1_with_pointer_to_live_file' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn cross_surface_version_consistency' crates/tillandsias-windows-tray/tests/cli_integration.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "fn logs_bak_when_missing_exits_1_with_pointer_to_live_file"
     timeout_ms: 3000
 
+  # ORDER 1258-8wfb — MIGRATED 2026-09-20. This step now declares
+  # `assert_exit: 0` like every other step in this file, and EVERY ONE of its
+  # seven conjuncts is load-bearing.
+  #
+  # WHAT IT USED TO DO, kept because the failure mode is the point. From
+  # 2026-06-23 to 2026-09-20 this step reported PASS while FIVE OF ITS SEVEN
+  # conjuncts returned rc=1:
+  #     rc=0  'cmd.exe'
+  #     rc=1  '--diagnose --json'     absent
+  #     rc=0  '--version'
+  #     rc=1  'install bits broken'   absent
+  #     rc=1  'build_commit'          absent
+  #     rc=1  'os_version'            absent
+  #     rc=1  'wsl_version'           absent
+  # It was green because `expected_behavior: "grep succeeds"` selected the
+  # interpreter arm requiring NON-EMPTY OUTPUT and IGNORING THE EXIT CODE
+  # (order 1252-znbn): the first grep matched, printed a line, and the step
+  # passed while the chain was broken from the second conjunct onward. Measured
+  # green one last time on 2026-09-20 before the fix, as this row's pre-fix
+  # result. DO NOT RESTORE `assert_output_nonempty` HERE — it is what let a
+  # guard assert nothing for three months.
+  #
+  # THE SUBJECT WAS A REGRESSION, in three commits and reverted by a fourth:
+  #     d7bfcdd9f  2026-05-28  ADDED the post-install `--diagnose --json` check
+  #                            and the exit-1 "install bits broken" throw
+  #     567009f68  2026-05-30  ADDED the --version preflight and build_commit
+  #     a9163cdaa              ADDED the os_version / wsl_version surfacing
+  #     6cdaa8ac2  2026-06-23  REMOVED the diagnose half of all three, KEEPING
+  #                            the --version layer -- which is exactly why
+  #                            conjuncts 1 and 3 still matched and the rest
+  #                            did not
+  #
+  # WHY 'install bits broken' IS THE LITERAL THAT MATTERS. The installer must
+  # fail on `--diagnose` exit 1 ONLY. Exit 2 means "binary works, distro not
+  # provisioned yet", which is the EXPECTED result of every first install, and
+  # exit 3 means "converging". Asserting a failure on any non-zero would fail
+  # every clean install; the phrase above is attached to the -eq 1 branch, so
+  # this conjunct pins the narrow test rather than the broad one.
   - step: "install-windows.ps1 contains the post-install --version + --diagnose sanity checks AND surfaces OS + WSL versions"
     command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
     timeout_ms: 3000
 
   - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON + both binary + script verdicts"
     command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1 && grep -F 'Binary --diagnose exit' scripts/tray-diagnose.ps1 && grep -F 'Script verdict' scripts/tray-diagnose.ps1"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "Binary --diagnose exit"
     timeout_ms: 3000
 
   - step: "cheatsheet exists with the documented schema"
     command: "grep -F 'Windows tray diagnostics' cheatsheets/runtime/windows-tray-diagnostics.md && grep -F 'manifest_pin_x86_64_oci_tar_xz' cheatsheets/runtime/windows-tray-diagnostics.md"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "manifest_pin_x86_64_oci_tar_xz"
     timeout_ms: 3000
 
   - step: "CONTRIBUTING-WINDOWS dev guide exists with the test pyramid + drift-protection checklist"
     command: "grep -F 'Contributing to' docs/CONTRIBUTING-WINDOWS.md && grep -F 'Test pyramid' docs/CONTRIBUTING-WINDOWS.md && grep -F 'Operator-facing surface coverage' docs/CONTRIBUTING-WINDOWS.md"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "Operator-facing surface coverage"
     timeout_ms: 3000

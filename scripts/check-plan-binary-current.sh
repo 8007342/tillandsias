@@ -147,6 +147,40 @@ _vs_surface_hash() {
         _vs_surface_lock_stanzas
     } | $_sha1 $_sha2 2>/dev/null | cut -d' ' -f1
 }
+# ORDER 1287-h6qn — ASK THE BINARY FIRST, and mint nothing when it can answer.
+#
+# A binary built after 1287-h6qn carries the validator surface's CONTENT hash,
+# so its own `--check` settles currency with no stamp file at all. That retires
+# this block's whole failure class for such binaries: the stamp cannot be
+# absent, cannot lag, and cannot be orphaned beside a redirected
+# CARGO_TARGET_DIR, because there is no stamp.
+#
+# THE OLD PATH REMAINS FOR OLD BINARIES, and only for them. Minting is still
+# gated on the mtime predicate below, which is why it could never rescue the
+# case this row was filed for: `git rebase` rewrites a surface file with a fresh
+# mtime and identical bytes, the predicate says stale, and this block declines
+# to stamp a binary that is byte-for-byte correct (measured on pirria
+# 2026-09-20). A mid-upgrade fleet keeps exactly the behaviour it had.
+# A ZERO EXIT IS NOT A VERDICT — require the answer LINE, the same rule the lane
+# uses. 1152-y3bv's structural fixture caught this copy: its harness binary is a
+# stub that exits 0 for every argument, so `--check` "succeeded", this block
+# reported content-verified, minted NOTHING, and the fixture's arms C and D lost
+# the stamp they are built on. Identical shape to the lane's own first draft, and
+# identical direction — a binary that cannot answer was treated as current.
+_vs_answer="$("$BIN" validator-surface-hash --check 2>/dev/null)"
+case "$_vs_answer" in
+    ok:validator-surface:*) _vs_content_ok=1 ;;
+    *)                      _vs_content_ok=0 ;;
+esac
+# MINT ANYWAY WHEN THE MTIME PREDICATE ALLOWS IT. The stamp is no longer this
+# host's verdict, but it is still the FALLBACK's, and a fleet mid-upgrade has
+# binaries that cannot answer being judged by hosts that can. Skipping the mint
+# because this binary happens to vouch for itself would quietly strip the ladder
+# out from under them — and 1152-y3bv owns that ladder, with a fixture that says
+# so. Report the content verdict, keep writing the stamp.
+if [ "$_vs_content_ok" = 1 ]; then
+    echo "ok:validator-surface:content-verified — this binary was built from these bytes (1287-h6qn)" >&2
+fi
 if command -v plan_binary_is_stale >/dev/null 2>&1 && ! plan_binary_is_stale "$BIN"; then
     _vs_new="$(_vs_surface_hash)"
     if [ -n "$_vs_new" ]; then

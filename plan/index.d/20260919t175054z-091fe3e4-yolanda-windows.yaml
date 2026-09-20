@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-19T17:50:54Z"
+      agent_id: windows-yolanda-claude-20260919t175053z
+      host: yolanda-windows
+      summary: |-
+        COUNT CORRECTION, SUPERSEDING THE "THREE MECHANISMS" I WAS APPROVED TO WRITE. Re-measured at the Git Bash locus 2026-09-19; the taxonomy is TWO mechanisms plus two open arms, not three and not the row's original four.
+
+        REGIME FOR THIS RUN, stated before the verdicts:
+          LOCUS_UNAME=MINGW64_NT-10.0-26200, run directly via scripts/run-litmus-test.sh, never through ./build.sh (which re-execs into the distro, where these do not fail)
+          TIER=[unset]   HEAD=3c4e3ffd7
+          yq: ABSENT at this locus. By census NO ARM IN THIS SET CALLS IT, directly or transitively — the one apparent hit in salvage-net-roundtrip is a precondition line naming a file, not an invocation. So the runner's degradation warning does not bear on these verdicts. RECORDING yq PRESENCE IS NOW PART OF THE REGIME BLOCK: a degraded harness and a real assertion failure are indistinguishable in the output.
+          meta-orchestration                 PASS 20  FAIL 4 (2 budget, exit 124)  SKIP 0
+          forge-environment-discoverability  PASS 17  FAIL 8 (1 budget)            SKIP 0
+
+        FIXED AND VERIFIED GREEN (4 of 8), by the previous yolanda session's landed work:
+          credential-channel-check-shape     was FAIL 8/10   -> PASS
+          salvage-net-roundtrip              was FAIL 9/9    -> PASS 9/9
+          expert-refresh-cargo-target-shape  was FAIL 2/3    -> PASS
+          forge-plan-expert-build-shape      was FAIL 10/17  -> PASS
+
+        THE CORRECTED TAXONOMY:
+
+        A. TOOL IDENTITY RESOLVED FROM PATH — with the fd-path case as a SUB-INSTANCE, not a separate mechanism. credential-channel-check-shape (git absent from a pinned PATH; fixed) and expert-groundtruth-harness (fixed under this row, see below) are the same defect as the four "jq /proc/self/fd/0" arms: the fixture asserts about WHICH BINARY A NAME RESOLVES TO. Not a missing platform facility.
+
+        B. THE ARM GRADES A CHANNEL IT DID NOT SEPARATE — CRLF and cargo warnings are TWO CONTAMINANTS OF ONE CHANNEL. The row named this mechanism "CRLF through pipes"; that name is why a fix stripping a carriage return would have left four arms red. Moved in full to 1268-fx87 as a child of 1252-fg9e, because the shared helper is that row's in-flight executor.
+
+        OPEN BY NAME, not counted as fixed and not counted as mechanisms:
+          project-answer-synthesis-refusal-typed 3/10 — the curl exit-vocabulary arm, output= EMPTY, exactly as esmeraldinha left it. Unchanged in cause.
+          citation-frame-and-caller-relation 8/8 — the open cargo arm; still needs the build to say WHICH tests printed FAILED and whether for a Windows reason.
+
+        MECHANISM 2'S FIX CURED ONE OF ITS FOUR CLAIMED ARMS, and that is the row's own converse rule landing. esmeraldinha counted four on shared error text, said plainly it was "a symptom match, not membership", and told whoever fixed them to reproduce each. One was that mechanism (forge-plan-expert-build-shape). Three were not.
+
+        THE fd-PATH MEASUREMENT THE LANDED FIX DOES NOT CARRY. The fix at 79b222739 attributes the failure to MSYS's procfs not publishing an fd directory for that pid. Measured here:
+          ls /proc/self/fd                       -> 0  1  2      MSYS /proc/self/fd EXISTS
+          jq --rawfile text /proc/self/fd/0      -> Could not open /proc/1927/fd/0
+          command -v jq                          -> WinGet Links/jq -> jqlang.jq_.../jq.exe   NATIVE WIN32
+          /dev/stdin                             -> fails; bash expands it to the same path
+          MSYS_NO_PATHCONV=1                     -> no effect
+          process substitution                   -> fails, /proc/<pid>/fd/63
+          a real temp file, --arg, piped stdin   -> all WORK
+        DISAGREEMENT RECORDED AS UNSETTLED, not overwritten: the landed comment says the procfs does not publish the fd dir; my measurement says the facility is present for MSYS programs and jq here is a NATIVE build with no procfs emulation. BOTH PREDICT THE SAME FAILURE AND THE SAME FIX HERE. They predict DIFFERENT things on a host with an MSYS-linked jq, and only one of them is a locus property rather than a host-configuration property. Nobody should settle this by reasoning; it needs a host with a pacman jq.
+
+        NOT THIS ROW, listed so nobody folds them in: e2e-eligibility-probe-shape, opencode-prompt-e2e-shape, generic-index-deterministic-subset (exit 1, genuine, outside the eight); build-cache-sweep-trigger, mcp-expert-health-probe-shape, groundtruth-no-mutable-status-pin-shape (exit 124, budget kills, the budget row's).
+
+        A CHEAP TOOL FOUND WHILE RECOVERING FROM MY OWN MISTAKE: .cache/metrics/tillandsias-timing.jsonl carries per-test exit codes, and EXIT 124 DISTINGUISHES A BUDGET KILL FROM AN ASSERTION FAILURE — a distinction the compact summary reports only as an aggregate count, and which esmeraldinha had to make by hand. It recovers a run's failing arm names without re-running a 500-second spec.

@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-windows-checkout-below-a-deep-path-cannot-materialise-this-repository-at-all-and-the-failure-presents-as-a-git-checkout-error-rather-than-as-a-path-length-limit
+    order: 1270-wiki
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [windows, portability, onboarding, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-host-tools.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a
+      PRECONDITION CHECK THAT DOES NOT YET EXIST — nothing in the tree tells a
+      Windows host that its checkout path is too deep for this repository's
+      longest tracked path — so any litmus named now resolves to nothing and
+      885-92iu refuses the row. Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-windows-path-budget-is-checked.sh — assert the check
+      computes the repository's longest tracked path, adds the checkout root's
+      length, and REFUSES with the budget stated when the total exceeds the
+      limit; the NEGATIVE CONTROL points it at a short root and asserts it
+      passes, so the check cannot degrade into refusing everywhere. msys-only,
+      skipping loudly elsewhere. Wire it in the same commit and name the route
+      (1068-cxmf).
+    title: |
+      a Windows checkout below a deep path cannot materialise this repository at all — `git worktree add` dies with "Filename too long" on an `openspec/changes/archive/...` path — and it presents as a git checkout error rather than as a path-length limit, so the reader looks at git
+    context: |
+      MEASURED ON YOLANDA 2026-09-19 while creating a worktree to reproduce the
+      v56.9.19.1 Windows tray failure. Verbatim:
+
+        $ git worktree add --detach <scratchpad>/wt-v56.9.19.1 v56.9.19.1
+        Preparing worktree (detached HEAD e2c5fbe71)
+        fatal: cannot create directory at 'openspec/changes/archive/
+          2026-04-25-tray-responsiveness-and-startup-gating-superseded/specs/
+          github-credential-health': Filename too long
+
+      The worktree was left half-materialised and had to be pruned. Retrying
+      under C:/Users/bullo/w1 succeeded immediately with the same command and
+      the same tag, which is the single-variable proof that the path length was
+      the cause and nothing about git, the tag or the tree was wrong.
+
+      WHY IT IS WORTH A ROW RATHER THAN A HABIT. The message names a DIRECTORY
+      and a git operation, so the reader's first hypothesis is a corrupt tree,
+      a bad tag, or a git bug — three expensive wrong turns. It never names the
+      actual constraint, which is that Windows MAX_PATH applies to the SUM of
+      the checkout root and the repository's longest tracked path, and this
+      repository's longest tracked paths live under
+      openspec/changes/archive/<long-change-name>/specs/<long-capability-name>.
+      The budget is a property of the repo, so it shrinks for every host as the
+      archive grows, and it is invisible until someone picks a root one
+      character too deep.
+
+      THE ROOT THAT FAILED IS NOT AN UNREASONABLE ONE. It was this agent's own
+      session scratchpad directory, which the harness supplies and which is
+      deep by construction. Any tooling that clones or worktrees into a
+      per-session temporary directory on Windows will hit this, and the deeper
+      the harness's own path convention, the sooner.
+
+      NOT A CONFIGURATION ANSWER ON ITS OWN. core.longpaths=true and the
+      Windows LongPathsEnabled policy both exist, and either may be the right
+      remedy, but they are host state rather than repository state and the
+      repository currently says nothing about needing them. A host that lacks
+      them gets the message above and no pointer. Whoever takes this row
+      decides whether the answer is a precondition check, a documented
+      requirement, or both — the exit criterion below names the OUTPUT, not the
+      mechanism.
+    deliverable: |
+      A Windows host learns that its checkout path is too deep BEFORE the
+      checkout fails, and the message names the path budget rather than a
+      directory.
+
+        * The check states the three numbers a reader needs: the repository's
+          longest tracked path, the checkout root's length, and the limit.
+        * It runs where it can still help — at clone/worktree time or in
+          check-host-tools.sh — not only inside an already-materialised tree,
+          since the failing case is the tree that could not be created.
+        * NEGATIVE CONTROL: a short root still passes. A check that refuses
+          everywhere is not a check.
+    exit_criteria:
+      - 'OUTPUT: on a Windows host, attempting to create a checkout under a root that exceeds the path budget produces a message NAMING the budget (longest tracked path + root length vs the limit), not a bare "Filename too long" against one directory. PRE-FIX RESULT: FAILS — `git worktree add` under a deep scratchpad root dies with `fatal: cannot create directory at ''openspec/changes/archive/2026-04-25-tray-responsiveness-and-startup-gating-superseded/specs/github-credential-health'': Filename too long`, leaving a half-materialised worktree; measured on yolanda 2026-09-19.'
+      - 'NEGATIVE CONTROL: the same check passes for a short checkout root (C:/Users/bullo/w1 succeeded with the identical command and tag), so the check discriminates rather than refusing unconditionally.'
+    provenance: |
+      Found by yolanda-windows 2026-09-19 as an incidental while creating a
+      worktree for the v56.9.19.1 Windows tray investigation; filed at
+      macuahuitl's direction as a row rather than carried as host lore. The
+      single-variable proof (same command, same tag, shorter root, immediate
+      success) was taken at the time rather than reconstructed.

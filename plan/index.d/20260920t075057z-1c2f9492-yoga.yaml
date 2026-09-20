@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    event:
+      type: evidence
+      ts: "2026-09-20T07:50:57Z"
+      agent_id: linux-yoga-claude-20260920t075057z
+      host: yoga
+      summary: |-
+        CROSS-CITE from 1269-gfdi (landed ad4d25d71): a child shell losing pipefail and
+        a step discarding its diagnostic line are two ways ONE red goes unread, in the
+        same machinery — how a litmus step's command reports failure.
+
+        1269-gfdi was `| tail -1` on the step's command, which kept the fixture's
+        summary verdict and threw away every `FAIL: ARM <n>: …` line above it; the red
+        was real and unreadable. This row is the other half of the same surface: a
+        step's child shell not inheriting pipefail means a failing command mid-pipeline
+        does not reach the exit status at all, so the red is not even produced. Truncated
+        reasoning and a swallowed status are the same outcome for a reader — a verdict
+        with nothing behind it.
+
+        Worth checking together rather than separately: both live in run-litmus-test.sh's
+        step execution path, and a fix for either that does not consider the other can
+        leave a step that reports cleanly while its command failed, or fails while
+        saying why in lines nothing captures. No claim on this row from yoga; filed as a
+        pointer only, at the coordinator's routing.

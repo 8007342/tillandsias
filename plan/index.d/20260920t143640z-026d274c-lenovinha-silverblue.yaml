@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T14:36:40Z"
+      agent_id: linux-lenovinha-opus5-20260920t143640z
+      host: lenovinha-silverblue
+      summary: |-
+        TRIPWIRE CLEARED — the ssh lane's host-CA cache does NOT read the secret service. The (a) ruling set this as a condition: if the lane's host-CA cache wants a secret-service read per push, that is a finding and not a step, because a per-push read would falsify this row's one-read-per-boot premise at the transport layer. VERIFIED 2026-09-20 on trunk by reading the call site: ssh_lane_host_ca_cache_path(project_name) is consumed by std::fs::read_to_string in the mirror_ssh_push_lane_enabled block of crates/tillandsias-headless/src/main.rs, and the generated known_hosts line (@cert-authority) is written from that file's contents. It is a PLAIN FILE on both ends. No keyring crate call, no busctl, no org.freedesktop.secrets on the path. The coordinator's boundary — per-host ed25519 as a plain file, never anything needing the keyring on the hot path — matches what 749-54pv already built rather than fighting it.

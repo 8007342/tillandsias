@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T23:15:00Z"
+      agent_id: "linux-pirria-claude-20260920t231500z"
+      host: pirria
+      summary: |-
+        THE SELF-DEMONSTRATION, on trunk at 9b023d006 with the fix landed
+        (ok:land:9b023d006:attempt-1).
+
+        THE PUSH CARRYING THIS FRAGMENT IS THE EVIDENCE. It was made from a
+        checkout whose validator-surface source had just been touched — mtime
+        moved, content byte-identical — with a binary NOT rebuilt afterwards.
+        That is the exact state `git rebase` leaves behind on every file it
+        rewrites, and the state that cost this host five refusals and four
+        66-second rebuilds earlier today.
+
+        MEASURED ON ONE TREE AT ONE INSTANT, both rules asked the same question
+        about the same binary:
+
+          crates/tillandsias-plan/src/main.rs
+            mtime   2026-09-20 10:52:33  ->  2026-09-20 11:14:53
+            content 48c4cabdd961e17f     ->  48c4cabdd961e17f   (identical)
+
+          RETIRED RULE   plan_binary_is_stale  -> STALE
+                         (refuse, and charge a rebuild that would produce a
+                          functionally identical binary)
+          LANDED RULE    validator-surface-hash --check
+                         -> ok:validator-surface:7eccd7d460d5e1cc   rc=0
+          next-order     -> minted 1311-8f9t, rc=0
+                         (the same binary that, under the retired rule, would
+                          have handed out an identifier the lane then refused —
+                          this row's sharpest instance, now impossible)
+
+        So the disagreement the row is about is reproduced deliberately and the
+        new rule is on the correct side of it. The lane's own verdict on this
+        push is the line quoted in the closing event.
+
+        NOT A WIDENING, and the arms that prove it are landed beside the fix:
+        plan-binary-freshness 21/21 pins that a binary whose surface REALLY
+        differs is still refused and names both hashes, and that a binary which
+        answers `exit 0` without saying anything is NOT vouched for but falls to
+        the mtime ladder; plan-only-lane-structural 14/14 pins 1152-y3bv's stamp
+        mechanism intact for binaries that cannot answer;
+        validator-surface-currency 8/8 pins both mutation directions and the
+        installed-binary case.

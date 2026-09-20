@@ -1,0 +1,106 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-refused-land-and-a-refused-push-both-reach-the-windows-harness-as-exit-zero-so-a-status-that-says-refused-arrives-as-success
+    order: 1296-jutd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [tooling, gate, agent-safety, measurement, windows]
+    estimated_hours: 3
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      a REFUSED land and a REFUSED push both reach the harness as exit 0 on a Windows host — the status that says "refused" does not survive the channel, so an agent that reads the exit code reports a land that never happened
+    context: |
+      MEASURED TWICE on yolanda-windows 2026-09-19/20, in one session, on two
+      different refusals of scripts/land-on-platform-branch.sh.
+
+      INSTANCE 1 — gate refusal. The script printed, verbatim:
+        refused:land:gate-failed — the gate refused; its output is at
+        C:/Users/bullo/claudia/tillandsias/.git/tillandsias-land-gate-attempt-1.log
+      and the harness recorded the background command as
+        completed (exit code 0)
+
+      INSTANCE 2 — push refusal, the more dangerous one. The script printed:
+        refused:land:push-failed — retrying THIS PUSH cannot help (not a lost
+        race): pre-push: refused — windows-next does not contain
+        origin/linux-next (2a269f154bd2758a2d6752395f48edcf5dceae41)
+      and the harness again recorded exit 0. Nothing was pushed; the branch
+      was exactly where it started.
+
+      WHY INSTANCE 2 IS WORSE. A gate refusal leaves an obviously unfinished
+      cycle. A push refusal leaves a GREEN GATE and a clean tree, which is
+      what a successful land also leaves — so exit 0 plus a green gate reads
+      as "landed" on every surface an agent normally checks. The only thing
+      that distinguishes them is the `refused:` line in the log.
+
+      THIS IS 1155-jurn'S FAMILY ONE LAYER OUT, and it must not be folded into
+      1155-jurn, which reads completed. That order fixed `$?` not surviving the
+      wsl.exe argument string; this is a refusal status not surviving the
+      HARNESS boundary. Same shape — a status that does not survive a channel —
+      different channel, and the inner fix does not address it.
+
+      WHAT MAKES IT A CORRECTNESS BUG RATHER THAN AN ANNOYANCE: the script's
+      own header exists to prevent precisely this. It documents that
+      `git push … | tee LOG | tail -3` tests tail's status, that a ref-update
+      line also matches the rejection line, and that together they "reported
+      LANDED for a push that was refused, and the agent reported that onward".
+      The script therefore asks the REMOTE with merge-base --is-ancestor. That
+      discipline is intact INSIDE the script and is then discarded at its own
+      exit: the refusal it correctly detected leaves as 0.
+
+      I caught both only by reading the log, which is not a control. An agent
+      following the ordinary rule "check the exit status" reports a land onto
+      windows-next for work that is sitting on a relay ref.
+
+      NOT YET ISOLATED, and deliberately not guessed at here: whether the 0
+      originates in the script's own exit path on this platform (the documented
+      exits are 0 landed / 1 dirty / 2 rebase conflict / 3 gate failed / 4
+      attempts exhausted / 5 auth / 6 push unfixable / 7 / 8), in the bash
+      wrapper, or in the harness's backgrounding. Both instances here ran
+      backgrounded after exceeding a foreground timeout, which is a difference
+      worth testing first and is not itself evidence.
+    next_action: |
+      Nobody holds this.
+      1. REPRODUCE IN THE SMALL: run land-on-platform-branch.sh against a tree
+         guaranteed to refuse (dirty tree is exit 1 and cheapest) both in the
+         foreground and backgrounded, and record the exit the harness sees for
+         each. That separates "the script returns 0" from "the channel loses
+         the status", which is the whole question and is one command each.
+      2. If the script is the source, fix the exit path so every `refused:`
+         line is paired with a non-zero exit, and add an arm asserting it.
+      3. If the channel is the source, the remedy is an OUTPUT the caller can
+         read, not an exit code: the script already prints `refused:`, so the
+         durable form is a machine-readable last line or a status file that
+         does not travel through the exit-code channel at all.
+      4. Either way add the assertion to the script's own fixture: a refusal
+         exits non-zero AND says so on a surface that survives backgrounding.
+      Do NOT close this on instance 1 alone — the push refusal is the one that
+      looks like success.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a refusal that
+      survives the harness boundary, and next_action step 1 is a MEASUREMENT
+      that decides where the 0 originates — script, wrapper or harness. The
+      guard's shape depends on that answer, so naming it now would encode
+      whichever cause its author assumed. When it lands the guard is
+      litmus-land-refusal-exits-nonzero, driving a land that must refuse and
+      asserting the exit the CALLER records, foreground and backgrounded, and
+      it must be written in the same commit as the fix (1136-n8sh).
+    verifiable_closure: |
+      On a Windows host, a land that prints `refused:land:gate-failed` and a
+      land that prints `refused:land:push-failed` each produce a NON-ZERO exit
+      as recorded by the harness that invoked it, both foreground and
+      backgrounded. Pre-fix result: exit 0 for both, with the refusal present
+      in the log and nothing pushed to the remote.
+
+events:
+  - packet_id: a-refused-land-and-a-refused-push-both-reach-the-windows-harness-as-exit-zero-so-a-status-that-says-refused-arrives-as-success
+    event:
+      type: note
+      ts: "2026-09-20T08:30:00Z"
+      host: yolanda-windows
+      summary: |-
+        two instances in one session; the push refusal leaves a green gate and a clean tree, which is indistinguishable from a successful land on exit code alone

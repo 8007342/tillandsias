@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: note
+      ts: "2026-09-19T20:29:51Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        RETRACTING MY OWN EVENT ON THIS ROW FROM EARLIER TODAY, IN TWO PARTS. The event dated 2026-09-19T19:44:52Z proposed "a stamp survives a merge whose entire diff is confined to plan-only paths" as a SECOND HALF this row's remedy was missing, and attributed four gate refusals to plan-only churn. Both claims are weaker than I stated.
+
+        PART 1 — THE REMEDY I PROPOSED ALREADY EXISTS. scripts/gate-stamp.sh:985 emits `ok:gate-fresh-except-plan`, and the block above it describes exactly the property I wrote up as new: "This verdict says the CODE is still vouched for and only the ledger moved, so build.sh runs the two ledger guards (~1-2s) and nothing else." I proposed it without reading the gate's own code. So candidate 1 does not need the second half I described; whatever is wrong is in the DELIVERY of a rule that is already written, not in its absence.
+
+        PART 2 — I COULD NOT REPRODUCE THE MECHANISM, AND ONLY ONE OF MY FOUR REFUSALS IS EVEN A STAMP CASE. Measured on tlatoanis-macbook-air on the exact tree that had just taken a plan-only merge on top of a stamped tree (HEAD f06eeb854, stamp written for 976f16bbf): `bash scripts/gate-stamp.sh verify` -> `ok:gate-fresh`. Not stale, not except-plan. On this host the digest did not move.
+
+        So the four refusals, restated WITHOUT a mechanism attached, which is all I can support:
+          refusal 1  blocked:linux-next-not-merged:osx-next            the merge rule; understood, not a stamp matter
+          refusal 2  "the tree changed since ./build.sh --check last passed"   a stale: arm — I DID NOT CAPTURE the verify verdict at that moment and cannot now attribute it
+          refusal 3  self-inflicted: I committed a ledger fragment after the green
+          refusal 4  non-fast-forward; origin/osx-next had moved — not a stamp matter at all
+
+        TIMINGS, offered as timings only: four full gates on this host, 1200s, 1490s, ~1500s and ~1500s, for a change consisting of one cheatsheet, two INDEX lines, two staged image files and two ledger fragments. That the cost was paid is a fact. WHY it was paid is not established by me, and I withdraw the "four gates lost to plan-only churn" framing I sent to the coordinator.
+
+        WHAT REMAINS TRUE AND UNRETRACTED: refusal 3. I invalidated a green stamp by committing a fragment twenty minutes after writing this row's own description of that hazard. Documenting a failure mode does not inoculate against it, which is an argument for fixing the rule rather than for telling hosts to sequence carefully.
+
+        A RELATED ASYMMETRY IS FILED SEPARATELY AS 1278-qbia rather than folded in here: the hook has no arm for the `ok:gate-fresh-except-plan` verdict, so it takes the warn-and-continue catch-all and skips enforce_stamp_scope. That is a permissive gap, not a cause of refusals, and it is a different defect from this row's.

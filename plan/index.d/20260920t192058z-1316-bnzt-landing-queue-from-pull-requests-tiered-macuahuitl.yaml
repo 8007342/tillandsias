@@ -1,0 +1,89 @@
+packets:
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    order: 1316-bnzt
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [git, github, coordination, landing, agent-safety]
+    estimated_hours: 8
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+      - scripts/land-on-platform-branch.sh
+      - methodology/multi-host-development.yaml
+    verifiable_closure: |
+      scripts/test-land-queue.sh prints `ok:land-queue:4/4` and exits 0,
+      against a scaffold remote with three work/<order> refs and a fake `gh`
+      that lists them as open pull requests into linux-next: (1) the queue
+      lands them ONE AT A TIME in PR-number order, each by fetch, merge of
+      target+candidate, the 19 relay deciders, the gate (a stub gate script
+      in the fixture), and a fast-forward push, and the fixture's push log
+      shows no push while a landing is in flight; (2) a candidate whose gate
+      fails is EVICTED with its refusal line recorded on the PR (fake gh
+      receives the comment) and the queue continues with the next candidate
+      rather than aborting; (3) a candidate whose merge with the moved target
+      conflicts is evicted with the conflicting paths named and the queue
+      continues; (4) a landing that wins pushes exactly one merge commit whose
+      second parent is the PR head, so GitHub closes the PR by ancestry with
+      no `gh pr merge` call. PRE-FIX RESULT: FAILS on every arm — no queue
+      exists; landings are the coordinator's relay scripts kept outside the
+      tree (drafts-macuahuitl/relay-one.sh, relay-many.sh, land-paths.sh,
+      2026-09-20) and each host's own land tool racing the others.
+    next_action: |
+      This is the local equivalent of a merge queue (GitHub's needs a check
+      that reports on its queue branch; there is no server CI by the
+      operator's ruling, so it cannot be used) — the shape bors/homu, the
+      Chromium CQ and GitLab merge trains share: test the candidate against
+      target PLUS candidate, land one at a time, evict and continue on a
+      failure. The coordinator does this by hand today through three
+      untracked scripts; this row moves it into the tree so any fat host
+      (lenovinha, yoga) can run the queue when the coordinator is busy, and
+      so the 19 deciders are the queue's preflight and not one host's habit.
+
+      THE PR IS THE QUEUE ENTRY AND THE PAPER TRAIL: a host opens
+      `gh pr create --base linux-next --head work/<order>` (draft while the
+      packet is in progress, ready when its closure evidence is on the row);
+      the PR body carries the packet order and the host's own gate verdict
+      line (a macOS-only slice is gated on the Mac before it is marked
+      ready; the queue's Linux gate then checks the union). No review is
+      required (GitHub separates "require PRs" from "require reviews"; the
+      queue's gate is the review); branch protection on linux-next is NOT
+      enabled, because the plan-only lane and the queue itself push
+      directly. The queue reads `gh pr list --base linux-next --state open
+      --json number,headRefName,isDraft` and takes non-draft PRs in number
+      order; a PR whose head is not a work/<order> ref is skipped with a
+      comment naming the lane.
+
+      ORDER: after 1315-4a7j (the lane must exist before the queue drains it).
+      The platform-branch relays (osx-next, windows-next into linux-next)
+      remain the coordinator's, gated the same way, until the macOS and
+      Windows hosts also work on work/<order> refs — their choice per host,
+      recorded on the row when they switch.
+
+      TIERED INTEGRATION, PROPORTIONAL TO THE BLAST RADIUS (operator, 2026-09-20
+      ~20:00Z): "Plan is cheap because it doesn't run full heavy gates ...
+      moving them to pull request would also move them to paying the full
+      integration price. Unless we can fine tune the pull requests to run
+      integration tests selectively, so the integration cost is proportional
+      to the blast radius ... All pull requests to main do full integration,
+      but our integration branches might have lower levels of integration
+      checks." The queue classifies each candidate by the paths its merge
+      adds over the target and picks the tier, printed on the PR and in the
+      landing line: LIGHT — only plan/, docs/, skills/, cheatsheets/ changed:
+      the fragment and cheatsheet deciders (added-fragments-parse,
+      scorable-obligation-added, fragment-status-loss, plan-orders, plan
+      check, cheatsheet-refs, cheatsheet-frontmatter, skills-single-source),
+      no build, a stamp adopted the way push-plan-fragments-to-trunk.sh does
+      today; SCOPED — only scripts/, openspec/, methodology/ changed: the
+      nineteen deciders, `scripts/run-litmus-test.sh --diff-scope
+      origin/linux-next`, and the fixtures that bind the touched scripts, no
+      cargo; FULL — anything under crates/, build.sh, images/, Cargo.*: the
+      gate as today. main takes FULL always (the release gate, unchanged).
+      Arm 5 of the fixture: three scaffold candidates, one per tier, each
+      lands with the tier named and the light one runs no build step (the
+      stub gate records whether it was invoked). The plan-only direct lane
+      stays as it is throughout the migration: it is already the light tier
+      landing itself, and a host may keep using it for claims and events.

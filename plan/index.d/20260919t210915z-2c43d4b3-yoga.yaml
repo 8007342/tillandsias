@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    field: status
+    value: in_progress
+    ts: "2026-09-19T21:09:15Z"
+    host: yoga
+
+events:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    event:
+      type: progress
+      ts: "2026-09-19T21:09:15Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed on yoga per macuahuitl's dispatch 2026-09-19; runnable here without podman

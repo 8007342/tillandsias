@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    field: next_action
+    value: |-
+      THE GATE IS NOT THE VARIABLE — this row's own title and framing are WITHDRAWN by its isolation event. The flip is LOAD plus PARALLEL execution, measured both ways: parallel under concurrent load reds 2 of 3 OUTSIDE the gate; parallel on an idle machine is green; a gate run on a quieter machine is GREEN (SCRATCH_GATE_RC=0, new-red=0); serial (--test-threads=1) under load is green 2 of 2. The environment is excluded by measurement — four gate-only variables captured from an instrumented build.sh and replayed, singly and together, all green; PWD, ~/.cache/tillandsias and the _run wrapper likewise. NO SINGLE VARIABLE FLIPS IT because there was no environment mechanism to find.
+      NEXT STEP, and it is the one thing this investigation did NOT do: NAME THE SHARED STATE THAT RACES. Serialising hides it; it does not identify it. The panic says 'must mount forge-owned gitconfig at /home/forge/.gitconfig' and the same source file records that a failed create_dir_all on the gitconfig cache root becomes None via  AT THE POINT IT HAPPENS, so the mount vanishes and the assertion fires frames away. Find what two tests contend for on that path under macOS, and make the failure SAY SO instead of presenting as an absent mount — a create_dir_all error that becomes None is the defect underneath the flake.
+      DO NOT SERIALISE THE GATE AS THE FIX unless the shared state is named first and the serialisation is recorded as a MITIGATION. 1021-hf9e removed the previous shared state rather than serialising readers, and its own text says the real defect would be the shared state on the contending host, not the threads line.
+      REPRODUCTION RECIPE, for anyone confirming: run the full workspace suite (cargo test --workspace --no-fail-fast) WHILE the machine is genuinely busy (a concurrent gate reproduces it; an idle host will not). Two of three runs is what macneo measured. Do not try to reproduce it on an idle machine and conclude it is fixed.
+      MEASUREMENT LIMITS, stated so nobody over-reads the result: the parallel-red and serial-green arms ran under DIFFERENT load sources (a concurrent gate versus eight synthetic spin loops), so serial-vs-parallel was not tested under byte-identical load; 2-of-3 and 2-of-2 establish that the flip exists, not its rate.
+      EXIT CRITERION 1 IS UNCHANGED and still unmet: two consecutive ./build.sh --check runs green on macneo with no known-red entry. Criterion 2 ('the mechanism is NAMED') is PARTLY met — the mechanism class is parallel contention, measured; the contended resource is still unnamed.
+
+      [2026-09-20T00:19:14Z tlatoanis-macbook-neo] MECHANISM NAMED. The mount vanishes because ORIGIN RESOLUTION fails, not because
+      create_dir_all does. Instrumented the create_dir_all and reproduced the red in a
+      gate with ZERO instrumentation hits, so the mechanism this row and the source
+      comment both assumed is REFUTED. The failing transcript shows:
+        `git config --get remote.origin.url exited Some(128)` -> OriginResolution::Unresolvable
+        -> origin_url None -> no gitconfig mount -> the assertion reports an absent mount.
+      The extra warning line that prints only when host_checkout.is_some() DID print,
+      while the test passes host_mount=false — so something outside the test's own
+      arguments supplied a host checkout. That is the contended state.
+      EXCLUDED BY DIRECT TEST: /tmp/project's existence on disk. Present as a plain
+      non-git dir -> test PASSES, no warning. Absent -> PASSES. The state is
+      process-internal, not on disk.
+
+      THE SOURCE ALREADY NAMES THIS TEST AS AN UNFINISHED RESIDUAL. build_forge_agent_run_argv's
+      host_mount parameter carries: "ORDER 1021-hf9e. The FIRST pass moved the env read
+      out of the two arg builders and into THIS function's body ... so
+      forge_credential_quarantine_mounts_present kept failing in 2 of 10 parallel runs.
+      Moving a global read one level up is not removing it. It is now the caller's to
+      resolve." So this is NOT a new macOS defect — it is a known 2-in-10 parallel
+      flake from a global read that 1021-hf9e's first pass did not remove, and macneo's
+      load makes it frequent enough to reach the ratchet. The 2-in-10 figure matches
+      what macneo measured (2 of 3 under gate load, 0 of many idle).
+
+      NEXT STEP — CATCH THE WRITER IN THE ACT. Do not argue from shape. At the moment
+      origin resolution runs, log the value of the process env the caller reads and
+      which test set it; a live process-global write exists in the same file
+      (`unsafe { std::env::set_var("TILLANDSIAS_PROJECT_REMOTE_URL", ...) }`) and is the
+      strongest candidate, but it is UNVERIFIED and must not be written up as the cause
+      until the writer is observed. Reproduce under REAL gate load: an idle host will
+      not reproduce it, and eight synthetic spin loops will NOT either (4 instrumented
+      runs, zero hits) — the reds occurred only while a full ./build.sh --check ran
+      concurrently.
+
+      THEN THE FIX: remove the sharing (resolve the value in the caller and pass it in,
+      which is what 1021-hf9e's comment says is now owed), and make the failure SPEAK —
+      an origin-resolution failure should not present as an absent mount three steps
+      later. Serialising the suite stays RECORDED AS A MITIGATION only; do not adopt it
+      as the fix before the global is removed, on 1021-hf9e's own reasoning.
+
+      WITHDRAWN FROM THIS ROW'S EARLIER ENTRIES: the claim that serial --test-threads=1
+      holds green under load. That arm ran under SPIN LOAD, which has since been shown
+      not to reproduce the failure at all (4 runs, 0 hits), so both arms pass there and
+      the comparison established nothing. Serial-vs-parallel is UNTESTED under a load
+      that reproduces. Exit criterion 1 remains unmet; criterion 2 is now MET for the
+      mechanism class and the failing path, and OPEN for the identity of the writer.
+    ts: "2026-09-20T00:19:14Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T00:19:14Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        mechanism named: origin resolution, not create_dir_all; serial arm withdrawn

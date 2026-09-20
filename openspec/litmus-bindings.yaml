@@ -150,6 +150,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:tool-materialization
+  - litmus:metrics-log-fallback-is-loud
   - litmus:gnuism-advisory-names-the-known-instances
   - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
@@ -171,6 +172,13 @@ specs:
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
+  - litmus:reset-state-contract
+  - litmus:installer-swap-atomicity
+  - litmus:installer-reprovisions-on-install
+  - litmus:validator-surface-currency
+  - litmus:fragment-ts-skew
+  - litmus:preflight-front-door
+  - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
   - litmus:parked-blocks-visibility-shape
@@ -473,12 +481,14 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:initialize-bare-metal-host-idempotent
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
   - litmus:forge-clone-reachability-probe-shape
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
+  - litmus:ssh-lane-refuses-when-unwired
   - litmus:git-mirror-startup-per-ref-tolerance
   - litmus:git-mirror-unborn-head-repair
   - litmus:git-mirror-stale-reconcile
@@ -579,6 +589,7 @@ specs:
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
+  - litmus:windows-host-lane-refusal
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
@@ -622,6 +633,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:fake-podman-direct-invocation-safety
+  - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
   - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
@@ -641,6 +653,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
   - litmus:release-freeze-holds-code
   - litmus:expire-claims-reads-the-status-write
@@ -1194,6 +1207,7 @@ specs:
   - litmus:secure-control-wire-guest-responder-shape
   - litmus:psk-input-parity-shape
   - litmus:host-guest-no-cfg-transport-selection
+  - litmus:macos-vsock-inference-closure
   coverage_ratio: 67
   last_verified: '2026-07-06'
 - spec_id: vm-provisioning-lifecycle

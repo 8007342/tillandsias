@@ -1,0 +1,33 @@
+# @trace order:1268-m2ir
+#
+# Pins scripts/metrics-log-path.sh's "where does a metrics log live" decision.
+# The resolver asked whether .git was a DIRECTORY, so a git worktree — whose
+# .git is a file — was judged "not a checkout" and every metrics record went to
+# /tmp. cycle-metrics.sh's metrics-log-split guard then correctly refuses to
+# publish when one host's records sit in two files, and the next release gate on
+# that host reds, hours later, on a symptom several steps from its cause.
+name: litmus:metrics-log-fallback-is-loud
+spec: ci-release
+phase: pre-build
+description: >
+  1. Records emitted by a runner invoked FROM a checkout stay in that checkout,
+     including when the checkout is a worktree.
+  2. A run genuinely outside any checkout still gets the /tmp fallback AND says
+     so on stderr — the fallback is legitimate, its silence was the defect.
+  3. With PROJECT_ROOT known, no record reaches a non-checkout path.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/metrics-log-path.sh
+  - workspace contains scripts/test-metrics-log-fallback-is-loud.sh
+
+critical_path:
+  - step: "the metrics-log resolver keeps records in the checkout, stays loud outside one, and honours PROJECT_ROOT"
+    command: "bash scripts/test-metrics-log-fallback-is-loud.sh"
+    timeout_ms: 300000
+    expected_behavior: "three arms pass and the fixture prints its verdict token"
+    assert_output_contains: "ok:metrics-log-fallback:3/3"
+
+evidence:
+  artifact: "scripts/metrics-log-path.sh + scripts/test-metrics-log-fallback-is-loud.sh"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T07:16:20Z"
+      agent_id: linux-macuahuitl-fable5-20260920t071620z
+      host: macuahuitl
+      summary: |-
+        Corrections and step-1 result (coordinator, from lenovinha's measurement 2026-09-20). OWNED PATHS: the two scripts named as scripts/git-credential-tillandsias.sh and scripts/relay-refs.sh live at images/git/git-credential-tillandsias.sh and images/git/relay-refs.sh (beside images/git/Containerfile, entrypoint.sh, post-receive-hook.sh and ensure-mirror-head.sh, which together are the git-mirror image); the base row's owned_files is immutable and this event supersedes those two lines. STEP 1 on lenovinha: `--ensure-enclave` revived the dormant vault (tillandsias-vault and tillandsias-proxy both Up and healthy, all 12 policies loaded including GitMirror, DONE_RC=0, gnome-keyring PID unchanged throughout). PREREQUISITE DISCOVERED: the host carried NO git-mirror container or image (only the vault images), so "wire the push remote to the local mirror" is a build-and-provision step (the images/git image built and its container started under the enclave) before it is a config change, and the recipe for every Linux host must carry it. MOTIVATION DEMONSTRATED: `--github-status` does not exist and its absence was hit within a minute, since nothing today can say whether Vault holds a usable token.

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-runners-parse-only-says-ok-for-a-file-that-is-not-yaml-because-its-extraction-is-line-based-so-the-verdict-word-overrides-its-own-note-and-a-broken-litmus-reaches-a-gate
+    event:
+      type: note
+      ts: "2026-09-20T19:37:36Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        THIS ROW'S OWN SUBJECT, MET THREE TIMES INSIDE ITS OWN VERIFICATION: verifying the v4 repair took FOUR attempts before one actually executed the fixture, and ALL FOUR RETURNED rc=0 — Git Bash had no `tillandsias-plan` on PATH (`skip:litmus-parse-only-duplicate-key:no-yaml-reader-on-PATH`), an inline `wsl.exe -- bash -lc` string lost its variables and printed an empty verdict, a staged script in a NON-LOGIN shell still lacked `~/.local/bin` and skipped again, and only PATH plus `TILLANDSIAS_PLAN_BIN` pinned to the ELF produced `ok:litmus-parse-only-duplicate-key:9/9`. `rc=0` and "the test passed" are different claims and the skip line is the only thing between them, which is precisely the gap 1303-2d5g closes one layer down.
+
+        THE SECOND REGIME IS CLEAN AND THE STRONGER CLAIM HOLDS: macuahuitl ran v4 (89159db4f) from a detached worktree on Fedora with that host's own reader and NO override — test-litmus-parse-only-duplicate-key 9/9 in 16s, test-litmus-parse-instruments-agree 3/3, expression-pinning, pin-claims and bash-dialect green. So the pinned 9/9 required on esmeraldinha is not this row's: it is 1258-tpkz's two-binary artifact, where the fixture's ARM 0 resolves the reader through PATH (an ELF at /root/.local/bin/tillandsias-plan) while the runner's probe prefers ./target/release/tillandsias-plan.exe, and the PE cannot read a Linux /tmp path (`blocked:yaml-unreadable:…: The system cannot find the path specified. (os error 3)`). Two binaries inside one fixture run, on a shared Windows/WSL checkout only.
+
+        AND THE COUPLING THE REPAIR EXPOSED, which outlives both rows: 1274-cbk7's ARM 1 and this order's own mutation arm were each building a pre-fix copy by PATTERN-MATCHING THE RUNNER'S CONTROL FLOW, so this order's document load — landing above 1274's duplicate-key detector — silenced that fixture's teeth with no signal, and then the anchor added to fix it immediately broke THIS order's arm the same way (caught only by its loud-failure guard, surfacing as 2/3 rather than as a quietly inert test). Both fixtures now mutate ONE NAMED LINE the runner owns and documents as load-bearing for a fixture in another file. A fixture that seds its subject's source is coupled to that source's shape, and nothing makes that coupling visible except a gate refusal several rounds later.

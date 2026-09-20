@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-19T23:26:33Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t232633z
+      host: macneo
+      summary: |-
+        ISOLATED BY DIFFERENCE. THE RESULT CONTRADICTS THIS ROW'S OWN FRAMING, AND THE
+        FRAMING IS WITHDRAWN.
+
+        This row was filed as a clean boundary: "panics inside ./build.sh --check and
+        PASSES under the gate's own cargo command outside it, so the red is a property
+        of the macOS GATE REGIME". Both halves of that boundary are now broken by
+        measurement. The gate was never the variable.
+
+        THE TWO-WAY FLIP IS LOAD, NOT THE GATE:
+          workspace suite, PARALLEL, idle machine        -> GREEN (repeatedly; this is
+                                                            what the row cited as
+                                                            "passes outside the gate")
+          workspace suite, PARALLEL, under concurrent load -> RED, 2 of 3 runs
+                                                            (run1 FAILED=1, run2
+                                                            FAILED=1, run3 FAILED=0)
+                                                            — OUTSIDE the gate entirely
+          ./build.sh --check, gates 5 and 6              -> RED
+          ./build.sh --check, instrumented copy, quieter -> GREEN
+                                                            (SCRATCH_GATE_RC=0,
+                                                            ok:test-baseline:ran=2455
+                                                            new-red=0)
+          workspace suite, SERIAL (--test-threads=1), under load -> GREEN, 2 of 2
+        So it reproduces outside the gate when the machine is busy, and a gate run
+        passes when it is not. The gate correlated because it is the heaviest thing
+        macneo runs, not because of anything it sets or leaves behind.
+
+        THE ENVIRONMENT IS EXCLUDED, measured rather than argued. Captured `env | sort`
+        at the gate's own workspace-test step from an instrumented copy of build.sh
+        (untracked, never in the tree, removed after) and diffed it against the shell
+        where the suite passes. Exactly four gate-only variables:
+            BUILD_COMMIT_SHA_OVERRIDE=non-artifact
+            TILLANDSIAS_GIT_SHA_OVERRIDE=non-artifact
+            TILLANDSIAS_CA_DIR=/Users/tlatoani/.local/state/tillandsias/ca
+            TILLANDSIAS_NO_SINGLETON=1
+          single test with all four        -> PASSES
+          full workspace with all four     -> PASSES, 0 failures
+        TILLANDSIAS_CA_DIR was the attractive candidate, because the test writes a
+        fixture CA into a tempdir and passes that path in; it is not the flip, alone or
+        combined. Also excluded: PWD (identical in both captures), ~/.cache/tillandsias
+        state (materially identical at gate time and after; forge-gitconfig present in
+        both), and the _run wrapper (transparent: `cd "$SCRIPT_DIR" && "$@"`).
+        SO THE ANSWER TO "which variable flips it" IS: NO SINGLE VARIABLE FLIPS IT.
+        There was no environment mechanism to find.
+
+        MECHANISM, stated with the measurement rather than by citation: the failure is
+        INTRA-SUITE PARALLEL CONTENTION that load makes probable. Serialising the suite
+        holds it green under the same load; parallel does not. That is the same
+        conclusion 1021-hf9e's comment anticipated for a second platform, but this entry
+        does NOT rest on that quote — the quote predicts that another platform would
+        contend; it does not say load is the trigger, and borrowing its authority for a
+        claim it does not make would be the error this fleet has spent the day
+        cataloguing.
+
+        CONSISTENT WITH THE PANIC'S SHAPE, which is why a deterministic hunt was always
+        going to fail: the assertion reads "must mount forge-owned gitconfig at
+        /home/forge/.gitconfig". The same file records that when the gitconfig cache
+        root cannot be created, `.ok()?` turns the failure into None AT THE POINT IT
+        HAPPENS, the mount silently vanishes, and an assertion several frames away fails
+        in a test that did nothing wrong. A transient directory operation losing a race
+        fits; a fixed environment difference does not.
+
+        HONEST LIMITS OF THIS MEASUREMENT:
+          - The two load profiles are NOT identical. The parallel reds ran while a full
+            gate ran concurrently (real mixed I/O and CPU); the serial greens ran under
+            eight synthetic spin loops (CPU only). Serial-vs-parallel was therefore not
+            tested under byte-identical load, and a stricter comparison would run both
+            arms against the same load source.
+          - 2-of-3 and 2-of-2 are small samples of a probabilistic failure. They
+            establish that the flip exists, not its rate.
+          - The shared state that races was NOT identified. Serialising hides it; it
+            does not name it.

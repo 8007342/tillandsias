@@ -90,17 +90,46 @@ if [[ -n "${TILLANDSIAS_VERSION:-}" ]]; then
     say "pinned to v${VERSION}"
 else
     BASE="$RELEASE_BASE_LATEST"
-    say "channel: $CHANNEL"
-    if [[ "$CHANNEL" == "unstable" ]]; then
-        say "  !! UNSTABLE channel — newest daily build, NOT promoted to stable."
-        say "     Expect breakage. Re-run without --channel for the stable build."
+    if [[ -n "${TILLANDSIAS_RELEASE_BASE:-}" ]]; then
+        # ORDER 1280-58kq. TILLANDSIAS_RELEASE_BASE overrides CHANNEL_BASE above,
+        # so announcing the CHANNEL here describes a resolution that did not
+        # happen. Measured on macneo: both the v56.9.19.1 and v56.9.19.2 smokes
+        # logged "channel: stable" then "resolving latest release" while pinned
+        # to a base whose release GitHub reports as a PRERELEASE — and the stable
+        # channel (/releases/latest/download) cannot serve one. The install was
+        # correct in both; only these lines were not.
+        #
+        # The TILLANDSIAS_VERSION arm one branch up already announces its own pin
+        # ("pinned to v<version>"), so this is a missing case rather than a
+        # missing idea: every path that bypasses channel resolution should say
+        # which path it took instead.
+        say "channel: pinned ${TILLANDSIAS_RELEASE_BASE}"
+    else
+        say "channel: $CHANNEL"
+        if [[ "$CHANNEL" == "unstable" ]]; then
+            say "  !! UNSTABLE channel — newest daily build, NOT promoted to stable."
+            say "     Expect breakage. Re-run without --channel for the stable build."
+        fi
+        say "resolving latest release"
     fi
-    say "resolving latest release"
 fi
 
 # ── temp workspace ───────────────────────────────────────────────────────
 TMP="$(mktemp -d -t tillandsias-install.XXXXXX)"
-trap 'rm -rf "$TMP"' EXIT
+# ORDER 1281-pgit: the trap also restores the app if we die mid-swap, so an
+# interrupted install never leaves $DEST absent while a backup exists.
+_INSTALL_STAGE=""
+_INSTALL_RESTORE_FROM=""
+_INSTALL_RESTORE_TO=""
+_install_cleanup() {
+    if [[ -n "$_INSTALL_RESTORE_TO" && ! -d "$_INSTALL_RESTORE_TO" \
+          && -n "$_INSTALL_RESTORE_FROM" && -d "$_INSTALL_RESTORE_FROM" ]]; then
+        mv "$_INSTALL_RESTORE_FROM" "$_INSTALL_RESTORE_TO" 2>/dev/null || true
+    fi
+    [[ -n "$_INSTALL_STAGE" ]] && rm -rf "$_INSTALL_STAGE"
+    rm -rf "$TMP"
+}
+trap _install_cleanup EXIT INT TERM HUP PIPE
 
 # ── download ─────────────────────────────────────────────────────────────
 SHA_URL="${BASE}/SHA256SUMS-macos"
@@ -151,17 +180,79 @@ if pgrep -x tillandsias-tray >/dev/null 2>&1; then
     pkill -KILL -x tillandsias-tray 2>/dev/null || true
 fi
 
+# ── extract BESIDE the destination, then swap ────────────────────────────
+# ORDER 1281-pgit. The previous order was: rm -rf the old backup, mv the LIVE
+# app aside, then extract. That left $DEST EMPTY for the whole duration of the
+# extraction, so an installer interrupted at any point in between — a signal, a
+# full disk, a closing laptop — left the host with NO application and NO backup.
+# Measured on macneo 2026-09-19: the installer was killed by SIGPIPE mid-swap
+# and /Applications held neither Tillandsias.app nor Tillandsias.app.bak.
+#
+# Now: extract into a staging directory on the SAME filesystem, and only then
+# perform the swap as two adjacent renames. The destructive step (removing the
+# previous backup) happens LAST, after the new app is already in place.
+STAGE="$(mktemp -d "${INSTALL_DIR}/.tillandsias-install.XXXXXX")" \
+    || die "could not create a staging directory in $INSTALL_DIR"
+_INSTALL_STAGE="$STAGE"
+
+say "extracting to $DEST"
+tar -xzf "$TMP/$ASSET_NAME" -C "$STAGE"
+NEW_APP="$STAGE/${DEST##*/}"
+[[ -d "$NEW_APP" ]] || die "extraction did not produce ${DEST##*/}"
+
+BACKUP="${DEST}.bak"
 if [[ -d "$DEST" ]]; then
-    BACKUP="${DEST}.bak"
-    rm -rf "$BACKUP"
+    # Keep the PREVIOUS backup until the swap has succeeded; it is the only
+    # other copy on disk while the renames are in flight.
+    PREV_BACKUP=""
+    if [[ -e "$BACKUP" ]]; then
+        PREV_BACKUP="${BACKUP}.prev.$$"
+        mv "$BACKUP" "$PREV_BACKUP"
+    fi
     say "backing up existing app to ${BACKUP##*/}"
+    # From here until the new app is in place, $DEST does not exist. The EXIT
+    # trap below restores the backup if anything interrupts us, so a trappable
+    # death cannot leave the host with nothing. SIGKILL cannot be trapped; the
+    # window is two adjacent renames on one filesystem, and the backup survives
+    # it in every case.
+    _INSTALL_RESTORE_FROM="$BACKUP"
+    _INSTALL_RESTORE_TO="$DEST"
     mv "$DEST" "$BACKUP"
 fi
 
-# ── extract ──────────────────────────────────────────────────────────────
-say "extracting to $DEST"
-tar -xzf "$TMP/$ASSET_NAME" -C "$INSTALL_DIR"
-[[ -d "$DEST" ]] || die "extraction did not produce $DEST"
+mv "$NEW_APP" "$DEST" || die "could not move the new app into $DEST"
+_INSTALL_RESTORE_FROM=""
+_INSTALL_RESTORE_TO=""
+[[ -d "$DEST" ]] || die "swap did not produce $DEST"
+
+# The new app is in place; only now is it safe to drop the older backup.
+[[ -n "${PREV_BACKUP:-}" ]] && rm -rf "$PREV_BACKUP"
+rm -rf "$STAGE"
+_INSTALL_STAGE=""
+
+# ── ORDER 1286-4437: reset the local state, with the NEW app in place ────
+# By default, and SYNCHRONOUSLY, before the tray is launched below. Two
+# reasons it sits exactly here and not elsewhere:
+#   * AFTER the swap, because the binary that reprovisions must be the new
+#     one — resetting first would reprovision with the outgoing version;
+#   * BEFORE `open -a`, because the reset refuses to run against a live tray
+#     (order 277) and this is the last point where none is running.
+# NO INSTALLER-LEVEL OPT-OUT. TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
+# and only escape hatch and the tray reads it itself; a second variable here
+# was proposed, agreed by three hosts and approved before anyone read the
+# source, and tillandsias-core's guard documents why it must not exist.
+# TILLANDSIAS_RESET_KEEP_MODELS is passed through by the environment for the
+# same reason: it narrows the reset, it does not skip it.
+say "resetting local state (--reset-state); TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction"
+set +e
+"$DEST/Contents/MacOS/tillandsias-tray" --reset-state
+RESET_EXIT=$?
+set -e
+# Fail LOUD. A failed reset has already destroyed the local state and left the
+# guest unprovisioned; carrying on to `open -a` would hand the operator a tray
+# booting against nothing, with the installer's last word being "Installed".
+[[ -n "${RESET_EXIT:-}" && $RESET_EXIT -eq 0 ]] || \
+    die "tillandsias-tray --reset-state failed (exit ${RESET_EXIT:-<empty>}); the local state may be cleared and the guest unprovisioned — re-run this installer"
 
 # ── login item (opt-in) ──────────────────────────────────────────────────
 if (( LOGIN_ITEM )); then

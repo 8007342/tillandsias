@@ -27,7 +27,26 @@ critical_path:
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example start-vm-headless 2>&1 | tee /tmp/litmus-vault-boot.log &'"
     timeout_ms: 5000
     run_in_background: true
-    expected_behavior: "background start; the foreground assertion immediately measures unseal latency"
+    expected_behavior: "launches the VM detached, teeing boot output to /tmp/litmus-vault-boot.log"
+    # ORDER 1282-rkkm / 1293-wka4. THE assert_exit HERE WAS MINE AND IT WAS
+    # VACUOUS, so it is removed rather than left looking like a check. I added it
+    # under 1252-znbn criterion 4 believing it was the faithful translation of
+    # the prose. It is not: the whole pipeline is backgrounded with `&` inside
+    # this step's own `bash -lc`, so the shell returns 0 the instant it forks —
+    # whatever `cargo run` then does. It asserted that a shell started.
+    #
+    # 1293-wka4 names the general form: a step's child shell does not inherit
+    # pipefail, so assert_exit adjudicates the LAST element of a pipeline rather
+    # than the producer that matters. Here even that is moot, because nothing is
+    # waited on at all.
+    #
+    # NOT REPLACED BY AN ASSERTION ON THE BOOT LOG, and the reason is the same
+    # asynchrony: at the moment this step returns, the log may be empty or
+    # absent, so any content assertion here would be a race rather than a check.
+    # The launch IS verified — by the next step, which waits up to 60s for the
+    # vsock handshake and asserts on THAT. A launcher step whose success is
+    # established by its successor should say so instead of carrying a check
+    # that cannot fail.
 
   - step: "wait up to 60s for VM ready (vsock handshake)"
     phase: runtime

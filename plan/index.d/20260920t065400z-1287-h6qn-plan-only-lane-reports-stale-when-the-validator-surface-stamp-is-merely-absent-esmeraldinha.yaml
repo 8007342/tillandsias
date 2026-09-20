@@ -1,0 +1,134 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    packet_kind: defect
+    order: 1287-h6qn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [diagnosis, fail-loud, plan-binary, developer-loop, operator-facing]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/check-plan-binary-current.sh
+    unscoreable: ""
+    verifiable_closure: |
+      A fresh plan binary with NO `<binary>.validator-surface-sha256` beside it
+      is refused in its own words, naming the command that fixes it:
+
+        refused:plan-binary-unstamped: run scripts/check-plan-binary-current.sh
+
+      distinct from the existing stale verdict, which keeps its current wording
+      and its rebuild remedy for the case where the binary genuinely predates
+      the validator surface.
+
+      THREE ARMS, and the third is the one that makes this more than a string
+      change:
+        1. binary fresh, stamp ABSENT      -> refused:plan-binary-unstamped
+        2. binary fresh, stamp PRESENT and matching -> the lane accepts
+        3. binary genuinely STALE (validator sources changed after the build,
+           stamp present and mismatched) -> the existing STALE verdict and the
+           existing rebuild remedy, BYTE-IDENTICAL to today.
+
+      A MUTATION ARM must show arm 3 still reds when the staleness check is
+      removed — otherwise this "fix" has deleted the protection rather than
+      narrowed it, and a stale binary would validate the bytes being pushed
+      against rules it does not carry (1129-4su6).
+
+      PRE-FIX RESULT: FAILS — measured on esmeraldinha 2026-09-20; see context
+      for the transcript.
+    title: |
+      the plan-only lane reports "the resolved plan binary is STALE (full gate required)" and prints a rebuild remedy when the validator-surface stamp file merely DOES NOT EXIST beside a fresh binary, so the remedy rebuilds nothing, the lane stays shut, and the floor host is sent to the full gate the lane exists to spare it
+    context: |
+      1260-2qgi family: a message that reads like a diagnosis, produced by
+      something that had the answer and printed a different one. Here the
+      answer withheld is WHICH of two conditions holds, and they have opposite
+      remedies.
+
+      MEASURED on esmeraldinha 2026-09-20, pushing four ledger fragments — the
+      cheapest push there is. The hook refused:
+
+        plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+          via:      validator-surface hash — validate-yaml/check --strict-fragments/the
+                    fragment checkers' own sources changed since this binary was built (1152-y3bv)
+          REMEDY:   bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan \
+                    && bash scripts/check-plan-binary-current.sh
+
+      THE REMEDY'S FIRST HALF IS A NO-OP AND THAT IS THE TELL. Running the
+      rebuild produced:
+
+        Finished `release` profile [optimized] target(s) in 3.57s
+
+      Nothing was recompiled, because nothing was stale — cargo and the lane
+      disagreed, and cargo was right. The binary had been built from the very
+      sources the lane was judging it against.
+
+      WHAT WAS ACTUALLY WRONG: the file
+      `<binary>.validator-surface-sha256` DID NOT EXIST. The lane compares the
+      binary against that stamp and reports staleness when it cannot find one,
+      so "never stamped" and "stale" arrive in the same words. The remedy's
+      SECOND half is what fixes it, and only that half:
+
+        bash scripts/check-plan-binary-current.sh
+        -> stamped:plan-binary-validator-surface:/root/.cache/.../tillandsias-plan.validator-surface-sha256
+        -> ok:plan-binary-write-is-opt-in+role-satisfies:... arms=16/0 copies=1
+
+      and the lane then accepted on the next push with no rebuild in between:
+
+        plan-only lane: outgoing diff adds only new plan fragment files ... accepting without the build stamp
+        ✓ local gate: plan-only lane clean (4 fragment file(s) validated; build stamp not required for this push)
+
+      WHY THIS IS WORTH A ROW RATHER THAN A SHRUG. The composition is the
+      damage, and it lands on exactly the host least able to absorb it. A floor
+      host cannot afford the ~100-minute gate, so it reaches for the plan-only
+      lane, which exists precisely so "a checkout that has never run
+      ./build.sh --check can push its claim". The lane refuses with a verdict
+      whose stated remedy does nothing observable, and whose stated fallback is
+      the full gate. A reader who runs the printed remedy, sees a 3-second
+      no-op, and re-runs the push gets the identical refusal — at which point
+      the reasonable inference is that the lane is broken or the binary is
+      cursed, and the actual fix (one command, already printed, in the second
+      half of a compound remedy) is the least likely thing to be tried next.
+      This is the same shape as 1266-dh2d, one layer down: that row found the
+      lane gated on a fresh binary; this one finds it gated on an ATTESTATION
+      that a fresh binary does not automatically carry.
+
+      NOT ESTABLISHED, and deliberately not guessed: WHY the stamp was absent
+      on this host. The binary had been rebuilt earlier in the same session
+      with a bare `cargo build --release -p tillandsias-plan`, which does not
+      write the stamp; whether the sanctioned build path
+      (scripts/with-wsl2-builder.sh) always does, and whether the stamp is
+      expected to be produced by the build or only ever by
+      check-plan-binary-current.sh, is unread. If the stamp is only ever
+      written by the checker, then EVERY freshly built binary is unstamped and
+      this refusal is the default state after any manual rebuild — which would
+      make it common rather than exotic, and worth saying on the row once
+      someone has confirmed it.
+    next_action: >
+      Read scripts/hooks/pre-push-local-gate.sh where the validator-surface
+      comparison is made, and distinguish the two conditions AT THE COMPARISON
+      rather than at the message: absent stamp file versus present-and-
+      mismatched. Emit refused:plan-binary-unstamped for the first, naming
+      scripts/check-plan-binary-current.sh alone, and leave the stale arm and
+      its rebuild remedy untouched. Then check whether the sanctioned build
+      path writes the stamp at all; if it does not, say so on this row, because
+      that turns this from an edge case into the default after every rebuild
+      and may argue for stamping at build time instead of only at check time.
+      DO NOT fix this by making the lane accept an unstamped binary — the lane
+      validates the bytes being pushed with the resolved binary, so an
+      unverified one can accept a fragment shape the current rules refuse
+      (1129-4su6), and that is the protection this row must not weaken.
+    provenance: |
+      Filed by esmeraldinha (windows) 2026-09-20 from its own transcript, at
+      the coordinator's request after reporting it in a hand-off. Every line
+      quoted in context is from this host's run on 2026-09-20 between roughly
+      05:50Z and 06:10Z: the refusal, the 3.57s no-op rebuild, the stamping
+      output, and the subsequent clean acceptance. The binary in question was
+      /root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan
+      inside the tillandsias-build WSL2 distro, resolved via TILLANDSIAS_PLAN_BIN
+      (itself a workaround for a separate defect recorded on 1258-tpkz the same
+      day). The cause of the stamp's absence is NOT established here and the
+      row says so.

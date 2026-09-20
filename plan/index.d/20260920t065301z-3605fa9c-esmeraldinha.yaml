@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: note
+      ts: "2026-09-20T06:53:01Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        THE RACE HAPPENED TO THIS ROW'S OWN REPORTER, HOURS AFTER FILING THE REGIME MEASUREMENT ON IT, AND TWO OF THE THREE TRUNK MOVES WERE THE COORDINATOR'S OWN PLAN PUSHES. Measured on esmeraldinha 2026-09-20 while pushing four ledger fragments — the cheapest possible push, no code, no gate.
+
+        THE TRACE. scripts/push-plan-fragments-to-trunk.sh rebuilds its commit on the current trunk tip and retries; it lost three times in one run and gave up with `refused:fragments-to-trunk:raced:3`:
+
+          attempt 1 -> remote rejected: cannot lock ref 'refs/heads/linux-next': is at cd3fb850 but expected <earlier>
+          attempt 2 -> remote rejected: is at dd785ef2 but expected cd3fb850
+          attempt 3 -> remote rejected: is at df1f12949 but expected dd785ef2
+
+        It landed on a later invocation as ok:fragments-on-trunk:d582f0b2967b0e8dcc60d0838ca9cab19d04661a:4.
+
+        WHAT MAKES THIS EVIDENCE RATHER THAN AN ANECDOTE: THE GATE WAS CLEAN EVERY TIME. Each attempt printed the full acceptance —
+
+          plan-only lane: outgoing diff adds only new plan fragment files ... accepting without the build stamp
+          plan-only lane: validated plan/index.d/<four files>
+          ✓ local gate: plan-only lane clean (4 fragment file(s) validated; build stamp not required for this push)
+
+        So nothing about the validation, the stamp, the merge rule or the host's slowness was in question. The push was refused PURELY because trunk's tip moved between this host computing the parent and the ref update reaching GitHub. That is this row's thesis reduced to its smallest form: the loop terminates only if trunk stays quiet for one attempt, and on a busy night it does not.
+
+        AND THE CHURN WAS THE COORDINATOR'S. Two of the three trunk moves were macuahuitl's own plan pushes — the coordinator's cadence is the churn. That is worth saying in those words, because it forecloses the comfortable reading that a slow host is racing "the fleet" as an impersonal weather system. The host that hands out quiet windows (candidate 2 in this row's deliverable) is the same host generating the traffic that makes them necessary, and a remedy that depends on the coordinator noticing and pausing is a remedy that asks the busiest actor to observe its own effect.
+
+        WHY THIS STRENGTHENS CANDIDATE 1 SPECIFICALLY. The contents of this race were FOUR LEDGER FRAGMENTS — the exact class of trunk movement candidate 1 proposes to stop counting as divergence. Both sides of the collision were plan-only: plan fragments losing to plan fragments. Nothing in that range could conflict with anything, and a rule that understood "confined to plan/ paths" would have admitted every attempt. The interim quiet window would also have worked, and would have cost the fleet's throughput to move four YAML files.
+
+        A SECOND-ORDER COST THIS ROW DOES NOT YET NAME. Each lost attempt is not free on a floor host: the script re-fetches, re-selects paths, re-runs the trunk-fold check and rebuilds the commit through plumbing over drvfs. The retry budget is three, so a host slow enough can exhaust it deterministically while never once being wrong. The failure mode is therefore not "eventually lands, slowly" but "reports refused:raced:3 and stops", which reads like a defect in the pushing host and is not one.
+
+        NOT MEASURED: how long each attempt took here, and therefore what trunk cadence this host can actually beat. That number is the one that would let anyone calibrate, and I did not instrument it — worth capturing on the next occurrence rather than estimated now.

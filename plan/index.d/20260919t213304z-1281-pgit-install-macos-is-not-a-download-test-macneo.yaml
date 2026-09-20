@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: install-macos-launches-the-tray-and-provisions-a-vm-during-the-install-so-section-1-of-the-smoke-is-not-a-download-test-and-the-hazard-is-documented-for-linux-only
+    order: 1281-pgit
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, install, release, docs, consent, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - scripts/install-macos.sh
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      install-macos.sh launches the tray and starts VM provisioning as part of the install, so §1 of the curl-install smoke is not a download test on macOS either — and that hazard is documented for the Linux installer only
+    context: |
+      FOUND BY macneo-macos during the v56.9.19.1 curl-install smoke and
+      reproduced on v56.9.19.2. Filed as a row at the coordinator's direction;
+      it was a Work Packet section in the .1 smoke report.
+
+      MEASURED, both smokes, last lines of the install log:
+        Launching Tillandsias (--init / VM provisioning runs automatically on first launch)...
+        Tray started. Look for the Tillandsias icon in the menu bar.
+        (Provisioning runs in the background on first launch — no extra step needed.)
+      and a tillandsias-tray process was running afterwards, which §2 then had
+      to stop before it could destroy the VM state.
+
+      THE ASYMMETRY THAT MAKES IT A ROW. The smoke runbook documents this exact
+      hazard for the LINUX installer and nowhere else: "install.sh is not a
+      download test — it runs the full init (1133-kktm) ... on an operator's
+      workstation say what §1 actually does before running it; consent to a
+      download check is not consent to a Vault bootstrap." install-macos.sh does
+      the macOS equivalent — launches the tray, begins provisioning a
+      Virtualization.framework VM, downloads a 528 MB Fedora Cloud image — and
+      no equivalent warning exists on the macOS path or in the Host Matrix.
+
+      WHY THE ASYMMETRY IS THE DANGEROUS PART: most of the fleet's macOS hosts
+      are OPERATORS' WORKSTATIONS, not dedicated smoke hosts, and the runbook
+      itself records that this distinction was already missed once (1004-vsh2,
+      "this section read as though every host running it were a smoke host").
+      A reader who has internalised "§1 is the safe download step, §2 is the
+      destructive one" is correct on Linux-by-documentation and wrong on macOS.
+      On macneo it was harmless: a dedicated floor smoke host with the
+      operator's standing authorization.
+
+      NOT A ONE-LINE FIX, and deliberately left unclaimed by the finder. It is
+      two questions at once. (a) DOCUMENTATION: the runbook and Host Matrix must
+      say what §1 does on macOS, which is cheap. (b) DESIGN: whether an
+      installer SHOULD launch and provision at all, or whether that belongs
+      behind a flag so a download check is available as a download check. (b) is
+      an owner call about the product's install UX, not a smoke-lane detail, and
+      the two should not be resolved by whoever happens to pick up the doc half.
+    exit_criteria:
+      - 'the smoke runbook states, on the macOS path and in the Host Matrix, that §1 launches the tray and begins VM provisioning, in the same terms the Linux path already uses for 1133-kktm — PRE-FIX RESULT: the runbook names install.sh and Vault only; a grep of the macOS §1 block for "provision" or "launch" finds no warning'
+      - 'either install-macos.sh offers a way to install WITHOUT launching and provisioning (a flag, or an env var in the shape of the existing TILLANDSIAS_* family), or a recorded decision says why the install must always provision — "nobody asked for one" is not that decision'
+      - 'if the flag exists, the smoke''s §1 uses it, so §1 becomes a genuine download-and-verify step and the first provisioning in the lane is §3''s, which is the only one the lane asserts about — PRE-FIX RESULT: §1 provisions, §2 destroys what §1 provisioned, and §3 provisions again; the lane pays a full image download it never examines'
+    unscoreable: |
+      decision-not-taken: whether an installer should launch and provision on
+      first install is an owner call about install UX, not effort. The
+      measurement is complete and reproducible from the two install logs cited
+      above; the documentation half could be closed immediately, and the row
+      says so, but closing only that half and marking the row done would bury
+      the design question.
+    events:
+      - type: filed
+        ts: "2026-09-19T21:33:04Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260919t213304z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Split out of the v56.9.19.1 macOS smoke report. Left UNCLAIMED by the
+          finder on the coordinator's instruction and on the finder's own read:
+          it is a runbook and installer design question, not a one-line fix.

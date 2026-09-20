@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: note
+      ts: "2026-09-20T00:24:35Z"
+      agent_id: linux-pirria-claude-20260920t002435z
+      host: pirria-silverblue
+      summary: |
+        FIVE STEPS EXECUTED AND GIVEN STRUCTURED ASSERTS, pirria 2026-09-20 — the ones
+        yoga could not run, done on a host with podman and the installed v56.9.19.2
+        tray. Each assert was chosen from what the command REALLY prints, measured, not
+        from the sentence that was there.
+
+        1-3. THE THREE `podman run -d` STEPS (proxy, router, forge) in
+           litmus-browser-isolation-e2e.yaml, all labelled "container id returned".
+           MEASURED: `podman run -d` prints exactly 64 lowercase hex characters on
+           stdout and exits 0 (probed here: length 64, `^[0-9a-f]{64}$` matched, rc=0).
+           The steps pipe that through `head -1 LOG`, so stdout is the id on success
+           and the ERROR TEXT on failure — which `assert_output_nonempty` cannot tell
+           apart. Added `assert_output_matches: "^[0-9a-f]{64}$"`.
+
+        4. THE FOURTH "container id returned" STEP, in litmus-browser-ephemeral.yaml,
+           IS MISLABELLED AND THERE IS NO CONTAINER. It runs
+           `LITMUS_PODMAN_MODE=fake`, and its own command ends with
+           `test -s "$calls_file"` — the success criterion is that the wrapper recorded
+           its argv. MEASURED failure path (chromium-framework image absent after this
+           host's own reset): rc=125, stdout `Error: ...: image not known`. So
+           **`assert_output_nonempty` was satisfied ON FAILURE TOO** and contributed
+           nothing to the verdict, which rested on `assert_exit` alone. Label corrected
+           to describe the fake-podman contract; the non-discriminating assert REMOVED
+           rather than replaced, because no implemented key can express "not an error"
+           without a positive success pattern, and the success path could not be
+           observed on this substrate. Left explicitly for a host that has the image.
+
+        5. `tillandsias --init --test 2>&1 | head -20` HAD TWO DEFECTS IN ONE LINE.
+           THE PIPE DECIDED THE VERDICT: `assert_exit: 0` asserted HEAD's status.
+           Measured by reproducing the runner's child shell exactly —
+           `bash -c 'source "$LITMUS_STDLIB"; <cmd> | head -20'` with a producer exiting
+           7 returns **0**. Reading the script was NOT enough: `run-litmus-test.sh` sets
+           `set -eo pipefail` at line 44 and the stdlib mentions pipefail five times,
+           yet it is not in effect for the step's own pipeline. A `--init --test` that
+           failed outright passed this step. AND IT TRUNCATED ITS OWN EVIDENCE at
+           twenty lines, into a capture file that has no terminal to protect. Pipe
+           removed; `assert_exit` now means what it says.
+
+        A MISTAKE I MADE AND CAUGHT, recorded because it is this row's own defect one
+        level in: I first wrote `assert_output_does_not_match` for step 4. **That key
+        is not implemented by the runner** — `scripts/run-litmus-test.sh` implements
+        assert_exit, assert_output_contains, assert_output_matches and
+        assert_output_nonempty — so the assert would have been a SILENT NO-OP wearing
+        the appearance of a check. Verified every key now used in the touched files
+        against the runner before landing. An unimplemented assert is exactly the
+        "rewording changes the rule" failure this order exists to remove, arriving in
+        the fix for it.

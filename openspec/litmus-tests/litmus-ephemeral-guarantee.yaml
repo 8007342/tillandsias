@@ -19,6 +19,7 @@ critical_path:
     command: "FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '^localhost/tillandsias-forge:v' | head -1) && [ -n \"$FORGE_IMG\" ] && podman run --rm --cap-drop=ALL --security-opt=no-new-privileges --network=none --entrypoint=/bin/sh \"$FORGE_IMG\" -c 'curl --connect-timeout 5 https://example.com 2>&1; echo CURL_EXIT=$?'"
     timeout_ms: 8000
     expected_behavior: "timeout or connection refused"
+    assert_output_matches: "[Ff]ailed to connect|[Cc]onnection refused|[Nn]etwork unreachable|[Tt]imeout|[Cc]ould not resolve|CURL_EXIT=[1-9]"
 
 gating_points:
   - signal: "no outbound route enforced by --network=none"

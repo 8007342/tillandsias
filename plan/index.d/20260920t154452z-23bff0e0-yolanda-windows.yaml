@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
+    event:
+      type: note
+      ts: "2026-09-20T15:44:52Z"
+      agent_id: windows-yolanda-claude-20260920t154451z
+      host: yolanda-windows
+      summary: |
+        POST-FIX MEASURED, and it meets this row's closure on the closure's own terms.
+
+        A trunk push through scripts/push-plan-fragments-to-trunk.sh RETURNED in 50
+        SECONDS, rc=1, with a named refusal:
+          pre-push refused: the tree changed since ./build.sh --check last passed
+        against the same 7073-file tree that never returned under bounds of 120, 150,
+        180, 200, 240, 575 or 1800 seconds. The refusal is CORRECT and is the hook
+        working: the working tree carried code changes the last gate had not covered,
+        so the stamp was legitimately stale.
+
+        THREE COSTS, ALL MEASURED, in the order they were found and fixed:
+          1. the hook's mover enumeration, a shell PER FILE at
+             pre-push-local-gate.sh:1620   ~18 min  -> 2.3 s
+          2. gate-stamp.sh movers, TWO spawns per path (sha256sum then cut) at 675 ms
+             per path                      ~4774 s  -> 7 s
+             with the batched digest proved BYTE-IDENTICAL to the per-file one before
+             it was trusted; the equivalence fixture caught a real bug in that change
+             on its first run (MSYS sha256sum prints binary-mode "digest *path", and a
+             separator match for two spaces left an asterisk glued to every path,
+             which would have made every path read as modified and refused every
+             host's push)
+          3. check-fragment-status-loss.sh, three plan-binary calls per fragment,
+             3 x 134 ms x 1302 = ~523 s     -> 9 s
+
+        EACH OF THE FIRST TWO FIXES WAS REAL AND INSUFFICIENT, and the closure is what
+        caught that. After (1) the push still did not return. After (2) it still did
+        not. Only after (3) did it. A closure naming the OUTPUT rather than a mechanism
+        is the only reason none of the three could be mistaken for the answer -- and a
+        fix that removed a genuine per-file spawn while leaving the push unusable is
+        exactly what a mechanism-shaped closure would have accepted.
+
+        AND THE THIRD FIX CONTAINED A FOURTH COST OF THE SAME CLASS. My frame reader
+        set IFS from a command substitution inside the while header, which is evaluated
+        ONCE PER ITERATION: roughly 3900 forked subshells, leaving 250 s after the
+        batching had already removed 3906 plan-binary calls. The timestamped trace
+        counted 3941 printf spawns against 25 plan-binary invocations. Having removed
+        the obvious per-item spawn, I had introduced a second one inside its own
+        remedy. Hoisting the assignment took it to 9 s.
+
+        ONE NOTE ON LEDGER HYGIENE, recorded here rather than as a second defect
+        record: this row's CLAIM fragment carries an agent_id with a model name in the
+        backend slot. The shape is platform-workstation-BACKEND-timestamp, where
+        backend is the HARNESS TYPE (claude, codex, opencode or gemini; order 570) and
+        not the model. The claim is spent and immutable on its ref; the rule is noted
+        so the next writer on this row does not copy the shape.

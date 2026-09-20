@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: progress
+      ts: "2026-09-19T19:59:04Z"
+      agent_id: linux-yoga-claude-20260919t195904z
+      host: yoga
+      summary: |-
+        CRITERION 4 CLOSED at 853a7c476 on work/1252-znbn-crit46. The four wall-clock
+        expected_behavior values are removed, not translated; every real budget was
+        already in timeout_ms (120000 / 600000 / 600000 / 5000) and is untouched.
+
+        THE ROW'S OWN THESIS BIT ITS OWN CRITERION. Removing the timing prose alone
+        would have flipped three verdicts, because there is NO length bucket in the
+        runner. The row's ">60 chars = NOT ENFORCED" was the CLASSIFIER's heuristic,
+        not a rule the code implements. behavior_matches_output falls through to
+        `grep -Fqi "$expected"` for anything no case arm matches, so:
+          cache-transparent:23   literal, unmatchable -> RED if run
+          cache-transparent:38   literal, unmatchable -> RED if run
+          clean-from-scratch:23  GREEN, and only because the word "cargo" sat in the
+                                 sentence and hit the *"cargo"* arm. Deleting "~10 min"
+                                 from it would have reddened it.
+          vault-auto-unseal:30   literal, unmatchable -> RED if run
+        Three more instances of 868-p8xi's shape, found by asking what the runner does
+        rather than trusting the row's classification of the same strings. Each step
+        therefore also gains `assert_exit: 0`, so the structured arm (line 1680)
+        decides first and the prose is inert by construction.
+
+        WHY NOBODY NOTICED, AND THE ROW DOES NOT SAY IT: litmus-build-cache-transparent
+        and litmus-build-clean-from-scratch-works are both phase=retired, which runs
+        only under an explicit --phase retired. THREE OF THE FOUR VALUES SIT IN TESTS
+        THAT DO NOT EXECUTE. Only the vault one is live (e2e, phase 6.5). A corpus
+        count is not a count of what runs; this is the same register error as the
+        --check/litmus-tier finding.
+
+        `run_in_background: true` IS INERT. It occurs once in the entire corpus and no
+        script reads it. The vault step runs in the foreground like any other; the `&`
+        inside its own `bash -lc` is what detaches it. The removed prose described a
+        runner mechanism that does not exist.
+
+        SCOPE, STATED SO THE NEXT READER DOES NOT RE-DERIVE IT: six long sentences
+        carry timing language, not four. The other two (vm-provisioning-idempotent:42
+        "succeeds within 2s wall", vm-shutdown-drains-forges:42 "WALL_NS <
+        30_000_000_000") plus vault:43 ("delta <= 5s") all contain "succeeds" and so
+        fall in criterion 2's disjoint 64-step bucket. The latter two are ALREADY
+        SOUND: their commands compute the elapsed time and exit 1 themselves, so the
+        budget has teeth and the prose only narrates it. Whoever migrates the 64 must
+        delete those numbers from the prose without translating them into asserts.
+
+        VERIFIED: 3/3 --parse-only rc=0, step counts unchanged (7/7/6);
+        ok:litmus-yaml-parses:436; ok:litmus-bindings:files=427 bound=411 retired=6
+        grandfathered=10; no duplicate assert_exit in any edited block (the defect that
+        produced blocked:yaml-load-failed on 1274-cbk7).
+
+        REMAINING ON THIS ROW: criterion 6 (the 27 executable arm-dependent steps, then
+        install-windows to assert_output_nonempty only, then the arms deleted on a
+        measured zero). Criteria 1, 3, 5 are already done on this branch.

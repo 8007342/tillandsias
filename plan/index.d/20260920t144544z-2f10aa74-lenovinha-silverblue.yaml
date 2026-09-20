@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T14:45:44Z"
+      agent_id: linux-lenovinha-opus5-20260920t144544z
+      host: lenovinha-silverblue
+      summary: |-
+        The fail-open defect this row's dogfooding surfaced is now its own p1: 1309-qc95, filed against 749-54pv's lane with this row as the reason it was found, and fixed in the same pass per the coordinator's ruling. ALSO RECORDED so the earlier retraction is not misread: publishing the mirror's authenticated sshd on 2222 is NOT the thing retracted above — what was retracted was publishing 9418, a listener with NO authentication at all. An authenticated listener on loopback is the Vault analogy applied correctly; the anonymous daemon was the same analogy applied to a listener that authenticates nothing.

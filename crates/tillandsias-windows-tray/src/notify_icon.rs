@@ -955,10 +955,13 @@ pub fn help_text() -> String {
             (no flags)              Launch the interactive tray (GUI subsystem).\n    \
             --provision-once        Provision the WSL utility VM to Ready, print\n                            \
             progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
-            --reset-guest           EPHEMERAL RESET: wipe the guest (wsl --unregister,\n                            \
-            deleting the VHDX + in-VM vault) and reprovision from scratch.\n                            \
-            Destructive by design; you'll re-authenticate once. Exit: 0 = Ready,\n                            \
-            1 = failed.\n    \
+            --reset-state           EPHEMERAL RESET (canonical name, all platforms):\n                            \
+            wipe ALL local state and reprovision, exiting with the provision's\n                            \
+            status. Honors TILLANDSIAS_DESTRUCTIVE_RESET_OK=0, which skips the\n                            \
+            wipe and provisions the existing state. PRESERVES the installation\n                            \
+            identity (tillandsias-vm-uuid). Exit: 0 = Ready, 1 = failed.\n    \
+            --reset-guest           Alias for --reset-state, kept for scripts that\n                            \
+            already use it. Same body, so the two cannot drift.\n    \
             --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
             Add --shell (default), --claude, --codex or --opencode to pick\n                            \
             the intent. Runs the SAME launch path as the tray menu item.\n                            \
@@ -983,6 +986,9 @@ pub fn help_text() -> String {
             Example: RUST_LOG=debug,tillandsias_windows_tray=trace\n    \
             TILLANDSIAS_NO_PROVISION  Equivalent to --no-provision when set to any value.\n                            \
             Useful when launching the tray via a method that can't pass flags.\n    \
+            TILLANDSIAS_DESTRUCTIVE_RESET_OK  Set to 0 to forbid the destructive half\n                            \
+            of --reset-state: nothing is wiped and the existing state is provisioned.\n                            \
+            Any other value, or unset, allows the reset. Opt-OUT, not opt-in.\n    \
             BUILD_COMMIT_SHA_OVERRIDE  Overrides build.rs's git rev-parse during builds\n                            \
             (CI / reproducible-source scenarios). Bakes at compile time, not runtime.\n\
          \n\
@@ -1078,15 +1084,38 @@ pub fn provision_once() -> i32 {
 /// re-authentication.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
-pub fn reset_guest_once() -> i32 {
+/// ORDER 1286-4437. `--reset-state` is the CANONICAL name for this across all
+/// three platforms: wipe every piece of local Tillandsias state, then
+/// reprovision through the platform initialisation and exit with its status.
+/// `--reset-guest` remains as an alias below, because operators and scripts
+/// already use that name and redefining a name people rely on is how a
+/// contract breaks quietly.
+///
+/// THE WINDOWS BODY ALREADY WAS THE FULL SEMANTICS, and that is a real
+/// platform difference rather than an oversight. On Linux `--reset-guest`
+/// preserves images and never touches the host keychain, which is why that
+/// platform needs a superset. Here the wipe has cleared the host vault
+/// credentials since 803-49re, because leaving them permanently broke GitHub
+/// login against a fresh guest. So this gains a NAME, a GUARD, an
+/// ANNOUNCEMENT and a CACHE PURGE -- it does not gain new destruction.
+///
+/// THE ENV GUARD IS NEW AND WAS MISSING ENTIRELY. Measured 2026-09-20:
+/// TILLANDSIAS_DESTRUCTIVE_RESET_OK appeared ZERO times in this crate, so on
+/// Windows the reset destroyed unconditionally -- on the one platform whose
+/// smoke runbook already tells an operator that variable is the supported
+/// opt-out. When it says no we still provision, because an installer that
+/// declines to destroy must still leave a working install.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+pub fn reset_state_once() -> i32 {
     struct ConsoleProgress;
     impl ProvisionProgress for ConsoleProgress {
         fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[reset-guest] phase: {}", phase.status_text());
-            tracing::info!(?phase, "reset-guest provision phase");
+            println!("[reset-state] phase: {}", phase.status_text());
+            tracing::info!(?phase, "reset-state provision phase");
         }
         fn report_message(&self, message: &str) {
-            println!("[reset-guest] {message}");
+            println!("[reset-state] {message}");
         }
     }
 
@@ -1097,69 +1126,148 @@ pub fn reset_guest_once() -> i32 {
     {
         Ok(rt) => rt,
         Err(err) => {
-            eprintln!("[reset-guest] failed to build tokio runtime: {err}");
+            eprintln!("[reset-state] failed to build tokio runtime: {err}");
             return 1;
         }
     };
-    println!(
-        "[reset-guest] This discards the local guest and its cached credentials. \
-         Everything lives in the cloud \u{2014} you'll re-authenticate once."
-    );
-    runtime.block_on(async {
-        let lifecycle = WslLifecycle::new();
-        if let Err(err) = lifecycle.wipe_guest().await {
-            eprintln!("[reset-guest] RESULT: FAILED \u{2014} wipe: {err}");
-            tracing::error!(%err, "reset-guest wipe failed");
+
+    // ORDER 1286-4437 -- THE CONTRACT IS IMPORTED, NOT RE-TYPED. The guard, the
+    // skipped-line wording and the announcement's shape all come from
+    // tillandsias_core::reset_state so the three platforms cannot drift. They
+    // already had: macneo measured this file's own line against core's constant
+    // on the day core landed -- the pinned middle phrase matched, so every grep
+    // and core's own pinning test read clean, while the prefix and the TAIL
+    // differed, and the tails differed in MEANING. That is precisely the
+    // divergence the constant exists to prevent, so the local strings are gone
+    // rather than corrected.
+    //
+    // THE PRE-FLIGHT GUARD IS PART OF THAT CONTRACT and is not vacuous here
+    // either. On Windows the reprovision is IN-PROCESS -- this binary is the
+    // reprovisioner -- so the path to check is our own image: an install
+    // interrupted between the swap and the reset can leave the process running
+    // from a file that no longer exists. macneo measured the macOS shape of it
+    // (the .app gone while 1.2 GiB of VM state survived). A repair tool that
+    // assumes the thing it repairs with is present is not a repair tool.
+    match std::env::current_exe() {
+        Ok(exe) if exe.is_file() => {}
+        Ok(exe) => {
+            eprintln!(
+                "{} {}",
+                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH,
+                exe.display()
+            );
             return 1;
         }
-        reset_crashloop_state();
-        // The wipe just invalidated the host's copy of THIS guest's vault
-        // identity. Clearing it is what makes the reset actually reset:
-        // left in place, the tray delivers the stale share into the fresh
-        // guest unconditionally and GitHub login is permanently broken
-        // (803-49re). Non-fatal — a reprovisioned guest is still better
-        // than an aborted reset, and the operator can clear it by hand.
-        match crate::installation_uuid::clear_guest_vault_credentials() {
-            Ok(cleared) if cleared.is_empty() => {
-                println!("[reset-guest] no host-side vault credentials to clear");
-            }
-            Ok(cleared) => {
-                println!(
-                    "[reset-guest] cleared host-side vault credentials: {} \
-                     (installation UUID preserved)",
-                    cleared.join(", ")
-                );
-                tracing::info!(?cleared, "reset-guest cleared host vault credentials");
-            }
-            Err(err) => {
-                eprintln!(
-                    "[reset-guest] WARNING: could not clear host-side vault credentials: {err}"
-                );
-                eprintln!(
-                    "[reset-guest] GitHub login may fail against the fresh guest. \
-                     Clear vault-shamir-share-v1 and vault-root-token-v1 by hand \
-                     (keep tillandsias-vm-uuid) and relaunch the tray."
-                );
-                tracing::warn!(%err, "reset-guest could not clear host vault credentials");
-            }
+        Err(err) => {
+            eprintln!(
+                "{} could not resolve this executable: {err}",
+                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH
+            );
+            return 1;
         }
-        println!("[reset-guest] guest wiped \u{2014} reprovisioning from scratch\u{2026}");
+    }
+
+    let wipe = tillandsias_core::reset_state::destructive_reset_allowed();
+
+    if wipe {
+        tillandsias_core::reset_state::announce_reset_plan(
+            &[
+                "the WSL2 distro and its disk",
+                crate::installation_uuid::VAULT_SHARE_TARGET,
+                crate::installation_uuid::VAULT_ROOT_TOKEN_TARGET,
+                "the download cache",
+            ],
+            &[crate::installation_uuid::TARGET_NAME],
+        );
+    } else {
+        eprintln!("{}", tillandsias_core::reset_state::RESET_SKIPPED_LINE);
+    }
+
+    runtime.block_on(async {
+        let lifecycle = WslLifecycle::new();
+        if wipe {
+            if let Err(err) = lifecycle.wipe_guest().await {
+                eprintln!("[reset-state] RESULT: FAILED \u{2014} wipe: {err}");
+                tracing::error!(%err, "reset-state wipe failed");
+                return 1;
+            }
+            reset_crashloop_state();
+            // The wipe just invalidated the host's copy of THIS guest's vault
+            // identity. Clearing it is what makes the reset actually reset:
+            // left in place, the tray delivers the stale share into the fresh
+            // guest unconditionally and GitHub login is permanently broken
+            // (803-49re). Non-fatal -- a reprovisioned guest is still better
+            // than an aborted reset, and the operator can clear it by hand.
+            match crate::installation_uuid::clear_guest_vault_credentials() {
+                Ok(cleared) if cleared.is_empty() => {
+                    println!("[reset-state] no host-side vault credentials to clear");
+                }
+                Ok(cleared) => {
+                    println!(
+                        "[reset-state] cleared host-side vault credentials: {} ({} preserved)",
+                        cleared.join(", "),
+                        crate::installation_uuid::TARGET_NAME
+                    );
+                    tracing::info!(?cleared, "reset-state cleared host vault credentials");
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[reset-state] WARNING: could not clear host-side vault credentials: {err}"
+                    );
+                    eprintln!(
+                        "[reset-state] GitHub login may fail against the fresh guest. Clear {} and {} by hand (keep {}) and relaunch the tray.",
+                        crate::installation_uuid::VAULT_SHARE_TARGET,
+                        crate::installation_uuid::VAULT_ROOT_TOKEN_TARGET,
+                        crate::installation_uuid::TARGET_NAME
+                    );
+                    tracing::warn!(%err, "reset-state could not clear host vault credentials");
+                }
+            }
+            // THE DOWNLOAD CACHE, AND ONLY IT. cache_root() is
+            // %LOCALAPPDATA%\tillandsias\cache, a SIBLING of wsl-build, which
+            // holds the BUILDER distro's disk on a developer host -- 142.9 GB of
+            // gate toolchain on yolanda (1295-b4i8). Removing the shared parent
+            // would take the builder with it, so this names the child.
+            let cache = WslLifecycle::cache_root();
+            match std::fs::remove_dir_all(&cache) {
+                Ok(()) => {
+                    println!("[reset-state] removed download cache {}", cache.display());
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    println!("[reset-state] no download cache to remove");
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[reset-state] WARNING: could not remove download cache {}: {err}",
+                        cache.display()
+                    );
+                    tracing::warn!(%err, "reset-state could not remove download cache");
+                }
+            }
+            println!("[reset-state] state wiped \u{2014} reprovisioning from scratch\u{2026}");
+        }
         match lifecycle
             .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
             .await
         {
             Ok(()) => {
-                println!("[reset-guest] RESULT: VM Ready \u{2014} control wire up \u{2713}");
-                tracing::info!("reset-guest: VM Ready after wipe+reprovision");
+                println!("[reset-state] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                tracing::info!("reset-state: VM Ready");
                 0
             }
             Err(err) => {
-                eprintln!("[reset-guest] RESULT: FAILED \u{2014} reprovision: {err}");
-                tracing::error!(%err, "reset-guest reprovision failed");
+                eprintln!("[reset-state] RESULT: FAILED \u{2014} provision: {err}");
+                tracing::error!(%err, "reset-state provision failed");
                 1
             }
         }
     })
+}
+
+/// Alias kept for the name operators and scripts already use. It delegates
+/// rather than duplicating, so the two cannot drift.
+pub fn reset_guest_once() -> i32 {
+    reset_state_once()
 }
 
 /// Structured `--status-once` report. Mirrors the JSON shape of the `wire`
@@ -5420,6 +5528,8 @@ mod tests {
         let text = help_text();
         for flag in [
             "--provision-once",
+            "--reset-state",
+            "--reset-guest",
             "--status-once",
             "--diagnose",
             "--json",
@@ -5445,6 +5555,7 @@ mod tests {
             "RUST_LOG",
             "TILLANDSIAS_NO_PROVISION",
             "BUILD_COMMIT_SHA_OVERRIDE",
+            "TILLANDSIAS_DESTRUCTIVE_RESET_OK",
         ] {
             assert!(
                 text.contains(env_var),

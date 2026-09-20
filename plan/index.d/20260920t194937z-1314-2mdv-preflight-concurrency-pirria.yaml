@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: the-preflight-front-door-runs-its-roster-serially-so-half-its-wall-is-fourteen-skipped-guards-each-paying-a-full-deadline-in-turn-and-the-door-a-host-should-run-before-every-push-costs-two-and-a-half-minutes
+  order: 1314-2mdv
+  status: ready
+  kind: improvement
+  priority: p2
+  desired_release: v0.5
+  release_target: fail-loud-diagnosis-milestone
+  pickup_role: any
+  capability_tags:
+  - tooling
+  - instrument
+  - low-end
+  - build
+  estimated_hours: 4
+  owned_files:
+  - build.sh
+  - scripts/test-preflight-front-door.sh
+  title: '`./build.sh --preflight` runs its 108 guards one after another, so 70 of its 140 seconds are
+    fourteen skipped guards each waiting out a full 5s deadline in turn — the door a host should run before
+    EVERY push costs two and a half minutes, and adoption is the whole point of it
+
+    '
+  context: "FILED BY THE HOST THAT BUILT THE DOOR (1305-udgs), as its sibling rather than\nits next slice:\
+    \ the door is finished and honest at 150s, and making it fast is a\ndifferent problem with a different\
+    \ hazard, which is a poor thing to bolt onto a\nrow that is ready to land.\n\nMEASURED ON PIRRIA 2026-09-20,\
+    \ the first enforced run:\n\n  ok:preflight:ran=94 skipped=14 wall=140s      orphan delta 0\n\nWHERE\
+    \ THE 140 SECONDS GO. 55s is the real work of the 94 guards that finish (54\nof them in under 250ms).\
+    \ 70s is the FOURTEEN SKIPPED guards, each waiting out its\nfull 5s deadline, one after another. The\
+    \ remaining ~15s is per-guard overhead —\na fork, a setsid and a polling quantum, 108 times, also\
+    \ serial. So half the wall\nis the door waiting, in sequence, for guards it has already decided not\
+    \ to wait\nfor, which is close to the worst possible use of a floor host's time.\n\nWHY IT MATTERS\
+    \ MORE THAN A MINUTE SAVED. This door exists because four\nconsecutive refusals on one ref in one\
+    \ evening were each decidable in about a\nsecond and each cost a full gate. Its value is entirely\
+    \ in being run BEFORE\nEVERY PUSH, and a command a host runs before every push has to be cheap enough\n\
+    that not running it never looks reasonable. At 140s it is a thing people will\nskip when they are\
+    \ in a hurry, which is exactly when they most need it.\n\nTHE SHAPE IS ALREADY THERE. Each guard writes\
+    \ to its OWN file in its OWN process\ngroup (1305-udgs), so the door already collects verdicts from\
+    \ files rather than a\nshared pipe. Running the roster concurrently and collecting the same files\
+    \ makes\nthe wall the longest fast guard plus one deadline — tens of seconds rather than\nminutes.\n\
+    \nTHE HAZARD, AND IT IS THE REASON THIS IS A ROW AND NOT A ONE-LINE CHANGE: guards\nthat share state\
+    \ collide when run side by side. Known candidates on this tree —\nthe plan binary's caches, anything\
+    \ writing .cache/metrics, and every guard that\ntouches the git index or runs `git fetch`. A collision\
+    \ would not necessarily\nfail loudly; it could change a verdict, which in a front door means a green\
+    \ that\nis wrong, and a wrong green is worse than the two and a half minutes.\n"
+  exit_criteria:
+  - '`./build.sh --preflight` completes in under 60s on the floor host with the same deadline (pre-fix
+    result: 140s measured on pirria 2026-09-20, ran=94 skipped=14)'
+  - 'THE COLLISION ARM, and it is the point of the row: the concurrent door run against an unchanged tree
+    produces verdicts IDENTICAL to the serial run, guard for guard, twice over. Any guard whose verdict
+    differs under concurrency is NAMED and serialized, never left racing and never dropped.'
+  - 'NEGATIVE CONTROL: the orphan delta stays zero under concurrency — a door that kills process groups
+    correctly when serial can leak them when several are in flight, and the group kill is what 1305-udgs
+    measured into existence'
+  - the wall arm's budget is re-derived from the first ENFORCED concurrent measurement, and the no-raise
+    rule applies to the new number from that moment (1305-udgs's rule)
+  unscoreable: 'concurrency-width-not-chosen: the right number of guards in flight depends on
+
+    the floor host''s cores and on how many of the 108 are IO-bound rather than CPU-
+
+    bound, and nothing here measures that split. Picking a width before measuring it
+
+    is how a fast door becomes a door that thrashes a two-core control unit.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-09-20T19:49:37Z'
+    agent_id: linux-pirria-claude-20260920t195000z
+    host: pirria
+    summary: 'Filed as a SIBLING of 1305-udgs rather than its next slice, on my own call by
+
+      size: the door is complete and honest at its measured 150s budget, and
+
+      concurrency needs its own measurement, its own hazard and its own arm. Bolting
+
+      it onto a row that is ready to land would delay a working front door to chase a
+
+      faster one.
+
+      The coordinator named the hazard and the arm; both are written into the criteria
+
+      as given, because the collision case is the one that could turn a fast door into
+
+      a wrong green.'

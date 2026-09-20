@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    event:
+      type: evidence
+      ts: "2026-09-19T19:13:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        FOURTH AND FIFTH REPRODUCTIONS, 2026-09-19, and the trigger is now broader than the packet says. The row's context describes the orphan arising from a KILLED --exec-guest (a timeout firing, a harness backgrounding a long call). Both of today's came from a DELIBERATE, ORDINARY stop of the TRAY in continuous-runloop mode: pkill on dist/Tillandsias.app/Contents/MacOS/tillandsias-tray, which is how you end a tray you started yourself. The com.apple.Virtualization.VirtualMachine XPC child outlived it both times, still holding nvram.bin and rootfs.img, and the next VM start would have failed as 'The boot loader is invalid'. I cleared it the same way both times (SIGTERM, then verify the pid is gone) and the subsequent starts were clean. SO WIDEN THE TRIGGER IN THE ROW: it is not specific to SIGKILL or to --exec-guest. Any termination of the owning process that does not stop the VM first leaves the child running, and SIGTERM to the tray is the normal way to stop a tray. That makes the orphan reachable in ordinary use, not only under a harness timeout, which raises the priority of half 1 of the deliverable — the message that names the holder instead of blaming the boot loader. FREQUENCY, since a rate means nothing unsplit: five occurrences today across two distinct causes — three from killed --exec-guest runs (harness timeout), two from tray stops. Every one cleared by killing one pid with no change to nvram.bin, rootfs.img or any config, which is the causal evidence rather than the correlation. I am not claiming the tray has no stop path that would do this correctly; I did not look for one. The claim is narrower: pkill on the tray binary, which is what an operator or an agent reaches for, leaves the VM running.

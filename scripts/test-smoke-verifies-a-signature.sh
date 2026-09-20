@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# @trace order:1273-4mak, spec:binary-signing
+#
+# THE DEFECT. The curl-install smoke — the acceptance gate a release is promoted
+# to stable on — verified INTEGRITY and never AUTHENTICITY. Measured by the row's
+# author on 2026-09-19: `grep -ci 'cosign|verify.sh' SKILL.md` returned 0. Every
+# release publishes a .cosign.bundle beside every asset, and nothing read one on
+# any lane, for any release, ever.
+#
+# WHY INTEGRITY IS NOT ENOUGH, which is the whole point and is what ARM 3 pins:
+# install.sh checks the asset's SHA256 against a SHA256SUMS fetched from the same
+# place as the asset. A substituted asset served with a REGENERATED manifest is
+# self-consistent and passes. Only the signature answers "who produced this".
+#
+# THIS FIXTURE RUNS THE RUNBOOK'S OWN TEXT. It extracts the Linux block from
+# §1s of SKILL.md and executes it against a fake release served over file://,
+# with a stub cosign on PATH. A fixture that re-implemented the block would
+# verify its own paraphrase and let the runbook rot underneath it.
+#
+# THE STUB MODELS A SIGNATURE, not a verdict: it records the bytes that were
+# "signed" at setup and exits 0 only if the artifact still matches them. So ARM 3
+# fails for the reason a real signature would fail, rather than because a stub
+# was told to fail.
+#
+# COSIGN IS NOT INSTALLED ON THIS HOST, NOR IN THE TOOLBOX, NOR IN dnf (checked
+# 2026-09-20 on yoga; macneo measured the same absence on macOS). So there is no
+# real-cosign arm here, and this fixture must not pretend otherwise — the row's
+# own criterion 2 is that could-not-run is never a pass, and that applies to the
+# test as much as to the lane. ARM 1 pins the could-not-run path, which is the
+# path every host in this fleet takes today.
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
+ROOT="$PWD"
+
+pass=0; fail=0
+ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass + 1)); }
+bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+# ORDER 1285-vz27 pass / the 416 second-regime fix. A DIGEST RESOLVED BY WHAT
+# ANSWERS, not by what platform this is.
+#
+# The first version hardcoded sha256sum. On macbookair that binary lives under
+# /sbin, which is NOT on the narrow PATH the stub runs with, so `command -v
+# sha256sum` found nothing, the stub's digest came back EMPTY, every artifact
+# compared unequal, ARM 2 reported cosign:FAILED on a genuine artifact and ARM 3
+# went VACUOUSLY GREEN — its expected refusal arrives whatever it substitutes.
+# This fixture's own ARM 2 text predicts that exact failure; predicting it is not
+# the same as testing the condition that produces it.
+#
+# Resolution is by EXECUTION: each candidate is run against a known input and
+# kept only if it emits a 64-hex digest. A `command -v` probe would accept a
+# binary that exists and cannot run, and a uname switch would encode the guess
+# this defect was made of. PATH is deliberately NOT widened — that would repair
+# reachability while leaving the GNU-name assumption in place for the next host.
+DIGEST_CMD=""
+for _cand in "sha256sum" "shasum -a 256" "openssl dgst -sha256"; do
+    _probe="$($_cand /dev/null 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1)"
+    if [ -n "$_probe" ]; then DIGEST_CMD="$_cand"; break; fi
+done
+if [ -z "$DIGEST_CMD" ]; then
+    printf 'skip:smoke-verifies-a-signature:no-sha256-tool (tried sha256sum, shasum -a 256, openssl dgst -sha256)\n'
+    exit 0
+fi
+# The stub runs under a NARROW PATH, so it needs an absolute program.
+DIGEST_BIN="$(command -v "${DIGEST_CMD%% *}")"
+DIGEST_ARGS=""
+case "$DIGEST_CMD" in *" "*) DIGEST_ARGS="${DIGEST_CMD#* }" ;; esac
+_digest() { "$DIGEST_BIN" $DIGEST_ARGS "$1" 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1; }
+
+# ORDER 1302-7j8p. SAY WHICH TOOL ANSWERED. macbookair ran this fixture twice on
+# 2026-09-20 — ambient PATH, where sha256sum resolved from /sbin, and a narrowed
+# PATH where `shasum -a 256` answered — and THE TWO OUTPUTS WERE BYTE-IDENTICAL.
+# Both printed 5/5 and neither said which candidate had run, so establishing
+# which regime the green proved meant replaying the selection loop by hand.
+#
+# A verdict that cannot name the regime it exercised is not evidence for a
+# second-regime record: the whole point of that record is WHICH one. Same shape
+# as 1300-q7eq's ARM 0 naming what it left untested rather than passing quietly.
+printf 'digest: %s (%s)\n' "$DIGEST_CMD" "$DIGEST_BIN"
+
+SKILL="skills/smoke-curl-install-and-test-e2e/SKILL.md"
+
+# ---------------------------------------------------------------- ARM 0
+# THE PREMISE: the runbook carries an extractable Linux verification block that
+# probes for cosign. Without this every arm below would be testing a block it
+# invented, and a deleted §1s would read as green.
+awk '/^Linux — use the release/{f=1} f&&/^```bash$/{c=1;next} c&&/^```$/{exit} c' \
+    "$SKILL" > "$TMP/linux-block.sh"
+if [ ! -s "$TMP/linux-block.sh" ]; then
+    bad "ARM 0: no Linux verification block could be extracted from $SKILL §1s — the runbook has no signature check to test"
+elif ! grep -q 'command -v cosign' "$TMP/linux-block.sh"; then
+    bad "ARM 0: the extracted block does not probe for cosign, so it cannot distinguish a missing tool from a bad signature"
+else
+    ok "ARM 0: the runbook's own Linux block extracted ($(wc -l < "$TMP/linux-block.sh") lines) and it probes for cosign"
+fi
+
+# A fake release served over file://. curl handles file:// URLs, so no network
+# and no listener is needed.
+REL="$TMP/release"; mkdir -p "$REL"
+printf 'genuine tillandsias binary\n' > "$REL/tillandsias-linux-x86_64"
+# The release's verify.sh is not in the checkout — it is published per release.
+# The block calls `bash verify.sh <asset>`, so the fake release serves a
+# stand-in with the SAME contract as the published one: refuse when cosign is
+# absent, otherwise let cosign's status decide. Checked against the real
+# v56.9.19.2 verify.sh, which is `set -euo pipefail`, exits 1 on a missing
+# cosign, and prints its success line only after verify-blob returns 0.
+cat > "$REL/verify.sh" <<'VERIFY'
+#!/usr/bin/env bash
+set -euo pipefail
+ARTIFACT="${1:?artifact required}"
+command -v cosign >/dev/null 2>&1 || { echo "Error: cosign is not installed." >&2; exit 1; }
+cosign verify-blob --bundle "${ARTIFACT}.cosign.bundle" "${ARTIFACT}"
+echo "Verification succeeded."
+VERIFY
+printf 'bundle for the genuine bytes\n' > "$REL/tillandsias-linux-x86_64.cosign.bundle"
+
+# The stub: a signature binds to CONTENT. Records the signed bytes once.
+STUBDIR="$TMP/stub"; mkdir -p "$STUBDIR"
+_digest "$REL/tillandsias-linux-x86_64" > "$TMP/signed.sha"
+cat > "$STUBDIR/cosign" <<STUB
+#!/usr/bin/env bash
+# stub cosign: exits 0 only when the artifact still matches the signed bytes.
+art="\${@: -1}"
+have="\$("$DIGEST_BIN" $DIGEST_ARGS "\$art" 2>/dev/null | grep -oE '[0-9a-f]{64}' | head -1)"
+want="\$(cat "$TMP/signed.sha")"
+[ "\$have" = "\$want" ]
+STUB
+chmod +x "$STUBDIR/cosign"
+
+run_block() {  # <PATH to use>  -> echoes the cosign: line the block emitted
+    ( cd "$TMP" && env PATH="$1" SMOKE_BASE="file://$REL" \
+        bash "$TMP/linux-block.sh" 2>/dev/null | grep -E '^cosign:' | head -1 )
+}
+
+# ---------------------------------------------------------------- ARM 1
+# NO COSIGN: could-not-run, named, and NOT a verified line. This is the path
+# every host in this fleet takes today, so it is the one that must be right.
+line="$(run_block "/usr/bin:/bin")"
+if [ "$line" = "cosign:could-not-run:cosign-absent" ]; then
+    ok "ARM 1: a host without cosign emits cosign:could-not-run:cosign-absent — not a pass, not a failure"
+elif printf '%s' "$line" | grep -q '^cosign:verified'; then
+    bad "ARM 1: a host WITHOUT cosign reported '$line' — a missing tool read as a verified signature, which is the could-not-run-as-ok shape this row exists to remove"
+else
+    bad "ARM 1: expected cosign:could-not-run:cosign-absent, got '${line:-<nothing>}'"
+fi
+
+# ---------------------------------------------------------------- ARM 2
+# A GENUINE ARTIFACT VERIFIES. Without this, a block that refused everything
+# would pass ARM 1 and ARM 3 and be useless.
+line="$(run_block "$STUBDIR:/usr/bin:/bin")"
+if [ "$line" = "cosign:verified:1/1" ]; then
+    ok "ARM 2: an artifact matching its signature emits cosign:verified:1/1"
+else
+    bad "ARM 2: a genuine artifact did not verify, got '${line:-<nothing>}' — the block refuses everything and ARM 3 proves nothing"
+fi
+
+# ---------------------------------------------------------------- ARM 3
+# THE ATTACK THE INTEGRITY CHECK CANNOT SEE, and the row's third criterion.
+# Substitute the asset AND regenerate its SHA256SUMS entry so the hash check is
+# self-consistent. The lane must still REFUSE, on the signature.
+printf 'SUBSTITUTED payload\n' > "$REL/tillandsias-linux-x86_64"
+printf '%s  tillandsias-linux-x86_64\n' "$(_digest "$REL/tillandsias-linux-x86_64")" > "$REL/SHA256SUMS"
+
+# First prove the premise: the integrity check PASSES on the substituted pair.
+# Compared here rather than via `sha256sum -c`: openssl has no -c at all, so a
+# host that resolved to it would skip the premise instead of checking it.
+_want="$(awk '{print $1}' "$REL/SHA256SUMS" 2>/dev/null | head -1)"
+_have="$(_digest "$REL/tillandsias-linux-x86_64")"
+if [ -n "$_want" ] && [ "$_want" = "$_have" ]; then
+    line="$(run_block "$STUBDIR:/usr/bin:/bin")"
+    if printf '%s' "$line" | grep -q '^cosign:FAILED:'; then
+        ok "ARM 3: a substituted asset whose SHA256SUMS entry was regenerated PASSES the hash check and is REFUSED on the signature ($line)"
+    elif printf '%s' "$line" | grep -q '^cosign:verified'; then
+        bad "ARM 3: the substituted asset was reported VERIFIED ('$line') — the signature check does not bind to content and adds nothing over the hash"
+    else
+        bad "ARM 3: expected cosign:FAILED:, got '${line:-<nothing>}'"
+    fi
+else
+    bad "ARM 3: premise broken — the regenerated SHA256SUMS does not validate the substituted asset, so this arm is not exercising the self-consistent-manifest case"
+fi
+
+# ---------------------------------------------------------------- ARM 4
+# COULD-NOT-RUN IS NOT A PASS, IN THE REPORT. The second half of criterion 2
+# lives in §5: a run that could not verify must not be filed as an unqualified
+# PASS. Three honest "NOT CHECKED" declarations across three platforms did not
+# close this gap; requiring the verdict itself to carry it is what does.
+if grep -q 'signature_verification' "$SKILL" \
+   && grep -q 'MUST NOT be reported as an' "$SKILL"; then
+    ok "ARM 4: §5 requires the cosign line in the report's opening lines and forbids an unqualified PASS when it is could-not-run"
+else
+    bad "ARM 4: §5 does not require the signature line or does not forbid an unqualified PASS — a lane may again verify nothing and file a clean PASS"
+fi
+
+printf '\n'
+if [ "$fail" -eq 0 ]; then
+    printf 'ok:smoke-verifies-a-signature:%d/%d\n' "$pass" "$((pass + fail))"
+    exit 0
+fi
+printf 'blocked:smoke-verifies-a-signature:%d-failed-of-%d\n' "$fail" "$((pass + fail))"
+exit 1

@@ -1,0 +1,142 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-windows-target-compile-of-the-headless-probe-refuses-to-build-without-a-linux-musl-sidecar-it-embeds-for-a-container-lane-the-windows-host-never-runs-natively
+    order: 1269-6fcn
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [windows, portability, release, build, fail-loud]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/build.rs
+      - .github/workflows/release.yml
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a build
+      that does not yet succeed — a Windows-target compile with images/router/
+      absent — so any litmus named now resolves to nothing and 885-92iu
+      refuses the row. Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-windows-target-headless-builds-without-linux-artifacts.sh —
+      with images/router/tillandsias-router-sidecar ABSENT, a Windows-target
+      `cargo build -p tillandsias-headless --bin tillandsias` succeeds; the
+      NEGATIVE CONTROL asserts a LINUX-target build still refuses when the
+      sidecar is missing, so the fix cannot degrade into "never require it".
+      msys-only, skipping loudly elsewhere, since the defect cannot occur where
+      the sidecar is the host's own build product.
+
+      WIRE IT IN THE SAME COMMIT THAT WRITES IT and name the route (1068-cxmf):
+      an `_run bash` line in build.sh, or BOTH an
+      openspec/litmus-tests/litmus-<name>.yaml and an
+      openspec/litmus-bindings.yaml entry.
+    title: |
+      a WINDOWS-TARGET compile of the headless probe refuses to build without `images/router/tillandsias-router-sidecar`, a LINUX MUSL artifact it embeds for a container lane the Windows host never runs natively — so the release runner must ship a Linux binary to a host that has no use for it
+    context: |
+      MEASURED ON YOLANDA 2026-09-19, natively in Git Bash at the v56.9.19.1
+      tag (worktree detached at e2c5fbe71), while validating the fix for the
+      release's failed Windows tray job.
+
+      PRE-FIX RED, verbatim, reproducing the CI failure exactly — same crate,
+      same line, same exit:
+
+        error: failed to run custom build command for `tillandsias-headless v56.9.19`
+        thread 'main' panicked at crates\tillandsias-headless\build.rs:139:17:
+          required runtime asset missing:
+            C:\Users\bullo\w1\images/router/tillandsias-router-sidecar
+              bash scripts/build-sidecar.sh
+          If you hit this from a build script, that script is missing the staging
+          call that build.sh and scripts/build-image.sh already make.
+        cargo build of tillandsias-headless failed (exit 101)
+
+      POST-FIX GREEN, the identical command with ONE variable changed — the
+      sidecar downloaded from the release and staged:
+
+        Package creation succeeded.
+        Packaged: tillandsias-tray-56.9.19.1-windows-x64.msix (version 56.9.19.0)
+        Packaged: tillandsias-tray-56.9.19.1-windows-x64.zip
+        EXITCODE=0
+
+      WHY IT SURFACED NOW AND NOT BEFORE. 1171-ccf2, since v56.9.13.1, made
+      scripts/build-windows-tray.ps1 build the native headless probe beside the
+      tray in its own cargo invocation. That is the first time a Windows runner
+      compiles tillandsias-headless at all — the last green Windows job has
+      zero matches for that crate in its log. The crate did not change; who
+      compiles it did. A build-time dependency that had always been satisfied
+      incidentally (build.sh and scripts/build-image.sh stage the sidecar,
+      723-wd8i / 1b5b5a856) became load-bearing on a host that runs neither.
+
+      THE ASYMMETRY THAT MAKES THIS HARD TO SEE FROM A DEV CHECKOUT, measured:
+
+        tag worktree (fresh, like the runner)   images/router/tillandsias-router-sidecar  ABSENT
+        main checkout (has run build.sh)        present, 1,964,144 bytes
+        tracked by git?                         NO — it is a build artifact
+
+      So a Windows developer who has ever run ./build.sh cannot reproduce the
+      failure, and a fresh runner cannot avoid it. My own first native build of
+      the tray at this tag PASSED for exactly that reason; the pass was true
+      and about a different subject.
+
+      THE QUESTION THIS ROW ASKS, which the release fix deliberately does not
+      answer: build.rs:139 refuses the build in order to EMBED a sidecar for a
+      container lane the Windows host never runs natively. The v56.9.19.2
+      workflow fix makes the runner green by DOWNLOADING that Linux musl
+      artifact onto a Windows runner — correct as a release fix, and it leaves
+      the coupling in place. Whether a Windows-target compile should require a
+      Linux artifact at all is the thing to settle.
+
+      NOT PRESCRIBING THE MECHANISM, deliberately. A conditional embed keyed on
+      target_os is one design; a stub sidecar on non-Linux targets is another;
+      making the embed lazy at runtime is a third. Each has different
+      consequences for the container lane that legitimately needs the real
+      bytes. The exit criterion below names the OUTPUT, not the design.
+
+      A WRITTEN CONSTRAINT, recorded here so it is not rediscovered as a defect
+      (verified against the cited spans 2026-09-19): the MSIX carries version
+      56.9.19.0 while the filename carries 56.9.19.1, because the Store
+      reserves field four and requires 0. scripts/build-windows-tray.ps1:441-447
+      states it and its consequence in its own words — "two Store submissions
+      on the SAME DAY would collapse to the same version ... One Windows
+      release per day is the design, not an accident" — and
+      openspec/specs/versioning/spec.md:26 carries the same rule. THE LIVE
+      LIMITATION, stated as a constraint and not as a bug: a sideloaded .2 MSIX
+      cannot supersede a same-day .1 MSIX through Add-AppxPackage, because
+      their manifest versions are identical. It does not bite the v56.9.19.2
+      fix-forward, since v56.9.19.1 shipped ZERO Windows assets and the .2 MSIX
+      is the first installable 56.9.19.0 package. The operator install path and
+      the smoke use the ZIP (install-windows.ps1:377-381 resolves
+      tillandsias-tray-*-windows-x64.zip from SHA256SUMS-windows), which
+      carries the full four-field version.
+    deliverable: |
+      A Windows-target build of the headless probe does not depend on a Linux
+      musl artifact, and the release lane selects platform assets by the
+      runner's actual architecture rather than by an assumption.
+
+        * A Windows-target `cargo build -p tillandsias-headless --bin tillandsias`
+          succeeds with images/router/ absent.
+        * The container lane still gets the REAL sidecar bytes. A fix that
+          makes the Linux build stop requiring it has widened the admission
+          while narrowing the claim, which is the failure this project names
+          explicitly.
+        * The release workflow's Windows job selects the sidecar (and the
+          guest) by runner architecture and FAILS LOUDLY when the arch-matched
+          asset is absent, rather than landing an x86_64 artifact under an
+          arch-neutral filename.
+    exit_criteria:
+      - 'OUTPUT, not mechanism: with images/router/tillandsias-router-sidecar ABSENT, a Windows-target `cargo build -p tillandsias-headless --bin tillandsias` completes successfully. PRE-FIX RESULT: FAILS — panic at crates/tillandsias-headless/build.rs:139 "required runtime asset missing: images/router/tillandsias-router-sidecar", cargo exit 101, measured on yolanda 2026-09-19 at tag v56.9.19.1 (worktree e2c5fbe71), reproducing the v56.9.19.1 release job failure exactly.'
+      - 'NEGATIVE CONTROL: a LINUX-target build still REFUSES when the sidecar is absent, so the container lane cannot be handed an empty embed by this fix. Without this arm the row could close by deleting the requirement outright.'
+      - 'the Windows job selects the sidecar pattern by `runner.arch` (X64 -> x86_64, ARM64 -> aarch64) and fails when the arch-matched asset is absent. PRE-FIX RESULT: an x86_64 sidecar lands under the arch-neutral name `images/router/tillandsias-router-sidecar` on any runner, and a size test cannot see the mismatch. PRECEDENT: v56.9.11.1 shipped no Windows tray because the guest-asset check and the staging loop disagreed about arch (release run 34649585604, Windows job 103439175869, recorded in build-windows-tray.ps1). The job is `runs-on: windows-2025` (release.yml:536) and x86_64-only today, so this is a latent hole rather than a live one — filed because the same class has already cost one release.'
+    provenance: |
+      Found by yolanda-windows 2026-09-19 while validating the coordinator's
+      workflow fix for the v56.9.19.1 Windows tray job, at macuahuitl's
+      direction to file the coupling question separately from the release fix.
+      The pre-fix red and post-fix green above are one measurement with one
+      variable changed, taken on the only locus that can take it. Two earlier
+      hypotheses of mine — that the packaging script's VERSION byte-scan zeroed
+      the guest asset, and that a $RepoRoot path mismatch stranded the staging
+      — were tested and REFUTED before this cause was found; recorded so nobody
+      re-derives them. The first reproduction attempt also failed for the wrong
+      reason, dying at the 1059-ry6t guest-asset check before reaching the
+      defect, which is why the red above was taken with the guest staged first.

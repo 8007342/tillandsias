@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    order: 1286-4437
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [installer, provisioning, idempotency, linux, macos, windows, operator-ruling]
+    estimated_hours: 12
+    owned_files:
+      - scripts/install.sh
+      - scripts/install-macos.sh
+      - scripts/install-windows.ps1
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    verifiable_closure: |
+      litmus:installer-reprovisions-on-install passes on each platform tier
+      with three arms, one per installer: on a host whose local state is
+      BROKEN on purpose (Linux: a half-provisioned guest with a stopped vault
+      container and a stale image tag; macOS: a VM state dir with a truncated
+      rootfs.img; Windows: a registered `tillandsias` distro whose guest
+      binary is a different version from the tray), running the published
+      installer the canonical way (`curl … | bash`, `curl … | bash` for
+      macOS, `irm … | iex`) with NO other command ends, within the
+      installer's own run, with the platform's diagnose surface reporting a
+      healthy provisioned state (`tillandsias --diagnose` /
+      `tillandsias-tray --diagnose --json` showing provisioned and ready) and
+      the installer's output naming what it reset (`reset: podman state
+      (containers, images, volumes)` / `reset: VM state and caches` /
+      `reset: WSL distro tillandsias and caches`) BEFORE it did so.
+      PRE-FIX RESULT: FAILS on all three — Linux install.sh installs the
+      launcher and stops (init is a separate manual step; a broken podman
+      state survives); install-windows.ps1 defers provisioning to the next
+      launch and never unregisters an existing distro; install-macos.sh
+      provisions but never resets existing VM state (a truncated rootfs
+      survives). NEGATIVE CONTROL: an install onto a host with NO prior state
+      ends in the same provisioned verdict, so the reset arm cannot be "wipe
+      only when something exists" without also proving the empty case.
+    title: |
+      an install resets and reprovisions the local state on every platform and then runs the platform initialisation itself, so a curl|bash or irm|iex install is also the repair for a broken local state
+    context: |
+      Operator ruling 2026-09-20 on 1281-pgit's open design criterion: the
+      macOS and Windows versions should provision on install, and that should
+      be the way to fix a broken local state; a curl|bash or irm|iex install
+      reprovisions the VM, the WSL distro and the podman containers; the
+      design is ephemeral AND idempotent; an install provisions and resets
+      the local install and then immediately runs --init / --provision /
+      whichever initialisation the platform needs. This makes the reset the
+      installers' job rather than the smoke runbook's §2 (which today
+      performs it by hand before §3), and it turns 1281-pgit's "install is
+      not a download test" from a hazard into the contract. Related rulings:
+      900-z3kv (reset is the baseline; idempotency over legacy support;
+      podman system reset --force preferred). Boundary the implementer must
+      keep: the reset destroys the vault store, mirrors and images on the
+      host, so the installer says so on its first line and offers one
+      documented escape (an env var that skips the reset) for an operator who
+      wants the old state kept; the default is the reset. The smoke runbook's
+      §1/§2/§3 sequencing changes with this: §1 becomes install-and-provision
+      and §2's manual destruction becomes a re-install onto broken state.
+    next_action: >
+      Three slices, one per installer, each landed by the host that can run
+      that platform's tier (Linux: a floor Silverblue host; macOS: a floor
+      macOS host; Windows: yolanda or esme): (1) make the installer perform
+      the platform reset (Linux: the existing clear-vault-host-credentials +
+      podman system reset --force path, which 1284-jf86 just made able to
+      remove subuid-owned vault-data; macOS: the VM state and cache dirs the
+      smoke's §2 removes; Windows: wsl --unregister tillandsias, the cache
+      and log dirs, and the two vault credentials) announcing it first; (2)
+      run the platform initialisation at the end of the install (Linux
+      `tillandsias --debug --init`; macOS the tray's provision, already
+      there; Windows `tillandsias-tray.exe --provision-once`) and exit with
+      its status; (3) write the litmus arm for that platform with the broken
+      state staged in a scratch prefix where the installer allows one, and
+      the real substrate where it does not, on a floor host only. Then update
+      the smoke runbook's §1-§3 to the new contract. Do not close on the macOS
+      arm alone.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from the
+      operator's ruling in the coordination session; the pre-fix results are
+      the three installers' current behaviour as read and as measured by
+      today's smokes (macneo's .1/.2, pirria's .1/.2, the operator's own esme
+      attempt); nothing here was run by the coordinator.

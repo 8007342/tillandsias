@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    field: status
+    value: in_progress
+    ts: "2026-09-20T20:26:12Z"
+    host: yoga
+
+events:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    event:
+      type: progress
+      ts: "2026-09-20T20:26:12Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: claimed on yoga 2026-09-20; today's ten gate cycles on two slices, five lost purely to re-gating an unchanged slice after someone else pushed, are this row's pre-fix measurement

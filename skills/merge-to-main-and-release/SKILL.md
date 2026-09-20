@@ -87,6 +87,24 @@ during the v56.8.31.3 stable promotion):**
   what was blessed.
 - **CUT-NEW** (no existing blessed release, or the tree moved past it):
   compute the next version and run every step below.
+- **FIX-FORWARD with zero code delta** (a published cut lost one platform's
+  artifacts to a runner or workflow defect, and the repair touches only
+  `.github/workflows/`, the README ledger and `plan/`): this is CUT-NEW for
+  the version and the tag, but the §3 gate is COMPOSED rather than re-run.
+  Assert the premise, never assume it — from the tree the previous cut's
+  `--ci-full --install` gated (`<gated>`) to `origin/linux-next`, the diff
+  outside `plan/`, `docs/`, `skills/`, `cheatsheets/`, `README.md`,
+  `.github/workflows/release.yml` and the previous cut's own
+  `VERSION`/`Cargo.lock`/`crates/*/Cargo.toml` bump MUST be empty; the delta
+  itself was gated by the land tool's `./build.sh --check`; and
+  `scripts/release-preflight.sh` is re-run fresh at merge time (it is cheap and
+  it is the only check that reads the NEW tag). Record the composition in the
+  PR body and the ledger row in those words. If the diff is not empty, it is a
+  CUT-NEW and the full gate runs. Measured on v56.9.19.2 (2026-09-19): the
+  Windows tray job of v56.9.19.1 died on a runner staging gap; re-running a
+  two-hour gate on a tree whose code bytes the gate had already passed would
+  have measured nothing new, and the assertion above is what makes that claim
+  checkable rather than convenient.
 
 **The version scheme is epoch-anchored CalVer** (operator ruling 2026-08-31):
 `<years_since_epoch>.<month>.<day>.<build>` — e.g. `56.8.31.3` for the third
@@ -539,6 +557,16 @@ The Linux Silverblue smoke-test artifact is the `tillandsias-linux-x86_64` musl 
 ---
 
 ## 8 — Record the cycle outcome
+
+**The ledger row is on origin BEFORE any smoke go is sent.** The curl-install
+smoke's §0.2b reads the row for the tag under test and files `NO LEDGER ROW`
+as a finding when it is absent — correctly, and it did so twice on
+2026-09-19 (macneo, pirria) because the coordinator sent both gos while the
+v56.9.19.1 row was still waiting on a refused land (the row had taken the
+table past the distillation threshold). A smoke started before the row lands
+produces a finding that is right at run time and stale by the time it is
+read; the cheaper order is row first, gos second, and a go message names the
+row's landed SHA.
 
 Append a one-line entry to `plan/issues/linux-next-work-queue-2026-05-25.md`:
 

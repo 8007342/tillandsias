@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-19T19:19:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        THE WIRING IS NOT A SMALL CHANGE, AND THE GATE IS WHAT MADE THAT CONCRETE. I wrote build_vsock_forwarder_run_args() with four tests, ran them green, and then REVERTED it rather than land it. Recording why, because the next person will reach for the same increment.
+
+        WHAT I WROTE AND THREW AWAY: a run-args builder encoding the shape proven on this host — --network tillandsias-enclave, --network-alias inference, --cap-drop=ALL, --security-opt=no-new-privileges, --security-opt=seccomp=<derived>, --entrypoint socat, then TCP-LISTEN:11434,fork,reuseaddr and VSOCK-CONNECT:2:42421 after the image. Four tests passed: the alias is claimed, the derived profile is passed and `unconfined` never appears, flags precede the image and socat's argv follows it, and the forwarder does not share the inference container's name.
+
+        THE GATE REFUSED IT, correctly: `error: constant VSOCK_FORWARDER_NAME is never used` / `error: function build_vsock_forwarder_run_args is never used`, under -D dead-code. A builder with no caller is not a delivered thing, and the gate says so in the one way that cannot be argued with. I did NOT reach for #[allow(dead_code)]: a helper marked allow-dead-code with four green tests reads as shipped capability and is not one — the same "looks maintained and is not" shape this row already rejected for a forked seccomp profile.
+
+        SO THE HONEST BOUNDARY IS SHARPER THAN "the product does not launch it". Making it launch means all of the following, and none is a finishing touch:
+          1. A HOST→GUEST SIGNAL THAT SURVIVES REPROVISIONING, and there is currently NO CHANNEL FOR ONE. headless runs in the guest and cannot observe Metal; detect_inference_tier() deliberately refuses to infer from cfg!(target_os) (1090-8nh4 — a cfg records where the binary was COMPILED, not what the running machine can do), and there is no "host-native" tier value at all. The obvious route is the headless systemd unit's Environment= lines, which provision_user_data writes FIRST-BOOT-ONLY — the same trap this row already documented twice. The shares that do exist every boot are home-src (a user directory), guest-bin (read-only) and model-cache (wrong semantics, and a file there trips test-macos-model-share-writable.sh's precondition). Naming the channel is a product decision, not a detail I should settle inside a commit.
+          2. ORDER 620-ca7g's INVARIANT. A source-shape test asserts EVERY site that starts the inference container sits behind local_inference_disabled(), precisely because the failure mode is an ADDED site rather than a changed one. The forwarder serves the same purpose on the same alias, so it belongs behind the same switch; adding a start site that is not is how the N100 field host silently gets a cost the switch exists to prevent.
+          3. MUTUAL EXCLUSION ACROSS 4-5 CALL SITES. build_inference_run_args is invoked from at least five places (9358, 12750, 13888, 14673, 18179 at the revision I read). The forwarder REPLACES the inference container for the host-native tier, so the exclusion has to hold at every one of them, not at the one a patch happens to touch.
+
+        WHAT DID LAND THIS CYCLE, and it is independent of the above: the cheatsheet cheatsheets/runtime/macos-guest-host-vsock-measurement.md, with provenance (this run, v56.9.19.1 for the derivation, both transcripts), covering the --exec-guest trap and why widening a timeout cannot fix it, the boot-oneshot + virtiofs side-channel method, the 2x3 seccomp verification table, the crun errno-under-ALLOW failure, and socat's /dev/vsock warning being incidental under a SERVING relay. Five cheatsheet validators green and the bundled copy staged.
+
+        ONE DEFECT I INTRODUCED AND CAUGHT, worth recording because the catch was luck-adjacent: inserting the tests by anchoring on a function signature put my block BETWEEN an existing #[test] and its function. My first test got a stray second #[test] and registered twice; inference_run_args_place_every_flag_before_the_image LOST its attribute and silently stopped being a test. The run said "5 passed" for 4 tests I had written, and only the odd count exposed it. A guard that never fires looks exactly like a guard that passes.

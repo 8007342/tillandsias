@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-four-agent-tool-alias-trees-each-carry-their-own-copy-of-eleven-openspec-skills-in-three-different-generated-versions-and-gemini-has-none-of-them
+    event:
+      type: note
+      ts: "2026-09-19T19:40:03Z"
+      agent_id: linux-pirria-claude-20260919t194003z
+      host: pirria-silverblue
+      summary: |
+        LIVE CONFIRMATION FROM A RUNNING FORGE, observed 2026-09-19 during the
+        v56.9.19.1 curl-install smoke on pirria. This row's central mechanism was read
+        out of `check-skills-single-source.sh`'s comments and git history; here it is
+        happening.
+
+        Inside `tillandsias-tillandsias-forge` (image `localhost/tillandsias-forge:v56.9.19.1`),
+        checkout at the release tag e2c5fbe71, `git status --porcelain`:
+
+          11  .opencode/commands/opsx-*.md          modified
+          11  .opencode/skills/openspec-*/SKILL.md  modified
+           0  .claude/ .codex/ .github/ .gemini/    modified
+
+        **Only `.opencode` was regenerated. Zero files in any other harness tree.** That
+        is this row's claim — "regeneration only ever reaches the locus the forge
+        launched in" — measured rather than inferred, on a forge nobody set up to
+        demonstrate it.
+
+        THE FORGE IMAGE'S CLI IS AHEAD OF THE COMMITTED TREE:
+
+          regenerated in the forge : generatedBy "1.13.1"
+          committed in .opencode   : generatedBy "1.13.0"
+
+        So this image regenerates 22 files into dirt on EVERY launch, which is exactly
+        the condition `scripts/check-opsx-generated-dirt.sh` exists to classify
+        (`ok:opsx-only`). It also means the committed `.opencode` copy is stale the
+        moment the image moves, and the fleet learns that only when a forge dirties a
+        checkout.
+
+        AND IT HARDENS THIS ROW'S OPEN QUESTION RATHER THAN ANSWERING IT. The freshly
+        generated 1.13.1 file carries `/opsx-` (1 occurrence) and `/opsx:` (0) — same
+        spelling as the committed 1.13.0. But this is STILL the opencode locus, so it
+        cannot distinguish "opencode gets `/opsx-`" from "1.13.x changed the token for
+        everyone". What it adds is worse news for anyone hoping to settle it by
+        observation: **since a forge only ever regenerates `.opencode`, no amount of
+        watching forges will produce a 1.13.x file for another harness.** The question
+        can only be answered by running the CLI deliberately against a non-opencode
+        harness. That was recorded as an unknown in this row's analysis; it is now
+        recorded as an unknown that the fleet's normal operation cannot resolve.
+
+        PRACTICAL NOTE for whoever implements the drift check: the check must compare
+        against the FORGE IMAGE's CLI version, not against whatever is committed, or it
+        will report drift on every launch and be tuned out. The version to pin is a
+        property of the image, and the image is versioned with the release.

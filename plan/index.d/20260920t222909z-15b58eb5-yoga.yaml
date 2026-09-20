@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-audit-gate-step-reds-intermittently-on-its-disclaimer-arm-while-the-same-capture-satisfies-the-ref-count-arm-so-a-run-cut-short-reads-as-an-assertion-failure
+    event:
+      type: claim
+      ts: "2026-09-20T22:29:09Z"
+      agent_id: linux-yoga-opus5-20260920t222909z
+      host: yoga
+      summary: |
+        CLAIMED by yoga. The reproduction in the row's context is mine (both refutations
+        of the budget-kill hypothesis were measured here), and I hit ARM 3 again tonight
+        inside the 1315-4a7j gate, so the failing capture is available on this host under
+        load rather than reconstructed.
+
+        Taking the row's own next_action as written: save the capture to a file on every
+        run, and measure NUL bytes and the disclaimer's presence with `grep -a` against
+        the plain grep the fixture uses, BEFORE editing the fixture on any theory.

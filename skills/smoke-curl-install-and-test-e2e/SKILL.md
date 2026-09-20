@@ -25,7 +25,7 @@ become `plan/issues/` work packets so they flow through the normal
 |---|---|---|---|
 | immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
-| macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
+| macOS | `scripts/install-macos.sh` via release curl URL — **launches the tray and begins VM provisioning; not a download test (1281-pgit)** | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
 | Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose — implemented by the §3 "Windows" block (`--provision-once`, `--status-once --json` polled to Ready, `--diagnose --json` LAST) |
 
 This is the only e2e install skill allowed on immutable Linux.
@@ -364,6 +364,33 @@ grep -qE "(^|[^0-9.])${SMOKE_TAG#v}([^0-9.]|\$)" target/smoke-e2e/01-version.txt
 > the release it claimed to be testing: a stale binary already on PATH would
 > answer `--version` and pass.
 
+**`install-macos.sh` is not a download test either — it launches the tray and
+provisions a VM (1281-pgit).** The hazard above is written for `install.sh` and
+Linux; the macOS installer does the platform equivalent and had no equivalent
+warning. MEASURED on macneo during the v56.9.19.1 and v56.9.19.2 smokes: §1 ends
+with "Launching Tillandsias (--init / VM provisioning runs automatically on
+first launch)", leaves a `tillandsias-tray` process running that §2 must then
+stop, and provisioning downloads a ~528 MB Fedora Cloud image in the background.
+
+WHY THE ASYMMETRY MATTERED, and why it is now stated on both paths: most of the
+fleet's macOS hosts are OPERATORS' WORKSTATIONS rather than dedicated smoke
+hosts, and this runbook has already recorded once that the distinction was
+missed (1004-vsh2 — "this section read as though every host running it were a
+smoke host"). A reader who has internalised "§1 is the safe download step, §2 is
+the destructive one" is correct on Linux by documentation and wrong on macOS.
+Say what §1 actually does before running it on a machine whose guest holds work
+someone has not finished with.
+
+AND AN INTERRUPTED INSTALL USED TO COST THE EXISTING APP. Until 1281-pgit the
+installer removed the previous backup and moved the live app aside BEFORE
+extracting, so a kill between those steps left `/Applications` with neither the
+app nor a backup — measured here when the installer was piped through `head` to
+read its first lines and died on SIGPIPE. The swap is now staged-extract,
+rename, rename, with the old backup dropped last and a trap that restores it, so
+the destination always holds a runnable app; `litmus:installer-swap-atomicity`
+pins that. A SIGKILL is still untrappable, so do not pipe the installer into
+something that closes early just to read its output — run it and read the log.
+
 macOS:
 
 ```bash
@@ -469,6 +496,115 @@ Verify the installed version matches the release tag from Step 0. If the install
 script errors, the version mismatches, or `tillandsias` is not on `PATH`
 afterward → **file a finding (capability: `release`, `install`) and STOP**;
 the rest of the smoke is invalid on a bad install.
+
+### 1s — Verify the SIGNATURE of the artifact this lane installed (1273-4mak)
+
+Until this section existed the smoke verified INTEGRITY and never AUTHENTICITY.
+`install.sh` checks the asset's SHA256 against a `SHA256SUMS` fetched from the
+same place as the asset, which is self-consistent by construction: a substituted
+asset served with a regenerated manifest passes. The `.cosign.bundle` beside
+every asset is the only artifact in the set that answers *who produced this*,
+and nothing read one — on any lane, for any release, ever. It was declared
+"NOT CHECKED" in the 08-28 Linux and Windows reports and in the 09-19 macOS
+report, three platforms, three times, and stayed open: a gap everyone declares
+and nobody closes is a missing GATE, not a missing observation.
+
+**Two facts measured on v56.9.19.2 that decide the shape of these blocks:**
+
+- **Every asset has its own `<asset>.cosign.bundle`** (32 assets). That is what
+  these blocks verify.
+- **`SHA256SUMS` and `SHA256SUMS-macos` have NO bundle; only
+  `SHA256SUMS-windows` does.** So "verify the manifest and trust it for every
+  asset it lists" is not available on the Linux or macOS lanes. Verify the
+  ARTIFACT THIS LANE INSTALLED, against its own bundle.
+
+**The precondition is probed, never inferred from an exit code.** The release's
+`verify.sh` exits 1 both when cosign is MISSING and when a signature is BAD, and
+those need opposite responses — one is "this run cannot answer the question",
+the other is "this artifact is not what it claims". A block that reads rc=1 and
+reports a failure turns a floor host without cosign into a fake security
+incident; one that swallows rc=1 turns a bad signature into a pass. So each
+block asks `command -v cosign` FIRST.
+
+**`cosign:could-not-run:<reason>` IS NOT A PASS.** It is not a failure either —
+`command -v cosign` returns nothing on macneo and on yoga today, and a host
+without the tool has not found a bad signature, it has found nothing. It is a
+THIRD verdict, and §5 requires it in the report's opening lines so a run that
+could not verify cannot be filed as an unqualified PASS. That requirement is the
+part that closes this gap rather than re-declaring it.
+
+Linux — use the release's own `verify.sh`, which ships with every release:
+
+```bash
+cd "$(mktemp -d)" || exit 1
+ASSET=tillandsias-linux-x86_64        # what install.sh actually downloads
+if ! command -v cosign >/dev/null 2>&1; then
+  echo "cosign:could-not-run:cosign-absent"
+else
+  curl -fsSL -O "$SMOKE_BASE/verify.sh" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET.cosign.bundle" || {
+         echo "cosign:could-not-run:asset-or-bundle-download-failed"; }
+  if [ -f "$ASSET.cosign.bundle" ]; then
+    if bash verify.sh "$ASSET"; then echo "cosign:verified:1/1"
+    else echo "cosign:FAILED:$ASSET"; fi
+  fi
+fi
+```
+
+macOS — its own call, NOT an inherited Linux assumption. The lane verifies the
+**tar.gz the installer consumed**, not a binary it never touched:
+
+```bash
+cd "$(mktemp -d)" || exit 1
+ASSET="tillandsias-tray-${SMOKE_VERSION}-macos-arm64.tar.gz"
+if ! command -v cosign >/dev/null 2>&1; then
+  echo "cosign:could-not-run:cosign-absent (brew install cosign)"
+else
+  curl -fsSL -O "$SMOKE_BASE/verify.sh" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET" \
+    && curl -fsSL -O "$SMOKE_BASE/$ASSET.cosign.bundle" || {
+         echo "cosign:could-not-run:asset-or-bundle-download-failed"; }
+  if [ -f "$ASSET.cosign.bundle" ]; then
+    if bash verify.sh "$ASSET"; then echo "cosign:verified:1/1"
+    else echo "cosign:FAILED:$ASSET"; fi
+  fi
+fi
+```
+
+`verify.sh` is bash and runs under macOS's bash 3.2, which is why this lane may
+call it — but it is called HERE, on this lane's own artifact, so a future change
+to the Linux block cannot silently redefine what macOS verified.
+
+Windows PowerShell — `verify.sh` is bash, so this lane calls cosign directly:
+
+```powershell
+$asset = "tillandsias-windows-x64.zip"
+if (-not (Get-Command cosign -ErrorAction SilentlyContinue)) {
+  "cosign:could-not-run:cosign-absent (winget install sigstore.cosign)"
+} else {
+  $tmp = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+  Set-Location $tmp
+  curl.exe -fsSL -O "$env:SMOKE_BASE/$asset"
+  curl.exe -fsSL -O "$env:SMOKE_BASE/$asset.cosign.bundle"
+  if (Test-Path "$asset.cosign.bundle") {
+    cosign verify-blob --bundle "$asset.cosign.bundle" `
+      --certificate-identity-regexp 'https://github\.com/8007342/tillandsias/' `
+      --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' `
+      $asset
+    if ($LASTEXITCODE -eq 0) { "cosign:verified:1/1" } else { "cosign:FAILED:$asset" }
+  } else { "cosign:could-not-run:bundle-download-failed" }
+}
+```
+
+**A `cosign:FAILED:` line is a STOP.** File a finding (capability: `release`,
+`security`) and do not continue: an artifact whose signature does not verify
+must not be exercised further, and the rest of the smoke would be reporting on
+software of unknown origin. This is the one check whose failure is not a bug
+report about Tillandsias but a question about what was downloaded.
+
+Carry whichever `cosign:` line this lane emitted into §5 verbatim.
+
 
 ---
 
@@ -1041,13 +1177,29 @@ before committable work":
 {
   echo "git_status_empty=$([ -z "$(git status --porcelain)" ] && echo yes || echo no)"
   echo "head_matches_origin=$([ "$(git rev-parse HEAD)" = "$(git rev-parse origin/linux-next)" ] && echo yes || echo no)"
-  echo "mo_full_marker_present=$(grep -qE '^MO-FULL: ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
+  # ORDER 1190-swen, CORRECTED 2026-09-20. This greped `^MO-FULL: `
+  # GENERICALLY and was WRONG: a guard-stopped cycle is SUPPOSED to emit
+  # `MO-FULL: BLOCKED`. The meta-orchestration skill sanctions it explicitly
+  # (`MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self`, and "BLOCKED
+  # is exempt: a cycle saying it did not finish must still be able to say so").
+  # MEASURED on pirria 2026-09-20: a lane that behaved exactly as designed —
+  # enclave up, `blocked:upstream-no-credential`, nothing claimed or pushed —
+  # emitted `MO-FULL: BLOCKED 7e33445f9 linux-next 7e33445f9` and this check
+  # flagged it, which would send the next reader to investigate a correct run.
+  # What must be absent is a COMPLETE marker: that is the claim a guard-stopped
+  # cycle has no right to make.
+  echo "mo_full_complete_present=$(grep -qE '^MO-FULL: COMPLETE ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
+  echo "mo_full_blocked_present=$(grep -qE '^MO-FULL: BLOCKED ' target/smoke-e2e/04-opencode.log && echo yes || echo no)"
 } | tee target/smoke-e2e/04a-cold-host-residue.txt
 ```
 
-Expected on a cold host: `yes`, `yes`, **`no`**. The ABSENT marker is correct
-and loud — a lane that stopped at the guard has not completed its exit contract
-and must not claim it did.
+Expected on a cold host: `yes`, `yes`, **`no`** for COMPLETE, and either value
+for BLOCKED. The absent COMPLETE marker is correct and loud — a lane that
+stopped at the guard has not completed its exit contract and must not claim it
+did. A `BLOCKED` marker is NOT a finding: it is the cycle correctly saying it
+did not finish, and a run that emits one has behaved better than a run that
+emits nothing, because the disposition is then on the record rather than
+inferred from silence.
 
 MEASURED on pirria 2026-09-14 (`04-opencode.log:848-862`): the guard answered
 `blocked:upstream-no-credential` (exit 1); the mirror published
@@ -1168,7 +1320,25 @@ is by design, so their ABSENCE here is the pass, not a finding.
 - run_start: <the `run_start=` value from target/smoke-e2e/00-run-start.txt>
 - evidence_dir: target/smoke-e2e   (previous runs archived under _archived-<ts>/)
 - forge_lane_outcome: <see below — required whenever §4 ran>
+- signature_verification: <the `cosign:` line §1s emitted, VERBATIM — required always>
 ```
+
+`signature_verification` carries §1s's line unchanged: `cosign:verified:<n>/<n>`,
+`cosign:could-not-run:<reason>`, or `cosign:FAILED:<asset>` (order 1273-4mak).
+
+**A run whose line is `cosign:could-not-run:` MUST NOT be reported as an
+unqualified PASS.** Write the verdict as `PASS (signatures unverified: <reason>)`.
+This is the requirement that closes the gap rather than re-declaring it: the
+08-28 Linux, 08-28 Windows and 09-19 macOS reports all recorded the missing
+signature check honestly, under "NOT CHECKED", and the gap still shipped three
+times — because declaring it cost nothing and the headline still said PASS.
+A reader who sees only the verdict must not be able to miss that authenticity
+was not established.
+
+`could-not-run` is NOT a failure. A host without cosign has not found a bad
+signature; it has found nothing, and reporting nothing as a failure would make a
+floor host look like a security incident. It is a third verdict, and it must be
+visible.
 
 `run_start` is what makes every other file in the evidence directory checkable
 (order 1189-7yvu). Without it a reader cannot tell this run's `03-init-exit.txt`

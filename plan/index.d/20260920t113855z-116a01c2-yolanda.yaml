@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    field: status
+    value: in_progress
+    ts: "2026-09-20T11:38:55Z"
+    host: yolanda
+
+events:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    event:
+      type: note
+      ts: "2026-09-20T11:38:55Z"
+      host: yolanda
+      summary: |-
+        handed by the coordinator 2026-09-20: the Windows litmus for the native --init refusal (esme's fix aa3e387a1 landed, the litmus is unwritten); yolanda's regime is the one it runs on

@@ -1,0 +1,67 @@
+# Gate step 1269-gfdi — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: that a RED IS READABLE. litmus:tool-materialization's arms
+# step ended in `| tail -1`, so a failure printed exactly one line —
+# `tool-materialize: FAIL` — naming no arm, no measurement and no regime, while
+# every `FAIL: ARM <n>: …` the fixture writes was discarded.
+#
+# MEASURED on macuahuitl 2026-09-19T05:15Z at 720e148bc: the step's captured
+# output was that single line, while the same fixture standalone in the same
+# toolbox seconds later printed ok:tool-materialize:all with the margin arm at
+# 1929ms vs 20473ms. Two candidate causes — a loaded host, or /tmp hitting its
+# usrquota during extraction — and the evidence that would have separated them
+# was the evidence thrown away.
+#
+# WHY IT IS A GATE STEP RATHER THAN A LITMUS TEST, which is the live trade-off
+# here. Its subject runs ONLY in the release tier: ./build.sh --check lists the
+# bound pre-build litmus tests and declines to run them, deliberately. So a
+# regression in the truncation or in the regime guard would surface at RELEASE
+# time, which is exactly when an unreadable red costs the most. Running here
+# buys early detection on every host; the cost is below.
+#
+# COST, MEASURED HERE 2026-09-20: 27.80 / 27.57 s — the most expensive step in
+# gate-steps.d and worth naming rather than discovering. It executes the real
+# subject fixture THREE times under three regimes (ARM 0 with nothing injected,
+# ARM 1 through the litmus runner with a forced failure, ARM 2 with an injected
+# load), and each run materializes a tool from the toolbox. There is no cheaper
+# honest form: ARM 0 must run uninjected or arms 1-2 only ever prove that
+# injected inputs reach an injected branch. Against a ~1125s gate that is ~2.5%.
+# IF GATE TIME BECOMES THE BINDING CONSTRAINT, THIS STEP IS THE FIRST CANDIDATE
+# FOR THE ADVISORY TIER — not the sub-second deciders — precisely because the
+# defect it guards is release-tier-only and would still be caught there.
+#
+# ARM 0 IS THE PREMISE AND IS NOT DECORATION. Arms 1 and 2 drive the guard by
+# injecting TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG / _AVAIL_KB. If the probe's
+# real reading path (/proc/loadavg, df on the extraction dir) broke or went
+# absent, both would still pass while production learned nothing. ARM 0 runs the
+# fixture with NOTHING injected and requires a real measured regime line.
+#
+# THE FORCE KNOB FAILS THE MEASUREMENT, NOT THE VERDICT.
+# TILLANDSIAS_TOOL_MATERIALIZE_FORCE_MARGIN_FAIL makes the ratio comparison
+# fail; the regime probe then chooses skip-vs-red exactly as it does when the
+# ratio fails on its own. That is why ARM 1 (quiet regime -> red naming ARM 7)
+# and ARM 2 (loaded regime -> named skip, verdict token intact) differ only in
+# the injected regime. A knob that selected the outcome would let this fixture
+# confirm a branch production never takes.
+#
+# ARM 3 CHECKS THE `command:` LINES, NOT THE WHOLE FILE, and the reason is
+# recorded because the first version got it wrong: the comment added above the
+# fixed step explains the removed pipeline and therefore CONTAINS the literal
+# `tail -1`, so grepping the file made the arm report the defect was back. The
+# documentation answered the grep. The property is that a step's command does
+# not truncate, which leaves the history free to be written down.
+#
+# TOKEN COUNT DIFFERS FROM THE ROW ON PURPOSE. 1269-gfdi's verifiable_closure
+# names `ok:tool-materialize-litmus:arm-surfaced:2/2`. This prints 5/5: the two
+# arms the row requires, plus the premise arm, the measurement arm, and the
+# truncation regression guard. The token GRAMMAR is preserved; anything matching
+# the literal `2/2` will not match, and that is a deliberate choice to keep the
+# extra arms rather than pad the count to fit the text.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking a tool-materialization red names its arm and a bad regime skips instead of redding (1269-gfdi)"
+STEP_SCRIPT="scripts/test-tool-materialize-litmus-surfaces-arm.sh"
+STEP_ERROR="a litmus red can again print one contentless line, or the margin arm reds on a loaded host instead of skipping (1269-gfdi) — read which arm failed above; ARM 0 failing means the regime probe's real reading path is broken and arms 1-2 prove nothing"
+STEP_OK="Tool-materialization reds name their arm; bad regimes skip"

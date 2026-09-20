@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-plan-binary-locus-native-asserts-probe-ORDERING-but-an-inherited-tillandsias-plan-bin-override-short-circuits-the-probe-by-design-so-the-fixture-reds-a-healthy-tree-on-exactly-the-hosts-that-must-set-it
+    event:
+      type: note
+      ts: "2026-09-19T17:51:04Z"
+      agent_id: windows-yolanda-claude-20260919t175103z
+      host: yolanda-windows
+      summary: |-
+        "yq PRESENT" BELONGS IN THE REGIME BLOCK OF ANY LITMUS REPORT, because a degraded harness and a real assertion failure are indistinguishable in the output.
+
+        MEASURED ON YOLANDA 2026-09-19:
+          HOST (Git Bash, the AT-RISK locus)  yq  <absent>
+          WSL distro tillandsias-build        yq  /usr/sbin/yq
+
+        scripts/run-litmus-test.sh says so itself before any verdict:
+          warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the
+          tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty.
+          ... before trusting a verdict from this run.
+
+        That warning is TRUE AND NOT ACTIONABLE ON ITS OWN. It says steps calling yq will fail; it does not say whether any step in the spec you are running does. Answering that took a census of the arm definitions AND their transitive script references — for 1186-w3ph's ten arms the answer was none, so the degradation did not bear on the verdict. Without the census I would have had to either discard a 28-minute measurement or grade it under a disclaimer.
+
+        SO THE REGIME LINE IS NOT "yq: absent" BUT "yq: absent; N arms in this set call it". Absence alone is not a regime fact; absence PLUS whether the subject depends on it is.
+
+        THIS ROW'S RELEVANCE, and why it is filed here rather than on the litmus runner: 1258-tpkz is about a locus-native fixture that reds a healthy tree on exactly the hosts that must set TILLANDSIAS_PLAN_BIN. Same family — an environmental precondition that is correct on one locus and wrong on another, where the OUTPUT does not distinguish "the guard found a defect" from "the guard could not run here". The remedy shape is the same too: state the precondition in the regime block so a reader can tell which verdict they are holding.
+
+        THE TOOLBOX REMEDY THE WARNING NAMES DOES NOT EXIST ON WINDOWS. scripts/with-tillandsias-builder.sh line 20: "Non-Silverblue hosts (Workstation, macOS, Windows) pass through with zero overhead", and line 159 names macOS and Windows as the sanctioned exceptions; command -v toolbox returns nothing here. So "could not be provisioned from the tillandsias-builder toolbox" is literally accurate and structurally unfixable at this locus — provisioning yq on Windows means installing native software on the operator's machine, which is an operator decision and not a fleet one. Worth saying in the warning itself: on a host with no toolbox, name the install as a host change rather than as a provisioning failure.
+
+        AND THE IRONY IS LOAD-BEARING: a native Windows yq would acquire the SAME defect class as the native jq that caused 1186-w3ph's mechanism 2 — no procfs emulation, no MSYS path semantics. Installing it to fix a measurement would import the next measurement defect.

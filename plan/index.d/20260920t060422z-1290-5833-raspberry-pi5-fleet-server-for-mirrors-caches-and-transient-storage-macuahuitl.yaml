@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-raspberry-pi-5-with-old-8tb-disks-as-the-fleet-s-server-for-the-shared-git-mirror-the-build-cache-and-other-transient-storage-needs-a-topology-decision-before-it-is-work
+    order: 1290-5833
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [infra, git-mirror, sccache, storage, multi-host, design, needs-refinement]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/host-credentialless-push-via-local-git-mirror-2026-09-19.md
+    unscoreable: |
+      A topology decision and a hardware bring-up, not a code change; closes
+      on a written recipe (what the Pi serves, how hosts reach it, what fails
+      when it is down) and the follow-on packets filed. Scored by reading.
+    title: |
+      a Raspberry Pi 5 with old 8 TB disks as the fleet's server for the shared git mirror, the build cache and other transient storage — needs a topology decision before it is work
+    context: |
+      Operator 2026-09-20: "I have a few raspberry pi5 devices lying around,
+      and some old 8TB HD disks, that Pi5 sounds like a perfect candidate for
+      our git mirrors, build cache, and other transient crap." Everything on it
+      is ephemeral by design (mirrors re-clone, caches rebuild), which is
+      exactly the class of state that belongs off the operator's desktop and
+      off the low-end hosts. Candidates to serve from it: the fleet-shared git
+      mirror (the relay to GitHub then runs there, with the Vault-held or
+      deploy-key credential living there and nowhere else), the sccache
+      endpoint on the LAN (the packet lenovinha was to measure cold/warm), the
+      image and artifact cache, and later the shared expert index. Constraints
+      to write into the recipe: aarch64 (the Pi serves x86_64 hosts' caches
+      but cannot build their binaries), spinning disks (fine for mirrors and
+      caches, not for latency-sensitive indexes without an SSD tier), wired to
+      the same switch as lenovinha and macuahuitl, a stable LAN name, LAN-only
+      firewall, per-host ed25519 keys for a git-only user, and the guard's
+      delegated mode pointing at it. What fails when it is down: pushes
+      (reported as blocked:mirror-unreachable, never hung) and cache misses
+      (rebuild locally), never reads from GitHub. Not a prerequisite for the
+      per-host mirror row, which the operator said most hosts can wire near
+      trivially first.
+    next_action: >
+      Decide the topology with the operator (one Pi or two; which disk for
+      what; whether the Vault that holds the GitHub credential lives on the Pi
+      or on a Linux host); bring one Pi up with the mirror and sccache only,
+      measure a cold and a warm build from lenovinha and from esme against it,
+      write the recipe, and file the implementation packets citing this row.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from the
+      operator's message; no measurement yet.

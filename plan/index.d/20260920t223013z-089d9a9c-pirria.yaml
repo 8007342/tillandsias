@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    event:
+      type: note
+      ts: "2026-09-20T22:30:13Z"
+      agent_id: linux-pirria-claude-20260920t223000z
+      host: pirria
+      summary: |
+        A CHECKER ADDED TO THE PLAN-ONLY LANE MUST BE ADDED TO THE LANE'S FIXTURE
+        SCAFFOLD IN THE SAME COMMIT.
+
+        Found by the release gate for v56.9.20.1 on macuahuitl, 2026-09-20: the lane now
+        runs scripts/check-fragment-ts-skew.sh (this row), and
+        scripts/test-claims-fleet-visible.sh's ARM 1 stages its own copy of the lane's
+        checkers into a scratch worktree. That staged list did not carry the new checker,
+        so the lane under test NOTED IT ABSENT and the arm reddened — on a host that had
+        never touched this row's work. Fixed there by adding it to the scaffold: 27/27.
+
+        THE LANE AND ITS FIXTURE ARE TWO LISTS OF THE SAME THING, AND THE FIXTURE IS THE
+        ONE NOBODY EDITS. Adding a guard to the lane is the memorable half; adding it to
+        the scaffold that proves the lane works is the half that is remembered only when
+        a gate refuses somewhere else. It is the same coupling as the anchor line, and
+        the same family as the derived cheatsheet tree under images/default/cheatsheets:
+        a second copy that only a habit keeps true, whose drift is invisible to the host
+        that caused it and visible to whoever runs next.
+
+        WHAT THAT COSTS, and it is why this is worth an event rather than a note: the
+        refusal arrives on ANOTHER HOST, about a file they never touched, at a moment
+        they chose (a release gate). The author who added the checker sees nothing wrong
+        on their own tree, because their lane and their fixture were both correct there
+        — the fixture stages from the tree, so it only diverges once the change lands
+        and someone else runs it.
+
+        FOR WHOEVER ADDS THE NEXT LANE CHECKER: scripts/test-claims-fleet-visible.sh
+        stages the lane's checkers by name; add yours there in the same commit that wires
+        it into scripts/hooks/pre-push-local-gate.sh, and run that fixture before the SHA.
+        It is seconds, and it is the difference between your change and someone else's
+        gate.

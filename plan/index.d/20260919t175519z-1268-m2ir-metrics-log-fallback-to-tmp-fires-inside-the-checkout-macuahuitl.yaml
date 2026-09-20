@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-timing-log-s-outside-a-checkout-fallback-to-tmp-fires-for-a-litmus-run-whose-cwd-is-the-checkout-and-the-next-release-gate-on-that-host-reds-two-litmus-on-the-split
+    order: 1268-m2ir
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, metrics, gate, instrument-defect, agent-safety]
+    estimated_hours: 4
+    owned_files:
+      - scripts/timing-log.sh
+      - scripts/run-litmus-test.sh
+      - scripts/cycle-metrics.sh
+    verifiable_closure: |
+      scripts/test-metrics-log-fallback-is-loud.sh prints
+      `ok:metrics-log-fallback:3/3` and exits 0, where: (1) the litmus runner
+      invoked FROM THE CHECKOUT under the agent-shell regime (a `timeout`
+      wrapper, pipefail, stdout through `sed|grep|head`, e.g.
+      `timeout 300 scripts/run-litmus-test.sh --size instant --phase pre-build --compact 2>&1 | grep -c .`)
+      leaves `/tmp/tillandsias-timing.jsonl` ABSENT and its records in
+      `.cache/metrics/tillandsias-timing.jsonl`; (2) the runner invoked from a
+      directory that is genuinely not a checkout writes the fallback AND prints
+      one stderr line naming why (`timing-log: fallback:/tmp:no-checkout-from:<cwd>`);
+      (3) with PROJECT_ROOT set and resolvable, no record reaches a non-checkout
+      path. PRE-FIX RESULT: FAILS on arm 1 — measured 2026-09-18T21:17:42Z on
+      macuahuitl: four records (litmus:credential-isolation,
+      litmus:opencode-web-session-otp-shape, litmus-suite phase=all, and the
+      litmus-suite phase=pre-build record of a `timeout 300` run) landed in
+      /tmp while cwd was the checkout; the next `--ci-full` then reddened
+      cycle-metrics-answer-rate-shape and cycle-flow-telemetry-shape with
+      observed= empty through cycle-metrics.sh's
+      `violation:metrics-log-split:.cache/...=124495:/tmp/...=4`, green six
+      hours earlier. NEGATIVE CONTROL: arm 2 keeps the fallback, so the fix
+      cannot be "delete the fallback".
+    title: |
+      the timing log's "outside a checkout → /tmp" fallback fires for a litmus run whose cwd IS the checkout, and the next release gate on that host reds two litmus on the split
+    context: |
+      The guard is correct: cycle-metrics.sh's metrics-log-split refuses to
+      publish when records for one host sit in two files, because a split log
+      under-counts every rate it reports. The writer is wrong: the timing
+      library's default-log resolver (`_metrics_default_log`) fell through to
+      its "not in a checkout" branch for a run started in the checkout by an
+      agent shell. The regime matters and is the thing to reproduce under —
+      the Bash tool wraps the command in `timeout`, sets pipefail, and reads
+      stdout through a pipeline; a resolver that walks `$PWD` or `$0` can see a
+      different answer there than in an interactive shell. The stray records are
+      preserved (drafts-macuahuitl/stray-timing-*.jsonl on macuahuitl) for the
+      reproduction. Host state was repaired by removing the file and the gate
+      re-ran; nothing in the tree stops it happening again. Same family as
+      1204-3s2s and 1209-hkcq (both completed): a writer that does not name its
+      log lands records where the guard must refuse them.
+    next_action: >
+      Reproduce arm 1 first, under the agent-shell regime, on the unfixed tree,
+      and capture WHICH branch of the resolver fired (print its decision to
+      stderr in the reproduction, not in the fix). Then make the fallback loud
+      (one stderr line, the reason and the cwd) and make the runner refuse a
+      non-checkout timing path whenever PROJECT_ROOT is known. Write the three
+      arms as the fixture; bind it under ci-release only after the pre-fix red
+      of arm 1 is on record in this packet's events.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-19 from release gate
+      #1 of the v56.9.19.1 cut (red at 00:20Z on this defect; the row was queued
+      until the cut finished). Measurement is this host's; regime attached.

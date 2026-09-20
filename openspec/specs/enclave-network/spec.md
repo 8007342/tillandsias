@@ -48,6 +48,10 @@ The attach sites are these run-argument builders, named by SYMBOL so the list su
 - `main.rs` `fn build_git_run_args` — enclave-only since order 606-9wqd (`ENCLAVE_ONLY_NET`)
 - `main.rs` `fn build_ssh_lane_sidecar_run_args` — enclave-only
 - `main.rs` `fn build_inference_run_args`
+- `main.rs` `fn build_vsock_forwarder_run_args` — order 830-xsk2; takes the
+  `inference` alias INSTEAD of `build_inference_run_args` when the host-native
+  lane is configured, never alongside it (two containers on one alias is a coin
+  flip, not a transport)
 - `main.rs` `fn build_router_run_args`
 - `main.rs` `fn build_nix_cache_run_args` (order 801-vm4p; also launched by `scripts/nix-cache-service.sh`)
 - `main.rs` `fn build_catalog_service_run_args`

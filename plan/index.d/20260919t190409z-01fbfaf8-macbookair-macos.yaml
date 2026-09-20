@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: evidence
+      ts: "2026-09-19T19:04:09Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |-
+        THE HOP IS PROVEN END TO END. First time in this tree that a guest-initiated vsock connection has been ACCEPTED, RELAYED TO A HOST-NATIVE TCP SERVICE, AND ANSWERED, with the answer read back inside the guest. tlatoanis-macbook-air 2026-09-19T19:03:01Z, tray in CONTINUOUS-RUNLOOP mode (the .app binary run with no flags, not --exec-guest).
+
+        BOTH SIDES REPORT, because either alone is a lie by omission — the host's ACCEPTED alone reads as "it works" and a guest timeout alone reads as "no listener". Verbatim:
+
+          TRAY (host, stderr):
+            [vz] host vsock: listening on port 42421 — a guest may now connect to CID 2
+            [vz] host vsock: forwarding accepted connections to 127.0.0.1:9999
+            [vz] host vsock: ACCEPTED a guest-initiated connection (fd 13) — the guest reached the host
+
+          HOST-NATIVE RESPONDER (127.0.0.1:9999, plain TCP, outside the VM):
+            2026-09-19T19:02:49 HOST-RESPONDER listening on 127.0.0.1:9999
+            2026-09-19T19:03:01 HOST-SAW: b'PING-FROM-GUEST\n' from ('127.0.0.1', 59355)
+
+          GUEST (inside a CONFINED container, reported via the model-cache virtiofs share):
+            image=localhost/tillandsias-forge-base:v56.9.13.1
+            ok:vsock-seccomp:derived
+            profile-bytes=17856
+            attempt=1 rc=0 REPLY=[PONG-FROM-HOST-NATIVE]
+            VERDICT=HOP-COMPLETED
+
+        THE GUEST SIDE WAS CONFINED, WHICH IS THE POINT: --cap-drop=ALL --security-opt=no-new-privileges --security-opt seccomp=<derived>. Not unconfined, not --privileged, no /dev/vsock passthrough. The derived profile is the one shipped in v56.9.19.1 and it was generated ON THE SPOT from the guest's installed podman default, so this also exercises the derivation in its real position rather than in a fixture.
+
+        HOW THE MEASUREMENT WAS TAKEN, because the method is the hard part and the next person will need it. --exec-guest cannot prove this — it blocks on the control wire and pumps no CFRunLoop, so guest connects sit queued past the kernel's 2s VSOCK_DEFAULT_CONNECT_TIMEOUT (measured 6/6 on 2026-08-29). But the tray OWNS the VM while it runs, so there is no second control-wire session available to drive the guest from outside either. The way through both constraints: make the guest half BOOT-TRIGGERED and have it report through a channel the host can read without touching the control wire.
+          - a systemd oneshot (tillandsias-vsock-hop-probe.service, enabled via --exec-guest beforehand) runs the probe at boot
+          - it writes its result into /root/.cache/tillandsias/models, the virtiofs share, which the host reads directly at ~/Library/Caches/tillandsias/models
+          - the tray is then started normally with TILLANDSIAS_HOST_VSOCK_PORT=42421 and TILLANDSIAS_HOST_VSOCK_FORWARD_TO=127.0.0.1:9999
+        The share is the trick. It is a side channel that does not compete with the tray for the VM, and it is why both halves of the measurement could be captured in one run.
+
+        IT SUCCEEDED ON ATTEMPT 1, no retries. The probe had a 20-attempt retry loop because the host binds its listener after Ready and the ordering was unknown; it was not needed. That the FIRST attempt completed is itself informative: once the host is pumping, there is no warm-up and no queue to drain.
+
+        WHAT THIS CLOSES AND WHAT IT DOES NOT. It closes the packet's "STILL NOT ESTABLISHED: the runtime proof of the whole hop needs a continuously-pumping host context". Both remaining halves of this row are now measured rather than assumed, and the host-side code needed no changes at all. It does NOT close the row: the transparency criterion is that agents keep addressing http://inference:11434 while the process behind it moves to the host, and this probe dialled CID 2 directly. A relay that works but does not answer to that NAME does not satisfy the deliverable. That is the next and last piece.
+
+        HOUSEKEEPING NOTED SO IT IS NOT INHERITED AS A DEFECT: the probe writes a dotfile into the model cache, which would trip scripts/test-macos-model-share-writable.sh's empty-cache precondition. Removed after capture; a permanent version must not report through that directory. Also, killing the tray left an orphaned com.apple.Virtualization.VirtualMachine holding nvram — 1253-gina, reproduced a third time today, cleared the same way.

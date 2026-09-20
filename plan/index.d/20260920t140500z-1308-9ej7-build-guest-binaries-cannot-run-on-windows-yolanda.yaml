@@ -1,0 +1,119 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    order: 1308-9ej7
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [tooling, windows, release, build, measurement]
+    estimated_hours: 4
+    owned_files:
+      - scripts/build-guest-binaries.sh
+      - scripts/build-windows-tray.ps1
+    title: |
+      scripts/build-guest-binaries.sh cannot run on a Windows host at all -- Nix is absent from the host AND from the build distro -- and its own --verify reports stale staging rather than naming the missing tool, so a Windows host improvises the staging and can stage a binary that builds, runs and cannot serve the wire
+    context: |
+      MEASURED on yolanda-windows 2026-09-20 while producing the staged build
+      the 1286-4437 Windows arm's exit criterion required.
+
+      THE SCRIPT CANNOT RUN HERE:
+        nix on the Windows host              -> MISSING
+        nix inside tillandsias-build (WSL2)  -> MISSING
+        strings on the Windows host          -> MISSING (the script uses it)
+      and its own verification path reports:
+        [build-guest-binaries] SKIP: staged guest binaries are stale or absent
+          (host staging predates VERSION 56.9.19.2).
+        verify:skip-stale-staging
+      which is TRUE and is not the useful answer. The staging was stale AND
+      the script could not have restaged it; the output names only the first.
+      A reader is told to "run scripts/build-guest-binaries.sh to restage" by
+      a script that cannot run on their host.
+
+      THE DOCUMENTED FALLBACK WORKS, PARTLY. build-windows-tray.ps1:28-29
+      offers "(a) rustup musl toolchain and install into target-guest/". For
+      x86_64 that works: cargo inside the build distro with the musl target
+      produced a current binary. For aarch64 it does NOT:
+        error occurred in cc-rs: failed to find tool "aarch64-linux-musl-gcc":
+        No such file or directory (os error 2)
+      a cross-gcc that is not installed in the distro, which is presumably why
+      CI uses Nix. So a Windows host can stage HALF the contract. I left the
+      aarch64 staged binary at its August state rather than half-stage it.
+
+      THE DANGEROUS PART IS NOT THE MISSING TOOL, IT IS WHAT IMPROVISING
+      PRODUCES. My first fallback build omitted `--features listen-vsock`,
+      which build-guest-binaries.sh:319 passes and which nothing in the
+      fallback's two-line description mentions. The result was a guest binary
+      that COMPILED, STAGED, EMBEDDED, INSTALLED INTO THE GUEST AND RAN --
+      `tillandsias-headless --version` printed the correct version -- and
+      could not serve the control wire. The reprovision failed after 524
+      seconds on a handshake timeout.
+        What saved it: the binary's own refusal, in the guest journal --
+        "FATAL: --listen-vsock 42420 was requested but this binary was built
+        WITHOUT the listen-vsock feature ... Rebuild with --features
+        listen-vsock (scripts/build-guest-binaries.sh does this)."
+      That message is the model for the fix: it names the cause AND the
+      remedy, at the moment of failure. Nothing earlier in the chain did --
+      not the compile, not the staging, not the tray build, not the install.
+      The version string matched at every step, so every check that compares
+      versions passed on a binary that was wrong in a way versions cannot see.
+
+      WHY THIS IS A ROW AND NOT A NOTE ON MY ARM: two Windows hosts in this
+      fleet will need a staged guest sooner or later, the fallback is the only
+      path either of them has, and the fallback as documented omits the one
+      flag that decides whether the artifact works. The next host to improvise
+      will lose the same 524 seconds, or worse, will not be running something
+      that fails loudly at the end.
+    next_action: |
+      Nobody holds this.
+      1. MAKE THE SCRIPT REFUSE BEFORE IT SKIPS. `--verify` should distinguish
+         "staging is stale" from "this host cannot restage", and name the
+         missing tool (nix, strings) rather than pointing the reader at itself.
+         That is one precondition check and it is the cheapest half.
+      2. MAKE THE FALLBACK COMPLETE OR HONEST. Either document the fallback
+         with its FULL command including `--features listen-vsock` and the
+         per-arch target, or -- better -- give the script a no-Nix path that
+         shells out to cargo with the right features, so there is one
+         documented way to stage and no improvisation. If aarch64 cannot be
+         staged without a cross-gcc, say so at the point of failure and name
+         the package.
+      3. ADD A STAGING ASSERTION THAT VERSIONS CANNOT FAKE. A staged guest
+         binary must be checked for the listen-vsock capability, not only for
+         its version string -- the whole defect above is that the version
+         matched. Probing the built binary (it refuses by name when the
+         feature is absent) is one command and catches it at staging time
+         rather than 524 seconds into a provision.
+      Do NOT fix this by installing Nix on the Windows hosts unless someone
+      has measured that it works there; that is a different and larger claim.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a refusal and a
+      staging assertion that do not exist yet, and step 2 is a choice between
+      two shapes (document the full fallback, or give the script a no-Nix
+      path) that changes what the guard asserts. Naming a litmus now would
+      encode whichever shape its author assumed, which 885-92iu refuses. When
+      it lands the guard is litmus-guest-staging-refuses-or-completes,
+      asserting that on a host without Nix the script either stages both
+      binaries or refuses naming the missing tool BEFORE touching
+      target-guest/, and that a staged binary lacking listen-vsock is refused
+      at staging time; same commit as the fix (1136-n8sh).
+    verifiable_closure: |
+      On a Windows host with no Nix, scripts/build-guest-binaries.sh either
+      stages both guest binaries through a documented path, or REFUSES naming
+      the missing tool before touching the staging -- and a staged binary
+      built without `--features listen-vsock` is rejected at staging time
+      rather than at provision time. Pre-fix result: nix MISSING on host and
+      in tillandsias-build, strings MISSING on host, `--verify` prints
+      verify:skip-stale-staging naming only the staleness, the rustup fallback
+      stages x86_64 and fails aarch64 on a missing aarch64-linux-musl-gcc, and
+      a feature-less binary staged cleanly and failed a provision 524s later.
+
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-20T14:05:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed from the 1286-4437 Windows arm's staged build; the 524s provision failure was mine and is the evidence, and the guest binary's own refusal naming its remedy is the model for the fix

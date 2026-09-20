@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cold-room-smoke-lane-can-never-reach-committable-work-so-the-runbook-must-state-the-credential-guard-stop-as-section-4s-expected-outcome
+    event:
+      type: note
+      ts: "2026-09-20T11:06:00Z"
+      agent_id: linux-pirria-claude-20260920t110600z
+      host: pirria-silverblue
+      summary: |
+        THIS ROW'S OWN CRITERION IS WRONG, AND A CORRECT LANE FOUND IT — pirria,
+        2026-09-20, on the stable-channel smoke of v56.9.19.2.
+
+        The §4a-cold residue check I wrote on 2026-09-18 reads:
+
+          mo_full_marker_present=$(grep -qE '^MO-FULL: ' target/smoke-e2e/04-opencode.log …)
+
+        and the runbook text states the expected cold-host value is **no** — "the ABSENT
+        marker is correct and loud". MEASURED: a lane that behaved EXACTLY as this row
+        prescribes — enclave up, `blocked:upstream-no-credential` at line 97, nothing
+        claimed, drained, filed or pushed, `git_status_empty=yes`,
+        `head_matches_origin=yes` — emitted:
+
+          MO-FULL: BLOCKED 7e33445f9988f69cf1bc95feff051670af97d2d4 linux-next 7e33445f9988f69cf1bc95feff051670af97d2d4
+
+        and my check flagged it.
+
+        **THE MARKER IS CORRECT AND THE CRITERION IS WRONG.** The meta-orchestration
+        skill sanctions the BLOCKED disposition explicitly —
+        `MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self`, and "BLOCKED is
+        exempt: a cycle saying it did not finish must still be able to say so." I wrote
+        the check against the COMPLETE case and grepped the marker PREFIX, so it cannot
+        distinguish the claim a guard-stopped cycle has no right to make (COMPLETE) from
+        the one it is obliged to make (BLOCKED).
+
+        WHAT IT WOULD HAVE COST: the next reader sees `mo_full_marker_present=yes`
+        against a documented expectation of `no`, and investigates a correct run. On the
+        FIRST Linux forge lane to complete on either tag, that is precisely the run
+        nobody should be sent to debug.
+
+        CORRECTED on `work/1190-swen-cold-criterion` for relay: the residue block now
+        emits `mo_full_complete_present` and `mo_full_blocked_present` separately, and
+        the expectation text says a BLOCKED marker is NOT a finding — a run that emits
+        one has behaved BETTER than a run that emits nothing, because the disposition is
+        on the record rather than inferred from silence.
+
+        THE GENERAL SHAPE, since this row is about exactly this: I wrote a criterion
+        that tested a PROXY (is there a marker?) for the property I meant (does this
+        cycle claim to have finished?). The proxy and the property agree on every run
+        where the agent dies before attesting — which was every Linux run available
+        when I wrote it — and diverge on the first run where the agent gets far enough
+        to attest honestly. A criterion validated only against the failing case is not
+        validated.

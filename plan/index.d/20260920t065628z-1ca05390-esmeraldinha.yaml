@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    field: next_action
+    value: |-
+      Read scripts/hooks/pre-push-local-gate.sh where the validator-surface comparison is made, and distinguish the two conditions AT THE COMPARISON rather than at the message: absent stamp file versus present-and- mismatched. Emit refused:plan-binary-unstamped for the first, naming scripts/check-plan-binary-current.sh alone, and leave the stale arm and its rebuild remedy untouched. Then check whether the sanctioned build path writes the stamp at all; if it does not, say so on this row, because that turns this from an edge case into the default after every rebuild and may argue for stamping at build time instead of only at check time. DO NOT fix this by making the lane accept an unstamped binary — the lane validates the bytes being pushed with the resolved binary, so an unverified one can accept a fragment shape the current rules refuse (1129-4su6), and that is the protection this row must not weaken.
+
+
+      [2026-09-20T06:56:28Z esmeraldinha] SUPERSEDED — READ THE FILER'S CORRECTION EVENT OF 2026-09-20 BEFORE THE context FIELD OR THE TEXT ABOVE; both have the MECHANISM wrong. The refusal was pre-push-local-gate.sh's rc=1 branch (stamp PRESENT, hash MISMATCHED), verbatim — not the absent-stamp path. The absent-stamp case falls to rc=2, which ALREADY names the missing stamp and prints the exact command that mints it, and needs no work at all. WHAT ACTUALLY HAPPENED: this checkout moved 173 commits under a stamp written for the OLD validator surface; the binary was then REBUILT (3m29s of real work) and was CURRENT; and the lane attributed the STAMP's staleness to the BINARY. 'changed since this binary was built' is false in its operative clause, which is exactly why the printed rebuild remedy was a 3.57s no-op. THE REAL DEFECT: a rebuild neither refreshes nor invalidates the stamp, and only scripts/check-plan-binary-current.sh:153 ever mints one (build.sh, local-ci.sh and the land tool never do; the hook only reads it), so a rebuilt binary inherits its predecessor's stamp. FIRST TASK: replace this row's exit criterion — drop the refused:plan-binary-unstamped arm, which targets the already-correct rc=2; the arm worth having is that the rc=1 verdict must distinguish 'the binary predates the current surface' from 'the stamp predates it and the binary does not', and must claim the former only when the binary's own mtime supports it. KEEP arm 3 and its mutation arm unchanged: genuine staleness must keep reddening, because 1129-4su6's protection is what must not be weakened. SECOND, UNANSWERED AND NOT TO BE GUESSED: check-plan-binary-current.sh mints only when plan_binary_is_stale is false — an MTIME predicate — then writes the CURRENT surface hash, a weaker test than the lane's. Whether a genuinely surface-stale but mtime-fresh binary can be laundered into a fresh-looking stamp by running the checker must be CONSTRUCTED as a case, not reasoned from source as I did; it may be unreachable. PRIORITY STAYS p2 pending that measurement: the p1 escalation put to me rested on 'every freshly built binary is unstamped, so this is the default state', and that conclusion does not follow once rc=2 is read.
+    ts: "2026-09-20T06:56:28Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T06:56:28Z"
+      host: esmeraldinha
+      summary: |-
+        The filer disproved his own context field by reading pre-push-local-gate.sh:456-495 against the captured refusal string; appended rather than replaced so the superseded reasoning stays visible.
