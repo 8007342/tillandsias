@@ -1,0 +1,121 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-cheatsheet-refs-scans-only-at-cheatsheet-annotations-and-see-also-bullets-so-an-ordinary-markdown-inline-link-to-a-deleted-sheet-resolves-as-ok-and-the-reference-count-does-not-even-move
+    packet_kind: defect
+    order: 1300-k7wq
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [cheatsheets, tooling, fail-loud, guard-cannot-fail, agent-safety]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-cheatsheet-refs.sh
+    unscoreable: ""
+    verifiable_closure: |
+      scripts/check-cheatsheet-refs.sh RESOLVES ordinary Markdown inline links
+      to `.md` targets, in addition to the `@cheatsheet` annotations and
+      `## See also` bullets it scans today, and REFUSES a dangling one in the
+      same shape it already uses:
+
+        Broken cheatsheet references (N of M checked):
+          <file>:<line>: <target>
+
+      THREE ARMS:
+        1. a dangling INLINE link `[x.md](x.md)` in any section REDS the
+           checker, naming file, line and target;
+        2. a dangling `## See also` bullet still REDS it, with today's wording
+           BYTE-IDENTICAL -- the existing coverage must not regress;
+        3. a RESOLVING inline link passes and is COUNTED, so the reference
+           total rises to include the shapes now being skipped.
+
+      A MUTATION ARM must show arm 1 FAILS if the inline-link pattern is
+      removed again, otherwise the fixture proves only that the corpus happens
+      to be clean today.
+
+      PRE-FIX RESULT: FAILS -- measured on esmeraldinha 2026-09-20, see context.
+    title: |
+      scripts/check-cheatsheet-refs.sh scans only `@cheatsheet` annotations and `## See also` bullets, so an ordinary Markdown inline link to a deleted sheet reports OK and the reference count does not even move
+    context: |
+      ANOTHER GUARD THAT CANNOT FAIL FOR THE THING IT LOOKS LIKE IT GUARDS.
+      Its own header says "verify every cheatsheet reference resolves"; what it
+      verifies is two specific citation shapes.
+
+      FOUND BY yolanda 2026-09-20, BY GREP AND NOT BY THE GUARD, while folding
+      two overlapping CR cheatsheets: deleting
+      cheatsheets/tooling/msys-grep-cannot-count-carriage-returns.md left
+      cheatsheets/tooling/git-bash-cannot-fork-or-enumerate.md pointing at it
+      from a `## Sibling traps` section, and the checker reported
+      "OK: 579 cheatsheet references resolved" with that dead link in the tree.
+      They repointed it by hand. Reproduced here rather than taken on report.
+
+      MEASURED ON esmeraldinha 2026-09-20, both arms, against the live corpus
+      with the file restored afterwards and the tree verified clean:
+
+        A dangling INLINE link appended to a real sheet --
+            [definitely-not-a-real-sheet.md](definitely-not-a-real-sheet.md)
+          rc=0
+          OK: 579 cheatsheet references resolved.
+        THE COUNT DID NOT MOVE. 579 before, 579 with the dead link present, so
+        the link was never examined and never counted -- it is invisible, not
+        merely tolerated.
+
+        A dangling `## See also` bullet, the shape it DOES scan --
+            - tooling/definitely-not-a-real-sheet.md — dead bullet
+          rc=1
+          Broken cheatsheet references (1 of 580 checked):
+            .../cheatsheets/tooling/awk-word-boundary.md:115: tooling/definitely-not-a-real-sheet.md
+
+      So the guard works correctly for what it covers, and the count rising
+      579 -> 580 is the proof that coverage is the whole difference.
+
+      THE CAUSE IS IN THE HEADER, STATED PLAINLY AND NOT AS A BUG. The script
+      documents that it scans "`@cheatsheet <path>` annotations and `## See
+      also` bullets shaped like `- <path>.md — ...`". An inline
+      `[text](target.md)` is neither. Nothing is hidden; the gap is between
+      what it says it scans and what "verify every cheatsheet reference"
+      promises to a reader who did not open it.
+
+      THE EXPOSURE IS SMALL AND REAL, and both halves matter. Measured across
+      cheatsheets/: 8 inline `.md` links in 4 files, 5 unique targets, and
+      ZERO currently dangling. So this is not an outstanding breakage to fix --
+      it is an unguarded axis. But the corpus USES that shape, including
+      awk-word-boundary.md's own "Sibling trap" section and the sheet that
+      actually broke, so the next deletion or rename has the same free hand the
+      last one had.
+
+      WHY IT IS p3 AND NOT HIGHER. Nothing is broken today, the blast radius is
+      a dead link in documentation rather than a false verdict about code, and
+      the shape it misses is a minority of citations. It earns a row because it
+      is the third instrument this week found asserting less than its name --
+      after the litmus step adjudicated on non-empty output (1258-8wfb) and the
+      index regenerator rewriting markers from absent state (1295-c4tn) -- and
+      because a references checker is exactly the tool nobody re-checks by hand
+      once it says OK.
+    next_action: >
+      Extend the extraction in scripts/check-cheatsheet-refs.sh to also match
+      `\[[^]]*\]\(([A-Za-z0-9_./-]+\.md)\)` and feed the captured target through
+      the existing resolve_target(), which already accepts both the
+      cheatsheets-relative and repo-root-relative forms and needs no change.
+      Expect the reported total to RISE (579 -> ~587 on today's corpus); that
+      rise is the fix working and the fixture should assert it rather than pin
+      the old number. WATCH TWO THINGS. First, inline links to ANCHORS and to
+      non-cheatsheet paths (`../../docs/foo.md`, `#section`) must not be
+      reported as broken -- resolve_target already requires a `.md` suffix, but
+      a relative path escaping cheatsheets/ needs a decision rather than a
+      crash. Second, keep the `## See also` and `@cheatsheet` arms byte-
+      identical: this row is a widening, and a widening that perturbs existing
+      output is indistinguishable from a rewrite when someone diffs the gate.
+    provenance: |
+      Found by yolanda-windows 2026-09-20 during the cheatsheet fold
+      (salvage/yolanda/20260920-cheatsheet-fold, 76e2f49e7), reported to
+      esmeraldinha, and offered rather than filed. Every number above was
+      RE-MEASURED on esmeraldinha the same day against the live corpus: the
+      dead-inline-link arm, the dead-See-also-bullet positive control, the
+      unchanged-then-incremented reference count, and the 8-links-in-4-files
+      exposure survey. The temporarily modified sheet was restored from a copy
+      and `git status` verified empty afterwards. The dead link that prompted
+      it was created by esmeraldinha's sheet and deleted by yolanda's fold, so
+      neither host is reporting only on the other's work.

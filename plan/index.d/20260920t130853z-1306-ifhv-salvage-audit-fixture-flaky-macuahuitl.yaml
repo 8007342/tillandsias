@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-salvage-audit-gate-step-reds-intermittently-on-its-disclaimer-arm-while-the-same-capture-satisfies-the-ref-count-arm-so-a-run-cut-short-reads-as-an-assertion-failure
+    order: 1306-ifhv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, scripts, instrument-defect, linux, flake]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-salvage-audit.sh
+      - scripts/gate-steps.d/
+    verifiable_closure: |
+      scripts/test-salvage-audit.sh, run 20 times consecutively on a host under
+      a concurrent ./build.sh --check load, prints `ok:salvage-audit:12/12`
+      every time, and when its subject is cut short by the capture's timeout
+      the fixture prints a NAMED kill (`skip:salvage-audit:subject-killed-at-
+      budget:<elapsed>s` or a refusal naming the budget) rather than
+      `FAIL: ARM 3: the ancestry disclaimer is gone`; the fixture's own
+      mutation arm shows that a subject killed after the ref count and before
+      the disclaimer is reported as a kill, not as ARM 3. PRE-FIX RESULT:
+      FAILS — measured by yoga 2026-09-20: pristine trunk worktree 12/12; the
+      same tree 8 consecutive runs 12/12; earlier 1 FAIL in 3 (11/12, ARM 3);
+      inside the gate PASSED once and FAILED twice on the same commit, and the
+      failing gate log shows `ok: ARM 1b: it audited 100 refs, covering
+      salvage (67) + work (33)` and `FAIL: ARM 3: the ancestry disclaimer is
+      gone` from ONE capture (`out="$(timeout 300 bash "$CHECK" 2>&1)"`, line
+      25), although the disclaimer is an unconditional printf to stderr three
+      lines after the ref check and is present once in the script on both
+      trees.
+    title: |
+      the salvage-audit gate step reds intermittently on its disclaimer arm while the same capture satisfies the ref-count arm, so a run cut short reads as an assertion failure
+    context: |
+      Blocked yoga's 1285-vz27 land twice (1226-jb8y's step). ONE HYPOTHESIS
+      ALREADY REFUTED, kept here with its evidence: the coordinator proposed
+      that the capture's `timeout 300` kills the subject under gate load
+      after the ref count and before the disclaimer (1282-trqp's family).
+      yoga refuted it twice: (1) structurally, the fixture's line 26 is
+      `verdict="$(printf '%s' "$out" | tail -1)"` and ARM 1 and ARM 1b read
+      $verdict, so in the failing runs the LAST line of the capture was
+      present and well-formed and an EARLY line (the disclaimer is at line
+      103 of the audit, before all per-ref work) was missing, the opposite
+      signature from truncation; (2) by timing, `timeout 300 bash
+      scripts/salvage-audit.sh` took 4.17 s with rc=0 for 100 refs, so no
+      load reaches the budget. The buffering variant (block-buffered stdout
+      lost, unbuffered stderr kept) is reversed by the same evidence. WHAT
+      REMAINS, labelled a guess by yoga: either some path skips the
+      disclaimer while still producing a full summary, or the grep did not
+      match content that was present; the audit compares FILE CONTENT and
+      can emit blob bytes into the same stream, and a capture carrying NUL
+      bytes changes how a grep classifies its input (`grep -qi` over a
+      binary-classified stream is a different question from over text, and
+      the fleet runs both GNU grep and ugrep). Nobody edits the fixture on a
+      theory; the next measurement is the failing capture itself, saved to
+      a file and inspected for NUL bytes and for the disclaimer's presence
+      with `grep -a` versus without.
+    next_action: >
+      Reproduce under load on a Linux host with the fixture's capture saved
+      to a file on every run; on a failing run check `tr -cd "\000" < cap |
+      wc -c` and `grep -a -c "ANCESTRY IS NOT USED" cap` against the plain
+      grep the fixture uses; if the line is present and the fixture's grep
+      misses it, make the fixture grep with -a (or strip the blob bytes
+      from the audit's stream) and add a mutation arm that feeds a capture
+      with NUL bytes; if the line is absent, find the path that skips line
+      103 while still printing the summary. Record the refuted budget-kill
+      hypothesis's two measurements on the row as the eliminated
+      candidate.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from
+      yoga-silverblue's measurements and gate log; nothing run here.

@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-20T11:42:40Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t114240z
+      host: macneo
+      summary: |
+        CLAIM RELEASED BACK TO ready. Holding this on macneo gated nothing: the work
+        that remains cannot start here, and whichever host produces a refusing log
+        should be free to take it without waiting on me.
+
+        FIFTH REGIME-CHECK FROM macneo, measured at osx-next cb87a6993, not recalled:
+          scripts/archive-plan-packets.sh --check
+            ok:archive-answerability:332/332 after archiving 1048 packets, ready set unchanged at 592
+            Check passed: ready set unchanged, no new orphaned events, archived packets
+            stay answerable, and the script is idempotent.
+          scripts/test-archiver-could-not-run-verdict.sh -> PASS 4/4 (965-sxec)
+        NON-VACUOUS, which is the only reason it is worth recording: 1048 packets
+        archived and a ready set that MOVED (592, against 531 at the first measurement).
+        A memo replay emits an identical cached line by construction, so a changed number
+        cannot be one.
+
+        THE PARKED POSITION, unchanged, and stated as a claim about evidence rather than
+        about the defect: "STOPPED REPRODUCING ON FOUR REGIMES" IS NOT "FIXED".
+          macneo      host-native, no toolbox, Apple ruby 2.6.10 — green, verified non-memoized
+          yoga        in-toolbox, 3 gates, greens proven real by a DIFFERING ready set
+          lenovinha   in-toolbox, direct un-memoized run, exit 0
+          macuahuitl  in-toolbox land gate, host==toolbox ruby 4.0.6 — the control case
+        Two of the hosts that ORIGINALLY reproduced it are among those four, and nobody
+        has found what changed. Closing on that absence would be the population error
+        yoga named: the set of hosts that "stopped reproducing" is smaller than it looks,
+        and some may never have run the check at all.
+
+        PICKUP TRIGGER: a log from ANY host that actually shows the refusal. Until one
+        exists, C3 (staging the out2 print) has no exit-3 site to print for and cannot be
+        started — that is a fact about the evidence, not a shortage of effort.
+        FIRST STEP FOR WHOEVER TAKES IT, before hunting the site: verify the green you
+        are looking at. Check POSITIONALLY for a memo line (grep -B3 around the archiver
+        verdict, never globally — the token appears in green logs as the memo fixture's
+        own passing arm), grep the unconditional PHASE LINE rather than the word
+        "archiver", and run a positive control that the detector works on that file.
+        IF NO REFUSING LOG CAN BE FOUND, the honest question is whether the original two
+        reports were memo replays or absent steps rather than refusals — which would end
+        this hunt rather than continue it.
