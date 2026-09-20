@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+- packet_id: every-platforms-state-root-falls-back-to-a-silent-default-when-its-home-variable-is-unset-and-since-reset-state-those-roots-are-destructive-so-a-scrubbed-environment-turns-a-repair-into-a-no-op-that-reports-success
+  order: 1315-d4qd
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  release_target: fail-loud-diagnosis-milestone
+  pickup_role: any
+  capability_tags:
+  - macos
+  - linux
+  - windows
+  - fail-loud
+  - destructive
+  estimated_hours: 3
+  owned_files:
+  - crates/tillandsias-macos-tray/src/diagnose.rs
+  - crates/tillandsias-macos-tray/src/reset_state.rs
+  - crates/tillandsias-core/src/cache_root.rs
+  - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+  title: |
+    every platform resolves its state root with a silent fallback when HOME (or XDG_CACHE_HOME, or
+    LOCALAPPDATA) is unset, and since 1286-4437 those roots are DESTRUCTIVE — so a scrubbed environment
+    turns --reset-state into a no-op that announces success and leaves the real state untouched
+  context: |
+    MEASURED ON MACNEO 2026-09-20, with a control, using only the read-only diagnostic.
+    Same binary, seconds apart:
+
+      HOME set     -> image_root=/Users/tlatoani/Library/Application Support/tillandsias, rootfs_present=true
+      env -u HOME  -> image_root=/tmp/Library/Application Support/tillandsias, rootfs_present=false, rootfs_bytes=null
+
+    There is 1.2 GiB of real guest state at the real root on this host. So with HOME
+    unset the SUPPORTED DIAGNOSTIC tells an operator the guest is not provisioned
+    while it is, and the obvious next action from that verdict is the destructive one.
+    The HOME-set run one second earlier is the control that makes this a finding and
+    not an anecdote.
+
+    ALL THREE PLATFORMS, each with a DIFFERENT silent default, found by reading in one
+    pass after the macOS measurement:
+
+    1. macOS, diagnose.rs:107 — var_os("HOME").unwrap_or_else(|| PathBuf::from("/tmp")).
+       MEASURED reachable (above). run_reset_state removes children of this root and
+       hands it to wipe_provisioned_artifacts.
+    2. SHARED CORE, cache_root.rs:41 — std::env::temp_dir().join("tillandsias") when
+       BOTH XDG_CACHE_HOME and HOME/USERPROFILE are unset. This is not only Linux's:
+       the macOS --reset-state body calls cache_root() for the fallback_* credential
+       copies and vault-data, so the macOS arm has a SECOND silent-default path that a
+       macOS-only fix would not touch. NOT measured.
+    3. WINDOWS, wsl_lifecycle.rs:544 — LOCALAPPDATA unset falls back to
+       'C:\Users\Public\AppData\Local', which is not a temp dir but a REAL SHARED
+       MULTI-USER PATH, and the reset calls remove_dir_all on its child. Worst of the
+       three by consequence. NOT measured. (notify_icon.rs:696 log_dir() has the
+       temp_dir form too, but it is a log path, not destructive.)
+
+    THE FAILURE IS THE ANNOUNCEMENT, NOT THE DELETION. --reset-state's contract is that
+    it announces what it will destroy before destroying it. The announcement is built
+    from the SAME wrong root, so the output is internally consistent and externally
+    false: it names /tmp paths, does exactly what it said, exits 0, and the operator
+    has been told the local state was cleared while it sits untouched. That is this
+    fleet's recurring family — a verdict produced by something other than the thing
+    whose success it claims — attached to the repair tool for a broken install.
+
+    SURVEY of contexts that scrub the environment, per the coordinator's ruling.
+    FOUND: no LaunchDaemon/LaunchAgent plists in the tree (the two .plist files are
+    app bundle Info.plist). Three scripts use 'env -i', all host-tool probes that do
+    not invoke the tray; one of them, check-spec-index-resolution-agreement.sh:62,
+    already passes HOME explicitly with a /nonexistent default, so the tree already
+    knows 'env -i' drops it. ONE ADJACENT REGIME, NOT RESOLVED:
+    land-on-platform-branch.sh:471 names 'a land invoked from a stripped environment
+    (the LaunchServices regime, 980-xcaf)', and LaunchServices is how the installer's
+    'open -a' starts the app. That regime is documented as stripping PATH; whether it
+    also strips HOME is UNMEASURED, and it is the one candidate that would put a
+    shipped path on this defect.
+    FOUND: none that invoke the tray with HOME unset, with that one unmeasured regime
+    named. The guard lands regardless — the fallback is measured reachable, and a
+    destructive path should not have a silent default whether or not today's callers
+    happen to avoid it.
+
+    NOT LIVE-FIRED ON MACNEO, DELIBERATELY. This host currently has NO Tillandsias.app
+    in /Applications and 1.2 GiB of VM state under the real root — the same unexplained
+    condition recorded here earlier today, and exactly the state --reset-state's
+    pre-flight guard exists for. Firing it to prove the guard works risks unre-derivable
+    vault state (803-49re) against a guard whose ordering is verifiable by reading: the
+    refusal returns before image_root() is computed. Same asymmetric-cost reasoning that
+    spared nvram.bin on 1286-4437. A live run waits for a macOS smoke with per-run
+    operator consent.
+
+    Issue note with the raw measurement:
+    plan/issues/macos-image-root-tmp-fallback-is-now-destructive-2026-09-20-macneo.md
+  verifiable_closure: |
+    With HOME unset ('env -u HOME') against a scaffolded image root:
+      1. --diagnose still ANSWERS (read-only; answering beats panicking) and its
+         JSON carries an image_root_source field reading 'fallback:/tmp:HOME-unset'
+         rather than 'home', so its false rootfs_present verdict is a LABELLED one
+         and no reader can mistake the fallback for the real root.
+      2. --reset-state REFUSES with 'refused:reset-state:no-home' BEFORE the
+         announcement is printed, and the scaffolded state is byte-identical
+         afterwards. The refusal must precede the ANNOUNCEMENT, not merely the
+         deletion, because an announcement naming /tmp paths is itself the false
+         report this row is about.
+      3. With HOME set, the same fixture proceeds normally, so the guard is not a
+         blanket refusal.
+    MUTATION ARM: remove the refusal branch and the fixture must FAIL by observing
+    the /tmp announcement return — the arm reproduces the defect rather than merely
+    failing to find it.
+    The fixture is hermetic (a scaffold plus 'env -u HOME'); it never touches a real
+    image root and needs no VM.
+  next_action: |
+    Implement ruling 1 for macOS first: image_root() returns Result, run_reset_state
+    refuses 'refused:reset-state:no-home' before announcing, --diagnose gains
+    image_root_source. Then decide the shared cache_root() case (2), which is the one
+    that reaches back into the macOS arm, and the Windows Public-AppData case (3),
+    which has the worst consequence and is yolanda's arm. Measure the LaunchServices
+    HOME question before claiming no shipped path reaches this.
