@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T20:30:00Z"
+      agent_id: "linux-pirria-claude-20260920t203000z"
+      host: pirria
+      summary: |-
+        THE LINUX ARM'S CLOSING EVIDENCE. Run on trunk after land 33b
+        (ok:land:07f397fd5:attempt-2) put both Linux refs there — the body v3 at
+        ef88b9406 and the installer-and-litmus at 5d299ef14:
+
+          ℹ Executing litmus:installer-reprovisions-on-install...
+            [STEP 1/7] the flag exists under the agreed name on the Linux surface ... [OK]
+            [STEP 2/7] nothing READS a second opt-out variable ... [OK]
+            [STEP 3/7] the guard and the announcement live in core, importable by all three binaries ... [OK]
+            [STEP 4/7] the Linux body does not keep a private copy of the gate ... [OK]
+            [STEP 5/7] the skipped-case line is the byte-exact shared phrase ... [OK]
+            [STEP 6/7] the installer refuses to destroy state when its reprovision path is absent ... [OK]
+            [STEP 7/7] the installer calls the flag AFTER the binary is in place, not before ... [OK]
+            [PASS] litmus:installer-reprovisions-on-install
+
+        THE TREE IS STATED RATHER THAN ASSERTED, because "on trunk" from the host
+        that wrote the arm is worth nothing without it: HEAD was trunk plus one
+        plan-fragment commit, and
+        `git diff --stat origin/linux-next -- crates/ scripts/ openspec/` was
+        EMPTY. Every byte the seven steps read — the body's surface, install.sh,
+        the arm and its binding — is trunk's. Steps 1 to 5 assert the body and 6
+        to 7 the installer, so what this proves is that the two refs AGREE ON
+        TRUNK, which is the reason for running it there rather than in the
+        worktree that produced them.
+
+        This row stays in_progress: the Linux arm is one of three. It closes
+        citing all three — this run, yolanda's Windows run event, and macneo's
+        macOS body and fixture — not on this evidence alone.
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T20:30:00Z"
+      agent_id: "linux-pirria-claude-20260920t203000z"
+      host: pirria
+      summary: |-
+        A FREQUENCY THIS ROW DID NOT KNOW. Pushing ONE plan fragment
+        (1310-7apk's row) to linux-next on 2026-09-20, this host was refused with
+
+          plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+
+        FOUR TIMES IN ONE HOUR, on four separate push attempts, for that single
+        fragment. It landed on the fifth. A fifth refusal of the same shape had
+        already been recorded against this row earlier the same day on a
+        different fragment, so five in one day on one host.
+
+        THE MECHANISM IS THE RACE, not the rebuild. Each rebuild costs 66s
+        (`cargo build --release -p tillandsias-plan` in the builder toolbox), and
+        each `git rebase` onto a trunk that has moved re-invalidates the
+        validator surface the rebuilt binary was stamped against. Trunk was
+        taking a land every few minutes during this window. So the sequence is:
+        rebuild 66s, rebase, push into a ~135s lane (1310-7apk), discover trunk
+        moved, rebuild again. A floor host loses that race by default, and the
+        loop that finally won did so by running check-plan-binary-current.sh
+        AFTER each rebase — which works because that checker is what WRITES the
+        validator-surface stamp, this row's own subject.
+
+        THE SHARPEST PART IS UNCHANGED AND NOW REPEATED: the binary refused as
+        STALE is the same binary that allocated 1310-7apk's order number, minutes
+        earlier, in the same shell. Recorded as an event rather than a new row on
+        the coordinator's ruling: the mechanism is one, the cadence is its
+        symptom, and stamping the validator surface where the staleness is
+        DECIDED — rather than in a checker a pusher must know to run first — is
+        what ends both.
