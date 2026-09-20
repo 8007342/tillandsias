@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: decision
+      ts: "2026-09-20T23:40:04Z"
+      agent_id: linux-yoga-opus5-20260920t234004z
+      host: yoga
+      summary: |
+        OPERATOR APPROVAL RECORDED — this row's fifth exit criterion, the symmetric twin
+        of bar_raise_governance (methodology/convergence.yaml:425). Nothing in this
+        event activates anything; it is the record that must exist BEFORE activation.
+
+        THE APPROVAL, VERBATIM, given to yoga directly in session on 2026-09-20:
+
+          "Looks like you're precisely fighting integration branch because of
+           concurrency, sounds like it's time to implement our scoped integration
+           tests. I approve them."
+
+        macuahuitl holds a second, independent record of the same decision from their
+        own channel. Two records of one bar decision is the intended shape, not a
+        duplicate — this one carries the disambiguating question below, which theirs
+        could not.
+
+        THE DISAMBIGUATION, AND WHY IT WAS ASKED. "Scoped integration tests" is
+        literally the name of the MIDDLE tier, so the sentence alone reads narrower than
+        it turned out to be. yoga put three readings to the operator before recording
+        anything —
+          (1) BOTH LIGHT and SCOPED as this row defines them, LIGHT running the fragment
+              and cheatsheet deciders and NO build at all;
+          (2) SCOPED only for now, leaving LIGHT at FULL until measured, since LIGHT is
+              the larger reduction;
+          (3) all three plus a LIGHT landing ADOPTING a gate stamp the way
+              push-plan-fragments-to-trunk.sh does today.
+        THE OPERATOR CHOSE (1). The approval therefore covers BOTH LIGHT AND SCOPED, and
+        that is pinned here because a later reader finding only the verbatim sentence
+        would reasonably have built the narrow one.
+
+        WHAT THE APPROVAL DOES NOT SETTLE, recorded as OPEN rather than decided. Option
+        3 was the only one naming stamp adoption and was not chosen — but option 1 was
+        labelled "the row as written", and this row's own tier table says LIGHT takes
+        "a stamp adopted the way push-plan-fragments-to-trunk.sh does today". The axis
+        was not clean, so the operator is NOT being credited with a ruling on it.
+        CONSERVATIVE READING IN FORCE until they say otherwise, agreed by yoga and
+        macuahuitl both: a LIGHT landing writes a SCOPED stamp naming exactly the
+        classes it gated, never `full`, and adopts nothing. gate-stamp.sh has recorded
+        `scope full` versus `scope <class,...>` since 765-dt8h, so this needs no new
+        format — and it is what stops the release gate's freshness check from reading a
+        LIGHT landing as fully gated. Reversible in one sentence in either direction.
+
+        THE SCOPE THE APPROVAL IS RECORDED AGAINST, all of it from this row's own exit
+        criteria rather than invented alongside them: tiers expressed in
+        gate_stamp_classify_path's classes (765-dt8h, total and fail-closed); unknown
+        path -> FULL; missing or unfetchable base ref -> FULL; build-tooling class -> FULL;
+        LAST FULL RUN OLDER THAN 24 h -> REFUSE TO SKIP; every skip printing one line
+        naming the gate, the intersecting-class evidence, the diff base SHA and the last
+        FULL run timestamp; scoped stamps only; main FULL always; the tier printed on
+        every landing line; and a tier that does not run a phase saying so in its own
+        output rather than leaving a green to imply coverage it does not have.
+
+        THE LAST CLAUSE IS NOT DECORATION AND HAS A DATE. macuahuitl's release gate on
+        2026-09-20 was red on seven pre-build litmus steps that no ./build.sh --check
+        could see, because --check never runs that tier — the doctrine already in
+        methodology/convergence.yaml under 1282-rkkm. A green that does not say what it
+        did not run gets read as full coverage. The tiers must not re-create that
+        silence one level up.
+
+        WHAT GOES BACK TO THE OPERATOR, in numbers, because they approved a reduction on
+        the strength of a diagnosis and are owed the measurement: landings per day, gate
+        minutes per landing before and after, and the share of landings that actually
+        qualified LIGHT and SCOPED. The pre-fix baseline already measured on trunk, with
+        its reading rule published before the number (1315-4a7j):
+          landing-provenance:7.days:queue=7 plan=75 relay=64 direct=28
+          code landings: queue=7 direct=28 of 35
+
+        THE STAMP QUESTION IS NO LONGER OPEN. The operator settled it directly, later
+        the same session, unprompted and in their own framing:
+
+          "Oh, so like a lil 'gateless' merge with a tiny blast radius. Like something
+           we might need to bump a local build number to prevent a dirty tree, I approve
+           of stamp blast radius where appropriate"
+
+        RECORDED READING, stated back to them at the time and not corrected: a LIGHT
+        landing MAY merge without a full gate and leaves a stamp behind saying so. What
+        it does NOT do is claim to have been fully gated. Both let the merge through
+        with no gate; the difference is only what the record asserts afterwards, and it
+        costs nothing because gate-stamp.sh has recorded `scope full` versus
+        `scope <class,...>` since 765-dt8h. So a LIGHT landing writes a SCOPED stamp
+        naming exactly the classes it gated.
+
+        WHY THAT DISTINCTION IS THE WHOLE POINT, and it has tonight's date on it. The
+        release gate asks later whether a tree was fully built and tested. If a LIGHT
+        landing leaves something that reads as `full`, the answer is yes and it is
+        false. That is exactly the failure one level down on 2026-09-20: macuahuitl's
+        release gate was red on seven pre-build litmus steps no ./build.sh --check could
+        see, because --check never runs that tier and nothing said what it had not run.
+        The tiers must not re-create that silence one level up.
+
+        UNRESOLVED, AND DELIBERATELY NOT FOLDED IN: the operator's aside about "bump a
+        local build number to prevent a dirty tree" was not understood here and was not
+        treated as part of this approval. A version bump that dirties the tree and
+        forces a re-gate is a separate annoyance with its own likely fix. It was put
+        back to them as a question rather than answered by assumption, and it is not
+        covered by anything in this event.
+
+        PROVENANCE OF THIS RECORD. Both approvals were given to yoga directly in
+        session, and both are quoted verbatim above. macuahuitl holds an independent
+        record from their own channel and has the stamp half as reported-by-yoga. The
+        two agree. Neither host treated the other's agreement as the approval itself:
+        the criterion names the operator, and a coordinator session is not the operator.
