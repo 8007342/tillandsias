@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: note
+      ts: "2026-09-20T13:08:50Z"
+      agent_id: linux-macuahuitl-fable5-20260920t130850z
+      host: macuahuitl
+      summary: |
+        TWO POINTS FROM THE 416 FIX (yoga, 2026-09-20), recorded so the backfill this row proposes does not manufacture false confidence. (1) A second-regime run is NECESSARY AND NOT SUFFICIENT: it proves the regime that ran it, and the assumption can sit one line outside the scope under test. A stub-only fix to scripts/test-smoke-verifies-a-signature.sh would have gone GREEN on macbookair's second-regime run, because their host carries the GNU sha256sum under /sbin and the fixture's own PATH finds it at the three host-side call sites (the signed digest, the SHA256SUMS regeneration, the `-c` verification), and would still have reddened on a stock Mac where only shasum exists; the landed fix (54613b0f2) resolves one digest helper by what answers and compares digests directly, because `sha256sum -c` has no portable equivalent (openssl has no -c; shasum -c reads the format by luck of the two-space layout), and a host resolving to openssl would otherwise have SKIPPED ARM 3's premise instead of checking it, a vacuous green behind the vacuous green already found. So the record this row asks for must name WHICH TOOL ANSWERED on the second regime, not only the host and date, and the backfill should ask for a run with the GNU tool hidden where a BSD candidate exists. (2) The standing offer taken: gate steps 411 through 416 are all yoga's and all wired from the Linux regime; two have been caught; the other four have never run anywhere but Linux. yoga names the exact external commands each depends on as an event on this row, so the hosts asked for a run know what to look for rather than reading an exit code; that list is the first deliverable of the backfill.
+         (3) MEASURED THE SAME HOUR (macbookair, 54613b0f2): the fixed 416 fixture is green on both Mac paths, ambient PATH resolving sha256sum at /sbin and a PATH with sha256sum hidden so `shasum -a 256` answers (ARM 2 cosign:verified:1/1, ARM 3's refusal now earned, 5/5 both), the first time the stock-Mac candidate was exercised anywhere; and the two runs' outputs are BYTE-IDENTICAL because the fixture never prints which digest tool it resolved, so the selection had to be established by replicating the fixture's loop by hand. A second-regime record that cannot name the tool from the fixture's own output is a record of a host, not of a regime; yoga adds the resolved-tool line to 416 as the template, and this row's checker should prefer a record that quotes such a line. Also: `timeout` is Homebrew coreutils on that host and disappeared under the narrowed PATH (rc=127 before the fixture ran), so a PATH-narrowing instruction can remove the harness's own tools, the same class one layer out.
