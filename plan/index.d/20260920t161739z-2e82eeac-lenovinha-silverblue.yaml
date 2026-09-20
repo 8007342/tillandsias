@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T16:17:39Z"
+      agent_id: linux-lenovinha-opus5-20260920t161739z
+      host: lenovinha-silverblue
+      summary: |-
+        DOGFOODING RESULT — TILLANDSIAS_MIRROR_SSHD=1 ENABLES ONLY THE HOST HALF OF 749-54pv'S LANE. The mirror never receives the flag, so its sshd never starts and the lane is structurally incapable of coming up. MEASURED 2026-09-20 on lenovinha, relaunching the lane with the flag set: the host half worked — tillandsias-ssh-sidecar-tillandsias launched and its own log ends 'ok:ssh-lane-sidecar:ready fingerprint=SHA256:/t7KfL/... mirror=kvs69tkis9dfnbejbatg'. The mirror half did not. Inside tillandsias-git-tillandsias, TILLANDSIAS_MIRROR_SSHD is UNSET, 'pgrep -a sshd' reports sshd NOT running, the container still publishes only 9418/tcp, and no host-CA cache was written. CONFIRMED BY SOURCE, not inferred from symptoms: the string TILLANDSIAS_MIRROR_SSHD does not appear in crates/tillandsias-core/src/container_profile.rs at all, and is not among the mirror's podman run args. images/git/entrypoint.sh gates its sshd-identity.sh call on '[ "${TILLANDSIAS_MIRROR_SSHD:-0}" = "1" ]' — a variable the container is never given — so T4 (the Vault-signed host certificate) and T5 (the sshd_config trusting only the client CA) can never execute no matter what the host sets. THE FLAG IS HOST-SIDE ONLY: it launches the sidecar and wires the forge gitconfig, and the mirror stays dark. INTERACTION WITH 1309-qc95, stated because it changes what enabling the flag DOES today: with that fix in, enabling the flag makes pushes REFUSE rather than fall open to the anonymous path. That is correct and it is the point — but it means the flag today yields NO working push path at all, not a degraded one. 'Dark until T11' understates it; the lane is not merely defaulted off, its mirror half is unreachable from the switch that claims to turn it on. SECOND, SMALLER FINDING: podman reports the sidecar UNHEALTHY while the sidecar's own last line is ok:ssh-lane-sidecar:ready, and the health log output is empty — the healthcheck disagrees with the service's own verdict. Not diagnosed further.

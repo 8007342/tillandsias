@@ -4505,6 +4505,66 @@ fn build_git_run_args(
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_DEFAULT_BRANCH={branch}"));
     }
+
+    // ORDER 1310-5e6g (1288-5qpn dogfooding). THE WIRE THAT WAS MISSING. The mirror
+    // half of 749-54pv's ssh push lane is gated in images/git/entrypoint.sh on
+    // `[ "${TILLANDSIAS_MIRROR_SSHD:-0}" = "1" ]` — a variable the container was
+    // NEVER GIVEN. So setting the flag on the host launched the sidecar half and
+    // wired the forge gitconfig while the mirror's sshd never started: T4 (the
+    // Vault-signed host certificate) and T5 (the sshd_config trusting only the
+    // client CA) could not execute no matter what the host set.
+    //
+    // MEASURED before the fix on lenovinha 2026-09-20: with TILLANDSIAS_MIRROR_SSHD=1
+    // on the host, tillandsias-ssh-sidecar-tillandsias reported
+    // `ok:ssh-lane-sidecar:ready fingerprint=SHA256:/t7KfL/... mirror=kvs69tkis9dfnbejbatg`,
+    // while inside tillandsias-git-tillandsias the variable read <unset>,
+    // `pgrep -a sshd` reported sshd NOT running, and only 9418/tcp was exposed.
+    // A lane whose two halves read different switches — which is the same defect
+    // shape as an authenticated transport falling open (1309-qc95), one address
+    // along.
+    //
+    // ONE READ FEEDS BOTH HALVES, deliberately. This derives from
+    // mirror_ssh_push_lane_enabled(), the SAME function the sidecar launch
+    // calls, so the two halves cannot disagree. Do not re-read the environment
+    // here: a second source drifts, and the drift is invisible until someone
+    // enables the lane and watches only one side come up.
+    //
+    // NOT in container_profile.rs, and that is not an oversight. That module
+    // declares the mirror's env and NOTHING CONSUMES IT — every `.env_vars`
+    // reference outside its own definition is in its own unit tests, and the
+    // launcher builds these args here. A wire added there would read like the
+    // fix, pass those tests, and change nothing the container receives. The
+    // module's status is filed separately.
+    if mirror_ssh_push_lane_enabled() {
+        args.push("--env".into());
+        args.push("TILLANDSIAS_MIRROR_SSHD=1".into());
+        // SECOND HALF OF THE SAME ASYMMETRY, found by the same measurement.
+        // sshd-identity.sh dies at require_mid with fail:sshd-identity:no-mirror-id
+        // unless the mirror knows its OWN id — and the SIDECAR was given
+        // TILLANDSIAS_MIRROR_ID while the mirror was not. The flag alone gets
+        // the entrypoint past its gate and straight into that refusal, so
+        // wiring one without the other just moves where the lane stops.
+        if let Some(mid) = mirror_id {
+            args.push("--env".into());
+            args.push(format!("TILLANDSIAS_MIRROR_ID={mid}"));
+        }
+        // PUBLISH THE AUTHENTICATED LISTENER ONLY, on loopback, so a native
+        // rootless host can reach it — it cannot route to the enclave bridge
+        // (the same constraint vault_host_publish_arg documents for Vault).
+        //
+        // THIS IS NOT THE PUBLISH RETRACTED ON 1288-5qpn. That one was 9418,
+        // the anonymous git daemon: --export-all --enable=receive-pack with NO
+        // authentication, whose entire safety argument is that it is
+        // enclave-INTERNAL. Publishing it would let any local process push refs
+        // that the privileged relay carries to GitHub with the Vault-held
+        // credential — a confused deputy. 2222 is sshd with AuthorizedKeysFile
+        // none, TrustedUserCAKeys, a single authorized principal and a
+        // ForceCommand. An authenticated listener on loopback is the Vault
+        // analogy applied correctly; 9418 was that analogy applied to a
+        // listener that authenticates nothing.
+        args.push("--publish".into());
+        args.push(format!("127.0.0.1:{MIRROR_SSHD_HOST_PORT}:2222"));
+    }
     if let Some(secret_name) = vault_approle_secret {
         // @trace spec:tillandsias-vault — Vault Agent consumes launch-scoped
         // AppRole material and maintains the tmpfs client-token sink used by
@@ -11147,6 +11207,14 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 // line. The whole lane sits behind TILLANDSIAS_MIRROR_SSHD=1 — the same flag
 // gating the mirror's sshd — until the T11 staged migration flips defaults.
 // ---------------------------------------------------------------------------
+
+/// ORDER 1310-5e6g (1288-5qpn). The loopback port the mirror's AUTHENTICATED sshd is
+/// published on, so a native rootless Linux host — which cannot route to the
+/// enclave bridge — can reach the ssh push lane. Deliberately distinct from the
+/// in-container 2222 so a host-side collision is a config change here rather
+/// than a container change. In-VM launches do not need it; the enclave alias
+/// resolves there.
+pub(crate) const MIRROR_SSHD_HOST_PORT: u16 = 2223;
 
 /// ORDER 1288-5qpn. The unroutable URL a push is redirected to when the SSH
 /// lane is ENABLED but its host-CA cache is absent. It exists so the failure
@@ -26374,6 +26442,84 @@ esac
             text.contains("TILLANDSIAS_MIRROR_SSHD"),
             "the refusal must name the variable that turned the lane on, since unsetting it is \
              one of the two remedies; got:\n{text}"
+        );
+    }
+
+    /// ORDER 1310-5e6g (1288-5qpn dogfooding). BOTH HALVES OF THE SSH LANE COME FROM
+    /// ONE READ. The mirror half was gated in the container's entrypoint on
+    /// TILLANDSIAS_MIRROR_SSHD, a variable the container was never given, so the
+    /// host could enable the lane and watch only the sidecar half come up. This
+    /// pins the wire AND pins that it derives from the same predicate the
+    /// sidecar uses, because a second environment read here would drift and the
+    /// drift is invisible until someone enables the lane.
+    #[test]
+    fn git_run_args_pass_the_ssh_lane_flag_into_the_mirror() {
+        let _env = env_guard();
+        let _guard = crate::runtime_assets::env_lock();
+        let old_flag = std::env::var_os("TILLANDSIAS_MIRROR_SSHD");
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.0.take() {
+                        Some(v) => std::env::set_var("TILLANDSIAS_MIRROR_SSHD", v),
+                        None => std::env::remove_var("TILLANDSIAS_MIRROR_SSHD"),
+                    }
+                }
+            }
+        }
+        let _restore = Restore(old_flag);
+
+        let certs = std::path::Path::new("/tmp/does-not-matter");
+        let args_with = {
+            unsafe { std::env::set_var("TILLANDSIAS_MIRROR_SSHD", "1") };
+            build_git_run_args("proj", Some("mid123"), certs, "img", None, None, None)
+        };
+        assert!(
+            args_with.iter().any(|a| a == "TILLANDSIAS_MIRROR_SSHD=1"),
+            "with the lane enabled on the host the MIRROR must receive the flag, or its \
+             entrypoint never starts sshd and only the sidecar half comes up (1288-5qpn); \
+             got:\n{args_with:?}"
+        );
+
+        // THE FLAG ALONE IS NOT ENOUGH, and pinning only the flag would have
+        // shipped a lane that stops one step later: sshd-identity.sh dies with
+        // fail:sshd-identity:no-mirror-id unless the mirror knows its own id,
+        // and the SIDECAR was given it while the mirror was not. Measured on
+        // lenovinha 2026-09-20 with the flag wired and the id not.
+        assert!(
+            args_with.iter().any(|a| a == "TILLANDSIAS_MIRROR_ID=mid123"),
+            "the mirror must receive its own id alongside the flag, or the entrypoint clears \
+             its gate and stops at require_mid instead (1288-5qpn); got:\n{args_with:?}"
+        );
+
+        // NEGATIVE CONTROL. Without it the arm above would pass on a builder
+        // that passes the flag unconditionally, which would turn the lane on
+        // for every host and defeat the T11 staged flip.
+        let args_without = {
+            unsafe { std::env::remove_var("TILLANDSIAS_MIRROR_SSHD") };
+            build_git_run_args("proj", Some("mid123"), certs, "img", None, None, None)
+        };
+        assert!(
+            !args_without.iter().any(|a| a.contains("TILLANDSIAS_MIRROR_SSHD")),
+            "with the lane OFF the mirror must not receive the flag — the T11 default flip is \
+             what turns this on, not the launcher; got:\n{args_without:?}"
+        );
+    }
+
+    /// ORDER 1310-5e6g. The two halves must read ONE predicate, not two environment
+    /// lookups that can drift. Source-level because that is the property: a
+    /// behavioural test cannot tell one `std::env::var` from another.
+    #[test]
+    fn ssh_lane_flag_has_a_single_source_of_truth() {
+        let src = include_str!("main.rs");
+        let direct_reads = src.matches("std::env::var(\"TILLANDSIAS_MIRROR_SSHD\")").count();
+        assert_eq!(
+            direct_reads, 1,
+            "TILLANDSIAS_MIRROR_SSHD must be read in exactly ONE place \
+             (mirror_ssh_push_lane_enabled); every other site calls that predicate. Found \
+             {direct_reads} direct reads — a second read is how the lane's two halves came to \
+             disagree in the first place (1288-5qpn)."
         );
     }
 
