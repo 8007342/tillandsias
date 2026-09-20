@@ -137,11 +137,19 @@ fi
 # "comment through the next fi" terminates at the wrong `fi` and produces a
 # file that does not parse, which reds arm 3 for a reason that has nothing to
 # do with the defect (measured while writing this).
+#
+# THE ANCHOR IS A LINE THE RUNNER OWNS, not this fixture's guess at its control
+# flow. v1 of this arm sed'd the `if ! parse_yaml_out=…` test directly; adding
+# the `_parse_load_enabled` switch for scripts/test-litmus-parse-only-duplicate-key.sh
+# reflowed that test across two lines and the sed silently stopped matching —
+# caught only because the guard below fails loudly on an unapplied mutation.
+# Both fixtures now mutate the SAME named line, so a future reflow breaks both
+# visibly instead of leaving one quietly inert.
 MUTANT="$ROOT/scripts/.run-litmus-test.mutant-1303.$$.sh"
-sed 's|if ! parse_yaml_out="$("$parse_reader" validate-yaml "$parse_target" 2>&1)"; then|if false; then|' \
+sed 's|^ *local _parse_load_enabled=1 .*|                local _parse_load_enabled=0 # neutralised for arm 3|' \
     "$RUNNER" > "$MUTANT"
-if ! grep -q 'if false; then' "$MUTANT"; then
-    fail "arm 3: the mutation did not apply; the load line has been reworded"
+if ! grep -q '_parse_load_enabled=0 # neutralised for arm 3' "$MUTANT"; then
+    fail "arm 3: the mutation did not apply; the LOAD-GATE-1303 anchor line has been reworded"
     echo "violation:litmus-parse-instruments-agree:$passed/3"
     rm -f "$MUTANT"
     exit 1

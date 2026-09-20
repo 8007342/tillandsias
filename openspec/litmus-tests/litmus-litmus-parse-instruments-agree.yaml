@@ -56,11 +56,6 @@ critical_path:
     assert_output_nonempty: true
     timeout_ms: 300000
 
-  - step: "--parse-only still loads the document before extracting (the fix is present)"
-    command: "grep -Fq 'ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING' scripts/run-litmus-test.sh && grep -Fq 'blocked:parse-only:not-yaml' scripts/run-litmus-test.sh && echo 'ok: load-before-extract wired'"
-    expected_behavior: "ok: load-before-extract wired"
-    assert_exit: 0
-    timeout_ms: 5000
 
 anti_regression:
   - claim: "the verdict word may not say ok for a file that is not YAML"

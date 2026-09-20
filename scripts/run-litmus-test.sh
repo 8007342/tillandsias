@@ -2450,7 +2450,24 @@ main() {
             fi
             if [[ -n "$parse_reader" && -x "$parse_reader" ]]; then
                 local parse_yaml_out=""
-                if ! parse_yaml_out="$("$parse_reader" validate-yaml "$parse_target" 2>&1)"; then
+                # MUTATION ANCHOR, and it is load-bearing for a fixture that is
+                # not this order's. scripts/test-litmus-parse-only-duplicate-key.sh
+                # (order 1274-cbk7) proves its defect by building a PRE-FIX COPY
+                # of this runner with the duplicate-key detector neutralised and
+                # requiring the false green to come back. Once 1303-2d5g added
+                # the document load above that detector, the load rejected the
+                # duplicate first and that arm stopped reproducing anything —
+                # TWO FIXES FOR ONE FILE, with the older fixture's mutation
+                # mutating something no longer reachable.
+                #
+                # So the load is switched by a line of its own, which that
+                # fixture seds to 0 alongside its own mutation. Keep this line
+                # a single assignment on one line: a sed anchored on it is
+                # matching text, and reflowing this breaks an arm in another
+                # file that will not be obvious from here.
+                local _parse_load_enabled=1  # LOAD-GATE-1303 (ARM 1 anchor)
+                if [[ "$_parse_load_enabled" == "1" ]] \
+                   && ! parse_yaml_out="$("$parse_reader" validate-yaml "$parse_target" 2>&1)"; then
                     printf 'blocked:parse-only:not-yaml:%s\n' "$parse_target" >&2
                     [[ -n "$parse_yaml_out" ]] && printf '%s\n' "$parse_yaml_out" >&2
                     parse_rc=1
