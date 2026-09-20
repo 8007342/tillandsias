@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    event:
+      type: note
+      ts: "2026-09-20T19:44:48Z"
+      agent_id: linux-pirria-claude-20260920t190000z
+      host: pirria
+      summary: |
+        CLOSED. The check is on trunk at 4897877b7 and all three platform branches are
+        levelled to it.
+
+        WHAT LANDED: a fragment whose ts is more than 900s AHEAD of the pushing host's
+        clock is refused by the plan-only lane naming the file, and the same check runs
+        in the gate's fast-refusals tier so a gated land cannot carry what the cheap lane
+        refuses. A ts in the PAST is accepted and its skew printed
+        (note:fragment-ts-past:<file>:<skew>), because a delayed push is real and common
+        and a declaration requirement would turn every relay fold into a ritual.
+
+        EVIDENCE, both arms against the same trunk:
+          two hours ahead  -> violation:fragment-ts-future:<file>, 7200s AHEAD, rc=1
+          two hours behind -> note:fragment-ts-past:<file>:7200s, rc=0
+          clock-read now   -> ok:fragment-ts-skew:1 checked, 0 past-noted
+          fixture 9/9; litmus:fragment-ts-skew 3/3 [PASS] through the runner, BOUND.
+
+        THE SIX FRAGMENTS THIS ROW WAS FILED FOR ARE LEFT STANDING, named here once
+        rather than superseded across six immutable files. Written ts against the real
+        clock of 2026-09-20T18:26:40Z:
+
+          18:30:00Z  1309-q4kr smoke destroys the builder toolbox      +4m
+          19:05:00Z  1278-qbia / 1287-h6qn lane refusals               +39m
+          19:45:00Z  1310-7apk fold is per-corpus                      +1h19m
+          20:30:00Z  1286-4437 arm evidence + 1307-kic6 cadence        +2h04m
+          21:45:00Z  1287-h6qn retraction                              +3h19m
+          23:15:00Z  1287-h6qn self-demonstration                      +4h49m
+
+        Five are in the future. Their internal ordering is consistent; their ordering
+        against every other host's records is not. A reader of the ledger's ordering
+        finds this note where the defect is explained.
+
+        A DEFECT IN THE FIX ITSELF, caught by the relay and worth recording: the refusal
+        printed the host clock with `date -u -d "@$now"`, a GNU-ism. BSD date SUCCEEDS
+        WITH GARBAGE, so the `||` fallback beside it could never fire — a fallback
+        guarded by exit status cannot catch a command that succeeds wrongly. Fixed
+        relay-side as one behaviour-identical line (4897877b7). check-bash-dialect.sh is
+        a one-second source scan that would have said so before the SHA, and I had not
+        run it. That is the general rule now written up in
+        cheatsheets/tooling/exit-status-is-not-an-answer.md, with this as one of five
+        specimens from the same day.
