@@ -1,0 +1,100 @@
+packets:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    order: 1315-4a7j
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [git, hooks, branches, coordination, agent-safety, methodology]
+    estimated_hours: 6
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/test-pre-push-work-ref-lane.sh
+      - methodology/multi-host-development.yaml
+      - scripts/land-on-platform-branch.sh
+    verifiable_closure: |
+      scripts/test-pre-push-work-ref-lane.sh prints `ok:work-ref-lane:4/4` and
+      exits 0, where, against a scaffold remote: (1) a push of a commit with NO
+      gate stamp to refs/heads/work/<order> is ACCEPTED by the hook, the fast
+      deciders run and each red one prints ONE line beginning
+      `warn:pre-push:<decider>:` followed by the affordance
+      `prefer work branches, land through a PR: see ./skills/join-the-fleet §3`,
+      and the hook exits 0 (pre-fix: refused, "The work/<order> lane is the
+      GATED hand-off and demands the stamp", pre-push-local-gate.sh:154);
+      (2) the same commit pushed to linux-next is still REFUSED for the missing
+      stamp (the integration gate is unchanged); (3) a push to linux-next that
+      loses the trunk race is refused with the existing wording PLUS the
+      affordance line naming work/<order> and the skill (pre-fix: no
+      affordance; the reader is left with the refusal alone); (4) the
+      creation_regex in methodology/multi-host-development.yaml admits
+      `work/<order>` (pre-fix: line 141 admits agent/ and salvage/ only, so a
+      work ref is a stray the sweep never reaps) and scripts/check-* that
+      enforce the regex accept `work/1313-w78k` and refuse `work/foo`.
+      PRE-FIX RESULT: FAILS on arms 1, 3 and 4 — measured 2026-09-20: the hook
+      exempts only salvage/*; 92 salvage refs versus 34 work refs on origin
+      show hosts using the ungated emergency lane as their everyday branch;
+      13 of ~46 lands today retried after the remote moved, one three times.
+    next_action: |
+      OPERATOR DIRECTION (2026-09-20 evening): the fleet's concurrent pushes to
+      linux-next race each other ("remote moved" retries on most lands);
+      work entirely on work branches named by packet id, land full work
+      through pull requests into linux-next as the integration branch, keep
+      frequent commits and pushes, and "not block anything with hooks, but
+      add some WARNINGS with AFFORDANCES instead, showing within the error
+      'prefer work branches to avoid this error. See ./skills/<relevant-skill>
+      skill for instructions'".
+
+      MEASURED BEFORE DESIGN (three read-only lookups, 2026-09-20T19:40Z):
+      13 of ~46 land runs today needed a retry, one needed three; the land
+      tool adopts a still-valid stamp on plan-only movement but re-gates on
+      code movement (land-on-platform-branch.sh:238-251); the hook exempts
+      ONLY salvage/* (:160) and names work/<order> as "the GATED hand-off"
+      (:154) while methodology says pre_push_gate.applies_to EXCLUDES
+      work/<order> (multi-host-development.yaml:263-270) and the
+      creation_regex (:141) admits no work/ at all — three documents, three
+      answers; 92 salvage/* refs vs 34 work/* on origin.
+
+      THE CHANGE: work/<order> becomes the DEFAULT place a host commits and
+      pushes, as often as it likes, with no stamp and no trunk merge required
+      (the same exemption salvage/* has, minus the "dirty copy" semantics:
+      a work ref is a real branch of real commits). The fast deciders still
+      run on a work push and WARN with the affordance; nothing on a work ref
+      blocks. The integration gate on linux-next/osx-next/windows-next is
+      UNCHANGED — there is no server CI, the local gate is the only safety
+      net, and the operator's ruling is about the work lane, not about
+      removing the net; the race refusal there gains the affordance line.
+      The plan-only lane (push-plan-fragments-to-trunk.sh) is unchanged: it
+      is small, trunk-parented and adopts stamps; it is not the churn.
+
+      METHODOLOGY FIRST (CLAUDE.md Authority): amend branch_namespaces
+      (creation_regex admits work/<order> = work/[0-9]+-[a-z0-9]{4}), state
+      the lane in one place (ungated push; integration by landing), retire
+      the contradiction at :154 and :263. Then the hook, then the fixture.
+      The landing side is 1316-bnzt; the skill text is 1317-9ugn; this row is
+      the lane itself.
+
+      MIGRATION, NOT ENFORCEMENT (operator clarification, 2026-09-20 ~20:00Z):
+      "adding new hard rules would make a bunch of agents crash and suddenly
+      start failing hard on ways they already know how to work, so the plan
+      is we add instructions and methodology but we don't enforce it yet, as
+      affordances in skills make this the preferred workflow and most changes
+      over time merge to land as pull requests, then we'll make it a blocking
+      hard enforcement to enforce the stragglers to comply." So PHASE 1 (this
+      row): nothing new refuses; the work lane is opened; every existing
+      refusal and the race message carry the AFFORDANCE — the complete
+      preferred workflow, not a warning with incomplete information:
+      "prefer work branches: git switch -c work/<order>; push there freely;
+      open the PR with gh pr create --base linux-next --head work/<order>;
+      the landing queue integrates it. See ./skills/join-the-fleet §3".
+      PHASE 2 (a later row, operator-triggered): direct code pushes to
+      linux-next by a non-queue host are refused with the same affordance.
+      THE TRIGGER IS A NUMBER: scripts/check-landing-provenance.sh (this row
+      adds it) classifies first-parent landings on origin/linux-next over a
+      window by source — queue/PR merge, plan-only lane, platform relay,
+      direct push — and prints one line
+      `landing-provenance:<window>:queue=<n> plan=<n> relay=<n> direct=<n>`;
+      when queue landings are the majority of code landings for a week, the
+      operator flips. Arm 5 of the fixture: the classifier reads a scaffold
+      history with one of each and counts them correctly.

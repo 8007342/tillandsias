@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-20T19:20:56Z"
+      agent_id: linux-macuahuitl-claude-20260920t192055z
+      host: linux
+      summary: |
+        COORDINATOR RULING on task 4.5 (mlua portability), accepting macbookair's 2026-09-18 proposal as stated and with its narrowing: the three-lane claim is linux + darwin + windows-MSVC. Evidence: darwin fragment 20260917t215204z-0877e478-macos (cargo clean -p mlua-sys, mlua-sys 0.6.8 and mlua 0.10.5 recompiled, cargo test -p tillandsias-plan --lib lua_runtime 7 passed 0 failed — script execution and the sandbox holding, strictly more than the 2026-08-28 initialization line); windows fragment 20260917t231200z-0fcb5624-windows (same forced-rebuild shape, 7/7, 32 Lua C sources compiled to x86-64 COFF objects through Visual Studio via vswhere, rustc host triple x86_64-pc-windows-msvc, no cc/gcc/clang on PATH); linux on this host and lenovinha's builder. THE NARROWING IS PART OF THE ACCEPTANCE: "msys" in earlier wording names the shell, not the toolchain; an MSYS host WITHOUT Visual Studio is untested and remains the case most likely to fail — it is not claimed here and any row that needs it files its own arm. NOT ACCEPTED as answering 902-5bf9's own blocking criterion, which is a separate obligation: that criterion gates on the litmus `steps:` form being green on three platforms before it is wired into --check, and the form does not exist (grep -c 'steps:' scripts/run-litmus-test.sh = 0 on two hosts); 902-5bf9 stays ready with its own question (why the existing non-shell rust_queries form has one adopter in 395 files) unanswered. 927-2q4w is completed/archived and is not carried forward. WHAT IS LEFT on this packet: the OpenSpec change tree sync/archive only; pickup_role widens from macos back to any for that item, since nothing left here needs a host regime.
