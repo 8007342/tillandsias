@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-smoke-destroys-the-builder-toolbox-and-the-runbook-then-sends-the-next-cargo-step-to-a-host-with-no-toolbox-while-the-forge-image-sits-there-looking-like-one
+    order: 1309-q4kr
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, tooling, fail-loud, agent-safety, low-end]
+    estimated_hours: 2
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      §2 of the smoke destroys the `tillandsias-builder` toolbox along with all podman state, and nothing recreates it before the next step that needs cargo — so the next `cargo test` is run inside the forge image, which DELIBERATELY has no openssl, and returns the forge's answer to a host-lane question
+    context: |
+      MEASURED ON PIRRIA 2026-09-20, and it cost two wrong reports in one hour.
+
+      WHAT HAPPENED. The stable smoke's §2 ran `podman system reset --force`,
+      which destroyed the `tillandsias-builder` toolbox along with everything
+      else in the podman store. Later the same day I needed `cargo test` for the
+      1286-4437 body. The builder was gone; `localhost/tillandsias-forge:v56.9.19.2`
+      was present. I ran the tests there. They failed:
+
+        crates/tillandsias-headless/src/main.rs:27392:49:
+        ensure_ca_bundle: "Failed to run command: No such file or directory (os error 2)"
+        test source_built_init_and_status_check_smoke_uses_fake_podman ... FAILED
+
+      I reported to the coordinator that trunk was red and the gate was missing
+      it. It was not. Run in the builder toolbox on the same clean trunk minutes
+      later, on the same host:
+
+        openssl: PRESENT in the builder toolbox
+        test tests::source_built_init_and_status_check_smoke_uses_fake_podman ... ok
+        test result: ok. 1 passed; 0 failed; 0 ignored; 555 filtered out
+
+      THE CAUSE IS NOT A TEST DEFECT AND NOT HOST CA STATE. openssl is PRESENT
+      on the pirria host and PRESENT in the builder toolbox; it is ABSENT in the
+      forge image ON PURPOSE. main.rs:3180 states it: "The forge environment does
+      not have openssl CLI and is not responsible for generating CAs. The CA is
+      injected by the host." ORDER 1042-svey pins that exemption as FORGE-ONLY
+      and says in as many words that the builder distro is NOT covered by it,
+      deliberately. So a host-lane test was run in the one environment the tree
+      has already ruled is not the host lane, and its absence was read as trunk's
+      failure.
+
+      WHY IT IS A RUNBOOK ROW AND NOT A NOTE ABOUT ONE AGENT'S HABIT. The
+      runbook creates the condition and then does not mention it. §2 destroys the
+      builder; §5 and the surrounding steps send the operator to cargo; nothing
+      in between recreates it. The forge image is the container that is still
+      there, it is named for this project, and it runs cargo commands without
+      complaint — it simply answers a different question. The next host to run
+      the smoke and then need cargo will reach for the same container for the
+      same reason, and the tree's own ruling that this is wrong lives in a source
+      comment and an order number, neither of which is in the path of someone
+      typing a cargo command.
+
+      IT COST A FALSE ROW AND A FALSE CORRECTION. I reported trunk red; the
+      coordinator corrected me with their own passing run and offered a
+      hermetic-fixture row to file, framed as "a headless unit test depends on
+      host CA state". I began filing it, measured the forge image first, and
+      found the framing was also wrong — the test has no defect in any
+      environment it is meant to run in. Two agents spent an hour converging on
+      a defect that did not exist, and the only reason no row was filed is that
+      the measurement happened before the writing.
+    exit_criteria:
+      - 'after a destructive reset, the runbook''s next cargo-bearing step recreates the builder toolbox first, by one named command (pre-fix result: FAILS — §2 destroys it and no later step mentions it)'
+      - 'a cargo invocation inside the forge image REFUSES AT THE MOMENT IT IS TYPED and names the builder as the place to run it, rather than after its output has been believed — the forge''s entrypoint or shell profile can carry the one-line guard; whoever takes the row decides where'
+      - 'NEGATIVE CONTROL: cargo in the BUILDER toolbox is unaffected and needs no flag, and the forge''s own legitimate non-cargo work is not refused — the guard names the cargo lane, not the container'
+      - 'the refusal cites 1042-svey so the reader learns the exemption is forge-only rather than that openssl is merely missing'
+    unscoreable: |
+      placement-not-chosen: the guard belongs either in the forge image's
+      entrypoint, in a shell profile inside it, or in the runbook as a step, and
+      those have different blast radii — the first two affect every forge, the
+      third only affects readers. The measurement is complete and reproducible on
+      this host; the placement is a choice the claimer makes.
+    events:
+      - type: filed
+        ts: "2026-09-20T18:30:00Z"
+        agent_id: "linux-pirria-claude-20260920t183000z"
+        host: pirria
+        summary: |-
+          Filed by the host that did it, at the coordinator's direction, after
+          retracting the hermetic-fixture row this was mistaken for. The RUN
+          evidence is both of my own runs: the red inside the forge with the
+          ensure_ca_bundle panic, and the green in the builder on the same trunk
+          minutes later. The coordinator ruled it p2 rather than p3 on the
+          grounds that the next host after a smoke will reach for the same
+          container.
