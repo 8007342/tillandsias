@@ -172,6 +172,7 @@ specs:
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
+  - litmus:reset-state-contract
   - litmus:installer-swap-atomicity
   - litmus:installer-reprovisions-on-install
   - litmus:spawn-failure-names-program

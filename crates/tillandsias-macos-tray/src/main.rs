@@ -27,6 +27,7 @@ mod installation_uuid;
 mod main_thread;
 #[cfg(target_os = "macos")]
 mod pty_vsock_bridge;
+mod reset_state;
 #[cfg(target_os = "macos")]
 mod status_item;
 
@@ -175,6 +176,13 @@ fn main() {
              --reset-guest EPHEMERAL RESET: wipe the guest disk (and with it the\n                  \
              in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
              you'll re-authenticate once\n    \
+             --reset-state FULL LOCAL RESET (order 1286-4437): everything\n                  \
+             --reset-guest destroys, plus the host-held vault credentials and\n                  \
+             the app caches, then reprovisions. PRESERVES the installation\n                  \
+             identity. The installer runs it by default after an upgrade.\n                  \
+             TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction (and only\n                  \
+             the destruction); TILLANDSIAS_RESET_KEEP_MODELS=1 spares the model\n                  \
+             cache\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
              the control wire, print its output + exit, then stop. An ABSOLUTE\n                  \
              argv[0] is sent as a verbatim argv vector with no shell in the\n                  \
@@ -250,6 +258,28 @@ fn main() {
     if args.iter().any(|a| a == "--reset-guest") {
         require_no_live_tray("--reset-guest");
         std::process::exit(diagnose::reset_guest_main());
+    }
+    // ORDER 1286-4437 — the same flag name and the same meaning on all three
+    // platforms. It is a DELTA over --reset-guest, not a rename of it: the guest
+    // wipe above is reused verbatim, and the host-held credentials and caches
+    // that macOS never cleared are this body's own steps.
+    //
+    // IT TAKES THE SAME ORDER-277 GUARD AS --reset-guest AND MUST. It destroys
+    // strictly more than the alias does, so a version that skipped the live-tray
+    // check would pull the disk out from under a running VM in exactly the case
+    // the guard was written for.
+    //
+    // Err => exit 1, one convention across the fleet. See reset_state.rs's note
+    // on why this returns Result while its three siblings return i32.
+    if args.iter().any(|a| a == "--reset-state") {
+        require_no_live_tray("--reset-state");
+        match reset_state::run_reset_state() {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
     }
     // Headless guest-exec smoke: boot the provisioned VM, run a command in the
     // guest over the control wire (VzRuntime::exec path), print its output +
@@ -685,6 +715,11 @@ mod tests {
             // windows-260717-4: the destructive reset must never wipe the
             // disk out from under a running tray's VM.
             ("--reset-guest", "diagnose::reset_guest_main()"),
+            // 1286-4437: --reset-state destroys strictly MORE than the alias
+            // above, so order 277's guard applies to it a fortiori. Asserted
+            // here rather than trusted, because the two dispatches sit side by
+            // side and a copy that drops the guard line still compiles.
+            ("--reset-state", "reset_state::run_reset_state()"),
         ] {
             let guard_call = format!("require_no_live_tray(\"{mode}\")");
             let g = source
