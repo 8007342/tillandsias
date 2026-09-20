@@ -27,7 +27,8 @@ critical_path:
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example start-vm-headless 2>&1 | tee /tmp/litmus-vault-boot.log &'"
     timeout_ms: 5000
     run_in_background: true
-    expected_behavior: "background start; the foreground assertion immediately measures unseal latency"
+    expected_behavior: "launches the VM detached, teeing boot output to /tmp/litmus-vault-boot.log"
+    assert_exit: 0
 
   - step: "wait up to 60s for VM ready (vsock handshake)"
     phase: runtime

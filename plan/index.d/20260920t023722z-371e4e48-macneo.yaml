@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T02:37:22Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t023722z
+      host: macneo
+      summary: |
+        THIRD IN-GATE REPRODUCTION ON macneo, with a one-file diff proving it is this
+        residual and not the change under gate.
+
+          ./build.sh --check, 2026-09-20, gating a DOCUMENTATION-ONLY commit:
+            new-red: tillandsias::tests::forge_credential_quarantine_mounts_present
+            fail:test-baseline:ran=2455 new-red=1 tolerated=0 stale=0
+          `git diff --name-only HEAD~1 HEAD` -> exactly ONE path:
+            skills/smoke-curl-install-and-test-e2e/SKILL.md
+          A Markdown edit cannot move a Rust test, and no other build-level failure
+          appears in the log. So the tree is excluded as a variable for a third time.
+
+        RUNNING TALLY ON THIS HOST, so the rate is a record rather than an impression:
+          in-gate RED : 3 (gates 5, 6, and this one)
+          in-gate GREEN: 3 (the instrumented copy, the 1281-pgit swap gate, the
+                            1281-pgit binding gate)
+          So macneo's in-gate rate is roughly 50%, against the source comment's 2-in-10
+          for a plain parallel run. That is consistent with the mechanism rather than
+          surprising: the gate is the heaviest thing this host runs, and the failure
+          needs the writer's TempDir to drop inside the victim's create-then-write
+          window. More load, more window.
+          OUTSIDE the gate: red 2 of 3 when racing a gate, 0 of many when idle, 0 of 4
+          under synthetic CPU load.
+
+        WHAT THIS ADDS: nothing about the mechanism, which is already named. It adds
+        that the reproduction is FREQUENT on this host, not marginal — three of six
+        gates — which is the operational reason macneo cannot land code without a
+        salvage hand-off, and the reason the fix is worth doing rather than tolerating.
+        It also means anyone verifying a fix on macneo has a usable signal: six
+        consecutive green gates here would be meaningful evidence, where six green runs
+        on an idle Linux host would not be.

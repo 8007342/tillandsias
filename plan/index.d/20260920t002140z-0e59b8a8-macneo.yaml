@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-20T00:21:40Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t002140z
+      host: macneo
+      summary: |
+        THIS ROW'S TITLE IS SUPERSEDED AND CANNOT BE CORRECTED — READ THIS FIRST.
+
+        The headline still says the panic is "a property of the macOS gate regime". That
+        is WRONG and is withdrawn. A packet title is immutable, and a reader who stops at
+        the title will take away the opposite of what this row now establishes, so the
+        correction lives here, in the mutable channel, where it is the first thing an
+        event reader sees.
+
+        PARENT ORDER: 1021-hf9e. This row is that order's OWED WORK, not a new defect and
+        not a platform anomaly.
+
+        1021-hf9e's own source comment, on build_forge_agent_run_argv's host_mount
+        parameter, says it in its author's words:
+          "The FIRST pass moved the env read out of the two arg builders and into THIS
+           function's body, which left it still inside a function eight tests call — so
+           forge_credential_quarantine_mounts_present kept failing in 2 of 10 parallel
+           runs. Moving a global read one level up is not removing it. It is now the
+           caller's to resolve."
+        THIS TEST IS NAMED THERE, with its rate, and the remedy is named there too: the
+        caller resolves the value and the process-global read is deleted. That work was
+        never done. macneo did not find a new bug; macneo is the host whose load makes an
+        already-documented 2-in-10 residual frequent enough to reach the test-baseline
+        ratchet and stop the gate.
+
+        WHAT THIS ROW ADDS to 1021-hf9e, and why it is still worth reading:
+          - the FAILING PATH, measured rather than assumed: origin resolution runs
+            `git config --get remote.origin.url`, gets exit 128 (FATAL — not the exit 1
+            that means "key not found"), becomes OriginResolution::Unresolvable, yields
+            origin_url None, and the gitconfig mount is never added. The assertion then
+            reports an absent mount three steps downstream of the actual failure.
+          - the swallowed create_dir_all at the gitconfig cache root is NOT the cause.
+            Instrumented and reproduced in a gate with ZERO instrumentation hits. Both
+            this row's original hypothesis and the coordinator's two candidate shapes
+            (EEXIST-on-a-file, rename mid-create) were unreachable.
+          - the contended state is PROCESS-INTERNAL, not on disk: the warning line that
+            prints only when host_checkout.is_some() DID print while the test passes
+            host_mount=false, and /tmp/project's existence on disk is excluded by direct
+            test in both directions.
+          - the reproduction condition is REAL GATE LOAD. Idle does not reproduce it;
+            eight synthetic spin loops do not either (4 instrumented runs, 0 hits).
+
+        STILL OPEN: WHICH global. Unverified, and not to be written up from shape.

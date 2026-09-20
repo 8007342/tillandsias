@@ -171,6 +171,7 @@ specs:
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
+  - litmus:installer-swap-atomicity
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
   - litmus:parked-blocks-visibility-shape

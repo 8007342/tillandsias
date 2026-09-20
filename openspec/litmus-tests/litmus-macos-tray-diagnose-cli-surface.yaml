@@ -48,16 +48,25 @@ critical_path:
   - step: "both CLI modes wired in main.rs"
     command: "grep -Fe '--diagnose' crates/tillandsias-macos-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-macos-tray/src/main.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "--diagnose"
     timeout_ms: 3000
 
   - step: "DiagnoseFormat enum + Human/Json variants pinned"
     command: "grep -F 'pub enum DiagnoseFormat' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'Human' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'Json' crates/tillandsias-macos-tray/src/diagnose.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "pub enum DiagnoseFormat"
     timeout_ms: 3000
 
   - step: "JSON schema-pin unit tests attached"
     command: "grep -F 'fn diagnose_report_json_keys_locked' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'fn diagnose_report_none_pin_serialises_as_null' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'fn diagnose_report_none_bytes_serialise_as_null' crates/tillandsias-macos-tray/src/diagnose.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "fn diagnose_report_none_bytes_serialise_as_null"
     timeout_ms: 3000
 
   # Order 735-2g5i renamed the test from exit_code_provisioned_zero_degraded_two
@@ -69,6 +78,9 @@ critical_path:
   - step: "exit-code contract test attached"
     command: "grep -F 'fn exit_code_separates_healthy_converging_and_degraded' crates/tillandsias-macos-tray/src/diagnose.rs"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "fn exit_code_separates_healthy_converging_and_degraded"
     timeout_ms: 3000
 
   - step: "NEGATIVE CONTROL: the pre-735-2g5i two-state test name is gone — a half-rename (both names present) or a revert to the exit-2-only contract must FAIL here"
@@ -79,6 +91,9 @@ critical_path:
   - step: "install-macos.sh contains the post-install --diagnose sanity check"
     command: "grep -Fe '--diagnose --json' scripts/install-macos.sh && grep -F 'install bits broken' scripts/install-macos.sh"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "install bits broken"
     timeout_ms: 3000
 
   - step: "Gatekeeper hint is quarantine-gated, not unconditional (order 421)"
@@ -89,9 +104,15 @@ critical_path:
   - step: "tray-diagnose.sh consumer script uses bash set +e around the tray invocation"
     command: "grep -F 'set +e' scripts/tray-diagnose.sh && grep -Fe '--diagnose --json' scripts/tray-diagnose.sh"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "--diagnose --json"
     timeout_ms: 3000
 
   - step: "cheatsheet exists with the documented schema"
     command: "grep -F 'macOS tray diagnostics' cheatsheets/runtime/macos-tray-diagnostics.md && grep -F 'manifest_pin_aarch64_img' cheatsheets/runtime/macos-tray-diagnostics.md"
     expected_behavior: "grep succeeds"
+    assert_exit: 0
+    assert_output_nonempty: true
+    assert_output_contains: "manifest_pin_aarch64_img"
     timeout_ms: 3000

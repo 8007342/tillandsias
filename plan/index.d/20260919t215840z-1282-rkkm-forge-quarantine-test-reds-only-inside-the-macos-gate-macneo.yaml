@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    order: 1282-rkkm
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, testing, gate, macos, determinism]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - build.sh
+    title: |
+      forge_credential_quarantine_mounts_present panics inside ./build.sh --check on macneo and PASSES under the gate's own cargo command run outside it, so the macOS gate cannot land any change while the test binary is provably unrelated to the tree
+    context: |
+      FOUND BY macneo-macos 2026-09-19 while gating a shell-only installer fix.
+      Filed at the coordinator's direction.
+
+      THE FAILURE:
+        tillandsias::tests::forge_credential_quarantine_mounts_present
+        panicked at crates/tillandsias-headless/src/main.rs
+        "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
+        fail:test-baseline:ran=2455 new-red=1 tolerated=0 stale=0
+
+      REPRODUCES: inside ./build.sh --check on macneo, TWICE (two consecutive
+      gates, the second with the host tray stopped to eliminate a competing
+      writer).
+
+      DOES NOT REPRODUCE, four ways, all on the same tree and the same commit:
+        1. cargo test -p tillandsias-headless --bin tillandsias           -> 527 passed, 0 failed
+        2. the same, --features tray,listen-vsock -- --test-threads=1     -> 1 passed (filtered)
+        3. the full bin suite under those features, serial                -> 689 passed, 0 failed
+        4. THE GATE'S OWN COMMAND, cargo test --workspace --no-fail-fast
+           at default parallelism, exactly as build.sh invokes it         -> rc 0, zero failed suites
+      So the trigger is in build.sh's own sequence or environment, NOT in the
+      test command. Invocation 4 is the one that matters: it is the identical
+      command, and it passes outside the gate and fails inside it.
+
+      THE TREE IS NOT THE VARIABLE. The commit under gate touches
+      scripts/install-macos.sh, one new fixture script and plan fragments;
+      `git diff --name-only HEAD~1 HEAD | grep -E '\.rs$|Cargo\.(toml|lock)|build\.rs'`
+      returns NOTHING, so the compiled test binary is byte-identical to a tree
+      that had gated GREEN forty minutes earlier on the same host.
+
+      THE UNCOVERED CASE, QUOTED RATHER THAN PARAPHRASED. build.sh's workspace
+      step carries order 1021-hf9e, which removed the shared process-global
+      state, dropped the `-- --test-threads=1` pin, and recorded its evidence as
+      TEN parallel runs on yoga with identical empty failure sets. It then names
+      its own limit:
+        "WHAT THIS EVIDENCE DOES NOT COVER: it is one host. A platform whose
+         tests carry their own process-global state would still contend, and the
+         failure would land on the ratchet as new-red. If that happens,
+         restoring `-- --test-threads=1` here is a one-line mitigation and the
+         real defect is the shared state on that host, not this line."
+      macneo is macOS; that evidence is Linux; the failure landed on the ratchet
+      as new-red. This is the uncovered case arriving as written.
+      IT IS A LEAD, NOT AN ANSWER, and the row says so: a contention story does
+      not explain why invocation 4 — the same parallel command — passes outside
+      build.sh. Something the gate does BEFORE the workspace step is part of the
+      trigger, and nobody has identified it.
+
+      THE FAILURE MODE IS A SILENT ABSENCE, which is why the assertion fires far
+      from the cause. The same file documents that when the gitconfig cache root
+      could not be created, `.ok()?` turned the failure into None AT THE POINT IT
+      HAPPENED, the mount silently vanished, and an assertion several frames away
+      failed in a test that did nothing wrong. Whatever the trigger is, the
+      instrument reports a missing mount rather than the error that removed it.
+
+      OPERATIONAL COST, stated because it is the reason this is p1: macneo
+      cannot land ANY change while this stands, including a shell-only fix whose
+      binary is identical to a green tree. The change had to be handed off by
+      salvage for another host to relay.
+    exit_criteria:
+      - 'two consecutive `./build.sh --check` runs on macneo are GREEN on forge_credential_quarantine_mounts_present, with NO entry for it in scripts/test-known-red.txt — PRE-FIX RESULT: red on two consecutive runs (the second with the host tray stopped), fail:test-baseline:ran=2455 new-red=1'
+      - 'the mechanism is NAMED: what build.sh does, before or around the workspace step, that makes the identical cargo command fail inside it and pass outside it — PRE-FIX RESULT: unknown; four non-reproducing invocations are recorded above and none isolates it'
+      - 'the gitconfig cache-root failure stops being reported as a missing mount: when the root cannot be created the test (or the code under it) says SO, rather than an assertion several frames away reporting an absence — PRE-FIX RESULT: the panic names the missing mount and nothing names the cause'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the first criterion is scored by running
+      the gate twice on macneo, which is not a litmus anyone can bind today, and
+      the third implies a code change whose test does not exist yet. Restoring
+      `-- --test-threads=1` in build.sh is the implementer's MITIGATION to choose
+      and is deliberately NOT written as this row's mechanism — 1021-hf9e's own
+      text says the real defect would be the shared state on that host, not that
+      line.
+    events:
+      - type: filed
+        ts: "2026-09-19T21:58:40Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260919t215840z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Filed from the host that cannot gate. The finder's own three errors
+          during diagnosis — measuring the wrong cargo command for three runs, a
+          refuted tray-contention hypothesis, and destroying the host's installed
+          app with a piped installer — are recorded on their respective rows, not
+          here; what belongs here is that none of them explains the red.

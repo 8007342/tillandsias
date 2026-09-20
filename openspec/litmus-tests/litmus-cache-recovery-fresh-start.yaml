@@ -57,6 +57,7 @@ observability:
     test: "cache-recovery-fresh-start"
     scenario: "fresh-start-no-cached-version"
     expected_behavior: "init succeeds, unwrap_or(false) prevents mismatch error"
+    assert_exit: 0
 
 rollback:
   on_failure: "Check if main.rs:549 still contains unwrap_or(false); verify save_version() is called at line 1728"

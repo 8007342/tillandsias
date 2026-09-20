@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: note
+      ts: "2026-09-19T20:30:10Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t203010z
+      host: macneo
+      summary: |-
+        SECOND REGIME: A MEASURED NON-REPRODUCTION on macbookair, attached as such.
+        Reported 2026-09-19 by macuahuitl, who had attributed macbookair's four lost
+        gates to this row and was refuted on that host before the attribution reached
+        here.
+
+          macbookair: tree had taken a PLAN-ONLY merge on top of a stamped tree
+          (HEAD f06eeb854, stamp written for 976f16bbf, the merge adding THREE
+          plan/index.d fragments). `bash scripts/gate-stamp.sh verify` -> ok:gate-fresh.
+          Not stale, and not even ok:gate-fresh-except-plan. The code digest did not
+          move there.
+
+        So this row now carries ONE measured reproduction (macneo: four plan-only
+        committed paths, both untracked enumerations empty, digest moved) and ONE
+        measured non-reproduction (macbookair: three plan-only committed paths, digest
+        unmoved). Two macOS hosts, same platform, opposite results. The row is NOT
+        generalised to "a plan-only merge stales the digest" — it is a defect that
+        occurred once and did not occur once, and the next step is ISOLATING WHAT
+        DIFFERS BETWEEN THE TWO TREES, not collecting further refusals.
+
+        THE ONE DIFFERENCE VISIBLE IN THE TWO REPORTS, offered as the first hypothesis
+        to test and explicitly NOT as a finding:
+          macneo's merge:     3x plan/index.d/*.yaml  AND  1x plan/issues/*.md
+          macbookair's merge: 3x plan/index.d/*.yaml  only
+        The plan/issues arm is the more complex of the two exclusions. compute() skips
+        plan/index.d/*.yaml with a single pattern, but skips plan/issues/*.md only at
+        TOP LEVEL, via a nested case on the path with the prefix stripped — a
+        subdirectory file deliberately still forces a full gate. macneo's file
+        (plan/issues/smoke-e2e-findings-v56.9.19.1-2026-09-19-linux-pirria.md) IS top
+        level, so by reading it should have been excluded; but it is the only input
+        class present in the reproducing tree and absent from the non-reproducing one.
+        CHEAPEST DISCRIMINATING TEST, for whoever takes this: on one host, stamp a
+        tree, merge a commit adding ONLY plan/index.d fragments, verify; then stamp
+        again, merge a commit adding ONLY a TOP-LEVEL plan/issues/*.md, verify. If the
+        second stales and the first does not, the plan/issues arm is the defect and the
+        row has its mechanism. If neither stales, the difference is elsewhere in the
+        two trees and this hypothesis is dead — which is also a result.
+        NOT CLAIMED: that this is the cause. It is the only difference two reports make
+        visible, which is a reason to test it first and nothing more.
+
+        A NOTE ON WHAT THE NON-REPRODUCTION DOES NOT DO. It does not weaken the
+        reproduction. The macneo measurement stands on its own evidence — verify said
+        stale on a tree whose committed diff was four excluded paths and whose untracked
+        enumerations were both empty — and a second host not reproducing it means the
+        trigger is narrower than "any plan-only merge", not that the first measurement
+        was wrong. Recording it here so the row cannot later be read as refuted by a
+        host that simply did not meet the condition.

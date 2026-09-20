@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T23:27:08Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t232708z
+      host: macneo
+      summary: |
+        SEVENTH INSTANCE, AND THE THIRD TONIGHT IN THE SAME TOOL: a shell expanded
+        prose as a command and the ledger accepted the result.
+
+        macneo, 2026-09-19, writing 1282-rkkm's next_action. The text contained a
+        reproduction recipe naming a command in backticks. The shell EXECUTED it:
+          (eval):1: command not found: cargo
+        and wrote the field with the command REMOVED, leaving:
+          "REPRODUCTION RECIPE, for anyone confirming: run  WHILE the machine is
+           genuinely busy"
+        A recipe whose command has been deleted, in a field whose entire purpose is to
+        tell a stranger what to run. `tillandsias-plan check` reported ok: 1092 packets,
+        ids unique, live references sound — the ledger is not a spell-checker and
+        cannot know that a sentence lost its verb.
+
+        THREE TIMES TONIGHT, THREE DIFFERENT DAMAGE MODES, ONE CAUSE:
+          1. an unquoted heredoc SILENTLY corrupted a fragment — `continue` became
+             nothing, leaving "excluded paths are d BEFORE entering". Caught by reading
+             the file back.
+          2. a heredoc nested inside `bash -c '...'` executed the prose LOUDLY, and a
+             glob in it expanded against plan/issues/, dumping hundreds of filenames.
+             Nothing was written; the failure was obvious.
+          3. this one: a backticked command inside a shell argument, executed, the
+             field written with a hole in it. Loud on stderr, silent in the artefact.
+        The through-line is that PROSE ABOUT COMMANDS, passed through a shell, is
+        indistinguishable from COMMANDS. The safe form is to write the text to a file
+        and pass "$(cat file)", which is what fixed (2) and is what should have been
+        used here.
+
+        WHY IT BELONGS ON THIS ROW: the field was written, the tool reported success,
+        every validator passed, and the artefact was wrong. The verdict ("ok: 1092
+        packets") was produced by something that never examined the property that
+        broke. That is this row's thesis with a shell in the place of the wrapper.
+
+        DISPOSITION: the fragment was local and unpushed, read by nobody, so the recipe
+        was restored in place rather than landed with a hole and corrected afterwards.
+        Recorded here so the repair is not invisible — a silent in-place fix of a
+        corrupted record is the same shape as the corruption.
+
+        THE REMEDY ALREADY EXISTED AND THE FILER HAD NOT READ FOR IT. When this very
+        note was submitted through argv, `tillandsias-plan append-event` REFUSED it:
+
+            error: refusing to store prose passed through argv that carries a literal
+            `$(` (an unexpanded or partly-expanded command substitution) — the shell
+            has already rewritten this text and the damage is not recoverable here
+            (971-7muc).
+              Pass the prose through a file instead, so no shell ever sees it:
+                tillandsias-plan append-event <ref> <type> --summary-file NOTE.md ...
+              Note the QUOTED heredoc delimiter ('EOF', not EOF): an unquoted one
+              expands backticks in the body and reproduces the very defect this refuses.
+
+        So order 971-7muc had already identified this exact failure, built a guard that
+        detects it, and shipped the safe form — and the filer produced three instances
+        of it in one evening by using the argv form and never reading the subcommand's
+        full usage. The guard catches the `$(` case; it cannot catch a bare backtick
+        that the shell already executed and removed, which is how instance 3 got
+        through. The defect that reaches the artefact is the one the guard cannot see,
+        and the one it can see is the one that never lands.
+
+        That is the useful pairing for this row: a guard that refuses the RECOVERABLE
+        case loudly and is blind to the UNRECOVERABLE one, because by the time the tool
+        is called the evidence of the second has already been deleted by the shell.

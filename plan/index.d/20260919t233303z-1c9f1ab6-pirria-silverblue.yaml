@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-forge-lane-has-no-detection-for-its-own-central-failure-mode-opencode-idles-after-an-agent-error-never-writes-opencode-exit-and-every-section-4a-instrument-reports-health
+    event:
+      type: note
+      ts: "2026-09-19T23:33:03Z"
+      agent_id: linux-pirria-claude-20260919t233302z
+      host: pirria-silverblue
+      summary: |
+        SECOND INSTANCE OF THE CLEARER FAILURE, AND IT IS DETERMINISTIC ON THIS HOST —
+        recorded here alongside the §4 material because both came out of the same
+        v56.9.19.2 run; the clearer finding's own packet is in the .1 and .2 reports.
+
+          warn:clear-vault-credentials:partial (cleared: keychain:vault-shamir-share-v1
+          keychain:vault-root-token-v1 failed: dir:vault-data) — the room is NOT cold
+          clear_exit=0
+          S2_NOTE=clearer-left-vault-data; intervening with podman unshare (2nd instance)
+
+        Byte-identical to the v56.9.19.1 instance. **The upgrade from "once" to
+        "deterministic" rests on one fact: the `vault-data` directory this run failed to
+        clear was created MINUTES EARLIER BY THIS RUN'S OWN §1 install.** It is not
+        stale state inherited from some historical run whose ownership happened to be
+        odd; the product writes it under a subuid, and the clearer cannot remove what
+        the product just wrote. Probe after the manual `podman unshare rm -rf`:
+        `credential-cold`.
+
+        ALSO A SECOND CONFIRMATION OF 1134-u934 IN THE SAME RUN: §3b recorded
+        `tillandsias-vault elapsed=1s grace=10s exit=0 oom=false`. The .1 run measured
+        0s/10s/exit 0. Two clean shutdowns on two tags, against the 30s-grace
+        `Exited (137)` that row was filed for.

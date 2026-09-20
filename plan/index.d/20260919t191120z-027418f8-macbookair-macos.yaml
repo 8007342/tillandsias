@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    field: next_action
+    value: |-
+      device question settled 2026-09-14: seccomp is the sole blocker
+
+      [2026-09-19T00:21:08Z macbookair-macos] SECCOMP IS DONE — do not re-derive it. 906a7c475 ships scripts/derive-vsock-seccomp.sh (podman's default with the one AF_VSOCK deny flipped, derived at runtime, refuses loudly if that rule is absent) and scripts/test-vsock-seccomp-derivation.sh, ok:vsock-seccomp-derivation:8 in the guest. The runtime matrix on the evidence event is the proof the profile is not a blanket unconfined: DEFAULT denies NETLINK_AUDIT and AF_VSOCK, DERIVED denies NETLINK_AUDIT and allows AF_VSOCK, UNCONFINED allows both.
+
+      THE HOST HALF ALSO NEEDS NOTHING: crates/tillandsias-vm-layer/src/host_vsock_forward.rs exists and is spawned from transport_macos.rs:711. Read it before assuming otherwise; an earlier reading of this row as "nothing listens" is out of date.
+
+      WHAT IS LEFT, in the order a stranger should take it.
+
+      1. THE IN-GUEST ENDPOINT, which is the actual remaining engineering. Something inside the guest must answer the enclave DNS name `inference:11434` and relay to CID 2 over vsock. The transparency criterion is the name, not the bytes: agents address http://inference:11434 (container_profile.rs, main.rs) and that must keep resolving while the process behind it sits on the macOS host. So a dedicated forwarder container that takes --network-alias inference and the derived profile, NOT a change to the shared container profile — the alias approach is what keeps this off every other consumer.
+         PICK THE IMAGE DELIBERATELY: localhost/tillandsias-inference has NO socat, nc, python3 or perl — only sh (measured). localhost/tillandsias-forge-base HAS socat. Do not assume a tool is present because another container has it.
+
+      2. THE RUNLOOP PROOF, and it cannot be taken with --exec-guest. Virtualization.framework delivers accepts only while the host pumps CFRunLoop; --exec-guest blocks on the control wire and pumps nothing while a guest command runs, so guest connects time out at the kernel's 2s VSOCK_DEFAULT_CONNECT_TIMEOUT and are then accepted in a burst after the command returns (measured 6/6, 2026-08-29). An ETIMEDOUT under --exec-guest is therefore EXPECTED and is NOT evidence the hop is broken — the derived arm in the evidence event shows exactly that shape and it is a PASS for socket creation. Take this measurement in tray continuous-runloop mode, and require BOTH sides to report: the host's ACCEPTED alone reads as success and the guest's timeout alone reads as no-listener, and either on its own is a lie by omission.
+
+      3. WIRING THE PROFILE. derive-vsock-seccomp.sh must be run somewhere before the forwarder container starts, and its output path passed as --security-opt seccomp=<file>. Note the trap the model-cache work hit on this same host: vz.rs's provisioning block is FIRST-BOOT ONLY, so anything written there never reaches an already-provisioned guest. Decide where the derivation runs with that in mind rather than inheriting the nearest-looking hook.
+
+      [2026-09-19T19:11:20Z macbookair-macos] BOTH TRANSPORT CRITERIA ARE NOW PROVEN AS CAPABILITIES; WHAT REMAINS IS WIRING, NOT DISCOVERY. Do not re-derive any of the below — all four were measured on tlatoanis-macbook-air 2026-09-19 and the evidence events carry verbatim output from both sides.
+
+      SETTLED, do not reopen:
+        * seccomp is the sole blocker and the fix is one rule. scripts/derive-vsock-seccomp.sh ships in v56.9.19.1.
+        * the host listener and relay already exist: host_vsock_forward.rs, spawned from transport_macos.rs:711, opt-in via TILLANDSIAS_HOST_VSOCK_PORT and TILLANDSIAS_HOST_VSOCK_FORWARD_TO.
+        * the guest->host hop completes under a CONFINED container, both sides recorded.
+        * a container addressing http://inference:11434 on the enclave network reaches a process on the macOS host and gets its body back.
+        * socat's `open("/dev/vsock"): No such file or directory` warning is incidental — it appears in a forwarder that is serving requests. Do not chase device passthrough.
+
+      WHAT IS LEFT IS ONE CODE CHANGE AND ITS GUARD.
+        1. headless must LAUNCH the forwarder for the host-native tier. Today nothing does; the demonstration used a hand-run container. Shape that worked, verbatim:
+             podman run -d --name tillandsias-vsock-forwarder \
+               --network tillandsias-enclave --network-alias inference \
+               --cap-drop=ALL --security-opt=no-new-privileges --security-opt seccomp=<derived> \
+               --entrypoint socat <forge-base> TCP-LISTEN:11434,fork,reuseaddr VSOCK-CONNECT:2:42421
+           PICK THE IMAGE DELIBERATELY: localhost/tillandsias-inference has ONLY sh — no socat, nc, python3 or perl. forge-base has socat. Measured; do not assume.
+        2. THE DERIVATION RUNS IN HEADLESS AT CONTAINER-START. DECIDED, with the reason, so nobody re-litigates it: vz.rs's provisioning block is FIRST-BOOT-ONLY and would never reach an already-provisioned guest — the same trap the model-cache work paid for on this host — and the container's own entrypoint cannot do it because podman applies seccomp BEFORE the entrypoint runs. Headless is the only point that runs every boot and before the container starts.
+        3. MUTUAL EXCLUSION ON THE ALIAS. build_inference_run_args also claims --network-alias inference. For the host-native tier the forwarder REPLACES the inference container; two containers on one alias is a coin flip, not a transport. Make the tier selection exclusive, not additive.
+        4. THE PORT AND TARGET NEED A SOURCE. 42421 and the forward address are operator-set env vars today. A shipped lane needs them defined somewhere; that is a decision, not a detail.
+
+      THE FIXTURE, and what it must not be. An --exec-guest test CANNOT reach a passing state here: --exec-guest pumps no CFRunLoop, so guest connects sit queued past the kernel's 2s timeout and are delivered in a burst after the command returns. A fixture built that way would red forever against working code and be "fixed" by widening a timeout, which cannot work because the timeout is the kernel's. The shape that DOES work, used for both proofs on this row: a boot-triggered systemd oneshot in the guest, enabled beforehand through --exec-guest, reporting through the MODEL-CACHE VIRTIOFS SHARE — a side channel the tray does not own — while the tray runs normally and pumps. ASSERT THE CLIENT CONTAINER SEES THE HOST'S BODY, not that the forwarder started: a forwarder that starts and answers nothing is exactly the silent-success shape this milestone exists to remove. And do not report through the model cache in a permanent fixture — a dotfile there trips test-macos-model-share-writable.sh's empty-cache precondition, which is how I found that caveat.
+    ts: "2026-09-19T19:11:20Z"
+    host: macbookair-macos

@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-green-assertion-killed-at-its-budget-on-a-slow-tier-is-reported-as-FAIL-and-will-be-read-as-a-red-by-the-next-person-who-does-not-scroll-to-the-budget-line
+    order: 1282-trqp
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, litmus, macos, observability, floor-tier]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/litmus-litmus-bindings-reconciliation-shape.yaml
+      - scripts/check-litmus-bindings.sh
+    title: |
+      litmus:litmus-bindings-reconciliation-shape's five-case fixture step is KILLED at its 30s budget on macneo while the fixture itself passes 5/5 in 37s, so a GREEN assertion is reported as FAIL on the macOS tier
+    context: |
+      FOUND BY macneo-macos 2026-09-19 while verifying an unrelated litmus
+      binding. Filed at the coordinator's direction.
+
+      MEASURED ON macneo (macOS 27.0, arm64):
+        bash scripts/test-litmus-bindings.sh
+          -> PASS: litmus bindings reconciliation (5/5)      in 37.17s
+        bash scripts/check-litmus-bindings.sh
+          -> ok:litmus-bindings:files=427 bound=411 retired=6 grandfathered=10
+                                                            in 36.03s
+        the step's budget: timeout_ms: 30000
+      The assertion is GREEN. The clock is 7 seconds over. The runner reports:
+        [FAIL] spec=ci-release test=litmus:litmus-bindings-reconciliation-shape
+        BUDGET: 1 of those FAILs were killed at their budget, not failed
+                assertions (still FAIL — 820-c8q8)
+
+      THE INSTRUMENT IS ALREADY HONEST, AND THAT IS THE POINT. The runner
+      distinguishes a budget kill from a failed assertion and says so in its own
+      summary — 820-c8q8 built that vocabulary deliberately. The defect is that
+      the DISTINCTION IS ONE LINE BELOW THE VERDICT. The verdict line says FAIL;
+      the qualification says the assertion never failed. A reader who greps for
+      FAIL, reads the last line, or is handed the status by a tool sees a red
+      that is not one. Tonight the finder read the BUDGET line only because they
+      were checking whether their own change had caused the failure; a reader
+      with no such reason has none.
+
+      IT IS NOT CAUSED BY THE CHANGE UNDER TEST. The commit being verified added
+      ONE file to a 427-file scan. The overrun is a property of the macOS tier's
+      speed against a budget set elsewhere, not of the tree.
+
+      WHY THIS MATTERS BEYOND ONE SPEC: this is the floor tier's version of a
+      failure the fleet has been cataloguing all day — a verdict produced by
+      something other than the thing whose success it claims. Here the killer is
+      a stopwatch and the assertion it interrupted had already passed. A gate
+      that reports red for slowness on the hosts least able to be fast will
+      eventually be switched off or ignored on exactly those hosts, which is the
+      argument 1021-hf9e's own text makes about non-deterministic gates.
+
+      RAISING THE BUDGET IS NOT ON THE TABLE. The finder is under a standing
+      fleet rule not to raise any litmus timeout budget and did not, and this row
+      does not propose it as a remedy. A budget raised to fit the slowest host
+      measured so far is a budget that will be raised again by the next slower
+      host, and it silently removes the signal that the reconciliation is 37
+      seconds of work per run.
+
+      REMEDY SPACE, both open, neither chosen here:
+        (a) MAKE IT FASTER. 427 files are scanned per run, twice over in this
+            spec (the check and the fixture that wraps it), which is where the
+            ~73 combined seconds go. A cache keyed on the tree, or scanning only
+            what changed, would put it under budget on every tier at once.
+        (b) DECLARE THE TIER'S REGIME. The spec states the budget it expects and
+            the runner reports a host outside that regime as
+            skip:budget-regime:<tier> rather than FAIL — an honest
+            could-not-run, in the same family as 965-sxec's "a check that could
+            not run never claims what it would have found". This keeps the
+            signal (the step did not complete here) without the false red.
+    exit_criteria:
+      - 'on macneo, the five-case fixture step COMPLETES WITHIN ITS BUDGET, or the runner reports it as `skip:budget-regime:<tier>` and the spec verdict is NOT FAIL — PRE-FIX RESULT: FAIL, with the qualifying line "BUDGET: 1 of those FAILs were killed at their budget, not failed assertions (820-c8q8)" printed BELOW the verdict; the fixture itself passes 5/5 in 37.17s against timeout_ms 30000'
+      - 'a budget kill is distinguishable from a failed assertion BY THE VERDICT LINE ITSELF, not by a qualifier a reader must scroll to — PRE-FIX RESULT: the verdict reads "[FAIL] spec=ci-release test=litmus:litmus-bindings-reconciliation-shape" with nothing in it naming the budget'
+      - 'the reconciliation''s per-run cost is recorded somewhere a later reader can compare against — PRE-FIX RESULT: unrecorded; the 427-file figure and the 36s/37s timings in this row are the only measurements of it on the macOS tier'
+    unscoreable: |
+      decision-not-taken: whether the remedy is a faster reconciliation or a
+      declared tier regime is an owner call, and the two have different
+      consequences — (a) removes the cost, (b) keeps the cost and makes it
+      legible. The measurement is complete and reproducible from the two timings
+      above. RAISING THE BUDGET IS EXCLUDED, not undecided: the filer is under a
+      standing rule against it and believes a budget fitted to the slowest host
+      measured so far would be raised again by the next one.
+    events:
+      - type: filed
+        ts: "2026-09-19T22:08:06Z"
+        agent_id: "macos-tlatoanis-macbook-neo-fable5-20260919t220806z"
+        host: tlatoanis-macbook-neo
+        summary: |-
+          Found while confirming that an unrelated binding had not broken the
+          spec. It had not: the bound step passed [OK] and this failure was
+          already there. Filed because the next reader will not have a reason to
+          check which of the two it is.

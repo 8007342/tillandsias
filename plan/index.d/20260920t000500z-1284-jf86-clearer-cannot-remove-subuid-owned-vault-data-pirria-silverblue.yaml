@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: clear-vault-host-credentials-cannot-remove-the-subuid-owned-vault-data-directory-warns-and-exits-zero-so-every-linux-clean-room-claim-rests-on-a-callers-own-assertion
+    order: 1284-jf86
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [podman, vault, release, testing, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/clear-vault-host-credentials.sh
+    title: |
+      `clear-vault-host-credentials.sh` cannot remove the subuid-owned `vault-data` directory — it warns and exits 0 — so every Linux clean-room claim rests on the CALLER asserting the directory's absence, and a caller that trusts `clear_exit=0` tests nothing
+    context: |
+      MEASURED TWICE ON PIRRIA, 2026-09-19, on two different releases, with
+      byte-identical output:
+
+        warn:clear-vault-credentials:partial (cleared: keychain:vault-shamir-share-v1
+        keychain:vault-root-token-v1 failed: dir:vault-data) — the room is NOT cold;
+        a partial clear is the state that looks clean and is not
+        clear_exit=0
+
+      v56.9.19.1 at 17:12Z and v56.9.19.2 at ~21:35Z. **DETERMINISTIC ON THIS
+      HOST, and not inherited state**: the directory the .2 run failed to clear
+      was created MINUTES EARLIER BY THAT RUN'S OWN §1 install. The product
+      writes it from inside a container under a subuid; the clearer then cannot
+      remove what the product just wrote.
+      OWNERSHIP, measured: `524388:lapto 755 vault-data`, subdirectories `700`.
+      A rootless `rm` as uid 1000 is refused on every subdirectory.
+      THIS IS NOT NEWS TO THE SCRIPT. `scripts/clear-vault-host-credentials.sh:110-111`:
+
+        elif rm -rf "$_vd" 2>/dev/null; then ... _say "removed vault-data/"
+        else _failed="$_failed dir:vault-data"; _say "WARNING: could not remove
+             vault-data/ (it is written from inside a container under a subuid;
+             a rootless rm may be refused)"; fi
+
+      The failure mode is anticipated, named in the script's own words, and
+      handled by warning. 900-z3kv — which wired this clearer into §2 and is
+      COMPLETED — mentions the subuid hazard eight times. So the gap is known,
+      documented, and load-bearing: nothing in the product closes it.
+      WHY IT IS p1 RATHER THAN A ROUGH EDGE. §2 of the curl-install smoke has
+      `test ! -e "$VAULT_DATA_DIR"`, and that single caller-side assertion is
+      the only thing standing between this and a Linux smoke certifying a cold
+      room it does not have. The smoke runbook records that every Linux pass
+      since at least 2026-06 silently carried exactly this gap before the
+      assertion existed. MEASURED CONSEQUENCE when the room IS genuinely cold:
+      `--init` creates a fresh unseal secret from HKDF and does NOT log
+      `preserving existing data volume`, so the keychain↔volume resync path is
+      exercised. Without the fix, a lane that trusts `clear_exit=0` exercises
+      none of it and reports that it exercised all of it.
+      A REMEDY THAT WORKS, measured twice: `podman unshare rm -rf "$_vd"` —
+      it runs in the user namespace where 524388 maps to root, returned rc=0
+      both times, and the probe answered `credential-cold` after. Named as ONE
+      remedy; the implementer may choose another.
+    exit_criteria:
+      - 'after `scripts/clear-vault-host-credentials.sh` returns, the `vault-data` directory is ABSENT and `scripts/probe-credential-cold-state.sh` answers `credential-cold`, on a host where that directory is owned by a subuid — PRE-FIX RESULT: FAILS, byte-identical `warn:clear-vault-credentials:partial … the room is NOT cold` with `clear_exit=0`, twice on 2026-09-19'
+      - 'NEGATIVE CONTROL: a clearer that "succeeds" by no longer ATTEMPTING the directory fails this criterion. Absence is the requirement, not silence — the cheapest way to go green is to stop looking, and that must not pass'
+      - 'a host where the directory is owned by the invoking user is still cleared — the fix must not regress the ordinary case into requiring a container runtime'
+      - 'THE EXIT-0-ON-PARTIAL HALF: a clear that failed any location must not exit 0. Today `clear_exit=0` accompanies `the room is NOT cold` in the same breath, which is a verdict channel contradicting its own prose; a caller branching on the exit code is told the opposite of what the text says'
+      - 'PROVEN BY RE-RUNNING §2 ON THE SAME SUBSTRATE, not by reasoning: a third destructive reset on pirria, after the fix, must reach `credential-cold` with no manual intervention and no `warn:` line'
+    unscoreable: |
+      none — the mechanism is measured, the remedy is measured, and the host
+      that reproduces it is the host taking the row.
+    events:
+      - type: filed
+        ts: "2026-09-20T00:05:00Z"
+        agent_id: "linux-pirria-claude-20260920t000500z"
+        host: pirria-silverblue
+        summary: |-
+          Minted because the coordinator's dispatch attributed this to
+          1275-ngrc, which is the FORGE LANE row; the clearer existed only as a
+          smoke-finding packet inside two reports and had no order. 900-z3kv
+          knows the hazard and is completed, so reopening it would be wrong.
+          Filed here so the fix has somewhere to land and the two measured
+          instances have an owner.

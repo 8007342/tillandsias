@@ -1,0 +1,67 @@
+# Gate step 1274-cbk7 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. Two checks answer two different questions, and the one
+# authors reach for did not say which was which:
+#
+#   run-litmus-test.sh --parse-only     -> "can the RUNNER extract steps here"
+#   scripts/check-litmus-yaml-parses.sh -> "does this LOAD as YAML"
+#
+# The runner's parser is line-based and tolerated a duplicated mapping key,
+# silently taking the last occurrence, while a YAML loader rejects the document
+# outright. So a file could be `parseable` and unloadable at the same time.
+#
+# THE INCIDENT. During the 1252-znbn migration three corpus files gained a
+# duplicated `assert_output_contains`. --parse-only over the corpus reported
+# every file ok; the gate then refused with blocked:yaml-load-failed, roughly
+# fifteen minutes later. The author had run a check and believed its green.
+# The check was real — it was aimed at a different question than the one being
+# asked of it. That is why the remedy here is NOT "authors should remember":
+# the mode now states its own scope and names the other check by path.
+#
+# ARM 1 IS THE LOAD-BEARING ONE. It neutralises the detector in a COPY of the
+# runner and requires the false green to come back; without it every other arm
+# would stay green if the detector were deleted. It asserts the MUTATION
+# LANDED first (live >= 1 occurrence, mutant 0), because a sed that matched
+# nothing yields a copy identical to the subject and "the defect did not
+# reproduce" would be indistinguishable from "the mutation never applied".
+#
+# ARM 0 ASSERTS THE PREMISE: a real YAML loader accepts the clean probe and
+# rejects the duplicate. If a future reader started tolerating duplicate keys,
+# every arm below would still pass while testing nothing.
+#
+# ARMS 2-4 COVER A NON-ASSERT KEY ON PURPOSE. `timeout_ms` and `command` are
+# exercised alongside `assert_output_contains`, because a fix keyed on the
+# assert family would close the instance that was hit and leave every other
+# key open — the shape this milestone exists to remove.
+#
+# ARM 6 COMPARES THE REAL CORPUS against the neutralised copy on the SAME tree
+# rather than against a fixed number. The row's criterion quotes "423 ok
+# files"; the count is 424 here and will drift as the corpus grows, so a
+# hardcoded figure would rot into a false red. What must hold is that the
+# detector adds NO refusal, which is what the comparison measures.
+#
+# WHAT IT DOES NOT GUARD, stated so the gap is not mistaken for an oversight:
+# the detector sees duplicates WITHIN one critical_path item only. A duplicated
+# TOP-LEVEL key still passes --parse-only and still reds the YAML gate.
+# Covering that needs care around folded scalars (`description: >`), whose
+# continuation lines can look like keys, and a false red there would be worse
+# than the false green being closed.
+#
+# COST, MEASURED HERE 2026-09-19: 15.20 / 15.08 / 15.33 s. That is ~20x its
+# 1252-znbn siblings (0.24s and 0.75s) and the reason is ARM 6: it runs
+# --parse-only over all 424 corpus files TWICE, once with the detector and once
+# without. Named rather than buried, because a 15s step is a real addition to a
+# ~1125s gate and the next person costing the gate should not have to measure
+# it. The two passes are what make ARM 6 a control instead of an assertion
+# against a hardcoded number, so the cost buys the thing the criterion asks
+# for. If gate time becomes the binding constraint, ARM 6 is the arm to move to
+# an advisory tier — not the cheap ones. No compile, no container, no network,
+# and it never writes into openspec/litmus-tests.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking --parse-only refuses a duplicated mapping key instead of reporting ok (1274-cbk7)"
+STEP_SCRIPT="scripts/test-litmus-parse-only-duplicate-key.sh"
+STEP_ERROR="run-litmus-test.sh --parse-only can again report ok on a file a YAML loader rejects (1274-cbk7) — read which arm failed above; ARM 0 failing means the premise is gone and no later arm means anything, ARM 1 failing means the fixture can no longer reproduce the defect"
+STEP_OK="--parse-only refuses duplicated mapping keys"

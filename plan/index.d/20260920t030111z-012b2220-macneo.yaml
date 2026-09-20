@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: install-macos-launches-the-tray-and-provisions-a-vm-during-the-install-so-section-1-of-the-smoke-is-not-a-download-test-and-the-hazard-is-documented-for-linux-only
+    event:
+      type: completed
+      ts: "2026-09-20T03:01:11Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260920t030111z
+      host: macneo
+      summary: |
+        CLOSED ON TWO OF THREE CRITERIA. THE THIRD IS EXPLICITLY UNMET AND IS NOT BEING
+        QUIETLY DROPPED — see the last section.
+
+        EVIDENCE, each SHA verified BY CONTENT on origin/linux-next rather than by a
+        landing report:
+          534202d73  the atomic swap, its fixture, its litmus spec and its BINDING
+          057212bc3  the runbook documentation
+          469d21a2a  trunk at close time, carrying both
+        Verified on trunk: the deferred-backup swap code (4 references), the trap line
+        `trap _install_cleanup EXIT INT TERM HUP PIPE`,
+        scripts/test-install-macos-swap-is-interruptible.sh,
+        openspec/litmus-tests/litmus-installer-swap-atomicity.yaml, its entry in
+        openspec/litmus-bindings.yaml, and both documentation edits — the §1 macOS
+        warning and the Host Matrix row.
+
+        CRITERION 1 — "the smoke runbook states, on the macOS path and in the Host
+        Matrix, that §1 launches the tray and begins VM provisioning, in the same terms
+        the Linux path already uses for 1133-kktm" — MET. The text sits in BOTH places a
+        reader actually looks: the Host Matrix row itself (what someone consults when
+        choosing a lane) and §1 immediately before the macOS block, mirroring exactly
+        where the Linux install.sh warning sits. Placement was the point: the defect was
+        an ASYMMETRY, and text anywhere else would have described the hazard without
+        removing it. PRE-FIX: a grep of the macOS §1 block for "provision" or "launch"
+        found no warning; the hazard was documented for install.sh and Linux only.
+
+        CRITERION 3 — "§1 becomes a genuine download-and-verify step" — NOT the criterion
+        that closed here; see below. What DID close under this row's swap work is the
+        invariant that an interrupted install cannot cost the existing app:
+          scripts/test-install-macos-swap-is-interruptible.sh PASSES 6/6, with ARM 5 a
+          NEGATIVE CONTROL that runs the OLD ordering under the same kill and requires
+          the destination to be ABSENT — without it arms 1-3 could pass for free.
+          litmus:installer-swap-atomicity is BOUND (check-litmus-bindings reads
+          files=428 bound=412) and ENUMERATED — the runner executed all three steps
+          [OK]. Enumeration was verified SEPARATELY from the assertion, because a
+          byte-identical expected_behavior proves the assertion is right, not that the
+          step runs.
+          VERIFIED AGAINST THE ORIGINAL INCIDENT: the identical
+          `install-macos.sh | head -6` that destroyed this host's app now leaves
+          /Applications/Tillandsias.app in place and runnable.
+          PRE-FIX: measured on macneo 2026-09-19 — the installer died on SIGPIPE
+          mid-swap and /Applications held NEITHER the app NOR a backup.
+
+        CRITERION 2 IS EXPLICITLY UNMET AND STAYS OPEN: "either install-macos.sh offers a
+        way to install WITHOUT launching and provisioning (a flag, or an env var in the
+        shape of the existing TILLANDSIAS_* family), or a recorded decision says why the
+        install must always provision — 'nobody asked for one' is not that decision."
+        NOTHING IN THIS CLOSURE ADDRESSES IT. The installer still launches the tray and
+        provisions a VM on every install; this row now only DOCUMENTS that rather than
+        changing it. That is a design decision about the product's install UX, it belongs
+        to the operator, and prose cannot settle it. It is in the operator's queue as a
+        plain decision (coordinator, 2026-09-20).
+        A READER SHOULD NOT TAKE THIS ROW AS "§1 IS NOW A DOWNLOAD TEST". It is not. It
+        is a documented, non-destructive-to-the-existing-app provisioning step.
+
+        WHAT ELSE THIS ROW PRODUCED, recorded so the trail is not lost:
+          - the SIGPIPE incident that supplied the pre-fix measurement was the filer's
+            own careless command — piping a destructive installer through `head` to read
+            four lines — and the runbook now warns against exactly that, since SIGKILL
+            remains untrappable and no ordering can defend against it.
+          - a residual limit stated rather than claimed away: the swap window is two
+            adjacent renames on one filesystem, the backup survives it in every case,
+            and a SIGKILL there is the one death the trap cannot catch.

@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    field: next_action
+    value: |-
+      THE GATE IS NOT THE VARIABLE — this row's own title and framing are WITHDRAWN by its isolation event. The flip is LOAD plus PARALLEL execution, measured both ways: parallel under concurrent load reds 2 of 3 OUTSIDE the gate; parallel on an idle machine is green; a gate run on a quieter machine is GREEN (SCRATCH_GATE_RC=0, new-red=0); serial (--test-threads=1) under load is green 2 of 2. The environment is excluded by measurement — four gate-only variables captured from an instrumented build.sh and replayed, singly and together, all green; PWD, ~/.cache/tillandsias and the _run wrapper likewise. NO SINGLE VARIABLE FLIPS IT because there was no environment mechanism to find.
+      NEXT STEP, and it is the one thing this investigation did NOT do: NAME THE SHARED STATE THAT RACES. Serialising hides it; it does not identify it. The panic says 'must mount forge-owned gitconfig at /home/forge/.gitconfig' and the same source file records that a failed create_dir_all on the gitconfig cache root becomes None via  AT THE POINT IT HAPPENS, so the mount vanishes and the assertion fires frames away. Find what two tests contend for on that path under macOS, and make the failure SAY SO instead of presenting as an absent mount — a create_dir_all error that becomes None is the defect underneath the flake.
+      DO NOT SERIALISE THE GATE AS THE FIX unless the shared state is named first and the serialisation is recorded as a MITIGATION. 1021-hf9e removed the previous shared state rather than serialising readers, and its own text says the real defect would be the shared state on the contending host, not the threads line.
+      REPRODUCTION RECIPE, for anyone confirming: run the full workspace suite (cargo test --workspace --no-fail-fast) WHILE the machine is genuinely busy (a concurrent gate reproduces it; an idle host will not). Two of three runs is what macneo measured. Do not try to reproduce it on an idle machine and conclude it is fixed.
+      MEASUREMENT LIMITS, stated so nobody over-reads the result: the parallel-red and serial-green arms ran under DIFFERENT load sources (a concurrent gate versus eight synthetic spin loops), so serial-vs-parallel was not tested under byte-identical load; 2-of-3 and 2-of-2 establish that the flip exists, not its rate.
+      EXIT CRITERION 1 IS UNCHANGED and still unmet: two consecutive ./build.sh --check runs green on macneo with no known-red entry. Criterion 2 ('the mechanism is NAMED') is PARTLY met — the mechanism class is parallel contention, measured; the contended resource is still unnamed.
+    ts: "2026-09-19T23:26:40Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: forge-credential-quarantine-mounts-present-panics-inside-build-sh-check-on-macneo-and-passes-under-the-gates-own-cargo-command-outside-it-so-the-red-is-a-property-of-the-macos-gate-regime
+    event:
+      type: note
+      ts: "2026-09-19T23:26:40Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        isolation complete: load+parallelism, not the gate; environment excluded

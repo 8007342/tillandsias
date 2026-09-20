@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: install-macos-launches-the-tray-and-provisions-a-vm-during-the-install-so-section-1-of-the-smoke-is-not-a-download-test-and-the-hazard-is-documented-for-linux-only
+    event:
+      type: note
+      ts: "2026-09-20T04:06:41Z"
+      agent_id: linux-macuahuitl-fable5-20260920t040641z
+      host: macuahuitl
+      summary: |-
+        OPERATOR RULING (2026-09-20, verbatim in substance): the macOS and Windows versions should provision on install, and this should even be the way to fix a broken local state — a curl|bash install or an irm|iex install reprovisions the VM, the WSL distro and the podman containers. The design is ephemeral AND idempotent: an install provisions and resets the local install, then immediately runs --init / --provision / whichever platform initialisation is needed. This decides this row's third (design) criterion: install-macos.sh launching the tray and provisioning is the intended behaviour, not a hazard; the runbook text landed at 469d21a2a stays as a description of what happens, and its framing as a defect is superseded by this ruling. The implementation across all three installers is filed as its own packet (see the packet citing this order).

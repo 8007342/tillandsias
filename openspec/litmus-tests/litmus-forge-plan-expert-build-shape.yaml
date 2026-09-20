@@ -201,6 +201,7 @@ critical_path:
     command: "mf_stage prod 0 OUT -- sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh && mf_holds_i_ere OUT '(^|[^a-z])python' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -q 'cargo build' && echo 'ok: no-python-cargo-only'"
     timeout_ms: 5000
     expected_behavior: "ok: no-python-cargo-only"
+    assert_output_contains: "ok: no-python-cargo-only"
 
 observability:
   traces:

@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-19T19:13:12Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t191312z
+      host: macneo
+      summary: |-
+        MACUAHUITL-FEDORA: A CONTROL CASE AND A THIRD STATE. Reported 2026-09-19 at the
+        row holder's request, after a first answer was WITHDRAWN by its author.
+
+        RESULT 1 — CONTROL CASE, the first on this row. macuahuitl land gate
+        (scripts/land-on-platform-branch.sh linux-next -> ./build.sh --check, re-execs
+        into tillandsias-builder, HOST and TOOLBOX ruby BOTH /usr/bin/ruby 4.0.6),
+        2026-09-19T19:10Z, .git/tillandsias-land-gate-attempt-1.log lines 5167-5172:
+          [build] Checking the plan archiver preserves the ready set (831-ezea)...
+          ok:archive-answerability:332/332 after archiving 1048 packets, ready set unchanged at 570
+          Check passed: ready set unchanged, no new orphaned events, archived packets
+          stay answerable, and the script is idempotent.
+          [build] Plan archiver check passed
+        STATE B, a real run, PASS. Re-exec line present, identical rubies on both sides
+        of the toolbox boundary, fixture ran and passed INSIDE the toolbox. This is the
+        control lenovinha's execution-context hypothesis needed: a host where the
+        re-exec happens and host==toolbox ruby, and it does NOT reproduce.
+
+        FOURTH NON-REPRODUCER, and none of the four is the red host.
+
+        RESULT 2 — THE THIRD STATE, AND IT IS THE FINDING. Same host, release gate
+        (./build.sh --ci-full --install), 2026-09-19T07:55Z-08:40Z,
+        gate-logs/ci-full-install-20260919T075526Z.log, 5535 lines:
+          phase-line count 0; ZERO lines containing "archiver". The single match for
+          "archive-answerability" is the guard-activation inventory line
+          `active: check-archive-answerability.sh <- scripts/archive-plan-packets.sh`,
+          which is not a verdict.
+        THE STEP WAS NOT REACHED IN THAT PROFILE. Not memoised, not skipped, not
+        refused — absent. Recorded as "step absent from the --ci-full --install log on
+        macuahuitl 2026-09-19".
+
+        WHY THIS MATTERS MORE THAN ANOTHER NON-REPRODUCER: --ci-full --install is THE
+        TIER THAT SHIPS. The v56.9.19.1 release verdict rests on it. On that run it did
+        not exercise this check at all, so the release gate's green says nothing about
+        the archiver, and any reader inferring archiver health from a shipped release
+        would be inferring it from a step that never ran.
+
+        CAUSE UNTRACED, BY BOTH HOSTS, DELIBERATELY. macuahuitl attempted to find the
+        enclosing condition in build.sh, found the attempt unreliable and declined to
+        guess. The holder then attempted it from macneo and also failed to identify the
+        guard with confidence: the archiver block (build.sh, the step
+        "Checking the plan archiver preserves the ready set") is indented, yet there is
+        no column-0 `if`/`case`/`while` and no `function`-style definition enclosing it,
+        and the nearest preceding `name() {` definition
+        (_prepare_ci_full_install_inputs) closes long before it. So the region's guard
+        was not identified. NEITHER HOST IS GUESSING; the empirical pair stands on its
+        own and is host-independent:
+          --check                -> step present and runs   (macneo x5 tonight, macuahuitl land gate)
+          --ci-full --install    -> step absent             (macuahuitl release gate)
+        Whoever traces it should say which dispatch reaches that region, and whether
+        the absence is deliberate (the release tier delegating to another lane) or an
+        oversight. Both are plausible and the log cannot distinguish them.
+
+        HOW THE FIRST ANSWER WAS NEARLY WRONG, recorded because it is the same family
+        as the rest of this row. macuahuitl first reported the release-gate log as a
+        NON-REPRODUCER under identical rubies. It was not: the log grepped was land
+        10's IN-PROGRESS gate log (the land tool reuses one filename, so the file
+        existed and was being appended to), and a second filter dropped the phase line
+        while three plan-advisory lines filled a `head -3` cap exactly, so the verdict
+        region was never read. Three independent instrument errors — a log that was not
+        the log intended, a filter that removed the one unconditional line, and a cap
+        that was reached by noise — composing into a confident "non-reproducer".
+        It was caught only because the reporter stated the LIMIT of their own claim ("I
+        cannot say whether the fixture ran or was skipped without knowing its output
+        token") rather than the claim alone. That sentence is what made the error
+        findable from the outside. Had it been omitted, this row would now carry a
+        fourth non-reproducer that never ran the check — precisely the population error
+        yoga named: the set of hosts that "stopped reproducing" is smaller than it
+        looks, and some may never have run it at all.

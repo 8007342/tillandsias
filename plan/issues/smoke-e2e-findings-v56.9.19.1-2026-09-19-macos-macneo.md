@@ -219,6 +219,29 @@ Claims as stated in PR #117:
     ts: `2026-09-19T17:22:00Z`
     agent_id: `macos-macneo-claude-20260919t171347z`
     host: macneo
+  - type: note
+    ts: `2026-09-19T19:00:47Z`
+    agent_id: `macos-tlatoanis-macbook-neo-fable5-20260919t190047z`
+    host: tlatoanis-macbook-neo
+    summary: >
+      CONTRAST CASE — the v56.9.19.2 smoke on this host produced BOTH states in
+      ONE run, which the original filing lacked:
+        {"step":"smoke-init-pristine","duration_ms":42000,"exit":0}
+        {"step":"smoke-health-check","duration_ms":0,"exit":0}
+      A multi-second step measured correctly at 42 s; a sub-second step in the
+      same run, same clock, same host, recorded 0. THE CLOCK IS NOT BROKEN —
+      only its resolution is, so the remedy is RESOLUTION-OR-SENTINEL and NOT a
+      broken-clock fix. That distinction was not establishable from the original
+      evidence, which held only zeroes and was equally consistent with the clock
+      returning garbage.
+      Restating the defect with the contrast in hand: `timing_emit` already
+      treats `_t0 == 0` as "the path-skew fallback stub ran, no measurement",
+      so on BSD `date` (1-second resolution, no %3N) a genuine sub-second
+      measurement and an absent instrument emit the identical value. Either
+      source milliseconds on BSD, or emit `duration_ms: null` with an explicit
+      `resolution:` field so the two are distinguishable.
+      Evidence: .cache/metrics/tillandsias-timing.jsonl on macneo; both records
+      carry exit 0, so the exit code does not discriminate them either.
 
 ---
 

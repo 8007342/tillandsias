@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: progress
+      ts: "2026-09-19T20:31:48Z"
+      agent_id: linux-yoga-claude-20260919t203148z
+      host: yoga
+      summary: |-
+        CRITERION 6 CLOSED at 89488617f. The keyword interpreter is DELETED — 105
+        lines, 12 case arms plus the `N+ env vars` regex block — and arm-dependent
+        steps corpus-wide are 0 of 2545.
+
+        THE MEASUREMENT IS BUILT FROM THE SOURCE, not from the row. A classifier
+        extracts the arm patterns out of run-litmus-test.sh and replays them in their
+        real `case` order, so first-match ordering is the runner's, not my reading of
+        it. Two of my own instruments were wrong first and both were caught by
+        cross-checking against a number I did not produce:
+          - an awk that dropped each file's LAST step, giving 2119 where the row says
+            2541. The gap was one per file, which is what named the bug.
+          - a `[[ $x == pat ]]` loop that cannot express `|` alternation, so EVERY step
+            classified as FALLBACK. Only bash's error output revealed it; a silent
+            version would have reported "no step depends on an arm" and been believed.
+
+        FOUR BATCHES, EACH VERIFIED BY EXECUTION WHERE EXECUTION EXISTS:
+          8   *"cargo"* arm     7 in situ PASS; the 8th both-branches + negative control
+          11  zero-count arm    2 in situ PASS; property verified over 5 cases
+          9   the remainder     3 in situ PASS, 1 red PRE-EXISTING (control at HEAD)
+          ---
+          28  total, of which install-windows took assert_output_nonempty ALONE.
+
+        THE STRONGEST FINDING IS THE *"cargo"* BATCH AND IT INVERTS THE ROW'S OWN
+        CENSUS. Seven of those eight steps carry a verdict-prefixed literal such as
+        `ok: cargo-target-dir-success` — the form the row counts among the 1,622
+        ENFORCED. They were not enforced. The arm fires on the word appearing anywhere
+        in the SENTENCE, before the literal fallback, and reduces the rule to
+        `grep -Eqi cargo` over the output. Demonstrated rather than argued:
+          `echo 'FAIL: cargo binary missing'; exit 1` against
+          expected_behavior "ok: cargo-target-dir-success"  ->  Status [PASS]
+          the same fixture with assert_output_contains      ->  Status [FAIL]
+        A step that exits 1 while printing its own failure was reporting success. So
+        "1,622 verdict-prefixed = ENFORCED" is an upper bound, not a count: any of them
+        whose sentence contains an arm keyword was being adjudicated by the keyword.
+
+        ONE MIGRATION IS A WEAKENING AND IS RECORDED AS ONE. mount-cleanup:18 runs
+        `mount | grep tillandsias`, printing LINES, while its arm required "first
+        integer >= 2" — i.e. it was adjudicating on a device number. ">= 2 lines" is
+        not expressible by any assert field without changing the command to `grep -c`
+        and losing the diagnostic listing. It takes assert_output_nonempty and carries
+        the gap in a seven-line comment in the step itself. If this row is expected to
+        have made every step at least as strong as before, it did not, and that
+        exception is here rather than in a summary line.
+
+        CONTROL. The pre-build/instant tier was run twice on the same tree, arms
+        deleted vs arms stashed back (premise asserted first — 2 occurrences live in
+        the baseline): both Total 490, executed 304, skipped 186, Pass Rate 100% across
+        100 specs. Identical, so nothing flipped. Both ends are SATURATED, so this is
+        not evidence the deletion is inert on a tier that has failures; the load-bearing
+        evidence is the measured zero and the PASS->FAIL demonstration above.
+
+        REACHABILITY, AGAIN, AND IT KEEPS BEING THE SAME LESSON: 9 of the 11
+        zero-count steps are in tests nothing runs — ca-ephemeral and mount-cleanup are
+        on unbound-grandfathered.txt, whose header states they "have NEVER been run by
+        any suite"; init-log-cleanup, socket-cleanup and toolbox-isolation are retired.
+        toolbox-isolation is additionally red at STEP 1/8 on a failure that a control
+        run of the pre-edit file at HEAD reproduces.
+
+        FOR 660-ryhn, NOT THIS ROW: vm-provisioning-idempotent and vm-shutdown-drains-
+        forges are on that same orphan list. Those are the two whose commands genuinely
+        compute their own elapsed time and exit 1 — real teeth that have never closed
+        on anything.
+
+        FOR WHOEVER NEXT TOUCHES scan-litmus-false-pass.sh: its documented limitation 2
+        ("it APPROXIMATES THE MATCHER ... not the special-case arms above it") is now
+        obsolete. With the arms gone the approximation is exact. Left unchanged here to
+        keep the diff to this row.
+
+        STATE: criteria 1-6 all closed on work/1252-znbn-crit46. Next is the full gate,
+        then landing through scripts/land-on-platform-branch.sh.

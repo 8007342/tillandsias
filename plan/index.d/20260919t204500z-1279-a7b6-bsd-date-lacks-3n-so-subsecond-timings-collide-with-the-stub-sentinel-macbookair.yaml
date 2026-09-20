@@ -1,0 +1,137 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-bsd-date-the-timing-clock-has-one-second-resolution-so-a-real-sub-second-measurement-emits-the-same-zero-the-script-already-treats-as-no-measurement
+    order: 1279-a7b6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, metrics, macos, observability, portability]
+    estimated_hours: 3
+    owned_files:
+      - scripts/timing-log.sh
+    unscoreable: ""
+    verifiable_closure: |
+      OUTPUT, on a BSD-date host: every macOS timing record for a SUB-SECOND
+      step carries either a non-zero duration_ms or an explicit marker the
+      reader cannot confuse with a measurement — never a bare 0.
+
+        $ . scripts/timing-log.sh
+        $ t0="$(timing_now_ms)"; sleep 0.2; timing_emit probe test "$t0" 0
+        then the appended record's duration_ms is > 0
+
+      NEGATIVE CONTROL, which must not regress: a multi-second step still
+      records its real value. macneo's contrast run produced BOTH states on one
+      host, same clock, same run —
+        {"step":"smoke-init-pristine","duration_ms":42000,"exit":0}
+        {"step":"smoke-health-check","duration_ms":0,"exit":0}
+      — so the 42000 record staying 42000 is part of the criterion, not a
+      by-product. A fix that broke it would be measuring something else.
+
+      PRE-FIX RESULT: FAILS. `{"step":"smoke-health-check","duration_ms":0,"exit":0}`
+      with exit 0, macneo 2026-09-19 on release v56.9.19.1, and reproduced
+      independently on tlatoanis-macbook-air 2026-09-19:
+      `timing_now_ms` -> 1789850675000 (trailing 000, whole seconds).
+    title: |
+      scripts/timing-log.sh sources its clock from `date +%s%3N`, which BSD date does not support, so on macOS the fallback degrades to seconds*1000 and every sub-second step emits duration_ms:0 — the exact value timing_emit already treats as "the stub ran, there was no measurement"
+    context: |
+      DISCOVERED by macneo via /smoke-curl-install-and-test-e2e on v56.9.19.1,
+      sharpened by a contrast run on tlatoanis-macbook-neo, and reproduced
+      independently here 2026-09-19.
+
+      THE MECHANISM, and it is slightly different from "the format is
+      unsupported". BSD `date` does not reject `%3N` — it emits the literal
+      characters. Measured on this host:
+
+        $ date +%s%3N
+        17898506753N
+
+      `timing_now_ms` guards with `case $_n in '' | *[!0-9]*)`, that stray `N`
+      trips the non-digit arm, and the fallback `date +%s | awk '{printf
+      "%d000", $1}'` produces whole seconds with three zeros stapled on. So the
+      guard is working exactly as written; what it cannot do is invent
+      resolution the source never had.
+
+        $ . scripts/timing-log.sh; timing_now_ms
+        1789850675000
+
+      WHY THE ZERO IS WORSE THAN A WRONG NUMBER. `timing_emit` ALREADY assigns
+      meaning to a zero on the other end: a `_t0` of 0 is skipped outright, and
+      the comment says why — "That happens when the caller captured t0 with the
+      no-op stub `timing_now_ms(){ echo 0; }` (path-skew fallback) or passed
+      nothing. Such a record is meaningless." So the codebase has already
+      decided that 0 means NO INSTRUMENT. On a BSD-date host a genuine
+      sub-second measurement now emits that same value, and the two conditions
+      are indistinguishable in the log. Neither the value nor the exit code
+      separates them: macneo confirmed both records carry exit 0.
+
+      THE CONTRAST RUN IS WHAT MAKES THE REMEDY DECIDABLE, and it is worth
+      keeping because the original evidence could not support it. The first
+      filing held only zeroes, which is equally consistent with the clock
+      returning garbage. The second run produced 42000 and 0 together on one
+      host with one clock, which proves the clock is FINE and only its
+      RESOLUTION is wrong. That rules out a broken-clock fix and points at
+      resolution-or-sentinel.
+
+      WHY IT MATTERS RATHER THAN BEING COSMETIC: 1013-qv7c exists precisely so
+      FLOOR hosts contribute timings, and the macOS floor hosts are the ones now
+      contributing zeroes. The lane designed to gather data from the slowest
+      machines is silently gathering nothing from a whole platform.
+
+      FAMILY: 1254-fdsu. Same shape one axis over — a producer emits something a
+      consumer reads as a different value, the platform difference is invisible
+      to every Linux lane, and nothing exits non-zero. There the separator was a
+      comma read as a decimal point or a thousands mark; here it is a resolution
+      collapsed onto a sentinel.
+    deliverable: |
+      A sub-second measurement on a BSD-date host is distinguishable from an
+      absent instrument, and the multi-second case is unchanged.
+
+      TWO SHAPES, and the choice is a real decision rather than a detail:
+
+        1. SOURCE MILLISECONDS FROM SOMETHING THAT HAS THEM. Both are present on
+           this host (measured): `python3 -c 'import time;print(int(time.time()*1000))'`
+           -> 1789850676011, and `perl -MTime::HiRes=time -e 'printf "%d\n", time*1000'`
+           -> 1789850676020. This makes macOS timings USEFUL rather than merely
+           honest, which is what 1013-qv7c wants. Cost: a subprocess per call on
+           the platforms that need it, on a path that runs per step.
+        2. DECLARE THE RESOLUTION. Emit `duration_ms: null` plus an explicit
+           `resolution` field so a reader cannot mistake a coarse measurement
+           for an absent one. Honest, cheap, and contributes no data.
+
+      THEY ARE NOT EXCLUSIVE AND PROBABLY SHOULD NOT BE: prefer a real
+      millisecond source, and if none exists, say so in the record rather than
+      degrading silently to a value that already means something else. A fix
+      that only does (1) still collides on a host with neither python3 nor perl.
+
+      NOTE THE SCHEMA CONSTRAINT before choosing (2): the record is written by a
+      single printf in scripts/cycle-metrics.sh (`"duration_ms":%s`), so a null
+      or an added field touches the emitter and every reader of that log. That
+      is a wider blast radius than (1) and is the reason to establish which
+      readers parse the field before widening the schema.
+    next_action: >
+      Reproduce first; it is one command and needs no build. On any macOS host:
+      `date +%s%3N` prints a trailing literal `N`, and `. scripts/timing-log.sh;
+      timing_now_ms` returns a value ending in three zeros. Then decide between
+      the two shapes in the deliverable rather than implementing whichever is
+      nearer the cursor — and if you take (2), first establish who READS
+      duration_ms, because the value is written by one printf in
+      cycle-metrics.sh and a null changes the contract for every consumer.
+      KEEP THE NEGATIVE CONTROL IN THE FIXTURE: a multi-second step must still
+      record its real value, because macneo's contrast run is the only reason we
+      know the clock itself is sound. Do NOT "fix" this by removing the
+      `_t0 -eq 0` skip in timing_emit — that skip is load-bearing for the
+      path-skew stub it was written for (693-tf79), and deleting it would let
+      absolute epoch-ms values through as ~56-year durations.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-19 at the coordinator's request,
+      from macneo's smoke finding in
+      plan/issues/smoke-e2e-findings-v56.9.19.1-2026-09-19-macos-macneo.md
+      (section "Work Packet: smoke-finding/timing-duration-zero-collides-with-
+      the-stub-sentinel-on-macos") plus its 2026-09-19T19:00:47Z contrast note.
+      The two zero records and the 42000/0 contrast are macneo's, carried as
+      sourced evidence and NOT inspected from here. The `date +%s%3N` literal-N
+      behaviour, the `timing_now_ms` return value, and the availability of
+      python3 and perl millisecond sources were measured on this host today.

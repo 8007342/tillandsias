@@ -77,6 +77,7 @@ critical_path:
     command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && grep -cE 'event:container_launch ' \"$LOG\" | awk '{ if ($1+0 >= 1) print \"ok: \" $1 \" idiomatic launch events\"; else { print \"FAIL: no idiomatic launch events\"; exit 1 } }'"
     timeout_ms: 10000
     expected_behavior: "at least one idiomatic launch events"
+    assert_output_matches: "^ok: [1-9][0-9]* idiomatic launch events$"
 
   # Piggyback: run the forge-diagnostics annex WITHOUT --reset. The annex's
   # dedupe-by-prompt-sha mechanism ensures that across all

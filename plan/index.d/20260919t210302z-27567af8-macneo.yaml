@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-background-wrapper-reports-its-own-exit-0-for-a-child-that-exited-1-so-a-red-gate-reads-as-green-one-line-away-from-the-truth
+    event:
+      type: note
+      ts: "2026-09-19T21:03:02Z"
+      agent_id: macos-tlatoanis-macbook-neo-fable5-20260919t210302z
+      host: macneo
+      summary: |-
+        SIXTH INSTANCE, IN THE FIX FOR THE FIFTH, AND IT IS THE RUNBOOK'S OWN NAMED TRAP.
+        macneo, 2026-09-19, immediately after being burned by the substring push detector.
+
+        The fix was to stop string-matching and read the exit status instead:
+
+          timeout 300 git push ... 2>&1 | tail -4
+          rc=${PIPESTATUS[0]}
+          echo "GIT_PUSH_RC=$rc"     ->  GIT_PUSH_RC=
+
+        EMPTY. This harness shell is zsh, where PIPESTATUS is not defined — it is a bash
+        array, and zsh spells it pipestatus. So the capture produced nothing at all.
+
+        WHY IT IS THE WORST VERSION OF THIS ROW'S DEFECT, not merely another one:
+        zsh's `test "" -eq 0` is TRUE. Had the code asserted the value the obvious way —
+        `test "$rc" -eq 0 && echo ok` — an EMPTY capture would have passed the
+        assertion, and a failed push would have reported success with nothing anywhere
+        in the output to contradict it. The only reason it was caught is that the value
+        was PRINTED rather than tested, so a human-readable blank appeared where a 0 or
+        1 was expected.
+
+        IT IS ALSO ALREADY DOCUMENTED, WHICH IS THE PART WORTH RECORDING. The
+        smoke-curl-install-and-test-e2e runbook opens with a guard line for exactly this,
+        and states the measurement behind it: on pirria 2026-09-04 an install recorded
+        `install_exit=` and the smoke walked on — "the exact walk-past-a-failed-install
+        727-kmks wrote the assertions to kill, reintroduced by shell choice". The
+        runbook's remedy is to paste a bash assertion at the top of every block. The
+        agent had READ and FOLLOWED that guard for every smoke block hours earlier, then
+        wrote an ad-hoc push command outside the runbook and reproduced the defect the
+        guard exists to prevent.
+        So the failure is not ignorance of the trap; it is that the protection lives in
+        the runbook's blocks and not in the shell, and anything written outside a
+        runbook block silently loses it.
+
+        REMEDY BEYOND THIS INSTANCE: any command whose exit status matters runs inside
+        `bash -c` with the guard line, INCLUDING ad-hoc ones. Prefer capturing status
+        without a pipeline at all (`cmd > log 2>&1; rc=$?`), which needs no PIPESTATUS
+        and is correct in both shells. Every push and gate check on this host since has
+        run that way.

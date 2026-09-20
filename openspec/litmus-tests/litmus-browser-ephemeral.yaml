@@ -13,11 +13,36 @@ critical_path:
     command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; mkdir -p \"$browser_root\"; find \"$browser_root\" -mindepth 1 -maxdepth 1 -type d -name 'safe-browser-*' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 directories"
+    assert_output_matches: "^[[:space:]]*0$"
 
   - step: "launch browser via safe wrapper using fake Podman"
     command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; rm -f \"$calls_file\"; DISPLAY=:99 LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=\"$calls_file\" ./run-safe-browser.sh --url \"http://opencode.test-project.localhost/\"; test -s \"$calls_file\""
     timeout_ms: 10000
-    expected_behavior: "container id returned"
+    expected_behavior: "the safe wrapper runs under fake podman and records its argv to the calls file; no container exists"
+    # ORDER 1252-znbn. The old label read "container id returned". There is NO
+    # container: this step runs LITMUS_PODMAN_MODE=fake, and its own command ends
+    # with `test -s "$calls_file"` — the success criterion is that the wrapper
+    # recorded its argv, not that anything launched.
+    #
+    # MEASURED on pirria 2026-09-20, failure path (chromium image absent):
+    #   rc=125, stdout `Error: tillandsias-chromium-framework:v56.9.19.2: image not known`
+    # So `assert_output_nonempty` is satisfied ON FAILURE TOO — it does not
+    # discriminate, and the whole verdict rested on assert_exit alone.
+    # The success path could not be observed on this substrate; the assert below
+    # is therefore scoped to what the step's own command already decides.
+    #
+    # `assert_output_nonempty` was REMOVED rather than replaced. The vocabulary
+    # the runner implements is assert_exit / assert_output_contains /
+    # assert_output_matches / assert_output_nonempty (verified against
+    # scripts/run-litmus-test.sh, which is the only list that counts — an
+    # assert key the runner does not implement is a SILENT NO-OP, which is this
+    # order's own defect one level in). None of them can express "not an error"
+    # without a positive pattern for the success path, and that path could not
+    # be observed here. So the verdict rests on assert_exit, which DOES
+    # discriminate (measured: rc=125 when the image is absent), and the
+    # positive assert is left for a host that can run this with the
+    # chromium-framework image present.
+    assert_exit: 0
 
   - step: "verify launch contract flags"
     command: "calls_file=\"${LITMUS_PODMAN_CALLS_FILE:-target/litmus-podman/browser-ephemeral.calls.log}\"; for pattern in --rm --pull=never --userns=keep-id --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --read-only --incognito --no-first-run --no-default-browser-check --user-data-dir= --app=http://opencode.test-project.localhost/ --env=DISPLAY=:99 --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --network=host 'tillandsias-chromium-framework:v[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'; do grep -Eq -- \"$pattern\" \"$calls_file\"; done"
@@ -27,6 +52,7 @@ critical_path:
     command: "browser_root=\"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/tillandsias/browser\"; find \"$browser_root\" -mindepth 1 -maxdepth 1 -type d -name 'safe-browser-*' 2>/dev/null | wc -l"
     timeout_ms: 3000
     expected_behavior: "0 directories"
+    assert_output_matches: "^[[:space:]]*0$"
 
 observability:
   traces:
