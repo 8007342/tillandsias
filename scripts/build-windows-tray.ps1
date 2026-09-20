@@ -30,6 +30,27 @@
     host); (c) let the guest fetch the published release (the fallback this
     embed demotes).
 
+    ORDER 1308-9ej7 -- LANE (a) NEEDS `--features listen-vsock`, AND THIS NOTE
+    OMITTING IT COST 524 SECONDS. Measured on yolanda 2026-09-20: a guest
+    built without that feature COMPILES, STAGES, EMBEDS, INSTALLS INTO THE
+    GUEST AND RUNS, printing the correct version at every step -- and never
+    binds the control wire, so the provision dies on a handshake timeout
+    minutes later. Every version-comparing check passes on it; the VERSION
+    string cannot see the difference. The full command, matching what
+    scripts/build-guest-binaries.sh runs in its own fallback (see its comment
+    citing order 282, which names this exact failure):
+
+      cargo build --package tillandsias-headless --bin tillandsias --release \
+          --target x86_64-unknown-linux-musl --features listen-vsock
+      cp <target>/x86_64-unknown-linux-musl/release/tillandsias \
+          target-guest/tillandsias-headless-x86_64-unknown-linux-musl
+
+    Note the binary is named `tillandsias`, not after its crate. Lane (a)
+    stages x86_64 ONLY: aarch64 needs aarch64-linux-musl-gcc, which the
+    build distro does not carry. `scripts/build-guest-binaries.sh --verify`
+    now refuses a staged binary that lacks the feature, so this mistake is
+    caught at staging time rather than at the far end of a provision.
+
     @trace spec:windows-native-tray, spec:linux-native-portable-executable
 
 .PARAMETER DebugBuild
