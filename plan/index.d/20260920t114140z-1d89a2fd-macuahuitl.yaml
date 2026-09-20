@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T11:41:40Z"
+      agent_id: linux-macuahuitl-fable5-20260920t114140z
+      host: macuahuitl
+      summary: |-
+        DESIGN SETTLED by the coordinator 2026-09-20T11:55Z, on pirria's fork and yolanda's objection: the reset is ONE BINARY FLAG, --reset-state, the same name and semantics on all three platforms, called by each installer by default after the fetch. It does what --reset-guest does PLUS clears the host-held credentials the clearer clears, the fallback_* files, vault-data and the images, then reprovisions through the same --init path, SYNCHRONOUSLY, and exits with that status. It PRESERVES the installation identity on every platform (on Windows tillandsias-vm-uuid, which anchors the installation, not the guest, and from which the in-VM Vault derives its master key; touching it is 803-49re), which is why the name is reset-STATE and not reset-install. The announcement names what will be destroyed and what is preserved BEFORE destroying anything. Exactly one documented env var skips the reset and runs plain --init; the default is the reset (the operator: an install provisions and resets). Rejected: (a) inlining the clearer into install.sh (a second implementation of the clearing rule the fleet unforked this week), (c) shipping the clearer as a release asset (a second download and signature). Pre-fix premises found stale when RUN: Linux install.sh already runs --init (63fe7b494) and propagates its status under set -euo pipefail, so the true Linux pre-fix state is no reset; the Windows installer already launches provisioning fire-and-forget and exits 0 without waiting, leaving a Stopped distro registered, so the Windows arm's closure is the synchronous reset-and-provision exiting with its status. Both hosts record their measured pre-fix states as events; the immutable closure's pre-fix line is superseded by them. Arms: Linux pirria (claim), Windows yolanda (by event), macOS unrouted.
