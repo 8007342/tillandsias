@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    order: 1295-b4i8
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [smoke, windows, wsl, release, agent-safety]
+    estimated_hours: 2
+    owned_files:
+      - images/default/skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      the Windows smoke's §2 "cache purge" names no path, and the only obvious path contains the BUILDER distro's 142.9 GB vhdx — so the documented reset deletes the host's gate toolchain whenever the builder is Stopped, and reports a clean reset while doing it
+    context: |
+      MEASURED ON yolanda-windows 2026-09-20 during the v56.9.19.2 Windows
+      curl-install smoke (report:
+      plan/issues/smoke-e2e-findings-v56.9.19.2-2026-09-20-windows-yolanda.md).
+
+      §2 OF THE RUNBOOK SAYS "cache purge" AND NAMES NO PATH. The table row at
+      SKILL.md:29 reads `wsl --unregister tillandsias`, cache purge, plus the
+      two Credential Manager entries. On Windows the only obvious directory to
+      purge is %LOCALAPPDATA%\tillandsias. On this host that directory contains
+      exactly one thing:
+
+        wsl-build\ext4.vhdx    142.9 GB
+
+      which is the **tillandsias-build** distro's disk — the WSL2 builder the
+      gate re-execs into. It is not runtime state. Deleting it deletes the
+      host's ability to run ./build.sh --check at all.
+
+      I RAN THAT REMOVAL. It failed — `removed=False` — and it failed for one
+      reason only: tillandsias-build was RUNNING and Windows held the file
+      open. That is luck, not a guard. Between gates the builder is Stopped,
+      which is its normal state, and the same command then succeeds. The smoke
+      would print a clean §2 reset having destroyed the build environment, and
+      the next gate on that host would fail for reasons no one would connect
+      to a smoke that passed.
+
+      THE RUNTIME STATE THAT SHOULD HAVE BEEN PURGED lives elsewhere and was
+      handled correctly by the steps that DO name paths:
+        %USERPROFILE%\.cache\tillandsias   221.3 MB   present, removed
+        %APPDATA%\tillandsias              absent
+      and the guest itself goes with `wsl --unregister tillandsias`.
+
+      SECOND INSTANCE OF THE SAME CONFLATION, in §3 rather than §2. The
+      freshness assertion selects the rootfs with
+        Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter ext4.vhdx |
+          Where-Object { $_.FullName -match 'tillandsias' }
+      and `wsl-build` sits under a parent named `tillandsias`, so that pattern
+      matches BOTH distros' disks. It resolved correctly on this run only
+      because the runtime rootfs sorted newest by mtime (01:01:09 against the
+      builder's 00:58:39). Gates here run ~2 hours and write the builder's
+      disk continuously; a gate finishing after the destruction marker would
+      have made `Select-Object -First 1` pick the BUILDER's vhdx, and the
+      assertion would then either pass vacuously (measuring an artifact the
+      smoke never touched) or throw "a survivor, not a fresh provision" on a
+      perfectly good provision. I used `-notmatch 'wsl-build'` to get a sound
+      measurement; the runbook does not carry it.
+
+      WHY ONE ROW AND NOT TWO: both are the same missing distinction, in two
+      steps of one runbook. esme-windows stated it plainly when comparing our
+      configs — tillandsias-build is the gate, tillandsias is the runtime, and
+      the smoke destroys only the runtime, which is WHY the build toolchain
+      deliberately does not live in the runtime distro
+      (with-wsl2-builder.sh:26-30). The runbook's prose never encodes it, so
+      every Windows smoke re-derives it or gets it wrong.
+
+      NOT A HYPOTHETICAL ON THIS FLEET: two Windows hosts run this smoke, both
+      carry a builder distro, and the 2026-08-17 precedent (803-49re) is a
+      "truly cold" claim that purged the wrong things and shipped a broken
+      release forty minutes later.
+    next_action: |
+      Nobody holds this.
+      1. §2: replace "cache purge" with the runtime paths BY NAME
+         (%USERPROFILE%\.cache\tillandsias, %APPDATA%\tillandsias) and state
+         that %LOCALAPPDATA%\tillandsias\wsl-build is EXCLUDED because it is
+         the builder distro's disk. Prefer naming what to delete over naming
+         what to keep, but say both — the reader who improvises is the failure
+         mode this row is about.
+      2. §3: add `-notmatch 'wsl-build'` to the rootfs selector, or select by
+         the distro's registered path rather than by a substring of an
+         arbitrary directory name.
+      3. Add an assertion that survives the whole smoke: capture the builder
+         vhdx's size and mtime before §2 and assert both are unchanged after
+         §3. That is the criterion below, and it is what turns "we remembered"
+         into "the runbook checked".
+      Do NOT fix this by telling hosts to stop the builder first: that makes
+      the destructive case the DEFAULT rather than the one that is currently
+      blocked by a file lock.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is the assertion
+      itself: the runbook has no fixture that runs a Windows smoke and checks
+      what survived it, so there is no litmus name to pin yet. When it lands
+      the guard is litmus-smoke-windows-preserves-the-builder-distro, asserting
+      the builder vhdx is byte-identical across §1+§2+§3 with the builder
+      STOPPED, and it must be written in the same commit as the runbook change
+      it tests (1136-n8sh). Pinning the name before it exists is refused by
+      885-92iu.
+    verifiable_closure: |
+      On a two-distro Windows host, a full §1+§2+§3 smoke leaves
+      %LOCALAPPDATA%\tillandsias\wsl-build\ext4.vhdx BYTE-IDENTICAL (same size,
+      same mtime) with the builder distro STOPPED for the duration — the state
+      in which the current text destroys it. Pre-fix result: the purge is
+      attempted and reports removed=False only because the file is held open by
+      a Running distro; with it Stopped the file is deleted and §2 still
+      reports a clean reset.
+
+events:
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    event:
+      type: note
+      ts: "2026-09-20T08:20:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed from the v56.9.19.2 Windows smoke; the purge of the 142.9 GB builder vhdx was attempted and failed only because the distro was Running
