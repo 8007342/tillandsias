@@ -854,6 +854,26 @@ credential_channel_verdict() {
   echo "  DO NOT run 'gh auth login' or 'gh auth refresh' (order 1025-a896): a" >&2
   echo "  re-auth on one host EVICTS the operator's token on every other host," >&2
   echo "  and it would be trading a fleet-wide outage for a passphrase prompt." >&2
+  # ORDER 1189-2ra5 STILL BINDS, AND 1265-8qr6 ALMOST BROKE IT. Removing the
+  # Locked read took away the guard's only way to say "present but locked", and
+  # this site fell straight through to missing:no-credential-channel — the exact
+  # conflation 1189-2ra5 exists to forbid, because "there is no credential here"
+  # invites `gh auth login` and that evicts the fleet (1025-a896). Caught by that
+  # fixture's arm 1 on 2026-09-19, not by review.
+  #
+  # The discriminator is rebuilt WITHOUT the fatal call. Whether
+  # org.freedesktop.secrets is ON THE BUS is a name listing answered by the bus
+  # itself; it never enters gnome-keyring's GetProperty handler and so cannot
+  # abort it. That is strictly less information than Locked — present-and-locked
+  # and present-and-unlocked-but-broken are now one verdict — but it is the half
+  # that decides the REMEDY, which is all this site needed.
+  if command -v busctl >/dev/null 2>&1 &&
+     busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then # sigpipe-ok: safe pipeline
+    echo "  The secret service IS on the session bus, so the channel EXISTS and" >&2
+    echo "  could not be opened — this is NOT an absent credential." >&2
+    echo "unknown:secret-service-unprobed"
+    return 1
+  fi
   echo "missing:no-credential-channel"
   return 1
 }

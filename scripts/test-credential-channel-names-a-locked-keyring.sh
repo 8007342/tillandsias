@@ -62,6 +62,7 @@ GH
             cat > "$bin/busctl" <<'BC'
 #!/usr/bin/env bash
 case "$*" in
+  *--user*list*) echo "org.freedesktop.secrets 1234 gnome-keyring-daemon"; exit 0 ;;
   *"/collection/login"*Locked*) echo "b true"; exit 0 ;;
   *Locked*) echo "b false"; exit 0 ;;
 esac
@@ -72,6 +73,7 @@ BC
             cat > "$bin/busctl" <<'BC'
 #!/usr/bin/env bash
 case "$*" in
+  *--user*list*) echo "org.freedesktop.secrets 1234 gnome-keyring-daemon"; exit 0 ;;
   *Locked*) echo "b false"; exit 0 ;;
 esac
 exit 1
@@ -106,14 +108,20 @@ run_guard() { # run_guard <repo> <bin>; sets OUT and RC
     ERR="$(cat "$repo/.stderr" 2>/dev/null || true)"
 }
 
-echo "arm 1 — a PRESENT but LOCKED collection reads blocked:gh-keyring-locked, not missing"
+echo "arm 1 — a PRESENT but unopenable secret service reads unknown:, NOT missing:"
 mk_bin "$W/bin-locked" locked
 D="$(scratch locked)"
 run_guard "$D" "$W/bin-locked"
-if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^blocked:gh-keyring-locked$'; then
-    ok "blocked:gh-keyring-locked at rc=$RC"
+# 1265-8qr6 REMOVED THE Locked READ, so the old blocked:gh-keyring-locked is
+# unreachable and asserting it would pin a probe that aborts its own subject.
+# What 1189-2ra5 actually protects is the REMEDY, and that survives: a service
+# on the bus means the channel EXISTS, so the verdict must not be missing:.
+if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
+    ok "unknown:secret-service-unprobed at rc=$RC — present, unopenable, not absent"
+elif printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then # sigpipe-ok: safe pipeline
+    bad "REGRESSION 1189-2ra5: a service ON THE BUS read as missing: — that verdict invites the fleet-evicting re-auth that 1025-a896 forbids"
 else
-    bad "expected blocked:gh-keyring-locked, got rc=$RC out='$OUT'"
+    bad "expected unknown:secret-service-unprobed, got rc=$RC out='$OUT'"
 fi
 
 echo "arm 2 — NEGATIVE CONTROL: no secret service on the bus still reads missing:"
@@ -163,10 +171,17 @@ echo "arm 3 — NEGATIVE CONTROL: an UNLOCKED collection does not trip the lock 
 mk_bin "$W/bin-unlocked" unlocked
 D="$(scratch unlocked)"
 run_guard "$D" "$W/bin-unlocked"
-if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
-    ok "unlocked + no token reads missing:, not locked"
-else
+# The lock probe is gone (1265-8qr6), so "does not trip the LOCK arm" now means
+# the verdict must carry no lock claim at all. Service on the bus, gh unable to
+# answer: that is unknown:, the same as arm 1 — this arm no longer discriminates
+# locked from unlocked, because the guard cannot, and saying so is the honest
+# form. What it still pins is that neither state is ever reported as a lock.
+if printf '%s' "$OUT" | grep -qi 'locked'; then # sigpipe-ok: safe pipeline
     bad "an unlocked collection must not read as locked, got '$OUT'"
+elif printf '%s' "$OUT" | grep -q '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
+    ok "unlocked + no token reads unknown:, with no lock claim"
+else
+    bad "expected unknown:secret-service-unprobed with no lock claim, got '$OUT'"
 fi
 
 echo "arm 4 — the remedy names UNLOCK and FORBIDS the re-auth (1025-a896)"
@@ -182,11 +197,17 @@ else
     bad "remedy incomplete (unlock=$_r_unlock no-reauth=$_r_noauth order=$_r_order): $ERR"
 fi
 
-echo "arm 5 — the lock probe is BOUNDED through _ccc_timeout (order 988)"
-if grep -q '_ccc_timeout [0-9]* busctl' "$GUARD"; then
-    ok "busctl is invoked through _ccc_timeout"
+echo "arm 5 — TRIPWIRE (1265-8qr6): the Locked property read must NOT come back"
+# This arm used to assert the busctl probe was BOUNDED through _ccc_timeout.
+# The probe is now removed outright, so a bounded-probe assertion would demand
+# the very call that aborts gnome-keyring-daemon 50.0 in its own GetProperty
+# handler. The arm is inverted rather than deleted: order 988's concern was an
+# unbounded probe, and absence satisfies it strictly. A reinstated read — by
+# any spelling, on any namespace — fails here first.
+if grep -qE 'get-property[^|]*Locked' "$GUARD"; then # sigpipe-ok: safe pipeline
+    bad "a Locked property read is BACK in the guard — it aborts gnome-keyring-daemon 50.0 and D-Bus re-activates it LOCKED, manufacturing the state it reports (1265-8qr6)"
 else
-    bad "the busctl probe is not bounded through _ccc_timeout — order 988 forbids an unbounded probe here"
+    ok "no Locked property read in the guard"
 fi
 
 echo "arm 6 — gh auth status is bounded too (it BLOCKS on a locked keyring)"
