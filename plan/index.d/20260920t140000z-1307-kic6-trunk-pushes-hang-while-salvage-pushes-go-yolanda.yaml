@@ -13,9 +13,9 @@ packets:
     owned_files:
       - scripts/push-plan-fragments-to-trunk.sh
     title: |
-      on yolanda a push to linux-next HANGS at git-remote-https with a clean dry-run, while reads to the same remote return instantly and a push to a salvage ref completes in seconds -- so the host can publish everywhere except trunk, and the difference is the destination
+      on yolanda a push to linux-next SUCCEEDS SERVER-SIDE AND THE CLIENT NEVER RETURNS -- the ref moves, the fragments land, and git-remote-https hangs until the caller kills it -- so the host reports its own landed work as failed and retries it
     context: |
-      MEASURED on yolanda-windows 2026-09-19/20 across a full cycle. SIX
+      MEASURED on yolanda-windows 2026-09-19/20 across a full cycle. SEVEN
       instances, and the framing below is a CORRECTION of my own earlier one.
 
       WHAT HANGS AND WHAT DOES NOT, all on one host, one credential, minutes
@@ -62,6 +62,32 @@ packets:
            in-progress push looks like under that shape. I matched a known
            failure signature to a symptom my own wrapper manufactured.
 
+      THE PUSH ACTUALLY SUCCEEDS. MEASURED 2026-09-20 after the first three
+      instances, and it reframes everything above. Two fragments from pushes I
+      had recorded as FAILED are on origin/linux-next:
+        plan/index.d/...-1282-trqp-windows-instance-yolanda.yaml   ON TRUNK
+        plan/index.d/...-1286-4437-windows-prefix-correction-...   ON TRUNK
+      and a later run of the same script said so itself:
+        'is already on origin/linux-next byte-for-byte; dropped'
+      So the ref moves, the objects transfer, the server accepts -- and the
+      CLIENT does not return. RC=124 is my timeout killing a push that had
+      already done its job.
+
+      THAT IS WORSE THAN A HANG, and it is the reason for the priority. A push
+      that fails is visible. A push that SUCCEEDS and reports nothing makes the
+      host report landed work as unlanded: I told the coordinator twice that
+      fragments had not reached trunk when they had, and I retried pushes that
+      were already applied. The retry is harmless here only because the lane
+      compares byte-for-byte and drops duplicates; a lane without that check
+      would have produced a second commit of the same content.
+
+      SO THE VERDICT-BEARING SURFACE IS THE REMOTE, NOT THE EXIT CODE. Anything
+      that concludes 'the push failed' from a non-zero status on this host is
+      wrong. Ask the remote: git ls-remote, or read the blob back out of the
+      ref. This is 1296-jutd's lesson arriving from the opposite direction --
+      there the wrapper discarded a real failure, here the transport discards a
+      real success.
+
       THE ONE DISCRIMINATOR THAT SURVIVES is the DESTINATION: salvage/* goes,
       linux-next does not, reads are fine. `salvage/*` is exempt from the
       pre-push hook by prefix (872-c9nd) and linux-next is not, so "the hook,
@@ -103,12 +129,14 @@ packets:
       as the fix (1136-n8sh).
     verifiable_closure: |
       On a Windows host, `scripts/push-plan-fragments-to-trunk.sh` with a clean
-      dry-run either LANDS the fragments on linux-next or REFUSES with a named
-      reason, within a bounded time, in the same session in which a push to a
-      salvage ref succeeds. Pre-fix result: RC=124 at the bound with
-      `Terminated  git push "$REMOTE" "$commit:refs/heads/$TRUNK"`, three
-      consecutive attempts, beside `ok:fragments-to-trunk:dry-run:<sha>:2` and
-      an instant `git ls-remote` against the same remote.
+      dry-run RETURNS -- with a zero status when the ref moved and a named
+      refusal when it did not -- within a bounded time, in the same session in
+      which a push to a salvage ref succeeds. Pre-fix result: RC=124 at the
+      bound with `Terminated  git push "$REMOTE" "$commit:refs/heads/$TRUNK"`,
+      seven instances, beside `ok:fragments-to-trunk:dry-run:<sha>:2`, an
+      instant `git ls-remote` against the same remote, AND the fragments
+      present on origin/linux-next afterwards -- the work landed and the client
+      never said so.
 
 events:
   - packet_id: on-one-windows-host-a-push-to-linux-next-hangs-at-git-remote-https-while-reads-return-instantly-and-a-push-to-a-salvage-ref-completes-in-seconds
