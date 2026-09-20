@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    event:
+      type: note
+      ts: "2026-09-20T18:21:41Z"
+      agent_id: linux-macuahuitl-claude-20260920t182141z
+      host: linux
+      summary: |
+        RECORDED HERE because the wire row (1310-5e6g) and 1310-rec6 are NOT on origin/linux-next as of 2026-09-20T18:45Z (lenovinha asked where they live). OPERATOR ACCEPTANCE CRITERION (2026-09-20, verbatim): "Make sure to ask Lenovinha to credential-free push on linux-next, and some work and other side branches successfully, before we mark the experiment as successfully." The host-to-mirror-to-GitHub experiment is successful only when lenovinha has pushed, with no credential on the host side of the hop, to (a) linux-next (a plan-lane fragment push or a gated land through the mirror), (b) at least one work/<order> branch, and (c) at least one other side branch (a salvage/ ref or a platform branch levelled from trunk), each verified by `git ls-remote origin <ref>` showing the pushed SHA, each recorded here with the command, the ls-remote line, and the evidence that neither the keyring nor the gh credential helper was consulted (keyring PID unchanged; no helper invocation in GIT_TRACE). A push that falls back to the keyring path refuses the experiment; the relay and hooks fail hard with no direct-push fallback. Sequence unchanged: link 3 (the mirror authenticates with its per-mirror host-signer role; sshd comes up), then the three pushes, then this row closes citing them. Until then no fleet-wide instruction goes out and 1312-i6da's v1 documents the lane as not yet up.

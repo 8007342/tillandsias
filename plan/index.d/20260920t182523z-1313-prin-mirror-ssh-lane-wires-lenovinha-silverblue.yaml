@@ -1,0 +1,140 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    order: 1313-prin
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, vault, credentials, keyring, ssh, agent-safety]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - images/git/entrypoint.sh
+      - images/git/vault-agent-signer.hcl
+    unscoreable: |
+      the-closure-is-three-witnessed-pushes-not-an-artifact. The operator set
+      this row's bar as a DEMONSTRATION: three real pushes from this host, each
+      with its ls-remote SHA, the keyring PID across it, and GIT_TRACE evidence
+      that the gh credential helper did not fire. No test can assert that on a
+      host other than the one that made them, and a litmus that re-ran them
+      would be pushing to a shared remote on every gate. A future guard CAN pin
+      the lane coming UP — litmus-mirror-sshd-runs-when-the-flag-is-set, the arm
+      that the flag on the host implies sshd inside the mirror and 2222
+      published — and that one is named here rather than pinned, because
+      nothing defines it yet (885-92iu) and it lands in the same commit as the
+      thing it tests (1136-n8sh).
+    verifiable_closure: |
+      OPERATOR'S ACCEPTANCE CRITERION, 2026-09-20, verbatim: "Make sure to ask
+      Lenovinha to credential-free push on linux-next, and some work and other
+      side branches successfully, before we mark the experiment as successfully."
+
+      THREE DEMONSTRATED PUSHES from lenovinha with NO credential on the host
+      side of the hop, each recorded on this row with the command and its
+      evidence: (a) a push to linux-next (a plan-lane fragment push or a gated
+      land) through the mirror, NOT the keyring path; (b) a push to at least one
+      work/<order> branch; (c) a push to at least one other side branch (a
+      salvage/ ref, or osx-next/windows-next levelled from trunk).
+
+      EACH VERIFIED, not inferred: `git ls-remote origin <ref>` showing the
+      pushed SHA; the keyring daemon PID unchanged across the push; and NO
+      credential-helper invocation in the push's GIT_TRACE — the host currently
+      carries credential.https://github.com.helper=!gh auth git-credential, so
+      "credential-free" means that helper demonstrably did not fire, not that no
+      prompt appeared.
+
+      ONE OF THE THREE FALLING BACK TO THE KEYRING PATH IS A REFUSAL OF THE
+      EXPERIMENT, NOT A PARTIAL PASS. The relay and hooks fail hard with no
+      direct-push fallback, as 1309-qc95 established.
+    title: |
+      the ssh push lane is wired END TO END — the mirror receives the flag and its own id, authenticates to the signer with a per-mirror identity, starts sshd, and a host push reaches GitHub through the mirror with no credential on the host side
+    context: |
+      FILED LATE AND THAT IS THE FIRST THING TO RECORD. This work was done under
+      the name "1310-5e6g", an order minted by next-order on 2026-09-20 and then
+      NEVER WRITTEN AS A FRAGMENT. It was cited in messages, in commit subjects,
+      and in ten @trace/comment sites in code, and it resolved to nothing —
+      `tillandsias-plan status 1310-5e6g` answers "no packet matches". Caught
+      by macuahuitl-fedora checking the salvage ref, not by me. A fragment
+      cannot claim an order the fold never allocated, so this row carries a
+      FRESH order and the code is re-cited to it. Third reference-that-looks-
+      sourced-and-is-not from this host today, after the "four Git Bash litmus
+      arms" that were never filed and a bare "1310" that does not resolve.
+
+      THE DEFECT CHAIN, three asymmetries each hiding the next, all measured on
+      lenovinha 2026-09-20 while dogfooding 749-54pv's dark lane as 1288-5qpn's
+      first authenticated client:
+
+      LINK 1 (fixed, on the salvage ref) — TILLANDSIAS_MIRROR_SSHD never reached
+      the mirror. The flag launched the sidecar half and wired the forge
+      gitconfig; the mirror's entrypoint gates sshd on that same variable and was
+      never given it. Wired at the launch site from mirror_ssh_push_lane_enabled(),
+      the SAME predicate the sidecar calls, so the halves cannot disagree. NOT in
+      container_profile.rs: that module declares the mirror's env and nothing
+      consumes it — every .env_vars reference outside it is in its own tests.
+
+      LINK 2 (fixed, on the salvage ref) — TILLANDSIAS_MIRROR_ID never reached
+      the mirror either, while the SIDECAR had it. sshd-identity.sh died at
+      require_mid. Wiring link 1 alone would have shipped a lane that stops one
+      step later, which is why the unit test pins both.
+
+      LINK 3 (provisioning half done, consumption half NOT) — the mirror's token
+      is refused by the signer: POST ssh-host-signer/sign/host-<mid> answers
+      http=403 permission denied. Diagnosed by READS only: auth/token/lookup-self
+      from inside the mirror returns policies ["default","git-mirror-policy"],
+      and grep shows mirror_host_signer_policy_name has ONE operative reference —
+      the mint. The policy is MINTED AND BOUND TO NOTHING; the lane side has both
+      halves, the host side had the mint only. Fixed by provision_host_signer_approle,
+      a per-mirror AGENT role named identically to its policy and bound to exactly
+      it. THE THREE-LINE FIX WAS REFUSED: attaching a per-mirror policy to the
+      GLOBAL git-mirror-agent role grants project A's mirror authority to sign
+      project B's host certificates — the authority D12 withdrew — past
+      reject_sign_wildcard, which inspects policy BODIES and would find no
+      wildcard. A guard watching the wrong door.
+
+      WHAT REMAINS is the consumption half: mint the signer role's AppRole
+      material bound to the MIRROR container, run a SECOND Vault Agent writing its
+      own sink, and point sshd-identity.sh at it via TILLANDSIAS_VAULT_TOKEN_FILE,
+      so one token never carries both authorities. The seam already exists —
+      vault-agent-bootstrap.sh takes VAULT_APPROLE_DOCUMENT, VAULT_AGENT_CONFIG,
+      VAULT_ROLE_ID_FILE and VAULT_SECRET_ID_FILE from the environment, so a
+      second identity needs a second .hcl and no change to that script.
+    next_action: |
+      Held by lenovinha-silverblue. Code for links 1-3a is on
+      salvage/lenovinha-silverblue/20260920-1310-5e6g-wires-rows-and-skill
+      (2d009dbff) and is UNLANDABLE until two things are true:
+      1. RE-CITE THE CODE to 1313-prin. Ten sites name the never-filed
+         1310-5e6g, and the gate's order-citations check resolves every cited
+         order, so the wires cannot land under that name.
+      2. FINISH THE CONSUMPTION HALF, because provision_host_signer_approle is
+         dead code and `-D warnings` refuses it: a second .hcl
+         (images/git/vault-agent-signer.hcl) with its own sink and id-file
+         paths, a Containerfile COPY, an entrypoint branch that starts the
+         second agent when the lane is on and the signer secret is mounted, and
+         build_git_run_args passing the minted signer secret at its THREE call
+         sites (forge-launch, opencode, opencode-web).
+      3. Then the three pushes in verifiable_closure, each with its ls-remote
+         line, keyring PID, and GIT_TRACE evidence that the gh helper did not
+         fire.
+      The WIP tip of that salvage ref is KNOWN-BROKEN and labelled so; do not
+      fold it expecting it to compile.
+    provenance: |
+      Filed 2026-09-20 by lenovinha-silverblue after macuahuitl-fedora found
+      that the order this work had been done under was never allocated a
+      fragment. Operator acceptance criterion relayed by the coordinator the
+      same day; it moves here from 1309-qc95, where it was parked because this
+      row did not exist. Related: 1288-5qpn (the design), 1309-qc95 (fail-closed,
+      landed a43c175a6), 749-54pv/749-6uby (the lane), 1310-rec6 (mirror
+      integrity), 1312-i6da (the bare-metal skill).
+
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-20T18:25:23Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260920t182523z
+      summary: |-
+        filed for real after the work had run for hours under an order that was minted but never written; code re-cited from 1310-5e6g to this row

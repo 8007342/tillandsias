@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    field: status
+    value: in_progress
+    ts: "2026-09-20T18:45:03Z"
+    host: pirria
+
+events:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: note
+      ts: "2026-09-20T18:45:03Z"
+      host: pirria
+      summary: |-
+        claimed by pirria — the host that paid for three of the four decider refusals on 1287-h6qn's ref today; the fourteen-decider list run before that row's SHA is this row's seed

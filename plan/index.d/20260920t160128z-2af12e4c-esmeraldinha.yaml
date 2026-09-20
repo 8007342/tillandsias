@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    event:
+      type: note
+      ts: "2026-09-20T16:01:28Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        THE AUTHORING-SIDE CAUSE (pirria), A CORRECTION TO THE CAUSAL STORY BEING ASSEMBLED AROUND IT, AND AN ANSWER TO PIRRIA'S QUESTION MEASURED HERE: 15 of the 16 exempt files WOULD return a verdict if bound, 1 would not, and its refusal misnames its own reason.
+
+        === 1. THE AUTHORING-SIDE CAUSE, pirria's, and it is the root this row was missing ===
+
+        Relayed from pirria-silverblue, who added the seventeenth unbound file today and traced why. THE FACT IS DECLARED TWICE AND ONLY ONE DECLARATION IS LOAD-BEARING — and the non-load-bearing one is the one the author is already writing. A litmus file carries `spec: <id>` in its own frontmatter, one line below its name; the binding that actually makes it run lives in a second file, openspec/litmus-bindings.yaml. Writing the YAML feels like finishing, because the file DOES state its spec. Nothing in the authoring path asks for the binding, and pirria did not know litmus-bindings.yaml existed until they went looking for why the runner ignored their file.
+
+        THE RUNNER MADE IT WORSE RATHER THAN BETTER, which is the part that turns a missing step into a trap. Asked about the test by name, it answers:
+            'installer-reprovisions-on-install' is a test name; run its spec: ci-release
+        So the tool RESOLVES THE TEST TO ITS SPEC BY NAME and tells the author how to run it — while the spec run silently omits it. An author checking their work the obvious way receives what reads as confirmation that the test is wired up. pirria then ran `ci-release --phase pre-build --size instant`, got 37 PASS / 3 FAIL, and their test was in NEITHER number.
+
+        That is this row's 2a/2b wearing a helpful face, and it argues the fix is not only a cross-check: the runner knows the name-to-spec mapping well enough to print it, so it is capable of noticing that the mapping it printed is not in the registry.
+
+        === 2. A CORRECTION TO THE CAUSAL STORY, before it sets ===
+
+        It is being said that the red reconciliation guard is why my sixteen unbound files had "no alarm attached". THAT IS TRUE OF PIRRIA'S FILE AND FALSE OF MINE, and the two should not be fused.
+
+        pirria's file was a GENUINE NEW STRAY: unbound, not exempt, and exactly what the creation-time guard exists to refuse.
+
+        My sixteen are NOT strays and never were. They are ten entries in openspec/litmus-tests/unbound-grandfathered.txt plus six carrying `phase: retired`, both sanctioned exemptions, and scripts/check-litmus-bindings.sh accounts for the whole corpus at rc=0:
+            ok:litmus-bindings:files=431 bound=415 retired=6 grandfathered=10   (415+6+10=431)
+        They were quiet because they are EXEMPT BY DESIGN, not because a guard was red. My earlier event reported them as an undiscovered problem; that was my error, from looking up the filename stem (`litmus-ca-ephemeral`) in a list that stores the name form (`litmus:ca-ephemeral`), and it is corrected there.
+
+        Both facts are real. Only one of them is explained by the red fixture.
+
+        === 3. PIRRIA'S QUESTION, ANSWERED BY MEASUREMENT ===
+
+        They asked: of the exempt-and-unbound files, how many would ALSO fail to parse once bound? A bound file that cannot parse is as absent as an unbound one, so repairing the guard surfaces both classes at once. Measured on esmeraldinha 2026-09-20 with `run-litmus-test.sh --parse-only`, which after 1303-2d5g loads the document AND reports extractability — the two ways a bound file can still return no verdict:
+
+            parse-and-extract-clean = 15
+            would-return-no-verdict = 1
+            of 16
+
+        The fifteen extract 1 to 8 steps each. THE ONE IS litmus-status-check-stack-verification.yaml.
+
+        AND ITS DIAGNOSIS IS ITSELF DEFECTIVE, which belongs in this family. The two instruments disagree in the OPPOSITE direction from 1303-2d5g:
+            strict `tillandsias-plan validate-yaml`  -> rc=0, ok:yaml-loads
+            `--parse-only`                           -> rc=1, [PARSE FAIL], two steps not extractable
+        That disagreement is CORRECT — the file is valid YAML and the runner genuinely cannot extract those steps — and it is worth stating plainly that 1303's fix did not collapse the two questions into one. It made the runner refuse the UNION of both failures, which is right: a file must both load and be extractable to return a verdict.
+
+        But the refusal text is:
+            command: not extractable (single-line double-quoted scalar required; folded '>'/'>-' unsupported)
+        and THE FILE CONTAINS NO FOLDED SCALARS. Its commands at lines 23 and 27 are SINGLE-QUOTED:
+            command: 'STATUS_BIN="${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}"; ...'
+        The requirement clause is accurate (a double-quoted scalar is required); the example clause names a cause that is not present. An author whose commands are single-quoted reads that line, searches their file for `>`, finds none, and is left with a refusal that has told them the rule and pointed at the wrong violation of it. Cheap fix, same family as the rest of this row: name the shape actually found.
+
+        === 4. THE SECOND SILENT-FAILURE STEP IN AUTHORING (pirria) ===
+
+        Binding is not the only place authoring fails silently. When pirria finally bound their file it still returned no verdict — it did not parse: they had written a `steps:` key with `assert_exit` / `assert_output_matches` / `assert_output_contains` fields, a vocabulary the runner does not implement. Their own observation is the useful one: that vocabulary is one someone might plausibly expect to exist. So an author can clear the binding hurdle and still be invisible, and the two hurdles are not adjacent in the authoring path.
+
+        === 5. THE RECONCILIATION FIXTURE, relayed and NOT verified here ===
+
+        macneo measured the cause of the red-and-silent guard: litmus-bindings-reconciliation-shape carries a 30s budget; its case 1 runs check-litmus-bindings.sh, which SKIPS its advisory corpus sweep when neither the registry nor any litmus file changed against origin/linux-next (3.2s) and RUNS it when one did (36.6s). The budget sits between the two, so the fixture is killed on exactly the changes it exists to check, with 5/5 assertions passing and only the clock failing; a budget kill counts as FAIL (820-c8q8). THE RULE WORTH KEEPING: a budget that sits between two code paths asserts WHICH PATH RAN.
+
+        Those two numbers are macneo's and are NOT re-measured here — my own timing run did not complete and I am not carrying an estimate as a measurement.
+
+        ONE HYPOTHESIS OF MINE, REFUTED, recorded so nobody re-runs it. Seeing case 1's command shaped `... | tail -1 | grep -qx '...' && echo 'ok: fixture 5/5'`, I suspected the `grep -q` SIGPIPE inversion under pipefail (the 1306-ifhv / 1307-ermc mechanism) — a plausible route to "rc=1 with EMPTY output". Measured on this host, BOTH arms pass:
+            without pipefail : ok: fixture 5/5, rc=0
+            with    pipefail : ok: fixture 5/5, rc=0
+        and the fixture alone gives rc=0 with its last line byte-exact (`od -c` confirmed, no CR). So the command shape is not the fault here and macneo's budget cause stands unchallenged. The pipefail arm still deserves its own row on other hosts, but it is not this one.

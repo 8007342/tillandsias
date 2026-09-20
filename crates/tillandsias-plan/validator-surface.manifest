@@ -1,0 +1,26 @@
+# Validator surface manifest — ORDER 1287-h6qn.
+#
+# THE ONE DEFINITION of what "the plan binary's validator surface" means.
+# build.rs hashes this list to embed a build-time hash; the same list is
+# hashed at runtime to answer whether the binary was built FROM THESE BYTES.
+# Two lists would drift, and a drifted comparison reports skew forever or
+# never — which is the failure this row exists to end.
+#
+# 'file' paths are repo-relative. 'lock-dep' names a crate whose [[package]]
+# stanza in Cargo.lock is part of the surface: a serde_yaml bump changes what
+# validate-yaml accepts without changing a line of our own source.
+#
+# Generated 2026-09-20 from the grep the shell checker used before this row
+# replaced it (validate-yaml|strict-fragments|declared-closures-check|
+# closure-evidence-check), so the surface is unchanged by the migration.
+
+file crates/tillandsias-plan/src/main.rs
+file crates/tillandsias-plan/Cargo.toml
+
+lock-dep serde
+lock-dep serde_yaml
+lock-dep serde_json
+lock-dep tillandsias-podman
+lock-dep mlua
+lock-dep tokio
+lock-dep chrono

@@ -1,0 +1,98 @@
+packets:
+  - packet_id: an-idempotent-join-the-fleet-skill-gives-a-worker-on-bare-metal-or-in-a-forge-the-requirements-scheduled-work-attestation-rules-and-session-joining-steps-so-no-host-is-bootstrapped-by-message
+    order: 1311-ajpm
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [skills, fleet, onboarding, methodology, bootstrap, agent-safety]
+    estimated_hours: 8
+    owned_files:
+      - skills/join-the-fleet/SKILL.md
+      - .claude/skills/join-the-fleet
+      - scripts/check-fleet-membership.sh
+      - scripts/test-join-the-fleet-idempotent.sh
+      - methodology.yaml
+    verifiable_closure: |
+      scripts/test-join-the-fleet-idempotent.sh prints
+      `ok:join-the-fleet-idempotent:3/3` and exits 0, where: (1) running
+      scripts/check-fleet-membership.sh twice on one host prints the same
+      verdict line `ok:join-the-fleet:<host>:<regime>:ran=<n> skipped=<m>`
+      both times and `git status --porcelain` is empty after the second run;
+      (2) under the forge regime (TILLANDSIAS_HOST_KIND=forge) every podman-,
+      vault- and hook-dependent step is a NAMED skip line
+      (`skip:join-the-fleet:<step>:<reason>`), the verdict's skipped= count
+      equals the number of skip lines, and nothing is executed that needs
+      the host; (3) on a scaffold missing an installed pre-push hook the
+      checker prints `todo:join-the-fleet:hooks:scripts/install-hooks.sh`
+      and exits 1 — a checker verdict names what is left, it never installs.
+      PRE-FIX RESULT: FAILS on every arm — neither the skill, the checker
+      nor the fixture exists; a new host is bootstrapped today by the
+      coordinator's messages and the meta-orchestration skill's Host
+      Classification, and nothing is idempotent or checkable. The skill's
+      own live proof: one run on a bare-metal host (this checkout) and one
+      inside a forge, both verdict lines quoted on the row with the regime.
+    next_action: |
+      OPERATOR DIRECTION (2026-09-20, after lenovinha's mirror progress):
+      "we'll need a ./skills/join-the-fleet skill, where you can define the
+      requirements, scheduled work, attestation rules, etc. An idempotent
+      skill to initialize other workers awareness of the bare-metal or
+      in-forge requirements to join the fleet and join the work session."
+      Bare-metal agents "might need some bootstrap instructions".
+
+      DESIGN (coordinator, assumption stated to the operator): ONE skill,
+      TWO regimes (bare metal by OS and tier; in-forge), six steps, every
+      command ensure-shaped so a second run is a no-op:
+        0. classify the host (meta-orchestration Host Classification) and
+           name the session: <host>-<os> on bare metal,
+           <host>-<project>-forge inside a forge; find the tier
+           (methodology multi_host_development / fleet tiers).
+        1. requirements per regime. Bare metal: the tillandsias-builder
+           toolbox, scripts/install-hooks.sh, a resolvable plan binary via
+           scripts/cycle-preflight.sh, scripts/check-credential-channel.sh
+           (982-sguu; blocked:* = stop and report; the delegated mirror mode
+           once 1310-5e6g lands), scripts/check-daily-maintenance.sh.
+           Forge: experts up, CARGO_TARGET_DIR exported, podman/vault absent
+           by design (named skips), and the 1310-rec6 rule: a broken mirror
+           is a hard stop ("upgrade tillandsias, rebuild the forge"), never
+           a warning retried against.
+        2. substrate (lenovinha's recipe; their proposed
+           initialize-bare-metal-host is THIS step, not a second skill):
+           `tillandsias --ensure-enclave` (vault, proxy) then
+           `TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia tillandsias --bash <project>`
+           (mirror, router, inference); ends by printing
+           `tillandsias --github-status`; never seeds, prompts for or copies
+           a token (the per-host token copy is the operator's per-host call).
+        3. scheduled work: cadence by tier (methodology loop_cadence; the
+           coordinator hourly + 4h meta on the operator host, fat hosts 2h
+           staggered, floor hosts 4h); what a cycle is (/meta-orchestration,
+           the e2e rate limit of one full cycle per 4h per host); claims by
+           order through the plan lane (a hand-off is a claim flip on
+           trunk); platform-branch and relay rules
+           (methodology/multi-host-development.yaml); salvage before refuse
+           (872-c9nd).
+        4. attestation: MO-FULL through scripts/mo-full-attest.sh self and
+           record (never typed); stage before the gate (the stamp digest
+           reads index modes, 1276-mugq); the tokens: line and the verbatim
+           cycle-metrics paste in every handoff; the loop_status handoff
+           format; the capability row into the base for a first-ever host
+           (846-idhn).
+        5. join the session: report to the coordinator with the credential
+           verdict and the verdict line of step 6; read through the experts
+           first (plan_next, plan_status, methodology_ask), files as the
+           named fallback.
+        6. scripts/check-fleet-membership.sh: NON-MUTATING; walks the steps
+           for the detected regime; prints ok/skip/todo lines and ONE verdict
+           `ok:join-the-fleet:<host>:<regime>:ran=<n> skipped=<m>` (exit 0)
+           or `todo:...` lines with exit 1. The skill runs the ensure
+           commands; the checker only says what is left.
+      methodology.yaml development_environment_lifecycle names the skill as
+      the entry point for a new or restarted host.
+
+      OWNERSHIP: the coordinator (macuahuitl) drafts SKILL.md and the
+      checker; lenovinha supplies step 2 verbatim from the proven recipe and
+      reviews the bare-metal regime; the forge regime is proven by one run
+      inside a forge on any Linux host. Land through the full gate (a script
+      and a fixture), never the plan lane alone.
