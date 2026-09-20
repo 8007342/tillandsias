@@ -6085,7 +6085,10 @@ mod tests {
             "the host-signer role and its policy share a name so the one-role-one-policy \
              pairing is visible in a Vault listing, as the lane side already does"
         );
-        assert_eq!(mirror_host_signer_role_name(mid), format!("ssh-host-signer-{mid}"));
+        assert_eq!(
+            mirror_host_signer_role_name(mid),
+            format!("ssh-host-signer-{mid}")
+        );
         // PER-MIRROR, not global. This is the whole point: a shared role
         // carrying per-mirror policies would grant project A's mirror the
         // authority to sign project B's host certificates (D12, withdrawn

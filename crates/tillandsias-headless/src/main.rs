@@ -26636,7 +26636,9 @@ esac
         // and the SIDECAR was given it while the mirror was not. Measured on
         // lenovinha 2026-09-20 with the flag wired and the id not.
         assert!(
-            args_with.iter().any(|a| a == "TILLANDSIAS_MIRROR_ID=mid123"),
+            args_with
+                .iter()
+                .any(|a| a == "TILLANDSIAS_MIRROR_ID=mid123"),
             "the mirror must receive its own id alongside the flag, or the entrypoint clears \
              its gate and stops at require_mid instead (1288-5qpn); got:\n{args_with:?}"
         );
@@ -26649,7 +26651,9 @@ esac
             build_git_run_args("proj", Some("mid123"), certs, "img", None, None, None)
         };
         assert!(
-            !args_without.iter().any(|a| a.contains("TILLANDSIAS_MIRROR_SSHD")),
+            !args_without
+                .iter()
+                .any(|a| a.contains("TILLANDSIAS_MIRROR_SSHD")),
             "with the lane OFF the mirror must not receive the flag — the T11 default flip is \
              what turns this on, not the launcher; got:\n{args_without:?}"
         );
@@ -26661,7 +26665,9 @@ esac
     #[test]
     fn ssh_lane_flag_has_a_single_source_of_truth() {
         let src = include_str!("main.rs");
-        let direct_reads = src.matches("std::env::var(\"TILLANDSIAS_MIRROR_SSHD\")").count();
+        let direct_reads = src
+            .matches("std::env::var(\"TILLANDSIAS_MIRROR_SSHD\")")
+            .count();
         assert_eq!(
             direct_reads, 1,
             "TILLANDSIAS_MIRROR_SSHD must be read in exactly ONE place \
