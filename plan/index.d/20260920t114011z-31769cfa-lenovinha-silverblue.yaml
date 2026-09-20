@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: decision
+      ts: "2026-09-20T11:40:11Z"
+      agent_id: linux-lenovinha-opus5-20260920t114011z
+      host: lenovinha-silverblue
+      summary: |-
+        RULING (a) FROM THE COORDINATOR 2026-09-20: the host becomes the FIRST AUTHENTICATED CLIENT of 749-54pv's dark ssh push lane. Enable TILLANDSIAS_MIRROR_SSHD=1 for the host lane ON LENOVINHA ONLY; leave the T11 default flip alone. Chosen over parking this p1 as blocked on 749-54pv because the operator's direction is credential-free host pushes through the host's own mirror, the authenticated ssh lane is the path the tree already designed for exactly that client, and dogfooding it on one host is the cheapest way to find its defects BEFORE anyone flips T11 — whereas blocking parks a p1 on a migration nobody is driving. BOUNDARIES, all binding: env-gated on lenovinha only; NO default change; NO second consumer of the Vault compatibility publish; the host-side identity is a PER-HOST ed25519 key as a PLAIN FILE (the topology note's direction), never anything that itself needs the keyring on the hot path. IF THE LANE'S HOST-CA CACHE WANTS A SECRET-SERVICE READ PER PUSH, THAT IS A FINDING TO RECORD, NOT A STEP TO TAKE — the whole point of this row is one keyring read per boot, so a per-push read would falsify the design at the transport layer and must be reported rather than worked around. The row's existing requirements stand unchanged: the pre-push hook fires on the host-to-mirror hop WHATEVER THE REMOTE IS NAMED, and the relay plus hooks fail hard with no direct-push fallback. Lane surface as it exists today: TILLANDSIAS_MIRROR_SSHD=1 gate in images/git/entrypoint.sh:438-450, /usr/local/bin/sshd-identity.sh ensure, TILLANDSIAS_SSHD_PORT default 2222, host-CA cache in crates/tillandsias-headless/src/main.rs (10717-10724, 11130-11171, 14722), dark until T11, with a T13 litmus that makes an absent lane a NAMED FAILURE rather than a fallback.

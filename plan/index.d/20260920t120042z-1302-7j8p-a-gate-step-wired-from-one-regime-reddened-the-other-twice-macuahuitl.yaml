@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    order: 1302-7j8p
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, scripts, macos, windows, regime, instrument-defect, process]
+    estimated_hours: 3
+    owned_files:
+      - scripts/gate-steps.d/414-1269-gfdi.step
+      - scripts/gate-steps.d/416-1273-4mak.step
+      - methodology/convergence.yaml
+    verifiable_closure: |
+      scripts/check-gate-step-regimes.sh prints
+      `violation:gate-step-single-regime:<step>` for every step under
+      scripts/gate-steps.d/ that carries no recorded second-regime run (a host
+      name and a date on a BSD or MSYS regime, in whatever form the implementer
+      chooses as long as the checker reads it and a later reader can find it),
+      prints `ok:gate-step-regimes:<n>` when every step carries one, exits
+      non-zero on any violation, and is wired into ./build.sh --check so a step
+      cannot enter the gate without the record; a fixture
+      scripts/test-gate-step-regimes.sh prints `ok:gate-step-regimes-fixture:3/3`
+      where arm 1 a step with no record is named, arm 2 a step with a record
+      passes, arm 3 a record naming only Linux hosts is named as single-regime.
+      PRE-FIX RESULT: FAILS — on 2026-09-20 steps 414 (1269-gfdi) and 416
+      (1273-4mak) both entered --check with a Linux-only measurement and
+      reddened both macOS gates within hours (414: the subject skips its
+      toolbox arms on a Mac and ARM 0 demanded a line that cannot print there,
+      1300-q7eq; 416: the stub cosign digests with sha256sum under a PATH
+      pinned to /usr/bin:/bin, unreachable on macbookair, so ARM 2 refuses a
+      genuine artifact and ARM 3 passes vacuously); no checker names either,
+      and the pre-fix output for both is empty.
+    title: |
+      a gate step wired from one regime reddened the other regime twice in one day, so a step needs a recorded second-regime run before it enters --check
+    context: |
+      The measurement that matters for a gate step is not the author's host:
+      a step runs on every host that runs --check, and the fleet has four
+      regimes (bare-metal Linux with a toolbox, Linux containers and forges
+      without one, BSD userland on the two Macs, MSYS on the two Windows
+      hosts). Twice on 2026-09-20 a step measured green on Linux was wired and
+      blocked both Macs from landing code within hours; both fixes were found
+      by the Mac that could not gate, both were one line, and both cost a
+      relay gate and a review round. The doctrine line already exists
+      (methodology/convergence.yaml: a measured green is a property of the
+      measuring regime; prefer a named skip) and did not prevent either,
+      because nothing checks it at wiring time. The record is cheap: the
+      author asks a Mac and a Windows host to run the fixture once and pastes
+      the host and date; the checker only insists that the record exists and
+      names a non-Linux regime. Related: 1300-q7eq (414's red and its four
+      slices), macbookair's 416 measurement (2026-09-20, ARM 2 red on a
+      genuine artifact, ARM 3 vacuous), 1268-m2ir's gate-step decision (a
+      fixture calling timeout, absent on macOS, kept out of --check for this
+      reason).
+    next_action: >
+      Decide the record's form with one line of reasoning (a header comment in
+      the .step file is the cheapest; a sidecar is the most greppable), write
+      the checker and its three-arm fixture, backfill the existing steps by
+      asking one macOS and one Windows host for a run each and recording them
+      (a step that genuinely cannot run off Linux records a named skip on that
+      regime, which counts), wire the checker into --check, and add the one
+      sentence to methodology/convergence.yaml: a step enters the gate with a
+      second-regime record or not at all.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from macneo's
+      414 report (1300-q7eq) and macbookair's 416 report; nothing run here
+      beyond the Linux gate logs that show both steps green on this regime.

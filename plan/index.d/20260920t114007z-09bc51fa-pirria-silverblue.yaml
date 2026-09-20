@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T11:40:07Z"
+      agent_id: linux-pirria-claude-20260920t114006z
+      host: pirria-silverblue
+      summary: |
+        THIS ROW'S LINUX PRE-FIX RESULT IS STALE IN TWO OF THREE PARTS — measured on
+        pirria 2026-09-20, before implementing, so the immutable closure is not used as
+        a premise it cannot support.
+
+        The closure states: "PRE-FIX RESULT: FAILS on all three — Linux install.sh
+        installs the launcher and stops (init is a separate manual step; a broken podman
+        state survives)".
+
+          CLAIM: "init is a separate manual step"          -> FALSE
+            scripts/install.sh:294-295 already runs `"$INSTALL_PATH" --init --debug`.
+            Landed 2026-06-27 in 63fe7b494 ("run --init with --debug so curl-install
+            users see build progress"), and it IS in the PUBLISHED v56.9.19.2 artifact
+            (curled and grepped: 2 `--init` references). Slice (2) of the next_action —
+            "run the platform initialisation at the end of the install" — is therefore
+            already satisfied on Linux.
+
+          CLAIM: "...and exit with its status"             -> ALREADY TRUE
+            scripts/install.sh:5 is `set -euo pipefail`, so a failing `--init` aborts
+            the script at line 295 with its status, before "Init complete" prints.
+
+          CLAIM: "a broken podman state survives"          -> TRUE, and it is the work
+            There is no reset anywhere in the installer.
+
+        **SO THE TRUE LINUX PRE-FIX STATE IS: "no reset in the installer."** Nothing
+        else. An implementer who takes the closure at face value will look for a missing
+        `--init`, find it present, and be unable to tell whether they are reading a
+        fixed tree or a wrong premise — which is the failure this event exists to
+        prevent. The closure is immutable and correctly stays as written; this event is
+        the pointer.
+
+        THE macOS AND WINDOWS CLAIMS ARE NOT CORRECTED HERE and should not be inherited
+        from this event. The row's provenance says its pre-fix results were "read and
+        measured" from today's smokes; mine turned out to be read rather than run for
+        the two parts above. The Windows arm (yolanda, eb89451b4) should check
+        `install-windows.ps1`'s stated pre-fix — "defers provisioning to the next launch
+        and never unregisters an existing distro" — against a run rather than a read,
+        for the same reason.
+
+        DESIGN DECISION RECORDED (coordinator, 2026-09-20), since it changes what the
+        Linux slice builds: the reset goes in the BINARY behind one flag, not inlined
+        into install.sh. `install.sh` is a standalone published artifact that fetches
+        the binary and nothing else (0 references to any second script), so it cannot
+        call `scripts/clear-vault-host-credentials.sh`. Inlining would fork the
+        credential-clearing rule into a second implementation on the same day it was
+        fixed under 1284-jf86 — the shape 1253-nmmy documents four times over. The flag
+        is a SUPERSET of `--reset-guest` (main.rs:9255-9349), which measurably preserves
+        images and never touches the keychain, `fallback_*` or `vault-data`, and whose
+        documented "keeps the model cache" contract stays untouched for anyone relying
+        on it.
+
+        Flag name and the single skip env var are being agreed with yolanda before
+        either arm lands, per the coordinator's requirement that the name and semantics
+        be identical on all three platforms.
