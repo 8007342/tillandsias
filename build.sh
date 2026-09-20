@@ -291,6 +291,37 @@ _phase_close() {
     _PHASE_NAME=""
 }
 
+# ORDER 1305-udgs. THE ONE DEFINITION of the fast-refusal set: every guard that
+# is tree-only, sub-second, and CAN FAIL. `./build.sh --preflight` runs exactly
+# this list and nothing else, so a host can spend seconds locally instead of
+# discovering the same refusal twenty minutes into a gate — or, on a floor host,
+# thirty-three.
+#
+# MEASURED: four consecutive refusals on one row's ref in one evening on pirria
+# (656-spux cross-target, 714-4r6w bounded podman, 851-cduu instrument freshness,
+# 721-nyev probe usage), every one decidable in about a second, every one paid
+# for with a full gate.
+#
+# FORMAT: <script>|<the message _error prints on failure>. No '|' in a message.
+# ADD NEW SUB-SECOND GUARDS HERE — adding one to the tier alone would hide it
+# from the front door, which is the drift this list exists to prevent.
+_fast_refusal_checks() {
+    cat <<'FASTREFUSALS'
+check-fragment-ts-skew.sh|a ledger fragment carries a ts AHEAD of this host's clock — a future timestamp is not a backfill, it is an invented time (1313-w78k); see the verdict line above
+check-scorable-obligation-added.sh|this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)
+check-unique-bin-names.sh|two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)
+check-tray-process-running-naming.sh|the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above
+check-issue-citation-convention.sh|a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above
+check-script-exec-bits.sh|a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above
+check-order-citations-resolve.sh|an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above
+check-litmus-pin-claims.sh|a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above
+check-secure-wire-single-reader.sh|a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above
+check-cheatsheet-source-anchors.sh|a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above
+check-no-spawn-in-if-not.sh|a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)
+check-enclave-membership-documented.sh|an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above
+FASTREFUSALS
+}
+
 _step()  {
     _phase_close
     _PHASE_NAME="$*"
@@ -367,6 +398,9 @@ _phase_emit_timing() {
 FLAG_RELEASE=false
 FLAG_TEST=false
 FLAG_CHECK=false
+# ORDER 1305-udgs — the fast-refusal front door: runs the tree-only guards and
+# exits, and NEVER compiles.
+FLAG_PREFLIGHT=false
 FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
@@ -388,6 +422,7 @@ while [[ $# -gt 0 ]]; do
         --release)        FLAG_RELEASE=true ;;
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
+        --preflight)      FLAG_PREFLIGHT=true ;;
         --clean)          FLAG_CLEAN=true ;;
         --install)        FLAG_INSTALL=true ;;
         --remove)         FLAG_REMOVE=true ;;
@@ -511,6 +546,72 @@ EOF
     esac
     shift
 done
+
+# ORDER 1305-udgs — `./build.sh --preflight`: the whole fast-refusal set, in
+# seconds, before a SHA.
+#
+# WHY IT EXISTS. Four consecutive refusals on one row's ref in one evening on
+# pirria — 656-spux, 714-4r6w, 851-cduu, 721-nyev — each decidable in about a
+# second, each paid for with a full gate (33 minutes on a floor host). The
+# deciders were always runnable; what did not exist was one command that ran them
+# all, so a host assembled the list from each refusal as it arrived.
+#
+# IT NEVER BUILDS. That is the whole contract. A front door that compiled would
+# not be run before every push, and one that is not run before every push is a
+# list of commands nobody types.
+#
+# A DECIDER THAT NEEDS A BINARY JOINS ONLY BEHIND RESOLVE-OR-NAMED-SKIP, and the
+# verdict carries counts, so a fresh checkout reads a green that NAMES what did
+# not run rather than a refusal about itself or a green that means nothing.
+if [[ "$FLAG_PREFLIGHT" == true ]]; then
+    _pf_ran=0; _pf_skipped=0; _pf_failed=0
+    while IFS='|' read -r _pf_script _pf_msg; do
+        [ -n "$_pf_script" ] || continue
+        if [ ! -f "$SCRIPT_DIR/scripts/$_pf_script" ]; then
+            echo "skip:preflight:${_pf_script%.sh}:absent"
+            _pf_skipped=$((_pf_skipped + 1))
+            continue
+        fi
+        if _pf_out="$(bash "$SCRIPT_DIR/scripts/$_pf_script" 2>&1)"; then
+            _pf_ran=$((_pf_ran + 1))
+            printf '%s\n' "$_pf_out" | grep -E '^note:' || true
+        else
+            _pf_failed=$((_pf_failed + 1))
+            printf '%s\n' "$_pf_out" >&2
+            echo "refused:preflight:${_pf_script%.sh} — $_pf_msg" >&2
+        fi
+    done <<PFEOF
+$(_fast_refusal_checks)
+PFEOF
+
+    # The no-Python guard (1087-h2z9, gate step 155) COMPILES before it resolves
+    # (scripts/check-no-python-scripts.sh:7), so it cannot be a list member. Run
+    # it only when its binary already exists, and NAME the skip otherwise.
+    _pf_policy=""
+    if [ -f "$SCRIPT_DIR/scripts/plan-binary-probe.sh" ]; then
+        _pf_policy="$( . "$SCRIPT_DIR/scripts/plan-binary-probe.sh" 2>/dev/null
+                       resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR" 2>/dev/null || true )"
+    fi
+    if [ -n "$_pf_policy" ] && [ -f "$SCRIPT_DIR/scripts/check-no-python-scripts.sh" ]; then
+        if _pf_out="$(bash "$SCRIPT_DIR/scripts/check-no-python-scripts.sh" 2>&1)"; then
+            _pf_ran=$((_pf_ran + 1))
+        else
+            _pf_failed=$((_pf_failed + 1))
+            printf '%s\n' "$_pf_out" >&2
+            echo "refused:preflight:no-python — a Python runtime reference entered the harness (1087-h2z9)" >&2
+        fi
+    else
+        echo "skip:preflight:no-python:no-runnable-policy-binary"
+        _pf_skipped=$((_pf_skipped + 1))
+    fi
+
+    if [ "$_pf_failed" -gt 0 ]; then
+        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed" >&2
+        exit 1
+    fi
+    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped"
+    exit 0
+fi
 
 if [[ -n "$CI_SPEC_LIST" ]]; then
     if [[ -z "$CI_FILTER_SPEC_LIST" ]]; then
@@ -1931,35 +2032,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 1313-w78k — the same check the plan-only lane runs, here so a GATED
     # land cannot carry what the cheap lane refuses. Tree-only, sub-second,
     # diff-scoped against the base ref.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-ts-skew.sh" 2>&1; then
-        _error "a ledger fragment carries a ts AHEAD of this host's clock — a future timestamp is not a backfill, it is an invented time (1313-w78k); see the verdict line above"
-        exit 1
-    fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
-        _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
-        exit 1
-    fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-unique-bin-names.sh" 2>&1; then
-        _error "two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)"
-        exit 1
-    fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-tray-process-running-naming.sh" 2>&1; then
-        _error "the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above"
-        exit 1
-    fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
-        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
-        exit 1
-    fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
-        _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
-        exit 1
-    fi
 
     # ORDER 1234-zade. `@trace order:<id>` had no resolver: validate-traces.sh
     # detects ghost traces for `spec:` and never looks at `order:`, though the
@@ -1972,10 +2049,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
     # tree. It refuses with `blocked:` if the ledger read yields nothing, which
     # is the difference between a clean tree and a broken instrument.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
-        _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
-        exit 1
-    fi
 
     # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
     # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
@@ -1992,29 +2065,38 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # missing must not be hoisted above the build. Speed is not the only axis —
     # a faster check that cannot fail is worse than a slow one that can.
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
-        _error "a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above"
-        exit 1
-    fi
 
 
     # 972-umik: tree-only, sub-second, and it ratchets the number of files
     # deciding whether the control wire is encrypted. Belongs in the fast phase
     # by both of lenovinha's criteria — it reads the tree and it can FAIL.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-secure-wire-single-reader.sh" 2>&1; then
-        _error "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above"
-        exit 1
-    fi
     # 1053-a7qr: a cheatsheet `sources:` anchor must name the file that
     # DECLARES the order. Tree-only, sub-second, and it can fail — the fast
     # phase by lenovinha's two criteria. Nothing read these anchors before:
     # a fixture naming a nonexistent file AND a nonexistent order passed both
     # the ghost-trace gate and trace-coverage.sh, because those scan `@trace`
     # ANNOTATIONS and frontmatter is a different field.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-cheatsheet-source-anchors.sh" 2>&1; then
-        _error "a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above"
-        exit 1
-    fi
+
+    # ORDER 1305-udgs — ONE LIST, TWO CONSUMERS. The uniform guards below are
+    # driven from `_fast_refusal_checks`, which `./build.sh --preflight` also
+    # reads. Two lists would drift, and the one that drifts is always the one a
+    # host runs before pushing: a front door that ran a SUBSET of the gate's
+    # refusals would be worse than none, because it would teach people the tree
+    # was clean when it was not.
+    #
+    # NON-UNIFORM GUARDS STAY INLINE, above: the memory floor and the
+    # competing-gate check have three-way verdicts of their own (a probe that
+    # cannot evaluate must warn, not refuse — 1176-fn2p), and flattening them
+    # into a two-state list is how a third state gets lost.
+    while IFS='|' read -r _fr_script _fr_msg; do
+        [ -n "$_fr_script" ] || continue
+        if ! _run bash "$SCRIPT_DIR/scripts/$_fr_script" 2>&1; then
+            _error "$_fr_msg"
+            exit 1
+        fi
+    done <<EOF
+$(_fast_refusal_checks)
+EOF
 
     _info "Fast refusals passed"
 
@@ -3389,12 +3471,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the shape outright across scripts/ and build.sh. The gate shipped in
     # 3b71b105a but was invoked by nothing here; wiring it activates it as a
     # real --check gate (same activation shape as 599-4wzr below).
-    _step "Checking for if-not pipeline verdict guards (795-imz3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-no-spawn-in-if-not.sh" 2>&1; then
-        _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
-        exit 1
-    fi
-    _info "If-not pipeline guard check passed"
+    # ORDER 1305-udgs — HOISTED into the fast-refusal list. It ran here, after
+    # the compile phase, so a guard decidable in about a second cost a full gate
+    # to report. It is now in `_fast_refusal_checks` and therefore also in
+    # `./build.sh --preflight`.
 
     # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
@@ -4327,12 +4407,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Claim-protocol agreement check passed"
 
-    _step "Checking the enclave membership list matches the code (245 P8)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
-        _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
-        exit 1
-    fi
-    _info "Enclave membership documentation check passed"
+    # ORDER 1305-udgs — HOISTED into the fast-refusal list. It ran here, after
+    # the compile phase, so a guard decidable in about a second cost a full gate
+    # to report. It is now in `_fast_refusal_checks` and therefore also in
+    # `./build.sh --preflight`.
 
     _step "Checking the proxy's permissive port agrees with its consumers (245 P6)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-proxy-permissive-port-routing.sh" 2>&1; then
