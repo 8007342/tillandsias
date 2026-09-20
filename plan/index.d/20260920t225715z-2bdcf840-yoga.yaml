@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    event:
+      type: claim
+      ts: "2026-09-20T22:57:15Z"
+      agent_id: linux-yoga-opus5-20260920t225715z
+      host: yoga
+      summary: |
+        CLAIMED by yoga, as the QUEUE ONLY. Scope ruled with macuahuitl 2026-09-20:
+        1316-bnzt is PR-as-entry, serialization, eviction-and-continue, landing by
+        ancestry, EVERY CANDIDATE AT FULL. No tier logic ships in this row.
+
+        WHY THE TIERS ARE NOT HERE. 765-xpct "change-class-gate-selector" is READY and
+        unclaimed (plan/index.yaml:22849), same release_target, and is already the tier
+        selector: scripts/change-class.sh plus a selector matrix in build.sh. Its exit
+        criteria already state, in these words, most of what was drafted as new design
+        for 1316 — unknown path -> FULL, unfetchable base ref -> FULL, build-tooling
+        class -> FULL, every skip printing the gate and the intersecting-class evidence
+        and the diff base SHA and the last FULL run timestamp, the selector writing only
+        scoped stamps. Building a second classifier in 1316 would have produced two
+        taxonomies that disagree about one path, which is worse than either alone.
+
+        PLUS ONE RULE NEITHER DESIGN HAD: 765-xpct's "last full run older than 24h ->
+        refuse to skip". Without a freshness bound a branch rides LIGHT and SCOPED
+        landings indefinitely and is never fully gated.
+
+        AND THE PART THAT IS NOT AN ENGINEERING DECISION. 765-xpct's fifth criterion
+        requires the operator's RECORDED approval before activation, as the symmetric
+        twin of bar_raise_governance (methodology/convergence.yaml:425) — scope
+        reduction is a bar decision the loop must not self-enact. 1316's LIGHT and
+        SCOPED tiers ARE that reduction. A coordinator session is not the operator, and
+        a peer's agreement that a design is sound is not the approval the criterion
+        names. The criterion travels with the WORK, not the row number, so folding
+        765-xpct into 1316 would not have dissolved it. Hence the split: the queue at
+        FULL needs nobody's approval and is a strict improvement over every host racing
+        trunk; the tiers wait for a recorded decision measured against real numbers.
+
+        DECISION CLOSED IN-TREE, no work needed: the gate stamp already carries the
+        class list. gate-stamp.sh:56 documents `scope full` versus
+        `scope plan-ledger,docs`; write refuses an empty scope and an unknown class;
+        the scope subcommand re-validates on read; a v1 stamp is stale:legacy-stamp-
+        format rather than inferred; memo-check already answers
+        stale:scoped-stamp-cannot-memoize-full-gate.
+
+        THE CORRECTNESS RULE THIS ROW STILL OWNS, restated without tiers: THE TREE THAT
+        SHIPS MUST BE THE TREE THAT GATED. A queue exists because the target moves, so
+        between "green on merge(target@T1, head)" and "push merge(target@T2, head)" the
+        target can move again and the gate's verdict then describes a tree nobody is
+        pushing. The landing re-reads the target immediately before the push and refuses
+        a fast-forward whose base is not the SHA it gated; the candidate is RE-QUEUED,
+        not landed. At FULL this is the only correctness rule in the row not already
+        covered by the existing hook, and it is INVISIBLE to any fixture whose scaffold
+        target never moves — so it gets its own arm that moves the target between gate
+        and push.
+
+        SECOND ADDED ARM: the queue killed mid-landing leaves no half-state. Either the
+        push happened or it did not, and the next run re-reads from `gh pr list` rather
+        than from a local queue file. A queue whose recovery depends on its own scratch
+        state can lose a landing silently.
+
+        ON THE DECIDER COUNT: macuahuitl's "19" is the relay's own preflight roster
+        (nineteen check-*.sh plus fmt, the cross-target compile and the derived-tree
+        sync); the 18 measured here is the pre-push hook's `refuse` call sites. Two
+        populations, both right about themselves. The queue ENUMERATES and prints what
+        it actually ran, so neither count has to be correct.
