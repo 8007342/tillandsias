@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: note
+      ts: "2026-09-20T18:45:03Z"
+      agent_id: linux-pirria-claude-20260920t184000z
+      host: pirria
+      summary: |
+        CORRECTION TO THIS ROW'S HEADLINE, agreed with the coordinator before any code
+        moves: "three sub-second deciders" is TWO sub-second deciders and ONE that
+        COMPILES.
+
+        scripts/check-no-python-scripts.sh line 7 is `cargo build --quiet -p
+        tillandsias-policy`, before the resolve at line 12. So it cannot enter a
+        compile-free front door as it stands. The other two are as described:
+        check-no-spawn-in-if-not at build.sh:3385 and check-enclave-membership-documented
+        at build.sh:4323.
+
+        RULING for the case that decides the design: --preflight NEVER BUILDS. A decider
+        needing a binary joins only behind resolve-or-named-skip — if the policy binary
+        resolves, run it; if not, print skip:preflight:no-python:no-runnable-policy-binary
+        and go on. The front door's verdict carries counts, ok:preflight:ran=<n>
+        skipped=<m>, so a fresh checkout reads a green that NAMES what did not run rather
+        than a refusal about itself or a green that means nothing. The checker's own
+        `cargo build` stays where it is and --preflight does its own resolve: a script
+        that behaves differently depending on which caller invoked it is a script nobody
+        can read, and the gate's behaviour does not move in this row at all.
+
+        AND A CORRECTION TO MY OWN REASONING, which was wrong about the mechanism while
+        right about the consequence. I reported that no-python "is not a gate decider at
+        all" because `grep -nE "python" build.sh` returns nothing with comments stripped.
+        It returns nothing because THE GATE'S STEPS ARE NOT IN build.sh: 88 of them live
+        one per file under scripts/gate-steps.d/, run by the loop at build.sh:3810, and
+        scripts/gate-steps.d/155-1087-h2z9.step carries
+        STEP_SCRIPT="scripts/check-no-python-scripts.sh" with STEP_ERROR="a Python
+        runtime reference entered the harness (1087-h2z9)" — the line that refused land
+        25. The step file says why the path is a literal: "a binding assembled from a
+        variable is invisible to every name-based scan" (1063-nraf).
+
+        So my conclusion came from a search over a population that could not contain the
+        answer, which is 1238-u84w's shape, and a build.sh name-grep is the walk-short
+        case for all 88 deciders. That fact has now cost two hosts a wrong premise on the
+        same day and lives in one host's private notes; the cheatsheet this row carries
+        is where it stops being private.
+
+        ALSO RECORDED so nothing is moved twice: scorable-obligation-added and
+        issue-citation-convention are ALREADY in the fast-refusals tier (1794-2011), which
+        today runs thirteen — cheatsheet-source-anchors, fragment-status-loss,
+        gate-memory-floor, issue-citation-convention, litmus-pin-claims,
+        no-competing-gate, order-citations-resolve, scorable-obligation-added,
+        script-exec-bits, secure-wire-single-reader, tracked-files-unwritten,
+        tray-process-running-naming, unique-bin-names. 1313-w78k added
+        check-fragment-ts-skew to it this evening, so fourteen.
+
+        656-spux (the Windows cross-target compile) is a NOTE on this row, not a member:
+        it cannot live in a seconds-long tier and stays the relay's job on a fat host.
+        714-4r6w (check-podman-sync-budgets) is a tree-only source scan and is a member.
