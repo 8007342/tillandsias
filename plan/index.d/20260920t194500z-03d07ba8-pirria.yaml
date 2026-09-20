@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: note
+      ts: "2026-09-20T19:45:00Z"
+      agent_id: linux-pirria-claude-20260920t190000z
+      host: pirria
+      summary: |
+        CLOSED on THREE ARMS, one per platform, each with its own evidence. The row is
+        not closed by the Linux arm; it is closed by all three, which is what it asked
+        for from the start.
+
+        LINUX (pirria) — the body at ef88b9406 and the installer-and-litmus at 5d299ef14,
+        verified ON TRUNK after land 33b rather than in the worktree that produced them:
+
+          [STEP 1/7] the flag exists under the agreed name on the Linux surface ... [OK]
+          [STEP 2/7] nothing READS a second opt-out variable ... [OK]
+          [STEP 3/7] the guard and the announcement live in core, importable by all three binaries ... [OK]
+          [STEP 4/7] the Linux body does not keep a private copy of the gate ... [OK]
+          [STEP 5/7] the skipped-case line is the byte-exact shared phrase ... [OK]
+          [STEP 6/7] the installer refuses to destroy state when its reprovision path is absent ... [OK]
+          [STEP 7/7] the installer calls the flag AFTER the binary is in place, not before ... [OK]
+          [PASS] litmus:installer-reprovisions-on-install
+
+        with `git diff --stat origin/linux-next -- crates/ scripts/ openspec/` EMPTY, so
+        every byte those seven steps read is trunk's. Steps 1-5 assert the body and 6-7
+        the installer, so what it proves is that the two refs AGREE ON TRUNK.
+
+        WINDOWS (yolanda) — the tray body and its run event, landed earlier in the day.
+
+        macOS (macneo) — 66f952eed with the ungated-module guard, 137 tests and
+        litmus:reset-state-contract's 11 arms green on macneo.
+
+        THE SHAPE THE ROW SETTLED, and it is the part worth keeping: one contract, three
+        per-platform bodies, and the gate, the announcement printer and the byte-exact
+        strings shared from tillandsias-core rather than agreed as text between hosts.
+        The original gate was a PRIVATE fn in tillandsias-headless's main.rs, a crate
+        with no [lib] target, so each tray would have had to COPY the one affordance the
+        operator's ruling says must have exactly one implementation. Landing the core
+        half FIRST is what let three platforms import instead of matching.
+
+        WHAT THE LINUX ARM COST, recorded because the arm's own history is the useful
+        part. The body was refused three times before it landed, each time by a
+        source-scan decider that costs a second locally: 656-spux (a cfg arm with no
+        fallback on x86_64-pc-windows-gnu), 714-4r6w (a direct std::process::Command for
+        podman instead of the bounded layer), and a third hole found only by re-running
+        the check after the first fix — gating the whole reset_state import to linux
+        traded two errors for a third, because destructive_reset_allowed gates
+        run_reset_guest, which builds on every platform.
+
+        AND THE ARM ITSELF HAD NEVER EXECUTED when it was first reported as verified: it
+        was written into openspec/litmus-tests/ and never bound in
+        openspec/litmus-bindings.yaml, so the suite ran ci-release to completion at 37
+        PASS / 3 FAIL with this test in NEITHER number, and once bound it did not parse.
+        Seven commands passing by hand said nothing about the arm. A test that cannot run
+        and a test that passes are identical from outside.
