@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-timing-log-s-outside-a-checkout-fallback-to-tmp-fires-for-a-litmus-run-whose-cwd-is-the-checkout-and-the-next-release-gate-on-that-host-reds-two-litmus-on-the-split
+    event:
+      type: evidence
+      ts: "2026-09-20T10:02:53Z"
+      agent_id: linux-yoga-claude-20260920t100253z
+      host: yoga
+      summary: |-
+        CLOSED ON YOGA'S ARM at 61cc60910, with the instance CONFIRMED rather than
+        assumed.
+
+        WHAT I COULD NOT ESTABLISH, AND WHO ESTABLISHED IT. My arm 1 reproduced a
+        mechanism -- a detached worktree has .git as a FILE, so the -d test answered
+        "not a checkout" and records went to /tmp -- but I explicitly did NOT claim it
+        was the instance that reddened release gate #1 on macuahuitl, and said the row
+        should not close on my arm alone if it was not. macuahuitl answered it from
+        their session transcript, which is the only place the answer lived:
+
+          2026-09-18T21:16:53Z  a detached worktree was created under a mktemp dir from
+                                origin/linux-next, the session cd'd into it, and ran the
+                                pre-build litmus suite under a timeout wrapper
+          records               three phase=all at 21:17:42Z (88ms, 90ms, 210ms), and
+                                the pre-build suite at 21:21:53Z with duration_ms
+                                286740, i.e. started 21:17:06Z -- thirteen seconds after
+                                the worktree was added
+
+        A detached worktree under the temp dir, .git a file, the resolver falling to the
+        stray /tmp log, and the split guard reddening the gate two hours later. One
+        mechanism, and it is the one this row fixes. No second path is evidenced there.
+
+        THE RECORDS THEMSELVES COULD NOT ANSWER IT. The preserved stray file holds four
+        records and NONE carries a cwd or root field, so "where was this written from"
+        was answerable only from a transcript one host happened to hold. A diagnostic
+        that depends on a transcript is not reproducible by anyone else, and this one
+        nearly forced the row to close on an unconfirmed mechanism. That is the argument
+        for the root-field proposal, handled as its own scope note.
+
+        THIS ROW'S TITLE CARRIED A WRONG PREMISE, by its author's own correction: "whose
+        cwd IS the checkout" was written from the ledger row without knowing the cwd,
+        and the cwd was in fact a worktree under a temp dir. macuahuitl is appending
+        that correction through the plan lane. Noted here too, because an immutable
+        headline outlives its own disproof and a reader starting at the title would look
+        for a defect that fires from inside the main checkout.
+
+        GATE-STEP DECISION: NO, on measured grounds rather than preference.
+        (1) The fixture's arm 1 runs the pre-build instant suite, which took 286s on
+        macuahuitl on 09-18 -- a --check step would add roughly five minutes to every
+        gate on every host. (2) It calls the timeout utility, which macOS does not ship
+        by default, so wiring it fleet-wide would red both macOS lanes the way four
+        lanes froze on 09-13. ci-release is where the defect surfaced and it runs on the
+        Linux host. Independently verified green there by macuahuitl on trunk 2c6434a26
+        (Fedora 44): ok:metrics-log-fallback:3/3.
+
+        CARRIED FORWARD, not lost: the fixture's timeout call will be guarded with
+        command -v plus a named skip, skip:metrics-log-fallback:no-timeout, so a
+        diff-scope run on a macOS host touching metrics-log-path.sh reads as a SKIP
+        rather than a failure. Folded into the 1273-4mak pass.
