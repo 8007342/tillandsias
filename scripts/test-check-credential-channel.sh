@@ -358,7 +358,18 @@ out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD
 case "$out" in
     blocked:credential-expired-mid-cycle)
         bad "claimed an expiry with no prior pass — a host that never had one has not lost one" ;;
-    blocked:*|missing:*) ok "no prior pass -> ordinary verdict, not a false expiry ($out)" ;;
+    # unknown: JOINED THIS LIST WITH 1189-2ra5. The arm asserts one thing — that
+    # a host which never had a pass is not told it LOST one — and it did that by
+    # enumerating verdict prefixes, so a new legitimate prefix reads as a
+    # surprise. unknown:secret-service-unprobed is an ordinary verdict here.
+    #
+    # IT ALSO EXPOSED A NON-HERMETICITY worth naming: this arm leaves the real
+    # busctl on PATH, so its verdict depends on whether org.freedesktop.secrets
+    # is on the session bus of whatever is running it. It read missing: on the
+    # host and unknown: inside the builder toolbox, from the same commit. The
+    # arm is correct either way, but an arm whose verdict tracks the environment
+    # is one environment change away from a mystery.
+    blocked:*|missing:*|unknown:*) ok "no prior pass -> ordinary verdict, not a false expiry ($out)" ;;
     *) bad "unexpected no-stamp verdict: $out (rc=$rc)" ;;
 esac
 
@@ -508,7 +519,17 @@ grep -qi 'gh auth refresh' "$LD/.err" \
     && bad "told the reader to refresh a token that was never presented" \
     || ok "does not prescribe a token refresh for a retrieval failure"
 
-# ── 16. DIRECTION TWO(b): the collection exists but is LOCKED. ───────────────
+# ── 16. DIRECTION TWO(b): the collection exists and is NOT PROBED. ──────────
+# ORDER 1265-8qr6. This arm used to assert blocked:credential-unretrievable-
+# keyring-locked, reached by a stubbed busctl reporting `b true`. The guard no
+# longer reads the Locked property ON ANY NAMESPACE — the real call aborts
+# gnome-keyring-daemon 50.0 in its own GetProperty handler and D-Bus
+# re-activates it LOCKED, so the probe manufactured the state it reported.
+# The stub below is retained deliberately: it proves the guard does not call
+# get-property even when a cooperative busctl would answer. If the guard ever
+# starts probing again, this arm sees the old verdict and reds.
+# The honest contract is now "retrieval failed, cause NOT determined", and the
+# verdict says so rather than naming a cause nobody checked.
 IFS='|' read -r LD LB <<<"$(layer_case locked 1 'connection refused')"
 cat >"$LB/busctl" <<'BEOF'
 #!/usr/bin/env bash
@@ -523,9 +544,12 @@ BEOF
 chmod +x "$LB/busctl"
 out="$(run_layer "$LD" "$LB" HOME="$W/nohome-locked")"; rc=$?
 case "$out" in
+    unknown:secret-service-unprobed)
+        ok "unprobed collection -> unknown:secret-service-unprobed (rc=$rc), and it FAILS CLOSED"
+        [ "$rc" -ne 0 ] || bad "unprobed verdict must be fail-closed, got rc=0" ;;
     blocked:credential-unretrievable-keyring-locked)
-        ok "locked collection -> unretrievable-keyring-locked (rc=$rc)" ;;
-    *)  bad "locked direction returned: $out (rc=$rc)" ;;
+        bad "the guard PROBED the Locked property — 1265-8qr6 removed that call and it is back" ;;
+    *)  bad "unprobed direction returned: $out (rc=$rc)" ;;
 esac
 
 # ── 17. THE THIRD STATE pirria NAMED: a PLAINTEXT token, no keyring at all. ──
