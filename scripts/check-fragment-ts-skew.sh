@@ -75,9 +75,15 @@ checked=0; refused=0; past=0
 # do NOT refuse: an unparseable ts is check-added-fragments-parse.sh's business
 # (720-24u6 already refuses a bare timestamp), and two checks refusing the same
 # byte with different words is how an operator learns to ignore both.
+# VALIDATE THE OUTPUT, NEVER THE EXIT STATUS: BSD date accepts -d and succeeds
+# with garbage, so a `&& return 0` on exit status accepts nonsense. An epoch is
+# digits; anything else is not an answer.
 _epoch() { # $1 = ISO8601 Z
-    date -u -d "$1" +%s 2>/dev/null && return 0
-    date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null && return 0
+    local out
+    out="$(date -u -d "$1" +%s 2>/dev/null)"
+    case "$out" in ''|*[!0-9]*) ;; *) printf '%s\n' "$out"; return 0 ;; esac
+    out="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null)"
+    case "$out" in ''|*[!0-9]*) ;; *) printf '%s\n' "$out"; return 0 ;; esac
     return 1
 }
 
@@ -89,10 +95,17 @@ while IFS= read -r f; do
         checked=$((checked + 1))
         delta=$((e - now))
         if [ "$delta" -gt "$LIMIT" ]; then
+            # The clock printed below is THIS HOST'S OWN, so it is `date -u`
+            # with no -d: `date -u -d "@$now"` is a GNU-ism, and BSD date
+            # SUCCEEDS WITH GARBAGE, so the `||` fallback beside it could never
+            # fire (relay fix 4897877b7, refused by check-bash-dialect.sh). A
+            # fallback guarded by exit status cannot catch a command that
+            # succeeds wrongly — the same shape as reading a bare `exit 0` as a
+            # freshness verdict.
             refused=$((refused + 1))
             {
                 echo "violation:fragment-ts-future:$f"
-                echo "  ts $stamp is ${delta}s AHEAD of this host's clock ($(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)); limit ${LIMIT}s."
+                echo "  ts $stamp is ${delta}s AHEAD of this host's clock ($(date -u +%Y-%m-%dT%H:%M:%SZ)); limit ${LIMIT}s."
                 echo "  A future timestamp is not a backfill — no clock-correct writer produces one."
                 echo "  REMEDY: read the clock instead of composing a time:"
                 echo "    date -u +%Y-%m-%dT%H:%M:%SZ"

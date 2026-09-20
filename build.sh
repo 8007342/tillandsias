@@ -291,35 +291,84 @@ _phase_close() {
     _PHASE_NAME=""
 }
 
-# ORDER 1305-udgs. THE ONE DEFINITION of the fast-refusal set: every guard that
-# is tree-only, sub-second, and CAN FAIL. `./build.sh --preflight` runs exactly
-# this list and nothing else, so a host can spend seconds locally instead of
-# discovering the same refusal twenty minutes into a gate — or, on a floor host,
-# thirty-three.
+# ORDER 1305-udgs. Run one guard under a deadline and leave NOTHING behind.
 #
-# MEASURED: four consecutive refusals on one row's ref in one evening on pirria
-# (656-spux cross-target, 714-4r6w bounded podman, 851-cduu instrument freshness,
-# 721-nyev probe usage), every one decidable in about a second, every one paid
-# for with a full gate.
+# `timeout N cmd` kills cmd; it does not reliably reach cmd's CHILDREN, and
+# `setsid timeout ...` does not fix it either — measured here 2026-09-20: a door
+# run left NINE survivors including the `timeout` processes themselves, and
+# setsid's exit propagation also broke the 124 detection, so two timed-out guards
+# were reported as REFUSALS rather than skips.
 #
-# FORMAT: <script>|<the message _error prints on failure>. No '|' in a message.
-# ADD NEW SUB-SECOND GUARDS HERE — adding one to the tier alone would hide it
-# from the front door, which is the drift this list exists to prevent.
-_fast_refusal_checks() {
-    cat <<'FASTREFUSALS'
-check-fragment-ts-skew.sh|a ledger fragment carries a ts AHEAD of this host's clock — a future timestamp is not a backfill, it is an invented time (1313-w78k); see the verdict line above
-check-scorable-obligation-added.sh|this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)
-check-unique-bin-names.sh|two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)
-check-tray-process-running-naming.sh|the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above
-check-issue-citation-convention.sh|a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above
-check-script-exec-bits.sh|a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above
-check-order-citations-resolve.sh|an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above
-check-litmus-pin-claims.sh|a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above
-check-secure-wire-single-reader.sh|a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above
-check-cheatsheet-source-anchors.sh|a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above
-check-no-spawn-in-if-not.sh|a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)
-check-enclave-membership-documented.sh|an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above
-FASTREFUSALS
+# So: put the guard in its own session (setsid + background makes pid == pgid),
+# poll it, and on expiry signal THE GROUP — TERM, then KILL for anything that
+# traps. Returns 124 on expiry, matching timeout's convention, so the caller is
+# unchanged. A door that returns quickly while leaving background work behind is
+# a door whose next run collides with its own last one.
+_pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
+    local _p="$1" _d="$2" _out="$3" _pid _ticks=0 _tick _per_s _max
+    # POLL IN TENTHS, NOT SECONDS. A one-second poll puts a ONE-SECOND FLOOR
+    # under every guard, including the 54 that finish in under 250ms: measured
+    # here, that floor alone took the run from 148s to 196s — the deadline
+    # machinery costing more than the guards it bounds. `sleep 0.1` is not POSIX,
+    # so it is probed once and falls back to whole seconds where it is refused.
+    if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
+    _max=$(( _d * _per_s ))
+    ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    _pid=$!
+    while kill -0 "$_pid" 2>/dev/null; do
+        if [ "$_d" -gt 0 ] && [ "$_ticks" -ge "$_max" ]; then break; fi
+        sleep "$_tick"
+        _ticks=$((_ticks + 1))
+    done
+    if kill -0 "$_pid" 2>/dev/null; then
+        kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null
+        sleep 1
+        kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
+        wait "$_pid" 2>/dev/null
+        return 124
+    fi
+    wait "$_pid"
+    return $?
+}
+
+# ORDER 1305-udgs. THE THREE ROSTERS a guard must be wired into to refuse a push.
+#
+# ENUMERATED, NEVER CURATED. A list assembled from what has bitten people is not
+# the set of guards that exist: esme's 1303 litmus was refused on 2026-09-20 by
+# check-litmus-expression-pinning-added (634-39ik), absent from every list any
+# host assembled that day, including an eighteen-entry one written an hour before.
+#
+# READ AS LITERALS, and that is not a style choice. 1063-nraf: "a binding
+# assembled from a variable is invisible to every name-based scan", which is why
+# gate-steps.d spells STEP_SCRIPT literally. A first draft of this row drove the
+# fast tier from a list variable and 1009-gccx's own fixture refused it — the
+# tier's bindings had become invisible to exactly the scans the fleet relies on.
+# So every roster here is scanned for literal paths, and the tier keeps its
+# literal `_run bash .../check-X.sh` invocations.
+#
+# THE SCRIPTS DIRECTORY IS NOT A ROSTER, it is a drawer: 138 check-*.sh of which
+# a dozen refuse a clean tree for reasons about the loop, the release or the
+# substrate (check-cycle-flow-log-fresh reports the LOOP's staleness;
+# check-installer-channel the RELEASE's state).
+_preflight_roster() {
+    # 1. the fast-refusal tier's own literal invocations
+    awk '/# .. FAST REFUSALS \(order 1009-gccx\)/,/_info "Fast refusals passed"/' "$SCRIPT_DIR/build.sh" \
+        | grep -ohE 'scripts/check-[a-z0-9-]+\.sh'
+    # 2. the gate's steps (data, not code — 1072-b7eq)
+    grep -h '^STEP_SCRIPT=' "$SCRIPT_DIR"/scripts/gate-steps.d/*.step 2>/dev/null \
+        | sed 's/STEP_SCRIPT="//; s/"$//'
+    # 3. the pre-push lane's own checks
+    grep -ohE 'scripts/check-[a-z0-9-]+\.sh' "$SCRIPT_DIR"/scripts/hooks/*.sh 2>/dev/null
+}
+
+# Guards that cannot simply be run here, each with the reason the verdict prints.
+# A guard is NEVER silently dropped: it is run, or it is named.
+_preflight_preconditions() {
+    cat <<'PRECONDS'
+check-no-python-scripts.sh|policy-binary|compiles before it resolves (its line 7 is `cargo build -p tillandsias-policy`); runs only when that binary already exists
+check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
+check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
+PRECONDS
 }
 
 _step()  {
@@ -401,6 +450,7 @@ FLAG_CHECK=false
 # ORDER 1305-udgs — the fast-refusal front door: runs the tree-only guards and
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
+FLAG_PREFLIGHT_FULL=false
 FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
@@ -423,6 +473,10 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --preflight)      FLAG_PREFLIGHT=true ;;
+        # The same enumeration with NO per-guard deadline, for a host that wants
+        # the whole set before a large land. A deadline-skipped guard still runs
+        # in the gate, which is its home, so nothing is lost by the default.
+        --full)           FLAG_PREFLIGHT_FULL=true ;;
         --clean)          FLAG_CLEAN=true ;;
         --install)        FLAG_INSTALL=true ;;
         --remove)         FLAG_REMOVE=true ;;
@@ -547,69 +601,125 @@ EOF
     shift
 done
 
-# ORDER 1305-udgs — `./build.sh --preflight`: the whole fast-refusal set, in
-# seconds, before a SHA.
+# ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
+# before the SHA, in seconds.
 #
-# WHY IT EXISTS. Four consecutive refusals on one row's ref in one evening on
-# pirria — 656-spux, 714-4r6w, 851-cduu, 721-nyev — each decidable in about a
-# second, each paid for with a full gate (33 minutes on a floor host). The
-# deciders were always runnable; what did not exist was one command that ran them
-# all, so a host assembled the list from each refusal as it arrived.
+# WHY. Four consecutive refusals on one row's ref in one evening on pirria
+# (656-spux, 714-4r6w, 851-cduu, 721-nyev), each decidable in about a second,
+# each paid for with a full gate — 33 minutes on a floor host. The deciders were
+# always runnable; what did not exist was one command that ran them all.
 #
-# IT NEVER BUILDS. That is the whole contract. A front door that compiled would
-# not be run before every push, and one that is not run before every push is a
-# list of commands nobody types.
-#
-# A DECIDER THAT NEEDS A BINARY JOINS ONLY BEHIND RESOLVE-OR-NAMED-SKIP, and the
-# verdict carries counts, so a fresh checkout reads a green that NAMES what did
-# not run rather than a refusal about itself or a green that means nothing.
+# IT NEVER BUILDS, and the dispatch is before ALL setup: placed after it, this
+# door took 51s and STARTED THE DEV PROXY CONTAINER and staged the router
+# sidecar. A front door with side effects is not a front door.
 if [[ "$FLAG_PREFLIGHT" == true ]]; then
+    # The `-added` family scopes itself against origin/linux-next; without a
+    # fetch it scans nothing and prints a green that means nothing.
+    git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
+
+    # 5s, SET FROM THE DISTRIBUTION AND NOT CHOSEN. Measured over all 105 roster
+    # entries on pirria: 94 finish under 5s for 55.3s of work, and the next costs
+    # are 6.6, 9.1, 14.6, 16.8, 22.1, three at a 25s cap, 89 and 316 seconds — a
+    # different population (fixtures that build, spawn or poll), not a tail.
+    # A SKIPPED GUARD STILL COSTS ITS DEADLINE, so wall time is not monotonic in
+    # the deadline; raising it past the knee buys few guards for many seconds.
+    # 2s was considered and declined: it skips a third of the roster, and a door
+    # that skips a third teaches that skips are normal.
+    # STANDING NO-RAISE RULE from the day this lands; re-measure the distribution
+    # before either number moves, and never in the same cycle as the refusal that
+    # made someone want to.
+    if [[ "$FLAG_PREFLIGHT_FULL" == true ]]; then
+        _pf_deadline=0            # `timeout 0` means no limit
+    else
+        _pf_deadline="${TILLANDSIAS_PREFLIGHT_TIMEOUT:-5}"
+    fi
+
+    _pf_tmp="$(mktemp "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_tmp=""
+    [ -n "$_pf_tmp" ] && trap 'rm -f "$_pf_tmp"' EXIT
+    _pf_wall0=$SECONDS
     _pf_ran=0; _pf_skipped=0; _pf_failed=0
-    while IFS='|' read -r _pf_script _pf_msg; do
-        [ -n "$_pf_script" ] || continue
-        if [ ! -f "$SCRIPT_DIR/scripts/$_pf_script" ]; then
-            echo "skip:preflight:${_pf_script%.sh}:absent"
+
+    while IFS= read -r _pf_path; do
+        [ -n "$_pf_path" ] || continue
+        _pf_base="${_pf_path##*/}"
+
+        _pf_pre="$(_preflight_preconditions | awk -F'|' -v s="$_pf_base" '$1 == s { print $2 "|" $3; exit }')"
+        if [ -n "$_pf_pre" ]; then
+            _pf_kind="${_pf_pre%%|*}"; _pf_why="${_pf_pre#*|}"
+            if [ "$_pf_kind" != "policy-binary" ]; then
+                echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
+                _pf_skipped=$((_pf_skipped + 1))
+                continue
+            fi
+            _pf_bin=""
+            if [ -f "$SCRIPT_DIR/scripts/plan-binary-probe.sh" ]; then
+                _pf_bin="$( . "$SCRIPT_DIR/scripts/plan-binary-probe.sh" 2>/dev/null
+                            resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR" 2>/dev/null || true )"
+            fi
+            if [ -z "$_pf_bin" ]; then
+                echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
+                _pf_skipped=$((_pf_skipped + 1))
+                continue
+            fi
+        fi
+        if [ ! -f "$SCRIPT_DIR/$_pf_path" ]; then
+            echo "skip:preflight:${_pf_base%.sh}:absent"
             _pf_skipped=$((_pf_skipped + 1))
             continue
         fi
-        if _pf_out="$(bash "$SCRIPT_DIR/scripts/$_pf_script" 2>&1)"; then
+
+        # OUTPUT TO A FILE, NEVER A COMMAND SUBSTITUTION. `out="$(timeout N cmd)"`
+        # reads the pipe until EOF, and EOF does not arrive while the guard's
+        # CHILDREN still hold stdout — so timeout kills the guard on schedule and
+        # the substitution keeps waiting. MEASURED at a 5s deadline:
+        # test-token-instrument was reported `deadline:296s` and
+        # test-memo-hit-observability `deadline:73s`, with a 467s wall against a
+        # ~110s projection. The deadline bounded nothing for exactly the guards it
+        # exists to bound, and it was visible only because the skip line carries
+        # the MEASURED cost rather than the configured one.
+        _pf_t0=$SECONDS
+        : > "$_pf_tmp"
+        # ITS OWN PROCESS GROUP, AND KILL THE GROUP. The file above stops the
+        # door WAITING for a killed guard's children; it does not stop those
+        # children RUNNING. MEASURED here 2026-09-20: after a door run, `pgrep -f`
+        # found SEVEN orphans from two killed fixtures still polling — a door that
+        # returns in two minutes while leaving background work behind is a door
+        # whose next run collides with its own last one. `setsid` makes the guard
+        # a session leader so the signal reaches the whole group, and -k 2 follows
+        # TERM with KILL for a guard that traps.
+        #
+        # NOT `timeout --foreground`: that is for interactive use and is exactly
+        # the mode in which timeout does NOT signal the group.
+        if _pf_run_guard "$_pf_path" "$_pf_deadline" "$_pf_tmp"; then
             _pf_ran=$((_pf_ran + 1))
-            printf '%s\n' "$_pf_out" | grep -E '^note:' || true
+            grep -E '^note:' "$_pf_tmp" || true
         else
-            _pf_failed=$((_pf_failed + 1))
-            printf '%s\n' "$_pf_out" >&2
-            echo "refused:preflight:${_pf_script%.sh} — $_pf_msg" >&2
+            _pf_rc=$?
+            if grep -qE '^skip:' "$_pf_tmp"; then
+                # A NAMED SKIP IS NOT A FAILURE, whatever it exits with
+                # (1273-4mak). MEASURED: test-uninstall-matcher-spares-bystanders
+                # prints `skip:not-darwin …` and exits non-zero, and this door
+                # called it `refused` — 1309-fhxb's shape inside the fix for 1305.
+                grep -E '^skip:' "$_pf_tmp" | head -2
+                _pf_skipped=$((_pf_skipped + 1))
+            elif [ "$_pf_rc" -eq 124 ]; then
+                echo "skip:preflight:${_pf_base%.sh}:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
+                _pf_skipped=$((_pf_skipped + 1))
+            else
+                _pf_failed=$((_pf_failed + 1))
+                cat "$_pf_tmp" >&2
+                echo "refused:preflight:${_pf_base%.sh}" >&2
+            fi
         fi
     done <<PFEOF
-$(_fast_refusal_checks)
+$(_preflight_roster | sort -u)
 PFEOF
 
-    # The no-Python guard (1087-h2z9, gate step 155) COMPILES before it resolves
-    # (scripts/check-no-python-scripts.sh:7), so it cannot be a list member. Run
-    # it only when its binary already exists, and NAME the skip otherwise.
-    _pf_policy=""
-    if [ -f "$SCRIPT_DIR/scripts/plan-binary-probe.sh" ]; then
-        _pf_policy="$( . "$SCRIPT_DIR/scripts/plan-binary-probe.sh" 2>/dev/null
-                       resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR" 2>/dev/null || true )"
-    fi
-    if [ -n "$_pf_policy" ] && [ -f "$SCRIPT_DIR/scripts/check-no-python-scripts.sh" ]; then
-        if _pf_out="$(bash "$SCRIPT_DIR/scripts/check-no-python-scripts.sh" 2>&1)"; then
-            _pf_ran=$((_pf_ran + 1))
-        else
-            _pf_failed=$((_pf_failed + 1))
-            printf '%s\n' "$_pf_out" >&2
-            echo "refused:preflight:no-python — a Python runtime reference entered the harness (1087-h2z9)" >&2
-        fi
-    else
-        echo "skip:preflight:no-python:no-runnable-policy-binary"
-        _pf_skipped=$((_pf_skipped + 1))
-    fi
-
     if [ "$_pf_failed" -gt 0 ]; then
-        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed" >&2
+        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed wall=$(( SECONDS - _pf_wall0 ))s" >&2
         exit 1
     fi
-    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped"
+    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped wall=$(( SECONDS - _pf_wall0 ))s"
     exit 0
 fi
 
@@ -2032,11 +2142,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 1313-w78k — the same check the plan-only lane runs, here so a GATED
     # land cannot carry what the cheap lane refuses. Tree-only, sub-second,
     # diff-scoped against the base ref.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-ts-skew.sh" 2>&1; then
+        _error "a ledger fragment carries a ts AHEAD of this host's clock — a future timestamp is not a backfill, it is an invented time (1313-w78k); see the verdict line above"
+        exit 1
+    fi
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
+        _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
+        exit 1
+    fi
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-unique-bin-names.sh" 2>&1; then
+        _error "two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)"
+        exit 1
+    fi
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-tray-process-running-naming.sh" 2>&1; then
+        _error "the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above"
+        exit 1
+    fi
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
+        exit 1
+    fi
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
+        _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
+        exit 1
+    fi
 
     # ORDER 1234-zade. `@trace order:<id>` had no resolver: validate-traces.sh
     # detects ghost traces for `spec:` and never looks at `order:`, though the
@@ -2049,6 +2183,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot degrade into the no-op that hoisting 885-92iu produced on a cold
     # tree. It refuses with `blocked:` if the ledger read yields nothing, which
     # is the difference between a clean tree and a broken instrument.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-order-citations-resolve.sh" 2>&1; then
+        _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
+        exit 1
+    fi
 
     # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
     # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
@@ -2065,39 +2203,42 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # missing must not be hoisted above the build. Speed is not the only axis —
     # a faster check that cannot fail is worse than a slow one that can.
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
+        _error "a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above"
+        exit 1
+    fi
 
 
     # 972-umik: tree-only, sub-second, and it ratchets the number of files
     # deciding whether the control wire is encrypted. Belongs in the fast phase
     # by both of lenovinha's criteria — it reads the tree and it can FAIL.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-secure-wire-single-reader.sh" 2>&1; then
+        _error "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above"
+        exit 1
+    fi
     # 1053-a7qr: a cheatsheet `sources:` anchor must name the file that
     # DECLARES the order. Tree-only, sub-second, and it can fail — the fast
     # phase by lenovinha's two criteria. Nothing read these anchors before:
     # a fixture naming a nonexistent file AND a nonexistent order passed both
     # the ghost-trace gate and trace-coverage.sh, because those scan `@trace`
     # ANNOTATIONS and frontmatter is a different field.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-cheatsheet-source-anchors.sh" 2>&1; then
+        _error "a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above"
+        exit 1
+    fi
 
-    # ORDER 1305-udgs — ONE LIST, TWO CONSUMERS. The uniform guards below are
-    # driven from `_fast_refusal_checks`, which `./build.sh --preflight` also
-    # reads. Two lists would drift, and the one that drifts is always the one a
-    # host runs before pushing: a front door that ran a SUBSET of the gate's
-    # refusals would be worse than none, because it would teach people the tree
-    # was clean when it was not.
-    #
-    # NON-UNIFORM GUARDS STAY INLINE, above: the memory floor and the
-    # competing-gate check have three-way verdicts of their own (a probe that
-    # cannot evaluate must warn, not refuse — 1176-fn2p), and flattening them
-    # into a two-state list is how a third state gets lost.
-    while IFS='|' read -r _fr_script _fr_msg; do
-        [ -n "$_fr_script" ] || continue
-        if ! _run bash "$SCRIPT_DIR/scripts/$_fr_script" 2>&1; then
-            _error "$_fr_msg"
-            exit 1
-        fi
-    done <<EOF
-$(_fast_refusal_checks)
-EOF
-
+    _step "Checking for if-not pipeline verdict guards (795-imz3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-no-spawn-in-if-not.sh" 2>&1; then
+        _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
+        exit 1
+    fi
+    _info "If-not pipeline guard check passed"
+    _step "Checking the enclave membership list matches the code (245 P8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
+        _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Enclave membership documentation check passed"
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
@@ -3471,10 +3612,9 @@ EOF
     # the shape outright across scripts/ and build.sh. The gate shipped in
     # 3b71b105a but was invoked by nothing here; wiring it activates it as a
     # real --check gate (same activation shape as 599-4wzr below).
-    # ORDER 1305-udgs — HOISTED into the fast-refusal list. It ran here, after
-    # the compile phase, so a guard decidable in about a second cost a full gate
-    # to report. It is now in `_fast_refusal_checks` and therefore also in
-    # `./build.sh --preflight`.
+    # ORDER 1305-udgs — HOISTED into the fast-refusal tier above. It ran here,
+    # after the compile phase, so a guard decidable in about a second cost a full
+    # gate to report.
 
     # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
@@ -4407,10 +4547,9 @@ EOF
     fi
     _info "Claim-protocol agreement check passed"
 
-    # ORDER 1305-udgs — HOISTED into the fast-refusal list. It ran here, after
-    # the compile phase, so a guard decidable in about a second cost a full gate
-    # to report. It is now in `_fast_refusal_checks` and therefore also in
-    # `./build.sh --preflight`.
+    # ORDER 1305-udgs — HOISTED into the fast-refusal tier above. It ran here,
+    # after the compile phase, so a guard decidable in about a second cost a full
+    # gate to report.
 
     _step "Checking the proxy's permissive port agrees with its consumers (245 P6)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-proxy-permissive-port-routing.sh" 2>&1; then
