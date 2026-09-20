@@ -56,8 +56,7 @@ pub fn destructive_reset_allowed() -> bool {
 /// so three hosts would stop negotiating. Do not "fix" the casing to match the
 /// surrounding style: a litmus and any operator greps this phrase across three
 /// platforms, and a capital letter here is a silent divergence on two of them.
-pub const RESET_SKIPPED_LINE: &str =
-    "[tillandsias] --reset-state: reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \
+pub const RESET_SKIPPED_LINE: &str = "[tillandsias] --reset-state: reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 \
      — reprovisioning through the platform's plain init instead.";
 
 /// The exact prefix of the refusal every platform prints when its reprovision
