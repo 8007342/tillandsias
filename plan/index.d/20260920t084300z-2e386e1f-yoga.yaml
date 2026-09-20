@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-timing-log-s-outside-a-checkout-fallback-to-tmp-fires-for-a-litmus-run-whose-cwd-is-the-checkout-and-the-next-release-gate-on-that-host-reds-two-litmus-on-the-split
+    event:
+      type: evidence
+      ts: "2026-09-20T08:43:00Z"
+      agent_id: linux-yoga-claude-20260920t084300z
+      host: yoga
+      summary: |-
+        ARM 1 PRE-FIX RED, ON RECORD BEFORE ANY FIX, as the row requires. Measured on
+        yoga 2026-09-20 on the unfixed tree. The reproduction prints the resolver's
+        DECISION and each sub-condition to stderr; none of that instrumentation belongs
+        in the fix.
+
+        FIRST, THE HONEST NEGATIVE: THE ROW'S OWN REGIME DOES NOT REPRODUCE HERE.
+        Under the agent-shell regime described on the row (a timeout wrapper, pipefail
+        set, stdout read through a pipeline), with cwd = the checkout:
+
+          cond A  root non-empty                 YES
+          cond B  root/.git is a directory       YES
+          cond C  mkdir root/.cache/metrics      YES
+          DECISION: checkout branch fired -> <root>/.cache/metrics/tillandsias-timing.jsonl
+
+        So on yoga the fallback does NOT fire, and the regime alone is not sufficient to
+        produce it. Two things I checked and eliminated rather than assumed:
+          - cycle-metrics.sh does NOT derive its root from cwd. REPO_ROOT comes from
+            SCRIPT_DIR, which is the script's own path, so a run started anywhere
+            resolves the same root. The "walks PWD" hypothesis in the row's context is
+            not what this caller does.
+          - the BASH_SOURCE fallback inside metrics_default_log (used when no root is
+            passed) would derive the PARENT of cwd if BASH_SOURCE were unset -- and the
+            parent has no .git, which would send records to /tmp. But it cannot be
+            unset in bash, and Fedora's sh is bash in POSIX mode and still sets it. I
+            could not make that branch fire.
+
+        THE MECHANISM I DID REPRODUCE, and it matches the symptom exactly -- a run whose
+        cwd IS a checkout, sending records to /tmp:
+
+          A GIT WORKTREE HAS .git AS A FILE, NOT A DIRECTORY.
+
+            git worktree add --detach <path> HEAD
+            [ -d "<path>/.git" ]  ->  FALSE   (it is a file: "gitdir: ...")
+            metrics_default_log tillandsias-timing.jsonl "<path>"  ->  /tmp/tillandsias-timing.jsonl
+
+        Condition B is the decider. The test asks "is .git a directory", but the
+        question it means to ask is "is this a checkout" -- and for a worktree, a
+        submodule, or any linked checkout, the answer is yes while .git is a file. The
+        resolver then reports "not in a checkout" for a tree that unambiguously is one,
+        which is precisely this row's title.
+
+        WHAT I AM NOT CLAIMING: that this is what fired on macuahuitl. I have a
+        mechanism that produces the symptom, locally and on demand; whether the release
+        gate #1 instance was a worktree is answerable from that host, and the preserved
+        drafts-macuahuitl/stray-timing-*.jsonl records plus a check of whether that
+        checkout's .git is a file would settle it in one command. If it was NOT a
+        worktree there, then there is a second path to the same symptom and this
+        reproduction has not found it -- the fix below is still correct, but the row
+        should not close on my arm alone.
+
+        CONDITION C REMAINS UNPROBED as a cause: mkdir failing (read-only mount, quota)
+        also routes to /tmp and would be indistinguishable in the log. The fallback
+        being SILENT is what makes these three causes look alike from the evidence, and
+        is why the row asks for it to become loud.
