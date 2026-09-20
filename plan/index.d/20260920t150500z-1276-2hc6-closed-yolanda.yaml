@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    order: 1276-2hc6
+    status: completed
+
+events:
+  - packet_id: the-windows-headless-launcher-accepts-init-natively-selects-the-desktop-user-session-lane-and-fails-eight-image-builds-with-program-not-found-instead-of-refusing-and-naming-the-tray
+    event:
+      type: closure
+      ts: "2026-09-20T15:05:00Z"
+      host: yolanda-windows
+      summary: |-
+        CLOSED. esme's fix (9b7180a9c) made the Windows host lane refuse on arrival; this closes the row by PINNING it, which is what it was waiting for. The litmus is on trunk in land 27 (ok:land:319c1e7e0), verified by content on origin.
+
+        THE GUARD: litmus:windows-host-lane-refusal, spec init-command, phase pre-build, size instant, bound in openspec/litmus-bindings.yaml under init-command. Fixtures: scripts/test-windows-host-lane-refusal.sh and scripts/test-windows-host-lane-refusal-controls.sh. Runs in 5.1-7.7s.
+
+        WHAT IT ASSERTS, and the order is the property rather than the text: windows_host_lane_refusal() is called BEFORE require_desktop_user_session and report_runtime_lane inside run_init; exactly TWO cfg-gated definitions exist (one refusing, one None); the refusal carries `refused:windows-host-lane` and names `tillandsias-tray.exe --provision-once`; and the not(windows) arm returns None so Linux keeps its lane by construction.
+
+        BOTH CONTROLS, measured red before this was committed:
+          CONTROL 1 -- the refusal call REMOVED from run_init: the fixture goes red with "does not call windows_host_lane_refusal", which is the pre-fix state the operator hit.
+          CONTROL 2 -- the refusal MOVED below lane selection: the fixture goes red on POSITION with "comes AFTER ...", WHILE its text arms stay GREEN. That is the control worth having: a text-only litmus passes a refusal that merely moved, and the defect (a lane announced and entered before refusing) survives it.
+        Each control asserts its own sabotage changed the file before trusting the red; an earlier attempt exited 1 only because a failed heredoc never wrote the sabotaged copy, so the fixture read a missing file and the control proved nothing.
+
+        BEHAVIOURAL ARM, run on this host: native tillandsias.exe --init exits 1, prints the refusal, names the tray command, and emits ZERO image-build lines against the pre-fix signature of EIGHT from the operator's transcript on esme. Off msys it SKIPS BY NAME, so a green run elsewhere cannot be read as a behavioural pass.
+
+        PRE-FIX RESULT, for the record: on a Windows host `tillandsias.exe --init` entered the host lane and failed eight image builds, then summarised eight images and no cause, never naming the supported command. The operator ran that binary because it sat beside tillandsias-tray.exe and looked like the product -- which is also why the fixture probes for `tillandsias.exe`: my first version probed for `tillandsias-headless.exe`, found nothing, and skipped forever.
+
+        Three refusals on the way to landing, all mine and all correct: a `python3 -c` control under the no-Python policy (1087-h2z9), three `grep -q`-in-a-pipeline guards under 795-imz3 in the controls file, and a binding placed in the ci-release block where the runner silently never discovered it. The last is filed as its own instance on 1303-2d5g's family; the first two are in the commits.
