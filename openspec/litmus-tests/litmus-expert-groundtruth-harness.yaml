@@ -129,7 +129,7 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: unrunnable-candidate-skipped"
 
-  - step: "MUTATION: the PRE-FIX bit test REJECTS the artefact the probe resolves -- reproducing the original failure, so the control above is not vacuous (msys only)"
+  - step: "SOURCE PIN: the PRE-FIX bit test REJECTS the artefact the probe resolves -- the original failure still reproduces on the real artefacts, so the control above is not vacuous (msys only)"
     # LOCUS-GATED AND SKIPPING LOUDLY, because this mutation has no subject off
     # MSYS: on Linux the extensionless ELF both exists and runs, so the pre-fix
     # test was correct there and the defect was invisible -- which is precisely
@@ -140,7 +140,7 @@ critical_path:
     # tillandsias-plan (the ELF) while the shared probe resolves a candidate
     # that actually runs. If test -x ever starts accepting it, this arm has
     # lost its subject and says so rather than passing.
-    command: "case $(uname -s) in MINGW*|MSYS*) ;; *) echo 'skip: mutation-has-no-subject-off-msys (the extensionless ELF runs here, so the pre-fix test was correct)'; exit 0;; esac; test -e target/release/tillandsias-plan || { echo 'skip: no extensionless artefact staged at this locus'; exit 0; }; if test -x target/release/tillandsias-plan; then echo 'FAIL: test -x ACCEPTED the extensionless ELF; this mutation has lost its subject'; exit 1; fi; . ./scripts/plan-binary-probe.sh >/dev/null 2>&1; r=$(resolve_plan_binary 2>/dev/null || true); test -n \"$r\" || { echo 'FAIL: the probe resolved nothing where the pre-fix test also failed'; exit 1; }; \"$r\" capabilities >/dev/null 2>&1 || { echo \"FAIL: the probe resolved a candidate that does not run: $r\"; exit 1; }; echo 'ok: bit-rejects-what-the-probe-resolves'"
+    command: "case $(uname -s) in MINGW*|MSYS*) ;; *) echo 'skip: mutation-has-no-subject-off-msys (the extensionless ELF runs here, so the pre-fix test was correct)'; exit 0;; esac; test -e target/release/tillandsias-plan || { echo 'skip: no extensionless artefact staged at this locus'; exit 0; }; if test -x target/release/tillandsias-plan; then echo 'FAIL: test -x ACCEPTED the extensionless ELF; this mutation has lost its subject'; exit 1; fi; r=$(mf_plan_binary 2>/dev/null || true); test -n \"$r\" || { echo 'FAIL: the probe resolved nothing where the pre-fix test also failed'; exit 1; }; \"$r\" capabilities >/dev/null 2>&1 || { echo \"FAIL: the probe resolved a candidate that does not run: $r\"; exit 1; }; echo 'ok: bit-rejects-what-the-probe-resolves'"
     timeout_ms: 60000
     expected_behavior: "ok: bit-rejects-what-the-probe-resolves"
 
