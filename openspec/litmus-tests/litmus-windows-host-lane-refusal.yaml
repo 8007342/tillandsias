@@ -1,0 +1,63 @@
+# @trace spec:init-command, spec:cli-diagnostics
+# @trace order:1276-2hc6
+#
+# Order 1276-2hc6: on a Windows host the headless launcher ran the host lane on
+# `--init` instead of refusing, and failed EIGHT image builds. MEASURED from the
+# operator's own transcript on esme 2026-09-19 (v56.9.19.2): the operator
+# unzipped the Windows release, found `tillandsias.exe` beside
+# `tillandsias-tray.exe`, ran the one whose name looked like the product, and
+# got eight identical failures and no mention of the supported command.
+#
+# The sibling row 1277-g5k9 fixes the LINE those failures printed and has its
+# own litmus. This one pins the LANE: a launcher on a platform where its lane
+# cannot work must refuse on arrival, naming the command that does work.
+#
+# WHY POSITION IS THE PROPERTY AND NOT THE TEXT. A refusal placed after lane
+# selection still announces a lane and still enters it; it converts eight
+# failures into one message and leaves the defect. So the fixture asserts that
+# the refusal call precedes require_desktop_user_session and
+# report_runtime_lane inside run_init — and control 2 below demonstrates that a
+# sabotage which merely MOVES the call down passes every text assertion.
+#
+# THE CONTROLS ARE A SCRIPT, NOT INLINE `command:` TEXT, and that is a measured
+# decision. The move sabotage needs a multi-line awk program; embedding one in a
+# double-quoted YAML scalar produced a file that check-litmus-yaml-parses.sh
+# rejected while the runner's own --parse-only still reported ok. An earlier
+# version used `python3 -c`, which the no-Python-runtime policy (1087-h2z9)
+# refuses and the gate caught, refusing the land.
+name: litmus:windows-host-lane-refusal
+spec: init-command
+phase: pre-build
+description: >
+  Pin 1276-2hc6: on Windows, `tillandsias --init` refuses ON ARRIVAL — before
+  any lane is selected or announced — with a refusal naming
+  `tillandsias-tray.exe --provision-once`, and produces no image-build lines;
+  on every other platform the refusal is a None and the lane is unchanged,
+  which is the negative control. Both positive controls sabotage a copy of the
+  source and require the fixture to go red for the stated reason.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-windows-host-lane-refusal.sh
+  - workspace contains scripts/test-windows-host-lane-refusal-controls.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - the behavioural arm additionally needs a native tillandsias.exe at this
+    locus; it SKIPS BY NAME elsewhere, so a green run off-msys must not be read
+    as a behavioural pass
+
+critical_path:
+  - step: "both fixtures parse and carry their exec bits"
+    command: "bash -n scripts/test-windows-host-lane-refusal.sh && bash -n scripts/test-windows-host-lane-refusal-controls.sh && test -x scripts/test-windows-host-lane-refusal.sh && test -x scripts/test-windows-host-lane-refusal-controls.sh && echo 'ok: windows-host-lane-fixtures-parse'"
+    timeout_ms: 10000
+    expected_behavior: "ok: windows-host-lane-fixtures-parse"
+
+  - step: "every arm passes against the real source: the refusal precedes lane selection, both cfg arms exist, the refusal names the working command, and the non-Windows arm returns None"
+    command: "bash scripts/test-windows-host-lane-refusal.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok:windows-host-lane-refusal:all"
+
+  - step: "POSITIVE CONTROLS: the fixture goes RED when the refusal call is removed, and RED on position when it is merely moved below lane selection while its text arms stay green"
+    command: "bash scripts/test-windows-host-lane-refusal-controls.sh"
+    timeout_ms: 180000
+    expected_behavior: "ok:windows-host-lane-refusal-controls:2/2"
