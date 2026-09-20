@@ -647,14 +647,35 @@ credential_channel_verdict() {
         printf 'unretrievable-no-service'
         return 0
       fi
-      local _locked
-      _locked="$(busctl --user get-property org.freedesktop.secrets \
-                   /org/freedesktop/secrets/collection/login \
-                   org.freedesktop.Secret.Collection Locked 2>/dev/null)"
-      case "$_locked" in
-        *true*) printf 'unretrievable-locked'; return 0 ;;
-      esac
-      printf 'indeterminate'
+      # ORDER 1265-8qr6. THE `Locked` PROPERTY READ IS REMOVED, ON EVERY
+      # NAMESPACE. It aborts gnome-keyring-daemon 50.0.
+      #
+      # MEASURED: five SIGABRTs on lenovinha in one day, four cores retained and
+      # UNANIMOUS in the crashing frame, plus one on macuahuitl:
+      #     #4 g_assertion_message_expr
+      #     #5 invoke_get_property_in_idle_cb   (libgio-2.0.so.0)
+      #     #6 g_idle_dispatch   #9 g_main_loop_run   #10 main
+      # The daemon asserts inside its OWN D-Bus property handler when asked for
+      # Locked. D-Bus then re-activates it LOCKED — so THE PROBE MANUFACTURES
+      # THE STATE IT REPORTS, and on 2026-09-19 it did that 53 seconds after an
+      # operator unlock, spending the unlock and the fleet's only pusher.
+      #
+      # NOT a version skew: both hosts run gnome-keyring-50.0-1.fc44,
+      # glib2-2.88.3-1.fc44, gcr3-3.41.1-12.fc44, dbus-broker-37-8.fc44 on
+      # kernel 7.2.5-200.fc44. One host crashed five times and the other once,
+      # which makes the trigger host-conditional and UNCHARACTERISED. Removal is
+      # justified by asymmetric cost, not by a proven mechanism.
+      #
+      # WHAT IS LOST is an early, specific diagnosis. WHAT IS NOT is any verdict
+      # that decides a push: a locked keyring still fails the real push
+      # verification above, which is fail-closed. The diagnosis survives as TEXT
+      # on the blocked path. A diagnosis that aborts its own subject is worse
+      # than no diagnosis.
+      #
+      # DO NOT REINSTATE by reading Locked another way until a fixed
+      # gnome-keyring is on the fleet. The defect is in the daemon's GetProperty
+      # error path; every caller of it is a loaded gun.
+      printf 'unknown-secret-service-unprobed'
     }
 
     case "$(_ccc_gh_failure_layer)" in
@@ -679,11 +700,27 @@ credential_channel_verdict() {
         echo "  REMEDY: run inside a session with a keyring, or inject GH_TOKEN for this run." >&2
         echo "blocked:credential-unretrievable-no-keyring-service"
         return 1 ;;
-      unretrievable-locked)
-        echo "[check-credential-channel] THE CREDENTIAL COULD NOT BE RETRIEVED — the login keyring collection is LOCKED." >&2
-        echo "  A LOCAL retrieval failure. The token may be perfectly valid; nothing has" >&2
-        echo "  been presented to GitHub. Unlock the collection and re-run." >&2
-        echo "blocked:credential-unretrievable-keyring-locked"
+      unknown-secret-service-unprobed)
+        # ORDER 1265-8qr6. Replaces the old `unretrievable-locked` arm, which is
+        # now unreachable: nothing emits that layer because the Locked probe
+        # that produced it has been removed (it aborts gnome-keyring-daemon
+        # 50.0). A case arm for a state nothing can produce is an orphan that
+        # reads as coverage, so it is deleted rather than left.
+        #
+        # FAIL CLOSED. gh could not retrieve the credential; that much IS
+        # measured. What is NOT measured is WHY, and the honest verdict says so
+        # instead of naming a cause we declined to check.
+        echo "[check-credential-channel] THE CREDENTIAL COULD NOT BE RETRIEVED, and the secret service was NOT probed." >&2
+        echo "  A LOCAL retrieval failure: the token may be perfectly valid and nothing" >&2
+        echo "  has been presented to GitHub." >&2
+        echo "  THE KEYRING MAY BE LOCKED — that is the usual cause — but this guard no" >&2
+        echo "  longer asks. Reading the collection's Locked property asserts" >&2
+        echo "  gnome-keyring-daemon 50.0 in invoke_get_property_in_idle_cb and D-Bus" >&2
+        echo "  re-activates it LOCKED, so the probe MANUFACTURES the state it reports" >&2
+        echo "  (1265-8qr6; five cores on lenovinha, one on macuahuitl)." >&2
+        echo "  REMEDY: unlock the login keyring on this host and re-run." >&2
+        echo "  DO NOT run 'gh auth login' or 'gh auth refresh' (order 1025-a896)." >&2
+        echo "unknown:secret-service-unprobed"
         return 1 ;;
       plaintext)
         echo "[check-credential-channel] gh is using a PLAINTEXT token in ~/.config/gh/hosts.yml, not the keyring." >&2
@@ -802,31 +839,21 @@ credential_channel_verdict() {
   # with no busctl or no secret service — every macOS host, the forge, a headless
   # server — falls straight through to missing: exactly as before. Absence of the
   # probe is never evidence of a lock.
-  if command -v busctl >/dev/null 2>&1; then
-    _ccc_locked_any=0
-    for _ccc_coll in login default; do
-      _ccc_locked="$(_ccc_timeout 5 busctl --user get-property \
-          org.freedesktop.secrets \
-          "/org/freedesktop/secrets/collection/${_ccc_coll}" \
-          org.freedesktop.Secret.Collection Locked 2>/dev/null || true)"
-      case "$_ccc_locked" in
-        *"b true"*) _ccc_locked_any=1; break ;;
-      esac
-    done
-    if [ "$_ccc_locked_any" -eq 1 ]; then
-      echo "[check-credential-channel] The secret service is present and its '${_ccc_coll}' collection is LOCKED." >&2
-      echo "  This is NOT a missing credential. The token is very likely still in the" >&2
-      echo "  keyring; nothing can open it, so \`gh auth status\` BLOCKS rather than" >&2
-      echo "  failing and every push falls back to asking for a username." >&2
-      echo "  REMEDY: UNLOCK the login keyring on this host (log into the desktop" >&2
-      echo "  session, or run a secret-service unlock), then re-run this guard." >&2
-      echo "  DO NOT run 'gh auth login' or 'gh auth refresh' (order 1025-a896): a" >&2
-      echo "  re-auth on one host EVICTS the operator's token on every other host," >&2
-      echo "  and it would be trading a fleet-wide outage for a passphrase prompt." >&2
-      echo "blocked:gh-keyring-locked"
-      return 1
-    fi
-  fi
+  # ORDER 1265-8qr6. THIS LOOP READ `Locked` ON TWO COLLECTIONS AND IS REMOVED.
+  # It is the probe that produced every blocked:gh-keyring-locked on lenovinha,
+  # and it aborts gnome-keyring-daemon 50.0 in its own GetProperty handler. See
+  # the crash evidence at the first removal site above. The diagnosis it carried
+  # is preserved below as TEXT, which is the only safe form it has.
+  echo "[check-credential-channel] No credential channel could be verified, and the secret service was NOT probed (1265-8qr6)." >&2
+  echo "  The keyring MAY BE LOCKED — that is the usual cause — but this guard no" >&2
+  echo "  longer asks: the Locked property read asserts gnome-keyring-daemon 50.0" >&2
+  echo "  in invoke_get_property_in_idle_cb and D-Bus re-activates it LOCKED, so" >&2
+  echo "  the probe manufactures the state it reports." >&2
+  echo "  REMEDY: UNLOCK the login keyring on this host (log into the desktop" >&2
+  echo "  session, or run a secret-service unlock), then re-run this guard." >&2
+  echo "  DO NOT run 'gh auth login' or 'gh auth refresh' (order 1025-a896): a" >&2
+  echo "  re-auth on one host EVICTS the operator's token on every other host," >&2
+  echo "  and it would be trading a fleet-wide outage for a passphrase prompt." >&2
   echo "missing:no-credential-channel"
   return 1
 }
