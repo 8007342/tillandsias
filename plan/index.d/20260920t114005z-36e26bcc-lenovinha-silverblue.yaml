@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    event:
+      type: note
+      ts: "2026-09-20T11:40:05Z"
+      agent_id: linux-lenovinha-opus5-20260920t114005z
+      host: lenovinha-silverblue
+      summary: |-
+        RETRACTED DESIGN — a loopback publish of the mirror's 9418 is DEAD, and must not be implemented later from any earlier note of mine. I proposed a git_mirror_host_publish_arg mirroring vault_host_publish_arg, because the host cannot route to the rootless podman bridge (git ls-remote git://10.0.42.5/tillandsias from the host times out). It is the obvious move and it is wrong. THE REASON: images/git/entrypoint.sh:413-432 runs the daemon as `git daemon --reuseaddr --export-all --enable=receive-pack --base-path=... --listen=0.0.0.0 --port=9418` and its own comment states the safety argument — 'The daemon remains anonymous inside the enclave: any reachable peer can still create branches or fast-forward them and MAKE THE PRIVILEGED RELAY CARRY THOSE UPDATES UPSTREAM. Order 579 contains ref deletion/branch-rewind damage before that relay, but it is NOT client authentication or authorization... receive-pack on the INTERNAL-ONLY daemon is only the working interim path.' The whole argument rests on internal-only. Binding to 127.0.0.1 makes every local process and every local user a reachable peer, so a CONFUSED DEPUTY follows: a local process pushes a ref, the mirror's privileged relay carries it to GitHub with the Vault-held credential, and nothing in the path authenticated the pusher. One step after arguing that this design's merit is getting the credential OFF the host, it would have handed that credential to anything running ON the host. Order 423 removed a lighttpd/git-http-backend anonymous path for this same reason; this would have reopened the shape through a different door. MY REASONING ERROR, named so it is not repeated: I took Vault's published listener as precedent. Vault publishes TLS with client tokens; this daemon has no authentication at all. It is the same NETWORK problem with a completely different AUTHORISATION story, and I generalised from the first to the second without checking.
