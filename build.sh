@@ -1928,6 +1928,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     esac
     unset _cg_ctx _cg_rc
 
+    # ORDER 1313-w78k — the same check the plan-only lane runs, here so a GATED
+    # land cannot carry what the cheap lane refuses. Tree-only, sub-second,
+    # diff-scoped against the base ref.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-ts-skew.sh" 2>&1; then
+        _error "a ledger fragment carries a ts AHEAD of this host's clock — a future timestamp is not a backfill, it is an invented time (1313-w78k); see the verdict line above"
+        exit 1
+    fi
+
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
         exit 1
