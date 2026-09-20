@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: salvage-dirty-worktree-reports-paths-as-unstageable-and-skipped-when-it-has-in-fact-salvaged-them-so-its-summary-names-the-opposite-of-what-the-ref-carries
+    order: 1303-vt3y
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, developer-loop, status-channel]
+    estimated_hours: 2
+    owned_files:
+      - scripts/salvage-dirty-worktree.sh
+    unscoreable: ""
+    verifiable_closure: |
+      OUTPUT. A salvage of a worktree containing a DELETION reports that
+      deletion as salvaged, and its summary count matches what the ref carries.
+
+        git rm <a tracked file>
+        scripts/salvage-dirty-worktree.sh <slug>
+        then: the ref's `git diff --stat <ref>^ <ref>` shows the file removed,
+        AND the tool printed no `skip:salvage:unstageable:<that file>` line and
+        no "N path(s) could not be staged … Salvage proceeded without them".
+
+      PRE-FIX RESULT: FAILS, measured twice on tlatoanis-macbook-air 2026-09-20.
+
+        run 1 (slug 830-xsk2-rust-seccomp-derivation, ref 185a53338):
+          printed: skip:salvage:unstageable:scripts/derive-vsock-seccomp.sh
+                   skip:salvage:unstageable:scripts/test-vsock-seccomp-derivation.sh
+                   2 path(s) could not be staged by this substrate and were skipped
+          carried: both deletions, -150 and -148 in the ref's own diff --stat
+
+        run 2 (slug …-v2, ref a164a2e0b):
+          printed: 3 path(s) could not be staged … Salvage proceeded without them
+          carried: all six files, including both cheatsheet copies
+
+      NEGATIVE CONTROL, so the fix is not "stop printing skips": a path the tool
+      GENUINELY cannot stage must still be reported, and must still be absent
+      from the ref. Without that arm the change is indistinguishable from
+      deleting the warning.
+    title: |
+      salvage-dirty-worktree.sh prints `skip:salvage:unstageable:<path>` and a "could not be staged … proceeded without them" summary for files it HAS salvaged, so its own output tells the operator the opposite of what the ref contains
+    context: |
+      MEASURED TWICE on tlatoanis-macbook-air 2026-09-20 while handing work off
+      because a macOS gate step was red for unrelated reasons.
+
+      WHAT THE TOOL SAID, verbatim from run 1:
+
+        skip:salvage:unstageable:scripts/derive-vsock-seccomp.sh
+        skip:salvage:unstageable:scripts/test-vsock-seccomp-derivation.sh
+        2 path(s) could not be staged by this substrate and were skipped; see
+        skip:salvage:unstageable lines above. Salvage proceeded without them.
+
+      WHAT THE REF ACTUALLY CARRIED, from `git diff --stat 185a53338^ 185a53338`:
+
+        scripts/derive-vsock-seccomp.sh           150 ------
+        scripts/test-vsock-seccomp-derivation.sh  148 ------
+
+      Both deletions travelled. The two paths it named as skipped are precisely
+      the two it salvaged correctly.
+
+      THE LIKELY MECHANISM, stated as a candidate rather than a conclusion
+      because I did not read the tool's source: for a REMOVED path there is
+      nothing to `git add`, so an add-based staging step fails and the path is
+      classified unstageable — while the deletion is nonetheless captured,
+      presumably by a commit -a or an index that already held it. If so the
+      check is asking "did add succeed" where the question is "is this path's
+      state in the ref".
+
+      WHY IT MATTERS MORE THAN A COSMETIC WRONG COUNT. This output is read at
+      exactly the moment an operator is handing work to another host because
+      their own gate cannot run it. The tool's summary says the retirement did
+      NOT travel; the truth is that it did. On run 1 I believed the retirement
+      had been dropped and began to report that to the coordinator — the ref's
+      own diff --stat is what contradicted it. An operator who trusts the
+      summary will either re-do work that is already safe, or hand over a ref
+      they believe is incomplete and say so, which is a false claim made in good
+      faith on the tool's word.
+
+      FAMILY: 1260-2qgi. A status channel reports something other than the state
+      it describes, and the reader supplies the difference. Here the report is
+      not absent — it is CONFIDENTLY WRONG, which is the harder variant, because
+      absence invites a check and a confident statement does not.
+    deliverable: |
+      The skip classification reflects whether the path's state reached the ref,
+      not whether one particular staging call returned zero. A deletion that is
+      carried is reported as carried; a path genuinely dropped is still reported
+      as dropped and is genuinely absent from the ref.
+
+      THE CHEAP WRONG FIX TO AVOID: suppressing the skip line for deletions.
+      That trades a false positive for a blind spot — a deletion that truly
+      failed to travel would then be silent, and this tool is used precisely
+      when the operator cannot verify locally. Whatever the fix, the tool must
+      still be able to say "this did not make it".
+
+      Worth deciding in the same pass: whether the summary should simply report
+      the ref's diff --stat, which is the authority the operator ends up
+      consulting anyway. That is a different shape from patching the
+      classification and may be the smaller change.
+    next_action: >
+      Reproduce first; it needs no macOS host and no gate. In any checkout:
+      `git rm` a tracked file, run scripts/salvage-dirty-worktree.sh with a
+      throwaway slug, and compare the tool's skip lines and summary count
+      against `git diff --stat <ref>^ <ref>` for the ref it just created —
+      expect the named path to appear as removed in the diff while the tool
+      claims it was skipped. Then read the staging step in
+      scripts/salvage-dirty-worktree.sh; the mechanism named in `context` is a
+      CANDIDATE from the observed behaviour, not a source read, so confirm it
+      before fixing it. Do NOT close this by silencing the line for deletions —
+      the negative control in verifiable_closure exists to refuse that.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-20 at the coordinator's request,
+      after the tool's output twice contradicted the refs it produced. Both the
+      quoted output and both `git diff --stat` readings were taken on this host;
+      the refs (185a53338, a164a2e0b) are on origin and can be re-read by anyone.
+      The mechanism in `context` is explicitly a candidate — I did not read the
+      tool's source before filing.

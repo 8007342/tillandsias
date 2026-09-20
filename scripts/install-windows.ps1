@@ -451,6 +451,64 @@ try {
     }
     SayOk $VerLine
 
+    # -- Verify the install bits via --diagnose --json (order 1258-8wfb) ------
+    # RESTORED. Added by d7bfcdd9f (2026-05-28), extended by 567009f68
+    # (build_commit) and a9163cdaa (os_version / wsl_version), and removed by
+    # 6cdaa8ac2 (2026-06-23) inside a wholesale installer rewrite that kept the
+    # --version layer above and dropped this one. The litmus step guarding it
+    # then reported PASS for three months, because its seven-conjunct grep
+    # chain was adjudicated on NON-EMPTY OUTPUT instead of exit code: the first
+    # conjunct matched, printed a line, and the step passed while five of the
+    # seven returned rc=1. Do not weaken that step back to non-empty output.
+    #
+    # THIS CHECKS THE INSTALL, NOT THE PROVISIONING, and that distinction is
+    # the only reason it can run here at all. From exit_code_from() in
+    # crates/tillandsias-windows-tray/src/notify_icon.rs:
+    #   exit 0 = re-install over an already-provisioned tray (phase Ready).
+    #   exit 3 = distro registered and wire reachable, guest still converging.
+    #            Explicitly not a failure.
+    #   exit 2 = first install: the binary works and the distro is not
+    #            provisioned yet, because --init has not run. THIS IS THE
+    #            EXPECTED RESULT ON A CLEAN MACHINE and must not fail anything.
+    #   exit 1 = the binary did not produce a verdict at all. exit_code_from()
+    #            never returns 1, so this means crashed or unlaunchable: the
+    #            install bits really are broken.
+    # FAILING ON ANY NON-ZERO WOULD FAIL EVERY FIRST INSTALL. That is why the
+    # test below is -eq 1 and not -ne 0, and why changing it needs this comment
+    # read first.
+    #
+    # Ordering (agreed with yolanda for 1286-4437): this runs BEFORE anything
+    # destructive, so a broken binary aborts here and never gets as far as
+    # resetting a distro. The post-reprovision readiness check belongs to that
+    # order, not to this one.
+    #
+    # Captured through cmd.exe for the same reason as --version above: the
+    # release tray is GUI-subsystem and PowerShell's direct stdout capture is
+    # unreliable for large writes.
+    Say "Verifying install bits via --diagnose --json..."
+    $DiagTmp = Join-Path $env:TEMP "tillandsias-install-diag-$([guid]::NewGuid().ToString('N')).json"
+    & cmd.exe /c "`"$InstalledExe`" --diagnose --json > `"$DiagTmp`" 2>nul"
+    $DiagExit = $LASTEXITCODE
+    $DiagJson = Get-Content $DiagTmp -Raw -ErrorAction SilentlyContinue
+    Remove-Item $DiagTmp -ErrorAction SilentlyContinue
+    if ($DiagExit -eq 1) {
+        Die "tillandsias-tray --diagnose --json hard-failed (exit $DiagExit); install bits broken."
+    }
+    if ($DiagJson) {
+        try {
+            $DiagReport = $DiagJson | ConvertFrom-Json -ErrorAction Stop
+            $DiagCommit = if ($DiagReport.build_commit) { $DiagReport.build_commit } else { '(unknown)' }
+            $DiagOsVer  = if ($DiagReport.os_version)   { $DiagReport.os_version }   else { '(not detected)' }
+            $DiagWslVer = if ($DiagReport.wsl_version)  { $DiagReport.wsl_version }  else { '(not detected -- run wsl --install)' }
+            SayOk "diagnose: version=$($DiagReport.version) commit=$DiagCommit (--diagnose exit $DiagExit)"
+            SayOk "host:     OS=$DiagOsVer; WSL=$DiagWslVer"
+        } catch {
+            SayWn "--diagnose ran (exit $DiagExit) but its JSON did not parse; the binary may still be sound."
+        }
+    } else {
+        SayWn "--diagnose ran (exit $DiagExit) but captured no JSON output."
+    }
+
     # -- Installed-Software registration (windows-260722-3) -------------------
     # ONE idempotent HKCU key, SAME name every install: DisplayVersion is
     # updated in place, so Settings > Apps always shows exactly the latest
