@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-fleet-shared-local-expert-system-served-from-one-lan-host-with-rag-over-the-shared-git-mirror-so-floor-hosts-stop-building-their-own-indexes-needs-refinement-before-it-is-work
+    order: 1289-ggsb
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, rag, git-mirror, multi-host, design, needs-refinement]
+    estimated_hours: 8
+    owned_files:
+      - plan/issues/host-credentialless-push-via-local-git-mirror-2026-09-19.md
+    unscoreable: |
+      A design exploration the operator explicitly marked as needing
+      refinement ("that one needs refinement … we'll deal with the shared one
+      later"); it closes on a written design with the questions below answered
+      and a follow-on implementation packet filed, not on a fixture. Scored by
+      reading.
+    title: |
+      a fleet-shared local expert system served from one LAN host with RAG over the shared git mirror, so floor hosts stop building their own indexes — needs refinement before it is work
+    context: |
+      Operator idea 2026-09-20: "We might even have all the fleet use a 'Local'
+      Expert system running in Macuahuitl with the RAG from the shared
+      git-mirror." Coordinator's read at filing: it is the Direction ("giving
+      forge agents local EXPERTS") taken to its conclusion; one index built
+      from the mirror's trunk instead of seven per-checkout indexes; the floor
+      hosts (esme's N100, macneo) stop building indexes they can barely afford;
+      answers are consistent fleet-wide. It needs the expert's MCP endpoint
+      served over HTTP on the LAN with a shared token and each host's MCP
+      config pointed at it. The trade to design around is STALENESS: a host's
+      own expert answers about its own checkout, the shared one answers about
+      trunk, so a host working an unlanded branch must know which it is asking;
+      serve both, name them differently. Questions to answer before this is
+      work: which host serves it (the operator first named macuahuitl; the
+      tiering says lenovinha or the planned Raspberry Pi 5 fleet server is the
+      better place than the operator's desktop); how the index tracks the
+      mirror (rebuild on relay, or incremental); auth on the LAN endpoint;
+      what a wifi host's query latency is against the local expert's; and
+      whether the forge's per-launch experts stay as the branch-aware tier.
+      Depends on the credential-free push row (the mirror) existing first.
+    next_action: >
+      Write the design as a short issue file with the five questions answered
+      by measurement where possible (index build time on lenovinha vs esme;
+      query latency over wifi), then file the implementation packet and close
+      this one citing it. Do not implement from this row.
+    provenance: |
+      Filed by the coordinator (macuahuitl-fedora) 2026-09-20 from the
+      operator's idea; the operator asked for it to be recorded as needing
+      refinement.
