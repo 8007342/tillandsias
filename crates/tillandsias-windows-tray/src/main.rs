@@ -66,6 +66,7 @@ const KNOWN_FLAGS: &[&str] = &[
     "--version",
     "-V",
     "--provision-once",
+    "--reset-state",
     "--reset-guest",
     "--status-once",
     "--diagnose",
@@ -146,11 +147,17 @@ fn main() {
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }
-    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest and
-    // reprovision from scratch. Destructive by design — one re-auth is the
-    // only cost.
-    if std::env::args().any(|a| a == "--reset-guest") {
-        std::process::exit(notify_icon::reset_guest_once());
+    // ORDER 1286-4437. `--reset-state` is the canonical name on all three
+    // platforms; `--reset-guest` is the alias operators already use. Both
+    // enter the same body, so they cannot drift.
+    //
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the local state and
+    // reprovision from scratch, exiting with the provision's status.
+    // Destructive by design, and TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
+    // documented opt-out; the BINARY owns that decision, so the installer
+    // calls this unconditionally and never reads the variable itself.
+    if std::env::args().any(|a| a == "--reset-state" || a == "--reset-guest") {
+        std::process::exit(notify_icon::reset_state_once());
     }
     // 945-vpg3: headless forge launch. Until this existed, the ONLY way to
     // open a forge was a tray menu click, so an automated release blessing
