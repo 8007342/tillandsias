@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-20T06:56:09Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        CORRECTION BY THE FILER, BEFORE ANYONE ACTS ON THIS ROW: THE MECHANISM IN MY OWN context IS WRONG, AND THE EXIT CRITERION I WROTE ADDRESSES A CASE THE CODE ALREADY HANDLES WELL. Measured on esmeraldinha 2026-09-20, by reading scripts/hooks/pre-push-local-gate.sh:456-495 instead of inferring from the transcript. The observed BEHAVIOUR on this row stands; the CAUSE does not.
+
+        WHAT I CLAIMED: that the lane reports STALE because `<binary>.validator-surface-sha256` DOES NOT EXIST.
+
+        WHY THAT IS FALSE, from the refusal's own wording. `_validator_surface_verdict()` opens with `[[ -f "$_stamp" ]] || return 2`, and the three outcomes get DIFFERENT text:
+
+          rc=1 (stamp present, hash MISMATCHED) ->
+              "validator-surface hash — validate-yaml/check --strict-fragments/the fragment
+               checkers' own sources changed since this binary was built (1152-y3bv); a change
+               elsewhere in the crate or in the workspace Cargo.lock would NOT have triggered this"
+          rc=2 (stamp ABSENT, falls to the mtime fallback) ->
+              "mtime fallback — no validator-surface stamp recorded for this binary yet; run
+               scripts/check-plan-binary-current.sh (or the full gate) once to mint one ..."
+
+        The refusal I received was VERBATIM the rc=1 string. I have it in the log. So a stamp file EXISTED and its hash mismatched; the absent-stamp path was never taken. AND NOTE WHAT THE rc=2 TEXT ALREADY DOES: it names the absent stamp as the condition and prints the exact command that fixes it. The defect I described does not exist — that case is already diagnosed better than most things in this tree.
+
+        WHAT ACTUALLY HAPPENED, reconstructed and consistent with every observation:
+          1. Early in the session I ran `git reset --hard origin/windows-next`, moving this checkout 173 commits (3c603061d -> b2a3e0ab8). That CHANGED the validator sources on disk.
+          2. A stamp file from an earlier build still sat beside the binary holding the OLD surface hash.
+          3. I rebuilt the plan binary at 21:39 (3m29s, real work). THE BINARY WAS THEREFORE CURRENT with the new sources.
+          4. The lane compared the STAMP's hash against the CURRENT surface hash, they differed, and it reported "the resolved plan binary is STALE ... changed since this binary was built".
+          5. That sentence is FALSE in its operative clause. The sources changed since the STAMP WAS WRITTEN. The binary was rebuilt AFTER they changed. The binary was never stale.
+          6. The rebuild remedy was a no-op (3.57s, nothing compiled) because there was nothing to rebuild — which is exactly what one expects for a current binary, and is the observation that should have led me to this reading rather than to the absent-stamp one.
+          7. check-plan-binary-current.sh re-minted the stamp and the lane accepted with no rebuild in between.
+
+        THE DEFECT, RESTATED CORRECTLY AND MORE NARROWLY. A REBUILD DOES NOT INVALIDATE OR REFRESH THE STAMP. The stamp is written only by scripts/check-plan-binary-current.sh (its line 153; build.sh, local-ci.sh and the land tool never mint it, the hook only reads it). So a binary rebuilt after its sources moved inherits its predecessor's stamp, and the lane attributes the resulting mismatch to the BINARY when it belongs to the STAMP. The user-visible consequence is unchanged from what this row already records — a refusal whose printed remedy demonstrably fixes nothing — but the fix is different: the message must not say "since this binary was built" when it cannot know that, and a rebuild should either drop the stale stamp or mint a new one.
+
+        THE EXIT CRITERION ON THIS ROW SHOULD BE REPLACED, NOT KEPT. `refused:plan-binary-unstamped` targets rc=2, which is already correct and already names its own remedy. The arm worth having is about rc=1: the verdict must distinguish "the binary predates the current validator surface" from "the stamp predates it and the binary does not", and must only claim the former when the binary's own mtime supports it. Arm 3 of the original closure — genuine staleness keeps its wording and its rebuild remedy, with a mutation arm proving it still reds — remains right and must survive any change, because 1129-4su6's protection is the thing that must not be weakened.
+
+        A SECOND QUESTION THIS OPENS, WHICH I HAVE NOT ANSWERED AND WILL NOT GUESS. check-plan-binary-current.sh mints the stamp only when `plan_binary_is_stale "$BIN"` is FALSE — an MTIME predicate — and then writes the CURRENT surface hash. That is a weaker test than the lane's. Whether a binary that is genuinely surface-stale but mtime-fresh can therefore be laundered into a fresh-looking stamp by running the checker is a real question with a real safety consequence (1129-4su6), and it needs someone to construct the case rather than reason about it from the source as I just did. It may be unreachable in practice; I do not know.
+
+        ON PRIORITY. Do NOT raise this to p1 on the reasoning that reached me — that every freshly built binary is unstamped and this is the default state after any manual rebuild. The first half is true (only the checker mints stamps) and the conclusion does not follow, because the unstamped case lands on rc=2, which is handled and clearly worded. The condition that actually bit here needs a stamp to already exist and the sources to have moved under it, which is narrower. I am leaving the priority at p2 and recording why; anyone who wants it raised should do so on the corrected mechanism, not on this one.
+
+        HOW I GOT IT WRONG, since it is the same shape this row is about. I read the SECOND half of a compound remedy working (`check-plan-binary-current.sh` fixed it) and inferred the condition it fixes most obviously (no stamp), without checking which of three branches had produced the message I was holding. The branch was identifiable from its own text the whole time. NAME WHAT THE INSTRUMENT READS — the refusal string distinguishes the cases, and I did not read it against the code until after filing.
