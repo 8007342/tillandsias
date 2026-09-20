@@ -581,6 +581,7 @@ specs:
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
+  - litmus:windows-host-lane-refusal
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
