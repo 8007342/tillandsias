@@ -1,0 +1,106 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-skills-single-source-guard-enumerates-from-the-git-index-so-a-newly-written-skill-is-invisible-to-it-and-the-author-gets-a-green-at-the-one-moment-they-would-check
+    order: 1314-w9fx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [skills, gate, tooling, agent-safety, green-on-one-regime]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-skills-single-source.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a change to an
+      existing guard plus a new arm in its fixture; the arm's name cannot be
+      pinned before it is written (885-92iu), and it lands in the same commit as
+      the change (1136-n8sh). Future arm:
+      scripts/test-check-skills-single-source.sh gains "an UNSTAGED new skill
+      directory is reported, not skipped".
+    verifiable_closure: |
+      With a new skill directory present on disk and NOT staged, and with zero
+      or some of its runtime symlinks present,
+      scripts/check-skills-single-source.sh REPORTS it — either as the same
+      violation:missing-from-runtime it would raise once staged, or as a
+      distinct advisory naming the unstaged directory — instead of exiting ok.
+      MUTATION ARM: revert to enumerating canonical skills from `git ls-files
+      skills/` alone and the new arm REDS.
+      PRE-FIX RESULT, MEASURED on lenovinha 2026-09-20 and reproduced twice:
+      with skills/initialize-bare-metal-host present on disk but unstaged, the
+      guard printed `ok:skills-single-source:5:16`; with the same directory
+      staged and no runtime links, it printed
+      `violation:missing-from-runtime:.claude/skills/initialize-bare-metal-host`.
+      Same tree, same command, opposite verdicts, decided by `git add`.
+    title: |
+      the skills single-source guard enumerates canonical skills from the GIT INDEX, so a newly written skill is invisible to it until it is staged — the author runs the check at the one moment it cannot fail, and the red surfaces on another host hours later
+    context: |
+      FOUND 2026-09-20 by lenovinha-silverblue, on its own new skill, having
+      fixed a different bug in this same guard that morning.
+
+      THE SEQUENCE. I wrote skills/initialize-bare-metal-host, created ONLY the
+      .claude runtime symlink, ran
+      `scripts/check-skills-single-source.sh` and got
+      `ok:skills-single-source:5:16`, and committed on that green. The relay
+      host then refused the land at the same guard:
+      `violation:missing-from-runtime:.opencode/skills/initialize-bare-metal-host`
+      — a new skill needs a 120000 symlink in EACH runtime that has a skills
+      directory (.claude, .opencode, .codex, .github; .gemini is itself a
+      directory symlink and is skipped), or a declaration in
+      skills/HARNESS-SCOPED.txt.
+
+      THE MECHANISM, read rather than inferred. Line 57 of the guard:
+        canonical="$(git ls-files skills/ | sed 's|^skills/||' | cut -d/ -f1 | sort -u | ...)"
+      The canonical set comes from the INDEX. An unstaged new skill is not in
+      it, so the loop that checks each runtime has nothing to check and the
+      guard exits ok. Reproduced both ways on one tree: unstaged -> ok, staged
+      -> violation. THE VERDICT IS DECIDED BY `git add`, not by the tree.
+
+      WHY THE INDEX IS RIGHT FOR THE REST OF THE GUARD, which is why this is a
+      narrow fix and not a rewrite: the guard's whole point is to read MODES
+      (`git ls-files -s` reports 120000 for a symlink), and its own header
+      says so — the filesystem cannot distinguish a symlink from a copy on
+      every platform the fleet runs. So the runtime-side checks must stay
+      index-driven. It is only the ENUMERATION of what exists that must also
+      see the working tree.
+
+      THE SHAPE IS GREEN-ON-ONE-REGIME, the thing this tree has the most scar
+      tissue about: the author checks at the natural moment and is told yes;
+      the failure appears on a host that did not write the skill, in a land
+      that bundles other people's work. Land 37 was refused this way and had to
+      be relaunched as land 38 with the three missing links added relay-side.
+
+      THE COST IS SMALL AND REAL: one refused land, one relaunch, and the
+      author learning the rule from someone else's refusal rather than from the
+      check they ran.
+    next_action: |
+      Nobody holds this. What is LEFT:
+      1. Make the ENUMERATION see the working tree as well as the index —
+         canonical = union of `git ls-files skills/` and the directories
+         present under skills/ — while leaving every MODE check index-driven,
+         because 120000 is only visible there.
+      2. Decide the verdict for an unstaged new skill. Prefer the SAME
+         violation it would raise once staged: a softer advisory reproduces the
+         defect in gentler form, since an advisory is what the author ignores.
+         If a distinct wording is chosen it must still be non-zero exit.
+      3. The fixture arm named in unscoreable, with the mutation that reverts
+         to index-only enumeration and reds.
+      4. One line wherever a new skill is documented: a new skill is the
+         directory PLUS four runtime symlinks, and this guard is the
+         one-second check — which is only true once this row lands.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-20 from its own false green,
+      refused at the relay by macuahuitl-fedora (land 37 -> land 38).
+      Related: 1312-i6da (the skill that exposed it), 631-wpkd (the guard's
+      order), and the morning's fix to this same guard's discriminator.
+
+events:
+  - packet_id: the-skills-single-source-guard-enumerates-from-the-git-index-so-a-newly-written-skill-is-invisible-to-it-and-the-author-gets-a-green-at-the-one-moment-they-would-check
+    event:
+      type: note
+      ts: "2026-09-20T18:39:13Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260920t183914z
+      summary: |-
+        found on my own skill hours after fixing a different bug in the same guard; unstaged ok, staged violation, same tree
