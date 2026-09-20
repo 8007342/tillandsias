@@ -175,6 +175,7 @@ specs:
   - litmus:reset-state-contract
   - litmus:installer-swap-atomicity
   - litmus:installer-reprovisions-on-install
+  - litmus:validator-surface-currency
   - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape

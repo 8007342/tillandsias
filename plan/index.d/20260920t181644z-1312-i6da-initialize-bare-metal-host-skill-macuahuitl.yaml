@@ -1,0 +1,76 @@
+packets:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    order: 1312-i6da
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [skills, git-mirror, enclave, bare-metal, bootstrap, agent-safety]
+    estimated_hours: 6
+    owned_files:
+      - skills/initialize-bare-metal-host/SKILL.md
+      - .claude/skills/initialize-bare-metal-host
+      - scripts/check-bare-metal-host-initialized.sh
+      - scripts/test-initialize-bare-metal-host-idempotent.sh
+    verifiable_closure: |
+      scripts/test-initialize-bare-metal-host-idempotent.sh prints
+      `ok:initialize-bare-metal-host:3/3` and exits 0, where: (1) IDEMPOTENT:
+      running the skill's commands twice on one bare-metal Linux host yields
+      the same verdict line from scripts/check-bare-metal-host-initialized.sh
+      (`ok:bare-metal-host:<host>:enclave=up mirror=up router=up inference=up github=<seeded|not-seeded>`)
+      both times, and no container's creation timestamp (podman ps --format
+      '{{.Names}} {{.CreatedAt}}') changes between the runs; (2) REBUILD FROM
+      NOTHING: after `podman system reset --force` on a pre-authorised smoke
+      host, the skill's commands alone bring the host back to the same
+      verdict with no manual step, and the github field reads not-seeded
+      without any prompt (the skill never seeds, asks for or copies a token);
+      (3) TROUBLESHOOTING: with the mirror container stopped, the checker
+      prints `todo:initialize-bare-metal-host:mirror:<the skill's restart
+      command>` and exits 1, and the skill's troubleshooting section names
+      that signature and the 1310-rec6 one (a fully successful relay sweep
+      printing `fatal: the remote end hung up unexpectedly` dozens of times
+      beside `Startup retry-push OK`, versus a real `fatal: Authentication
+      failed`) with the command that discriminates them. SELF-EVOLVING RULE,
+      checked: the skill carries a `## Repairs` section where every entry
+      has date, host, symptom, the discriminating command and the fix; the
+      checker refuses an entry missing any of the five. PRE-FIX RESULT: FAILS
+      on every arm — no skill, no checker, no fixture; the recipe lives in
+      one host's transcript and on 1310-5e6g's row, and a second bare-metal
+      host has no instructions to bring up or repair its own mirror.
+    next_action: |
+      OPERATOR DIRECTION (2026-09-20, verbatim): "It might be a standalone
+      skill, we want that initialization to be idempotent, so agents running
+      on bare metal rebuilding and troubleshooting the mirror itself should
+      have standalone instructions, and we can let this instructions be self
+      evolving." This supersedes the coordinator's earlier reading that the
+      bring-up was a step inside ./skills/join-the-fleet (1311-ajpm):
+      join-the-fleet's substrate step REFERENCES this skill and never
+      duplicates it.
+
+      SCOPE: ./skills/initialize-bare-metal-host — bring up, rebuild and
+      troubleshoot THIS host's own enclave and per-project git mirror.
+      Recipe as proven on lenovinha 2026-09-20 (the mirror-to-GitHub half:
+      150 -> 155 refs relayed, zero stranded, keyring PID unchanged all day):
+      `tillandsias --ensure-enclave` (vault, proxy), then
+      `TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia tillandsias --bash <project>`
+      (mirror, router, inference); both ensure-shaped. The skill ends by
+      printing `tillandsias --github-status`; seeding a token is the
+      operator's per-host act (`--github-login --with-token`, stdin), stated
+      as such and never performed by the skill. Restart discipline from
+      1310-rec6: while each host owns its OWN mirror it may restart it
+      freely; that ends the day a mirror is shared (1290-5833). Link 3 of
+      1310-5e6g (host-to-mirror over ssh with the per-mirror signer role) is
+      NOT a precondition: v1 documents the lane as "not yet; pushes still
+      take the keyring path" and v2 adds the lane when it works.
+
+      SELF-EVOLVING: the skill is edited by whoever repairs a mirror from
+      it, in the same land as the repair, under `## Repairs` with the five
+      fields; the checker is what keeps the evolution honest. Land through
+      the full gate (a script and a fixture).
+
+      OWNER: lenovinha (holds the recipe and the measurements). v1 first — it
+      is small and the operator wants bare-metal bootstrap instructions now —
+      then link 3. The rebuild-from-nothing arm runs on a pre-authorised
+      smoke host (pirria), never on a workstation without per-run consent.

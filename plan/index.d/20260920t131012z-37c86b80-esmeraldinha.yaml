@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    field: status
+    value: completed
+    ts: "2026-09-20T13:10:12Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    event:
+      type: completed
+      ts: "2026-09-20T13:10:12Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: Relay-landed by macuahuitl as ok:land:5928dbad2:attempt-2 from source commit 37b71d087 (salvage/esmeraldinha/20260920-1258-8wfb-installer-diagnose). VERIFIED ON TRUNK BY CONTENT at 49b4efe31, not by ancestry, because a land here rebases: install-windows.ps1 carries 'DiagExit -eq 1' and 'install bits broken' and surfaces os_version; litmus-windows-tray-diagnose-cli-surface.yaml's install-windows step declares assert_exit: 0 and no longer carries assert_output_nonempty. All four exit criteria met. Criterion 4, the one this row exists for, proved TWICE: on copies all seven literals are load-bearing (ok:negative-control:7/7), and on the REAL installer with one literal deleted the litmus reports [FAIL] litmus:windows-tray-diagnose-cli-surface, with the file then restored and the tree verified clean -- the copies arm proves the CHAIN reds, only the real arm proves the STEP does. Pre-fix: CHAIN_RC=1 with the litmus reporting PASS 9/9 100%. The closure was corrected before implementation: failing on any non-zero diagnose would have failed every first install, since exit_code_from() returns 2 whenever the distro is unregistered, so the throw is -eq 1 only, as the removed code documented; confirmed independently by yolanda from two real cold provisions (91s, 79s). Full evidence, the four-commit regression history including a9163cdaa, and the harness error of mine are on the closing event of 2026-09-20.
+  - packet_id: install-windows-ps1-lost-its-post-install-diagnose-verification-and-the-litmus-guarding-it-has-reported-pass-for-three-months
+    event:
+      type: note
+      ts: "2026-09-20T13:10:12Z"
+      host: esmeraldinha
+      summary: |-
+        All four exit criteria met and verified by content on trunk; the negative control was demonstrated at step level against the real installer, not only at chain level on copies.

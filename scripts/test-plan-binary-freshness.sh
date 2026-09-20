@@ -282,6 +282,81 @@ case "$_out2" in
     *)            ck "CONTROL: a CURRENT binary is not refused as stale" yes yes ;;
 esac
 
+# ── ORDER 1287-h6qn: THE CONTENT CONTRACT ──────────────────────────────────
+#
+# The arms above pin the MTIME ladder, which is still the lane's behaviour for a
+# binary that cannot answer for itself — every binary predating 1287-h6qn, and
+# every stub. These arms pin what replaces it for a binary that CAN.
+#
+# WHY THE LADDER IS STILL RIGHT ABOVE AND WRONG HERE. `git rebase` rewrites
+# every file it touches with a fresh mtime and identical bytes, so the mtime
+# ladder condemns a byte-for-byte correct binary and charges a 66s rebuild that
+# produces a functionally identical one. That is the row. The content hash is
+# the verdict when it exists; the ladder is the fallback when it does not.
+#
+# THE STUBS ANSWER ON STDOUT, because a zero exit is not a verdict: the lane's
+# first draft took `exit 0` as "current" and the stub above — which exits 0 for
+# every argument — was vouched for, opening the lane for every old binary in the
+# fleet. That arm is the one below named "a binary that cannot ANSWER".
+
+_write_stub() { # $1 = what `validator-surface-hash --check` should do
+    cat > "$LW/wc/target/release/tillandsias-plan" <<STUB
+#!/usr/bin/env bash
+case "\${1:-}" in
+    capabilities) echo compact; exit 0 ;;
+    check) exit 0 ;;
+    validate-yaml) exit 0 ;;
+    yaml-type) echo '!!map'; exit 0 ;;
+    validator-surface-hash) $1 ;;
+esac
+exit 0
+STUB
+    chmod +x "$LW/wc/target/release/tillandsias-plan"
+}
+
+# Keep the sources mtime-NEWER than the binary for all three arms: under the old
+# rule that is a guaranteed refusal, so each arm's verdict is decided purely by
+# what the binary says about its own content.
+_plant_mtime_stale() {
+    touch -t 202609041215 "$LW/wc/target/release/tillandsias-plan"
+    touch -t 202609111933 "$LW/wc/crates/tillandsias-plan/src/main.rs"
+}
+
+# ARM 1 — THE ROW'S WHOLE POINT. mtime says stale, the binary says it was built
+# from these bytes, so the push is ACCEPTED and no rebuild is charged.
+_write_stub "echo 'ok:validator-surface:deadbeefdeadbeef'; exit 0"
+_plant_mtime_stale
+_out="$(_lane_push)"; _rc=$?
+case "$_out" in
+    *"is STALE"*) ck "CONTENT: an mtime-stale binary that vouches for its content is ACCEPTED" yes no ;;
+    *)            ck "CONTENT: an mtime-stale binary that vouches for its content is ACCEPTED" yes yes ;;
+esac
+
+# ARM 2 — the mutation control. The binary reports a real difference, so the
+# lane refuses and the refusal carries BOTH hashes, not "the newer file":
+# under a content contract "stale relative to what" is answered by the hashes.
+_write_stub "echo 'stale:validator-surface built-from=1111111111111111 checkout=2222222222222222' >&2; exit 3"
+_plant_mtime_stale
+_out="$(_lane_push)"; _rc=$?
+ck "CONTENT: a binary whose surface really differs is REFUSED" 1 "$_rc"
+case "$_out" in
+    *built-from=1111111111111111*checkout=2222222222222222*)
+        ck "CONTENT: the refusal names BOTH hashes" yes yes ;;
+    *)  ck "CONTENT: the refusal names BOTH hashes" yes no ;;
+esac
+
+# ARM 3 — NEGATIVE CONTROL, and the one the gate caught. A binary that cannot
+# ANSWER must not be vouched for by its exit status; it falls to the ladder and
+# is refused by mtime exactly as before.
+_write_stub "exit 0"   # exits 0, says nothing — an old binary, or any stub
+_plant_mtime_stale
+_out="$(_lane_push)"; _rc=$?
+ck "CONTENT: a binary that cannot ANSWER falls back to the ladder and is refused" 1 "$_rc"
+case "$_out" in
+    *"is STALE"*) ck "CONTENT: the fallback refusal still names staleness" yes yes ;;
+    *)            ck "CONTENT: the fallback refusal still names staleness" yes no ;;
+esac
+
 printf 'plan-binary-freshness: %d passed, %d failed\n' "$pass" "$fail"
 if [ "$fail" -eq 0 ]; then
     echo "ok:plan-binary-freshness:$pass"
