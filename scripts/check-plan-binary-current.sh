@@ -147,7 +147,23 @@ _vs_surface_hash() {
         _vs_surface_lock_stanzas
     } | $_sha1 $_sha2 2>/dev/null | cut -d' ' -f1
 }
-if command -v plan_binary_is_stale >/dev/null 2>&1 && ! plan_binary_is_stale "$BIN"; then
+# ORDER 1287-h6qn — ASK THE BINARY FIRST, and mint nothing when it can answer.
+#
+# A binary built after 1287-h6qn carries the validator surface's CONTENT hash,
+# so its own `--check` settles currency with no stamp file at all. That retires
+# this block's whole failure class for such binaries: the stamp cannot be
+# absent, cannot lag, and cannot be orphaned beside a redirected
+# CARGO_TARGET_DIR, because there is no stamp.
+#
+# THE OLD PATH REMAINS FOR OLD BINARIES, and only for them. Minting is still
+# gated on the mtime predicate below, which is why it could never rescue the
+# case this row was filed for: `git rebase` rewrites a surface file with a fresh
+# mtime and identical bytes, the predicate says stale, and this block declines
+# to stamp a binary that is byte-for-byte correct (measured on pirria
+# 2026-09-20). A mid-upgrade fleet keeps exactly the behaviour it had.
+if "$BIN" validator-surface-hash --check >/dev/null 2>&1; then
+    echo "ok:validator-surface:content-verified — this binary was built from these bytes (1287-h6qn); no stamp needed" >&2
+elif command -v plan_binary_is_stale >/dev/null 2>&1 && ! plan_binary_is_stale "$BIN"; then
     _vs_new="$(_vs_surface_hash)"
     if [ -n "$_vs_new" ]; then
         _vs_stamp="${BIN}.validator-surface-sha256"

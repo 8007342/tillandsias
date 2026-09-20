@@ -474,6 +474,34 @@ _validator_surface_verdict() { # $1 = binary path
 # exists yet — never override an actual surface-hash verdict.
 _lane_staleness_check() { # $1 = binary path
     local _bin="$1" _rc
+
+    # ORDER 1287-h6qn — ASK THE BINARY, which knows what it was built from.
+    #
+    # build.rs embeds the validator surface's CONTENT hash, so `--check`
+    # compares "what I was built from" against "what this checkout holds" and
+    # needs no stamp file, no mtime and no operator who knew to run a checker
+    # first. That retires the whole failure class the stamp had — absent,
+    # lagging, or orphaned under a redirected CARGO_TARGET_DIR — and it fixes
+    # the case that defeated every earlier mechanism: `git rebase` rewrites a
+    # surface file with a fresh mtime and identical bytes, and a content hash
+    # does not move (1172-dyvd: currency is a content probe, never an mtime).
+    #
+    # exit 0 = same, 3 = different, 4 = cannot ask. ONLY 0 and 3 are verdicts.
+    # A 4, or a binary too old to have the subcommand, falls through to the
+    # stamp-and-mtime ladder below, so a mid-upgrade fleet keeps the old
+    # behaviour rather than being vouched for by a question nobody answered.
+    if _rc="$("$_bin" validator-surface-hash --check 2>&1)"; then
+        _LANE_STALE_VIA="embedded validator-surface hash — this binary was built from these bytes (1287-h6qn)"
+        return 1
+    else
+        case "$_rc" in
+            stale:validator-surface*)
+                _LANE_STALE_VIA="embedded validator-surface hash — ${_rc#stale:validator-surface } (1287-h6qn); a rebase that rewrote a file without changing it would NOT have triggered this"
+                return 0
+                ;;
+        esac
+    fi
+
     _validator_surface_verdict "$_bin"; _rc=$?
     case $_rc in
         0)
