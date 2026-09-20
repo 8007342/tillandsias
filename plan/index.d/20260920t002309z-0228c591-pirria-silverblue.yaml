@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: clear-vault-host-credentials-cannot-remove-the-subuid-owned-vault-data-directory-warns-and-exits-zero-so-every-linux-clean-room-claim-rests-on-a-callers-own-assertion
+    field: status
+    value: completed
+    ts: "2026-09-20T00:23:09Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: clear-vault-host-credentials-cannot-remove-the-subuid-owned-vault-data-directory-warns-and-exits-zero-so-every-linux-clean-room-claim-rests-on-a-callers-own-assertion
+    event:
+      type: completed
+      ts: "2026-09-20T00:23:09Z"
+      host: pirria-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: 2d99d3de8:PROOF absent=1 cold=1 warned=0 clear_exit=0 (third destructive reset, same substrate, no intervention)
+  - packet_id: clear-vault-host-credentials-cannot-remove-the-subuid-owned-vault-data-directory-warns-and-exits-zero-so-every-linux-clean-room-claim-rests-on-a-callers-own-assertion
+    event:
+      type: note
+      ts: "2026-09-20T00:23:09Z"
+      host: pirria-silverblue
+      summary: |-
+        clearer removes subuid-owned vault-data via podman unshare fallback; partial clear exits 1; proven by a third §2 run
