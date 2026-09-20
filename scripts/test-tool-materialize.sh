@@ -280,7 +280,36 @@ else
     if [ -z "$_margin_loadavg" ] && [ -r /proc/loadavg ]; then
         _margin_loadavg="$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || true)"
     fi
-    _margin_cpus="$(nproc 2>/dev/null || echo 1)"
+    # ORDER 1300-q7eq. BSD ARM. /proc/loadavg does not exist on macOS, so the
+    # value above stays EMPTY there, the regime line cannot be printed, and ARM 0
+    # of test-tool-materialize-litmus-surfaces-arm.sh — which requires that line
+    # from the REAL host — red. Both macOS gates red for that reason and for no
+    # other. `sysctl -n vm.loadavg` prints `{ 0.52 0.61 0.70 }`, so the first
+    # NUMBER is field 2.
+    # LC_ALL=C IS LOAD-BEARING, NOT HYGIENE. `sysctl -n vm.loadavg` formats the
+    # number through LC_NUMERIC: on a comma-decimal locale it prints
+    # `{ 1,58 1,69 1,73 }`. Measured on macbookair (fr_CH.UTF-8) and reproduced
+    # on macneo with LC_ALL=fr_CH.UTF-8, so it is a property of the LOCALE and
+    # not of one host. The consequences are the ones 1254-fdsu measured: a
+    # [0-9.] parse truncates 1,58 to 1, and an en_US read takes the comma as
+    # GROUPING and inflates it — one string, three values. The integer
+    # arithmetic below then judges the regime on a number that was never the
+    # load. Pin the locale AT THE READ, where the formatting happens.
+    if [ -z "$_margin_loadavg" ]; then
+        _margin_loadavg="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}' || true)"
+    fi
+    # CPU COUNT. `nproc` is GNU coreutils, not a macOS built-in. It happens to be
+    # present on BOTH fleet Macs via homebrew coreutils (macneo prints 6,
+    # macbookair 10) and absent on a stock install, so its presence is a property
+    # of what someone brewed rather than of the platform. BRANCH ON WHAT ANSWERS,
+    # never on what a platform is presumed to lack: try nproc, then ask the OS,
+    # then fall back to a literal. The old `|| echo 1` would have reported ONE
+    # cpu on a six-core machine wherever coreutils was missing, and the margin
+    # arithmetic would have judged the host loaded on that basis.
+    _margin_cpus="${TILLANDSIAS_TOOL_MATERIALIZE_CPUS-}"
+    if [ -z "$_margin_cpus" ]; then
+        _margin_cpus="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)"
+    fi
     _margin_avail_kb="${TILLANDSIAS_TOOL_MATERIALIZE_AVAIL_KB-}"
     if [ -z "$_margin_avail_kb" ]; then
         _margin_avail_kb="$(df -Pk "${CACHE:-/tmp}" 2>/dev/null | awk 'NR==2{print $4}' || true)"
@@ -291,7 +320,15 @@ else
     # floats, so it is scaled by 100 with the fractional part taken as text.
     _margin_regime=""
     case "$_margin_loadavg" in
-        ''|*[!0-9.]*) : ;;
+        # ORDER 1300-q7eq. NO READABLE PROBE SOURCE — neither /proc/loadavg nor
+        # sysctl vm.loadavg gave a number. The margin arm then has NO basis to
+        # say whether a slow ratio means a broken mechanism or a busy host, and
+        # an unfounded RED is the worse of the two errors: it stops a gate while
+        # asserting something the host never measured. Name the absence instead,
+        # so the run still ends in its verdict token. This is the same rule the
+        # regime skip below already follows — a skip is an absence of evidence,
+        # not evidence of absence — applied one level earlier, to the probe.
+        ''|*[!0-9.]*) _margin_regime="no-regime-probe" ;;
         *)
             _ld_int="${_margin_loadavg%%.*}"
             _ld_frac="${_margin_loadavg#*.}00"
