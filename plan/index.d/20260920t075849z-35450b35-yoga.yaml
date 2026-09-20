@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-step-child-shell-does-not-inherit-pipefail-from-the-runner-so-a-producer-that-fails-into-head-returns-zero-and-assert-exit-adjudicates-the-consumers-status
+    event:
+      type: evidence
+      ts: "2026-09-20T07:58:49Z"
+      agent_id: linux-yoga-claude-20260920t075849z
+      host: yoga
+      summary: |-
+        CORPUS AUDIT OF THE assert_exit POPULATION, measured on yoga 2026-09-20 at the
+        tip of linux-next, for whoever takes this row. assert_exit is the field 1252-znbn
+        added, so this hazard and that migration intersect, and one of the findings
+        below is mine.
+
+        THE METHOD, so the numbers can be falsified rather than believed: a scanner
+        walks every step declaring assert_exit, strips command substitutions from the
+        command, and asks whether a pipe remains at the TOP LEVEL -- the position whose
+        exit status the step is adjudicated on. It then inspects the LAST element of
+        that pipeline. It is an approximation: it does not parse quoting perfectly and
+        cannot see inside nested bash -lc beyond the first level. Treat the three named
+        files as confirmed and the counts as a floor.
+
+          35  steps declare assert_exit AND contain a pipe anywhere
+          25  of those have a pipe at the TOP LEVEL
+           3  end in a STATUS-SWALLOWING consumer -- the class this row's title names
+
+        THE 25-TO-3 GAP IS THE USEFUL PART. Most top-level pipes end in grep -q, where
+        grep IS the intended adjudicator and the step is correct as written. A blanket
+        "enable pipefail for every step" would change the verdict of those 22, several
+        of which are negated greps and would INVERT. Whoever fixes this should confirm
+        that enabling pipefail does not redden steps whose last element is the
+        assertion itself.
+
+        THE THREE, all ending in tee:
+          litmus-cross-platform-terminal-attach: trigger Attach Here via the host shell control surface
+          litmus-vm-provisioning-idempotent:     second provision is a no-op (no network, completes in under 2s)
+          litmus-vm-shutdown-drains-forges:      issue VmShutdownRequest and measure drain time
+
+        TWO OF THE THREE HAVE NEVER RUN. vm-provisioning-idempotent and
+        vm-shutdown-drains-forges are both on openspec/litmus-tests/
+        unbound-grandfathered.txt, whose header states those files have NEVER been run
+        by any suite (660-ryhn owns that ratchet). So live exposure is ONE step; the
+        other two are latent and acquire this defect's consequences the moment someone
+        binds them, which 660-ryhn intends to do.
+
+        AND ONE WAS MINE, NOW FIXED IN THE 1282-rkkm SLICE.
+        litmus-vault-auto-unseal-no-prompt's step "start the VM with no TTY attached"
+        carried assert_exit: 0 on a command that backgrounds its whole pipeline with a
+        trailing ampersand inside its own bash -lc. That is worse than the three above:
+        the shell returns 0 the instant it forks, whatever cargo then does. It did not
+        even appear in the scan, because the trailing ampersand puts it outside the
+        pipeline-status question entirely. I added that assert under 1252-znbn criterion
+        4 believing it was the faithful translation of the step's prose.
+
+        It is now REMOVED with the reason written beside it, rather than replaced by a
+        content check on the boot log -- at that instant the log may be empty or absent,
+        so a content assertion there would be a race rather than a check. The launch IS
+        verified, by the NEXT step, which waits up to 60s for the vsock handshake.
+
+        THE GENERAL LESSON, offered rather than asserted: a structured assert is only as
+        good as the status it reads, and 1252-znbn gave steps a way to declare "I check
+        the exit code" without giving anyone a way to ask WHOSE exit code. This row and
+        1269-gfdi are the same surface from opposite ends -- 1269-gfdi was a red whose
+        REASON was discarded; this is a red that is never PRODUCED.
