@@ -116,7 +116,20 @@ fi
 
 # ── temp workspace ───────────────────────────────────────────────────────
 TMP="$(mktemp -d -t tillandsias-install.XXXXXX)"
-trap 'rm -rf "$TMP"' EXIT
+# ORDER 1281-pgit: the trap also restores the app if we die mid-swap, so an
+# interrupted install never leaves $DEST absent while a backup exists.
+_INSTALL_STAGE=""
+_INSTALL_RESTORE_FROM=""
+_INSTALL_RESTORE_TO=""
+_install_cleanup() {
+    if [[ -n "$_INSTALL_RESTORE_TO" && ! -d "$_INSTALL_RESTORE_TO" \
+          && -n "$_INSTALL_RESTORE_FROM" && -d "$_INSTALL_RESTORE_FROM" ]]; then
+        mv "$_INSTALL_RESTORE_FROM" "$_INSTALL_RESTORE_TO" 2>/dev/null || true
+    fi
+    [[ -n "$_INSTALL_STAGE" ]] && rm -rf "$_INSTALL_STAGE"
+    rm -rf "$TMP"
+}
+trap _install_cleanup EXIT INT TERM HUP PIPE
 
 # ── download ─────────────────────────────────────────────────────────────
 SHA_URL="${BASE}/SHA256SUMS-macos"
@@ -167,17 +180,55 @@ if pgrep -x tillandsias-tray >/dev/null 2>&1; then
     pkill -KILL -x tillandsias-tray 2>/dev/null || true
 fi
 
+# ── extract BESIDE the destination, then swap ────────────────────────────
+# ORDER 1281-pgit. The previous order was: rm -rf the old backup, mv the LIVE
+# app aside, then extract. That left $DEST EMPTY for the whole duration of the
+# extraction, so an installer interrupted at any point in between — a signal, a
+# full disk, a closing laptop — left the host with NO application and NO backup.
+# Measured on macneo 2026-09-19: the installer was killed by SIGPIPE mid-swap
+# and /Applications held neither Tillandsias.app nor Tillandsias.app.bak.
+#
+# Now: extract into a staging directory on the SAME filesystem, and only then
+# perform the swap as two adjacent renames. The destructive step (removing the
+# previous backup) happens LAST, after the new app is already in place.
+STAGE="$(mktemp -d "${INSTALL_DIR}/.tillandsias-install.XXXXXX")" \
+    || die "could not create a staging directory in $INSTALL_DIR"
+_INSTALL_STAGE="$STAGE"
+
+say "extracting to $DEST"
+tar -xzf "$TMP/$ASSET_NAME" -C "$STAGE"
+NEW_APP="$STAGE/${DEST##*/}"
+[[ -d "$NEW_APP" ]] || die "extraction did not produce ${DEST##*/}"
+
+BACKUP="${DEST}.bak"
 if [[ -d "$DEST" ]]; then
-    BACKUP="${DEST}.bak"
-    rm -rf "$BACKUP"
+    # Keep the PREVIOUS backup until the swap has succeeded; it is the only
+    # other copy on disk while the renames are in flight.
+    PREV_BACKUP=""
+    if [[ -e "$BACKUP" ]]; then
+        PREV_BACKUP="${BACKUP}.prev.$$"
+        mv "$BACKUP" "$PREV_BACKUP"
+    fi
     say "backing up existing app to ${BACKUP##*/}"
+    # From here until the new app is in place, $DEST does not exist. The EXIT
+    # trap below restores the backup if anything interrupts us, so a trappable
+    # death cannot leave the host with nothing. SIGKILL cannot be trapped; the
+    # window is two adjacent renames on one filesystem, and the backup survives
+    # it in every case.
+    _INSTALL_RESTORE_FROM="$BACKUP"
+    _INSTALL_RESTORE_TO="$DEST"
     mv "$DEST" "$BACKUP"
 fi
 
-# ── extract ──────────────────────────────────────────────────────────────
-say "extracting to $DEST"
-tar -xzf "$TMP/$ASSET_NAME" -C "$INSTALL_DIR"
-[[ -d "$DEST" ]] || die "extraction did not produce $DEST"
+mv "$NEW_APP" "$DEST" || die "could not move the new app into $DEST"
+_INSTALL_RESTORE_FROM=""
+_INSTALL_RESTORE_TO=""
+[[ -d "$DEST" ]] || die "swap did not produce $DEST"
+
+# The new app is in place; only now is it safe to drop the older backup.
+[[ -n "${PREV_BACKUP:-}" ]] && rm -rf "$PREV_BACKUP"
+rm -rf "$STAGE"
+_INSTALL_STAGE=""
 
 # ── login item (opt-in) ──────────────────────────────────────────────────
 if (( LOGIN_ITEM )); then
