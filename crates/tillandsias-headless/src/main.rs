@@ -11682,9 +11682,7 @@ pub(crate) fn write_forge_gitconfig(
                         .strip_prefix("git@github.com:")
                         .and_then(|s| s.strip_suffix(".git"))
                         .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
-                    config.push_str(&format!(
-                        "\tpushInsteadOf = https://github.com/{nwo}.git\n"
-                    ));
+                    config.push_str(&format!("\tpushInsteadOf = https://github.com/{nwo}.git\n"));
                 }
             }
         }
