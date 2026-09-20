@@ -752,13 +752,52 @@ case "${1:-verify}" in
                 plan/index.d/*.yaml|plan/loop_status.d/*.md|plan/mo-full-attestations.d/*.md) continue ;;
                 plan/issues/*.md) case "${_p#plan/issues/}" in */*) : ;; *) continue ;; esac ;;
             esac
+            # ORDER 1307-kic6 -- PARTITION HERE, HASH IN ONE BATCH BELOW. This
+            # loop used to hash INSIDE itself, two spawns per path
+            # (sha256sum + cut). Measured on yolanda over 30 real files:
+            # 675 ms per path, so 7073 paths is ~4774 s -- EIGHTY MINUTES on
+            # every push that reaches this subcommand, which is why no bound
+            # ever returned, including 1800 s.
+            #
+            # This is the shape `gate_stamp_plan_digest` at :560 already uses,
+            # and its comment already said why: "One xargs, not a hash per file
+            # ... a fork per path is what makes a guard too slow to keep on the
+            # memo path, and a guard that gets switched off for cost is the
+            # failure mode this whole packet is downstream of." The COMPUTE path
+            # was batched; this one was not.
+            #
+            # The loop itself stays: it is pure bash (a case filter and two
+            # tests), it spawns nothing, and it is where the 930-i6x4 / 1142-85zx
+            # skips live. Only the hashing moves out.
             if [[ -L "$REPO_ROOT/$_p" ]]; then
-                printf '%s\t%s\n' "$(readlink "$REPO_ROOT/$_p" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" "$_p"
+                printf '%s\0' "$_p" >> "$_mv_tmp/links.z"
             elif [[ -f "$REPO_ROOT/$_p" ]]; then
-                printf '%s\t%s\n' "$("${GATE_STAMP_SHA256[@]}" < "$REPO_ROOT/$_p" | cut -d' ' -f1)" "$_p"
+                printf '%s\0' "$_p" >> "$_mv_tmp/regular.z"
             fi
-        done < <(git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null | LC_ALL=C sort -z) \
-            > "$_mv_tmp/now"
+        done < <(git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null | LC_ALL=C sort -z)
+        : >> "$_mv_tmp/links.z"; : >> "$_mv_tmp/regular.z"
+        {
+            # REGULAR FILES: one xargs, paths relative to REPO_ROOT so the
+            # digest lines carry repo-relative paths exactly as before.
+            #
+            # THE SEPARATOR IS TWO CHARACTERS AND THE SECOND ONE VARIES:
+            # coreutils prints "<digest>  <path>" in TEXT mode and
+            # "<digest> *<path>" in BINARY mode, and MSYS sha256sum defaults to
+            # BINARY. Matching only the two-space form left an asterisk glued to
+            # every path, which would have made every path read as `modified`
+            # and refused every host's push. The equivalence fixture caught it;
+            # inspection had not. `[ *]` accepts both, and anchoring on the
+            # digest keeps a path that itself contains spaces intact.
+            ( cd "$REPO_ROOT" && LC_ALL=C xargs -0 -r "${GATE_STAMP_SHA256[@]}" < "$_mv_tmp/regular.z" 2>/dev/null ) \
+                | LC_ALL=C sed 's/^\([0-9a-fA-F][0-9a-fA-F]*\) [ *]/\1\t/'
+            # SYMLINKS keep the per-link read, deliberately: the digest is of the
+            # link TEXT, not of a file, so it cannot join the batch above. There
+            # are a handful of these; the cost this row is about is the 7000-path
+            # side.
+            while IFS= read -r -d '' _lp; do
+                printf '%s\t%s\n' "$(readlink "$REPO_ROOT/$_lp" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" "$_lp"
+            done < "$_mv_tmp/links.z"
+        } > "$_mv_tmp/now"
         # Manifest is `<kind>\t<execbit>\t<digest>\t<path>`; reduce to digest+path.
         cut -f3,4 "$STAMP_MANIFEST" > "$_mv_tmp/then" 2>/dev/null || true
         LC_ALL=C sort -t"$(printf '\t')" -k2 "$_mv_tmp/now"  -o "$_mv_tmp/now"
