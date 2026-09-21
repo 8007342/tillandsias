@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-21T23:19:57Z"
+      agent_id: linux-lenovinha-linux-20260921t231957z
+      host: lenovinha-silverblue
+      summary: |-
+        DESIGN NOTE FOR ARM A, from the coordinator and recorded because it may be the actual answer rather than a fallback. The constraint added earlier was: the redesign must say HOW A HUMAN MAY SAFELY ASK THE DAEMON WHETHER IT IS LOCKED, since the coordinator's own `timeout 10 busctl ... Locked` diagnostic is itself a D-Bus client under a kill and has the same shape as the suspect under load.
+        THE CANDIDATE ANSWER: there may be NO safe way to ask from a shell, and the correct remedy is then to STOP ASKING THE DAEMON and observe it from outside instead - read `coredumpctl` and the daemon's pid rather than querying it. A pid that has not changed and a coredump list with no keyring entry answer "has it survived" without becoming another client that can be killed mid-call.
+        WHY THIS IS THE RIGHT SHAPE AND NOT A DODGE. Every probe that asks the daemon a question is, by construction, a Secret Service client, and every bounded probe is a client that can be killed. So "ask safely" may be unsatisfiable, and a design that keeps trying to satisfy it will keep producing probes with the same hazard in smaller print. Observing from outside changes the question from one the daemon must answer to one the OS already recorded. Note this is the exact inverse of tonight's recurring error: 1345-8hyg is an instrument standing in for the thing, and here the thing cannot be safely interrogated, so the honest move is to read its traces instead of simulating a safe interrogation.
+        WHAT THE REVIEW WILL CHECK, stated in advance so the bar is not set after the fact: (a) the design ANSWERS this question rather than dropping it - a redesign silently without it leaves the operator with only unsafe options at the moment they most need one; (b) if the answer is the pid-and-coredumpctl reading, it says so explicitly and states what that reading CANNOT tell you (it distinguishes "has crashed" from "has not", not "is locked" from "is unlocked" - those are different questions and the second may simply have no safe shell answer); (c) the one remaining call the design does keep - the busctl read - is SHOWN harmless on a SERVING keyring, not argued to be.
+        A pid-and-coredump reading also has a precedent tonight worth pointing at: pirria's negative control is exactly that shape - pid 3661 unbroken for 3d04:25, zero keyring coredumps against 46 total - and it was the most decisive single piece of evidence anyone produced, precisely because it required running nothing that could perturb what it measured.
