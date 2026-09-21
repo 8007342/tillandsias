@@ -11471,6 +11471,13 @@ pub(crate) const MIRROR_SSHD_HOST_PORT: u16 = 2223;
 /// convention someone has to remember.
 pub(crate) const MIRROR_SIGNER_TOKEN_SINK: &str = "/tmp/tillandsias-vault-signer-token";
 /// ORDER 1288-5qpn. The unroutable URL a push is redirected to when the SSH
+/// lane is ENABLED but its host-CA cache is absent. It exists so the failure
+/// happens at the push rather than being absorbed by the anonymous git://
+/// redirect, and so git's own error text names the lane: git reports "Unable
+/// to find remote helper for 'tillandsias-ssh-lane-unwired'". Deliberately not
+/// a real scheme — anything routable would be a second fallback.
+pub(crate) const SSH_LANE_UNWIRED_REFUSAL_URL: &str =
+    "tillandsias-ssh-lane-unwired://host-ca-cache-missing";
 
 /// ORDER 1313-prin. Where this host's push AppRole document lives.
 ///
@@ -11491,14 +11498,6 @@ pub(crate) fn host_push_approle_path(host: &str) -> std::path::PathBuf {
         .join("host-push")
         .join(format!("{host}.approle.json"))
 }
-/// lane is ENABLED but its host-CA cache is absent. It exists so the failure
-/// happens at the push rather than being absorbed by the anonymous git://
-/// redirect, and so git's own error text names the lane: git reports "Unable
-/// to find remote helper for 'tillandsias-ssh-lane-unwired'". Deliberately not
-/// a real scheme — anything routable would be a second fallback.
-pub(crate) const SSH_LANE_UNWIRED_REFUSAL_URL: &str =
-    "tillandsias-ssh-lane-unwired://host-ca-cache-missing";
-
 /// One flag flips the whole ssh push lane (mirror sshd + sidecar + forge
 /// wiring): T4-T10 land dark and T11 (749-y8xx) owns the default flip.
 pub(crate) fn mirror_ssh_push_lane_enabled() -> bool {
