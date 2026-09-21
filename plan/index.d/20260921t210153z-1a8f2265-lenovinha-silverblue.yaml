@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-image-sh-builds-a-tag-from-the-checkout-and-a-lane-launch-rebuilds-the-same-tag-from-the-extracted-runtime-tree-so-verifying-an-image-change-proves-nothing-about-what-a-lane-runs
+    event:
+      type: correction
+      ts: "2026-09-21T21:01:53Z"
+      agent_id: linux-lenovinha-linux-20260921t210153z
+      host: lenovinha-silverblue
+      summary: |-
+        CORRECTION to the measurement event immediately preceding this one, which lost its most important sentence to my own shell quoting. I wrote the remedy inside backticks in a double-quoted argument, so the shell EXECUTED it and recorded the sentence with a hole where the command should be. The recorded text reads "then relaunching re-extracts" with nothing before it. THE REMEDY, stated plainly and without shell metacharacters: remove the extracted runtime directory for the running version under the tillandsias runtime path (the per-version images tree at $HOME/.local/share/tillandsias/runtime/ followed by the version number), then relaunch the lane. That forces re-extraction, and the re-extracted tree and the running container then both carry the change. Everything else in the preceding event stands as written and was measured: the version-keyed extraction does NOT refresh on a rebuilt binary at an unchanged VERSION. This is the third time tonight I have let backticks in a double-quoted argument execute and silently alter a record I was writing; it is a defect in how I compose these calls, not in the tool, and the two earlier instances mangled a commit message and emptied a comment.

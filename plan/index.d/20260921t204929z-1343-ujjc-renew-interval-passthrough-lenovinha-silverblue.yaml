@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-sidecar-s-renewal-interval-cannot-be-set-on-a-real-launch-so-the-only-way-to-reach-a-renewal-cliff-outside-a-fixture-is-to-wait-out-the-wall-clock
+    order: 1343-ujjc
+    status: pending
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, forge, ssh, operability, testability]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    verifiable_closure: |
+      litmus:ssh-lane-sidecar-shape is NOT the pin here — that fixture already
+      sets the variable directly and so cannot show the launcher's gap. The pin
+      is a cargo test over the sidecar's env construction asserting that a set
+      TILLANDSIAS_CLIENT_CERT_RENEW_SECONDS reaches the container's env and that
+      an unset one leaves the 1200 s default untouched, beside a measured launch
+      on a real host where `podman inspect` shows the variable present with the
+      value given. The default must be shown unchanged by the same arms: this
+      row makes an interval SETTABLE, it does not make it shorter for anyone.
+    title: |
+      the ssh-lane sidecar's renewal interval is readable by the sidecar but unsettable by the launcher, so a renewal cliff can be reached in a fixture and nowhere else
+    context: |
+      FOUND WHILE TAKING 1342-r4pv'S ARMS 2 AND 3. That row's defect is an agent
+      that accumulates one identity per renewal until the server's MaxAuthTries
+      refuses the lot; its arms therefore have to observe a sidecar PAST the
+      cliff, which is seven renewals.
+
+      THE GAP. images/git/ssh-lane-sidecar.sh reads
+      TILLANDSIAS_CLIENT_CERT_RENEW_SECONDS (RENEW_SECONDS, default 1200), and
+      the ONLY setter anywhere in the tree is scripts/test-ssh-lane-sidecar.sh.
+      The launcher does not pass it through, so on a real host the interval is
+      1200 s and nothing can change it. Seven renewals is about two hours and
+      twenty minutes of wall clock, and the alternative is hand-building the
+      sidecar container, which means reconstructing the vault token wiring its
+      mounts do not reveal.
+
+      WHY THIS IS FILED SEPARATELY AND NOT FOLDED INTO 1342-r4pv, on the
+      coordinator's ruling: the passthrough is operability, 1342-r4pv is the
+      defect, and smuggling one into the other hides a scope decision inside a
+      fix. It is also NOT a blocker for that row — arms 2 and 3 are being taken
+      at the true 1200 s cadence deliberately, because an arm measured at the
+      real cadence cannot be accused of having manufactured its own cliff.
+
+      THE GENERAL SHAPE, which is the reason to fix it rather than shrug: a
+      timing constant that only a fixture can set is a constant whose behaviour
+      is only ever observed in a fixture. Every cliff, backoff and expiry in the
+      lane has this property today.
+    next_action: |
+      Unclaimed. Pass TILLANDSIAS_CLIENT_CERT_RENEW_SECONDS from the launcher's
+      environment into the sidecar container when it is set, leaving the 1200 s
+      default alone when it is not, and pin both directions. Check while there
+      whether the sidecar's other timing constants have the same gap; if they
+      do, say so in the closure rather than fixing them silently.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21 while taking 1342-r4pv's arms,
+      on the coordinator's explicit ruling to file it rather than fold it in.
+      Related: 1342-r4pv (the defect whose arms exposed this), 749-y8xx (T11).
