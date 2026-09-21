@@ -1,0 +1,130 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-wsl2-the-gate-memory-preflight-reads-the-utility-vms-meminfo-so-it-prints-ok-about-a-machine-that-is-not-the-one-that-reaps-the-gate-and-against-an-8gb-capped-guest-its-1gib-floor-can-essentially-never-fire
+    order: 1337-7jr5
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [windows, measurement, agent-safety, gate, wsl2]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-gate-memory-floor.sh
+    title: |
+      on WSL2 the gate-memory preflight reads the UTILITY VM's /proc/meminfo, so it prints ok: about a machine that is not the one that reaps the gate — and against a guest architecturally capped at 8 GiB its 1 GiB floor can essentially never fire, which makes it an accept that cannot refuse
+    context: |
+      FOUND JOINTLY 2026-09-21: yolanda-windows saw the symptom in a live gate
+      log, esmeraldinha-windows located the mechanism in the source. Both
+      Windows hosts, independently, on the same day.
+
+      THE SYMPTOM. During a gate on yolanda the preflight printed:
+        ok:gate-memory:5578MB available, floor 1024MB
+      comfortably, while the number that decides whether the run survives is
+      the WINDOWS available figure, which this host had seen at 10.8% earlier
+      the same hour — below every harness reap it has ever recorded.
+
+      THE MECHANISM, read in the file rather than inferred:
+      scripts/check-gate-memory-floor.sh:32 sets MEMINFO=/proc/meminfo.
+      Inside a WSL2 distro that path is the UTILITY VM's meminfo, bounded by
+      .wslconfig `memory=`. It is not the Windows host. So on this host class
+      the check reads one machine and the reaper acts on another.
+
+      MEASURED SIDE BY SIDE, both near idle, so the divergence is structural
+      and not a stress artefact:
+        guest MemAvailable (what the preflight reads)   5,689 MB of 7,942
+        host  Available    (what reaps the gate)        4,455 MB of 15,526 (28.7%)
+      esme measured the same shape on their host: guest 7,264 MB against host
+      8,531 MB of 16,159.
+
+      THE CHECK IS NOT WRONG. IT IS RIGHT ABOUT THE WRONG MACHINE. Its own
+      header (lines 17-18) records that the floor was measured on yoga —
+      Silverblue, 14.8 GiB — a NATIVE LINUX host, where /proc/meminfo IS the
+      host's. The design is sound exactly where it was validated and silently
+      changes meaning on a host class it was never measured on. That is worth
+      stating precisely, because "the check is broken" invites a rewrite and
+      the correct fix is much smaller.
+
+      AND IT CANNOT SATISFY ITS OWN STATED CONTRACT HERE. The header is
+      careful that this is NOT a capacity predictor and answers only whether
+      there is so little memory available RIGHT NOW that starting is
+      pointless. On WSL2 it cannot answer even that narrow question: the
+      number it reads is bounded by memory=8GB and is very nearly independent
+      of whether Windows is about to squeeze vmmemWSL. A 1 GiB floor against
+      a guest that is ARCHITECTURALLY CAPPED at 8 GiB is a predicate that can
+      essentially never fire — an accept that cannot refuse, which this fleet
+      has now met in several disguises.
+
+      WHY p1 RATHER THAN p2: this is the guard standing in front of the gate
+      on both Windows hosts, and it passed immediately before four harness
+      reaps on yolanda. A guard that cannot refuse is not merely useless, it
+      is load-bearing in the wrong direction — its ok: line is why nobody
+      looked at the host number for four reaps, and why the first explanation
+      reached for was a driver defect (see 1334-d8bh) rather than the obvious
+      one.
+
+      THE AFFORDANCE FOR A FIX ALREADY EXISTS: line 36 accepts
+      `--meminfo-from <path>`, so the source of the reading is already a
+      parameter rather than a constant. And the file already has the right
+      REGISTER for refusing to assert: `could-not-run:gate-memory:no-meminfo`
+      (line 53) and `could-not-run:gate-memory:no-memavailable` (line 63)
+      both decline to vouch rather than passing. What is missing is a third
+      member of that family for the case where the meminfo that IS readable
+      describes a different computer.
+    next_action: |
+      Nobody holds this; yolanda and esme both have live numbers for it.
+      1. DETECT THE HOST CLASS. Inside WSL2 this is cheap and local —
+         /proc/sys/kernel/osrelease carries "microsoft-standard-WSL2", and
+         /run/WSL exists. No Windows round-trip is needed to know that the
+         meminfo you can read is not the host's.
+      2. REFUSE TO ASSERT, in the vocabulary the file already uses:
+           could-not-run:gate-memory:wsl2-guest-meminfo-is-not-the-host
+         Printing ok: where the honest answer is "I measured a different
+         machine" is the only part that is actually wrong. A could-not-run is
+         not a degradation here; it is the truth.
+      3. IF A HOST NUMBER IS AVAILABLE, USE IT. Where something exports the
+         Windows figure into the guest, feed it through the EXISTING
+         --meminfo-from parameter rather than adding a second code path. Do
+         not make a Windows round-trip a hard requirement of the preflight —
+         a check that cannot run without the host it is checking is a worse
+         failure than one that declines.
+      4. RE-DERIVE THE FLOOR IF IT IS EVER APPLIED TO A HOST FIGURE. 1024 MB
+         was measured against a 14.8 GiB native host; it is not transferable
+         to a Windows host whose reaps occurred between 11.5% and 18.3% free
+         (roughly 1.8 to 2.8 GiB of 15.16). A floor carried across host
+         classes without re-measurement is how this row happened.
+      Do NOT fix this by lowering the floor or by deleting the check. The
+      check is correct where it was measured; the defect is that it does not
+      know when it has been moved.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable includes the fixture
+      that would score it, and pinning a litmus name before it exists is
+      refused by 885-92iu. When it lands the guard is
+      litmus-gate-memory-floor-refuses-on-wsl2, driving the script with
+      --meminfo-from pointed at a guest-shaped meminfo under a simulated WSL2
+      marker and asserting the verdict is could-not-run and NOT ok:, with a
+      native-Linux arm asserting the existing ok:/refuse behaviour is
+      unchanged — both arms, since a guard that only checks the WSL2 case
+      would pass a script that refused everywhere; same commit as the fix
+      (1136-n8sh).
+    verifiable_closure: |
+      On a WSL2 host, scripts/check-gate-memory-floor.sh does NOT print
+      ok:gate-memory from the guest's /proc/meminfo; it either asserts against
+      a host-derived figure supplied through --meminfo-from, or prints
+      could-not-run:gate-memory:wsl2-guest-meminfo-is-not-the-host and asserts
+      nothing. On a native Linux host its current behaviour is unchanged.
+      Pre-fix result, measured 2026-09-21 on both Windows hosts: the preflight
+      printed ok:gate-memory:5578MB available, floor 1024MB during a live gate
+      on yolanda, while the host figure was 28.7% and had been 10.8% earlier
+      the same hour; guest 5,689 MB of 7,942 against host 4,455 MB of 15,526,
+      the two readings structurally independent.
+
+events:
+  - packet_id: on-wsl2-the-gate-memory-preflight-reads-the-utility-vms-meminfo-so-it-prints-ok-about-a-machine-that-is-not-the-one-that-reaps-the-gate-and-against-an-8gb-capped-guest-its-1gib-floor-can-essentially-never-fire
+    event:
+      type: note
+      ts: "2026-09-21T18:15:00Z"
+      host: yolanda-windows
+      summary: |-
+        symptom seen in a live gate log on yolanda, mechanism located in the source by esmeraldinha; filed by the host whose four reaps this check passed immediately before, which is why it is p1 rather than a curiosity

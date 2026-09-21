@@ -1,0 +1,129 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-forge-reads-a-mirror-rather-than-github-so-a-sha-that-has-landed-upstream-and-a-sha-that-does-not-exist-produce-the-identical-fatal-and-nothing-from-inside-the-forge-can-tell-them-apart
+    order: 1338-tkfh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [forge, agent-safety, measurement, plan-lane, coordination]
+    estimated_hours: 3
+    owned_files:
+      - skills/join-the-fleet/SKILL.md
+    title: |
+      a forge reads a MIRROR, not GitHub, so a SHA that has landed upstream and a SHA that never existed produce the IDENTICAL fatal — and nothing from inside the forge distinguishes "mirror behind" from "absent", which makes every cross-host SHA citation unverifiable there
+    context: |
+      MEASURED 2026-09-21 by yolanda-windows and yolanda-tillandsias-forge, on
+      the two sides of the same question, within minutes of each other. It
+      nearly produced a false closure on 1331-884p.
+
+      THE TWO READINGS, both correct against the remote each host can reach:
+
+        yolanda-windows, origin = https://github.com/8007342/tillandsias.git
+          ls-remote refs/heads/linux-next  -> 2ce8ecd0c
+          7c1600b64                        present, and an ancestor of the tip
+          parse-failure verdict in checker 2 occurrences
+
+        the forge, origin = git://git-75ris00jek61du11lk9g/tillandsias (MIRROR)
+          ls-remote refs/heads/linux-next  -> f6dd50caf
+          7c1600b64                        fatal: couldn't find remote ref
+                                           fatal: Not a valid object name
+          parse-failure verdict in checker 0 occurrences
+
+      land67 was on GitHub and had not reached the mirror. NEITHER HOST
+      MIS-MEASURED.
+
+      WHAT IT NEARLY COST. The coordinator cited 7c1600b64 as the evidence for
+      1331-884p's reporting clause; yolanda verified it against GitHub and
+      relayed it to the forge as confirmed, instructing it to write the closure
+      events. THE FORGE REFUSED, because the clause those events would assert
+      reads UNMET on the only remote it can reach and the SHA resolves nowhere
+      there. That refusal was correct and it is the row's own principle applied
+      to the row's own closure: an obligation recorded as met because the
+      record said so is exactly what 1331-884p exists to refuse.
+
+      THE DEFECT IS THE INDISTINGUISHABILITY, not the lag. A mirror that trails
+      is ordinary. What is not ordinary is that from inside a forge:
+        "this SHA has not landed yet"        -> fatal: couldn't find remote ref
+        "this SHA landed, my mirror is behind" -> fatal: couldn't find remote ref
+      are the same string. The forge cannot wait intelligently, cannot report
+      BLOCKED accurately, and cannot tell a coordinator whether to re-push or
+      to wait. Same family as the night's other traps: absence and
+      unreachability producing identical output.
+
+      AND IT DEFEATS THE FLEET'S OWN VERIFICATION RULE ON THAT SUBSTRATE. The
+      standing discipline is "verify against the remote, never trust an ok:
+      line", and yolanda had been giving the forge that instruction all
+      session, including the specific form "ls-remote against the upstream
+      rather than a fetch against the mirror". IN A FORGE, `ls-remote origin`
+      IS THE MIRROR. The instruction names the right principle and the wrong
+      authority for that substrate, so following it perfectly still yields a
+      stale answer presented as authoritative.
+
+      NOT A CREDENTIAL PROBLEM. A forge's pushes DO reach GitHub, through the
+      mirror's relay ("[relay] Atomic push … succeeded", "[pre-receive] Relay
+      verified: upstream durably accepted the ref transaction"), so the forge
+      can WRITE upstream while being unable to READ upstream state. That
+      asymmetry is the surprising part and is worth stating plainly in the row.
+
+      THE SYNC TRIGGER IS NOT KNOWN AND IS NOT ASSERTED HERE. The coordinator
+      declined to state a cadence beyond yoga's observation that the relay's
+      staleness guard fetches upstream before relaying a push. So a forge
+      cannot currently answer "will this arrive in two minutes or never?" —
+      and that question, not the lag itself, is what blocks a worker.
+    next_action: |
+      Nobody holds this.
+      1. GIVE THE FORGE A DISCRIMINATOR. From inside, distinguishing "behind"
+         from "absent" needs something the mirror exposes about its own
+         freshness — its last-sync time, or the upstream tip it last saw. Any
+         of those turns one fatal into two distinguishable answers. Prefer
+         something the forge can read without an upstream credential, since it
+         has none by design.
+      2. DOCUMENT THE CADENCE, or document that there is none. "Will it
+         arrive?" is the operative question and it is currently unanswerable
+         from the substrate. If the only sync is push-triggered, say so — that
+         is an answer, and a worker can act on it.
+      3. FIX THE INSTRUCTION IN join-the-fleet, which currently teaches a
+         verification step that silently degrades on the substrate it is most
+         needed on. Say: in a forge, `origin` is the MIRROR; verify what you
+         can reach, and treat a missing SHA as UNDECIDED rather than absent.
+      4. CITE PROPERTIES, NOT SHAs, ACROSS THE MIRROR BOUNDARY. A coordinator
+         telling a forge "7c1600b64 has landed" says something the forge cannot
+         check; telling it "the checker on your trunk prints
+         violation:scorable-obligation-parse-failure" says something it can.
+         The coordinator has already adopted this; it belongs in the page.
+      Do NOT fix this by giving forges an upstream credential. Credential-less
+      forges are deliberate (1337-3tk6's neighbourhood), and the relay already
+      carries writes; the gap is READ VISIBILITY and a freshness signal.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a discriminator
+      that does not exist yet plus a page correction, and the honest machine
+      check — that a forge can distinguish a behind-mirror from an absent ref
+      — cannot be named as a litmus until the discriminator's shape is decided.
+      Pinning a name before that is refused by 885-92iu. When it lands the
+      guard is litmus-forge-distinguishes-mirror-lag-from-absence, asserting
+      that a ref present upstream and absent from the mirror produces a
+      DIFFERENT verdict from a ref absent everywhere; same commit as the fix
+      (1136-n8sh).
+    verifiable_closure: |
+      From inside a forge, a ref that exists upstream but has not reached the
+      mirror produces a DIFFERENT and self-describing answer from a ref that
+      exists nowhere, and join-the-fleet tells a forge worker that `origin` is
+      the mirror and that a missing SHA is UNDECIDED rather than absent.
+      Pre-fix result, measured 2026-09-21: 7c1600b64 was an ancestor of
+      origin/linux-next on GitHub with the checker showing 2 parse-failure
+      occurrences, while the same query inside the forge returned
+      "fatal: couldn't find remote ref" with 0 occurrences — the identical
+      output a nonexistent SHA produces — and the coordinator's citation of it
+      was unverifiable there.
+
+events:
+  - packet_id: a-forge-reads-a-mirror-rather-than-github-so-a-sha-that-has-landed-upstream-and-a-sha-that-does-not-exist-produce-the-identical-fatal-and-nothing-from-inside-the-forge-can-tell-them-apart
+    event:
+      type: note
+      ts: "2026-09-21T19:20:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed by the host whose relayed citation was refused; the forge declined to write a closure against a SHA it could not resolve, which is the row's principle applied against its own director and is why no false closure was written
