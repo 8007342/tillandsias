@@ -94,7 +94,7 @@ cp "$HELPER" scripts/push-plan-fragments-to-trunk.sh
 # 1261-bn7v shipped: the lane skipped it with a note, the note said "absent",
 # and the arm caught a lane that had measured less than it claimed.
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh \
-         check-fragment-status-loss.sh check-added-fragments-parse.sh \
+         check-fragment-status-loss.sh check-added-fragments-parse.sh check-fragment-ts-skew.sh \
          check-scorable-obligation-added.sh check-no-base64-script-injection.sh \
          check-append-vs-origin-fold.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true

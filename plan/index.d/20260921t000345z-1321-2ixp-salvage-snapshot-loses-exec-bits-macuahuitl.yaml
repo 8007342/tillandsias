@@ -1,0 +1,42 @@
+packets:
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    order: 1321-2ixp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [git, windows, salvage, release-gate, exec-bits, relay]
+    estimated_hours: 3
+    owned_files:
+      - scripts/salvage-dirty-worktree.sh
+      - scripts/check-script-exec-bits.sh
+      - scripts/test-salvage-preserves-exec-bits.sh
+    verifiable_closure: |
+      scripts/test-salvage-preserves-exec-bits.sh prints
+      `ok:salvage-exec-bits:3/3` and exits 0: (1) a scaffold worktree holding
+      a new scripts/test-x.sh with mode 100644 (the state a Git Bash/MSYS
+      checkout produces) salvaged by scripts/salvage-dirty-worktree.sh reaches
+      the ref with mode 100755 when the file carries a `#!` shebang, and the
+      salvage prints one `note:exec-bit-restored:<path>` per file; (2) a file
+      without a shebang keeps 100644; (3) scripts/check-script-exec-bits.sh
+      covers scripts/test-*.sh and openspec-bound fixtures (today it reports
+      26 checked of ~700 scripts) and refuses
+      `violation:script-exec-bits:<path>` for a shebang script at 100644.
+      PRE-FIX RESULT: FAILS — measured 2026-09-20: scripts/test-windows-host-
+      lane-refusal.sh and its controls were 100644 in git since yolanda's
+      salvage relay (land 27), every --check gate passed, and the v56.9.20.1
+      release gate refused litmus:windows-host-lane-refusal step 1
+      (`test -x`) on the first run of the tier that checks it.
+    next_action: |
+      The pre-build litmus tier is run by the release gate only (1302-7j8p's
+      shape: a gate step wired from one regime), so a mode lost on a Windows
+      host is invisible for a whole day of Linux lands. Two fixes, both
+      needed: the salvage tool restores the executable bit for shebang files
+      at snapshot time (a Windows host cannot express the bit; the relay
+      cannot know it was meant), and the exec-bits decider covers the
+      fixtures the litmus corpus binds, so the 19-decider relay preflight
+      refuses it in a second instead of the release gate refusing it after
+      45 minutes. Do not "fix" by chmod on the relay side alone: the next
+      Windows salvage carries the same defect.

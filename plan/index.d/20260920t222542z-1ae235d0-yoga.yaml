@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    event:
+      type: progress
+      ts: "2026-09-20T22:25:42Z"
+      agent_id: linux-yoga-claude-20260920t222542z
+      host: yoga
+      summary: |-
+        PHASE 1 BUILT AND PUSHED TO ITS OWN LANE: work/1315-4a7j at 48a768610, gate green
+        (GATE_EXIT=0, 1071s), verified on origin by artifact. The row's code is the first
+        slice to travel the lane the row opens, which is also what the cut freeze
+        required — the freeze exempts work refs and the plan lane, and this event is the
+        plan lane.
+
+        WHAT THE DEFECT ACTUALLY WAS: not a bug in any one file but a CONTRADICTION
+        ACROSS THREE. The hook called work/<order> "the GATED hand-off and demands the
+        stamp"; the methodology said pre_push_gate EXCLUDES work/<order> while calling it
+        "a GATED commit"; and creation_regex admitted no work/ ref at all. A work branch
+        was required to be gated, exempt from the gate, and not a legal ref name. The
+        measured consequence is the one that should be quoted: 92 salvage/* refs against
+        34 work/*, hosts using the emergency RESCUE lane as their everyday branch because
+        it was the only ungated one.
+
+        THE ENFORCEMENT TRIGGER HAS ITS PRE-FIX NUMBER, measured against real history
+        rather than asserted:
+          landing-provenance:7.days:queue=7 plan=75 relay=64 direct=28
+          code landings: queue=7 direct=28 of 35
+        Direct pushes outnumber queue landings FOUR TO ONE. The migration has not
+        happened, which is exactly what this row exists to change and what the operator's
+        later flip will be measured against. The reading rule is printed WITH the number
+        so it cannot be fitted afterwards to whatever the number turned out to be, and
+        plan-only is classified BY CONTENT rather than by subject — a commit that says
+        plan() while touching scripts/ is not the fragment lane.
+
+        THIS ROW'S OWN PRE-FIX COST, from today on this host: 10 gate cycles across two
+        slices, 5 of them lost purely to RE-GATING AN UNCHANGED TREE after another host
+        pushed first. The other 5 caught real defects and are the gate working. That is
+        the distinction the row rests on: this is not an argument against gating, it is
+        an argument against re-gating a tree that did not change.
+
+        I DID NOT WIRE A GATE STEP FOR THE FIXTURE, deliberately, and the omission is
+        recorded rather than left to be discovered. 1302-7j8p's rule — which exists
+        because I walled both macOS hosts twice in one day — says a step needs a RECORDED
+        SECOND-REGIME RUN before it enters --check. This fixture invokes the pre-push
+        hook and runs every decider, which is about as platform-dependent as a fixture
+        gets, and refuse() now RETURNS on the work lane where it used to exit, so the
+        code after each decider runs where it previously could not. Wiring that from one
+        Linux host tonight would be the same mistake a third time.
+          WHAT THE SECOND REGIME MUST CONFIRM: on a Mac and under MSYS, that a work push
+          is accepted, that each red decider prints one warn line, that the hook exits 0,
+          and that nothing after a returned refuse() misbehaves on that platform.
+          THE TENSION, STATED: an unbound fixture is an orphan, and "a closure citing an
+          orphan fixture protects nothing" is a hazard I have cited against others' work
+          today. Binding is DEFERRED, not forgotten; it is owed in the same pass that
+          records the second regime.
+
+        FOR 1316-bnzt, from macuahuitl's release gate tonight: the release gate is the
+        ONLY tier that runs the pre-build litmus, so a land can be green under --check
+        and red for the cut — four reds tonight that no --check could see. That is the
+        first RELEASE-BLOCKING instance of the doctrine added to
+        methodology/convergence.yaml under 1282-rkkm ("a green ./build.sh --check MUST
+        NOT be read as the litmus assertions having run"). So the queue's SCOPED and FULL
+        tiers should not merely name which litmus phase each runs: THE TIER THAT SHIPS
+        MUST BE THE TIER THAT GATED, and a tier that does not run a phase must say so in
+        its own output rather than leaving a green to imply coverage it does not have.

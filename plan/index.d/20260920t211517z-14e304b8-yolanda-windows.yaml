@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-20T21:15:17Z"
+      agent_id: windows-yolanda-claude-20260920t211516z
+      host: yolanda-windows
+      summary: |
+        RETRACTION, from the host that filed this row. STEP 1 OF THIS ROW ALREADY
+        EXISTS, and I asked for it because I had measured one surface.
+
+        RUN on yolanda, `bash scripts/build-guest-binaries.sh` with no flags: rc=1 in
+        TWO SECONDS, nothing compiled, nothing in target-guest touched.
+          nix lane UNAVAILABLE: detail:nix-toolbox:chroot:nix: command not found on PATH
+          detail:nix-toolbox:create: neither toolbox nor podman on PATH
+          blocked:nix-toolbox:create-failed
+          DEGRADED to the local Cargo fallback (reason above)
+          REFUSED: the cargo fallback cannot succeed on this host -- no aarch64 musl
+          linker (aarch64-linux-musl-gcc or clang + rust-lld). Nothing was compiled.
+        That is order 934-7jd4, and it is this row's step 1 almost word for word: it
+        refuses BEFORE touching the staging and it NAMES THE MISSING TOOL. Its own
+        comment gives the same reason I gave -- a doom knowable in milliseconds must
+        not be reported as wreckage after 73 seconds of compiling.
+
+        I HAD ONLY EVER RUN `--verify`. The verify path prints
+        verify:skip-stale-staging, which is true and is not the useful answer; I read
+        that surface and wrote a row about the whole tool. Same shape as my Windows
+        pre-fix claim on 1286-4437, which said the installer "defers provisioning"
+        when it actually fires and forgets: one surface measured, the tool described.
+
+        AND THE 524-SECOND FAILURE WAS NOT THIS SCRIPT'S GAP. The script's cargo
+        fallback ALREADY passes `--features listen-vsock`, with a comment naming the
+        exact failure I later hit -- a guest that boots and never binds the control
+        wire, handshake timeout, order 282. I improvised a build by hand BECAUSE the
+        script had refused, and the flag was documented in the script I did not read
+        rather than in build-windows-tray.ps1's two-line fallback note that I did.
+
+        WHAT THIS ROW IS NOW, four items, all still real:
+
+          (a) `--verify` conflates "the staging is stale" with "this host CANNOT
+              restage". It prints verify:skip-stale-staging and points the reader at a
+              script that, on this host, refuses. The verdict should distinguish them.
+
+          (b) staging_is_current() calls `strings`, which is ABSENT on this host, so
+              the predicate returns "stale" for a binary that may be current -- which
+              is why my --verify said stale about binaries I had just staged
+              correctly. This is macbookair's near miss from this afternoon in another
+              file: subject AND control both read 0, so the instrument's silence looked
+              like the subject's absence. The predicate must PROVE ITS INSTRUMENT
+              before trusting a negative: command -v strings, or a grep -a fallback,
+              with a positive control against a binary known to carry the token.
+
+          (c) build-windows-tray.ps1's two-line fallback description omits
+              `--features listen-vsock`. It is the document a Windows host actually
+              follows when the script refuses, and it is the one that cost 524 s. It
+              gets the flag and a pointer to the script's own comment.
+
+          (d) A staging assertion that VERSIONS CANNOT FAKE. verify's current check is
+              `strings | grep VERSION`, which is exactly the test my feature-less
+              binary passed at every step. The assertion must be a VOCABULARY PROBE:
+              the staged guest must contain a token only a listen-vsock build carries
+              (the forwarder's name), counted against a control, not the VERSION
+              string a feature-less build carries too.
+
+        SCOPE UNCHANGED OTHERWISE: the builder distro lacks CROSS toolchains, not
+        toolchains; nothing here asks for a change to the native lanes, and installing
+        Nix on the Windows hosts is not in scope because nobody has measured it works
+        there.

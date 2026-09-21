@@ -143,6 +143,10 @@ critical_path:
     command: "case $(uname -s) in MINGW*|MSYS*) ;; *) echo 'skip: mutation-has-no-subject-off-msys (the extensionless ELF runs here, so the pre-fix test was correct)'; exit 0;; esac; test -e target/release/tillandsias-plan || { echo 'skip: no extensionless artefact staged at this locus'; exit 0; }; if test -x target/release/tillandsias-plan; then echo 'FAIL: test -x ACCEPTED the extensionless ELF; this mutation has lost its subject'; exit 1; fi; r=$(mf_plan_binary 2>/dev/null || true); test -n \"$r\" || { echo 'FAIL: the probe resolved nothing where the pre-fix test also failed'; exit 1; }; \"$r\" capabilities >/dev/null 2>&1 || { echo \"FAIL: the probe resolved a candidate that does not run: $r\"; exit 1; }; echo 'ok: bit-rejects-what-the-probe-resolves'"
     timeout_ms: 60000
     expected_behavior: "ok: bit-rejects-what-the-probe-resolves"
+    success_pattern: "^(ok: bit-rejects-what-the-probe-resolves|skip: mutation-has-no-subject-off-msys)"
+    # ADMITS ITS OWN NAMED SKIP off MSYS (the step is locus-gated by design); scored
+    # as a FAIL on every Linux release gate since 2026-09-19 until the v56.9.20.1 cut
+    # (2026-09-20); 1309-fhxb's runner grammar makes this line unnecessary once it lands.
 
   - step: "ORDER 888-miiy: report the spec-index branch BEFORE grading, never after a red"
     # ADVISORY, never a gate. The point is that the log states which branch this

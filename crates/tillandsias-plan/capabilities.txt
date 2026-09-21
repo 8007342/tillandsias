@@ -85,6 +85,7 @@ status
 # tillandsias-plan CAPABILITY MANIFEST — order 569
 # Two DIFFERENT readers need the same list, and they cannot both run Rust:
 validate-yaml
+validator-surface-hash
 verify-answer
 yaml-get
 yaml-json
