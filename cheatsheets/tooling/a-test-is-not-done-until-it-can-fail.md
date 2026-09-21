@@ -147,6 +147,66 @@ prose, and prose about a guard is the one text most likely to appear in files
 that have no guard at all — because that is what people write while fixing the
 absence.
 
+## The third kind: a test that RUNS, PASSES, and reaches nothing
+
+The page opens with a test nothing runs. Then the mirror: a mention read as a
+use. This is the one that is hardest to see, because from every angle it looks
+like the healthy case — **the test is bound, the suite executes it, and it
+passes.** What it exercises is unreachable from any live path, so its greenness
+is evidence about nothing, and worse: the fact that it is green is what makes
+the dead scaffolding underneath look load-bearing.
+
+Three specimens, all on this fleet on 2026-09-21, all found while fixing
+something else:
+
+| Specimen | The test | What it reached |
+|---|---|---|
+| `cloud_overflow_row_is_informational_not_a_dead_button` (591-33s6) | green for seven weeks; asserts the overflow row "must name a remedy the user can actually act on" | a helper called from exactly one place — a builder carrying `#[allow(dead_code)]` and *"retired by order 628-p5tj"*. The live tray shipped an enabled no-op the whole time |
+| `refresh_local_projects_picks_up_new_checkout` (997-e4v2) | green | a method with no production caller at all; its only other reference is its own doc comment |
+| `resolved_max_cloud_projects_in_menu` + `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` (591-33s6) | green, two tests | a resolver reachable only from the same retired builder — while a **live** code path printed a tip telling users to set the environment variable that could not work |
+
+**The first is the one to remember, because it is the whole failure in one
+sentence: the fix and its proof migrated into dead code together, so nothing in
+the tree could report the difference.** A repair was written, a test was written
+to pin it, both landed in a function that had been retired, and for seven weeks
+the row read as fixed, the suite read as green, and the user still could not
+reach the thing.
+
+The third is the sharpest in a different way: dead code is inert, but this dead
+code was still being **advertised**. A live handler told users about a knob that
+a retired function was the only reader of.
+
+### The tell
+
+Coverage answers "was this executed?" and cannot answer "does anything live
+reach it?" — a test is a caller, so it makes its subject reachable *from the
+test*, which is exactly the thing you are trying to rule out. So look for:
+
+```bash
+#[allow(dead_code)]              # the compiler already told someone, and lost
+"retired by order …"             # in a doc comment, with the code still present
+grep -c '<fn name>'  → 2         # the definition and one test, nothing else
+```
+
+The dead giveaway is a symbol whose only references are **its own definition, a
+doc comment, and a test**. The compiler will not warn: the test is a real use.
+
+### What to do
+
+**Do not ask whether the test passes. Ask what reaches the code it exercises,
+excluding the test itself.**
+
+```bash
+grep -n '<symbol>' <file>        # then subtract: the definition, its doc, its tests
+                                 # if nothing survives, the green means nothing
+```
+
+And when you find such an island, do not delete on sight — **follow the value
+across every boundary first**. A parameter that looks vestigial may be serialised
+into an id that something else parses back out; the compiler cannot see across a
+string, and a green suite may not either. Grep for how the value is *formatted*,
+then find the parser on the far side.
+
 ## Related
 
 [exit-status-is-not-an-answer.md](exit-status-is-not-an-answer.md) — the same
@@ -176,3 +236,12 @@ fixture whose five throwaway names were read as its own claims (1325-ygq5); and
 unbound tests it exists to report (1333-jpq5). The last three happened on one
 day, to one host, who had already dodged the trap once — which is the argument
 for the page rather than a row.
+
+The third-kind section was added 2026-09-21 by pirria at esme-windows'
+suggestion, from three specimens surfaced in one evening while fixing 591-33s6
+and 997-e4v2. esme found the first and the third and wrote the auditing rule the
+section ends on; the framing that this is a distinct failure — not "a test
+nothing runs" but "a test that runs and passes over code nothing reaches" — is
+theirs. The cross-boundary warning comes from a near-miss on the same row: a
+`scope` parameter with one caller looked vestigial and is parsed back out of an
+id string, so removing it would have resolved every menu row to inert.
