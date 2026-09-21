@@ -106,6 +106,15 @@ shared-plumbing table matches `60d8a8770`.
 
 ### A1 — unknown 2 is a PROBABLE DEFECT, not an assumption
 
+> **STRUCK 2026-09-21 — do not implement.** Falsified on a live forge: the bare
+> `@cert-authority git-<mid>` line verifies at port 2222 (`Host 'git-<mid>' is
+> known and matches the ED25519-CERT host certificate`). `ssh-keygen -F` was the
+> instrument on both sides and it is not the client. The writer stays as it is;
+> 1341-mgry is closed obsoleted. The text below is kept as the record of the
+> claim. See the Audit section's A1 for the real defect the same transcript
+> found (1342-r4pv).
+
+
 The forge's gitconfig writer emits `@cert-authority git-<mid> <ca>` and pushes
 to `ssh://git@git-<mid>:2222/…` with `StrictHostKeyChecking=yes` and **no
 `HostKeyAlias`**. OpenSSH looks a non-22 port up as `[host]:port`, so the bare
@@ -196,19 +205,21 @@ lines to a log file, so the proposed pusher line has a home; the sidecar
 has no recorded 30-minute run; the shared-plumbing table matches the six fixes
 at 60d8a8770.
 
-**A1 — unknown 2 is a probable defect, not an assumption.** The forge's
-gitconfig writer (`crates/tillandsias-headless/src/main.rs`, the `pushInsteadOf` writer guarded by `mirror_ssh_push_lane_enabled`) emits
-`@cert-authority git-<mid> <ca>` and pushes to `ssh://git@git-<mid>:2222/…` with
-`StrictHostKeyChecking=yes` and NO `HostKeyAlias`. OpenSSH looks a non-22 port
-up as `[host]:port`; measured on this host with `ssh-keygen -F` (OpenSSH 10.2):
-a bare `git-abc123` line matches `git-abc123` and does NOT match
-`[git-abc123]:2222`; a `[git-abc123]:2222` line does the reverse. Bare metal
-works only because it passes `HostKeyAlias=git-<mid>`, which is looked up
-verbatim. Expected symptom on the first forge push: "Host key verification
-failed". Measure first (`ssh -v -p 2222 git@git-<mid> true` from a forge with the
-lane on), then fix in the writer by either spelling the line
-`@cert-authority [git-<mid>]:2222 …` or adding `-o HostKeyAlias=git-<mid>` to
-`core.sshCommand`; both keep strict checking and no TOFU.
+**A1 — STRUCK (falsified on a live forge by lenovinha, 2026-09-21).** The
+audit asserted that the forge's bare `@cert-authority git-<mid>` line would not
+match a port-2222 lookup without `HostKeyAlias`, from `ssh-keygen -F` on this
+host; lenovinha re-measured with the same instrument and agreed. On a live forge
+(OpenSSH 10.2, lane on, writer untouched) the real client printed
+`Host 'git-<mid>' is known and matches the ED25519-CERT host certificate` and
+`Found CA key in /run/tillandsias/ssh-known_hosts:1`. `ssh-keygen -F` performs
+one literal lookup; the client does not stop there. Two observers, one
+instrument, no independence — the check has to be the client, not a model of
+it. THE WRITER MUST NOT BE CHANGED; 1341-mgry is closed obsoleted. The same
+transcript found the real forge-client defect the audit predicted in kind: the
+sidecar's agent accumulates one identity per renewal until sshd's MaxAuthTries
+runs out, so the lane dies about two hours after boot with "Too many
+authentication failures" while a valid certificate sits on disk (1342-r4pv, p0,
+fixed in PR #134; it blocks the T11 flip on its own).
 
 **A2 — arm 3 cannot run inside a forge.** A forge has no DNS for github.com
 (`images/default/lib-common.sh`, the comment beside its github-URL rewrite: "no DNS for github.com"), so "ls-remote against GitHub" is a
