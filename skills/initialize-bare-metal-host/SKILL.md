@@ -134,25 +134,55 @@ state, not a fault you can fix here.
 **Who this is for.** The Silverblue hosts are the dogfooders — lenovinha, yoga,
 pirria. Windows and macOS likely never need it.
 
-**FIRST, BEFORE ANYTHING ELSE.** The client half — `TILLANDSIAS_HOST_PUSH_HOST`
-and the `til:host-push:` principal — arrives only with the lane fixes. Measured
-by pirria on trunk: `TILLANDSIAS_MIRROR_SSHD` is consumed there today, but the
-host-push half appears nowhere outside `plan/`. A host that starts before the
-fixes land fails in a way that reads as a HOST problem and is not one.
+**FIRST, BEFORE ANYTHING ELSE — two preconditions, in this order.**
 
-**Preconditions, both testable before you start.** The lane's six fixes must be
-on trunk, and your own tree must contain them:
+**(i) The fixes must be on trunk, and in your tree.** The client half —
+`TILLANDSIAS_HOST_PUSH_HOST` and the `til:host-push:` principal — arrives only
+with the lane fixes. Measured by pirria: `TILLANDSIAS_MIRROR_SSHD` is consumed
+on trunk today, but the host-push half appeared nowhere outside `plan/` before
+they landed. A host that starts early fails in a way that reads as a HOST
+problem and is not one.
 
 ```bash
 git merge-base --is-ancestor 88b0679d9 origin/linux-next && echo "fixes on trunk"
+git merge-base --is-ancestor 88b0679d9 HEAD && echo "and in my tree"
 git rev-list --count HEAD..origin/linux-next        # 0, or merge first
 ```
 
-If the first prints nothing, **stop** — the lane cannot come up, and every
-failure below will be one of the six rather than anything about your host.
+**(ii) THE BINARY YOU RUN MUST CARRY THEM — this is not the same question.**
+Found by pirria before running: `images/git/*` (including `sshd-identity.sh`) is
+**embedded in the tillandsias binary at compile time** and materialised
+unconditionally. So a host whose binary predates the fixes rebuilds its mirror
+**without** them, and the relay fails as `Could not resolve host: github.com` —
+a network error on the wrong host, for a reason that is not network.
 
-**The lane stays default-off.** Both variables are explicit on every command;
-nothing here changes a default for anyone else.
+Release **v56.9.21.1 was cut ~11 h before the fixes landed**, so every host on
+that installed release is in this state until the next daily.
+
+Two regimes work; **say in your report which one you used**:
+
+- **Install from a checkout at or above the fixes** — `./build.sh --install`
+  (the install target with the autoincrement; never `SKIP_VERSION_BUMP`), then
+  confirm `tillandsias --version` descends from the fixes.
+- **Run the checkout's binary directly** — `./target/release/tillandsias`,
+  leaving the installed one alone.
+
+**What lenovinha did, stated so the three regimes are comparable:** the second.
+This host's acceptance was run entirely with `./target/release/tillandsias`
+(v56.9.21.1 built from a tree descending from the fixes), while the *installed*
+binary on `PATH` was **v56.9.12.2** the whole time and was never used. `./build.sh
+--install` was never run here. So lenovinha's legs do not evidence the install
+path — only the checkout-binary path.
+
+Whichever you choose, confirm the binary itself carries the fix rather than
+trusting a version string:
+
+```bash
+strings <the-binary-you-will-run> | grep -c RELAY_HTTP_PROXY   # expect >0
+```
+
+**The lane stays default-off.** Both variables are explicit on every command
+below; nothing here changes a default for anyone else.
 
 ### 6.1 — Bring the stack up with the lane on
 
