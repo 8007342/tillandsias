@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    order: 1345-8hyg
+    status: pending
+    kind: docs
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [methodology, agent-safety, measurement, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - methodology/philosophy.yaml
+    unscoreable: |
+      the-deliverable-is-a-METHODOLOGY-RULE-not-an-artifact. No litmus can
+      assert that a rule is written well, and a guard that greps methodology for
+      a phrase would be an instance of the very error the rule names — a model
+      of the text standing in for the text. Closure is checkable by reading the
+      rule and its instances, per the closure below.
+    verifiable_closure: |
+      The rule is in methodology/ (not in a plan issue, not in a skill), it
+      NAMES the corollary about independent observers sharing one instrument,
+      and it carries at least the three measured instances below with enough
+      detail that a reader can tell what the wrong instrument returned and what
+      the real one returned. A rule stated without an instance is a slogan; each
+      instance here cost real work and one of them nearly landed a fix to
+      correct code.
+    title: |
+      a model of the client is not the client — write the instrument rule into methodology, with tonight's three instances and the two-observers-one-instrument corollary
+    context: |
+      THE RULE. When you check a behaviour, the check must exercise the thing
+      that will actually run, not a stand-in that is easier to invoke. A
+      stand-in answers a question of its own, and the two questions agree right
+      up until the moment they matter.
+
+      THE COROLLARY, which is the part that actually bit. Two people measuring
+      independently with the SAME instrument have not measured independently.
+      The coordinator measured A1 with `ssh-keygen -F`, I re-measured it
+      separately with `ssh-keygen -F`, we got the same answer, and I reported it
+      as an independent confirmation — which was true about the data and false
+      about the confidence it bought. Agreement between observers is evidence
+      only to the extent their instruments differ.
+
+      THREE MEASURED INSTANCES FROM ONE NIGHT, all on lenovinha 2026-09-21:
+      1. `ssh-keygen -F` vs the ssh client (1341-mgry). `ssh-keygen -F` does ONE
+         literal known_hosts lookup; the real client does not stop there. The
+         model said a bare `@cert-authority` line cannot match at port 2222; the
+         client accepted it. An amendment instructing a future reader to "fix"
+         correct code was derived from the model and struck only after someone
+         ran the client.
+      2. build-image.sh vs a lane launch (1344-q6uc). Checking the IMAGE for a
+         fix returned yes; the sidecar a lane actually started did not have it.
+         Two build paths write one tag from two different trees.
+      3. A fixture that ran under the cliff (1342-r4pv). `scenario_renewal`
+         renewed three times against a MaxAuthTries of six and asserted only
+         that renewal had happened, so it could not have failed on the broken
+         code whatever it asserted. An arm that cannot reach the failing region
+         is a model of the test, not the test.
+
+      RELATED AND NOT DUPLICATE: 1287-myx8 is about instruments that MATCH
+      THEMSELVES (a pgrep that finds its own shell). This is the neighbouring
+      error — an instrument that matches something else entirely, faithfully,
+      and is believed because it is green. Both belong under one heading.
+    next_action: |
+      Unclaimed, and deliberately not self-assigned: I am the author of two of
+      the three instances and the person who overstated the independence of the
+      third, so someone else stating the rule is worth more than my stating it.
+      Write it into methodology/philosophy.yaml beside the existing measurement
+      rules, cross-reference 1287-myx8, and cite the three instances.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21 on the coordinator's agreement
+      that the rule generalises past ssh and that an obsoleted row's closure
+      (1341-mgry) is where nobody will find it. Instances: 1341-mgry, 1344-q6uc,
+      1342-r4pv. Neighbour: 1287-myx8.

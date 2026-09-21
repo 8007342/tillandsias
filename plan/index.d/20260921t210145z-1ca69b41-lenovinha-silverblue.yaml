@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-image-sh-builds-a-tag-from-the-checkout-and-a-lane-launch-rebuilds-the-same-tag-from-the-extracted-runtime-tree-so-verifying-an-image-change-proves-nothing-about-what-a-lane-runs
+    event:
+      type: measurement
+      ts: "2026-09-21T21:01:45Z"
+      agent_id: linux-lenovinha-linux-20260921t210145z
+      host: lenovinha-silverblue
+      summary: |-
+        THE ROW'S OWN OPEN QUESTION, ANSWERED BY MEASUREMENT before anyone claims it. The row asked whether the version-keyed extraction refreshes on a rebuilt binary at an unchanged VERSION. IT DOES NOT. Measured on lenovinha 2026-09-21: cargo build --release rebuilt tillandsias-headless at 13:51 local with the fixed images/git/ssh-lane-sidecar.sh embedded (strings on the binary shows 'ssh-add -D'), and ~/.local/share/tillandsias/runtime/56.9.21.1/images/git/ssh-lane-sidecar.sh STILL had the old text - the extracted tree is a cache hit on the version string alone, so a rebuilt binary at an unchanged VERSION silently keeps serving the stale assets to every lane launch.  then relaunching re-extracts, and the re-extracted tree and the running container both then carry the fix. THIS IS THE SECOND HALF OF THE ROW AND THE WORSE HALF: the first half costs you one confused verification, this one costs you the obvious remedy too. A developer who notices the image is stale, rebuilds the binary, and relaunches gets the SAME stale file again with no message, and the only way out is to know about a cache directory the tooling never mentions. Note also that VERSION cannot simply be bumped to escape it: a VERSION bump is a cut's own commit (702-eusw), so the correct escape for a dev host is the directory removal, which nothing documents. Whoever claims this row should treat 'the remedy is undiscoverable' as part of the defect, not as a footnote.

@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-test-that-runs-and-passes-over-code-nothing-reaches-is-indistinguishable-from-a-closed-bug-and-this-corpus-produced-three-in-one-day
+    packet_kind: improvement
+    order: 1338-x5rq
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, corpus, audit, no-build]
+    estimated_hours: 5
+    owned_files:
+      - scripts
+    unscoreable: ""
+    verifiable_closure: |
+      A script reports every item that BOTH (a) is exercised by a passing test
+      and (b) is not reachable from any live entry point, where a test is NOT a
+      live entry point. It names file, item, the test that vouches for it, and
+      why it is unreachable.
+
+      PROVEN ON THE THREE KNOWN INSTANCES, by name, or it does not close:
+        crates/tillandsias-headless/src/tray/mod.rs  cloud_overflow_row
+        crates/tillandsias-headless/src/tray/mod.rs  resolved_max_cloud_projects_in_menu
+        crates/tillandsias-headless/src/tray/mod.rs  refresh_local_projects
+      A check that finds only the first is NOT sufficient; see the context for
+      why the second is the hard one.
+    title: |
+      a test that runs and passes over code nothing reaches is indistinguishable from a closed bug, and this corpus produced three in one day
+    context: |
+      A DISTINCT FAILURE FROM THE ONE ALREADY WRITTEN DOWN. The traps page from
+      1328-v3kp covers a test NOTHING INVOKES — an orphan fixture, an unbound
+      litmus. This is its sibling and it is worse: the test IS invoked, it DOES
+      run, and it PASSES, while the code it exercises is unreachable from any
+      live path. There is no output anywhere that distinguishes it from a
+      closed bug, because from the suite's point of view nothing is wrong.
+
+      THE THREE INSTANCES, all found 2026-09-21, all in one file, all
+      independently:
+        * cloud_overflow_row — the 591-33s6 fix. Two callers: one INSIDE a
+          function 628-p5tj had retired, one a test. The test
+          cloud_overflow_row_is_informational_not_a_dead_button asserts the row
+          is not clickable and that its label names an actionable remedy. Both
+          true of the function. The function is unreachable. Green for seven
+          weeks while the bug it fixed stayed live on all three platforms.
+        * resolved_max_cloud_projects_in_menu — same shape, and THIS ONE IS THE
+          HARD CASE. It carries no allow(dead_code) of its own; it is dead only
+          because its sole non-test caller is the retired function. So the
+          naive check misses it, and the env var it resolves,
+          TILLANDSIAS_MAX_CLOUD_MENU_ITEMS, is still advertised to users by a
+          LIVE handler that prints a tip telling them to set it.
+        * refresh_local_projects — no production caller at all, a doc comment,
+          and a test named refresh_local_projects_picks_up_new_checkout that
+          passes while nothing reaches the function.
+
+      WHY THE CHEAP VERSION IS NOT ENOUGH, measured rather than assumed. The
+      tree carries 187 allow(dead_code) annotations. Listing them is a report,
+      not a signal — and two of the three instances above would be MISSED or
+      MISATTRIBUTED by attribute-grepping alone, because deadness here is
+      TRANSITIVE: an item is unreachable not because it is marked, but because
+      everything that calls it is itself unreachable. The compiler already
+      computes exactly this, correctly, and allow(dead_code) is precisely the
+      annotation that suppresses the answer — after which a test keeps the item
+      "used" and nothing complains from either direction.
+
+      SO THE HIGHEST-VALUE CHEAP MOVE MAY NOT BE A NEW ANALYSIS AT ALL: audit
+      the 187 suppressions and ask of each what it is hiding. Whoever takes
+      this should cost both shapes before building — a suppression audit, or a
+      real reachability pass with tests excluded as roots — and say which is
+      cheaper against this corpus. Do not assume the script is the answer
+      because the row is filed as one.
+
+      A SECOND AXIS, coordinator's, worth doing in the same pass: over ready
+      rows carrying owned_files, report the ones whose named item has no live
+      caller. That finds rows believed fixed whose fix is unreachable, which is
+      the ledger-side of the same defect and is how 591-33s6 aged seven weeks
+      while looking closed.
+    next_action: >
+      Start from the three named instances and work BACKWARDS to the rule, not
+      forwards from a grep — the second one is the test of whether the check is
+      real, because it has no attribute of its own. Cost the suppression audit
+      against the reachability pass before writing either, and state the
+      measurement. Whatever ships must be a REPORT first, never a gate: 187
+      suppressions means an immediate refusal would red every host on history
+      nobody has triaged, which is the ratchet reasoning of 699-dycj and
+      660-ryhn. A number in a report that someone can act on beats a refusal
+      that gets disabled in a week.
+    provenance: |
+      esmeraldinha 2026-09-21, filed at the coordinator's request after the
+      third instance in a single day. The pattern was named while correcting
+      the 591-33s6 parity comment; pirria found the third independently, which
+      is what turned it from an anecdote into a population worth counting.

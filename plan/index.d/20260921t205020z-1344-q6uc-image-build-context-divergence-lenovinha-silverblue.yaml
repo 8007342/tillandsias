@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-image-sh-builds-a-tag-from-the-checkout-and-a-lane-launch-rebuilds-the-same-tag-from-the-extracted-runtime-tree-so-verifying-an-image-change-proves-nothing-about-what-a-lane-runs
+    order: 1344-q6uc
+    status: pending
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [containers, build, agent-safety, fail-loud, testability]
+    estimated_hours: 4
+    owned_files:
+      - scripts/build-image.sh
+    verifiable_closure: |
+      litmus:image-build-context-agrees (new, written in the same commit as the
+      thing it checks) — with the checkout's images/ tree differing from the
+      extracted runtime tree for the running version, the fixture must show that
+      SOMETHING REFUSES OR WARNS rather than that both paths quietly produce a
+      tag of the same name. The arm is the DIVERGENCE case: a fixture run where
+      the two trees agree cannot fail and is not this arm.
+      Also required, because the verdict is what misled: `scripts/build-image.sh
+      <name>` must say WHICH tree it built from, in its output, so its success
+      line cannot be read as a statement about what a lane will run.
+    title: |
+      scripts/build-image.sh builds a tag from the checkout while a lane launch rebuilds the same tag from the extracted runtime tree, so verifying an image change proves nothing about what a lane actually runs
+    context: |
+      MEASURED TONIGHT, and it very nearly cost a real fix its evidence.
+
+      Taking 1342-r4pv's arms, I fixed images/git/ssh-lane-sidecar.sh, ran
+      `scripts/build-image.sh git`, and CHECKED THE IMAGE — `podman run --rm
+      localhost/tillandsias-git:latest grep -c "ssh-add -D" ...` returned 1. The
+      fix was in the image. I then relaunched the lane and checked the running
+      sidecar: 0. The fix was gone.
+
+      THE MECHANISM. `scripts/build-image.sh` builds from the CHECKOUT's
+      images/git/. A lane launch builds from
+      `~/.local/share/tillandsias/runtime/<version>/images/git/`, a tree the
+      binary extracts from its own embedded assets (crates/tillandsias-headless
+      runtime_assets). BOTH WRITE THE SAME TAG. Measured here:
+        checkout images/git/ssh-lane-sidecar.sh        -> has the fix
+        runtime/56.9.21.1/images/git/ssh-lane-sidecar.sh -> does NOT
+        localhost/tillandsias-git:latest, after build-image.sh -> has the fix
+        the same tag, after a lane launch                -> does NOT
+      The extracted tree is keyed by VERSION, so a rebuilt binary at an unchanged
+      VERSION may not refresh it either — the stale tree is a cache hit.
+
+      WHY IT IS FILED p1 RATHER THAN AS A NOTE. The failure mode is not "an
+      image is stale", it is "the instrument said yes". Someone changing
+      anything under images/ can verify their change in the image, correctly,
+      and still have every lane on the host run the old file — and the evidence
+      they would paste into a packet is the build-image.sh verdict and a podman
+      run against the tag, both of which are green and both of which are about
+      the wrong tree. That is the same shape as tonight's A1: A MODEL OF THE
+      THING IS NOT THE THING. See the methodology row filed beside this one.
+    next_action: |
+      Unclaimed. The fix is NOT "make build-image.sh write the runtime tree" —
+      decide deliberately which tree is authoritative for a dev host and say so,
+      then make the other path either refuse or say loudly what it did. At
+      minimum build-image.sh must name the tree it built from in its output.
+      Check whether the version-keyed extraction refreshes on a rebuilt binary
+      at an unchanged VERSION; if it does not, that is the second half of this
+      row and the reason a developer's second attempt also fails.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21, found while taking 1342-r4pv's
+      arms 2 and 3 on a real forge. Related: 1342-r4pv (the fix whose evidence
+      this nearly falsified), 1341-mgry (the same instrument family, A1),
+      1343-ujjc (the other testability gap the same arms exposed).
