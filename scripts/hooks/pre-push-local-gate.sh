@@ -1991,37 +1991,39 @@ else
 fi
 
 
-# SILENT ON SUCCESS IS THIS PACKET'S OWN DEFECT, so this block ECHOES ITS
-# VERDICT. Found by the push that landed 1325-ygq5: the ok path printed nothing,
-# sitting immediately before the `✓ local gate` line, so the ONLY evidence the
-# guard had run was that the next line printed. A hook check silent on success
-# reads identically whether it is wired or not — which is the sentence this
-# packet exists to enforce, one level up, in the guard enforcing it. The verdict
-# line also carries `standing=`, so every push transcript shows the ratchet
-# number moving without anyone running anything.
-#
-# THE REFUSAL GOES THROUGH refuse(), never a bare `exit 1` (1315-4a7j). A work
-# ref sets WORK_REF_LANE=1 and does NOT exit early — it runs every decider — so
-# a bare exit here would hard-refuse on the work lane under ENFORCE=1 and
-# bypass the migration phase that lane exists to provide. refuse() exits 1 on a
-# normal ref and returns 0 with a warn: line on a work ref, which is the
-# behaviour every other decider already inherits.
+# THE TWO STREAMS ARE CAPTURED SEPARATELY, and that is not tidiness. The first
+# version captured `2>&1` into one blob and then tested
+# `[[ "$out" == warn:added-test-unreferenced:* ]]`. The guard writes its DETAIL
+# to stderr and its VERDICT to stdout, so the blob began with
+# "UNREFERENCED TEST ADDED: ..." and the prefix match never fired — the warn
+# branch was unreachable and an unreferenced test printed under a GREEN CHECK.
+# Observed as-wired on a dry-run push, 2026-09-21, not reasoned about: a
+# warning rendered as a pass, in the hook half of the guard whose whole subject
+# is a thing that cannot fail reading exactly like a thing that guards.
+# A verdict channel is only a channel if nothing else is mixed into it.
 if [[ -f scripts/check-added-test-is-referenced.sh ]]; then
-    _addedtest_out="$(bash scripts/check-added-test-is-referenced.sh 2>&1)"
+    _addedtest_err="$(mktemp)"
+    _addedtest_out="$(bash scripts/check-added-test-is-referenced.sh 2>"$_addedtest_err")"
     _addedtest_rc=$?
-    if [[ $_addedtest_rc -ne 0 ]]; then
-        TILLANDSIAS_HOOK_DECIDER="added-test-is-referenced" \
-        refuse "this push adds a test nothing can fail because of (1325-ygq5)" \
-               "$(printf '%s' "$_addedtest_out" | head -8)" \
-               "Run it by hand and it will pass. That pass means nothing." \
-               "Wire it, or declare it in scripts/unreferenced-grandfathered.txt with a reason."
-    elif [[ "$_addedtest_out" == warn:added-test-unreferenced:* ]]; then
-        echo "${YLW}⚠ this push adds a test nothing can fail because of (1325-ygq5)${RST}" >&2
-        echo "$_addedtest_out" | head -10 | sed 's/^/  /' >&2
-        echo "  Run it by hand and it will pass. That pass means nothing." >&2
-    else
-        echo "${GRN}✓ ${_addedtest_out}${RST}" >&2
-    fi
+    _addedtest_detail="$(cat "$_addedtest_err" 2>/dev/null)"
+    rm -f "$_addedtest_err"
+    case "$_addedtest_rc:$_addedtest_out" in
+        0:ok:added-test-referenced:*)
+            echo "${GRN}✓ ${_addedtest_out}${RST}" >&2
+            ;;
+        0:warn:added-test-unreferenced:*)
+            echo "${YLW}⚠ this push adds a test nothing can fail because of (1325-ygq5)${RST}" >&2
+            echo "${YLW}  ${_addedtest_out}${RST}" >&2
+            printf '%s\n' "$_addedtest_detail" | head -8 | sed 's/^/  /' >&2
+            echo "  Run it by hand and it will pass. That pass means nothing." >&2
+            ;;
+        *)
+            TILLANDSIAS_HOOK_DECIDER="added-test-is-referenced" \
+            refuse "this push adds a test nothing can fail because of (1325-ygq5): ${_addedtest_out:-<no verdict line>}" \
+                   "$(printf '%s' "$_addedtest_detail" | head -6)" \
+                   "Wire it, or declare it in scripts/unreferenced-grandfathered.txt with a reason."
+            ;;
+    esac
 else
     echo "${YLW}note: scripts/check-added-test-is-referenced.sh absent — added-test reference check skipped${RST}" >&2
 fi
