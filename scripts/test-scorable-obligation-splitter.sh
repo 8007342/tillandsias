@@ -110,7 +110,7 @@ mk_fixture() { # $1 = indent spaces, $2 = path
 mk_fixture 4 "$tmp/bad.yaml"   # yaml.safe_dump shape: items at the parent indent
 mk_fixture 6 "$tmp/good.yaml"  # the interim workaround shape
 
-closure_of() { awk -f "$1" "$2" | awk -F'\x1f' 'NR==1{print $3}'; }
+closure_of() { awk -f "$1" "$2" | awk -F'\037' 'NR==1{print $3}'; }
 
 # The nested item the old splitter mistakes for a row — computed, not asserted,
 # so the mutation arm can NAME it rather than merely report a mismatch.
@@ -165,12 +165,12 @@ fi
 # measures reports zero and looks like good news.
 corpus=(plan/index.yaml)
 while IFS= read -r f; do corpus+=("$f"); done < <(ls plan/index.d/*.yaml 2>/dev/null)
-SEP="$(printf '\x1f')"
+SEP="$(printf '\037')"
 
 emit_keyed() { # $1=awk program -> "<file>|<pid>\x1f<closure>"
     local prog="$1" f
     for f in "${corpus[@]}"; do
-        awk -f "$prog" "$f" 2>/dev/null | awk -F'\x1f' -v F="$f" '{print F"|"$1"\x1f"$3}'
+        awk -f "$prog" "$f" 2>/dev/null | awk -F'\037' -v F="$f" '{print F"|"$1"\037"$3}'
     done | sort
 }
 emit_keyed "$tmp/old.awk" > "$tmp/K-old.txt"
@@ -183,9 +183,9 @@ only_new=$(comm -13 <(cut -d"$SEP" -f1 "$tmp/K-old.txt") <(cut -d"$SEP" -f1 "$tm
 [ "$only_new" -eq 0 ] || fail "scorable-splitter:arm3:PHANTOM rows appeared under the fix: $only_new — a row the pinned splitter never emitted is a parse of something that is not a packet"
 
 recovered=$(join -t"$SEP" -j1 "$tmp/K-old.txt" "$tmp/K-new.txt" 2>/dev/null \
-            | awk -F'\x1f' '$2=="" && $3!=""{n++} END{print n+0}')
+            | awk -F'\037' '$2=="" && $3!=""{n++} END{print n+0}')
 lost=$(join -t"$SEP" -j1 "$tmp/K-old.txt" "$tmp/K-new.txt" 2>/dev/null \
-            | awk -F'\x1f' '$2!="" && $3==""{n++} END{print n+0}')
+            | awk -F'\037' '$2!="" && $3==""{n++} END{print n+0}')
 
 [ "$lost" -eq 0 ] || fail "scorable-splitter:arm3:closures LOST under the fix: $lost — a boundary change must never un-read a closure"
 if [ "$recovered" -lt 1 ]; then
@@ -193,7 +193,7 @@ if [ "$recovered" -lt 1 ]; then
 else
     note "ok:scorable-splitter:arm3-per-file-diff:$n_old records, $recovered closure(s) recovered, 0 lost"
     join -t"$SEP" -j1 "$tmp/K-old.txt" "$tmp/K-new.txt" 2>/dev/null \
-      | awk -F'\x1f' '$2=="" && $3!=""{ split($1,a,"|"); printf "  recovered: %s\n", a[1] }'
+      | awk -F'\037' '$2=="" && $3!=""{ split($1,a,"|"); printf "  recovered: %s\n", a[1] }'
 fi
 [ "$n_old" -eq "$n_new" ] || fail "scorable-splitter:arm3:record-count-moved old=$n_old new=$n_new"
 
@@ -243,8 +243,8 @@ else
         printf 'FIXED\x1f%s\n'  "$(bash scripts/check-scorable-obligation-added.sh base-ref 2>/dev/null | grep -E '^(ok|violation|skip):' | head -1)"
     ) > "$tmp/witness.out" 2>/dev/null
     rm -rf "$fx"
-    blind_v="$(awk -F'\x1f' '$1=="BLIND"{print $2}' "$tmp/witness.out")"
-    fixed_v="$(awk -F'\x1f' '$1=="FIXED"{print $2}' "$tmp/witness.out")"
+    blind_v="$(awk -F'\037' '$1=="BLIND"{print $2}' "$tmp/witness.out")"
+    fixed_v="$(awk -F'\037' '$1=="FIXED"{print $2}' "$tmp/witness.out")"
     # Does THIS checker implement the self-blaming verdict? Grade accordingly.
     if grep -q 'scorable-obligation-parse-failure' "$CHECKER"; then arm4_mode=STRICT; else arm4_mode=RELAXED; fi
     case "$blind_v" in
@@ -299,10 +299,10 @@ packets:
     verifiable_closure: |
       SENTINEL_PROSE_PLACEHOLDER
 PROSE
-sed -i "s/SENTINEL_PROSE_PLACEHOLDER/$SENT_PROSE/" "$tmp/prose.yaml"
-prose_closure="$(awk -f "$tmp/new.awk" "$tmp/prose.yaml" | awk -F'\x1f' 'NR==1{print $3}')"
+awk -v s="$SENT_PROSE" '{ gsub(/SENTINEL_PROSE_PLACEHOLDER/, s); print }' "$tmp/prose.yaml" > "$tmp/prose.yaml.new" && mv "$tmp/prose.yaml.new" "$tmp/prose.yaml"   # no sed -i: BSD sed needs an argument, GNU does not (macneo, ad7386102)
+prose_closure="$(awk -f "$tmp/new.awk" "$tmp/prose.yaml" | awk -F'\037' 'NR==1{print $3}')"
 prose_rows="$(awk -f "$tmp/new.awk" "$tmp/prose.yaml" | wc -l)"
-prose_pre="$(awk -f "$tmp/old.awk" "$tmp/prose.yaml" | awk -F'\x1f' 'NR==1{print $3}')"
+prose_pre="$(awk -f "$tmp/old.awk" "$tmp/prose.yaml" | awk -F'\037' 'NR==1{print $3}')"
 
 if [ "$prose_closure" != "$SENT_PROSE" ]; then
     fail "scorable-splitter:arm5:example YAML inside a block scalar ATE THE CLOSURE (got [$prose_closure]) — the row marker fires on documentation and re-creates the defect this row fixes"
