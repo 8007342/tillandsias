@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: note
+      ts: "2026-09-21T17:40:44Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t174044z
+      host: forge-tillandsias
+      summary: |
+        CORRECTION TO MY PREVIOUS EVENT, and it goes further than the previous one did:
+        the defect has ZERO LIVE VICTIMS ANYWHERE ON TRUNK, so the regression arm cannot
+        be corpus-based at all. My proposed replacement arm (c) was wrong and is
+        withdrawn here rather than quietly dropped.
+
+        WHAT (c) CLAIMED: "plan/index.yaml holds 900 packet records and 21 list items at
+        indent 2 or 4 that are not row starts. The trigger is still present there and
+        has not been hand-repaired, so the arm has real history to read."
+
+        WHY THAT IS WRONG. I classified those 21 by channel instead of counting them:
+
+          10 are `  - ts:` items in the `capabilities:` channel. `capabilities` is not
+             `packets` or `plan_index`, so `indecl != 1 { next }` discards them before
+             the row marker is ever tested. They cannot trigger anything.
+          11 are `    - pending` / `- ready` / … , the `default_status_values` enum
+             under `plan_index:` at lines 668-678. That IS an indecl channel, so they
+             DO match the old marker and DO fire a flush — but they sit before any
+             packet row in the file, so `pid` is empty and `flush()` prints nothing.
+             Harmless by position, not by design.
+
+        So the base index has no live victim either. Neither does the fragment dir.
+
+        THE MEASUREMENT THAT SETTLES IT — full-corpus equivalence between the pre-fix
+        splitter (extracted verbatim from scripts/check-scorable-obligation-added.sh at
+        ff6fc4fdd) and the fixed one, comparing (packet_id, unscoreable, closure) per
+        record:
+
+          plan/index.yaml     old 900 records   new 900 records
+                              only-old (regressions)   0
+                              only-new (recovered)     0
+          plan/index.d/*.yaml old 266 records   new 266 records
+                              only-old (regressions)   0
+                              only-new (recovered)     0
+
+        Byte-identical on every committed record in the ledger. Two things follow, and
+        they pull in opposite directions:
+
+        GOOD — the fix is BEHAVIOUR-PRESERVING on all real data. A splitter change that
+        touches the row boundary could silently re-partition the ledger; this one
+        provably does not. That is the strongest safety evidence available for this
+        change and it should be kept as an arm in its own right.
+
+        BAD — there is nothing on trunk for a regression arm to recover, so any
+        criterion phrased as "the affected fragments now yield a closure" is vacuous
+        today, whether the population is stated as 142, as 21, or derived. The fixture is
+        the ONLY falsifiable evidence, and the arms must rest on it.
+
+        AND THE 142 IS NOT REPRODUCIBLE FROM COMMITTED STATE. This row's own worked
+        example is the test: it says 1330-j5is was refused while carrying a closure and
+        that re-indenting its list items from 4 to 6 "made it pass with NO other
+        change". I read that fragment at both commits that touch it (f905274dc, then
+        a926bd304) and its capability_tags items are at INDENT 6 IN ITS FIRST COMMITTED
+        VERSION. It was never at indent 4 in git. So the repair happened in macneo's
+        working copy before the fragment ever landed, which is consistent with the
+        measurement being true when taken and never having been visible in trunk.
+
+        I am not asserting the 142 was wrong. I am asserting it cannot be re-derived
+        from committed state by the method the row prescribes, and that a claimer
+        following that instruction gets 0. If the population matters, it has to come
+        from macneo's pre-commit working copy, which no other host can read.
+
+        REVISED ARMS, replacing (a)-(d) of my previous event:
+
+          1. FIXTURE (falsifiable, hermetic). Two fragments differing only in the indent
+             of a capability_tags list above the closure. Pre-fix: indent-4 yields an
+             EMPTY closure, indent-6 yields it. Post-fix: both yield it. Pre-fix result
+             pasted in the row; this is the arm that FAILS on unfixed code.
+          2. MUTATION. Revert the splitter and arm 1 must fail, naming the nested item
+             mistaken for a row — AND the arm asserts the reverted source actually
+             DIFFERS from the fixed source before reading any verdict, because a no-op
+             mutation is indistinguishable from a passing test.
+          3. EQUIVALENCE, replacing the regression arm. Over the whole committed ledger,
+             the fixed splitter must produce output IDENTICAL to the pinned pre-fix
+             splitter — 0 records gained, 0 lost. Cardinality is asserted on BOTH
+             directions, and the pre-fix splitter is taken verbatim from git rather than
+             re-implemented, so the arm tests real prior behaviour and not a paraphrase.
+             This arm has teeth today, unlike a recovery count, and it is what stops the
+             fix from re-partitioning 1,166 live records.
+
+        The cardinality condition asked of me is therefore satisfied as an equality
+        (0 and 0) rather than as a recovery count, because the corpus offers no
+        recoveries to count. Stating it as "non-empty recovered set" would have been
+        unsatisfiable, and I would rather say that than build an arm that cannot fail.
+
+        THE TRAP RESTATED, because it is what made both of my wrong numbers possible:
+        counting empty closures does not measure this bug. The base index returns 527
+        empty of 900 and most of those packets never carried a closure. Empty-because-
+        unparsed and empty-because-absent are indistinguishable from outside — the same
+        indistinguishability the row names between deferral and satisfaction, reappearing
+        in the instrument used to size it. Only a diff against a pinned correct parser
+        separates them, which is why arm 3 is a diff and not a count.
