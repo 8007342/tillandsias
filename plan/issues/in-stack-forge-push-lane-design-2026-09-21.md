@@ -98,3 +98,74 @@ implementation packet is claimed — including by the author.** Three acceptance
 arms and two instruments of the bare-metal work were falsified by peers
 measuring their own hosts; a design written alone for a client that has never
 run deserves the same treatment before code follows it.
+
+## Audit (macuahuitl-fedora, 2026-09-21)
+
+**Outcome: ACCEPTED WITH AMENDMENTS. Implementation may proceed on the amended
+shape below; the T11 flip (749-y8xx) still waits on a forge acceptance.**
+
+Verified, by reading the code rather than the design: `TILLANDSIAS_PUSH_*` is
+exported at `images/git/tillandsias-receive.sh` (its `export TILLANDSIAS_PUSH_KEY_FP TILLANDSIAS_PUSH_PRINCIPAL …` block) and read only by
+`scripts/test-mirror-receive-wrapper.sh` (its `receive-env` record and the `hook-missing-serial` asserts — a fixture that
+mints its own certificate and asserts what it minted); `relay-refs.sh` and
+`pre-receive-hook.sh` (each through its `log` function) already write timestamped `[relay]`/`[pre-receive]`
+lines to a log file, so the proposed pusher line has a home; the sidecar
+(`images/git/ssh-lane-sidecar.sh`) renews every 1200 s against a 30 m TTL and
+has no recorded 30-minute run; the shared-plumbing table matches the six fixes
+at 60d8a8770.
+
+**A1 — unknown 2 is a probable defect, not an assumption.** The forge's
+gitconfig writer (`crates/tillandsias-headless/src/main.rs`, the `pushInsteadOf` writer guarded by `mirror_ssh_push_lane_enabled`) emits
+`@cert-authority git-<mid> <ca>` and pushes to `ssh://git@git-<mid>:2222/…` with
+`StrictHostKeyChecking=yes` and NO `HostKeyAlias`. OpenSSH looks a non-22 port
+up as `[host]:port`; measured on this host with `ssh-keygen -F` (OpenSSH 10.2):
+a bare `git-abc123` line matches `git-abc123` and does NOT match
+`[git-abc123]:2222`; a `[git-abc123]:2222` line does the reverse. Bare metal
+works only because it passes `HostKeyAlias=git-<mid>`, which is looked up
+verbatim. Expected symptom on the first forge push: "Host key verification
+failed". Measure first (`ssh -v -p 2222 git@git-<mid> true` from a forge with the
+lane on), then fix in the writer by either spelling the line
+`@cert-authority [git-<mid>]:2222 …` or adding `-o HostKeyAlias=git-<mid>` to
+`core.sshCommand`; both keep strict checking and no TOFU.
+
+**A2 — arm 3 cannot run inside a forge.** A forge has no DNS for github.com
+(`images/default/lib-common.sh`, the comment beside its github-URL rewrite: "no DNS for github.com"), so "ls-remote against GitHub" is a
+bare-metal peer's or the coordinator's arm: the forge hands its pushed sha as a
+condition and the peer verifies equality on GitHub. The forge's own check is
+against the mirror's `git://` read AFTER the relay confirms, with 1338-tkfh's
+caveat that the mirror lags.
+
+**A3 — the forge's race window is the mirror's sync lag, and it is unmeasured.**
+The forge's base is the mirror's tip; the relay's staleness guard fetches
+upstream and REJECTs a stale old-id; the forge cannot refetch from GitHub the
+way yoga did (one loss in 82 s WITH a fresh fetch). So on a busy trunk (84–296 s
+between moves tonight) forge pushes to linux-next fail whenever any host pushed
+since the mirror last synced. The dogfood must include three plan-only pushes at
+a measured trunk cadence and count the REJECTs, and the mirror's upstream-sync
+cadence must become observable from inside a forge (1338-tkfh) before any
+default flip.
+
+**A4 — unknown 3 becomes an arm.** A second push after at least 30 minutes of
+sidecar uptime; the serial in the relay's pusher line must differ from the first
+push's. The log line and the renewal then verify each other.
+
+**A5 — the pusher line.** Write it in `relay-refs.sh`'s log function per ref
+transaction and include `KEY_ID` alongside principal and serial: the key id is
+the mint-time identity (host name for `til:host-push`, mirror id for
+`til:forge-push`), which is what attribution needs — tonight two forge
+mechanisms landed as `plan(unknown)` and `salvage/unknown/` (1337-3tk6).
+
+**A6 — regimes.** State the forge dogfood's regime as the bare-metal ones are
+stated: a Linux forge inside a Silverblue dogfooder's enclave first (the
+author's own), the WSL2 forge already running in yolanda's enclave second.
+Candidates, not directives.
+
+**A7 — consistent with the PR direction.** A forge cannot open PRs (its
+`~/.config/gh` is a credential-less tmpfs by design); the lane's job is the
+credential-free push of `work/<order>` refs, which a bare-metal host or the
+coordinator then lands. The design should say so, so nobody reads the lane as a
+landing path.
+
+Not found: no defect in the finding the design turns on, in the division of
+authorisation (sshd's `AuthorizedPrincipalsFile`), or in what the design refuses
+to claim.

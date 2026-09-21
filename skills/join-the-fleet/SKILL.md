@@ -105,6 +105,17 @@ In a forge:
   `target/` path (721-nyev); use `scripts/plan-binary-probe.sh`.
 - The credential channel is a REPORT for verification-only work (818-cgpn)
   and a GATE for anything that commits.
+- `origin` in a forge is the enclave's git MIRROR, not GitHub, and it lags:
+  on 2026-09-21 it sat three commits behind for minutes while a coordinator
+  cited a GitHub sha (1338-tkfh). From inside a forge, "landed upstream but
+  not here yet" and "exists nowhere" both answer `couldn't find remote ref`,
+  so a sha that does not resolve is UNDECIDED, not absent. Verify the
+  PROPERTY a landing was meant to establish on the trunk you can reach (a
+  verdict line, a file's content), or wait for the mirror to carry the sha;
+  never close a row on a sha you cannot resolve, and when you cite a sha to
+  someone else, say which remote it is on. The mirror's upstream-sync
+  cadence is not observable from inside a forge today (1338-tkfh's closure
+  makes the two answers differ).
 - A broken git mirror is a HARD STOP: "upgrade tillandsias, rebuild the forge",
   never a warning retried against (1310-rec6). A forge cannot repair the host
   that runs it.
