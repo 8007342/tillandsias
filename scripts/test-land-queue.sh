@@ -437,6 +437,55 @@ else
     bad "ARM 8b: the caller started detached at ${det_before:0:9} and was left at ${det_after:0:9} — the restore recorded the literal 'HEAD' instead of a commit"
 fi
 
+# ──────────────────────────────────────────────────────────── ARM 9
+# A GATE THAT READS STDIN MUST NOT EAT THE CANDIDATE LIST.
+#
+# THIS ARM EXISTS BECAUSE THE FIXTURE MISSED THE DEFECT IN THE FIELD. Every stub
+# gate above is `exit 0`, which consumes nothing, so arms 1 and 3 land three
+# candidates each and passed while the REAL queue — whose gate is
+# `./build.sh --check`, and which reads stdin — drained exactly one per run and
+# reported ok:land-queue:1 with --limit 2. Measured 2026-09-21 on this host,
+# landing another host's PRs.
+#
+# The world the fixture built had a gate that does not read. The subject's
+# world has one that does. So the stub here CONSUMES STDIN on purpose, and the
+# assertion is that all three candidates are still processed.
+scaffold arm9
+candidate arm9 9001-aaaa a.txt A
+candidate arm9 9002-bbbb b.txt B
+candidate arm9 9003-cccc c.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/9001-aaaa","isDraft":false},
+ {"number":2,"headRefName":"work/9002-bbbb","isDraft":false},
+ {"number":3,"headRefName":"work/9003-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+# A gate that drains stdin, exactly as ./build.sh --check does.
+cat >/dev/null 2>&1 || true
+exit 0
+GATE
+# AND THE FAKE gh DRAINS STDIN TOO, which is what makes this arm discriminate.
+# The gate alone does not: the queue redirects it from /dev/null, so an arm
+# built only on a hungry GATE passes even with the fd-3 read reverted — measured
+# when this arm was written. gh is invoked inside the loop with no such
+# redirect, so a hungry gh tests the fd the LIST is read on rather than one
+# subprocess's plumbing. Two guards, and the arm must fail if EITHER is removed.
+sed -i '2i cat >/dev/null 2>&1 || true' "$GH_BIN"
+out9="$(run_queue)"
+n9="$(printf '%s' "$out9" | sed -n 's/^land:\([0-9]*\) .*/\1/p' | tr '\n' ',')"
+case "$out9" in
+    *"ok:land-queue:3 "*)
+        if [ "$n9" = "1,2,3," ]; then
+            ok "ARM 9: a STDIN-CONSUMING gate still lets all three candidates be processed — the list is read on fd 3, not stdin"
+        else
+            bad "ARM 9: the queue reported 3 examined but landed '$n9'"
+        fi ;;
+    *)
+        bad "ARM 9: a stdin-consuming gate cut the drain short (landed '$n9') — the candidate list is being eaten by the loop body, which is the field defect of 2026-09-21
+$(printf '%s' "$out9" | tail -3)" ;;
+esac
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
