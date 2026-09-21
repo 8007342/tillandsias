@@ -1,0 +1,43 @@
+# @trace spec:ci-release, order:1313-w78k
+name: litmus:fragment-ts-skew
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1313-w78k. `tillandsias-plan append-event` refuses a ts more than 900s
+  from the host's clock. A fragment written BY HAND as YAML went through no such
+  check — the parser, the plan-only lane and the fold all read `ts:` and none
+  asked whether it was a time that had happened. Measured on pirria 2026-09-20:
+  six hand-written fragments in one session, five in the FUTURE, the worst by
+  4h49m. `ts` is what stalest-first sorts on, what claim expiry reads and what
+  every recency claim consumes, and the records are permanent.
+
+  THE RULE IS ASYMMETRIC AND THE ASYMMETRY IS THE CONTRACT. An undeclared FUTURE
+  ts is refused, always, because no clock-correct writer produces one — it is
+  never a backfill, it is an invented time. A PAST ts is accepted and its skew
+  printed, because a delayed push is real and common (lenovinha's seven written
+  16:17Z and folded 19:00Z) and requiring a declaration would turn every relay
+  fold into a refusal or a ritual.
+preconditions:
+  - workspace contains scripts/check-fragment-ts-skew.sh
+  - workspace contains scripts/test-fragment-ts-skew.sh
+
+critical_path:
+  - step: "a future ts is refused, a past ts is accepted and printed, and the check is diff-scoped"
+    command: "bash scripts/test-fragment-ts-skew.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:fragment-ts-skew-fixture"
+    # Nine arms. The load-bearing one is the PAST arm: a fixture that proved only
+    # the refusal would pass a checker that refused everything, which would break
+    # every relay fold in the fleet.
+
+  - step: "both the cheap lane and the gate run it, so a gated land cannot carry what the lane refuses"
+    command: "n=$(grep -lc 'check-fragment-ts-skew' scripts/hooks/pre-push-local-gate.sh build.sh 2>/dev/null | wc -l); if [ \"$n\" -eq 2 ]; then echo ok:both-consumers; else echo \"FAIL:consumers=$n\"; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:both-consumers"
+
+  - step: "the refusal names the remedy as reading the clock, never as composing a time"
+    command: "if grep -q 'date -u +%Y-%m-%dT%H:%M:%SZ' scripts/check-fragment-ts-skew.sh; then echo ok:remedy-is-read-the-clock; else echo FAIL:no-clock-remedy; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:remedy-is-read-the-clock"

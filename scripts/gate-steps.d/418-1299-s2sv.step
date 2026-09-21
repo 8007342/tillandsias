@@ -1,0 +1,77 @@
+# Gate step 1299-s2sv — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A timing record now says WHICH CHECKOUT wrote it. On
+# 2026-09-18 four records landed in /tmp while a gate ran, the metrics-log-split
+# guard correctly refused to publish, and the next release gate reddened two
+# hours later on a symptom several steps from its cause. Establishing where
+# those records came from was impossible FROM THE RECORDS — they carry ts, host,
+# step, phase, duration_ms, exit and nothing else — and the answer existed only
+# in one host's session transcript. 1268-m2ir came within that transcript of
+# closing on an unconfirmed mechanism.
+#
+# THE READER SURVEY CAME FIRST and is why the field could be added at all. 28
+# files mention the timing log; only FOUR parse a record field. NONE does a
+# whole-object comparison, key-set check, to_entries, has() or field count —
+# grepped for each, not assumed — so a new key is inert for every existing
+# reader, and the split guard compares wc -l and reads no fields at all. ARM 4b
+# is that claim as a test rather than a sentence.
+#
+# THE ABSENT-CASE RULE THE ARMS PIN:
+#   no reader may dereference .root bare (jq yields null; null interpolates as
+#   the STRING "null", which is absent-read-as-value); the canonical read is
+#   `.root // .root_unusable // "unknown"`, which is WHY the fallback path must
+#   emit root_unusable — without it the chain has a hole exactly where the
+#   diagnosis is needed; and ABSENT MEANS PRE-FIELD, NEVER /tmp, because ~124k
+#   records predate the field and are not evidence about where they were written.
+#
+# ARM 4 USES THE REAL CORPUS: the four records preserved from the 2026-09-18
+# incident, verbatim, relayed from macuahuitl. Synthesising a field-less record
+# would have tested this author's idea of one rather than what the fleet wrote.
+#
+# FOR WHOEVER WRITES THE NEXT EMITTER, because this cost the first version of
+# this one and the symptom is silence rather than an error:
+#
+#   A GLOBAL SET INSIDE A COMMAND SUBSTITUTION IS DISCARDED.
+#
+# metrics_default_log's result is consumed as `p="$(metrics_default_log …)"`,
+# and $(...) runs in a SUBSHELL. The first version had that function set
+# METRICS_LOG_ROOT / METRICS_LOG_ROOT_UNUSABLE / METRICS_LOG_FALLBACK_REASON for
+# the caller to read; every one of them came back EMPTY, in the resolved case and
+# the fallback case alike, because the subshell that set them had already exited.
+# Nothing errors. The caller simply sees blank values and, if it does not check,
+# writes records with a missing field or an empty one.
+#
+# The shape generalises past this file: any helper whose ANSWER is taken through
+# a command substitution can return exactly one thing — its stdout. Side effects
+# it performs for the caller's benefit do not survive. metrics_root_fields() is
+# therefore a PURE function the caller evaluates in its own shell, deriving what
+# it needs from the resolved path rather than from state the resolver tried to
+# leave behind.
+#
+# ARM 2 CONSTRUCTS A WORKTREE AS A DIRECTORY WHOSE .git IS A FILE — what
+# `git worktree add` produces, and the exact condition that broke the resolver in
+# 1268-m2ir. A real worktree would prove the same property while mutating the
+# repository from inside a gate step, which is not worth it.
+#
+# COST, MEASURED HERE 2026-09-20: 1.14 / 1.04 s. The first version was 32s
+# because ARM 4b ran cycle-metrics.sh in full twice, computing every metric to
+# read ONE line — more than step 414 cost when that was judged too expensive.
+# `--no-experts --no-repo-scan` still prints the timing line at 0.57s a side,
+# same flags both sides, comparison unchanged.
+#
+# SECOND REGIME (1302-7j8p): REQUIRED, and NOT yet recorded. This fixture needs
+# jq, which is not universally present, and it skips by name when jq is absent
+# (skip:timing-record-root:no-jq). The emitter it exercises is shell and the
+# fixture's other tools are POSIX spellings already covered by steps 411 and
+# 413. What a second regime must confirm is the jq behaviour the absent-case
+# rule rests on — that `.root // .root_unusable // "ABSENT"` yields ABSENT and
+# never the string "null" on that host's jq build. ASK FOR THAT RUN BEFORE
+# TREATING THIS STEP'S GREEN AS FLEET-WIDE.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking a timing record says which checkout wrote it, and absent reads as absent (1299-s2sv)"
+STEP_SCRIPT="scripts/test-timing-record-carries-root.sh"
+STEP_ERROR="a timing record can again fail to say where it was written from, or an absent root reads as a value instead of as pre-field (1299-s2sv) — read which arm failed above; ARM 4b failing means the field is no longer inert for existing readers"
+STEP_OK="Timing records carry their checkout; absent reads as absent"

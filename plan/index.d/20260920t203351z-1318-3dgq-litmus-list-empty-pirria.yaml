@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: run-litmus-test-sh-list-builds-a-filename-from-the-binding-name-with-its-colon-intact-so-every-existence-test-fails-and-the-listing-answers-no-suites-for-a-corpus-of-five-hundred
+    order: 1318-3dgq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags:
+      - litmus
+      - instrument
+      - fail-loud
+      - tooling
+    estimated_hours: 1
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: '`scripts/run-litmus-test.sh --list` prints its header and nothing else — it builds `litmus:<name>.yaml`
+      from the binding name with the colon intact, the corpus files are `litmus-<name>.yaml`, so all 503
+      bound entries fail a silent `-f` test and the listing answers "no suites" for a corpus of 503, exit
+      0
+
+      '
+    context: "FOUND by macuahuitl 2026-09-20 while verifying macbookair's fixture, and\nREPRODUCED here\
+      \ before filing.\n\n  $ scripts/run-litmus-test.sh --list\n  Available Litmus Test Suites:\n  <nothing>\n\
+      \  $ grep -cE '^  - litmus:' openspec/litmus-bindings.yaml\n  503\n\nMeasured on two hosts: 0 of\
+      \ 440 suites on macuahuitl (yq present, stderr merged,\nwith and without a spec name) and 0 on macbookair,\
+      \ who read it as yq\ndegradation. It is not yq.\n\nTHE MECHANISM, from the source. The listing reads\
+      \ `.specs[].litmus_tests[]` from\nthe bindings, which yields names of the form `litmus:<name>`,\
+      \ and then tests:\n\n    local test_file=\"${LITMUS_TESTS_DIR}/${test}.yaml\"\n    if [[ -f \"$test_file\"\
+      \ ]]; then ... printf ... fi\n\nso it looks for a file literally named `litmus:installer-reprovisions-on-install.yaml`\n\
+      while the corpus file is `litmus-installer-reprovisions-on-install.yaml`. Every\nentry fails the\
+      \ existence test, the `if` has no else, and the loop finishes\nhaving printed nothing. EXIT 0.\n\
+      \nWHY IT IS THE NIGHT'S OWN FAMILY, with a colon where a dash goes: a listing that\nanswers \"no\
+      \ suites\" and a corpus that genuinely has none are byte-identical AND\nstatus-identical. There\
+      \ is no stderr to read and nothing failed — the same shape\nas 1238-u84w (a recursive search over\
+      \ a population it never walked) and as the\nfour specimens in cheatsheets/tooling/exit-status-is-not-an-answer.md.\
+      \ An\noperator or an agent reaching for --list to discover what exists is told,\nauthoritatively\
+      \ and wrongly, that nothing does.\n\nIT IS ALSO A DISCOVERY SURFACE, which is what makes it worth\
+      \ p2 rather than a\ntidy-up: --list is how a host asks what it can run. This fleet has already spent\n\
+      a day on an arm that never executed because nobody could see it was unbound\n(1304-wbb2 and this\
+      \ host's own unbound litmus), and the tool that would answer\n\"is my test here?\" has been answering\
+      \ \"there are no tests\" to everyone who asked.\n\nNOT FOLDED INTO 1309-fhxb: that row's consumer\
+      \ census covers the runner's VERDICT\nsurface (the step arms, the summary lines, and the seven parsers\
+      \ that read them)\nand never touches the --list block. Filed separately so the fix is reviewable\
+      \ as\nwhat it is — one path expression — rather than arriving inside a reporting change.\n"
+    exit_criteria:
+      - '`scripts/run-litmus-test.sh --list` NAMES every bound suite, and the count equals check-litmus-bindings''
+        bound total (pre-fix result: prints 0 for a corpus of 503; measured on pirria, macuahuitl and
+        macbookair)'
+      - 'NEGATIVE CONTROL: a binding whose file genuinely does NOT exist is REPORTED, not skipped — the
+        silent `if [[ -f ]]` with no else is the defect, and a fix that merely corrects the filename would
+        still hide a missing file the next time one is missing'
+      - 'the fixture arm asserts the count, not the exit status: a listing that prints nothing exits 0
+        today, so an arm checking rc would have passed throughout'
+    unscoreable: 'reporting-shape-not-chosen: the fix is one path expression (translate the binding name''s
+      `:` to the file
+
+      name''s `-`), but criterion 2 is a behaviour choice: reporting an absent file
+
+      turns a silent listing into one that can be noisy on a tree mid-migration. The
+
+      count is fully measured; whether an absent binding prints a line or a warning is
+
+      the claimer''s call with 1304-wbb2''s reconciliation guard in view, since that row
+
+      owns the bound-vs-present question.
+
+      '
+    events:
+      - type: filed
+        ts: '2026-09-20T20:33:51Z'
+        agent_id: linux-pirria-claude-20260920t202500z
+        host: pirria
+        summary: 'Filed through the tool by pirria at the coordinator''s request — their checkout
+
+          was held by a gate and could not push a fragment. The mechanism is theirs, read
+
+          from the source; the reproduction and the 503 count are mine, taken here before
+
+          filing rather than relayed.'

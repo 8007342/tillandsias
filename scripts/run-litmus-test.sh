@@ -2332,7 +2332,8 @@ parse_args() {
             -*)
                 log_fail "Unknown option: $1"
                 echo "Use: $0 [spec-name] --timeout N --phase <name> --list --json" >&2
-                echo "     --parse-only <file>... asks whether THIS RUNNER can extract the steps; for YAML validity use scripts/check-litmus-yaml-parses.sh" >&2
+                echo "     --parse-only <file>... loads each file as YAML and REFUSES if it does not load, then reports whether THIS RUNNER can extract its steps (order 1303-2d5g)" >&2
+                echo "                            scripts/check-litmus-yaml-parses.sh is the AUTHORITATIVE gate over the whole corpus; --parse-only answers for named files only" >&2
                 exit 3
                 ;;
             *)
@@ -2404,12 +2405,74 @@ main() {
         # say which was which. A green here means THIS RUNNER can extract the
         # steps; it is not a YAML validity verdict, and a file can be
         # extractable and unloadable at the same time.
-        printf 'note:parse-only answers runner-extractability, NOT YAML validity — for YAML validity run scripts/check-litmus-yaml-parses.sh\n' >&2
+        # ORDER 1303-2d5g supersedes 1274-cbk7's wording. That note told the
+        # reader to run the strict checker for YAML validity; since the load
+        # below, this flag ANSWERS that question for the named files, so the
+        # old text sent people to re-run a check this verdict had just made.
+        # What remains true, and is the only thing worth saying here, is the
+        # difference in SCOPE: this answers for the files named on the command
+        # line, and the gate answers for the whole corpus.
+        printf 'note:parse-only judges the FILES NAMED HERE (loads each as YAML, then reports extractability); scripts/check-litmus-yaml-parses.sh is the corpus-wide gate\n' >&2
+        # ORDER 1303-2d5g. LOAD THE DOCUMENT BEFORE EXTRACTING FROM IT.
+        #
+        # 1274-cbk7 added the note above, on the theory that naming the
+        # question was enough. It is not: MEASURED on esmeraldinha 2026-09-20,
+        # a file that `tillandsias-plan validate-yaml` REFUSES (rc=1,
+        # `blocked:yaml-load-failed: could not find expected ':'`) came back
+        # from here as `ok:litmus-parseable:<f>:1 step(s)` — it even reported a
+        # step count, because this runner's extraction is LINE-BASED and never
+        # loads the document. The note was printed directly above that line and
+        # did not help, because A READER ACTS ON THE VERDICT WORD. Two
+        # instruments disagreeing about one file, with the looser one the one
+        # authors reach for first, is how a broken litmus reaches a gate on one
+        # host and is refused on another twenty minutes later (land 25).
+        #
+        # So the verdict may not say `ok:` for a file that is not YAML. The
+        # load runs FIRST and its own message is passed through verbatim, so
+        # this refusal names the same file and line the strict checker names
+        # and the two instruments cannot disagree about the same file again.
+        #
+        # NO READER IS ITS OWN NAMED STATE, not a pass — and the wording and
+        # the stand-aside both match scripts/check-litmus-yaml-parses.sh
+        # deliberately, because two instruments answering the same question
+        # must not differ on what "cannot answer" looks like. Extractability is
+        # still reported, since that is this flag's own question and a fresh
+        # clone must still be able to ask it.
+        local parse_reader="${LITMUS_PLAN_BIN:-}"
+        if [[ -z "$parse_reader" || ! -x "$parse_reader" ]]; then
+            printf 'skip:parse-only:yaml-load-unchecked:no-runnable-reader (run scripts/cycle-preflight.sh) — the lines below answer extractability ONLY\n' >&2
+        fi
         for parse_target in ${PARSE_ONLY_FILES[@]+"${PARSE_ONLY_FILES[@]}"}; do
             if [[ ! -f "$parse_target" ]]; then
                 printf 'blocked:parse-only:missing:%s\n' "$parse_target" >&2
                 parse_rc=1
                 continue
+            fi
+            if [[ -n "$parse_reader" && -x "$parse_reader" ]]; then
+                local parse_yaml_out=""
+                # MUTATION ANCHOR, and it is load-bearing for a fixture that is
+                # not this order's. scripts/test-litmus-parse-only-duplicate-key.sh
+                # (order 1274-cbk7) proves its defect by building a PRE-FIX COPY
+                # of this runner with the duplicate-key detector neutralised and
+                # requiring the false green to come back. Once 1303-2d5g added
+                # the document load above that detector, the load rejected the
+                # duplicate first and that arm stopped reproducing anything —
+                # TWO FIXES FOR ONE FILE, with the older fixture's mutation
+                # mutating something no longer reachable.
+                #
+                # So the load is switched by a line of its own, which that
+                # fixture seds to 0 alongside its own mutation. Keep this line
+                # a single assignment on one line: a sed anchored on it is
+                # matching text, and reflowing this breaks an arm in another
+                # file that will not be obvious from here.
+                local _parse_load_enabled=1  # LOAD-GATE-1303 (ARM 1 anchor)
+                if [[ "$_parse_load_enabled" == "1" ]] \
+                   && ! parse_yaml_out="$("$parse_reader" validate-yaml "$parse_target" 2>&1)"; then
+                    printf 'blocked:parse-only:not-yaml:%s\n' "$parse_target" >&2
+                    [[ -n "$parse_yaml_out" ]] && printf '%s\n' "$parse_yaml_out" >&2
+                    parse_rc=1
+                    continue
+                fi
             fi
             run_litmus_test_file "$parse_target" "parse-only" || parse_rc=1
         done

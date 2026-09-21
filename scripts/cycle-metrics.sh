@@ -435,9 +435,15 @@ if [ "${1:-}" = "--emit-timing" ]; then
     [ -n "$et_step" ] || et_step="-"
     {
         et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s}\n' \
+        # ORDER 1299-s2sv. WHERE THIS RECORD WAS WRITTEN FROM, so the question
+        # "which checkout produced it" is answerable from the record instead of
+        # from a transcript one host happens to still hold — which is what
+        # 1268-m2ir cost. Appended as a pre-rendered fragment so the existing
+        # field order is untouched and every current reader stays inert.
+        et_root_fields="$(metrics_root_fields "$TIMING_LOG" 2>/dev/null || true)"
+        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s%s}\n' \
             "$et_ts" "$et_host" "$et_step" "$et_phase" \
-            "$et_duration_ms" "$et_exit" \
+            "$et_duration_ms" "$et_exit" "$et_root_fields" \
             >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
@@ -502,7 +508,8 @@ fi
 if [ "${1:-}" = "--emit-timing-batch" ]; then
     {
         etb_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-        awk -F'\t' -v ts="$etb_ts" '
+        etb_root_fields="$(metrics_root_fields "$TIMING_LOG" 2>/dev/null || true)"
+        awk -F'\t' -v ts="$etb_ts" -v rootf="$etb_root_fields" '
             NF >= 3 && $1 != "" {
                 step = $1; phase = $2; dur = $3; ec = $4; host = $5
                 if (dur !~ /^[0-9]+$/) dur = 0
@@ -511,8 +518,8 @@ if [ "${1:-}" = "--emit-timing-batch" ]; then
                 if (phase == "") phase = "-"
                 if (host == "") host = "-"
                 gsub(/["\\]/, "", step); gsub(/["\\]/, "", phase); gsub(/["\\]/, "", host)
-                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d}\n", \
-                    ts, host, step, phase, dur, ec
+                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s}\n", \
+                    ts, host, step, phase, dur, ec, rootf
             }' >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
@@ -979,7 +986,16 @@ accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harnes
 # --no-experts: keep the DEFERRED line above rather than grading. The line is
 # still emitted and still says `deferred`, so a reader can tell "not graded this
 # run" from "graded and green" -- the distinction a silent omission would erase.
-if [ "$NO_EXPERTS" = true ]; then
+if [ "${TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE:-0}" = 1 ]; then
+    # A FIXTURE that asks only about the mcp: line (health, surface, stale attestations)
+    # opts out of the groundtruth grade: ~18 s of expert queries on this host (rung-1,
+    # ~763 ms a case) that would otherwise sit inside a 20 s step budget and turn a
+    # passing property into a load-dependent TIMEOUT (v56.9.20.1 release gate,
+    # litmus:mcp-expert-health-probe-shape step 19). Never set by a cycle; the default
+    # grades as before.
+    accuracy_line='expert_accuracy: skipped source=TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE (fixture asked for the mcp line only)'
+    GRADE_BIN=""
+elif [ "$NO_EXPERTS" = true ]; then
     accuracy_line='expert_accuracy: skipped source=--no-experts (caller asked for telemetry only)'
     GRADE_BIN=""
 fi

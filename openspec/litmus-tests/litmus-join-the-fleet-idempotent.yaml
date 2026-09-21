@@ -1,0 +1,33 @@
+name: litmus:join-the-fleet-idempotent
+spec: methodology-accountability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Order 1311-ajpm (operator direction 2026-09-20): ./skills/join-the-fleet is
+  the idempotent onboarding for a worker on bare metal or in a forge, and
+  scripts/check-fleet-membership.sh is its NON-MUTATING verifier. This binding
+  runs the fixture: two runs print the same verdict line and leave git status
+  untouched; under the forge regime every host-only step is a named skip and
+  the verdict's skipped= count equals the skip lines printed; a scaffold git
+  dir with no pre-push hook yields todo:join-the-fleet:hooks:scripts/install-hooks.sh
+  with a non-zero exit. The checker's own probes (credential channel, experts,
+  substrate, plan-binary currency) have their own fixtures; arms 2 and 3 run
+  with JOIN_FLEET_PROBES=0 so this litmus is about the checker's grammar and
+  honesty, not about the host's state.
+preconditions:
+  - workspace contains scripts/check-fleet-membership.sh
+  - workspace contains scripts/test-join-the-fleet-idempotent.sh
+  - workspace contains skills/join-the-fleet/SKILL.md
+critical_path:
+  - step: "the checker and the fixture parse and carry their exec bits"
+    command: "bash -n scripts/check-fleet-membership.sh && bash -n scripts/test-join-the-fleet-idempotent.sh && test -x scripts/check-fleet-membership.sh && test -x scripts/test-join-the-fleet-idempotent.sh && echo ok:join-the-fleet-scripts-parse"
+    expected_behavior: "ok:join-the-fleet-scripts-parse"
+    assert_exit: 0
+    timeout_ms: 5000
+  - step: "the fixture's three arms hold"
+    command: "bash scripts/test-join-the-fleet-idempotent.sh 2>&1 | grep -E '^ok:join-the-fleet-idempotent:3/3$'"
+    expected_behavior: "ok:join-the-fleet-idempotent:3/3"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 120000

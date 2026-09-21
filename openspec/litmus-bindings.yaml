@@ -172,8 +172,12 @@ specs:
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
+  - litmus:reset-state-contract
   - litmus:installer-swap-atomicity
   - litmus:installer-reprovisions-on-install
+  - litmus:validator-surface-currency
+  - litmus:fragment-ts-skew
+  - litmus:preflight-front-door
   - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
@@ -477,6 +481,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:initialize-bare-metal-host-idempotent
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
   - litmus:forge-clone-reachability-probe-shape
@@ -628,6 +633,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:fake-podman-direct-invocation-safety
+  - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
   - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
@@ -647,6 +653,7 @@ specs:
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
+  - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
   - litmus:release-freeze-holds-code
   - litmus:expire-claims-reads-the-status-write
@@ -1200,6 +1207,7 @@ specs:
   - litmus:secure-control-wire-guest-responder-shape
   - litmus:psk-input-parity-shape
   - litmus:host-guest-no-cfg-transport-selection
+  - litmus:macos-vsock-inference-closure
   coverage_ratio: 67
   last_verified: '2026-07-06'
 - spec_id: vm-provisioning-lifecycle

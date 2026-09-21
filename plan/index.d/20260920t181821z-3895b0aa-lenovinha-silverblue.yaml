@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-idempotent-initialize-bare-metal-host-skill-that-brings-the-container-stack-up-and-deliberately-does-not-seed-prompt-for-or-copy-a-github-token
+    field: status
+    value: obsoleted
+    ts: "2026-09-20T18:18:21Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: an-idempotent-initialize-bare-metal-host-skill-that-brings-the-container-stack-up-and-deliberately-does-not-seed-prompt-for-or-copy-a-github-token
+    event:
+      type: note
+      ts: "2026-09-20T18:18:21Z"
+      host: lenovinha-silverblue
+      summary: |-
+        superseded by 1312-i6da, the same deliverable with wider scope (rebuild + troubleshoot + self-evolving Repairs section) and already claimed here

@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamps below are READ FROM THE CLOCK, not composed — which is this row.
+packets:
+- packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+  order: 1313-w78k
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  release_target: fail-loud-diagnosis-milestone
+  pickup_role: any
+  capability_tags:
+  - plan
+  - tooling
+  - instrument
+  - fail-loud
+  estimated_hours: 2
+  owned_files:
+  - scripts/hooks/pre-push-local-gate.sh
+  title: 'append-event refuses a ts more than 900s from the host''s clock, but a fragment written BY HAND
+    goes through no such check — so an invented time enters the permanent ledger, and ts is what stalest-first
+    sorts on, what claim expiry reads, and what every recency claim consumes
+
+    '
+  context: "MEASURED ON PIRRIA 2026-09-20, and the measurement is this host's own output.\nClosing 1287-h6qn\
+    \ through the tool produced:\n\n  error: --ts 2026-09-20T23:30:00Z disagrees with this host's clock\n\
+    \         2026-09-20T18:19:51Z by 18609s (limit 900s) — omit --ts to use the\n         clock, or pass\
+    \ --backfill if the event genuinely happened earlier;\n         append-event refused the write\n\n\
+    The tool owns a 900-second skew limit. A fragment written by hand as YAML passes\nthrough the fragment\
+    \ parser, the plan-only lane and the fold, and NONE of them\nasks the question. So the limit protects\
+    \ only the path a careful agent was\nalready on.\n\nSIX FRAGMENTS THIS HOST WROTE BY HAND TODAY, measured\
+    \ against the real clock at\n2026-09-20T18:26:40Z:\n\n  18:30:00Z  1309-q4kr smoke destroys the builder\
+    \ toolbox      +4m\n  19:05:00Z  1278-qbia / 1287-h6qn lane refusals               +39m\n  19:45:00Z\
+    \  1310-7apk fold is per-corpus                      +1h19m\n  20:30:00Z  1286-4437 arm evidence +\
+    \ 1307-kic6 cadence        +2h04m\n  21:45:00Z  1287-h6qn retraction                             \
+    \ +3h19m\n  23:15:00Z  1287-h6qn self-demonstration                      +4h49m\n\nFive of the six\
+    \ are in the FUTURE. They were composed as plausible clock times\nrather than read from the clock,\
+    \ and nothing in the path objected. The\ntool-written fragments from the same session are correct,\
+    \ because the tool read\nthe clock itself.\n\nWHY IT IS p1 AND NOT TIDINESS. ts is what \"stalest\
+    \ first\" sorts on, what claim\nexpiry reads, and what any recency reasoning over the ledger consumes.\
+    \ A\nfuture-dated event is the newest thing in the ledger until the clock catches up,\nand these records\
+    \ are permanent: 1310-7apk will say it was filed at 19:45Z\nforever. The rows' internal ordering is\
+    \ consistent; their ordering against every\nother host's records is not.\n\nIT IS NOT ONE HOST'S SLIP.\
+    \ The coordinator's working notes ran about an hour\nahead of UTC for four hours the same day, written\
+    \ from memory, and nothing in\ntheir path objected either; the handoff they landed carries the corrected\
+    \ window\nand the notes do not. Two hosts, same day, same cause — a time composed instead\nof read\
+    \ — which is what makes it a lane check rather than a habit to fix.\n\nRELATED, SAME SESSION, OPPOSITE\
+    \ DIRECTION: before 1287-h6qn landed, this host\nminted order 1311-8f9t from a binary the lane would\
+    \ have refused. An identifier\nand a timestamp are both things the ledger treats as facts, and both\
+    \ were\nproduced without asking the instrument that knows.\n"
+  exit_criteria:
+  - 'a fragment whose ts is TWO HOURS AHEAD of the pushing host''s clock is REFUSED by the plan-only lane,
+    naming the file (pre-fix result: FAILS — six such fragments were accepted on this host on 2026-09-20,
+    one of them 4h49m ahead)'
+  - a fragment whose ts is two hours BEHIND is ACCEPTED, and the lane prints note:fragment-ts-past:<file>:<skew>
+    — a delayed push is real and common (lenovinha's seven written 16:17Z and folded 19:00Z; yolanda's
+    reached trunk hours after writing), and a declaration requirement would turn every relay fold into
+    a refusal or a ritual
+  - 'NO DECLARATION ADMITS AN UNDECLARED FUTURE ts: no clock-correct writer produces one, so it is never
+    a backfill, it is an invented time. --backfill stays what it is for the tool''s own writes and does
+    not become a way to push one through the lane.'
+  - the SAME check runs in the gate's fast-refusals tier, so a gated land cannot carry what the plan-only
+    lane refuses (both arms asserted against the same trunk)
+  unscoreable: 'clock-source-not-chosen: the check compares against the PUSHING host''s clock,
+
+    which is the only clock the lane can read — a fleet whose hosts disagree with
+
+    each other by more than the limit would refuse each other''s fragments, and
+
+    nothing here measures that spread. The 900s figure is inherited from the tool
+
+    deliberately so the two paths cannot diverge; if the fleet''s real spread is
+
+    wider, that is a second measurement and a second row, not a number to loosen
+
+    here on one host''s guess.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-09-20T18:28:43Z'
+    agent_id: linux-pirria-claude-20260920t182800z
+    host: pirria
+    summary: 'Filed by the host that produced the six, from its own tool''s refusal.
+
+      THE SIX ARE LEFT STANDING and are listed above with their written ts and the
+
+      measured real time, on the coordinator''s ruling: one note in one place beats
+
+      superseding events scattered across six immutable fragments, and a reader of the
+
+      ledger''s ordering finds the correction where the defect is explained.
+
+      This fragment''s own timestamps are read from the clock.'

@@ -474,6 +474,43 @@ _validator_surface_verdict() { # $1 = binary path
 # exists yet — never override an actual surface-hash verdict.
 _lane_staleness_check() { # $1 = binary path
     local _bin="$1" _rc
+
+    # ORDER 1287-h6qn — ASK THE BINARY, which knows what it was built from.
+    #
+    # build.rs embeds the validator surface's CONTENT hash, so `--check`
+    # compares "what I was built from" against "what this checkout holds" and
+    # needs no stamp file, no mtime and no operator who knew to run a checker
+    # first. That retires the whole failure class the stamp had — absent,
+    # lagging, or orphaned under a redirected CARGO_TARGET_DIR — and it fixes
+    # the case that defeated every earlier mechanism: `git rebase` rewrites a
+    # surface file with a fresh mtime and identical bytes, and a content hash
+    # does not move (1172-dyvd: currency is a content probe, never an mtime).
+    #
+    # exit 0 = same, 3 = different, 4 = cannot ask. ONLY 0 and 3 are verdicts.
+    # A 4, or a binary too old to have the subcommand, falls through to the
+    # stamp-and-mtime ladder below, so a mid-upgrade fleet keeps the old
+    # behaviour rather than being vouched for by a question nobody answered.
+    # A ZERO EXIT IS NOT A VERDICT — REQUIRE THE ANSWER LINE. The first draft of
+    # this block took `exit 0` as "current", and 851-cduu's fixture caught it in
+    # the gate: its lane stub answers `exit 0` to EVERY argument, so a binary
+    # that has never heard of this subcommand was vouched for and the lane
+    # accepted a validator it had refused a moment before. That is cannot-ask
+    # read as fresh, in the one direction that matters — it opens the lane rather
+    # than closing it — and every old binary, wrapper or stub in the fleet has
+    # exactly that shape. Only the literal `ok:validator-surface:<hash>` line is
+    # a pass; anything else falls through to the ladder below.
+    _rc="$("$_bin" validator-surface-hash --check 2>&1)"
+    case "$_rc" in
+        ok:validator-surface:*)
+            _LANE_STALE_VIA="embedded validator-surface hash — this binary was built from these bytes (1287-h6qn)"
+            return 1
+            ;;
+        stale:validator-surface*)
+            _LANE_STALE_VIA="embedded validator-surface hash — ${_rc#stale:validator-surface } (1287-h6qn); a rebase that rewrote a file without changing it would NOT have triggered this"
+            return 0
+            ;;
+    esac
+
     _validator_surface_verdict "$_bin"; _rc=$?
     case $_rc in
         0)
@@ -1255,6 +1292,30 @@ attempt_plan_only_lane() {
             printf '%s' "$out" | grep 'does not parse and was SKIPPED' | head -6 | sed 's/^/  /' >&2
             return 1
         fi
+        # ORDER 1313-w78k. A fragment written BY HAND may carry any timestamp:
+        # append-event refuses a ts more than 900s from the host's clock, and
+        # nothing on the hand-authored path asks. Measured here 2026-09-20, six
+        # in one session, five in the FUTURE, the worst by 4h49m. `ts` is what
+        # stalest-first sorts on, what claim expiry reads and what every recency
+        # claim consumes, and the records are permanent.
+        #
+        # ASYMMETRIC BY RULING: an undeclared FUTURE ts is refused (no
+        # clock-correct writer produces one, so it is never a backfill), while a
+        # PAST ts is accepted and its skew printed — a delayed push is real and
+        # common, and requiring a declaration for it would turn every relay fold
+        # into a refusal or a ritual.
+        if [[ -f scripts/check-fragment-ts-skew.sh ]]; then
+            if ! out="$(bash scripts/check-fragment-ts-skew.sh 2>&1)"; then
+                echo "plan-only lane: validation FAILED — a fragment carries a FUTURE timestamp (1313-w78k):" >&2
+                echo "$out" | head -12 | sed 's/^/  /' >&2
+                return 1
+            fi
+            # The past-skew notes are information, not a verdict: print them.
+            printf '%s\n' "$out" | grep -E '^note:fragment-ts-past:' >&2 || true
+        else
+            LANE_NOTES+=("scripts/check-fragment-ts-skew.sh absent — skipped")
+        fi
+
         if [[ -f scripts/check-fragment-status-loss.sh ]]; then
             if ! out="$(bash scripts/check-fragment-status-loss.sh 2>&1)"; then
                 echo "plan-only lane: validation FAILED — check-fragment-status-loss refused (full gate required):" >&2

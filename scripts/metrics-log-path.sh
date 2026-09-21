@@ -78,6 +78,95 @@ _metrics_is_checkout() {
     [ -n "${1:-}" ] && [ -e "$1/.git" ]
 }
 
+# ORDER 1299-s2sv. THE JSON FIELDS THAT SAY WHERE A RECORD WAS WRITTEN FROM.
+#
+# Derived from the RESOLVED PATH in the caller's own shell, deliberately, not
+# reported by metrics_default_log: that function's result is consumed through a
+# command substitution, which is a SUBSHELL, so any global it sets is discarded
+# before the caller can read it. Measured here on the first attempt — the
+# variables came back empty in both the resolved and the fallback case.
+#
+# Emits a JSON fragment beginning with a comma, or nothing when it cannot tell.
+#   resolved:  ,"root":"<checkout>"
+#   fallback:  ,"root_unusable":"<candidate>","fallback_reason":"<why>"
+# The canonical read is `.root // .root_unusable // "unknown"` (the absent-case
+# rule on this row), which is why the fallback path must emit root_unusable:
+# without it the chain has a hole exactly where the diagnosis is needed.
+#
+# ABSENT MEANS PRE-FIELD, NEVER /tmp. A record with none of these keys was
+# written before this field existed; ~124k such records exist and they are not
+# evidence about where they were written.
+metrics_root_fields() {
+    _mrf_path="${1:-}"
+    case "$_mrf_path" in
+        */.cache/metrics/*)
+            _mrf_root="${_mrf_path%/.cache/metrics/*}"
+            printf ',"root":"%s"' "$_mrf_root"
+            return 0
+            ;;
+        /tmp/*)
+            # ONLY THE RESOLVER'S OWN FALLBACK SHAPE COUNTS, which is exactly
+            # /tmp/<basename> with nothing between. A caller naming its own log
+            # under /tmp — TILLANDSIAS_TIMING_LOG=/tmp/whatever/t.jsonl, which is
+            # what every fixture does — is NOT a fallback, and the first version
+            # of this case labelled those records root_unusable. Caught by
+            # emitting one: a throwaway log in a temp dir was reported as an
+            # unusable checkout.
+            case "${_mrf_path#/tmp/}" in
+                */*) _metrics_root_of_process; return 0 ;;  # a caller's own path
+            esac
+
+            # Re-derive WHY by ASKING the same questions the resolver asked,
+            # rather than assuming the remaining branch. The first version's
+            # else-arm asserted cache-dir-not-creatable without testing mkdir,
+            # so a perfectly writable checkout was blamed for a condition it did
+            # not have — a reason that reads as measured and was not.
+            _mrf_cand="${PROJECT_ROOT:-}"
+            if [ -z "$_mrf_cand" ]; then
+                _mrf_cand="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-.}")/.." 2>/dev/null && pwd)" || _mrf_cand=""
+            fi
+            if [ -z "$_mrf_cand" ]; then
+                printf ',"root_unusable":"","fallback_reason":"no-candidate-root"'
+            elif ! _metrics_is_checkout "$_mrf_cand"; then
+                printf ',"root_unusable":"%s","fallback_reason":"not-a-checkout"' "$_mrf_cand"
+            elif ! mkdir -p "$_mrf_cand/.cache/metrics" 2>/dev/null; then
+                printf ',"root_unusable":"%s","fallback_reason":"cache-dir-not-creatable"' "$_mrf_cand"
+            else
+                # It is a checkout and the cache dir is creatable, yet the log
+                # resolved to /tmp: the tree changed between the resolve and
+                # this read. Say that rather than pick one of the above.
+                printf ',"root_unusable":"%s","fallback_reason":"resolved-elsewhere-then-usable"' "$_mrf_cand"
+            fi
+            return 0
+            ;;
+        *)
+            # A CALLER-NAMED LOG ANYWHERE ELSE. The record still knows which
+            # checkout the PROCESS ran in, and saying so is the point of the
+            # field. Emitting nothing here would make the record
+            # indistinguishable from a pre-field one, and clause 3 of this row's
+            # absent-case rule is that absent means PRE-FIELD — so leaving these
+            # blank would put ~124k old records and every fixture's throwaway log
+            # in the same bucket.
+            _metrics_root_of_process
+            return 0
+            ;;
+    esac
+    return 0
+}
+
+# The checkout THIS PROCESS is running in, when there is one. Silent otherwise:
+# a process genuinely outside any checkout has no root to report, and inventing
+# one would be the same failure as reporting /tmp as a location.
+_metrics_root_of_process() {
+    _mrp="${PROJECT_ROOT:-}"
+    if [ -z "$_mrp" ]; then
+        _mrp="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-.}")/.." 2>/dev/null && pwd)" || _mrp=""
+    fi
+    [ -n "$_mrp" ] || return 0
+    _metrics_is_checkout "$_mrp" || return 0
+    printf ',"root":"%s"' "$_mrp"
+}
+
 metrics_default_log() {
     _mdl_base="${1:?metrics_default_log: basename required}"
     _mdl_root="${2:-}"

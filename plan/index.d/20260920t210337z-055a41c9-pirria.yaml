@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    field: unscoreable
+    value: |-
+      clock-source-not-chosen: the check compares against the PUSHING host's clock,
+      which is the only clock the lane can read — a fleet whose hosts disagree with
+      each other by more than the limit would refuse each other's fragments, and
+      nothing here measures that spread. The 900s figure is inherited from the tool
+      deliberately so the two paths cannot diverge; if the fleet's real spread is
+      wider, that is a second measurement and a second row, not a number to loosen
+      here on one host's guess.
+    ts: "2026-09-20T21:03:37Z"
+    host: pirria
+
+events:
+  - packet_id: a-hand-written-plan-fragment-may-carry-any-timestamp-because-the-900-second-skew-limit-lives-only-in-the-tools-write-path-so-future-dated-events-enter-a-permanent-ledger-with-nothing-in-the-path-objecting
+    event:
+      type: note
+      ts: "2026-09-20T21:03:37Z"
+      host: pirria
+      summary: |-
+        restated through the tool so the fold reads it at the indent check-scorable-obligation-added scans: the original fragment was generated with yaml.safe_dump, whose indentless sequences put exit_criteria items at the checker's packet-row marker, hiding every field after the first criterion

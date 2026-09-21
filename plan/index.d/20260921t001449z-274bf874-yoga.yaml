@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: claim
+      ts: "2026-09-21T00:14:49Z"
+      agent_id: linux-yoga-opus5-20260921t001449z
+      host: yoga
+      summary: |
+        CLAIMED by yoga, with the operator's approval already recorded on this row at
+        302118c56 (both LIGHT and SCOPED; a LIGHT landing merges gatelessly and writes a
+        SCOPED stamp naming the classes it gated, never `full`). The approval is the
+        fifth exit criterion; the other five still have to be MET, and this claim is for
+        meeting them, not for standing on the approval.
+
+        WHAT THIS ROW DOES NOT GET TO REINVENT. gate_stamp_classify_path
+        (scripts/gate-stamp.sh:167, order 765-dt8h) is already a TOTAL path-to-class map
+        whose final `*)` arm exists so that "an unclassified path fails closed instead
+        of silently belonging to whatever a scoped gate claimed", and enforce_stamp_scope
+        (scripts/hooks/pre-push-local-gate.sh:1555) already enforces that the stamped
+        scope covers what is pushed. The selector EXTENDS those two. Two classifiers
+        that disagree about one path is a worse bug than either would have been alone.
+
+        TIERS, ENTIRELY IN THE EXISTING CLASSES:
+          LIGHT  = classes subset of {plan-ledger, docs}
+          SCOPED = classes subset of {plan-ledger, docs, specs, methodology,
+                   build-scripts}
+          FULL   = anything else, which INCLUDES `other` by construction
+        So an unknown path can only ever RAISE the tier. The failure direction is
+        inverted from the plan-only lane's on purpose: there a bypass lands ungated
+        ledger appends, here it would ship unbuilt Rust.
+
+        THE FOUR FAIL-CLOSED PATHS, from this row's own criteria, each with a negative
+        test: unknown path -> FULL; missing or unfetchable base ref -> FULL;
+        build-tooling class (build.sh, local-ci.sh, run-litmus-test.sh, the guard's own
+        script) -> FULL; LAST FULL RUN OLDER THAN 24 h -> refuse to skip. The last one is
+        the rule that neither yoga's nor macuahuitl's independent design had, and it is
+        the one that stops a branch riding LIGHT and SCOPED landings indefinitely and
+        never being fully gated.
+
+        EVERY SKIP PRINTS WHAT IT DID NOT RUN, POSITIVELY, with the gate named, the
+        intersecting-class evidence, the diff base SHA and the last FULL run timestamp.
+        This is not formatting. macuahuitl's release gate on 2026-09-20 was red on seven
+        pre-build litmus steps that no ./build.sh --check could see, because --check
+        never runs that tier — the doctrine already in methodology/convergence.yaml under
+        1282-rkkm. A green that does not say what it did not run is read as full
+        coverage. The tiers must not re-create that silence one level up.
+
+        TWO HAZARDS INHERITED RATHER THAN REDISCOVERED, both measured on the plan-only
+        lane under 1056-5344 and both fatal here in a worse way:
+          (a) `git log --no-merges A..B` is WRONG for "what did this change touch" — a
+              commit arriving THROUGH a merge is itself a non-merge commit newly
+              reachable, so the scoped set equals the unscoped one and the fix changes
+              nothing while looking correct;
+          (b) `--first-parent` ALONE IS A BYPASS — park code on a side branch, merge it
+              --no-ff, and it arrives through the SECOND parent where a first-parent
+              walk cannot see it. Measured there: a sneaky.rs was invisible. The
+              ancestry gate is not optional.
+
+        PIRRIA REVIEWS THE build.sh SELECTOR MATRIX (their front door reads the same
+        region). That is cross-substrate review of scaffolding rather than one host's
+        opinion, which is how this class of defect gets caught at all.
+
+        NOT IN SCOPE HERE: the landing queue (1316-bnzt, built and gated at 69d957699)
+        stays at FULL for every candidate until this selector is on trunk. The queue
+        consumes the selector; it does not contain one.

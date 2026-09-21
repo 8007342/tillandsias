@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-authenticated-ssh-push-lane-falls-open-to-the-anonymous-git-path-when-it-is-enabled-but-its-host-ca-cache-is-absent-so-the-flag-being-set-is-not-evidence-the-lane-is-in-use
+    event:
+      type: completed
+      ts: "2026-09-20T16:34:53Z"
+      agent_id: linux-lenovinha-opus5-20260920t163453z
+      host: lenovinha-silverblue
+      summary: |-
+        CLOSED. The authenticated ssh push lane now REFUSES when enabled but unwired instead of falling open to the anonymous git:// path. Landed via the relay as ok:land:a43c175a6:attempt-2. VERIFIED BY ME, BY CONTENT ON ORIGIN, not by the landing report: git merge-base --is-ancestor origin/work/1309-qc95 origin/linux-next returns true, and on origin/linux-next SSH_LANE_UNWIRED_REFUSAL_URL appears in crates/tillandsias-headless/src/main.rs, scripts/test-ssh-lane-refuses-when-unwired.sh exists, and litmus:ssh-lane-refuses-when-unwired is bound once in openspec/litmus-bindings.yaml. THE FIX: a pushInsteadOf to an unroutable url, because omitting the push redirect is NOT fail-closed — the anonymous insteadOf written earlier in the same function covers PUSH as well as fetch, so silence lets the unauthenticated path win. The pre-fix unit test ASSERTED that wrong answer and was inverted rather than deleted. FIVE GATE REFUSALS BEFORE GREEN, every one a real defect of mine and none a flake: cargo fmt; a verifiable_closure naming a litmus nothing defined (885-92iu); the litmus existing but BOUND TO NO SUITE so it would have executed in no suite at all; 'if ! sed -i' as a verdict, hazard shape 3 of 1252-r72q, written by the person who filed that order; and — found while fixing that one — SED EXITS ZERO WHEN IT MATCHES NOTHING, so a mutation that silently failed to apply would have run the arms against unmutated source, seen them pass, and reported 'the guard bites'. A mutation arm proving nothing while reading as proof, which is the same loud-but-silent-in-outcome shape as the defect this row is about. It now checks sed's status AND greps for the mutated text. PRE-FIX EVIDENCE, STATED AS IT IS: established FROM THE CALL SITE, not from a run. No push was made at the pre-fix commit. The coordinator's brief recorded it as run; it was not, and that correction stands in the closure rather than being quietly adopted.

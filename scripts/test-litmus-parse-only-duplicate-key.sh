@@ -89,16 +89,31 @@ fi
 # ---------------------------------------------------------------- ARM 1
 # PRE-FIX CONTROL. Neutralise the detector in a copy and require the false
 # green to return.
-sed 's|^ *duplicate_keys+=(.*|                    : # neutralised for ARM 1|' \
+# TWO SITES, NOT ONE, since order 1303-2d5g. That order made --parse-only LOAD
+# the document before extracting from it, and the load sits ABOVE this order's
+# duplicate-key detector — so a copy with only the detector neutralised still
+# refuses a duplicate-key file, on the loader's verdict, and this arm stopped
+# exercising its own defect. Neutralising only one of two fixes for the same
+# file proves nothing about either.
+#
+# The second sed is anchored on `_parse_load_enabled=1`, a line 1303-2d5g added
+# for this purpose and documented as load-bearing for THIS fixture.
+sed -e 's|^ *duplicate_keys+=(.*|                    : # neutralised for ARM 1|' \
+    -e 's|^ *local _parse_load_enabled=1 .*|                local _parse_load_enabled=0 # neutralised for ARM 1|' \
     "$ROOT/scripts/run-litmus-test.sh" > "$PREFIX_RUNNER" 2>/dev/null
 chmod +x "$PREFIX_RUNNER" 2>/dev/null
 
-# ASSERT THE MUTATION LANDED. A sed that matched nothing produces a copy
+# ASSERT BOTH MUTATIONS LANDED. A sed that matched nothing produces a copy
 # identical to the subject, and "the defect did not reproduce" would then be
-# indistinguishable from "the mutation never applied".
+# indistinguishable from "the mutation never applied". With two sites the
+# weaker failure is worse: ONE mutation landing and the other not still yields
+# a copy that refuses, which reads exactly like a fixed defect.
 live_hits="$(grep -c 'duplicate_keys+=(' "$ROOT/scripts/run-litmus-test.sh")"
 mut_hits="$(grep -c 'duplicate_keys+=(' "$PREFIX_RUNNER")"
-if [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ]; then
+live_load="$(grep -c 'local _parse_load_enabled=1 ' "$ROOT/scripts/run-litmus-test.sh")"
+mut_load="$(grep -c 'local _parse_load_enabled=1 ' "$PREFIX_RUNNER")"
+if [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ] \
+   && [ "$live_load" -ge 1 ] && [ "$mut_load" -eq 0 ]; then
     prefix_out="$("$PREFIX_RUNNER" --parse-only "$TMP/dup-assert.yaml" 2>&1)"
     prefix_rc=$?
     if [ "$prefix_rc" -eq 0 ] && printf '%s' "$prefix_out" | grep -Fq "$OK_PARSEABLE"; then
@@ -107,7 +122,7 @@ if [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ]; then
         bad "ARM 1: pre-fix copy did NOT reproduce the false green (rc=$prefix_rc) — the arm is not exercising the defect"
     fi
 else
-    bad "ARM 1: mutation did not apply (live=$live_hits mutant=$mut_hits) — refusing to read a verdict from an unmutated copy"
+    bad "ARM 1: mutation did not apply (detector live=$live_hits mutant=$mut_hits; load live=$live_load mutant=$mut_load) — refusing to read a verdict from a partly-mutated copy"
 fi
 
 # ---------------------------------------------------------------- ARMS 2-4
@@ -156,10 +171,25 @@ fi
 
 # ---------------------------------------------------------------- ARM 7
 # THE MODE SAYS WHICH QUESTION IT ANSWERS, and names the other check by path.
+#
+# THE ASSERTION MOVED BECAUSE THE BEHAVIOUR MOVED (order 1303-2d5g). This arm
+# used to require the literal 'NOT YAML validity', which was true when
+# --parse-only only extracted. It now LOADS each named file as YAML first, so
+# that sentence became FALSE and pinning it would have required the mode to go
+# on saying something untrue in order to keep a fixture green. What survives
+# the change, and is the thing this arm was always really about, is that the
+# mode states its SCOPE and names the corpus-wide gate by path: --parse-only
+# answers for the files named on the command line, check-litmus-yaml-parses.sh
+# answers for the corpus.
+#
+# Kept deliberately loose — 'FILES NAMED' and the path — rather than pinning
+# the whole sentence. An arm that pins prose word-for-word reds on a reword
+# that changed nothing, which is the expression-pinning shape 634-39ik refuses
+# in litmus steps and which is no better in a fixture.
 out="$(scripts/run-litmus-test.sh --parse-only "$TMP/clean.yaml" 2>&1)"
 if printf '%s' "$out" | grep -Fq 'check-litmus-yaml-parses.sh' \
-   && printf '%s' "$out" | grep -Fqi 'NOT YAML validity'; then
-    ok "ARM 7: --parse-only states its scope and names the check for YAML validity"
+   && printf '%s' "$out" | grep -Fqi 'FILES NAMED'; then
+    ok "ARM 7: --parse-only states its scope and names the corpus-wide gate by path"
 else
     bad "ARM 7: --parse-only does not say which question it answers"
 fi
