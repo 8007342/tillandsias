@@ -1,0 +1,43 @@
+packets:
+  - packet_id: the-landing-queue-requeues-a-green-candidate-when-trunk-moved-by-plan-fragments-only-during-its-gate-so-during-busy-hours-it-lands-nothing-while-the-land-tool-adopts-the-same-stamp
+    order: 1335-2nzf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [landing-queue, git, gate, coordination]
+    estimated_hours: 3
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    verifiable_closure: |
+      scripts/test-land-queue.sh gains an arm and prints its verdict with it
+      counted: a candidate gated green on base B, with trunk then moved to B'
+      where `git diff --name-only B B'` touches only plan/index.d/*.yaml and
+      plan/loop_status.d/*.md (the plan-only lane's paths), is RE-MERGED onto
+      B' and PUSHED without a second gate, printing
+      `land:<n> tier=full gate=adopted base=<B'> gated-on=<B> merge=<sha>`;
+      a control arm where B..B' touches one non-plan path still prints
+      `requeue:land-queue:<n>:target-moved:…` and re-gates; the adoption
+      names the same rule scripts/land-on-platform-branch.sh applies
+      (gate-fresh-except-plan) and the same excluded paths, read from one
+      place. PRE-FIX RESULT: FAILS — measured 2026-09-21T17:10Z on macuahuitl:
+      PR #127 (work/1332-tdde) gated green at FULL on bbab64bf6; yolanda's
+      plan-only push moved trunk to e15ddcf8a during the gate;
+      `requeue:land-queue:127:target-moved:gated-on=bbab64bf6 now=e15ddcf8a`,
+      `landed=0 requeued=1`; twenty minutes of gate spent, nothing landed.
+    next_action: |
+      The relay lane's land tool adopts a valid stamp when trunk moved by plan
+      fragments only (the ok:gate-fresh-except-plan memo, 930-i6x4) — every
+      relay land tonight that hit a moved trunk landed on attempt 2 in seconds.
+      The queue re-gates instead, and the plan lane pushes every few minutes
+      during a busy session (eight trunk moves in one hour measured by esme),
+      so a twenty-minute FULL gate loses the race more often than it wins:
+      the queue built to end the trunk race re-enters it. Reuse the land
+      tool's classification (plan-only paths) rather than restating it; the
+      selector's classes (765-xpct, change-class.sh: plan-ledger) are the
+      other candidate source and must agree. Filed by the coordinator from
+      the first two real landings (PR #126 landed on a quiet trunk; #127
+      requeued on a busy one). Owner candidate: yoga (1316-bnzt's author).

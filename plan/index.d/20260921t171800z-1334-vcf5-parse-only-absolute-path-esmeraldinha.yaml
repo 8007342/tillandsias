@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: run-litmus-test-parse-only-fails-for-any-absolute-path-on-a-windows-host-so-the-bound-but-unrunnable-guard-refuses-every-newly-bound-litmus-there
+    packet_kind: defect
+    order: 1334-vcf5
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, windows, wsl, fail-loud, no-build]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+    unscoreable: ""
+    verifiable_closure: |
+      On a Windows host, 'scripts/run-litmus-test.sh --parse-only <ABSOLUTE
+      PATH>' exits 0 for a file that already parses under a relative path, and
+      'scripts/check-litmus-bindings.sh' returns ok for a newly bound, genuinely
+      runnable litmus.
+
+      A fixture pins it: the SAME file, parsed twice, once by relative path and
+      once by absolute path, must reach the SAME verdict. That arm fails today.
+    title: |
+      run-litmus-test.sh --parse-only fails for any absolute path on a Windows host, so the bound-but-unrunnable guard refuses every newly bound litmus there
+    context: |
+      A GUARD THAT CANNOT PASS, which is the mirror of the family this
+      milestone is about. check-litmus-bindings.sh (958-b36m) refuses a newly
+      bound litmus whose steps the runner cannot extract. On esmeraldinha it
+      refuses EVERY newly bound litmus, including correct ones, and the cause
+      is a path form rather than the file.
+
+      MEASURED at trunk bbab64bf6, in the WSL2 builder distro, three files,
+      each parsed twice:
+        litmus-litmus-binding-truth              relative 0, absolute 1
+        litmus-cross-target-cfg-gate-check       relative 0, absolute 1
+        litmus-census-enforced-reachability-split relative 0, absolute 1
+      The first two are long-established and unquestionably runnable. The
+      failing verdict is
+        blocked:yaml-unreadable:<path>: The system cannot find the path
+        specified. (os error 3)
+
+      THE CHAIN, verified rather than inferred.
+        1. check-litmus-bindings.sh sets TESTS_DIR to "$ROOT/openspec/litmus-tests",
+           an ABSOLUTE path, and passes the resolved file to --parse-only.
+        2. run-litmus-test.sh line 279 sets LITMUS_PLAN_BIN="" UNCONDITIONALLY,
+           discarding any value the caller exported — so
+           'LITMUS_PLAN_BIN=... scripts/run-litmus-test.sh' silently has no
+           effect. That is a second, smaller defect and it is why forcing the
+           Linux binary changed nothing when I tried it.
+        3. resolve_plan_binary then selects target/release/tillandsias-plan.exe,
+           a WINDOWS binary, which exists in this checkout.
+        4. A Windows executable invoked from WSL resolves a RELATIVE path
+           against its translated working directory, which is why the relative
+           form works, but cannot resolve /mnt/c/... at all — hence os error 3,
+           a Windows error code surfacing inside a Linux shell.
+      The Linux binary is fine: 'tillandsias-plan validate-yaml <absolute>'
+      answers ok:yaml-loads for the same file. The loader is not the problem.
+
+      WHAT I DO NOT CLAIM. I have not shown this on a Linux host and I expect
+      it does NOT reproduce there, because step 3 needs a .exe in the target
+      directory. Treat it as a Windows-host defect until someone measures a
+      second platform. It matters anyway: it makes the 958-b36m guard unusable
+      on this host class, and a host that cannot add a binding without a red
+      gate will eventually stop adding bindings.
+
+      HOW IT SURFACED. It presented as my own new litmus being broken, while
+      --parse-only on the same file by relative path said
+      ok:litmus-parseable:3 step(s). Two instruments disagreeing about one file
+      is the tell; the control that settled it was running two OLD files the
+      same way and watching them fail identically.
+    next_action: >
+      Smallest correct fix is at the caller: have check-litmus-bindings.sh pass
+      a path relative to ROOT. The better fix is at the runner — make
+      --parse-only normalise its target, and stop line 279 from clobbering an
+      exported LITMUS_PLAN_BIN, which is a real override a debugging operator
+      would reasonably expect to work. Whichever is chosen, the fixture is the
+      same: parse one file twice, by relative and absolute path, and require
+      the same verdict. Measure on a Linux host FIRST to establish whether the
+      defect is Windows-only, because that decides whether this gates the fleet
+      or one host class.
+    provenance: |
+      esmeraldinha 2026-09-21, found while landing 1334-57at: the binding guard
+      refused a new litmus that every other instrument called valid.
