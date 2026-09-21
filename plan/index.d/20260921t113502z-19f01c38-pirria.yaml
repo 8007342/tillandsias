@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T11:35:02Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        LANDED SHAs for this row, each verified here as an ancestor of
+        origin/linux-next rather than taken on trust from the relay.
+
+          8ef27b784  slice one — the census published as a script, and the first
+                     fifteen asserts (twelve demonstrated red on mutation).
+          030ce5ba5  the three cfg-gate mutation arms, watched failing, one distinct
+                     step reddened per arm.
+          5c1f43ec2  slice two — the remaining long-sentence steps and the surviving
+                     succeed-step; 22 of 24 demonstrated, two deliberately unenforced.
+
+        The amendment (named-reason bucket, and the file-scope laundering hole its own
+        control caught) is relaying and its landed SHA is not yet known; it is NOT cited
+        here rather than guessed.
+
+        WHY THE LANDED SHA AND NOT THE WORK-REF TIP, recorded once for the row: a work
+        ref can be rebased or dropped, so a citation to one can stop resolving. Evidence
+        that looks specific and resolves to nothing is the silent-negative shape this
+        milestone keeps meeting, and a verification rung is exactly the wrong place for
+        it.
