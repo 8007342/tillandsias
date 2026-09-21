@@ -211,8 +211,33 @@ _BLOCK_AWK='
         # Everything nested inside a row — its events, its exit_criteria — is
         # deeper, so anchoring to those two depths keeps the block boundary
         # exactly at the row.
-        /^  - |^    - / {
-            flush(); pid = ""; first = ""; buf = ""; unscoreable = "no"; inclosure = 0
+        # A ROW IS A LIST ITEM WHOSE FIRST KEY IS packet_id OR order — NOT any
+        # dash at a given depth. ORDER 1331-884p.
+        #
+        # This matched /^  - |^    - /, i.e. ANY list item at 2 or 4 spaces. A
+        # capability_tags entry and an owned_files entry sit at exactly those
+        # depths, so a nested item RESET THE ROW mid-record: pid, first and
+        # unscoreable were cleared together and everything after it — including
+        # the verifiable_closure — was never captured.
+        #
+        # MEASURED on macneo 2026-09-21: 142 of 1,450 fragments in plan/index.d
+        # contained at least one packet whose closure this pass could not read.
+        # The failure was SILENT, which is the serious half: an unparsed row
+        # emitted no usable record, fell to the deferred path below (1071-adhj)
+        # and PASSED, and a deferral is indistinguishable from a satisfied
+        # obligation. The loud half was wrong in the other direction — when the
+        # id happened to survive, the refusal read "carries no scorable
+        # obligation" about a file that carried one, which cost five wrong
+        # repairs before the awk was instrumented.
+        #
+        # Both documented row forms start with one of these two keys: fragments
+        # write `- packet_id: x`, and plan/index.yaml writes `- order: 873-vgyg`
+        # with packet_id a line below (the reason the id rule keeps its optional
+        # dash). A nested value item (`- plan`, `- scripts/foo.sh`) has no key
+        # and cannot match.
+        /^[ \t]*-[ \t]+(packet_id|order):[ \t]*[^ \t]/ {
+            flush(); pid = ""; first = ""; buf = ""; unscoreable = "no"
+            inclosure = 0
         }
         # Then take the id from wherever in the row it appears — ON the marker
         # line (`- packet_id: x`, every fragment and most base rows) or on a

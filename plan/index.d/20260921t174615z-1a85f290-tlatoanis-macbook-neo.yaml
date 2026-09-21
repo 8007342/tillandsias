@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: evidence
+      ts: "2026-09-21T17:46:15Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t174615z
+      host: tlatoanis-macbook-neo
+      summary: |
+        CLOSURE EVIDENCE AND SCOPE for the fix on work/1331-884p.
+
+        WHAT THE FIX IS, in one line — a row is a list item whose first key is packet_id or order, not any dash at indent 2 or 4. Both documented row forms start with one of those keys; a nested value item (- plan, - scripts/foo.sh) has no key and can no longer be mistaken for a row.
+
+        MEASURED ON COMMITTED BYTES, origin/linux-next, old splitter versus new, records compared on packet_id, unscoreable and closure text:
+          committed fragments under plan/index.d                1533
+          of those, declaring a packets block                    264
+          records emitted, old splitter                          267
+          records emitted, new splitter                          267
+          fragments whose records DIFFER                           5
+          of those, new reads a closure old did not                3
+          of those, new reads FEWER closures than old              0
+        The three recovered are 1315-d4qd, 1323-pc8k and 1327-r4zb. All three are FLAT-shaped — row start at indent 0, tag items at indent 2, closure present at indent 2 — so the old marker never matched the row start, took a tag item for the row, and the whole packet went invisible at flush. That is why a totals comparison cannot see them and a per-fragment diff can.
+
+        REPRODUCIBLE BY ANYONE, no working copy involved:
+          git show origin/linux-next:plan/index.d/20260921t051701z-1327-r4zb-installed-app-vanishes-between-runs-macneo.yaml
+          old splitter reads closure empty; new reads "A THIRD OCCURRENCE IS OBSERVED WITH A TIMESTAMP, or ...".
+
+        ZERO LOST IS THE SAFETY NUMBER and it is what makes this landable; three gained is the recovery number and it is small. The row's original 142 was measured in a working copy and is corrected on this row already.
+
+        SIX ROWS CARRY A DELIBERATELY EMPTY CLOSURE, and the fix must not reclassify them. They are:
+          1183-j9dk, 1253-gina, 1254-fdsu, 1258-99k9, 1259-kn83, 1260-4a59
+        Each writes verifiable_closure with an explicitly empty string. The checker already documents that case — a bare pair of quotes unquotes to nothing, which is silence, which is what the gate exists to refuse — and already routes it through the missing-obligation path. DO NOT RE-ADD A PARSE-FAILURE VERDICT FOR THEM. I built one, measured it, and removed it before proposing: with the splitter fixed these six are the only rows that reach it, so the branch would have converted a documented and handled case into a new false-refusal class to satisfy a sentence I had written in this row's own closure. Distinguishing unparseable from empty needs a signal nobody has yet; until then, empty is empty.
+
+        1319-vd5h'S LEAD, CARRIED AND NOT FIXED HERE. check-fragment-status-loss.sh has the same shape in three sites — it flushes on a bare dash at indent 2 and matches rows only as indent-2-with-dash or indent-4, so a packet row at indent 0 matches NEITHER and the packet is invisible to that scanner entirely.
+          MEASURED with a positive control: the committed 1327-r4zb yields no DECLARED line; 1146-xs6s, whose row sits at indent 2, yields DECLARED ... -> ready.
+          SCOPE: 5 of the 264 packet-declaring fragments have rows at indent 0.
+        NOT FIXED IN THIS PR, deliberately. It is a different scanner with its own LWW-status and event passes, the affected population is five, and a second semantic change to a working checker at the end of a long session is how one clean fix becomes two defects. One line per site for whoever takes it with a clear head.
+
+        A RETRACTION THAT BELONGS WITH THE EVIDENCE: I earlier told the coordinator that the forge's 266-record count had dropped most of the directory and that its equivalence instrument might be subject to the bug it measures. That was wrong. A record is a packet, not a fragment; both splitters emit 267 over the committed corpus, so 266 was very nearly exact. I compared a file count against a record count. The forge's arm is not compromised by anything I measured.
