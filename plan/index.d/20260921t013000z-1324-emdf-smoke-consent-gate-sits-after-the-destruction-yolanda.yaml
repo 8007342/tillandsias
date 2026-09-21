@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-smoke-runbooks-authorisation-gate-sits-before-section-2-but-since-1286-4437-every-installer-destroys-inside-section-1-so-the-gate-is-bypassed-by-sequencing-on-all-three-platforms
+    order: 1324-emdf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [smoke, release, agent-safety, consent, windows, linux, macos]
+    estimated_hours: 2
+    owned_files:
+      - images/default/skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      the smoke runbook puts its authorisation gate before §2, but since 1286-4437 every installer performs the destruction inside §1 — so on all three platforms the operator's consent is read AFTER the distro has already been unregistered, and the gate is bypassed by sequencing rather than by anyone deciding to skip it
+    context: |
+      FOUND BY RUNNING IT, yolanda-windows, the v56.9.20.1 Windows smoke on
+      2026-09-21 (report:
+      plan/issues/smoke-e2e-findings-v56.9.20.1-2026-09-21-windows-yolanda.md).
+      The coordinator's go said: run §1, quote the operator's consent into the
+      report, then run §2. I did exactly that, and the destruction had already
+      happened — inside §1.
+
+      THE CAUSE IS A CHANGE THAT WAS CORRECT IN ITSELF. Order 1286-4437 made an
+      install also the repair for a broken local state, so every installer now
+      calls --reset-state itself:
+        scripts/install.sh:314          "$INSTALL_PATH" --reset-state --debug
+        scripts/install-macos.sh:248    "$DEST/Contents/MacOS/tillandsias-tray" --reset-state
+        scripts/install-windows.ps1:566 & cmd.exe /c "...--reset-state > ..."
+      All three verified by reading the files. So §1 -- "curl-install and
+      assert the tag" -- now unregisters the guest, clears host credentials and
+      reprovisions, on EVERY platform. It is no longer the safe download step
+      the runbook's structure assumes.
+
+      THE RUNBOOK STILL PUTS THE WARNING AND THE GATE ON §2. Its §2 heading
+      carries "(DESTRUCTIVE — see warning above)" and the consent discipline
+      hangs there; §1 carries a note that it is not a non-destructive binary
+      install, but the AUTHORISATION step sits after it. The coordinator's own
+      go for this run inherited that order, and so did I.
+
+      WHAT THAT MEANS IN PRACTICE, and why p1: an operator or agent following
+      the runbook as written reads the consent requirement, and quotes the
+      consent, at a point where the guest is already gone. On this run the
+      action was authorised — the operator's standing consent predates it and
+      is quoted verbatim in the report — so nothing was destroyed without
+      permission. The DEFECT IS THAT THE RUNBOOK CANNOT PREVENT THE OTHER CASE.
+      A host whose operator had NOT consented would discover that at the same
+      point: after the unregister.
+
+      NOT A WINDOWS DEFECT. pirria's Linux run failed at the very same call
+      (install.sh's --reset-state, rejected by the headless allow-list), which
+      is the same line arriving from the other direction. macOS has it too at
+      install-macos.sh:248. Three platforms, one sequencing error, and it
+      appeared the moment 1286-4437 landed rather than being introduced by any
+      later change.
+    next_action: |
+      Nobody holds this.
+      1. MOVE THE GATE. The authorisation/consent step goes BEFORE §1, not
+         before §2, in images/default/skills/smoke-curl-install-and-test-e2e/SKILL.md.
+         That is the whole safety fix and it is a text change.
+      2. MOVE THE BANNER. The DESTRUCTIVE marking belongs on §1, which is now
+         where the unregister, the credential clear and the reprovision
+         actually happen. §1's existing "this is not a download test" note is
+         true and insufficient: it warns, it does not gate.
+      3. SAY WHAT §2 STILL DOES, per platform, once the installer has already
+         destroyed: the podman reset and vault-data directory on Linux, the VM
+         directories on macOS, and on Windows a re-assertion rather than a
+         destruction. A §2 that reads as the destructive step when it is no
+         longer is the same ambiguity one layer down.
+      4. While there: §2's "cache purge" on Windows still names no path, which
+         is 1295-b4i8 and is a different row; cross-cite rather than merge.
+      Do NOT fix this by reverting 1286-4437. An install that repairs a broken
+      state is the operator's ruling; the runbook simply has not caught up.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is runbook TEXT, and
+      the only honest machine check — that the authorisation step precedes the
+      first destructive call — needs a convention for marking both in the
+      skill that does not exist yet. Pinning a litmus name before that
+      convention is settled is refused by 885-92iu. When it lands the guard is
+      litmus-smoke-gate-precedes-destruction, asserting the consent step
+      appears before the §1 heading and that every installer's --reset-state
+      call site is inside the marked-destructive span; same commit as the text
+      change (1136-n8sh).
+    verifiable_closure: |
+      In the smoke runbook, the authorisation/consent step appears BEFORE §1,
+      §1 carries the DESTRUCTIVE banner, and §2 states per platform what it
+      still destroys given the installer has already run --reset-state. Pre-fix
+      result: the gate and the banner sit on §2 while
+      install.sh:314, install-macos.sh:248 and install-windows.ps1:566 all
+      destroy inside §1 — demonstrated on 2026-09-21, when a go that followed
+      the runbook's order had the consent quoted after the distro was already
+      unregistered.
+
+events:
+  - packet_id: the-smoke-runbooks-authorisation-gate-sits-before-section-2-but-since-1286-4437-every-installer-destroys-inside-section-1-so-the-gate-is-bypassed-by-sequencing-on-all-three-platforms
+    event:
+      type: note
+      ts: "2026-09-21T01:30:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed by the host that caused half of it: 1286-4437's Windows arm is mine, and the sequencing consequence was invisible until a real go was executed in the runbook's own order
