@@ -51,8 +51,16 @@ scripts/check-bare-metal-host-initialized.sh
 
 Non-mutating: it starts nothing and writes nothing.
 
-- `ok:bare-metal-host:<host>:enclave=up mirror=up router=up inference=up github=<seeded|not-seeded>` — exit 0
+- `ok:bare-metal-host:<host>:enclave=up mirror=up router=up inference=up github=<seeded|not-seeded> lane=<off|wired:<principal>|unwired:<reason>>` — exit 0
 - `todo:initialize-bare-metal-host:<component>:<command>` — exit 1, and the command named is the fix
+
+**The `lane=` field is a READ, not a proof.** It says what can be seen without
+minting anything: `off` when the lane flag is not set in the mirror,
+`wired:<principal>` when sshd is up and the mirror authorises a host principal,
+`unwired:<reason>` otherwise. A `wired:` reading does NOT mean the lane works —
+only the three legs of §6 show that. The field exists because this verdict was
+otherwise silent about the lane, and a green that is true and ADJACENT gets read
+as coverage.
 
 **Why a separate read exists.** The step-1 commands are ensure-shaped, so
 running them is the remedy for almost everything. That is exactly why "did it
@@ -125,6 +133,12 @@ state, not a fault you can fix here.
 
 **Who this is for.** The Silverblue hosts are the dogfooders — lenovinha, yoga,
 pirria. Windows and macOS likely never need it.
+
+**FIRST, BEFORE ANYTHING ELSE.** The client half — `TILLANDSIAS_HOST_PUSH_HOST`
+and the `til:host-push:` principal — arrives only with the lane fixes. Measured
+by pirria on trunk: `TILLANDSIAS_MIRROR_SSHD` is consumed there today, but the
+host-push half appears nowhere outside `plan/`. A host that starts before the
+fixes land fails in a way that reads as a HOST problem and is not one.
 
 **Preconditions, both testable before you start.** The lane's six fixes must be
 on trunk, and your own tree must contain them:
@@ -296,7 +310,22 @@ pirria both carry — is *never consulted for an `ssh://` URL*. Zero invocations
 is therefore guaranteed by SCOPE and says nothing about the lane. It is worth
 recording, but it is not evidence. The three arms below are.
 
-### The acceptance criterion, restated
+### The acceptance criterion
+
+**An arm must name what the lane MADE TRUE, not what it failed to do.**
+
+This is yoga's rule, and it was earned: three arms of an earlier template were
+found incapable of failing, each asserting a *local absence* that was already
+true for a reason unrelated to the lane — a keyring PID unchanged on a host
+whose git never reads the keyring; zero helper invocations on any ssh push,
+because the helper is scoped to `https://github.com`. An absence proves nothing
+unless something could have made it present.
+
+The arms below each assert a **positive fact the lane had to produce**. Each can
+fail. If you find yourself recording that nothing happened, ask what would have
+had to happen for the arm to fail — and if the answer is "nothing could have",
+it is not an arm.
+
 
 **(1) The push authenticated by the HOST CERT over ssh.** Add `-v` to
 `GIT_SSH_COMMAND` and keep the transcript:
@@ -313,8 +342,22 @@ ssh offers the bare key *and* the certificate; the line that matters says
 an `authorized_keys` path, not the CA — and this mirror has
 `AuthorizedKeysFile none`, so it should be impossible.
 
-**(2) No host-side GitHub credential path was read** — instrument per §Step 0
-(libsecret keyring PID; file store moved aside; or, where no helper exists at
+**(2) The push succeeded while the host's GitHub credential was provably
+unavailable.** Stated positively, because that is the fact the lane produced.
+The instrument is the one that can make it unavailable on your host:
+
+- **File store** — move the store file aside for the three legs, restore
+  immediately after. A push that succeeds with the credential absent from disk
+  is a positive result: the lane needed none.
+- **libsecret/keyring** — *this arm is WEAKER here and the procedure says so.*
+  The honest version would lock the collection, but on this fleet a Secret
+  Service read can abort gnome-keyring 50 (1265-8qr6) and cost the operator an
+  unlock, so we do not. What remains is the keyring daemon's PID unchanged
+  across the push, named by component — an absence, recorded as corroboration
+  and NOT claimed as proof. Say which you have.
+- **No helper configured** — claim less: the legs show the lane works, but not
+  that a credential path went unread, because there was none.
+
 all, say so and claim less).
 
 **(3) `ls-remote` equality and no TOFU** — the ref on origin equals your local
