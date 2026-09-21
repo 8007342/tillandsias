@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-platforms-state-root-falls-back-to-a-silent-default-when-its-home-variable-is-unset-and-since-reset-state-those-roots-are-destructive-so-a-scrubbed-environment-turns-a-repair-into-a-no-op-that-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-21T01:26:39Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t012639z
+      host: tlatoanis-macbook-neo
+      summary: |
+        THE HARDCODED DESTRUCTIVE PATH HAS A SECOND FAILURE MODE: not a scrubbed environment, but a SECOND INSTALL LOCATION. Measured on macneo during the v56.9.20.1 macOS smoke, 2026-09-21.
+
+        TWO INSTALLED COPIES, TEN DAYS AND NINE VERSIONS APART, both with the same bundle id:
+          /Applications/Tillandsias.app           tillandsias-tray 56.9.20.1  (installed by this run)
+          /Users/tlatoani/Applications/Tillandsias.app  tillandsias-tray 56.9.11.1  (dir mtime 2026-09-11T19:11:55)
+
+        install-macos.sh writes /Applications and never looks at ~/Applications, so the stale copy is never upgraded, never removed, and never mentioned. macOS supports both locations and the smoke runbook's own version step carries a "fallback-to-~/Applications check", so the second location is a supported state, not an anomaly.
+
+        WHY THIS BELONGS ON THIS ROW. reset_state.rs derives its reprovision path as the LITERAL /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray. That is the same defect shape this row is about — a destructive path resolved from an assumption rather than from the host — with the environment variable replaced by a hardcoded prefix. An operator whose real install is ~/Applications gets "REFUSING to destroy anything -- the reprovision path is missing or not executable", which is CORRECT about the path it was told to check and WRONG about the host: they have a working app, and the flag that exists to repair a broken install refuses to run on a working one.
+
+        It is the mirror image of the HOME case. There, the root resolves to somewhere that does not exist and the reset proceeds against nothing while reporting success. Here, the reprovision path resolves to somewhere that does not exist and the reset refuses although everything needed is present. One fails open, one fails closed, and both come from deriving a path without asking the host.
+
+        WHICH COPY LAUNCHES, and the non-claim. On this host LaunchServices resolved "Tillandsias" to /Applications (56.9.20.1) -- observed because an osascript `path to application` probe LAUNCHED the app rather than merely resolving it, then timed out on the AppleEvent (-1712); the running process's path is the evidence. NOT CLAIMED: that /Applications always wins. LaunchServices ranks by its own database and this host had just had /Applications rewritten, which is exactly the condition that would favour it. A host whose most recent install went to ~/Applications may resolve the other way and nothing here measures that. The stale copy is a finding regardless of which one wins, because two apps of different versions share one bundle id and only one of them is ever updated.
+
+        SUGGESTED DIRECTION, not a decision, and it is the same shape as this row's HOME remedy: resolve the reprovision path from the RUNNING binary (std::env::current_exe and walk up to the bundle) rather than from a literal, with the literal kept only as a fallback -- and if neither resolves, refuse naming both. That makes the destructive path's target an observation about this host rather than an assumption about where installs go.
