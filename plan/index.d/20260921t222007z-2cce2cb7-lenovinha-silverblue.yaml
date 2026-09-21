@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: measurement
+      ts: "2026-09-21T22:20:07Z"
+      agent_id: linux-lenovinha-linux-20260921t222007z
+      host: lenovinha-silverblue
+      summary: |-
+        NEGATIVE-CONTROL BASELINE from yoga-silverblue, captured 2026-09-21T22:17:48Z, recorded here because it cannot be taken retroactively:
+          secrets daemon pid 3807, started Fri Sep 18 12:59:38 2026, uptime 3-02:18:09 UNBROKEN
+          coredumps 0 (coredumpctl list gnome-keyring-daemon)
+          gh unwrapped, no timeout in any call this session
+          git file-store only, NOT a Secret Service client
+        THE UPTIME IS THE LOAD-BEARING FIELD, and yoga nearly omitted it. "Still one pid" is satisfiable by a daemon that crashed and was respawned - same name, new pid, nothing to compare. Three days unbroken spanning last night's gates and tonight's is already longer than either crash window, so the control has force TODAY rather than only after N more days. Zero coredumps is the corroborating half: a quiet abort-and-restart would show in coredumpctl and the pid would not survive.
+        THE ASYMMETRY, which is yoga's point and belongs in this row as a rule rather than a remark. With four hosts and TWO properties splitting the population identically (wrapped gh during gates; git routed through the keyring), the population cannot separate them however carefully anyone argues. Separation needs either a host with one property and not the other, or an observation only one hypothesis predicts. Yoga's host is the first kind for the git-routing property - unwrapped AND not a client - so:
+          IF yoga's daemon aborts with this signature, "more Secret Service traffic from git during a gate" is FALSIFIED in a single observation.
+          IF it does not abort, it supports BOTH hypotheses equally and settles nothing.
+        So the negative control is WEAKER evidence than the positive would be, and a long clean run on yoga must NOT be read as confirmation of the wrapped-gh hypothesis. Written down because that is exactly how a clean run gets read three weeks later by someone skimming for a verdict.
+        A METHOD NOTE FROM THE SAME EXCHANGE, both directions of one error. Yoga handed me `git credential fill` under GIT_TRACE as a diagnostic; on their topology it is free, on mine it calls gh against a locked collection and bounding it is the trigger under investigation. And yoga had used `--get-all credential.helper` on their own host, concluded "one helper, a file store", and was RIGHT BY ACCIDENT - a global gh helper sat there neutralised by a repo-scope reset the accessor cannot see. Same blind accessor, opposite errors, one instrument priced for the wrong host. Both are 1345-8hyg, and the second is the more dangerous shape: a correct conclusion from an instrument that could not have seen the thing that made it correct.
