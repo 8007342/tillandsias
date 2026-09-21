@@ -224,7 +224,7 @@ interactive shell being cut off, not a failure.
 
 ```bash
 podman exec tillandsias-git-<project> sh -c \
-  'echo "SSHD=${TILLANDSIAS_MIRROR_SSHD:-unset} MID=${TILLANDSIAS_MIRROR_ID:-unset} TOKENFILE=${TILLANDSIAS_VAULT_TOKEN_FILE:-unset}"; pgrep -a sshd || echo "sshd NOT running"'
+  'echo "SSHD=${TILLANDSIAS_MIRROR_SSHD:-unset} MID=${TILLANDSIAS_MIRROR_ID:-unset} TOKENFILE=${TILLANDSIAS_VAULT_TOKEN_FILE:-unset}"; p=$(cat /tmp/tillandsias-sshd/sshd.pid 2>/dev/null); if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo "sshd running pid=$p"; else echo "sshd NOT running"; fi'
 podman ps --format '{{.Names}}\t{{.Ports}}' | grep git-      # expect 127.0.0.1:2223->2222/tcp
 ls -l ~/.config/tillandsias/host-push/                       # expect <host>.approle.json, mode 0600
 ```
@@ -330,13 +330,29 @@ Then pick the instrument that matches what you found:
 **Instrument A — a libsecret/keyring helper** (e.g. `!gh auth git-credential`):
 
 ```bash
-pgrep -f 'gnome-keyring-daemon.*components=secrets' | head -1   # before AND after
+for p in $(pgrep -x gnome-keyring-d); do
+  tr '\0' ' ' < /proc/$p/cmdline | grep -q 'components=secrets' && echo "$p"
+done                                            # before AND after| head -1   # before AND after
 grep -ac 'git-credential' <transcript>                          # expect 0
 ```
 
 Name the daemon **by component**: there are two on a Silverblue host,
 `--daemonize --login` and `--start --foreground --components=secrets`. Secret
 Service is the second, and `ps -C gnome-keyring-d | head -1` can return either.
+
+**Do NOT use `pgrep -f 'gnome-keyring-daemon.*components=secrets'`.** Run from a
+tool call, the enclosing `bash -c` carries that pattern in *its own* command
+line, so `pgrep -f` matches the agent's shell as well as the daemon — the
+self-matching-instrument shape of 1287-myx8. Measured here: that pattern
+returned **two** pids, the daemon and the shell. `head -1` happened to return the
+daemon only because the boot-time daemon has the lower pid; had the daemon
+restarted and taken a higher one, the "before AND after" compare would have been
+comparing *shell* pids and would have read a changed shell as a changed daemon.
+
+A bracket (`gnome-keyring-daemo[n]`) does **not** reliably fix it either — if the
+unbracketed pattern appears anywhere else in the same command line, it
+self-matches again, which is exactly what happened when this was tested. `-x`
+matches the executable name only and never the pattern, so it cannot self-match.
 
 **Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`):
 
