@@ -1,0 +1,151 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: append-event-accepts-a-block-scalar-line-whose-key-contains-a-space-and-the-compaction-renderer-cannot-round-trip-it-so-one-legal-note-reds-every-gate-in-the-fleet
+    order: 1330-j5is
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags:
+      - plan
+      - tooling
+      - instrument
+      - fail-loud
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      append-event accepts a block-scalar line whose key contains a SPACE, and the compaction renderer
+      cannot round-trip it — so one legal note reds every host's gate, and nothing upstream refuses it
+    context: |
+      TRIGGER ISOLATED TO A VALUE TYPE, by ten runs against the real ledger on
+      macneo 2026-09-21, ~173s each, each changing exactly one thing.
+
+      A line inside a literal block scalar, of the form
+         <label><colon><space><an ISO-8601 timestamp>
+      does not round-trip. The same line with a PROSE value does. The label, its
+      capitalisation, whether it contains a space, and the line's indentation are
+      all IRRELEVANT — each was varied and each made no difference.
+
+      THE RUNS:
+        line absent from the ledger                              PASS
+        line present, as originally written                      FAIL rc=101
+        the three indented lines removed                         PASS
+        only this line removed, the other two kept               PASS  (necessary)
+        only this line kept, the other two removed               FAIL  (sufficient)
+        de-indented to the block scalar body base                FAIL  (indent irrelevant)
+        same label and indent, value replaced with prose         PASS  (the VALUE is the trigger)
+        same label and indent, value = the ISO timestamp alone    FAIL  (the timestamp is the trigger)
+
+      TWO STANDING CONTROLS, both in the live ledger right now:
+        * this very row carries two indented lines with multi-word labels and a
+          colon, values in prose, and it round-trips (verified before push);
+        * the re-appended note on 1327-r4zb carries the SAME timestamp with an
+          em-dash instead of a colon, and it round-trips.
+      So neither the label shape nor the timestamp alone is enough; it is the pair.
+
+      THE MECHANISM, and it is about TYPE rather than text. Inside a block scalar
+      the line is inert text by the YAML spec. If the compaction renderer re-emits
+      the scalar such that the line becomes a real mapping, its value stops being a
+      STRING and becomes a TIMESTAMP — a different node type. Text that folds to a
+      string cannot fold back from a timestamp, which is exactly what
+      assert_fold_equivalent reports (fragments.rs:4155, "the rendered text must
+      fold to the same state"). A prose value re-parses as a string either way,
+      which is why every prose case passes.
+
+      WHY NO SCAN FOUND THIS. yoga measured the population
+      (plan/issues/block-scalar-keyval-corpus-2026-09-21-yoga.md at 201981fb4):
+      254 of 1,444 fragments match their STRICT rule, 436 match LOOSE, and the
+      fixture is GREEN on all but the excised one. Both rules select on the KEY and
+      say nothing about the value, so a corpus built from them is a corpus of prose
+      values. It is therefore a ready-made NEGATIVE CONTROL — real history that must
+      stay green after any fix — and not a candidate-culprit list, which is what
+      yoga's file says of itself.
+
+      NO INTERIM WRITING RULE WAS ISSUED, and that was right. I proposed one
+      ("avoid indented key: value in block scalars") before the narrowing; it is the
+      over-broad ban yoga had already declined and it would have forbidden 254
+      fragments' worth of prose. The accurate avoidance is narrow: inside a block
+      scalar, do not follow a colon-space with a value that BEGINS with an
+      ISO-8601 timestamp — write the label with an em-dash, or put the timestamp
+      mid-sentence.
+
+      THE WORD "BARE" WAS WRONG AND IS CORRECTED HERE. The first broadcast of
+      this rule said "a BARE ISO timestamp". yoga matched that wording against
+      the excised specimen and it did NOT match, because the specimen's value is
+      a timestamp FOLLOWED BY an inode, mode, owner and path (an ls -li line) —
+      so a host following "bare" literally would have written the breaking line
+      believing it was safe. Both forms fail in my table and the tail is
+      irrelevant, so the rule is about what the value BEGINS with.
+
+      THE TWO POSITIVE SPECIMENS, both measured FAIL:
+        the timestamp alone as the value
+        the timestamp followed by the rest of an ls -li line
+      THE NEGATIVE CONTROL that caught the wording — yoga's matcher for the
+      "bare" phrasing found ZERO of 1,444 fragments, including the one known
+      breaker. A rule whose matcher cannot find its own specimen is not a rule
+      yet, and that zero is what exposed it.
+
+      THE SPECIMEN IS NOT REPRODUCED HERE AND MUST NOT BE. Bytes are held outside
+      the ledger: macuahuitl's
+      drafts-macuahuitl/exhibits/258875a0-compaction-roundtrip-specimen.yaml and
+      macneo's ~/tillandsias-exhibits/258875a0-compaction-roundtrip-specimen.yaml,
+      sha256 f840a4947ec71b7404efdd8834e684bf3aaed03a889c30ba915e2156e08ef294 so the
+      copies can be compared without either being pasted. Writing the shape into a
+      summary reds the gate that reads the summary, and a guard cannot tell mention
+      from use.
+
+      HISTORY: the specimen reached trunk in d0ceea5b4 through the plan lane and
+      redded every host's gate until it was excised at 6c372ed26, a recorded
+      exception to the append-only rule, with the author asking and the gate green
+      without it.
+
+      THREE OF MY OWN HYPOTHESES WERE WRONG BEFORE THIS ONE, each from generalising
+      a controlled run past what it controlled: the broad indented-key-value shape
+      (refuted by yoga's 254); a key containing a space (refuted by this row's own
+      passing lines); the indentation depth (refuted by the de-indent run). Every
+      one was cheap to refute only because the specimen is preserved and each run
+      changed exactly one thing. Recorded so the next reader trusts the table above
+      and not the narrative that produced it.
+
+      A SECOND, SMALLER DEFECT IN THE INSTRUMENT: the assertion is an assert_eq!
+      over two whole ledger states, so the panic is 22.5 MB and opens by naming
+      whichever packet sorts first — here an unrelated order-128 packet, which I
+      first read as evidence the failure was not mine.
+
+    unscoreable: unpinnable-until-the-guard-exists — the guard IS this row's deliverable, so a pinned litmus name would name nothing and 885-92iu refuses an unbound fixture as inert; the intended name is litmus:block-scalar-timestamp-value-round-trips at openspec/litmus-tests/litmus-block-scalar-timestamp-value-round-trips.yaml, to be written and bound in the SAME commit as the fix it tests (1136-n8sh), with the pre-fix failure reproduced first; note the existing red is a Rust test over the real ledger, not a litmus, and the new fixture is the minimal composed-at-run-time case the ledger test cannot be
+    verifiable_closure: |
+      ONE OF THE TWO, STATED:
+
+        (a) THE RENDERER ROUND-TRIPS WHAT THE WRITER ACCEPTS: a fragment whose
+            block scalar contains an indented line with a MULTI-WORD label before a
+            colon folds, renders and folds to the same state.
+
+        (b) OR append-event REFUSES that summary BEFORE WRITING, naming the
+            offending line and why. Cheaper, and legitimate: a writer that accepts
+            what the reader cannot read is the defect either way.
+
+      THE FIXTURE MUST COMPOSE THE SHAPE AT RUN TIME, never carry it literally —
+      otherwise the fixture reds the gate it tests, exactly as the specimen did.
+      test-litmus-bindings.sh composes fixture names for the same reason.
+
+      REGRESSION CORPUS: yoga's 254 strict matches
+      (plan/issues/block-scalar-keyval-corpus-2026-09-21-yoga.md, 201981fb4) must
+      remain GREEN after the fix — they are real history and the fix must not
+      reclassify them.
+
+      PRE-FIX RESULT, so the closure is falsifiable: FAILS, rc=101, with the
+      sufficiency run above (only the spaced-key line present). A fix that cannot
+      reproduce THAT has not been shown to address this.
+
+      MUTATION ARM: reverting the fix must fail the fixture, and the failure must
+      name the line or the scalar — not print both ledger states.
+    next_action: |
+      Reproduce the sufficiency case from the specimen file first; it is one line
+      and it is the whole bug. Then choose (a) or (b) — (b) is smaller and can land
+      before the next compaction, which is the deadline that matters: a compaction
+      touching a matching fragment reds every host again. Narrow the 22.5 MB
+      assertion in the same slice if (a) is taken.
