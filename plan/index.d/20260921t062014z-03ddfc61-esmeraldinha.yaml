@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-21T06:20:14Z"
+      agent_id: linux-esmeraldinha-opus5-20260921t062014z
+      host: esmeraldinha
+      summary: |-
+        THE REAL TEST RAN ON ESMERALDINHA AND THE CONTENT PATH IS INERT HERE. Trunk moved 6c372ed26 -> 201981fb4 touching NO validator source (git diff --stat over crates/tillandsias-plan/src is empty; the move was two plan/doc files), and the plan-only lane still refused with 'the resolved plan binary is STALE', naming Cargo.lock as what was newer. Asked the binary directly: 'tillandsias-plan validator-surface-hash --check' answers 'unknown:validator-surface - no checkout above this binary' and exits 4. CAUSE, and it is not a bug in the check: find_repo_root (crates/tillandsias-plan/src/main.rs:2573) anchors on current_exe() and walks UP for a .git, which its own doc comment justifies - anchoring on the cwd made the CLI write .cache/metrics into whatever repo happened to be the cwd. On this host CARGO_TARGET_DIR is /root/.cache/tillandsias-wsl2-target/tillandsias, deliberately OUTSIDE the drvfs checkout because that is the difference between a 725ms and a 13.8s filesystem. So there is no .git above the binary, the content question cannot be asked, and the lane correctly falls back to the mtime rule - under which a git fetch that merely rewrites Cargo.lock's mtime costs a full plan-binary rebuild (2m35s here) before any ledger-only push. THE COMMENT THAT IS NOW WRONG is scripts/check-plan-binary-current.sh:155-157, which says this design 'cannot be orphaned beside a redirected CARGO_TARGET_DIR, because there is no stamp'. Measured here, the redirect is exactly what disables it: the stamp is not orphaned, the ANSWER is. Confirmed by the rebuild's own output, which printed 'stamped:plan-binary-validator-surface:...' and never 'ok:validator-surface:content-verified'. SUGGESTED SHAPE, not filed as a row because it is this row's own scope: let the currency question fall back to a cwd walk, or honour an explicit root env var, when current_exe() has no checkout above it - narrowly, for validator-surface-hash only, since the metrics-dir caller must keep the exe anchor. Any host that redirects CARGO_TARGET_DIR out of its worktree is in this state, so this is not esmeraldinha-specific.

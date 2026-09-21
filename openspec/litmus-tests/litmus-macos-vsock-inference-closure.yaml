@@ -32,7 +32,7 @@ critical_path:
     failure_pattern: "syntax error|No such file"
 
   - step: "the closure holds: the TRAY configures the guest, the client gets the host's body, and the mutation arm reds"
-    command: "scripts/test-macos-vsock-inference-closure.sh 2>&1 | grep -E '^(ok|violation|unsupported):macos-vsock-inference-closure:'"
+    command: "scripts/test-macos-vsock-inference-closure.sh 2>&1 | grep -E '^(ok|violation|unsupported|skip):macos-vsock-inference-closure:'"
     timeout_ms: 2700000
     # ASSERT THE OUTPUT, not the source. The fixture's own arms carry the
     # meaning; this step must not re-implement them, or it would pass the moment

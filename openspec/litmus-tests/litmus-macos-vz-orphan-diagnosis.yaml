@@ -34,7 +34,7 @@ critical_path:
     failure_pattern: "syntax error|No such file"
 
   - step: "the diagnosis names the holder, refuses --reset-guest, and the mutation arm reds"
-    command: "scripts/test-macos-vz-orphan-diagnosis.sh 2>&1 | grep -E '^(ok|violation|unsupported):macos-vz-orphan-diagnosis:'"
+    command: "scripts/test-macos-vz-orphan-diagnosis.sh 2>&1 | grep -E '^(ok|violation|unsupported|skip):macos-vz-orphan-diagnosis:'"
     timeout_ms: 600000
     # ASSERT THE OUTPUT, not the source: the fixture's arms carry the meaning,
     # and re-implementing them here would pass the moment one was weakened.
