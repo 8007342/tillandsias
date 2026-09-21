@@ -1,0 +1,42 @@
+packets:
+  - packet_id: the-ledger-distillation-advisory-cannot-refuse-a-cut-yet-its-fixture-pins-head-at-or-under-threshold-and-refused-the-v56-9-21-1-ledger-land-at-the-eleventh-row
+    order: 1329-er33
+    status: ready
+    kind: test
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, fixtures, readme, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-ledger-distillation-advisory.sh
+    verifiable_closure: |
+      scripts/test-ledger-distillation-advisory.sh prints
+      `PASS: ledger-distillation-advisory <n>/<n> (914-nkc4)` and exits 0 on a
+      HEAD whose README carries MORE rows than the threshold (a hermetic
+      table of threshold+1 rows built in a throwaway git repo, or a historical
+      ref that carried 11+ rows, named in the arm), because ARM 1 asserts
+      `ok:ledger-distillation:*` on a hermetic table of at-or-under-threshold
+      rows and no arm asserts a property of the live README at HEAD; and the
+      advisory's own `due:` on an over-threshold HEAD stays a printed line,
+      never a red, in `./build.sh --check`. PRE-FIX RESULT: FAILS — measured
+      2026-09-21T04:29Z on macuahuitl at the v56.9.21.1 ledger land: ARM 1
+      `wanted ok:ledger-distillation:*, got
+      'due:ledger-distillation:11-rows:threshold=10'`, `FAIL:
+      ledger-distillation-advisory 7/8`, and the land tool refused the commit
+      carrying the cut's own README row (refused:land:gate-failed), although
+      914-nkc4's text and the runbook say the advisory "does not block a cut".
+    next_action: |
+      A fixture arm that asserts a property of the live checkout is green only
+      while the checkout happens to satisfy it (the fixture's own header says
+      the live table was AT threshold when it was written — so the very next
+      cut's row was the red, by construction). The remedy is the fixture's,
+      not the ledger's: ARM 1 builds its under-threshold table in a temp repo
+      (the checker takes --ref and reads README from a git ref, so `git init`
+      + one commit with a 3-row table is enough) and a new arm asserts the
+      over-threshold case on the same scaffold with threshold+1 rows; both
+      positive controls on the historical refs stay. The distillation itself
+      was done at a3e60457c (v56.9.11.1 … v56.9.13.1 folded into one span, 8
+      rows after); this row is about the gate, not the README. Related:
+      1274-cbk7 (a fixture pinning a live-checkout property), 914-nkc4.

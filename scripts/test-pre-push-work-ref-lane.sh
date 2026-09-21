@@ -50,6 +50,70 @@ run_hook() {
     printf '%s\n__RC__%s\n' "$out" "$rc"
 }
 
+# run_hook_line <local-sha> <remote-ref> <remote-sha> — one raw push line, for
+# the arms where the DELETION shape matters. run_hook above always sends a
+# create/update; a deletion is a local sha of all zeros, and the regression
+# below lives entirely in that shape.
+run_hook_line() {
+    local out rc
+    out="$(printf 'refs/heads/x %s %s %s\n' "$1" "$2" "$3" \
+        | timeout 300 bash "$HOOK" origin "file://$TMP/scaffold.git" 2>&1)"
+    rc=$?
+    printf '%s\n__RC__%s\n' "$out" "$rc"
+}
+
+# ---------------------------------------------------------------- ARM 0
+# A SALVAGE-ONLY PUSH IS NOT THE WORK LANE. REGRESSION ARM, and the regression
+# was mine.
+#
+# WHAT HAPPENED. 1315-4a7j added the work lane by accumulating `_all_work`
+# alongside `_all_salvage` and `_all_marker`. The `refs/heads/salvage/*` arm
+# cleared `_all_marker` and NOT `_all_work`, so a push made ONLY of salvage refs
+# satisfied `_all_work -eq 1`, took the work lane, and the work lane WARNS where
+# it used to refuse. The casualty was 874-w2gc's deletion protection: deleting a
+# salvage ref — which may be the ONLY copy of rescued work, the whole reason
+# that refusal exists — was downgraded to a warning and the push proceeded.
+#
+# HOW IT WAS CAUGHT, and this is the part worth keeping. It was NOT caught by
+# ./build.sh --check, which was green on this change through the gate, the
+# hand-off and the cross-platform compile. It was caught by
+# litmus:salvage-net-roundtrip in the PRE-BUILD LITMUS TIER, which --check never
+# runs (the doctrine recorded in methodology/convergence.yaml under 1282-rkkm,
+# written the same evening by the host that then shipped this). Fixed in
+# 6080e8365 before the landing; this arm is what makes the fix falsifiable
+# instead of trusted.
+#
+# WHY A DELETION AND NOT ANY SALVAGE PUSH. An ordinary salvage push is exempt by
+# design (872-c9nd) and exits 0 either way, so it CANNOT distinguish the two
+# classifications — an arm built on it would pass against the defect. The
+# deletion is the one salvage shape whose correct answer is a REFUSAL, so it is
+# the only shape where "work lane" and "salvage lane" give different verdicts.
+a0="$(run_hook_line "$ZERO" refs/heads/salvage/yoga/20260921-probe "$SHA")"
+rc0="${a0##*__RC__}"
+case "$a0" in
+    *"874-w2gc"*)
+        if [ "${rc0:-0}" -ne 0 ]; then
+            ok "ARM 0 (regression): a salvage-only DELETION push is REFUSED naming 874-w2gc — a salvage-only push is not the work lane"
+        else
+            bad "ARM 0 (regression): the 874-w2gc text was printed but the hook EXITED 0 — the refusal became a warning, which is the 1315-4a7j regression exactly"
+        fi ;;
+    *"warn:pre-push:"*)
+        bad "ARM 0 (regression): a salvage-only deletion took the WORK LANE and warned (rc=$rc0) — _all_work is not cleared on the salvage arm" ;;
+    *)
+        bad "ARM 0 (regression): a salvage-only deletion was neither refused for 874-w2gc nor warned (rc=$rc0); the deletion protection is unreachable" ;;
+esac
+
+# ARM 0b (CONTROL): the same deletion WITH the documented override proceeds.
+# Without this, ARM 0 would pass against a hook that refused every salvage push
+# unconditionally — which would break the rescue lane while looking protective.
+a0b="$(TILLANDSIAS_SALVAGE_DELETE_OK=1 run_hook_line "$ZERO" refs/heads/salvage/yoga/20260921-probe "$SHA")"
+rc0b="${a0b##*__RC__}"
+if [ "${rc0b:-1}" -eq 0 ]; then
+    ok "ARM 0b (control): the same deletion with TILLANDSIAS_SALVAGE_DELETE_OK=1 is accepted — ARM 0 pins the protection, not a blanket refusal"
+else
+    bad "ARM 0b (control): the documented override did not clear the refusal (rc=$rc0b) — the rescue lane is broken, which is worse than the regression"
+fi
+
 # ---------------------------------------------------------------- ARM 1
 # A WORK PUSH WITH NO STAMP IS ACCEPTED, THE DECIDERS WARN, THE HOOK EXITS 0.
 a1="$(run_hook refs/heads/work/1315-4a7j)"
