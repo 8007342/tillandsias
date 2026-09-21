@@ -1,0 +1,142 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-macos-fixtures-cannot-say-which-binary-they-tested-so-a-skewed-run-raises-a-violation-about-the-wrong-subject-and-a-relocated-copy-skips-in-silence
+    order: 1332-tdde
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, tests, litmus, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-macos-vz-orphan-diagnosis.sh
+      - scripts/test-macos-model-share-writable.sh
+      - scripts/test-macos-vsock-inference-closure.sh
+    unscoreable: ""
+    verifiable_closure: |
+      THREE OUTPUTS, each stated as what a reader sees rather than as the
+      mechanism that produces it.
+
+      1. EVERY verdict — ok, violation, refused and skip alike — carries the
+         subject's full `--version` line, sha and build stamp included. A reader
+         of any past run can say WHICH BINARY answered. Demonstrated on a run of
+         each of the three fixtures.
+
+      2. A copy of a fixture run from outside a checkout prints
+         `refused:<fixture>:root-is-not-a-tillandsias-checkout-<path>` and the
+         runner scores the step a FAILURE. Demonstrated by copying one fixture
+         to a temp directory and running it, showing the runner's step verdict.
+         IT MUST NOT BE A SKIP — see the deliverable.
+
+      3. A tray built from a different tree than the guest it drives either
+         REFUSES by name, or says in the verdict that skew could not be
+         determined. Which of the two is honest depends on what the image
+         records, and the answer measured before this row was filed is that IT
+         RECORDS NO VERSION (see context) — so a closure claiming a skew
+         refusal must first show the state it compares, or must deliver the
+         "cannot determine" wording instead. DO NOT CLOSE THIS BY COMPARING
+         VERSION STRINGS: two specimens below differ in git sha and agree in
+         version.
+
+      PRE-FIX RESULTS ARE PART OF THE CLOSURE, both already measured: a dist/
+      run that raised a violation about the wrong subject, and a relocated copy
+      that exited 0 with a silent skip.
+    title: |
+      the macOS fixtures take their target's PATH as its identity, so a ten-day-old tray against a current guest raises `violation:…:guest-never-reached-a-running-command` about the wrong subject, and a copy run from /tmp resolves ROOT to / and skips in silence
+    context: |
+      THREE SPECIMENS, all measured on real hosts, none reproduced by argument.
+
+      SPECIMEN 1 — THE SKEWED RUN (macneo, first run of
+      litmus:macos-vz-orphan-diagnosis). The fixture defaults its target to
+      $ROOT/dist/Tillandsias.app/…/tillandsias-tray. On that host the bundle was
+      56.9.11.1 built 2026-09-12, while the guest image had been provisioned
+      minutes earlier by 56.9.21.1. Arm 1 ran a ten-day-old host binary against
+      a current guest and answered
+      `violation:macos-vz-orphan-diagnosis:guest-never-reached-a-running-command`
+      — a RED asserting the product is broken, raised about a pairing that was
+      never the subject.
+
+      SPECIMEN 2 — THE VERSION IS NOT THE IDENTITY (macneo, verifying 1253-gina
+      post-fix). Pre-fix run on git 2f5f2a90a gave
+      `violation:…:failure-text-does-not-name-holder-75667`; post-fix run on git
+      65994e1e5 gave `ok:macos-vz-orphan-diagnosis:4`. Same host, same image,
+      same default target — AND BOTH BINARIES REPORT "56.9.21.1". A version
+      comparison cannot tell those two subjects apart. This specimen kills the
+      obvious fix (compare the tray's version against the tree's VERSION) before
+      anyone spends a day on it.
+
+      SPECIMEN 3 — THE RELOCATED COPY (macneo). A copy of the fixture run from
+      /tmp resolved ROOT to `/`, found no app bundle there, and exited 0. Since
+      1330-i4hu that is a terminal `skip:` and the runner scores it SKIPPED,
+      silently, out of the rate. Before 1330-i4hu it was a FAIL — loud, if
+      misattributed. So the could-not-run fix made this case QUIETER, which is
+      the one direction it must never move a verdict.
+
+      IT IS ALSO LIVE ON THE FILING HOST, which is why this is not a macneo
+      quirk: tlatoanis-macbook-air's bundle reports "tillandsias-tray 56.9.20.1
+      (git 8007a2d8c-dirty, built 2026-09-21T04:00:40Z)" against a 56.9.21.1
+      tree. Every fixture result reported from this host on 2026-09-20 used a
+      bundle one version behind the tree. Those results stand — the arms PASSED,
+      and a skewed-but-working pair still demonstrates what they assert — but
+      the filer did not know the subject's identity while reporting them, and
+      the fixture could not have told him.
+
+      WHAT THE IMAGE ACTUALLY RECORDS, read before writing the criterion rather
+      than assumed. The image directory holds provision/provision.state, whose
+      writer is crates/tillandsias-vm-layer/src/vz.rs (lines 862, 864, 1306). It
+      records `written_at`, `written_at_iso` and `phase`, and on the `complete`
+      phase also `guest_binary_sha256`. THERE IS NO VERSION FIELD, and the only
+      identity present is a CONTENT HASH OF THE GUEST BINARY, which is not
+      comparable to the host tray's git sha without new state being written. On
+      the filing host the file reads `phase start`, so even that hash is absent.
+      A skew refusal therefore cannot be built from what exists today; that is a
+      finding, not an obstacle to route around.
+    deliverable: |
+      1. CARRY THE SUBJECT'S IDENTITY IN THE VERDICT. The tray already prints
+         version, git sha and build stamp on `--version`; put that whole line in
+         every verdict, not a parsed field of it. Specimen 2 is the reason it
+         must be the whole line.
+
+      2. REFUSE, DO NOT SKIP, WHEN ROOT IS NOT A CHECKOUT. Assert that ROOT
+         carries build.sh and crates/ BEFORE anything derived from ROOT is
+         trusted, and emit
+         `refused:<fixture>:root-is-not-a-tillandsias-checkout-<path>`.
+
+         THIS CASE WAS PROPOSED AS A SKIP AND REFUSED, and the distinction is
+         the row's finding. "No app bundle" is a TRUE statement about `/` and a
+         FALSE description of what happened: the fixture cannot tell whether it
+         is looking at a checkout at all. Routing it through the could-not-run
+         helper would turn a red into a silent skip — the "six characters that
+         make a red disappear" shape run-litmus-test.sh:948 warns about —
+         introduced by the very fix meant to stop could-not-runs being misread.
+         `refused:` is in the runner's failure set at run-litmus-test.sh:966,
+         checked FIRST and short-circuiting, so it stays red whatever follows.
+         cannot_run must keep meaning "the HOST cannot answer this question" and
+         nothing else.
+
+      3. THE SKEW CASE, conditioned on what exists. Read provision.state first.
+         If it cannot identify the tree that built the image — and today it
+         cannot — then EITHER write that state as part of this row and refuse on
+         a real comparison, OR deliver the honest wording: a verdict that names
+         both identities it can see and says skew was not determined. Do not
+         invent a comparison between a guest binary's sha256 and a host tray's
+         git sha.
+
+      DO NOT WIDEN ANY OF THIS INTO THE FAILURE PATHS: `violation:` stays a
+      violation.
+    next_action: >
+      Start with deliverable 2, which is self-contained, cheap, and the only one
+      of the three that is currently making a verdict quieter than it was. Then
+      deliverable 1, which makes every past and future run's subject legible and
+      costs one line per verdict. Deliverable 3 last, and read
+      provision/provision.state and its writer at vz.rs:1306 before choosing
+      between its two honest endings.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-21 at macuahuitl-fedora's
+      direction. Specimens 1, 2 and 3 are macneo's, reported through the
+      coordinator and quoted as received. The filing host's own skew, the
+      provision.state contents and its writer's line numbers were read here. The
+      refuse-not-skip decision was proposed as a skip by macuahuitl-fedora,
+      refused by this host with the reason recorded above, and agreed.
