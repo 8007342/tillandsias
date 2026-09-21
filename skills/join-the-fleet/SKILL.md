@@ -159,7 +159,11 @@ there.
      on 2026-09-20 and activating when that row closes;
   6. close by order (`set-field <order> status completed …`) after the landing
      proves — after the merge is on `origin/linux-next`, not after the PR is
-     opened.
+     opened. The evidence SHA on the closing event is the LANDED commit on
+     `origin/linux-next` (the merge or relay commit), never the work ref's own
+     SHA: they are different objects, and a closure that cites the gated SHA
+     points at something a reader of trunk cannot resolve as the landing
+     (yoga, 2026-09-21). Until then the row stays `in_progress`.
 
   The pre-push hook and the land tool print the same affordance on every
   refusal; this is the sentence they point at, word for word:
