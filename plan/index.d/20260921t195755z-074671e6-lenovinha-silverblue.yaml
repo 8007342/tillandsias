@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-lane-sidecar-adds-a-cert-to-the-agent-on-every-renewal-and-never-removes-the-expired-one-so-the-forge-push-lane-dies-of-maxauthtries-about-two-hours-after-boot
+    event:
+      type: measurement
+      ts: "2026-09-21T19:57:55Z"
+      agent_id: linux-lenovinha-linux-20260921t195755z
+      host: lenovinha-silverblue
+      summary: |-
+        ARM 1, FAILS-NOW, captured before any fix. Forge tillandsias-tillandsias-forge-maintenance, mid kvs69tkis9dfnbejbatg, OpenSSH_10.2p1, sidecar up 5h, measured 2026-09-21T19:57Z. THE CLIENT: ssh -v -o UserKnownHostsFile=/run/tillandsias/ssh-known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=no -p 2222 git@git-kvs69tkis9dfnbejbatg true -> host key ACCEPTED (Host ... is known and matches the ED25519-CERT host certificate; Found CA key in /run/tillandsias/ssh-known_hosts:1), then the same identity offered over and over, then 'Received disconnect from 10.0.42.27 port 2222:2: Too many authentication failures', EXIT=255. THE AGENT: ssh-add -l lists 17 identities, 16 ED25519-CERT plus the plain key, every one on fingerprint SHA256:+I9DiIj9/j4xj9FOR9eK88L7eQbrcbspvG7ZltCtgKc, each cert a different serial. THE SIDECAR: its log's last renewal line is 'ok:ssh-lane-sidecar:renewed n=16' - identity count and renewal count match exactly, which is the accumulation shown rather than argued. THE SERVER, from the mirror's /tmp/tillandsias-sshd/sshd.err: 'Certificate invalid: expired' once per offer, each naming a different serial under Key ID 'kvs69tkis9dfnbejbatg|approle', then 'Disconnecting authenticating user git ... Too many authentication failures [preauth]'. THE CREDENTIAL WAS VALID THE WHOLE TIME: the cert on disk at /tmp/tillandsias-ssh-lane/id_ed25519-cert.pub was serial 13385431346440221213, valid 2026-09-21T19:54:49 to 20:25:19 - valid at the moment every offer was refused as expired. Vault healthy, issuance healthy, sidecar printing ok: on every tick, lane dead. Every instrument read green through a broken lane, and the one error an operator would ever see names neither certificates nor the agent.

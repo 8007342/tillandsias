@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-forge-s-known-hosts-writer-emits-a-bare-cert-authority-line-while-the-lane-pushes-to-port-2222-so-openssh-looks-up-a-bracketed-name-that-never-matches
+    order: 1341-mgry
+    status: in_progress
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, forge, ssh, known-hosts, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    unscoreable: |
+      the-deliverable-is-a-MEASUREMENT-on-a-live-forge-not-an-artifact. This row
+      asks whether a predicted defect EXISTS. There is no litmus that can pin
+      it, because the fixtures that could run here (test-mirror-host-cert-and-
+      sshd.sh, test-mirror-receive-wrapper.sh) all pass HostKeyAlias and so
+      cannot exhibit the thing in question — a guard written from them would
+      pin the workaround, not the behaviour. The closure below is checkable by
+      reading two transcripts captured from a forge.
+    verifiable_closure: |
+      TWO ARTIFACTS, in this order, both pasted into this row's events.
+      FAILS FIRST: an `ssh -v -p 2222 git@git-<mid> true` transcript captured
+      FROM INSIDE A FORGE with the lane on, BEFORE the fix, showing the
+      known_hosts lookup of `[git-<mid>]:2222` finding no match and the session
+      ending in `Host key verification failed`. A fix whose pre-state was never
+      measured is a fix for a defect nobody saw.
+      PASSES AFTER: the same command from a forge after the fix, exiting 0 with
+      the certificate accepted, strict checking still on (`StrictHostKeyChecking
+      =yes`) and NO new TOFU acceptance — the `known_hosts` file must not have
+      grown a plain host-key line.
+      A `ssh-keygen -F` demonstration on bare metal is NOT either artifact: the
+      bare-metal lane passes HostKeyAlias and so cannot exhibit the defect.
+    title: |
+      the forge's known_hosts writer emits a bare `@cert-authority git-<mid>` line while the lane pushes to port 2222, and OpenSSH looks a non-default port up as `[host]:port` — measured on the forge first, then fixed
+    context: |
+      AMENDMENT A1 of the audited design
+      (plan/issues/in-stack-forge-push-lane-design-2026-09-21.md, audited and
+      ACCEPTED WITH AMENDMENTS by macuahuitl-fedora on 1340-tzsx). Derived on
+      the amended shape, which the audit event authorises.
+
+      THE DEFECT, as far as it is measured TODAY and no further. OpenSSH looks
+      a host up in known_hosts under `[host]:port` when the port is not 22. I
+      measured this independently on OpenSSH 10.2p1 with `ssh-keygen -F`
+      against two hand-written files: a bare `@cert-authority git-testmid <ca>`
+      line does NOT match a lookup of `[git-testmid]:2222` and DOES match a
+      lookup of `git-testmid`; the bracketed line matches `[git-testmid]:2222`.
+      The forge's writer emits the BARE form while the lane pushes to
+      ssh://git@git-<mid>:2222 with strict checking and no HostKeyAlias.
+
+      WHY THIS IS STILL "PROBABLE" AND NOT "CONFIRMED". The forge client has
+      never been exercised. Everything above is a property of OpenSSH plus a
+      reading of the writer; the prediction that a forge push fails
+      `Host key verification failed` has not been observed on a forge. That
+      observation IS the first half of this row's closure, deliberately.
+
+      WHY BARE METAL DOES NOT SHOW IT: my bare-metal lane passes
+      `-o HostKeyAlias=git-<mid>`, which OpenSSH looks up VERBATIM — the alias
+      is the workaround that hid the defect behind it, which is why the arm
+      above refuses a bare-metal demonstration.
+    next_action: |
+      Held by lenovinha-silverblue. In order:
+      1. Bring up a forge with the lane on and capture the PRE-FIX `ssh -v`
+         transcript. If it does NOT fail, the defect is not what this row says
+         — amend the row and do not "fix" anything.
+      2. Then fix the writer in the gitconfig emission near the
+         `pushInsteadOf` / `@cert-authority` site: either spell the line
+         `@cert-authority [git-<mid>]:2222 <ca>` or add
+         `-o HostKeyAlias=git-<mid>` to `core.sshCommand`. Both keep strict
+         checking and neither introduces TOFU.
+      3. Re-measure from a forge, gate, push a work ref, open a PR.
+      Does NOT unblock the T11 flip (749-y8xx) by itself: that waits on a forge
+      acceptance carrying A2-A4's arms.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21 as amendment A1 of 1340-tzsx,
+      whose audit event authorises derived implementation packets. Siblings
+      still owed from the same audit: A2-A4 (the forge acceptance arms) and A5
+      (the pusher line in relay-refs.sh). Related: 1313-prin (the bare-metal
+      lane, whose HostKeyAlias hides this), 749-y8xx (the T11 flip).
