@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-installers-capability-probe-asks-help-whether-a-flag-exists-so-it-is-defeated-by-exactly-the-defect-it-was-written-to-survive-a-help-that-advertises-a-flag-the-parser-rejects
+    order: 1323-5taw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, install, release, agent-safety, measurement]
+    estimated_hours: 2
+    owned_files:
+      - scripts/install-windows.ps1
+    title: |
+      install-windows.ps1 decides whether the tray supports --reset-state by GREPPING ITS --help, so it is defeated by precisely the defect it was written to survive: a binary whose --help advertises a flag its parser rejects. That binary exists today, at v56.9.20.1 on Linux.
+    context: |
+      FOUND 2026-09-20 by yolanda-windows, reading the tag after pirria's Linux
+      lane failed, and reported before it could bite anyone.
+
+      THE PROBE, scripts/install-windows.ps1:553-554, which I added under
+      1286-4437:
+        $ResetHelp = & cmd.exe /c "`"$InstalledExe`" --help 2>&1"
+        $HasResetState = ($ResetHelp -join "`n") -match '--reset-state'
+      Its purpose is sound and still wanted: the installer always DOWNLOADS the
+      tray, TILLANDSIAS_VERSION can pin an older tag (the release smoke does
+      exactly that), and a tray predating 1286-4437 does not know
+      --reset-state. Calling it unconditionally would turn every pinned-older
+      install into a hard failure at a step that did not exist when that tag
+      shipped.
+
+      THE DEFECT IS THE INSTRUMENT IT ASKS. It asks the binary what it CLAIMS,
+      not what it DOES. Against a binary whose --help mentions the flag while
+      its parser refuses it, the probe returns TRUE, the installer proceeds,
+      the call exits 2, and the installer Dies -- the exact outcome the probe
+      exists to prevent, reached THROUGH the probe.
+
+      AND THAT BINARY IS NOT HYPOTHETICAL. v56.9.20.1's published Linux
+      headless advertises --reset-state in --help and rejects it at the parser:
+      its known-flags allow-list at crates/tillandsias-headless/src/main.rs:612-651
+      carries no entry, and pirria's curl-install failed with
+      `Unsupported option: --reset-state`, install_exit=2. Three hosts have now
+      reproduced that from source. So the row has a real specimen at a real
+      tag, and the probe's failure mode is demonstrable rather than argued.
+
+      WHY IT DID NOT FIRE ON WINDOWS, which is luck and not design: the tray's
+      allow-list is pinned to its dispatch by a unit test
+      (known_flags_match_the_dispatch_in_main, E4 2026-08-17), so on that
+      binary --help and the parser cannot disagree. The probe is unsound in
+      general and sound on Windows today. A guard that works because of a
+      property of the thing it is guarding, rather than because of how it asks,
+      is one refactor away from silence.
+
+      THE SHAPE IS THE FLEET'S OWN RULE, already written down for stale
+      binaries: probe a refusal by asking for the refusal. A version check, a
+      capability manifest and a --help grep all pass on a binary that will not
+      do the thing; only attempting it and reading the outcome distinguishes
+      them.
+    next_action: |
+      Nobody holds this; yolanda will take it after the v56.9.20.1 smoke.
+      1. REPLACE the --help grep with an ATTEMPT under the non-destructive
+         guard, which the flag already honours:
+           TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 <tray> --reset-state
+         A tray that supports it announces the skip and provisions the existing
+         state, exit 0. A tray that does not refuses with an unknown-flag error
+         and exit 2. That distinguishes a parser that honours the flag from a
+         --help that merely mentions it, and it is non-destructive by
+         construction -- the guard is what makes the probe safe to run.
+      2. KEEP THE SKIP BEHAVIOUR on a negative: an older tray must still leave
+         a working install with a loud named line, not a Die.
+      3. CONTROL IN THE FIXTURE: a nonsense flag must produce the refusal
+         shape, so the probe is shown to distinguish supported from
+         unsupported rather than passing everything.
+      Do NOT fix this by adding --reset-state to more allow-lists; that treats
+      the specimen and leaves the probe asking the wrong question.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable includes the fixture
+      that would score it, and pinning a litmus name before it exists is
+      refused by 885-92iu. When it lands the guard is
+      litmus-installer-probes-by-attempt-not-by-help, asserting that the
+      installer's capability decision is made from an attempted invocation's
+      outcome and that a --help-only mention does not satisfy it; same commit
+      as the fix (1136-n8sh).
+    verifiable_closure: |
+      install-windows.ps1 decides whether to run --reset-state by ATTEMPTING it
+      under TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 and reading the outcome, and a
+      binary whose --help mentions the flag while its parser rejects it is
+      correctly treated as UNSUPPORTED (skip with a named line), not as
+      supported. Pre-fix result: the probe at :554 greps --help, returns TRUE
+      for such a binary, and the installer then Dies on the exit 2 it was
+      written to avoid -- with v56.9.20.1's Linux headless as the specimen
+      (`Unsupported option: --reset-state`, install_exit=2, pirria).
+
+events:
+  - packet_id: the-windows-installers-capability-probe-asks-help-whether-a-flag-exists-so-it-is-defeated-by-exactly-the-defect-it-was-written-to-survive-a-help-that-advertises-a-flag-the-parser-rejects
+    event:
+      type: note
+      ts: "2026-09-20T23:00:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed by the author of the probe, before it bit anyone; not folded into 1286-4437, which is closed and may take events but not a change of contract
