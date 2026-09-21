@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T16:15:22Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        AN ACCEPTANCE CRITERION ON THIS ROW WAS VACUOUS ON EVERY HOST, AND IS RESTATED.
+        Recorded here rather than left in a relay message, because the criterion had
+        already been met once and would have been met again.
+
+        THE CRITERION AS WRITTEN: "zero credential-helper invocations with the helper
+        still configured", proven alongside three credential-free pushes over the ssh
+        lane to the host own mirror.
+
+        WHY IT COULD NOT FAIL. The helper on this host is not generic. It is URL-scoped:
+        credential.https://github.com.helper and credential.https://gist.github.com.helper,
+        both invoking gh (present and on PATH here, so live rather than broken). Git
+        consults a URL-scoped helper only for URLs matching that scope. The acceptance
+        pushes travel the SSH lane to the host own mirror, so no such helper is ever
+        consulted — whether or not the lane is credential-free, and whether or not the
+        lane works at all. Zero invocations is guaranteed by the SCOPE and earned by the
+        LANE on no host. The coordinator confirms lenovinha carries the same URL-scoped
+        configuration, so this was never a pirria property: the bar read as evidence on
+        the host that already passed it.
+
+        WHAT IT WAS MEASURING INSTEAD: that the pushing URL was ssh. Which is the
+        premise of the test, not its result.
+
+        RESTATED (coordinator call, the operator bar unchanged — credential-free through
+        the host own mirror):
+          1. the push authenticated by the HOST CERT over ssh — `GIT_SSH_COMMAND='ssh -v'`
+             showing `Authenticated to ... using "publickey"` with the certificate
+             principal til:host-push:<host>, plus the relay two lines on the mirror side;
+          2. no host-side GitHub credential path was read, with the instrument being each
+             host ACTUAL path rather than one spelling: yoga file store moved aside; a
+             libsecret keyring PID where that is the helper; on pirria, the from-zero
+             baseline itself — 0 ssh keys and no ~/.ssh/known_hosts before the run, so
+             the only key material existing afterwards is the minted cert, listed;
+          3. ls-remote equality and no TOFU, unchanged.
+
+        AND THE THING NOT TO DO, recorded because it was the obvious fix and it is wrong:
+        do NOT configure a generic credential.helper so that an invocation becomes
+        possible. That manufactures a configuration nobody runs in order to give the
+        control something to detect, which buys a falsifiable-looking result about a
+        machine that does not exist.
+
+        THE SHAPE, for whoever writes the next acceptance: a criterion phrased as the
+        ABSENCE of an event is only evidence when that event could have occurred. Ask
+        what configuration would make it fire before accepting a run where it did not.
