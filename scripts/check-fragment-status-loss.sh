@@ -112,7 +112,13 @@ declared="$(awk '
     FNR == 1                                                 { flush(); sect = "" }
     /^packets:[[:space:]]*$/                                 { flush(); sect = "packets"; next }
     /^[a-z_]+:[[:space:]]*$/                                 { flush(); sect = "";        next }
-    sect == "packets" && /^  - /                             { flush() }
+    # A ROW IS A LIST ITEM WHOSE OWN KEY IS packet_id OR order (1331-884p,
+    # carried from 1319-vd5h). A BARE dash at indent 2 also matches every
+    # NESTED sequence entry written at the indent of the parent key — the shape a
+    # YAML dumper emits — and flushing there drops the (packet_id, status)
+    # pair when the nested list sits BETWEEN them. A status-loss detector that
+    # loses a status is the failure this pass exists to refuse.
+    sect == "packets" && /^  - (packet_id|order):[[:space:]]/ { flush() }
     sect == "packets" && /^(  - |    )packet_id:[[:space:]]/ { pid = $NF }
     sect == "packets" && /^(  - |    )status:[[:space:]]/    { st  = $NF }
     END { flush() }
