@@ -75,6 +75,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: reset between swap and launch"
 
+  # ORDER 1315-d4qd. A destructive path has no silent default. Kept in THIS
+  # fixture rather than a new one because it is the same contract: the flag
+  # announces what it will destroy before destroying it, and an announcement
+  # built from a fallback root is already the false report — whether or not
+  # anything is removed afterwards.
+  - step: "with HOME unset the reader LABELS its fallback and the destructive path REFUSES (1315-d4qd)"
+    command: "bash scripts/test-reset-state-no-home-refusal.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS"
+
 observability:
   traces:
     - "@trace spec:ci-release"
