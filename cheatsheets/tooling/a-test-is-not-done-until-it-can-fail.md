@@ -204,6 +204,19 @@ mentions. The heuristic finds only the no-caller case and misses the transitive
 one — so as first written it would have cleared every specimen on this page,
 including the one it calls the sharpest.
 
+**The count is not merely weak — it decays as you document the problem.** Two
+people measured `cloud_overflow_row` in the same file on the same evening and got
+different answers: 5 and 7. Neither was wrong. They measured at different
+commits, and in between, a comment had been added WARNING that the function was
+dead. The warning raised the count and pushed the symbol further from the
+"2 mentions" signal.
+
+So the metric moves away from firing in proportion to how carefully someone has
+explained the thing it is meant to catch, and it degrades fastest on exactly the
+items a person cared enough to annotate. It is not a weak signal; it is
+anti-correlated with care. (The warning in question was written by the same
+person who then found the flaw — which is how it came to light at all.)
+
 The rule that actually holds: **an item is not dead because nothing mentions it,
 it is dead because everything that mentions it is itself dead.**
 `cloud_overflow_row` has a definition, a real call, a doc reference and tests —
