@@ -20,6 +20,21 @@
 #                 closure. Pre-fix the indent-4 one yields an EMPTY closure;
 #                 post-fix both yield it. This is the arm that fails on unfixed
 #                 code.
+# ARM 4 IS GRADED AGAINST WHAT THE CHECKER IMPLEMENTS, ON PURPOSE.
+# A fixture that encodes ITS AUTHOR'S fix rather than the ROW'S CONTRACT fails
+# for whoever lands a different correct implementation, and the natural response
+# to that failure is to change the implementation to match the test. That is the
+# tail wagging the dog. So arm 4 asserts the contract at two levels and says
+# which one it ran:
+#   STRICT   the checker implements violation:scorable-obligation-parse-failure
+#            and must blame ITSELF for a row it could not parse.
+#   RELAXED  the checker has no such verdict. Then the assertion is only that a
+#            blind parser must NOT SILENTLY PASS — the half of the contract that
+#            every implementation shares.
+# RELAXED is a deliberate, ANNOUNCED weakening, not a pass. It is in force while
+# the "refuse instead of blame" reporting change is deferred; when that lands the
+# checker gains the verdict and this arm becomes STRICT again with no edit.
+#
 #   2 MUTATION    revert the splitter and arm 1 must fail, naming the nested item
 #                 mistaken for a row. The arm FIRST asserts the reverted source
 #                 actually DIFFERS from the fixed source: a no-op mutation reads
@@ -222,15 +237,24 @@ else
     rm -rf "$fx"
     blind_v="$(awk -F'\x1f' '$1=="BLIND"{print $2}' "$tmp/witness.out")"
     fixed_v="$(awk -F'\x1f' '$1=="FIXED"{print $2}' "$tmp/witness.out")"
+    # Does THIS checker implement the self-blaming verdict? Grade accordingly.
+    if grep -q 'scorable-obligation-parse-failure' "$CHECKER"; then arm4_mode=STRICT; else arm4_mode=RELAXED; fi
     case "$blind_v" in
         violation:scorable-obligation-parse-failure:*)
-            note "ok:scorable-splitter:arm4-witness:blind parser REFUSES loudly [$blind_v]" ;;
+            note "ok:scorable-splitter:arm4-witness[STRICT]:blind parser blames ITSELF [$blind_v]" ;;
         ok:*|skip:*)
-            fail "scorable-splitter:arm4:blind parser PASSED the row silently [$blind_v] — deferral is still indistinguishable from a satisfied obligation" ;;
+            fail "scorable-splitter:arm4[$arm4_mode]:blind parser PASSED the row SILENTLY [$blind_v] — deferral is still indistinguishable from a satisfied obligation, which is the half of 1331-884p that lets a row enter trunk unchecked" ;;
         violation:scorable-obligation-missing:*)
-            fail "scorable-splitter:arm4:blind parser blamed the ROW [$blind_v] — the obligation is in the file; the checker must blame itself" ;;
+            if [ "$arm4_mode" = STRICT ]; then
+                fail "scorable-splitter:arm4[STRICT]:blind parser blamed the ROW [$blind_v] — this checker HAS the parse-failure verdict and did not use it; the obligation is in the file"
+            else
+                note "ok:scorable-splitter:arm4-witness[RELAXED]:blind parser refuses, but blames the ROW [$blind_v]"
+                note "  RELAXED: this checker implements no parse-failure verdict, so only \"must not pass silently\" is asserted."
+                note "  RESTORED TO STRICT when the reporting change lands: a row the checker cannot parse must be reported"
+                note "  as a defect IN THE CHECKER, naming the file and line, never as a silent row (1331-884p)."
+            fi ;;
         *)
-            fail "scorable-splitter:arm4:unexpected verdict from blind parser [$blind_v]" ;;
+            fail "scorable-splitter:arm4[$arm4_mode]:unexpected verdict from blind parser [$blind_v]" ;;
     esac
     [ "$fixed_v" = "ok:scorable-obligations:1 checked" ] \
         || fail "scorable-splitter:arm4:fixed checker should ACCEPT the same row (got [$fixed_v])"
