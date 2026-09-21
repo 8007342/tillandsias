@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T05:51:01Z"
+      agent_id: linux-lenovinha-opus5-20260921t055101z
+      host: lenovinha-silverblue
+      summary: |-
+        THE LANE WORKS END TO END FOR A HOST. Measured on lenovinha 2026-09-20, every link an artifact rather than an inference. (1) The cert mints ON DEMAND: scripts/tillandsias-host-push-cert.sh prints ok:host-push-cert:~/.config/tillandsias/host-push/lenovinha.ed25519-cert.pub. (2) It is the right identity, by ssh-keygen -L: 'user certificate', Principals: exactly one line, til:host-push:lenovinha, signed by the Vault client CA. (3) It is correctly SCOPED: Critical Options force-command /usr/local/bin/tillandsias-receive and source-address 10.0.42.0/24; Extensions: (none), so a stolen cert opens no shell and forwards nothing; Valid 22:03:59 to 22:34:29, the 30-minute TTL. NOTE THE source-address: the 127.0.0.1/32 narrowing I proposed and retracted would have made this certificate unusable for the very push it exists for. (4) The mirror ACCEPTS the identity: /tmp/tillandsias-sshd/authorized_principals now renders BOTH lines, til:forge-push:kvs69tkis9dfnbejbatg and til:host-push:lenovinha, so a host push and a forge push are distinguishable in its log and revoking one leaves the other. (5) AUTHENTICATION SUCCEEDS: ssh -i <key> -p 2223 git@127.0.0.1 answers 'fail:tillandsias-receive:not-receive-pack' — the ForceCommand running and refusing an interactive session, which is the designed behaviour and is only reachable AFTER the certificate authenticated. (6) AND THE GATE FIRES ON THE HOST-TO-MIRROR HOP, which is this row's own requirement and was previously only reasoned about: a push to ssh://git@127.0.0.1/srv/git/tillandsias — a URL naming no GitHub remote — was refused by the local pre-push hook with '✗ pre-push refused: the tree changed since ./build.sh --check last passed', preceded by ok:no-stale-base-revert, ok:main-branch-affordance and ok:linux-next-merged. The mirror cannot be used to route around the gate. The refusal itself is CORRECT: my stamp had gone stale because I merged trunk after gating. SELF-INFLICTED AND WORTH THE NEXT READER'S TIME: my first probe TOFU'd the mirror's host key with StrictHostKeyChecking=no, and the mirror has since been recreated with a new host key, so the next connection failed REMOTE HOST IDENTIFICATION HAS CHANGED. A pinned host key breaks on every mirror rebuild; the design's answer is the @cert-authority known_hosts line trusting the HOST CA, exactly as the forge's gitconfig writer already does. The acceptance pushes will wire that rather than lean on accept-new. STILL OWED: the three credential-free pushes, held until the freeze lifts and until all three can be made the same way.
