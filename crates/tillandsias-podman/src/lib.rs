@@ -1099,10 +1099,51 @@ fn podman_cmd_sync_std() -> std::process::Command {
     cmd
 }
 
+/// THE ONE LOCK over `TILLANDSIAS_PODMAN_BIN` (order 1329-ud87).
+///
+/// That variable is PROCESS-global and cargo runs tests in parallel threads
+/// inside a single process, so every test in this crate that points it at a
+/// stub must take the SAME guard. Two modules previously each declared their
+/// own — a `std::sync::Mutex` in the module below and a `tokio::sync::Mutex`
+/// in backend.rs — and two mutexes over one variable serialise nothing against
+/// each other.
+///
+/// MEASURED rather than reasoned about: backend.rs's prompt test installed its
+/// `echo ok` stub, the chatty test in the module below repointed the variable
+/// at its 2000-line stub, and the prompt test then executed the CHATTY binary,
+/// failing with a wall of a's where it expected `ok`. The workspace gate
+/// reported that as a NEW failure on a head that touched neither file.
+///
+/// A TOKIO MUTEX, and the reason is worth keeping because the obvious argument
+/// against it is wrong in a way that compiles. backend.rs holds this guard
+/// across an `.await`; its `#[tokio::test]`s default to the current-thread
+/// flavor, so a std guard held there is SOUND — and `clippy::await_holding_lock`
+/// denies it anyway, which is a gate failure, not an opinion. Soundness was
+/// never the binding constraint. backend.rs's original instinct to reach for a
+/// tokio mutex was right; what was wrong was declaring a SECOND one instead of
+/// sharing this.
+///
+/// Sync callers take it with `blocking_lock`, which is correct precisely
+/// because they are not in a runtime — it panics if it ever is, which is the
+/// loud failure rather than the deadlock.
+#[cfg(test)]
+pub(crate) static PODMAN_BIN_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Blocking acquisition for the crate's SYNC tests (order 1329-ud87). Async
+/// tests take `PODMAN_BIN_ENV_LOCK.lock().await` directly.
+///
+/// No poison recovery to write: a tokio mutex is not poisoned by a panicking
+/// holder, so the recovery `std::sync::Mutex` needed here (833-u85z) has no
+/// counterpart — one behaviour difference this change deliberately accepts,
+/// and the cascade that recovery prevented cannot occur for the same reason.
+#[cfg(test)]
+pub(crate) fn podman_bin_env_lock() -> tokio::sync::MutexGuard<'static, ()> {
+    PODMAN_BIN_ENV_LOCK.blocking_lock()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
 
     /// ORDER 880-tdwn. With the tripwire armed and no explicit binary, the
     /// resolver must PANIC by name rather than hand back the real podman —
@@ -1290,7 +1331,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
     fn stub_podman(
         script: &str,
     ) -> (
-        (std::sync::MutexGuard<'static, ()>, impl Drop),
+        (tokio::sync::MutexGuard<'static, ()>, impl Drop),
         std::path::PathBuf,
     ) {
         use std::io::Write;
@@ -1367,12 +1408,72 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
     /// actually panicked still fails and still reports. It only stops that
     /// panic from being restated as five more, which is noise that buries the
     /// one line worth reading.
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    /// ORDER 1329-ud87. EXACTLY ONE lock may exist over the process-global
+    /// `TILLANDSIAS_PODMAN_BIN`, and this asserts it by SHAPE because the
+    /// defect it guards is an interleaving: the crate passed 176/176 on the
+    /// run right after the failure, so no amount of green proves its absence.
+    ///
+    /// Two modules each declared their own guard — a std one here, a tokio one
+    /// in backend.rs — and two mutexes over one variable serialise nothing
+    /// against each other. Each author was fixing a real hazard and each fix was
+    /// correct within its module; nothing in either file could see the other.
+    /// This test is what makes the third one impossible to add silently.
+    ///
+    /// It reads the sources rather than the built crate because a lock that is
+    /// declared and never contended looks identical at runtime to no lock.
+    #[test]
+    fn exactly_one_mutex_guards_the_process_global_podman_bin() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut declarations = Vec::new();
+
+        for name in ["lib.rs", "backend.rs"] {
+            let path = root.join(name);
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("{} must be readable: {e}", path.display()));
+            for (i, line) in text.lines().enumerate() {
+                let trimmed = line.trim_start();
+                // A DECLARATION, not a use: `static X: Mutex<..>` or a
+                // `OnceLock<Mutex<()>>` initialised in place. Comments are
+                // skipped so that this file's own prose — which names both of
+                // the mutexes it replaced — does not answer its own grep.
+                if trimmed.starts_with("//") {
+                    continue;
+                }
+                // Visibility prefixes count: the one real declaration is
+                // `pub(crate) static`, and a bare `starts_with("static ")`
+                // would have missed it and passed a tree with two locks.
+                let is_static_item = trimmed.starts_with("static ")
+                    || trimmed.starts_with("pub static ")
+                    || trimmed.starts_with("pub(crate) static ");
+                let declares_static_mutex = is_static_item && trimmed.contains("Mutex<()>");
+                // The needles are ASSEMBLED rather than written whole: spelled out,
+                // these two lines would match themselves and the test would fail
+                // against a correct tree (it did, on the first run).
+                let qualified = concat!("OnceLock<std::sync::", "Mutex<()>>");
+                let bare = concat!("OnceLock<", "Mutex<()>>");
+                let declares_oncelock_mutex = trimmed.contains(qualified) || trimmed.contains(bare);
+                if declares_static_mutex || declares_oncelock_mutex {
+                    declarations.push(format!("{name}:{}: {}", i + 1, trimmed));
+                }
+            }
+        }
+
+        assert_eq!(
+            declarations.len(),
+            1,
+            "exactly one mutex may guard TILLANDSIAS_PODMAN_BIN — every \
+             stub-installing test in this crate must take the SAME guard, and a \
+             second declaration serialises nothing against the first. Found: {declarations:#?}"
+        );
+    }
+
+    /// Delegates to the crate-level `podman_bin_env_lock` (order 1329-ud87).
+    /// This used to declare its own `OnceLock<Mutex<()>>`; backend.rs declared
+    /// a second one, and two mutexes over one process-global variable serialise
+    /// nothing against each other. The name stays because a dozen call sites
+    /// below read well with it.
+    fn env_lock() -> tokio::sync::MutexGuard<'static, ()> {
+        super::podman_bin_env_lock()
     }
 
     #[test]
