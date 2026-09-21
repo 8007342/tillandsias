@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    field: status
+    value: in_progress
+    ts: "2026-09-21T02:40:24Z"
+    host: pirria
+
+events:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    event:
+      type: note
+      ts: "2026-09-21T02:40:24Z"
+      host: pirria
+      summary: |-
+        claimed by pirria — the host that produced a specimen in each organ on the same day, and whose written-up lesson from the first did not fire for the second because it was filed against the organ rather than the shape
