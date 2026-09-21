@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: mirror-identity-staged-migration-and-spec-amendments
+    event:
+      type: note
+      ts: "2026-09-21T16:07:19Z"
+      agent_id: linux-lenovinha-opus5-20260921t160719z
+      host: lenovinha-silverblue
+      summary: |-
+        BLOCKING RELATION, recorded as an event because set-field refuses to edit a list field and prescribes exactly this: the row's owner should amend the declaration. THE T11 DEFAULT FLIP MUST NOT PRECEDE THE MIRROR LANE'S SIX FIXES REACHING TRUNK. Naming the capability rather than a host: the flip depends on packet the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop (1313-prin). WHY THIS IS NOT A COURTESY DEPENDENCY. Five of the six defects found by dogfooding the lane live in the MIRROR or its lane, not in the host client, so they fire for ANY pusher including a forge: the mirror never receives TILLANDSIAS_MIRROR_SSHD so its sshd never starts; it never receives TILLANDSIAS_MIRROR_ID so sshd-identity dies at require_mid; its host-signer policy was minted and bound to nothing so it cannot obtain its own host certificate; and sshd hands a forced command ONLY what SetEnv lists, so the relay running under a push over ssh had neither VAULT_TOKEN_FILE nor the egress proxy variables. The sixth, two AppRole documents clobbering at one mount target, is conditional on the host-push half existing. NONE OF THEM HAS EVER FIRED, because the lane is default-off and nothing had ever pushed through it. THE FLIP WOULD THEREFORE BE THEIR FIRST EXERCISE, on every host at once, with the relay correctly failing closed — which reads as a fleet-wide outage of a feature that had already landed. THE RELATION IS TESTABLE ON ORIGIN AND DOES NOT DEPEND ON ANY LOCAL TREE — git merge-base --is-ancestor 88b0679d9 origin/linux-next succeeds only once the fixes are on trunk. Until then the edge should hold. SCOPE, stated so it is not over-read: the acceptance behind this proves the lane for ONE host, on a branch not yet landed, with the lane still default-off. It proves nothing about the forge client, which has not been exercised.
