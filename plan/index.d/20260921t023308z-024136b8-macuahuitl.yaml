@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-idempotent-join-the-fleet-skill-gives-a-worker-on-bare-metal-or-in-a-forge-the-requirements-scheduled-work-attestation-rules-and-session-joining-steps-so-no-host-is-bootstrapped-by-message
+    event:
+      type: completed
+      ts: "2026-09-21T02:33:08Z"
+      agent_id: linux-macuahuitl-claude-20260921t023306z
+      host: macuahuitl
+      summary: |
+        Closed by the coordinator (macuahuitl). The skill, the checker and the fixture landed on trunk (skills/join-the-fleet/SKILL.md, scripts/check-fleet-membership.sh, scripts/test-join-the-fleet-idempotent.sh, bound as litmus:join-the-fleet-idempotent under methodology-accountability with runtime symlinks in .claude/.opencode/.codex/.github/skills). Executable closure: the v56.9.20.1 release gate (./build.sh --ci-full, attempt 3, PASS, 2026-09-21) executed litmus:join-the-fleet-idempotent inside a pre-build tier that reported `Pass Rate: 100% (382/382 executed)`; the binding's step 2 greps the fixture's verdict line, so a 3/3 short of three arms would have been a FAIL in that count. Arm by arm, measured on this host before the land: (1) two runs printed the same verdict line and git status was byte-identical; (2) under TILLANDSIAS_HOST_KIND=forge every host-only step was a named skip and skipped= equalled the skip lines (7 = 7); (3) a scaffold git dir with no pre-push hook yielded todo:join-the-fleet:hooks:scripts/install-hooks.sh with rc=1.
+
+        Amended by 1317-9ugn (landing next): the fixture grows to six arms (rerere, the work-ref note, the affordance identity) and the verdict line reads ok:join-the-fleet-idempotent:6/6; §3 of the skill now states a worker's slot (check-fleet-membership.sh then /advance-work-from-plan) and the work-ref flow, correcting the landed "a cycle is /meta-orchestration (full mode)" line for workers.
