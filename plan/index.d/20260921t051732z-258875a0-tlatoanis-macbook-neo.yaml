@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-installed-macos-app-bundle-disappears-from-applications-between-runs-on-macneo-with-the-vm-state-left-intact-which-is-the-exact-state-the-reset-state-pre-flight-guard-exists-for-and-no-mechanism-is-known
+    event:
+      type: note
+      ts: "2026-09-21T05:17:32Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t051732z
+      host: tlatoanis-macbook-neo
+      summary: |
+        THE INSTRUMENT IS RUNNING, not merely specified. Armed on macneo 2026-09-21T05:17:20Z.
+
+          watcher: $HOME/tillandsias-app-watch.sh, detached via nohup, pid 65167
+          log:     $HOME/tillandsias-app-watch.log
+          first stamp: 2026-09-21T05:17:20Z 12826846 drwxr-xr-x 3 tlatoani admin 96 Sep 20 22:12 /Applications/Tillandsias.app
+
+        So the baseline inode for the bundle installed by the v56.9.21.1 smoke is 12826846. A row that only DESCRIBES an instrument leaves the third occurrence to repeat the second; this one is collecting now, across whatever window comes next.
+
+        HOW TO READ THE LOG AT THE NEXT run_start, restated here because it is the part that matters and the fragment carrying it is elsewhere in the fold:
+          * two adjacent lines whose second reads "No such file or directory" bound a REMOVAL to a 60-second window, and the last line before it carries the inode that existed until then;
+          * two adjacent lines with DIFFERENT inodes and no absence between them are a REPLACEMENT, which closes this row differently and means something is reinstalling rather than deleting;
+          * an unbroken run of 12826846 across a window in which the app was later found absent would mean the removal happened outside the watcher's lifetime — check the WATCH START lines for gaps before concluding anything.
+          * the log surviving with no absence, across a window with no occurrence, is a RESULT and must be recorded as one: it is what makes a later positive reading interpretable.
+
+        Also run at the next run_start, before anything touches the host:
+          log show --predicate 'eventMessage CONTAINS "Tillandsias.app"' --last 4h
+
+        CAVEAT ON THE INSTRUMENT ITSELF: the watcher lives in $HOME on one host, not in the repository. That is deliberate for a single-host investigation and it is also the "a second copy is where the fix does not go" hazard in miniature — the row carries the script verbatim so it can be recreated, and if this becomes a fleet-wide watch it belongs in scripts/ rather than being copied by hand. It will not survive a reboot; if the log's WATCH START lines show a gap, that gap is the watcher's absence and not evidence about the bundle.
