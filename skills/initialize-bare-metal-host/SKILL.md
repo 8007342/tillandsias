@@ -174,12 +174,36 @@ binary on `PATH` was **v56.9.12.2** the whole time and was never used. `./build.
 --install` was never run here. So lenovinha's legs do not evidence the install
 path — only the checkout-binary path.
 
-Whichever you choose, confirm the binary itself carries the fix rather than
-trusting a version string:
+**Confirm the BINARY carries the fix. `tillandsias --version` cannot tell you.**
+It prints a version and no git sha, so no ancestry check is possible against it
+— a version string can match while the embedded assets do not, which is exactly
+the trap. Grep the binary instead, with two controls so the result is readable:
 
 ```bash
-strings <the-binary-you-will-run> | grep -c RELAY_HTTP_PROXY   # expect >0
+BIN=<the binary you will run>                 # installed path, or ./target/release/tillandsias
+strings -a "$BIN" | grep -c RELAY_HTTP_PROXY        # MARKER  — expect >= 1
+strings -a "$BIN" | grep -c TILLANDSIAS_RECEIVE_ROOT # CONTROL — expect >= 1 on ANY build
 ```
+
+- **The marker is the fix's own text.** `RELAY_HTTP_PROXY` is absent at
+  `88b0679d9^` and present at `88b0679d9`, so finding it means that commit's
+  content is embedded. A *load-bearing* name is chosen deliberately over a
+  comment: a comment can be reworded while the fix remains, which would fail the
+  check for no reason; if this variable disappears, the fix really has.
+- **The control proves a 0 is meaningful.** If the marker reads 0 and the
+  control also reads 0, you cannot read that binary at all and the answer is
+  unknown, not "absent".
+
+Measured on this host, both binaries present at once:
+
+| string | checkout build v56.9.21.1 | installed v56.9.12.2 |
+|---|---|---|
+| `RELAY_HTTP_PROXY` (marker) | 2 | **0** |
+| `TILLANDSIAS_RECEIVE_ROOT` (control) | 3 | 3 |
+
+**If you took the install route: `./build.sh --install` BUMPS `VERSION` in your
+tree.** Do not commit that on a work ref — a VERSION bump is a cut's own commit
+(702-eusw). Leave it, or restore it, but do not carry it into your PR.
 
 **The lane stays default-off.** Both variables are explicit on every command
 below; nothing here changes a default for anyone else.
