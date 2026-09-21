@@ -1990,5 +1990,35 @@ else
     echo "${YLW}note: scripts/check-scorable-obligation-added.sh absent — scorable-obligation check skipped${RST}" >&2
 fi
 
+
+# ORDER 1325-ygq5 — a test this push ADDS that nothing which runs on its own can
+# fail because of. The gate stamp does not cover this either, and for a sharper
+# reason than the scorable check above: a test the gate never reaches cannot
+# make the gate red, so a GREEN STAMP IS EXACTLY WHAT AN UNREFERENCED TEST
+# PRODUCES. The stamp is evidence the tree passed; it is not evidence the tree
+# was asked.
+#
+# MIGRATION PHASE: this WARNS and does not refuse, carrying the standing count
+# so the flip is a decision made against a number rather than a date. Warn here
+# is still worth the fork — it fires at the moment the author can act, which is
+# the only thing the two specimens lacked. The full gate's step refuses nothing
+# either; both become refusals together, by setting
+# TILLANDSIAS_ADDED_TEST_REFERENCE_ENFORCE=1.
+if [[ -f scripts/check-added-test-is-referenced.sh ]]; then
+    _addedtest_out="$(bash scripts/check-added-test-is-referenced.sh 2>&1)"
+    _addedtest_rc=$?
+    if [[ $_addedtest_rc -ne 0 ]]; then
+        echo "${RED}✗ this push adds a test nothing can fail because of (1325-ygq5)${RST}" >&2
+        echo "$_addedtest_out" | head -10 | sed 's/^/  /' >&2
+        exit 1
+    fi
+    if [[ "$_addedtest_out" == warn:added-test-unreferenced:* ]]; then
+        echo "${YLW}⚠ this push adds a test nothing can fail because of (1325-ygq5)${RST}" >&2
+        echo "$_addedtest_out" | head -10 | sed 's/^/  /' >&2
+        echo "  Run it by hand and it will pass. That pass means nothing." >&2
+    fi
+else
+    echo "${YLW}note: scripts/check-added-test-is-referenced.sh absent — added-test reference check skipped${RST}" >&2
+fi
 echo "${GRN}✓ local gate: preflight clean, ./build.sh --check current for this tree${RST}" >&2
 exit 0
