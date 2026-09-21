@@ -241,12 +241,13 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## tooling
 
-- awk-word-boundary.md                 — an `awk` search came back empty and you are about to report the [bundled, partial-verify]
-- a-write-cannot-ask-a-question.md     — **A tool that writes by default cannot be used to ask whether a flag exists.** [bundled, partial-verify]
-- exit-status-is-not-an-answer.md      — **Check what it produced.** `cmd || fallback`, `if cmd; then`, and [bundled, partial-verify]
-- git-bash-cannot-fork-or-enumerate.md — you are running a project script from Git Bash and it fails in a [bundled, partial-verify]
-- msys-cr-blindness.md                 — you are about to answer "does this file have CRLF line endings?" [bundled, partial-verify]
-- recursive-grep-symlinks.md           — you are about to assert a UNIVERSAL NEGATIVE ("nothing in this tree [bundled, partial-verify]
+- a-test-is-not-done-until-it-can-fail.md — **Writing the assertion is the easy half.** The hard half is that something [bundled, partial-verify]
+- awk-word-boundary.md                    — an `awk` search came back empty and you are about to report the [bundled, partial-verify]
+- a-write-cannot-ask-a-question.md        — **A tool that writes by default cannot be used to ask whether a flag exists.** [bundled, partial-verify]
+- exit-status-is-not-an-answer.md         — **Check what it produced.** `cmd || fallback`, `if cmd; then`, and [bundled, partial-verify]
+- git-bash-cannot-fork-or-enumerate.md    — you are running a project script from Git Bash and it fails in a [bundled, partial-verify]
+- msys-cr-blindness.md                    — you are about to answer "does this file have CRLF line endings?" [bundled, partial-verify]
+- recursive-grep-symlinks.md              — you are about to assert a UNIVERSAL NEGATIVE ("nothing in this tree [bundled, partial-verify]
 
 ## utils
 

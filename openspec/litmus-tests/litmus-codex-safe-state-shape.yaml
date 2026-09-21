@@ -22,6 +22,7 @@ critical_path:
     command: "scripts/test-codex-safe-state.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex state is explicit, provider-auth-excluding, worker-namespaced, and normally checkpointed"
+    assert_output_contains: "PASS: Codex state is explicit, provider-auth-excluding, worker-namespaced, and normally checkpointed"
 
   - step: "ship and initialize the helper before any harness refresh"
     command: "grep -Fq 'COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh' images/default/Containerfile && awk '/codex_safe_state_setup/{setup=NR} /ensure_forge_harnesses/{harness=NR} END{exit !(setup && harness && setup < harness)}' images/default/entrypoint-forge-codex.sh && echo 'ok: safe state precedes refresh'"
@@ -32,6 +33,7 @@ critical_path:
     command: "grep -Fq 'TILLANDSIAS_CODEX_SAFE_STATE_READY' images/default/codex-oauth-session.sh && grep -Fq 'TILLANDSIAS_CODEX_SAFE_STATE_ROOT' images/default/codex-oauth-session.sh && scripts/test-codex-oauth-harvest.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex OAuth creation, rotation, and signal-exit harvest"
+    assert_output_contains: "PASS: Codex OAuth creation, rotation, and signal-exit harvest"
 
   - step: "host passes exact raw identity and provider login persists only the Codex tool cache"
     command: "grep -Fq 'TILLANDSIAS_CODEX_STATE_WORKER' crates/tillandsias-headless/src/main.rs && grep -Fq 'tillandsias-codex-login-tool-cache:/home/forge/.cache/tillandsias-project:rw' crates/tillandsias-headless/src/main.rs && echo 'ok: raw identity and Codex-only login cache'"

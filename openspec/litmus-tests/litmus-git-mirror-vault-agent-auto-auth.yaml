@@ -24,6 +24,7 @@ critical_path:
     command: "scripts/test-git-mirror-vault-agent-auto-auth.sh"
     timeout_ms: 15000
     expected_behavior: "PASS: git-mirror Vault Agent auto-auth survives max_ttl fixture (order 424)"
+    assert_output_contains: "PASS: git-mirror Vault Agent auto-auth survives max_ttl fixture (order 424)"
 
   - step: "Agent role crosses max_ttl but crash-orphans are finite; ordinary SecretIDs remain one-use/30s"
     command: "grep -Fq 'create_approle_agent_role' crates/tillandsias-vault-client/src/lib.rs && grep -Fq '\"token_num_uses\": 0' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_num_uses\": 0' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_ttl\": \"48h\"' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_num_uses\": 1' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_ttl\": \"30s\"' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq 'crash_orphan_secret_id_lifetime LE 48h' openspec/specs/tillandsias-vault/spec.md && echo 'ok: bounded split SecretID lifecycle'"

@@ -71,6 +71,7 @@ critical_path:
     command: "grep -qE 'pub const WIRE_VERSION: u(16|32) = 4;' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: WIRE_VERSION still 4 (additive-only since the 890-y72v field addition)'"
     timeout_ms: 10000
     expected_behavior: "ok: WIRE_VERSION still 4 (additive-only since the 890-y72v field addition)"
+    assert_output_contains: "ok: WIRE_VERSION still 4 (additive-only since the 890-y72v field addition)"
 
   - step: "ROUTING: vsock-only request, response-only reply, pinned in both matrices"
     command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::vsock_routing_matrix -- --exact 2>&1 | tail -3"

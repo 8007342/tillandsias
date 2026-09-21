@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T09:09:46Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        THE THREE CFG-GATE ARMS, OWED SINCE land51, NOW WATCHED FAILING. Baseline first,
+        one mutation at a time, tree restored between each, all inside the builder
+        toolbox.
+
+          BASELINE — all three steps green, dev-build 11/11.
+
+          ARM A, un-gated `use std::os::unix::process::CommandExt;` prepended to
+          crates/tillandsias-headless/src/main.rs. STEP 1 red, and the runner printed
+          the mechanism: assert_exit expected 0 got 1, with
+          "FAIL: line 1 has un-gated top-level use std::os::unix". Steps 2 and 3 green.
+
+          ARM B, un-gated `use std::os::unix::fs::PermissionsExt;` prepended to
+          crates/tillandsias-core/src/lib.rs. STEP 3 red, naming
+          crates/tillandsias-core/src/lib.rs:1. Steps 1 and 2 green.
+
+          ARM C, a bare `libc::getuid()` in a function with no cfg(unix) gate within the
+          window the step inspects. STEP 2 red, naming the line. Steps 1 and 3 green.
+
+        WHY THE ONE-STEP-EACH RESULT IS THE POINT. Each mutation reds EXACTLY ONE step,
+        and a DIFFERENT one each time. That is stronger than three reds: it shows the
+        three steps discriminate independently rather than being one coarse check wearing
+        three labels, which is the failure a single mutation reddening all three would
+        have hidden.
+
+        A FINDING FOUND BY TRYING TO RUN THEM, and it is probably why these arms stayed
+        owed. The fixture declares `spec: cross-platform-compilation`, but its binding
+        sits under `spec_id: dev-build`. So
+        `run-litmus-test.sh cross-platform-compilation` answers "no litmus tests matched
+        filter" — the test is invisible under the name it gives itself, and runs credited
+        to a spec it does not name, while cross-platform-compilation reads covered with
+        nothing behind it. That is precisely what check-litmus-bindings.sh's own
+        binding-spec-mismatch text warns about; the guard cannot see this one because it
+        is scoped to NEWLY ADDED bindings, so a pre-existing mismatch is inherited and
+        silent. Same diff-scoping rationale as every other guard in this family, and the
+        same blind spot. A reader has to decide which side is wrong — the file's spec:
+        line or the binding — so this is filed rather than fixed here.

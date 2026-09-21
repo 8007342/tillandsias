@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    packet_kind: improvement
+    order: 1333-jpq5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags:
+      - litmus
+      - corpus
+      - fail-loud
+      - adjudication
+      - floor
+      - no-build
+    estimated_hours: 4
+    owned_files:
+      - scripts/census-litmus-reachability.sh
+    title: |
+      24 bound litmus tests run credited to a spec they do not declare, so asking for them by their own spec answers "no litmus tests matched" and the spec they name reads covered with nothing behind it
+    context: |
+      MEASURED, NOT ESTIMATED. scripts/census-litmus-reachability.sh, this row's
+      instrument, at commit abbb6f76f:
+
+        files                       445
+        retired                      12
+        grandfathered-unbound        10
+        unbound (not grandfathered)   0
+        SPEC/BINDING MISMATCH        24
+
+      A MISMATCH is a test whose file declares `spec: X` while its binding sits
+      under `spec_id: Y`. The consequence is stated by the guard that already
+      refuses NEW ones (check-litmus-bindings.sh, 1304-wbb2), in its own words:
+      "It will RUN and be credited to the wrong spec, while the spec it names
+      reads covered with nothing behind it."
+
+      THAT GUARD IS DIFF-SCOPED AND THAT IS CORRECT. It fires only on newly
+      ADDED bindings, for the same reason every guard in this family does —
+      refusing the standing corpus turns one host's mistake into every host's
+      red. The consequence is that all 24 pre-existing mismatches are inherited
+      and silent, and nothing counts them. This row counts them.
+
+      HOW THE POPULATION WAS FOUND, which is the argument for counting it.
+      Three turned up inside a single slice of 1329-m8dk, by accident, while
+      trying to run steps:
+
+        litmus:control-dispatch-shape  grandfathered unbound. An assert added to
+                                       it is correct and permanently inert.
+        litmus:ca-ephemeral            grandfathered unbound AND phase e2e.
+        litmus:cross-target-cfg-gate-check
+                                       declares cross-platform-compilation,
+                                       bound under dev-build.
+
+      The third is the expensive one. Asking for it by the spec it declares
+      answers "no litmus tests matched filter", and that is the likeliest reason
+      its three mutation arms sat owed across two hosts and two orders before a
+      third host found them by guessing a different spec name. A test invisible
+      under its own name does not merely mis-report coverage; it silently
+      removes itself from the set of things anyone can be asked to run.
+
+      Three found without looking, in one slice, is why this is a population
+      rather than three anecdotes.
+
+      WHAT THIS IS NOT. Not a proposal to re-bind all 24. Which side is wrong —
+      the file's `spec:` line or the binding — is a reader's call per test, and
+      the existing guard already says so. Some are surely deliberate: a test may
+      legitimately exercise a spec other than the one that owns its schedule.
+      The defect is that DELIBERATE and FORGOTTEN are once again the same state,
+      and nothing at any moment tells them apart. That is 1325-ygq5's sentence
+      at the level of the standing corpus rather than the diff.
+    exit_criteria:
+      - 'every one of the 24 ends in one of exactly two states: re-bound (or its spec: line corrected) so that declared and bound agree, OR declared deliberate in a form the instrument reads and excludes, with the reason on this row'
+      - 'the instrument reports spec-binding-mismatch = 0 outside whatever deliberate-declaration bucket this row adopts (the shape 1329-m8dk used for named-reason steps, so a legitimate divergence is neither hidden nor counted as debt)'
+      - 'NEGATIVE CONTROL, already passing on the instrument as filed: introducing one mismatch moves the count 24 -> 25, and a MULTI-SPEC declaration that includes the binding spec does NOT count (the first version of the script counted those and read 31)'
+      - 'the 10 grandfathered-unbound are NOT this row: they are 660-ryhn''s ratchet and stay there. This row may only report them, never bind them blind.'
+      - 'NO TEST IS MADE TO AGREE BY DELETING ITS spec: LINE, and none is re-bound without someone reading what it asserts — a test moved to the spec that already happens to schedule it is the laundering shape this family exists to refuse'
+    unscoreable: ''
+    verifiable_closure: |
+      scripts/census-litmus-reachability.sh reports spec-binding-mismatch = 0
+      outside the deliberate bucket, with files/retired/grandfathered unchanged
+      except as this row deliberately moves them, and the two negative controls
+      above still hold.
+    next_action: >
+      Take the 24 in small batches. For each, READ what the test asserts and
+      decide which side is wrong -- the file's spec: line or the binding -- then
+      fix that side. Do not re-bind to whatever spec currently schedules it just
+      to make the numbers agree; that is laundering and this family refuses it.
+      Expect some to be legitimately divergent, and give those the deliberate
+      declaration rather than a silent pass. Run the instrument before and after
+      each batch; it needs no build and finishes in about a second on the floor
+      tier. Start with litmus-cross-target-cfg-gate-check, which is the specimen
+      whose invisibility is already documented to have cost two hosts their
+      mutation arms.
+    provenance: |
+      Filed by pirria (linux) 2026-09-21 at the coordinator's direction, out of
+      1329-m8dk, where three unrunnable tests surfaced inside one slice without
+      being looked for. The instrument was written for this row and its two
+      negative controls were run before the row was filed, because the same
+      session had already shipped one census whose mutation control could not
+      fail and one bucket whose own control caught it laundering on its first
+      day. A number filed without a control on the instrument that produced it
+      is exactly what this milestone exists to stop.
+    events:
+      - type: filed
+        ts: '2026-09-21T11:20:00Z'
+        agent_id: linux-pirria-claude-20260921t050924z
+        host: pirria
+        summary: |-
+          Filed with the measurement already taken and the instrument already
+          controlled. The first version of that instrument read 31 because it
+          string-compared a multi-spec declaration against a single binding
+          spec; the corrected reading is 24, and the control that a multi-spec
+          declaration must NOT count is now one of the row's exit criteria so
+          the next reader cannot repeat it.

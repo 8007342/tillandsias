@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    field: next_action
+    value: |-
+      AS-WIRED VERIFICATION OUTSTANDING, one half only. The gate half has fired as
+      wired: step 419 ran inside the full gate on pirria and printed
+      ok:added-test-guard-proven:10, and litmus:added-test-is-referenced-shape is
+      bound and ran in the ci-release suite (46/46, 100%). The PUSH-TIME half has
+      NOT been observed firing: the packet's first two exit criteria say "is NAMED at
+      push time", and that is the pre-push hook, which running the script directly
+      does not demonstrate (the 396 lesson). Promote this row to verified once a push
+      carrying an unreferenced added test is observed producing the hook's warning
+      line, or a push with none is observed producing the ok: line.
+
+      SECOND, FOR WHOEVER FLIPS THE SWITCH: the guard WARNS today. The migration
+      phase ends by a decision against a number, not a date — standing was 40
+      unreferenced shell tests on trunk when this landed, and the verdict line
+      carries it on every run. Set TILLANDSIAS_ADDED_TEST_REFERENCE_ENFORCE=1 in
+      the hook and the step together when that number is small enough to be worth
+      refusing on; both already honour it.
+    ts: "2026-09-21T08:03:51Z"
+    host: pirria

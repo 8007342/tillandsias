@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    field: verifiable_closure
+    value: "scripts/test-macos-vz-orphan-diagnosis.sh prints ok:macos-vz-orphan-diagnosis:4\non a macOS host with the app bundle and a provisioned, unheld image; bound as\nlitmus:macos-vz-orphan-diagnosis under vm-provisioning-lifecycle, post-build.\n\nTHE ARM THAT MAKES IT EVIDENCE IS ARM 2, NOT ARM 1. \"SIGKILL the tray, then a\nsecond start works\" is green on any quiet host that never orphaned anything —\nit shows a VM starting twice, which is not the claim. Arm 2 leaves a live VM\nholding nvram.bin and requires the SAME second-start assertion to RED, and\nrequires that failure text to name the holding pid and to contain\n\"DO NOT --reset-guest\". Weaken arm 2 and this fixture measures nothing.\n\nArm 0 is a source guard that runs on every host, macOS or not: the explainer\nexists, still steers away from --reset-guest, and the start-failure site is\nstill wired to it. A helper nothing calls is not a diagnosis.\n\nThe fixture refuses rather than guesses — off-platform, without the bundle,\nwithout a provisioned image, or with the image ALREADY held, it prints\nunsupported:* and exits 0, naming what was not tested. It kills the guest it\nstarted and any holder it finds on every exit path.\n\n[2026-09-21T06:42:50Z macos] \nLANDED ON origin/linux-next AT 576b17c95 (land50), verified at that tree rather\nthan taken on report: explain_start_failure present in\ncrates/tillandsias-vm-layer/src/vz.rs, scripts/test-macos-vz-orphan-diagnosis.sh\npresent, litmus:macos-vz-orphan-diagnosis bound in openspec/litmus-bindings.yaml,\nand the pushed osx-next head e57d7f7a1 is an ancestor of it.\n\nThe row's earlier evidence said \"see the relay of osx-next carrying this\ncommit\"; this is that SHA."
+    ts: "2026-09-21T06:42:50Z"
+    host: macos

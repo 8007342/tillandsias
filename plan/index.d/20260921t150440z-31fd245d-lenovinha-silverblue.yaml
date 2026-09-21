@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T15:04:40Z"
+      agent_id: linux-lenovinha-opus5-20260921t150440z
+      host: lenovinha-silverblue
+      summary: |-
+        ACCEPTANCE — TWO OF THREE LEGS PASSED, CREDENTIAL-FREE THROUGH THE MIRROR. The operator's bar is three pushes from this host with no credential on the host side of the hop, each verified by ls-remote with the keyring named by component and no helper in the push. LEG (b), a work ref — 80a4face3..88b0679d9 HEAD -> work/1313-prin; the mirror answered '[relay] Atomic push to https://github.com/8007342/tillandsias.git succeeded' and '[pre-receive] Relay verified: upstream durably accepted the ref transaction'; git ls-remote origin refs/heads/work/1313-prin returns 88b0679d9b85e1940ce4a0ffcb6f8af97b728356, equal to local HEAD; credential-helper invocations in the push output — zero; gnome-keyring-daemon --components=secrets PID 5533 before and after. LEG (c), a side branch — a new ref salvage/lenovinha-silverblue/20260921-1313-prin-acceptance, same two relay lines, ls-remote returns the same SHA, zero helper invocations, same keyring PID. LEG (a), linux-next, is this fragment's own push. THE SIXTH DEFECT, fixed to get here, is the reason the lane had never relayed anything. sshd hands a forced command ONLY what SetEnv passes; the container's environment is not inherited. The rendered config passed three variables, so under ssh the relay had neither the Vault token file nor the egress proxy variables. Over the anonymous git:// daemon the relay inherits the entrypoint's environment, which is why THAT path always worked and this one never had. Measured in two steps: with the token wired the push got past the credential and died on 'Could not resolve host: github.com' — the mirror is enclave-only with no egress leg and reaches GitHub through the proxy. MY REASONING WAS THE SECOND BUG. I fixed the token alone and argued 'one variable, not four' as restraint; it was an unenumerated guess. I checked which Vault variables had correct defaults and never asked what else the relay reads. The container's environment was one command away.

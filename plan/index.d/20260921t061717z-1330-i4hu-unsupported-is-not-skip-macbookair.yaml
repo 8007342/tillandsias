@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-macos-fixtures-spell-their-could-not-run-unsupported-which-the-litmus-runner-scores-as-a-failure-rather-than-a-skip
+    order: 1330-i4hu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, tests, litmus, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-macos-vz-orphan-diagnosis.sh
+      - scripts/test-macos-model-share-writable.sh
+      - scripts/test-macos-vsock-inference-closure.sh
+    unscoreable: ""
+    verifiable_closure: |
+      Each of the three fixtures, driven into a could-not-run state, is scored
+      SKIPPED by scripts/run-litmus-test.sh and lands OUTSIDE the pass rate;
+      each in its healthy state still scores PASS. Both halves are required —
+      a fixture that scores SKIPPED in every state has been disarmed, not fixed.
+
+      THE PRE-FIX RESULT IS PART OF THE CLOSURE. Show the same command scoring
+      FAIL before the change, so the row rests on a difference rather than on a
+      green.
+    title: |
+      test-macos-vz-orphan-diagnosis, -model-share-writable and -vsock-inference-closure print `unsupported:…` and exit 0 when they cannot run, and the litmus runner scores that a FAILURE — so a host that merely lacks the app bundle reds the suite
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-21, driving the fixture into a
+      could-not-run state with TILLANDSIAS_TRAY_BIN pointed at a path that does
+      not exist:
+
+        $ bash scripts/test-macos-vz-orphan-diagnosis.sh
+        unsupported:macos-vz-orphan-diagnosis:no-app-bundle-run-scripts/build-macos-tray.sh
+        exit=0
+
+        $ scripts/run-litmus-test.sh vm-provisioning-lifecycle --phase post-build
+          [FAIL] spec=vm-provisioning-lifecycle test=litmus:macos-vz-orphan-diagnosis
+                 Check implementation
+          PASS: 0   FAIL: 1
+          Pass Rate: 0% (0/1 executed)
+          Test Verdicts: passed=0 advisory=0 skipped=0 not-run=1 failed=1
+
+      So the cost is not that a skip is read as green — it is a HARD RED, with
+      "Check implementation" pointing the reader at a fixture that is working
+      exactly as designed, on a host whose only sin is having no app bundle.
+
+      WHY THE SPELLING DECIDES IT. run-litmus-test.sh:960 step_terminal_verdict
+      recognises `skip:[a-z0-9]*` and `advisory:[a-z0-9]*`, and ONLY on the last
+      non-empty line. `unsupported:` is in neither arm, so the step falls
+      through to check_signal, where the success pattern
+      (ok:macos-vz-orphan-diagnosis:4) does not match and :992 returns failure.
+
+      THIS IS THE DEFECT ORDER 1309 ALREADY NAMED, REACHED BY A DIFFERENT WORD.
+      run-litmus-test.sh:937 records it verbatim: a step that emitted
+      `skip:no-cargo` on a host without cargo was scored FAIL, and the exposure
+      "concentrates on floor and platform-minority hosts, because the absent
+      precondition is usually the HOST — which makes it worst exactly where a
+      red is least likely to be believed." These three fixtures are macOS-only
+      and their precondition IS the host. The grammar was widened; these three
+      were written with the older spelling and never moved onto it.
+    deliverable: |
+      Make the LAST non-empty line of every could-not-run path start with
+      `skip:<reason>`. Only the last line is consulted, so the informative
+      `unsupported:<fixture>:<reason>` line can stay exactly where it is and a
+      terminal `skip:` line follows it — the reader keeps the detail and the
+      runner gets the verdict. Update each fixture's declared GRAMMAR comment in
+      the same edit, or the file will state an alphabet it no longer emits.
+
+      COVER ALL THREE could-not-run families, not just the one measured:
+      off-platform, no app bundle, no provisioned image, precondition unmet
+      (an image already held; a model cache that is not empty).
+
+      DO NOT widen this into the failure paths. `violation:` must stay a
+      violation, and a fixture that returns `skip:` for a red would be the
+      "six characters that make a red disappear" the runner's own comment warns
+      about. The closure requires the healthy state to still score PASS for
+      exactly that reason.
+    next_action: >
+      Read scripts/run-litmus-test.sh:935-978 first — step_terminal_verdict and
+      the comment above it explain both the rule and why it is shaped this way.
+      Then run one fixture in a could-not-run state through
+      scripts/run-litmus-test.sh to see the FAIL for yourself before changing
+      anything; the pre-fix verdict is part of the closure.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-21. The FAIL verdict, the exit
+      code and the fixture output above were produced on this host; the grammar
+      claim is a source read of run-litmus-test.sh:960 and :992, cited by line.
+      Raised by macuahuitl-fedora after 1253-gina landed, on seeing that
+      litmus:macos-vz-orphan-diagnosis prints `unsupported:` when a tray holds
+      the image.

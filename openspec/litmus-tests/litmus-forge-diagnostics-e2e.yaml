@@ -69,6 +69,7 @@ critical_path:
     command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && [ -s \"$STDERR\" ] && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' \"$STDERR\" && echo \"ok: idiomatic layer reported >=1 container running via diagnostics annex\""
     timeout_ms: 10000
     expected_behavior: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
+    assert_output_contains: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
 
   - step: "container-start health: NO INFRA container failed during the annex capture (agent-process exits excluded)"
     # A failed INFRA launch surfaces the failing stage + container straight

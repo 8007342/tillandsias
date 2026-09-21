@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-macos-fixtures-spell-their-could-not-run-unsupported-which-the-litmus-runner-scores-as-a-failure-rather-than-a-skip
+    field: status
+    value: in_progress
+    ts: "2026-09-21T06:17:20Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: three-macos-fixtures-spell-their-could-not-run-unsupported-which-the-litmus-runner-scores-as-a-failure-rather-than-a-skip
+    event:
+      type: note
+      ts: "2026-09-21T06:17:20Z"
+      host: macbookair-macos
+      summary: |-
+        claimed on macbookair; the three fixtures are macOS-only and this host can run all three states

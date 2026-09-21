@@ -27,6 +27,11 @@ critical_path:
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example start-vm-headless 2>&1 | tee /tmp/litmus-vault-boot.log &'"
     timeout_ms: 5000
     run_in_background: true
+    # unenforced: the prose describes a side effect of a BACKGROUNDED pipeline
+    # and is not adjudicable from the result of this step. The comment below is
+    # the original author recording that they added assert_exit here under
+    # 1252-znbn, found it vacuous, and removed it. Declared under 1329-m8dk so
+    # the census counts it as adjudicated-unadjudicable rather than as debt.
     expected_behavior: "launches the VM detached, teeing boot output to /tmp/litmus-vault-boot.log"
     # ORDER 1282-rkkm / 1293-wka4. THE assert_exit HERE WAS MINE AND IT WAS
     # VACUOUS, so it is removed rather than left looking like a check. I added it

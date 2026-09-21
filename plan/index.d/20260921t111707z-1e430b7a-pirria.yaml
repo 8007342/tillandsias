@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    field: next_action
+    value: |-
+      CLOSURE MET on the amended reading: census reports ENFORCED 244, succeed 0,
+      long 0 outside the named-reason bucket, named reason 2, anything else 2167
+      (unmoved across every slice). 34 of 39 asserts demonstrated red on mutation; the
+      rest carry named reasons on this row.
+
+      WHAT IS LEFT FOR THE PARENT, not for this row: yoga inherits the named-reason
+      bucket on 1252-znbn, and the 2,167 prose-only steps remain that row open design
+      question — whether a prose expected_behavior is meant to adjudicate at all.
+      Moving them here would answer a design question by attrition.
+
+      ALSO OPEN, filed separately: three tests met on this row cannot be run at all
+      (grandfathered-unbound, e2e-unbound, and a spec/binding mismatch that makes a
+      test invisible under the name it declares). Three in one slice is a population,
+      not a coincidence; the census is the instrument to count it fleet-wide.
+    ts: "2026-09-21T11:17:07Z"
+    host: pirria
