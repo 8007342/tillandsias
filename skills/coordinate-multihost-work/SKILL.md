@@ -398,6 +398,30 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
 
 ---
 
+## Landing Queue (order 1316-bnzt) — one serialized landing per pass
+
+The work-ref flow (`work_ref_lane`, 1315-4a7j; join-the-fleet §3) moves the
+trunk race from every push to one landing. The coordinator is the queue's
+runner. Once per pass, from a CLEAN tree and never while a gate is running
+(the dry run merges on a detached HEAD and restores through a trap):
+
+```bash
+scripts/land-queue.sh --dry-run          # the candidates, in PR-number order, and the tier each would pay
+scripts/land-queue.sh --limit 1          # land ONE; the next pass lands the next
+```
+
+Every candidate pays the FULL tier until 765-xpct's selector activates (the
+operator approved the light and scoped tiers on 2026-09-20; the selector is
+that row's work, not this script's). An empty queue is honest while the
+fleet's token cannot open pull requests ("Pull requests: write" is missing
+from the fine-grained token as of 2026-09-20 — an operator ask, never routed
+through a peer's working token): until then hosts push `work/<order>` and
+send the SHA, and the relay lane (`relay-one` / `relay-many`, bundled, one gate
+per pass) lands it exactly as the queue would. A fixture arriving through a
+Windows salvage snapshot has no exec bit (1321-2ixp); the relay lane fixes the
+mode in a fixup commit before the gate, so a `test -x` red never reaches the
+release tier from that path again.
+
 ## Integration And Runtime Executor
 
 Run this before ending the loop whenever `origin/windows-next` or `origin/osx-next` is not an ancestor of `origin/linux-next`, or whenever the latest integrated code has not yet been exercised by the full runtime litmus.
