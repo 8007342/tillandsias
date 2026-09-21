@@ -241,6 +241,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## tooling
 
+- a-test-is-not-done-until-it-can-fail.md — **Writing the assertion is the easy half.** The hard half is that something [bundled, partial-verify]
 - awk-word-boundary.md                 — an `awk` search came back empty and you are about to report the [bundled, partial-verify]
 - a-write-cannot-ask-a-question.md     — **A tool that writes by default cannot be used to ask whether a flag exists.** [bundled, partial-verify]
 - exit-status-is-not-an-answer.md      — **Check what it produced.** `cmd || fallback`, `if cmd; then`, and [bundled, partial-verify]
