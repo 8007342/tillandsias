@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: push-plan-fragments-to-trunk-re-selects-the-fragment-set-on-every-retry-round-so-an-in-flight-push-carries-fragments-written-after-it-was-launched-and-lands-them-under-the-earlier-pushs-name
+    packet_kind: defect
+    order: 1327-r4bx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-lane, scripts, fail-loud, agent-safety, floor]
+    estimated_hours: 2
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    unscoreable: ""
+    verifiable_closure: |
+      The AUTHOR CAN TELL WHAT WAS PUSHED FROM THE OUTPUT ALONE. Either the
+      script snapshots the fragment set at launch and says so, or it re-reads
+      and SAYS IT RE-READ — whichever the script's owner prefers; this closure
+      specifies the OUTPUT, not the mechanism.
+
+        on launch, one line naming the set it will carry:
+          plan-lane: selected <n> fragment(s) at launch: <name>[, <name>...]
+        and, IF the set differs on a later round, one line before the push:
+          plan-lane: fragment set RE-READ on round <r>: +<n> added, -<n> gone
+          (added: <name>...)
+
+      The `ok:fragments-on-trunk:<sha>:<n>` line must be reconcilable with
+      those: a reader who saw only the launch line and the final line can say
+      which files landed WITHOUT running ls-remote.
+
+      TWO ARMS plus a mutation:
+        1. a fragment created AFTER launch and before a later round either
+           does not land, or lands with the RE-READ line naming it;
+        2. a run whose set does not change prints no RE-READ line — the
+           negative control, so the line means something when it appears;
+        3. MUTATION: with the reporting removed, arm 1 fails.
+
+      PRE-FIX RESULT: FAILS — measured on esmeraldinha 2026-09-21; the run
+      landed three fragments with no line distinguishing the two written
+      mid-flight from the one selected at launch.
+    title: |
+      push-plan-fragments-to-trunk.sh re-selects the fragment set on every retry round, so an in-flight push carries fragments written after it was launched, lands them under the earlier push's name, and its earlier rounds read as failures to the author
+    context: |
+      MEASURED on esmeraldinha 2026-09-21, by accident, while pushing a single
+      ledger event.
+
+      WHAT HAPPENED. A push was launched carrying ONE fragment (a note event on
+      1287-h6qn). Its first round refused; on a floor-tier host a round costs
+      200-2600s, so the script was still retrying while I continued working.
+      During that window I wrote TWO MORE fragments — the closing event and the
+      status flip for 1304-wbb2. Round 2 then landed THREE:
+
+        ok:fragments-on-trunk:d4f25593d9ba68aea2fc6c6e41b68c3566449e02:3
+
+      The two mid-flight fragments were correct and ready, so nothing was
+      damaged. THAT IS LUCK, NOT DESIGN.
+
+      WHY IT IS A DEFECT AND NOT A FEATURE. The author's mental model is that a
+      push carries what existed when it was launched. On this host that window
+      is minutes to tens of minutes wide, and anything written into
+      plan/index.d/ during it is silently adopted — INCLUDING A FRAGMENT THE
+      AUTHOR HAS NOT FINISHED CHECKING. A status flip written for review, or an
+      event whose evidence is still being gathered, lands under an earlier
+      push's name with no line anywhere saying it was picked up. The ledger is
+      append-only and immutable once landed, so there is no cheap undo.
+
+      THE SECOND HALF, WHICH IS WHAT ACTUALLY COST TIME. The earlier rounds
+      read as failures. I saw `refused:` on the rounds I inspected, concluded
+      the push had failed, and was about to re-push the same fragments — which
+      would have been a no-op at best and a duplicate at worst. What caught it
+      was checking the REF before re-pushing (`git ls-remote` / `git ls-tree`
+      against origin), not anything the script said. A tool whose earlier
+      output contradicts its eventual effect makes the author's next action
+      wrong by default.
+
+      SAME FAMILY AS THE ROWS AROUND IT: the verdict a reader acts on did not
+      describe what happened. Here the mismatch is in TIME rather than in
+      wording — the output was true when printed and false by the end.
+    next_action: >
+      Decide the mechanism first, because the two options have different costs
+      and only the script's owner should pick: SNAPSHOT the fragment set at
+      launch (simplest, and matches the author's model, but a fragment written
+      during a 40-minute retry loop then waits for the next invocation), or
+      RE-READ and REPORT (keeps today's throughput, costs one line per round
+      where the set changed). Then write the output in the closure, and the
+      three-arm fixture with its mutation. DO NOT close this by documenting
+      the behaviour in the script's header alone: the defect is that the
+      RUNNING OUTPUT misleads, and a comment in a file the author is not
+      reading at 03:00 does not reach them.
+    provenance: |
+      Found by esmeraldinha (windows) 2026-09-21 while pushing a 1287-h6qn
+      event during the v56.9.21.1 freeze; filed at the coordinator's request,
+      who framed the closure as "write the OUTPUT the closure needs, not the
+      mechanism". The exhibit is this host's own run: round 2 landing three
+      fragments, two of them created after launch, at
+      d4f25593d9ba68aea2fc6c6e41b68c3566449e02. No fixture has been written
+      and the mechanism is undecided; nothing here proposes which option to
+      take.
