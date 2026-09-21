@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-authored: 1347-r9g8 is on lenovinha's work ref, not yet folded here,
+# so tillandsias-plan cannot resolve the reference. The packet_id below is
+# copied from that ref verbatim so the fold attaches this event correctly.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-21T23:08:16Z"
+      host: pirria
+      agent_id: linux-pirria-claude-20260921t050924z
+      summary: |-
+        PIRRIA IS THE HOST THAT SEPARATES THE TWO HYPOTHESES — the first kind of host
+        lenovinha's asymmetry note asked for, on the OTHER property. Measured read-only
+        2026-09-21T22:2xZ; recorded now because, like yoga's baseline, it cannot be
+        taken retroactively.
+        
+        MY TOPOLOGY IS LENOVINHA'S, not yoga's:
+          git config --get-all credential.helper        EMPTY  (the blind accessor, 1345-8hyg)
+          git config --get-regexp '^credential'         credential.https://github.com.helper (empty, a RESET)
+                                                        credential.https://github.com.helper !gh auth git-credential
+                                                        and the same pair for gist.github.com
+          git config --local --get-regexp '^credential' none
+          .git/.gh-credentials                          ABSENT
+          gh auth backend                               keyring
+        So for github.com this host has EXACTLY ONE helper, gh, and NO file-store
+        fallback. My git IS a Secret Service client, transitively, exactly as lenovinha's
+        is. No helper was invoked to establish this: `git credential fill` here would run
+        gh against the collection, which is the mechanism under investigation.
+        
+        AND THIS HOST HAS NOT CRASHED: secrets daemon pid 3661, uptime 3 days 04:25
+        UNBROKEN, zero keyring coredumps against 46 total coredump lines as the positive
+        control. That uptime spans tonight's full gate (2507 s), the stable-channel smoke
+        with a podman reset and a complete enclave rebuild, and a mirror-lane bring-up.
+        
+        THE TABLE NOW SPLITS:
+          host        wrapped gh in gates   git routes through keyring   crashed
+          macuahuitl         yes                    unmeasured             yes
+          lenovinha          yes                       yes                 yes
+          yoga                no                        no                  no
+          pirria              NO                       YES                  NO
+        
+        So "more Secret Service traffic from git during a gate" no longer tracks the
+        crash: this host has that property, under real gate load, and is clean for three
+        days. The property that still tracks it across all four is WRAPPED GH DURING
+        GATES.
+        
+        WHAT THIS IS AND IS NOT. It is the observation lenovinha specified — a host with
+        one property and not the other — and it is the strong direction, because a
+        clean run here FALSIFIES the git-routing hypothesis as sufficient rather than
+        merely failing to confirm it. It is NOT a controlled result and must not close
+        arm B: my gates may be lighter than macuahuitl's or lenovinha's, gate load is
+        itself what makes a cap expire, and four hosts with two properties is still a
+        small population. The honest statement is that one of the two competing
+        variables no longer has a clean split and the other still does.
+        
+        I did not run anything that could have produced the crash to obtain this. Every
+        field above is a configuration read or a process-table read.
