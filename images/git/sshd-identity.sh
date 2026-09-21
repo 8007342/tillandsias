@@ -90,6 +90,29 @@ TOKEN_FILE="${TILLANDSIAS_VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-token}"
 # to the relay would swap a working credential for one that is guaranteed to
 # fail, and the failure would look exactly like this defect.
 RELAY_TOKEN_FILE="${TILLANDSIAS_RELAY_VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-token}"
+
+# ORDER 1313-prin, SECOND PASS. The relay also needs the EGRESS environment.
+#
+# I fixed the Vault token alone first, arguing "one variable, not four" because
+# VAULT_ADDR and VAULT_CACERT default correctly. That reasoning was right about
+# those two and WRONG as a method: I minimised without enumerating what the
+# consumer needs. The next push got past the token and failed with
+# "Could not resolve host: github.com" — the mirror is on the ENCLAVE-ONLY
+# network (606-9wqd, no egress leg) and reaches GitHub through the proxy, whose
+# variables sshd also does not pass.
+#
+# Read from the container rather than assumed: HTTP_PROXY, HTTPS_PROXY and
+# NO_PROXY (plus their lowercase twins, because curl reads the lowercase and
+# some gits read the uppercase) are set on the mirror and absent under ssh.
+# NO_PROXY matters as much as the proxies: without it the relay would send
+# vault, proxy and the enclave subnet THROUGH the proxy.
+#
+# These are read from the ambient environment at render time, so the enclave's
+# own configuration remains the single source and this file never hardcodes an
+# address.
+RELAY_HTTP_PROXY="${HTTP_PROXY:-${http_proxy:-}}"
+RELAY_HTTPS_PROXY="${HTTPS_PROXY:-${https_proxy:-}}"
+RELAY_NO_PROXY="${NO_PROXY:-${no_proxy:-}}"
 VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_CACERT="${VAULT_CACERT:-/etc/tillandsias/ca.crt}"
 RECEIVE_PATH="${TILLANDSIAS_RECEIVE_PATH:-/usr/local/bin/tillandsias-receive}"
@@ -253,7 +276,7 @@ ForceCommand $RECEIVE_PATH
 # T6 (749-2fqj): the wrapper's fixed-path inputs. Sessions inherit no container
 # env; these are the ONLY channel, and the wrapper fails loud when they are
 # empty rather than guessing a repository.
-SetEnv TILLANDSIAS_RECEIVE_ROOT=$RECEIVE_ROOT TILLANDSIAS_RECEIVE_PROJECT=$RECEIVE_PROJECT TILLANDSIAS_MIRROR_ID=$MID VAULT_TOKEN_FILE=$RELAY_TOKEN_FILE
+SetEnv TILLANDSIAS_RECEIVE_ROOT=$RECEIVE_ROOT TILLANDSIAS_RECEIVE_PROJECT=$RECEIVE_PROJECT TILLANDSIAS_MIRROR_ID=$MID VAULT_TOKEN_FILE=$RELAY_TOKEN_FILE HTTP_PROXY=$RELAY_HTTP_PROXY HTTPS_PROXY=$RELAY_HTTPS_PROXY NO_PROXY=$RELAY_NO_PROXY http_proxy=$RELAY_HTTP_PROXY https_proxy=$RELAY_HTTPS_PROXY no_proxy=$RELAY_NO_PROXY
 ExposeAuthInfo yes
 AllowTcpForwarding no
 AllowAgentForwarding no
