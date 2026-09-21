@@ -368,6 +368,7 @@ _preflight_preconditions() {
 check-no-python-scripts.sh|policy-binary|compiles before it resolves (its line 7 is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
 check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
+test-pending-capability-row-does-not-wedge.sh|live-ledger|plants probe fragments in the checkout's OWN plan/index.d and relies on its exit trap to remove them; the door's deadline kill (SIGKILL of the group) mid-arm leaves them behind and the release preflight then refuses the whole ledger as incomplete (v56.9.20.1 release gate, 2026-09-20, twice); the gate step 275 runs it in full — the door does not, until the fixture is hermetic
 PRECONDS
 }
 

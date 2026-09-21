@@ -986,7 +986,16 @@ accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harnes
 # --no-experts: keep the DEFERRED line above rather than grading. The line is
 # still emitted and still says `deferred`, so a reader can tell "not graded this
 # run" from "graded and green" -- the distinction a silent omission would erase.
-if [ "$NO_EXPERTS" = true ]; then
+if [ "${TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE:-0}" = 1 ]; then
+    # A FIXTURE that asks only about the mcp: line (health, surface, stale attestations)
+    # opts out of the groundtruth grade: ~18 s of expert queries on this host (rung-1,
+    # ~763 ms a case) that would otherwise sit inside a 20 s step budget and turn a
+    # passing property into a load-dependent TIMEOUT (v56.9.20.1 release gate,
+    # litmus:mcp-expert-health-probe-shape step 19). Never set by a cycle; the default
+    # grades as before.
+    accuracy_line='expert_accuracy: skipped source=TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE (fixture asked for the mcp line only)'
+    GRADE_BIN=""
+elif [ "$NO_EXPERTS" = true ]; then
     accuracy_line='expert_accuracy: skipped source=--no-experts (caller asked for telemetry only)'
     GRADE_BIN=""
 fi
