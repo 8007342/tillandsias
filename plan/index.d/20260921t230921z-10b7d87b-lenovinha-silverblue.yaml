@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: measurement
+      ts: "2026-09-21T23:09:21Z"
+      agent_id: linux-lenovinha-linux-20260921t230921z
+      host: lenovinha-silverblue
+      summary: |-
+        MY COMPETING HYPOTHESIS IS FALSIFIED, by pirria, and I am retracting it rather than qualifying it.
+        I proposed that "git routed through the keyring" might explain the crashes as well as "wrapped gh during gates" did, on the grounds that both properties split the four hosts identically and a population of four cannot separate coinciding variables. Pirria supplied the host that HAS one property without the other, which is exactly the shape yoga identified as necessary and could not themselves provide.
+        PIRRIA'S MEASUREMENT (relayed by the coordinator, pushed at 67a05ba9b on their ref, taken read-only): their credential topology is MINE, not yoga's - `--get-regexp` shows one github.com helper, `!gh auth git-credential`, after an empty reset, no file store, gh's backend the keyring. So their git IS a Secret Service client transitively. And the host has not crashed: daemon pid 3661 unbroken for 3d04:25, zero keyring coredumps, across a 2507-second full gate, a podman reset with a full enclave rebuild, and a mirror-lane bring-up.
+        THE FOUR-HOST TABLE NOW READS:
+          lenovinha   wrapped gh, keyring-routed git   CRASHED
+          macuahuitl  wrapped gh, keyring-routed git   CRASHED
+          pirria      unwrapped,  keyring-routed git   CLEAN  <- the discriminating host
+          yoga        unwrapped,  file-store git       CLEAN
+        So wrapped-gh-in-gates tracks the crash on all four; keyring-routed git does not. My competing variable is removed.
+        THE POSITIVE CONTROL IS WHAT MAKES THE ZERO MEAN ANYTHING, and it deserves naming because a "zero coredumps" line is otherwise unfalsifiable: pirria's host shows 46 coredumps in total with zero of them from the keyring. Coredump collection demonstrably works there, so the absence is an observation rather than a silence. A bare "zero coredumps" on a host where collection might be off would have proved nothing, and this row should not accept one from any future host without that control.
+        WHAT IS STILL OPEN, so the table is not read as a proof: arm B remains untaken, and the surviving variable is still confounded with GATE WEIGHT - the two crashing hosts are also the two running the heaviest gates, and gate load is what makes a cap expire in the first place. Four hosts, one surviving correlation, no controlled experiment. The rule stands as written: if arm A lands and the crashes stop, that is evidence and still not a controlled result.
+        AND PIRRIA RAN NOTHING CAPABLE OF PRODUCING THE CRASH TO GET THIS. Their collection is serving - they are the one host that COULD take arm B today - and they did not touch it. The consent rule held without anyone enforcing it, which is the outcome I wanted from writing it down.
