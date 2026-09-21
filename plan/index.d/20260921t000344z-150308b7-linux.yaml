@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: decision
+      ts: "2026-09-21T00:03:44Z"
+      agent_id: linux-macuahuitl-claude-20260921t000344z
+      host: linux
+      summary: |
+        OPERATOR APPROVAL RECORDED (2026-09-20, ~23:10Z, on the coordinator's channel), verbatim: "Looks like Yoga is precisely fighting integration branch because of concurrency, sounds like it's time to implement our scoped integration tests. I approve them." This is the fifth criterion's recorded approval before activation — the symmetric twin of bar_raise_governance: scope reduction is a bar decision the loop must not self-enact, and this row's LIGHT and SCOPED tiers are that reduction. Context the operator approved against: yoga's measured day (ten gate cycles on two slices, five lost purely to re-gating an unchanged tree after the remote moved; 13 of ~46 lands retried), the v56.9.20.1 release gate refusing three times on pre-build litmus reds that no --check land could see (the release tier is the only tier that runs that phase), and the operator's own direction earlier tonight: "Plan is cheap because it doesn't run full heavy gates ... integration cost proportional to the blast radius of the changes being integrated ... All pull requests to main do full integration, but our integration branches might have lower levels of integration checks." SCOPE OF THE APPROVAL: the selector as this row specifies it — tiers expressed in gate_stamp_classify_path's classes (LIGHT ⊆ {plan-ledger, docs}; SCOPED ⊆ {plan-ledger, docs, specs, methodology, build-scripts}; FULL otherwise, `other` and any unknown path included by construction), every skip printing one line naming the gate, the intersecting-class evidence, the diff base SHA and the last FULL run timestamp, scoped stamps only (a scoped run never writes scope=full), the 24-hour last-full-run bound below which the selector refuses to skip, and main taking FULL always. The tier a landing ran is printed on its landing line so the tier that ships is the tier that gated. Consumer: the landing queue 1316-bnzt reads the selector; it lands FULL until this row activates. Measured saving to report back to the operator after activation: landings per day, gate minutes per landing before/after, the share that qualified LIGHT and SCOPED.
+
+        DISAMBIGUATION, from yoga's channel where the operator said the same words directly and answered a follow-up (yoga's own event on this row carries the question and the answer verbatim): asked whether the approval covers (1) both LIGHT and SCOPED as the row defines them, (2) SCOPED only for now, or (3) all tiers plus a LIGHT landing adopting a gate stamp, the operator chose (1): BOTH LIGHT AND SCOPED. OPEN QUESTION, recorded as open and not as settled by that answer: whether a LIGHT landing adopts an existing stamp the way push-plan-fragments-to-trunk.sh does — option 3 was the only one naming adoption and was not chosen, but option 1 was labelled "the row as written" and the row's tier table itself says LIGHT adopts, so the axis was not clean. Conservative reading in force until the operator says otherwise (reversible either way in one sentence): a LIGHT landing writes a SCOPED stamp naming exactly the classes it gated, never `full`, and adopts nothing. Two independent records of one bar decision — this one from the coordinator's channel, yoga's with the disambiguation — are the intended shape.
+
+        LATER THE SAME HOUR (reported by yoga from their channel, to be recorded there in the operator's words; this record notes it as reported, not as its own measurement): the operator settled the stamp question in the direction both records were already holding — a LIGHT landing may merge without the full gate and leaves a stamp naming the classes it gated rather than claiming full. Until yoga's event with the words is on trunk, the conservative reading above stands unchanged; the two agree.

@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    event:
+      type: investigated
+      ts: "2026-09-21T00:44:36Z"
+      agent_id: linux-yoga-opus5-20260921t004436z
+      host: yoga
+      summary: |
+        THE ROW'S next_action WOULD BUILD A GATE THIS FLEET ALREADY MEASURED AND
+        REJECTED. Reporting before implementing, because the row asks for the sweep
+        first and the sweep is the answer.
+
+        WHAT THE ROW ASKS: extend scripts/check-no-spawn-in-if-not.sh — a WHOLE-REPO
+        checker — to the `producer | grep -q pat && ok || bad` spelling.
+
+        WHAT THAT PRODUCES, measured on this tree 2026-09-20 with the matcher built and
+        run once: 269 VIOLATIONS ACROSS ~100 FILES. Top of the distribution:
+        check-dead-env-branches.sh 16, test-stale-ready-rows.sh 10,
+        test-portability-idioms.sh 10, test-reclaim-stranded-claims.sh 9,
+        test-mirror-host-cert-and-sshd.sh 9, test-capability-routing.sh 9, and a long
+        tail. build.sh itself has one. Wiring that to the gate would red every host in
+        the fleet on the next push, which is 1302-7j8p at fleet scale.
+
+        AND ORDER 792-ksr8 ALREADY RAN THIS SWEEP AND WROTE DOWN WHY NOT. From
+        scripts/check-sigpipe-verdict-pipelines-added.sh's own header: "355 pipelines in
+        this tree feed an early-exiting consumer; ~50 sit in a verdict context. Nearly
+        all are BENIGN, because the race needs the producer to still be writing when the
+        consumer exits ... A whole-repo GATE would therefore cry wolf on safe code while
+        missing the real cases, which is precisely the false-signal failure 741-2izr
+        says is as damaging as no signal at all." My 269 is that finding reproduced from
+        a different direction. The existing guard is DIFF-SCOPED for this reason and
+        that decision should stand.
+
+        SO WHY DID THE DIFF-SCOPED GUARD MISS test-salvage-audit.sh? That is the real
+        question of this row, and the answer is TWO INDEPENDENT MISSES, both measured by
+        running the guard's own regexes against the exact flaking line:
+
+          producer:        NO MATCH — UNBOUNDED_PRODUCER_RE lists cat, find, journalctl,
+                           recursive grep, git log/diff/show/ls-files/ls-tree/grep,
+                           cargo, podman, docker. The flaking producer was
+                           `printf '%s' "$out"`, which is in none of them.
+          verdict context: NO MATCH — VERDICT_CONTEXT_RE is
+                           `^[[:space:]]*(if|while|until|elif)[[:space:]]`. The and-or
+                           spelling is not a verdict context by that rule at all.
+
+        EITHER MISS ALONE WOULD HAVE HIDDEN IT. Fixing only the spelling, which is what
+        this row's title asks for, would NOT have caught 1306-ifhv: the producer half
+        still misses. That is worth stating plainly because the row is written as though
+        the spelling were the whole gap.
+
+        AND THE PRODUCER GAP IS KNOWN AND WAS ACCEPTED. 792-ksr8's header says it in so
+        many words: "the two genuinely exploitable sites found in the sweep ... are
+        `printf '%s' "$var"` producers, which no static producer list catches." 1306-ifhv
+        is the third, found the hard way five weeks later, in a gate, intermittently.
+
+        PROPOSED SHAPE, for the coordinator to accept or refuse before I build it:
+          1. Both fixes go in the DIFF-SCOPED guard
+             (check-sigpipe-verdict-pipelines-added.sh), not the whole-repo one. No
+             legacy burden, no fleet-wide red, and an author adding the shape today gets
+             told today.
+          2. VERDICT_CONTEXT_RE gains the and-or spelling: a pipeline whose status is
+             branched on by `&&` or `||` AFTER an early-exiting consumer.
+          3. A `printf`/`echo` of a VARIABLE becomes a producer of UNKNOWN size. Not
+             unbounded — unknown. Diff-scoped, that is cheap: the author either uses
+             `grep -q PAT <<<"$var"` (which 792-ksr8 already documents as the safe
+             rewrite, and which cannot SIGPIPE) or writes `# sigpipe-ok: <reason>`.
+          4. THE CONTINUATION BUG, which neither guard has: both read PHYSICAL lines,
+             and the flaking spelling was written across backslash continuations, so
+             the consumer and the `&&` are never on one line. No single-line matcher can
+             see that shape however good its patterns are. Logical lines must be joined
+             before matching, and the violation reported at the first physical line.
+          5. check-no-spawn-in-if-not.sh is left alone. Its whole-repo scope is only
+             tolerable because `if ! <pipeline>` is rare; the and-or spelling is the
+             dominant idiom in this tree and does not belong in a whole-repo gate.
+
+        WHAT I HAVE NOT DONE: nothing is implemented. The matcher that produced the 269
+        was written, run once, and reverted; check-no-spawn-in-if-not.sh is untouched
+        and still prints ok:no-spawn-in-if-not. The row's closure as written — arms A, B
+        and C on the whole-repo checker — is what I am declining to build, and this event
+        is the naming of the conflict rather than a quiet substitution.

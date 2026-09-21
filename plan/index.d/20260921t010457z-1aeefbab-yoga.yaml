@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: progress
+      ts: "2026-09-21T01:04:57Z"
+      agent_id: linux-yoga-opus5-20260921t010457z
+      host: yoga
+      summary: |
+        PIRRIA'S REVIEW APPLIED: work/765-xpct now at 67af891aa, GATE_EXIT=0, verified
+        on origin by artifact. ok:change-class:20/20, up from 14/14 at b61931e79.
+
+        THE LINE THE REVIEW PRODUCED, and it is the one thing in the file worth arguing
+        about later:
+          A FILE THAT DECIDES WHAT RUNS IS FULL. A FILE THAT IS RUN MAY BE SCOPED.
+
+        pirria measured the `build-scripts` class and it is too coarse to be the unit:
+        845 tracked files, of which 89 are scripts/gate-steps.d/*.step, 140 are
+        scripts/check-*.sh, 8 are scripts/hooks/*, and 352 are top-level
+        scripts/test-*.sh. One class cannot be right for both "a helper that formats a
+        report" and "the file that decides whether a check runs at all". The first three
+        groups now force FULL alongside build.sh, local-ci.sh, run-litmus-test.sh and
+        change-class.sh itself. gate-steps.d is the sharpest case: those deciders are
+        DATA, invisible to a name-grep of build.sh (1063-nraf), so "I checked build.sh"
+        is not a statement about what the gate runs.
+
+        openspec/litmus-bindings.yaml FORCES FULL although it is class `specs` and
+        therefore SCOPED by the tiers. The bindings file is WHAT MAKES A LITMUS TEST
+        EXIST, and pirria's measured incident is the argument: an arm written and never
+        bound, with the suite reporting 37 PASS / 3 FAIL and that test in NEITHER
+        number. A shrinking corpus reports a clean number.
+
+        scripts/test-support/* FORCES FULL, and this one came from a CORRECTION rather
+        than from the review proper. Those four files — a podman mock, a secret-tool
+        fake, a github-login fake, a litmus podman guard — are not fixtures SCOPED would
+        execute; they are FAKES that fixtures LOAD. pirria's formulation, adopted
+        verbatim because it is better than the one it replaced: a fake is not a file
+        that is run, it is a file that DECIDES WHAT RUNNING MEANS for everything that
+        loads it. The tier runs the FIXTURE; the fixture's verdict depends on the fake
+        being faithful; a fake that drifts turns every fixture loading it green for the
+        wrong reason and nothing in SCOPED notices.
+
+        THE FIXTURES THEMSELVES STAY SCOPED, as a stated decision. SCOPED RUNS them and
+        drops cargo, so a test-*.sh edit is executed by the tier that lands it. Making
+        all 352 unconditional would cost most of SCOPED's value to re-cover what the
+        tier already does. WHAT WOULD CHANGE IT: slice 2's matrix showing a SCOPED
+        landing that does NOT run the fixture it touched. pirria raised these as a
+        candidate and not a recommendation and asked for that measurement.
+
+        ARM 5b IS ABOUT SILENCE. The classifier's vocabulary has nine classes and these
+        tiers name seven; `ci` is unmentioned, so under allow-lists it lands in FULL
+        silently and correctly. The arm makes that auditable — a reader checking the
+        tiers against the vocabulary would otherwise wonder whether `ci` was forgotten.
+
+        ONE PREMISE OF MINE WAS WRONG AND THE REVIEWER REFUSED TO INVENT AN ANSWER FOR
+        IT. I asked whether the allow-list survives contact with the front door's class
+        reads. `grep -c gate_stamp_classify_path build.sh` is 0; on trunk the only
+        reader in the tree is gate-stamp.sh. My selector is the SECOND reader, not a
+        second opinion, so the agreement question had a population of one. It becomes
+        real only if slice 2 teaches the door to skip by class.
+
+        TWO TREE-IDENTITY SLIPS IN ONE HOUR, ON A ROW ABOUT WHICH TREE A DECISION WAS
+        MEASURED AGAINST, recorded here rather than left in the message thread because
+        it is this selector's own occupational hazard. pirria measured the class
+        composition on a work branch carrying their own new fixture and reported it as a
+        fact about the tree, then caught it and withdrew it. I did the same thing
+        minutes later — my recount included test-change-class.sh, which exists only on
+        my work ref. "Which tree did you measure" is precisely what this selector will
+        be asked every time it skips something, and tonight it has been answered wrongly
+        twice by two hosts before the thing has ever answered once for a landing.
+
+        AND MY DISMISSAL WAS THE REAL ERROR, not either count. Given two numbers that
+        disagreed with mine, I waved one away as "immaterial, probably a glob edge"
+        instead of looking. It was not a glob edge: git's pathspec crosses directory
+        boundaries where a shell glob does not, and what the dismissal was hiding was
+        scripts/test-support/ — a category my own line had put on the WRONG SIDE. The
+        cost of not looking was not a count, it was a design error about to be gated.
+
+        MUTATION-MEASURED: narrowing the gate-owning list to build.sh alone reds six of
+        the seven ARM 5 cases.

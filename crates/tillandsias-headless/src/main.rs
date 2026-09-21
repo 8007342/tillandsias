@@ -610,6 +610,22 @@ fn main() {
         .and_then(|i| user_args.get(i + 1).map(|p| p.to_string()));
 
     let known_flags = [
+        // ORDER 1286-4437, ADDED AFTER A RELEASE SHIPPED WITHOUT THEM. Both
+        // reset flags are parsed above (`--reset-guest` and `--reset-state`),
+        // documented in the usage text and dispatched below — and NEITHER was
+        // in this list, so this allow-list exited 2 before either dispatch was
+        // reached. v56.9.20.1's published install.sh calls `--reset-state` and
+        // the published binary answered `Unsupported option: --reset-state`, so
+        // EVERY Linux curl-install of that release failed at the install step.
+        //
+        // A FLAG IS NOT ADDED IN ONE PLACE. Parse arm, dispatch, usage line,
+        // help line and THIS ENTRY are five sites, and the first four all
+        // produce a binary that mentions the flag everywhere a reader or a
+        // source scan would look while refusing it at runtime.
+        // scripts/test-reset-flags-are-accepted.sh runs the binary rather than
+        // reading it, which is the only check that could have caught this.
+        "--reset-guest",
+        "--reset-state",
         "--headless",
         "--force-downgrade",
         "--tray",
@@ -4446,6 +4462,22 @@ pub(crate) const GIT_VAULT_TOKEN_SECRET_OPTS: &str =
 /// environment.
 const GIT_VAULT_APPROLE_SECRET_OPTS: &str = "target=vault-approle,uid=1000,gid=1000,mode=0400";
 
+/// ORDER 1313-prin. The SIGNER AppRole document mounts at its OWN target.
+///
+/// THE BUG THIS FIXES, found on lenovinha 2026-09-20 by looking at
+/// /run/secrets inside a running mirror: the signer secret was passed with
+/// GIT_VAULT_APPROLE_SECRET_OPTS above, whose `target=vault-approle` is the
+/// RELAY document's path. Both secrets therefore mounted to the same file and
+/// one clobbered the other, so `ls /run/secrets` showed a single entry and the
+/// signer agent found the wrong document — or the relay agent did.
+///
+/// The irony is recorded deliberately: vault-agent-signer.hcl carries a comment
+/// warning that two agents sharing any path would overwrite each other's state,
+/// and I then shared the one path that comment did not enumerate. Distinct
+/// sinks, pid files and id files are not enough if the INPUT documents collide.
+const GIT_VAULT_SIGNER_SECRET_OPTS: &str =
+    "target=vault-approle-signer,uid=1000,gid=1000,mode=0400";
+
 /// Project-unique DNS identity of the per-project git-mirror service.
 ///
 /// Returns the opaque per-project hostname (`git-<mirror-id>`) when the
@@ -4668,7 +4700,7 @@ fn build_git_run_args(
         // relay keeps git-mirror-agent. One token never carries both authorities.
         if let Some(signer_secret) = host_signer_secret {
             args.push("--secret".into());
-            args.push(format!("{signer_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
+            args.push(format!("{signer_secret},{GIT_VAULT_SIGNER_SECRET_OPTS}"));
             args.push("--env".into());
             args.push(format!(
                 "TILLANDSIAS_VAULT_TOKEN_FILE={MIRROR_SIGNER_TOKEN_SINK}"
@@ -26784,6 +26816,16 @@ esac
         // sshd-identity.sh at the signer sink instead of the relay token, which
         // is how "one token never carries both authorities" is ENFORCED rather
         // than merely intended.
+        // AND at its OWN mount target: both documents once landed on
+        // target=vault-approle and one clobbered the other, leaving a single
+        // file in /run/secrets and an agent reading the wrong identity.
+        assert!(
+            args_with
+                .iter()
+                .any(|a| a == "signer-sec,target=vault-approle-signer,uid=1000,gid=1000,mode=0400"),
+            "the signer document must mount at its OWN target, not the relay path; \
+             got:\n{args_with:?}"
+        );
         assert!(
             args_with.iter().any(|a| a.starts_with("signer-sec,")),
             "the mirror must receive the SIGNER AppRole material when the lane is on; \
@@ -30036,5 +30078,81 @@ mod enclave_service_health_tests {
             0,
         );
         assert!(line.contains("age=unknown"), "{line}");
+    }
+}
+
+/// ORDER 1286-4437 — the flag SURFACE, in its own module because it is about the
+/// command line and not about whatever it would otherwise have been nested in.
+#[cfg(test)]
+mod flag_surface_tests {
+    /// EVERY FLAG THE USER-ARG DISPATCH MATCHES ON MUST BE IN `known_flags`.
+    ///
+    /// The twin of tillandsias-windows-tray's `known_flags_match_the_dispatch_in_main`
+    /// (E4, 2026-08-17), in the direction that one does NOT cover. That test
+    /// iterates KNOWN_FLAGS and asserts each entry appears at least twice, which
+    /// catches a flag LISTED AND UNUSED. A flag USED AND UNLISTED is never
+    /// iterated, so it cannot be caught there — and that is the defect that
+    /// shipped here in v56.9.20.1: `--reset-state` parsed from user_args,
+    /// dispatched, documented in usage and in `--help`, ABSENT from
+    /// `known_flags`, so the allow-list printed `Unsupported option:
+    /// --reset-state` and exited 2 before the dispatch ran. The published
+    /// install.sh calls that flag, so every Linux curl-install of the release
+    /// failed at the install step.
+    ///
+    /// PRE-FIX RESULT: FAILS, naming --reset-guest and --reset-state.
+    ///
+    /// SCOPED TO THE USER-ARG READ (the `any` closure comparing an element to a
+    /// flag literal), which is how a top-level flag is read. The needle is built
+    /// in code below and DELIBERATELY NOT SPELLED IN THIS COMMENT: the first
+    /// draft wrote the pattern out with a placeholder flag, and the scan matched
+    /// its own documentation and reported that placeholder as a missing entry.
+    /// A source scan reads comments, which is the third time in one session this
+    /// tree has taught that lesson. A broader scan of every equality against a
+    /// flag literal also matches
+    /// podman argv comparisons (`--rm`, `--cap-drop=ALL`, `--entrypoint`) and
+    /// reports them as missing entries, which is a scan defect rather than a code
+    /// defect — measured while writing this test.
+    #[test]
+    fn every_dispatched_flag_is_in_the_known_flags_allow_list() {
+        let src = include_str!("main.rs");
+
+        // The list itself, not mentions anywhere in the file: twelve mentions of
+        // --reset-state coexisted with zero entries.
+        let list_start = src.find("let known_flags = [").expect("known_flags array");
+        let list_end = list_start + src[list_start..].find("];").expect("array end");
+        let list = &src[list_start..list_end];
+
+        // Flags that EXIT BEFORE the allow-list is consulted, so they need no
+        // entry. Kept short and named; anything else missing is a real gap.
+        const SHORT_CIRCUITS: &[&str] = &["--help", "-h", "--version", "-V"];
+
+        let needle = "user_args.iter().any(|a| a == \"";
+        let mut dispatched: Vec<&str> = Vec::new();
+        for part in src.split(needle).skip(1) {
+            if let Some(end) = part.find('"') {
+                let flag = &part[..end];
+                if flag.starts_with("--")
+                    && !SHORT_CIRCUITS.contains(&flag)
+                    && !dispatched.contains(&flag)
+                {
+                    dispatched.push(flag);
+                }
+            }
+        }
+        assert!(
+            dispatched.len() >= 2,
+            "found only {} user-arg flags — the scan is broken, not the code",
+            dispatched.len()
+        );
+
+        let missing: Vec<&&str> = dispatched
+            .iter()
+            .filter(|f| !list.contains(&format!("\"{f}\"")))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "dispatched from user_args but NOT in known_flags, so the allow-list \
+             refuses them with `Unsupported option` before the dispatch runs: {missing:?}"
+        );
     }
 }

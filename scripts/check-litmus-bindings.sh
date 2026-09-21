@@ -102,6 +102,83 @@ if [ -n "$dangling" ]; then
     exit 1
 fi
 
+# ORDER 1304-wbb2. BOUND IS NOT BOUND UNDER THE RIGHT SPEC.
+#
+# Everything above answers "will anything run this file?" and, below, "can the
+# runner enter it?". Nothing asked "is it bound where it says it belongs?".
+# NOTHING COMPARED A FILE'S OWN `spec:` FIELD WITH THE BLOCK IT IS LISTED
+# UNDER, so a misbound litmus RUNS and is MISATTRIBUTED: the spec it declares
+# reads covered while holding zero tests, and the block it was filed under
+# takes credit for a test naming a different owner. The coverage number is
+# wrong in both directions at once and every other check here is green.
+#
+# MEASURED on the live corpus 2026-09-20: 69 such bindings across 42 files,
+# including a matched platform swap — two Windows tests filed under macOS and
+# one macOS test under Windows, so neither tray spec's coverage means what it
+# says.
+#
+# MEMBERSHIP, NOT EQUALITY, AND AT LEAST ONCE, NOT EXACTLY ONCE. `spec:` is a
+# COMMA-SEPARATED LIST in 14 of 430 files (an e2e smoke legitimately serves
+# several specs) and 42 names are bound under more than one block by design.
+# An equality test against a three-element list fails for all three specs the
+# file actually declares; "exactly once" refuses every multi-bound test. Both
+# were run against the corpus before this was written and both were absurd
+# before they were interesting.
+#
+# NOT GATED ON THE RUNNER, deliberately. This is a STATIC comparison of two
+# files and needs no binary; the first version sat inside the runner-gated
+# block below and was therefore skipped wherever the runner was absent —
+# including in its own fixture, which passed while exercising nothing. A check
+# that quietly does not run is this row's subject.
+#
+# DIFF-SCOPED, like the check below and for the same reason: with 69
+# pre-existing mismatches a hard refusal would convert one silent problem into
+# an undiagnosed red suite, which is 660-ryhn's own warning. New bindings are
+# refused; the standing 69 are cleanup decided PER FILE, because a wrong block
+# can mean the BINDING is wrong or the DECLARATION is wrong and only a reader
+# can tell which.
+XC_BASE_REF="${TILLANDSIAS_LITMUS_BIND_BASE:-origin/linux-next}"
+if git -C "$ROOT" rev-parse --verify "$XC_BASE_REF" >/dev/null 2>&1; then
+    # Same repeated character class as below: BSD sed has no `\+` in a BRE.
+    xc_added="$(git -C "$ROOT" diff -U0 "$XC_BASE_REF" -- openspec/litmus-bindings.yaml 2>/dev/null \
+        | sed -n 's/^+[[:space:]]*-[[:space:]]*\(litmus:[A-Za-z0-9._-][A-Za-z0-9._-]*\).*/\1/p' | sort -u || true)"
+    xc_pairs="$(awk '
+        /^- spec_id: / { blk = $3; next }
+        /^  - litmus:/ { print $2 " " blk }
+    ' "$BINDINGS" 2>/dev/null || true)"
+
+    misbound=""
+    while IFS= read -r nm; do
+        [ -n "$nm" ] || continue
+        file="$(grep -rlF "name: $nm" "$TESTS_DIR" 2>/dev/null | head -1)"
+        [ -n "$file" ] || continue
+        declared="$(grep -m1 '^spec:' "$file" | sed 's/^spec:[[:space:]]*//')"
+        [ -n "$declared" ] || continue
+        declared_set="$(printf '%s' "$declared" | tr ',' '\n' \
+            | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep . || true)"
+        while IFS= read -r blk; do
+            [ -n "$blk" ] || continue
+            # Herestring, never `printf | grep -q`: the SIGPIPE-under-pipefail
+            # hazard this file documents twice above.
+            grep -qxF "$blk" <<< "$declared_set" && continue
+            [ -n "$misbound" ] && misbound="$misbound,"
+            misbound="$misbound$nm(declared=$(printf '%s' "$declared_set" | tr '\n' '|' | sed 's/|$//'),bound-under=$blk)"
+        done <<< "$(awk -v n="$nm" '$1 == n { print $2 }' <<< "$xc_pairs")"
+    done <<< "$xc_added"
+
+    if [ -n "$misbound" ]; then
+        echo "violation:binding-spec-mismatch:$misbound"
+        {
+            echo "each name above is newly bound under a block that is NOT among the specs its own"
+            echo "file declares (1304-wbb2). It will RUN and be credited to the wrong spec, while the"
+            echo "spec it names reads covered with nothing behind it. Fix the binding, or fix the"
+            echo "file's spec: line if the binding is the correct one — a reader has to decide which."
+        } >&2
+        exit 1
+    fi
+fi
+
+
 
 # ORDER 958-b36m. BOUND IS NOT RUNNABLE.
 #

@@ -100,10 +100,97 @@ verify_binaries() {
 # defect of a current-stamped binary (wrong arch, not static, not
 # executable, corrupted stamp). Falsifiable grammar on the last line:
 #   verify:ok | verify:skip-stale-staging | (non-zero exit on real defect)
+# ORDER 1307-kic6 / 1308-9ej7. READ A BINARY'S STRINGS WITHOUT DEPENDING ON
+# `strings`, which is NOT present on every host that stages guests: it is
+# absent on the Windows hosts, where this file's own --verify consequently
+# reported "stale" about binaries that had just been staged correctly.
+#
+# `grep -a` treats a binary as text and needs no external tool. The fallback
+# matters more than the convenience: a missing instrument that returns "no
+# match" is indistinguishable from a real absence, which is how a subject and
+# its control can both read 0 and a check can pass by being blind.
+_guest_strings() {
+    if command -v strings >/dev/null 2>&1; then
+        strings "$1"
+    else
+        LC_ALL=C grep -a -o '[[:print:]]\{4,\}' "$1" 2>/dev/null
+    fi
+}
+
+# PROVE THE INSTRUMENT BEFORE TRUSTING A NEGATIVE. Every check below asks
+# "is TOKEN absent from this binary?", and the answer is only meaningful if
+# the reader can find something that IS there. The control is a token every
+# build of this binary carries regardless of features.
+_guest_reader_works() {
+    _guest_strings "$1" | grep -qF "tillandsias" 2>/dev/null
+}
+
+# ORDER 1308-9ej7. A STAGED GUEST THAT CANNOT SERVE THE WIRE, CAUGHT AT
+# STAGING TIME RATHER THAN 524 SECONDS INTO A PROVISION.
+#
+# THE VERSION STRING CANNOT SEE THIS. Measured on yolanda 2026-09-20: a guest
+# built WITHOUT `--features listen-vsock` compiled, staged, embedded,
+# installed into the guest and RAN, printing the correct version at every
+# step, and could not bind the control wire. Every version-comparing check
+# passed on it. The provision failed 524 s later, and only the guest's own
+# runtime refusal named the cause.
+#
+# A POSITIVE VOCABULARY PROBE DOES NOT WORK HERE, AND THAT IS MEASURED, NOT
+# ASSUMED. Comparing a listen-vsock build against a feature-less control of
+# the same source:
+#     tokio_vsock     good 2   control 2
+#     VsockListener   good 3   control 3
+#     vsock_loopback  good 2   control 2
+#     AF_VSOCK        good 14  control 16   <- control has MORE
+#     vsock           good 206 control 206
+# The vsock vocabulary is linked into both; the feature gates the LISTENER,
+# not the words. A probe on any of those tokens would pass a binary that
+# cannot serve the wire, which is the defect it was meant to catch.
+#
+# WHAT DOES DISCRIMINATE is the binary's own self-declaration, the refusal it
+# prints at runtime when the feature is absent: good 0, control 1. Asserting
+# its ABSENCE is a stronger test than any token's presence, because the binary
+# is telling us what it is -- and it is the exact string that caught the
+# 524-second failure, moved from the far end of a provision to staging time.
+_GUEST_NO_VSOCK_MARKER='built WITHOUT the listen-vsock feature'
+
+guest_binary_serves_wire() {
+    local bin="$1"
+    if ! _guest_reader_works "$bin"; then
+        echo "[build-guest-binaries] UNMEASURED: cannot read strings out of $bin (no strings(1) and grep -a found nothing) -- refusing to call it good on a blind check" >&2
+        return 2
+    fi
+    if _guest_strings "$bin" | grep -qF "$_GUEST_NO_VSOCK_MARKER"; then
+        echo "[build-guest-binaries] REFUSED: $bin was built WITHOUT --features listen-vsock. It will run, report the right version, and never bind the control wire; a provision using it fails on a handshake timeout minutes later (1308-9ej7). Rebuild with --features listen-vsock." >&2
+        return 1
+    fi
+    return 0
+}
+
 staging_is_current() {
     [[ -f "$X86_64_DEST" && -f "$AARCH64_DEST" ]] || return 1
-    strings "$X86_64_DEST" | grep -F "$VERSION_VAL" >/dev/null || return 1
-    strings "$AARCH64_DEST" | grep -F "$VERSION_VAL" >/dev/null || return 1
+    _guest_reader_works "$X86_64_DEST" || return 1
+    _guest_strings "$X86_64_DEST" | grep -F "$VERSION_VAL" >/dev/null || return 1
+    _guest_strings "$AARCH64_DEST" | grep -F "$VERSION_VAL" >/dev/null || return 1
+    return 0
+}
+
+# ORDER 1308-9ej7. Can this host restage AT ALL? `--verify` used to answer
+# "stale" and point the reader at this script, which on a host without the
+# toolchain then refuses -- two hops to learn a fact knowable in one. This
+# names the missing tool in the verify verdict itself.
+restage_blocker() {
+    # ORDER 790-mbk9: the nix lane is a CAPABILITY, not a binary on PATH — the
+    # toolbox rung carries nix on hosts that have none. Ask the lane (its
+    # `capability` NEVER creates); `command -v nix` under-reports and the
+    # nix-lane fixture refuses it (caught by the pre-cut litmus, 2026-09-21).
+    if [[ -x "$ROOT/scripts/nix-toolbox.sh" ]] && "$ROOT/scripts/nix-toolbox.sh" capability >/dev/null 2>&1; then
+        return 1
+    fi
+    if command -v aarch64-linux-musl-gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then
+        return 1
+    fi
+    printf 'no nix, and no aarch64 musl linker (aarch64-linux-musl-gcc or clang + rust-lld)'
     return 0
 }
 
@@ -121,11 +208,26 @@ fi
 if [[ "$VERIFY_ONLY" == true ]]; then
     if ! staging_is_current; then
         echo "[build-guest-binaries] SKIP: staged guest binaries are stale or absent (host staging predates VERSION $VERSION_VAL)."
+        # ORDER 1308-9ej7. SAY WHETHER THIS HOST COULD RESTAGE, here, rather
+        # than sending the reader to a script that will refuse. "Stale" and
+        # "stale AND unrestageable here" are different facts and the second
+        # one is the actionable half; telling a Windows host to run the
+        # restage is two hops to learn something knowable in one.
+        _blocker="$(restage_blocker)" && {
+            echo "[build-guest-binaries] AND THIS HOST CANNOT RESTAGE: $_blocker."
+            echo "[build-guest-binaries] Staging must come from a host that has them (the release lane uses Nix), or via the documented rustup-musl fallback in scripts/build-windows-tray.ps1, which stages x86_64 ONLY and requires --features listen-vsock."
+            echo "verify:skip-cannot-restage-here"
+            exit 0
+        }
         echo "[build-guest-binaries] This is host staging state, not a code regression (order 447); run scripts/build-guest-binaries.sh to restage."
         echo "verify:skip-stale-staging"
         exit 0
     fi
     verify_binaries
+    # ORDER 1308-9ej7. The wire-capability check runs on a CURRENT staging,
+    # because a feature-less binary carries the right VERSION and passes
+    # every check above it.
+    guest_binary_serves_wire "$X86_64_DEST" || exit $?
     echo "verify:ok"
     exit 0
 fi

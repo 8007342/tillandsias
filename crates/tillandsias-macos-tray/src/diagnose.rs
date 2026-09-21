@@ -112,10 +112,70 @@ pub(crate) fn image_root() -> PathBuf {
     if let Some(root) = IMAGE_ROOT_OVERRIDE.with(|o| o.borrow().clone()) {
         return root;
     }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
-    home.join("Library/Application Support/tillandsias")
+    resolve_image_root().0
+}
+
+/// How [`image_root`] arrived at its answer. ORDER 1315-d4qd.
+///
+/// `/tmp` IS A REAL ANSWER TO A DIFFERENT QUESTION. With HOME unset the root
+/// resolves to `/tmp/Library/Application Support/tillandsias`, which exists
+/// nowhere, so every `stat` under it reports absent. MEASURED on macneo
+/// 2026-09-20 with the HOME-set run one second earlier as its control:
+/// `rootfs_present: false`, `rootfs_bytes: null` — over 1.2 GiB of real guest
+/// state at the real root. A supported diagnostic told the operator the guest
+/// was not provisioned, and the obvious next action from that verdict is the
+/// destructive one.
+///
+/// The fallback STAYS for readers: answering beats panicking, and a diagnostic
+/// that dies when HOME is unset helps nobody. What it must not do is answer
+/// WITHOUT SAYING WHICH QUESTION IT ANSWERED, so callers that report get this
+/// alongside the path and callers that DESTROY get [`image_root_for_destruction`]
+/// instead, which refuses.
+pub(crate) const IMAGE_ROOT_SOURCE_HOME: &str = "home";
+pub(crate) const IMAGE_ROOT_SOURCE_FALLBACK: &str = "fallback:/tmp:HOME-unset";
+
+/// The SINGLE resolution. `status_item::default_image_root` delegates here too:
+/// it carried a byte-identical copy of the fallback, so the live tray had the
+/// same defect as the diagnostic and a fix to one would have left the other.
+pub(crate) fn resolve_image_root() -> (PathBuf, &'static str) {
+    match std::env::var_os("HOME") {
+        Some(h) if !h.is_empty() => (
+            PathBuf::from(h).join("Library/Application Support/tillandsias"),
+            IMAGE_ROOT_SOURCE_HOME,
+        ),
+        // An EMPTY HOME is the unset case wearing a value: `HOME=` joins to a
+        // relative path and would silently root the tree at the process's cwd,
+        // which is worse than /tmp because it is writable and unpredictable.
+        _ => (
+            PathBuf::from("/tmp").join("Library/Application Support/tillandsias"),
+            IMAGE_ROOT_SOURCE_FALLBACK,
+        ),
+    }
+}
+
+/// The root for callers that are about to DESTROY something. ORDER 1315-d4qd.
+///
+/// A destructive path has no silent default. `--reset-state` announces what it
+/// will destroy and then destroys it; if the root is the fallback, both halves
+/// are wrong TOGETHER, so the announcement names `/tmp` paths, the removal does
+/// exactly what it announced, the process exits 0, and the operator has been
+/// told the local state was cleared while it sits untouched. The consistency is
+/// what makes it unreadable as a failure.
+///
+/// So the refusal must come BEFORE THE ANNOUNCEMENT, not merely before the
+/// deletion: an announcement built from the wrong root is already the false
+/// report, whether or not anything is removed afterwards.
+pub(crate) fn image_root_for_destruction() -> Result<PathBuf, String> {
+    match resolve_image_root() {
+        (root, IMAGE_ROOT_SOURCE_HOME) => Ok(root),
+        (root, src) => Err(format!(
+            "refused:reset-state:no-home — HOME is unset or empty, so the state root would be \
+             {} ({src}). REFUSING to announce or destroy anything: the real state lives under \
+             $HOME/Library/Application Support/tillandsias and would be left untouched while \
+             this reported success. Re-run with HOME set.",
+            root.display()
+        )),
+    }
 }
 
 /// Guest crash-loop DETECTION state file. On macOS `--diagnose` is
@@ -901,6 +961,9 @@ pub struct DiagnoseReport {
     pub in_app: bool,
     pub exe_path: Option<String>,
     pub image_root: String,
+    /// `home` or `fallback:/tmp:HOME-unset` (1315-d4qd) — so a reader
+    /// cannot mistake a fallback answer for the real root.
+    pub image_root_source: String,
     pub rootfs_present: bool,
     pub rootfs_bytes: Option<u64>,
     pub kernel_present: bool,
@@ -1002,7 +1065,7 @@ fn collect_report() -> DiagnoseReport {
         .unwrap_or(false);
     let exe_path = exe.as_ref().map(|p| p.display().to_string());
 
-    let root = image_root();
+    let (root, image_root_source) = resolve_image_root();
     let image_root_str = root.display().to_string();
     let (rootfs_present, rootfs_bytes) = stat_file(&root.join("rootfs.img"));
     let (kernel_present, kernel_bytes) = stat_file(&root.join("vmlinuz"));
@@ -1018,6 +1081,7 @@ fn collect_report() -> DiagnoseReport {
         in_app,
         exe_path,
         image_root: image_root_str,
+        image_root_source: image_root_source.to_string(),
         rootfs_present,
         rootfs_bytes,
         kernel_present,
@@ -3261,6 +3325,7 @@ mod tests {
                 "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray".to_string(),
             ),
             image_root: "/Users/test/Library/Application Support/tillandsias".to_string(),
+            image_root_source: crate::diagnose::IMAGE_ROOT_SOURCE_HOME.to_string(),
             rootfs_present: true,
             rootfs_bytes: Some(8_589_934_592),
             kernel_present: false,
@@ -3298,6 +3363,7 @@ mod tests {
             "in_app",
             "exe_path",
             "image_root",
+            "image_root_source",
             "rootfs_present",
             "rootfs_bytes",
             "kernel_present",

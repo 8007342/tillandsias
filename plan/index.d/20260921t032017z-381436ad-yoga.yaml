@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    event:
+      type: progress
+      ts: "2026-09-21T03:20:17Z"
+      agent_id: linux-yoga-opus5-20260921t032017z
+      host: yoga
+      summary: |
+        REGRESSION ARM BUILT AND GATED: work/1315-4a7j at 0672b2ff6, ./build.sh --check
+        GATE_EXIT=0, ok:work-ref-lane:7/7 (was 5/5). The ref is reused rather than
+        branched, for a reason in the second half of this event.
+
+        THE REGRESSION WAS MINE AND THIS ARM IS ITS FALSIFIER. 1315-4a7j accumulated
+        `_all_work` alongside `_all_salvage` and `_all_marker`; the
+        `refs/heads/salvage/*` arm cleared `_all_marker` and NOT `_all_work`, so a push
+        made ONLY of salvage refs satisfied `_all_work -eq 1`, took the work lane, and
+        the work lane WARNS where it used to refuse. The casualty was 874-w2gc's
+        deletion protection — deleting a salvage ref, which may be the ONLY copy of
+        rescued work, downgraded from a refusal to a warning.
+
+        THE FAILURE SHAPE IS THE WORST ONE A GUARD HAS: THE REFUSAL TEXT STILL PRINTED.
+        It simply stopped meaning anything. A reader sees the 874-w2gc paragraph and an
+        exit 0 and has no reason to suspect the two disagree — the fixture's own failure
+        message now says exactly that, because that is the symptom someone will meet.
+
+        CAUGHT BY THE TIER --check DOES NOT RUN. Not by ./build.sh --check, which was
+        green on this change through the gate, the hand-off and the cross-platform
+        compile; by litmus:salvage-net-roundtrip in the PRE-BUILD LITMUS TIER. That is
+        the doctrine in methodology/convergence.yaml under 1282-rkkm, written the same
+        evening by this host, which then shipped the defect the doctrine describes.
+        Fixed by the coordinator in 6080e8365 before the landing.
+
+        WHY THE ARM USES A DELETION. An ordinary salvage push is exempt by design
+        (872-c9nd) and exits 0 under BOTH classifications, so it cannot tell them apart:
+        an arm built on one would pass against the defect and report the fix verified.
+        The deletion is the only salvage shape whose correct answer is a REFUSAL, so it
+        is the only shape where the two lanes disagree. ARM 0b is its control — the same
+        deletion with TILLANDSIAS_SALVAGE_DELETE_OK=1 must still be ACCEPTED, or ARM 0
+        would pass against a hook that refused every salvage push and broke the rescue
+        lane while looking protective.
+
+        MUTATION-MEASURED against the defect as shipped: restoring line 241 to
+        `_all_marker=0` alone reds ARM 0 with "the 874-w2gc text was printed but the
+        hook EXITED 0", and leaves ARM 0b green.
+
+        AND I BROKE MY OWN LANE GRAMMAR IN THE SAME CYCLE. I first pushed this to
+        `work/1315-4a7j-regress`, which the creation_regex THIS ROW WROTE does not admit
+        — `work/[0-9]{3,4}-[a-z0-9]{4}$` — so it was a stray that
+        scripts/sweep-salvage-refs.sh would reap, and ARM 4 of this row's own fixture
+        asserts exactly that property. The hook did not stop me because a non-conforming
+        name is not a work ref at all: it took the ordinary branch path, found a valid
+        stamp, and passed. Moved to work/1315-4a7j (force-with-lease; the landed content
+        is on trunk, so nothing was lost) and the stray is deleted.
+          WORTH A LINE IN THE SKILL, not a row: the work lane's grammar is enforced by a
+          SWEEP, not by the hook, so a mistyped work ref is accepted at push time and
+          reaped later. That is the correct design — the hook cannot know which strays
+          are deliberate — but it means the feedback arrives hours after the mistake,
+          and tonight it arrived because I re-read my own regex rather than because
+          anything told me.

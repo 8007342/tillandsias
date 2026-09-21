@@ -360,11 +360,16 @@ use objc2_app_kit::NSControlStateValueOn as _;
 ///
 /// VzRuntime joins `<image_root>/rootfs.img` etc., so this is one
 /// level above the file basenames.
+/// ORDER 1315-d4qd — DELEGATES, and no longer carries its own copy.
+///
+/// This held a byte-identical duplicate of the HOME-or-/tmp resolution that
+/// `diagnose::image_root` had, with a comment on the other side saying they
+/// mirror each other. Two copies of one rule is one copy too many when the rule
+/// is wrong: the LIVE TRAY reads this one, so a fix applied to the diagnostic
+/// alone would have left the running process resolving state to /tmp with
+/// nothing saying so.
 fn default_image_root() -> std::path::PathBuf {
-    let home = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
-    home.join("Library/Application Support/tillandsias")
+    crate::diagnose::resolve_image_root().0
 }
 
 #[cfg(test)]

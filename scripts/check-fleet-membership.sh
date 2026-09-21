@@ -72,7 +72,7 @@ case "$REGIME" in
     *)       _note "session-name:${HOST}-unknown" ;;
 esac
 
-# ---- 1. platform branch ----------------------------------------------------
+# ---- 1. platform branch, or a work ref ------------------------------------
 case "$REGIME" in
     linux-*) want=linux-next ;;
     macos)   want=osx-next ;;
@@ -80,16 +80,25 @@ case "$REGIME" in
     *)       want="" ;;
 esac
 branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo detached)"
-if [ -z "$want" ]; then
-    case "$branch" in
-        linux-next|osx-next|windows-next) _ok "branch:$branch" ;;
-        *) _todo "branch:seeded-off-a-platform-branch:$branch:git checkout <linux-next|osx-next|windows-next>" ;;
-    esac
-elif [ "$branch" = "$want" ]; then
-    _ok "branch:$branch"
-else
-    _todo "branch:$branch:git checkout $want"
-fi
+case "$branch" in
+    work/*)
+        # ORDER 1317-9ugn (methodology work_ref_lane, 1315-4a7j): a work ref is
+        # where a host WORKS. It is a correct place to be, never a todo; the
+        # note is so the operator sees which order the checkout is on.
+        _note "branch:$branch"
+        _ok "branch:work-ref:$branch" ;;
+    *)
+        if [ -z "$want" ]; then
+            case "$branch" in
+                linux-next|osx-next|windows-next) _ok "branch:$branch" ;;
+                *) _todo "branch:seeded-off-a-platform-branch:$branch:git checkout <linux-next|osx-next|windows-next>" ;;
+            esac
+        elif [ "$branch" = "$want" ]; then
+            _ok "branch:$branch"
+        else
+            _todo "branch:$branch:git checkout $want"
+        fi ;;
+esac
 
 # ---- 2. hooks ----------------------------------------------------------------
 gitdir="${JOIN_FLEET_GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null || echo .git)}"
@@ -100,6 +109,15 @@ if [ -n "$hv" ]; then
     _ok "hooks:$hv"
 else
     _todo "hooks:scripts/install-hooks.sh"
+fi
+
+# ---- 2b. rerere (1317-9ugn: a work ref merges trunk more than once) ---------
+# `git config --get` reads the checkout's effective value (local over global);
+# the remedy is the local setting, so a fixture can pin both outcomes.
+if [ "$(git config --get rerere.enabled 2>/dev/null || true)" = "true" ]; then
+    _ok "rerere"
+else
+    _todo "rerere:git config rerere.enabled true"
 fi
 
 # ---- 3. builder toolbox (Linux bare metal only) ----------------------------

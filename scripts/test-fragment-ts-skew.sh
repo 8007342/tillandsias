@@ -32,7 +32,18 @@ _at() { # $1 = signed seconds
     local out
     out="$(date -u -d "@$(( $(date -u +%s) + $1 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
     case "$out" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-*Z) printf '%s\n' "$out"; return 0 ;; esac
-    out="$(date -u -v"${1}S" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
+    # BSD `date -v` REQUIRES AN EXPLICIT SIGN. `-v7200S` is not "+7200 seconds",
+    # it is a parse error ("7200S: Cannot apply date adjustment"), so the two
+    # non-negative callers below (+7200 and 0) both produced an empty string and
+    # the `[ -n ... ]` guard skipped the whole fixture on every macOS host —
+    # MEASURED on macneo 2026-09-20, before and after the epoch-shape hardening:
+    # `skip:fragment-ts-skew:no-portable-date`, so 1313-w78k's guard had NO macOS
+    # coverage at all. The negative caller worked, which is why it reads as a
+    # date-support problem rather than a sign problem. GNU `date -d` needs no
+    # sign, so the first arm above is unaffected.
+    local _off="$1"
+    case "$_off" in -*|+*) : ;; *) _off="+$_off" ;; esac
+    out="$(date -u -v"${_off}S" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
     case "$out" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-*Z) printf '%s\n' "$out"; return 0 ;; esac
     return 1
 }
@@ -54,13 +65,23 @@ case "$out" in *"date -u"*) ok "the refusal carries a remedy the operator can ty
 _plant "$PAST"
 out="$(bash "$CHECK" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then ok "a ts two hours BEHIND is accepted (rc=0)"; else bad "a past ts was refused (rc=$rc) — this breaks every relay fold"; fi
-case "$out" in *note:fragment-ts-past:*) ok "the past skew is PRINTED, not swallowed" ;; *) bad "a past ts was accepted silently — the skew is invisible" ;; esac
+# SCOPED TO THE PROBE. The checker is diff-scoped and reports on EVERY newly
+# added fragment, so an unscoped match here passes as soon as any unrelated
+# fragment is more than the limit old — a true statement about someone else's
+# file standing in for the one this arm is about.
+case "$out" in *"note:fragment-ts-past:$PROBE:"*) ok "the past skew is PRINTED, not swallowed" ;; *) bad "a past ts was accepted silently — the skew is invisible" ;; esac
 
 # ── ARM 3: CONTROL — a clock-read ts is accepted with no note ───────────────
 _plant "$NOW"
 out="$(bash "$CHECK" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then ok "CONTROL: a ts read from the clock is accepted" ;else bad "CONTROL: a current ts was refused (rc=$rc)"; fi
-case "$out" in *note:fragment-ts-past:*) bad "CONTROL: a current ts produced a past-skew note" ;; *) ok "CONTROL: a current ts produces no note" ;; esac
+# SCOPED TO THE PROBE, and this is the arm that caught it. MEASURED on macneo
+# 2026-09-20: merging osx-next brought four of macbookair's fragments dated 930s
+# and 935s earlier, the checker noted them, and this control FAILED — reporting
+# that a clock-read ts had produced a past-skew note when the notes belonged to
+# other files entirely. Unscoped, ARM 2 can pass for the wrong reason and this
+# arm can fail for the wrong reason, from the same cause.
+case "$out" in *"note:fragment-ts-past:$PROBE:"*) bad "CONTROL: a current ts produced a past-skew note" ;; *) ok "CONTROL: a current ts produces no note" ;; esac
 
 # ── ARM 4: NEGATIVE CONTROL — the check is DIFF-SCOPED ──────────────────────
 # Fragments already on the base ref are not re-judged: one host's mistake must
