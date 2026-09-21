@@ -610,6 +610,22 @@ fn main() {
         .and_then(|i| user_args.get(i + 1).map(|p| p.to_string()));
 
     let known_flags = [
+        // ORDER 1286-4437, ADDED AFTER A RELEASE SHIPPED WITHOUT THEM. Both
+        // reset flags are parsed above (`--reset-guest` and `--reset-state`),
+        // documented in the usage text and dispatched below — and NEITHER was
+        // in this list, so this allow-list exited 2 before either dispatch was
+        // reached. v56.9.20.1's published install.sh calls `--reset-state` and
+        // the published binary answered `Unsupported option: --reset-state`, so
+        // EVERY Linux curl-install of that release failed at the install step.
+        //
+        // A FLAG IS NOT ADDED IN ONE PLACE. Parse arm, dispatch, usage line,
+        // help line and THIS ENTRY are five sites, and the first four all
+        // produce a binary that mentions the flag everywhere a reader or a
+        // source scan would look while refusing it at runtime.
+        // scripts/test-reset-flags-are-accepted.sh runs the binary rather than
+        // reading it, which is the only check that could have caught this.
+        "--reset-guest",
+        "--reset-state",
         "--headless",
         "--force-downgrade",
         "--tray",
@@ -30062,5 +30078,81 @@ mod enclave_service_health_tests {
             0,
         );
         assert!(line.contains("age=unknown"), "{line}");
+    }
+}
+
+/// ORDER 1286-4437 — the flag SURFACE, in its own module because it is about the
+/// command line and not about whatever it would otherwise have been nested in.
+#[cfg(test)]
+mod flag_surface_tests {
+    /// EVERY FLAG THE USER-ARG DISPATCH MATCHES ON MUST BE IN `known_flags`.
+    ///
+    /// The twin of tillandsias-windows-tray's `known_flags_match_the_dispatch_in_main`
+    /// (E4, 2026-08-17), in the direction that one does NOT cover. That test
+    /// iterates KNOWN_FLAGS and asserts each entry appears at least twice, which
+    /// catches a flag LISTED AND UNUSED. A flag USED AND UNLISTED is never
+    /// iterated, so it cannot be caught there — and that is the defect that
+    /// shipped here in v56.9.20.1: `--reset-state` parsed from user_args,
+    /// dispatched, documented in usage and in `--help`, ABSENT from
+    /// `known_flags`, so the allow-list printed `Unsupported option:
+    /// --reset-state` and exited 2 before the dispatch ran. The published
+    /// install.sh calls that flag, so every Linux curl-install of the release
+    /// failed at the install step.
+    ///
+    /// PRE-FIX RESULT: FAILS, naming --reset-guest and --reset-state.
+    ///
+    /// SCOPED TO THE USER-ARG READ (the `any` closure comparing an element to a
+    /// flag literal), which is how a top-level flag is read. The needle is built
+    /// in code below and DELIBERATELY NOT SPELLED IN THIS COMMENT: the first
+    /// draft wrote the pattern out with a placeholder flag, and the scan matched
+    /// its own documentation and reported that placeholder as a missing entry.
+    /// A source scan reads comments, which is the third time in one session this
+    /// tree has taught that lesson. A broader scan of every equality against a
+    /// flag literal also matches
+    /// podman argv comparisons (`--rm`, `--cap-drop=ALL`, `--entrypoint`) and
+    /// reports them as missing entries, which is a scan defect rather than a code
+    /// defect — measured while writing this test.
+    #[test]
+    fn every_dispatched_flag_is_in_the_known_flags_allow_list() {
+        let src = include_str!("main.rs");
+
+        // The list itself, not mentions anywhere in the file: twelve mentions of
+        // --reset-state coexisted with zero entries.
+        let list_start = src.find("let known_flags = [").expect("known_flags array");
+        let list_end = list_start + src[list_start..].find("];").expect("array end");
+        let list = &src[list_start..list_end];
+
+        // Flags that EXIT BEFORE the allow-list is consulted, so they need no
+        // entry. Kept short and named; anything else missing is a real gap.
+        const SHORT_CIRCUITS: &[&str] = &["--help", "-h", "--version", "-V"];
+
+        let needle = "user_args.iter().any(|a| a == \"";
+        let mut dispatched: Vec<&str> = Vec::new();
+        for part in src.split(needle).skip(1) {
+            if let Some(end) = part.find('"') {
+                let flag = &part[..end];
+                if flag.starts_with("--")
+                    && !SHORT_CIRCUITS.contains(&flag)
+                    && !dispatched.contains(&flag)
+                {
+                    dispatched.push(flag);
+                }
+            }
+        }
+        assert!(
+            dispatched.len() >= 2,
+            "found only {} user-arg flags — the scan is broken, not the code",
+            dispatched.len()
+        );
+
+        let missing: Vec<&&str> = dispatched
+            .iter()
+            .filter(|f| !list.contains(&format!("\"{f}\"")))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "dispatched from user_args but NOT in known_flags, so the allow-list \
+             refuses them with `Unsupported option` before the dispatch runs: {missing:?}"
+        );
     }
 }
