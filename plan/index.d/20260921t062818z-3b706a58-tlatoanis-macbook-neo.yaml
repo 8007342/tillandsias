@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: evidence
+      ts: "2026-09-21T06:28:18Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t062818z
+      host: tlatoanis-macbook-neo
+      summary: |
+        SECOND-REGIME RESULT for litmus:macos-vz-orphan-diagnosis on macneo, against the INSTALLED v56.9.21.1 (git 2f5f2a90a). The arm finds a real defect; this is not a one-host reproduction.
+
+        VERDICT — violation:macos-vz-orphan-diagnosis:failure-text-does-not-name-holder-75667
+
+        THE TEXT THE TRAY PRINTED when a second start was attempted while a live tray held the image, captured by running a copy of the fixture that preserves its workdir:
+
+          [exec-guest] starting VM…
+          [tillandsias-vz] guest sizing: 4 vCPU / 4 GiB (host: 6 cores / 8 GiB) — order 919-jii2
+          {"error":"start: VM start failed: Invalid virtual machine configuration. The boot loader is invalid."}
+
+        The start DOES fail under contention — the safe half works. The message attributes the failure to the BOOT LOADER and the VM CONFIGURATION, naming neither the holding process nor the contention. An operator reads that as a broken guest image. The fixture's next assertion requires the text to steer AWAY from --reset-guest, which says the author anticipated precisely this: the misdiagnosis points at the destructive remedy, and that remedy would not help.
+
+        THE GUEST IS HEALTHY, which is what makes this a misdiagnosis rather than a true report. Measured immediately afterwards with no tray running, same binary and same image:
+          tillandsias-tray --exec-guest "echo alive"  ->  alive, status ok, exit_code 0
+
+        TWO WRONG TURNS ON THE WAY, recorded because they bear on how much to trust the result. First I nearly reported the holder-naming failure without reading the text, which would have been right by luck, since I had not established the start failed for the right reason. Then I over-corrected — vmlinuz and initramfs.img are absent from the image root, I concluded the guest could not boot at all, and I was about to withdraw the finding. The standalone exec-guest settled it: the guest boots, so their absence is normal for this EFI path. That check costs thirty seconds and discriminates between the two readings; it should have come before either conclusion.
+
+        NOT CLAIMED — that the missing vmlinuz and initramfs are a defect (they are not); that an earlier run of this fixture said anything about the release (it defaulted to a dist/ bundle ten days stale, reported separately); or that Virtualization.framework offers the host a better error to surface. That last is worth checking before a fix is designed. If the framework returns only the generic configuration error, the remedy is for the tray to probe the holder itself and say so — which the fixture's own lsof precondition shows is cheap.

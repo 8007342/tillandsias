@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    field: progress_summary
+    value: |-
+      HALF 1 IS DONE; HALF 2 HAS NO SPECIMEN ON THIS BUILD AND IS CLOSED AS NOT
+      REPRODUCED RATHER THAN AS FIXED. Nothing here claims the leak was repaired.
+
+      Half 1 (crates/tillandsias-vm-layer/src/vz.rs). Before reporting a start
+      failure the runtime lsofs the image directory's nvram.bin; when a process holds
+      it, the error names the pid, says it is a live VM already running on this
+      image, and tells the reader explicitly NOT to --reset-guest, instead of
+      relaying "Invalid virtual machine configuration. The boot loader is invalid."
+      Best-effort by contract: it runs on an already-failing path, and an empty
+      answer reports the framework's text unadorned exactly as before this order.
+
+      MEASURED on tlatoanis-macbook-air 2026-09-20 against 56.9.20.1:
+        live run                  -> lsof nvram.bin = pid 31650 (the XPC helper)
+        second start while held   -> the enriched branch named pid 31650
+        the printed `kill 31650`  -> the identical command then SUCCEEDED
+      The last line is the point: the remedy the message prints was EXECUTED, not
+      reasoned about.
+
+      HALF 2, NOT REPRODUCED. On 56.9.20.1, TERM, INT and KILL sent mid-`--exec-guest`
+      — each with the in-guest command confirmed RUNNING first, so nothing was killed
+      before the VM booted — had the helper reaped every time. THE PROBE IS NOT
+      BLIND: during a live run lsof showed pid 31650 holding nvram.bin, so the
+      negative rests on a positive control rather than on a reading that could not
+      see anything either way. The leak was measured twice on 56.9.13.1 (pids 22546,
+      23586). WHAT CHANGED BETWEEN THOSE VERSIONS IS UNIDENTIFIED and is NOT claimed
+      to be deliberate.
+
+      REOPEN BY SPECIMEN, WITH THE VERSION. A fresh orphan on a named build reopens
+      this; the fixture's SIGKILL arm is the assertion that will red when one
+      appears, so a regression surfaces instead of going quiet.
+    ts: "2026-09-21T04:27:37Z"
+    host: macos
