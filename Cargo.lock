@@ -3608,6 +3608,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "embed-resource",
+ "png 0.17.16",
  "resvg",
  "serde",
  "serde_json",
