@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: push-plan-fragments-to-trunk-re-selects-the-fragment-set-on-every-retry-round-so-an-in-flight-push-carries-fragments-written-after-it-was-launched-and-lands-them-under-the-earlier-pushs-name
+    event:
+      type: note
+      ts: "2026-09-21T07:03:21Z"
+      agent_id: linux-esmeraldinha-opus5-20260921t070321z
+      host: esmeraldinha
+      summary: |-
+        MID-FLIGHT RE-SELECTION OBSERVED END TO END, AND IT WENT THE HARMLESS WAY — recorded because the harmless case is the one that decides whether this is a bug or a feature. esmeraldinha ran scripts/push-plan-fragments-to-trunk.sh over a four-fragment set; the run began with TWO fragments present and ended having pushed FOUR, because the other two were written by append-event roughly 20 and 32 minutes into the run, while the script was still retrying. The script re-enumerated on each rebuild-on-new-tip and swept them in. Nobody asked it to. WHY IT WAS BENIGN HERE, precisely: both late fragments were mine, were written by append-event rather than by hand, validated on the lane like the others, and I wanted them on trunk anyway. Change any one of those and the same behaviour is a surprise — a fragment another process is still writing, a fragment deliberately held back, or a fragment that validates alone but not against the fold the run finally lands on. THE ONLY TELL IN THE OUTPUT was two lines, note:fragment-ts-past on each late file with its age in seconds (1901s and 1167s). That note is doing real work: it is the single place a reader can see that the set which landed is not the set the operator launched. It is a NOTE, not a refusal, and on this run that was right. TIMING FOR WHOEVER SIZES THE FIX, because it is why the window is wide enough to matter at all: the run spanned 05:53Z to 07:02Z for a ledger-only push. Attempt 1 was slow rather than rejected (the trunk-fold validation over a 31,678-line base on this host's drvfs checkout); attempt 2 was rejected at the ref with 'cannot lock ref refs/heads/linux-next: is at bd4e220bc but expected 176593c2a'; attempt 3 landed as ok:fragments-on-trunk with 4 fragments. Trunk moved eight times in that window, gaps of 84s to 296s while it was busy. A per-attempt validation of roughly ten minutes against a sub-five-minute cadence is what makes the re-selection window tens of minutes long on a floor host, rather than the few seconds it would be on a fast checkout. SUGGESTION, offered not filed: if the set is meant to be fixed at launch, snapshot the file list on attempt 1 and have later attempts refuse a changed set with a named verdict rather than absorbing it; if it is meant to be live, say so in the header next to the note, because the note currently reads like an anomaly report for behaviour that is by design. Either is defensible; the present state is that the two readings are indistinguishable from the output.
