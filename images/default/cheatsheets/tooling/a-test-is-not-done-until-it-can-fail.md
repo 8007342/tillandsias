@@ -225,9 +225,22 @@ which is how it came to light at all.)
 **And note what actually surfaced it**, because it is the transferable part: not
 either author being careful, but two people measuring the same symbol at
 different times and **reconciling the disagreement instead of picking a number.**
-Two measurements that disagree are worth more than one that is confident. Had
-either of us simply trusted our own count, the heuristic would have shipped, and
-it would have shipped looking reasonable.
+Had either of us simply trusted our own count, the heuristic would have shipped,
+and it would have shipped looking reasonable.
+
+That happened **twice in the same evening**, on unrelated work. A census of
+litmus step enforcement read 42 / 2,166 on one host and 43 / 2,167 on another.
+Reconciling those two numbers is what found the missing `as a key` clause — two
+comments *mentioning* an assert token were being counted *as* enforcement. Same
+shape as the 5-against-7: **the gap was the finding, and neither number alone
+could have produced it.**
+
+The general form is worth more than either instance. A single measurement is
+always self-consistent, so it never announces that it is wrong. Two that disagree
+are the only free evidence you get — and the instinct is to end the discomfort by
+choosing the more plausible one, which discards precisely the signal. Do not
+resolve a disagreement between two measurements by picking. Resolve it by finding
+the mechanism that produces both.
 
 The rule that actually holds: **an item is not dead because nothing mentions it,
 it is dead because everything that mentions it is itself dead.**
