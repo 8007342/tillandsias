@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-21T16:59:13Z"
+      agent_id: windows-yolanda-claude-20260921t165912z
+      host: yolanda-windows
+      summary: |-
+        CORRECTION to the memory event above, which fragments being immutable cannot be amended. That event said this host carries 1.3 GB of non-reclaimable nonpaged pool that esme does not and that it is a host driver. MEASUREMENT REFUTES IT. poolmon snapshots either side of a restart: File 605.7 to 5.6 MB, SQSF 121.9 to 0.4, HalB 27.2 to 0.9 -- while DAL3 300.3, HalD 165.1, ct13 45.2 and KLOG 35.7 did not move at all. About 750 MB was ACCUMULATION, overwhelmingly kernel file objects from build filesystem churn, reclaimed entirely by one reboot; the genuinely fixed driver cost is ~546 MB and the real difference from esme is ~350 MB, the AMD display driver against their Intel one. Available memory went 32 to 56.2 percent against esme's 57.9. THE FLAW WAS THE CONTROL: this host was measured after hours of uptime and heavy builds, esme's at idle, and the difference was attributed to a driver -- with a predicted band stated in advance that esme's number landed inside, which is the shape of a confirmation rather than a test. The control was a fresh-boot reading of this host, one reboot away, and it was taken only after the conclusion had been circulated to two parties. Generalised and filed as 1334-d8bh, because it governs every host comparison and not just this row. WHAT THIS ROW'S CLOSURE RESTS ON IS UNAFFECTED: 1308-9ej7 closed on the staging criterion, which names no memory condition. What changes is how its alive-versus-reaped result should be read -- the run was alive on a host whose late-session pool was ~700 MB worse than the same host at boot, and that is a better explanation for the four reaps than anything about a driver.
