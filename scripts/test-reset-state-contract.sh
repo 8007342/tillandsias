@@ -128,6 +128,24 @@ if grep -q 'PRESERVED_ANCHOR: &str = "installation-uuid-v1"' "$MAC" \
     ok "ARM5 installation-uuid-v1 is preserved, not cleared"
 else bad "ARM5 the installation anchor is not provably on the preserved side"; fi
 
+# ARM 7 — the shared constants' PUNCTUATION is part of them.
+# RESET_NO_REPROVISION_PATH ends in a colon, so a consumer writes "{} {}". The
+# macOS body wrote "{}: {}" and v56.9.20.1 SHIPPED "...not executable:: /Applications/..."
+# in the one message a broken host ever sees, while the Windows arm formatted it
+# correctly from the same constant. Sharing the string did not share how to join
+# it, which is the thin end of exactly what the constant exists to prevent — so
+# the join is asserted, not left to each body's care.
+# The constant is a multi-line Rust string; the LAST line carries the closing
+# quote, so the tail we care about is the two characters before it.
+if grep -A2 'RESET_NO_REPROVISION_PATH: &str' "$CORE" | grep -qE ':";[[:space:]]*$'; then
+    ok "ARM7 the constant still ends in a colon (consumers must NOT add one)"
+else
+    bad "ARM7 the constant no longer ends in a colon — every '{} {}' consumer now under-punctuates"
+fi
+DOUBLED="$(grep -rn -B1 'RESET_NO_REPROVISION_PATH,' --include='*.rs' crates/ | grep '"{}: {}"' || true)"
+if [ -n "$DOUBLED" ]; then bad "ARM7 a body adds a second colon to a constant that ends in one: $DOUBLED"
+else ok "ARM7 no body doubles the constant's trailing colon"; fi
+
 # ARM 6 — NEGATIVE CONTROL. The arms above are greps, and a grep that matches
 # nothing looks identical to one whose subject is correct. This proves they can
 # still fail: assert a property that is deliberately FALSE.

@@ -87,8 +87,13 @@ pub fn run_reset_state() -> Result<(), String> {
     if !is_executable(&app) {
         // Same rule as the skipped line: the SHARED constant carries the wording,
         // this body supplies only the platform path it could not find.
+        // "{} {}", NOT "{}: {}". The shared constant already ENDS in a colon —
+        // that trailing colon is part of its contract, and the Windows arm
+        // honours it (notify_icon.rs). Mine did not, so v56.9.20.1 shipped
+        // "...not executable:: /Applications/..." in the operator-facing
+        // refusal. One character, in the one message a broken host sees.
         return Err(format!(
-            "{}: {}",
+            "{} {}",
             tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH,
             app.display()
         ));
