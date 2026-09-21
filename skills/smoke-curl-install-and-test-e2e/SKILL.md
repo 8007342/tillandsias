@@ -328,6 +328,20 @@ still holds (§2 destroys, §1 provisions), but on an operator's workstation say
 what §1 actually does before running it; consent to a download check is not
 consent to a Vault bootstrap (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
 
+**SINCE 1286-4437, `install.sh` CALLS `--reset-state` ITSELF, so on a release
+carrying that change §1 IS A DESTRUCTIVE STEP.** Bank the pre-state BEFORE §1,
+not before §2, or the reset contract has nothing to be measured against — and
+on an operator's workstation get consent for §1 on those grounds, not §2's.
+
+**AFTER A SUCCESSFUL §1 THE ENCLAVE SHOWS ZERO RUNNING CONTAINERS, AND THAT IS
+CORRECT.** The reprovision rebuilds IMAGES synchronously; the install log ends
+`SUCCESS web`, "Reset and reprovision complete", exit 0, and directs the
+operator to launch the tray. Containers arrive at tray or lane launch, not at
+install. A reader who checks `podman ps` here and finds it empty will file a
+failed provision against a release that installed perfectly — measured on
+pirria during the v56.9.21.1 run. Check the IMAGE count against `run_start`
+instead: on a real reprovision every image post-dates it.
+
 Linux:
 
 The installer honors `TILLANDSIAS_RELEASE_BASE` so the smoke pins the exact

@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-independent-mutexes-guard-one-process-global-podman-bin-so-the-stub-tests-still-race-and-the-gate-reds-on-an-unrelated-head
+    field: verifiable_closure
+    value: |-
+      ONE lock guards every write to TILLANDSIAS_PODMAN_BIN in this crate, and a
+      test asserts that the two modules use the SAME one rather than each
+      declaring its own — a source-shape assertion, because the race is
+      load-dependent and a green run proves nothing about it.
+
+      DO NOT CLOSE THIS BY RE-RUNNING THE SUITE UNTIL IT PASSES. The failure is
+      an interleaving; its absence on any one run is not evidence.
+
+
+      [2026-09-21T06:25:15Z macos] ONE LOCK, and a test that makes a second one impossible to add silently.
+
+      podman_bin_env_lock() in crates/tillandsias-podman/src/lib.rs is now the only
+      guard over TILLANDSIAS_PODMAN_BIN. lib.rs's env_lock() delegates to it (the name
+      stays; a dozen call sites read well with it) and backend.rs's two #[tokio::test]s
+      take it directly, its own tokio::sync::Mutex removed.
+
+      THE ASYMMETRY THE ROW CALLED THE DESIGN QUESTION DISSOLVES ON READING. A std
+      guard CAN be held across the `.await` in backend.rs, because #[tokio::test]
+      defaults to the current-thread flavor and that future is never required to be
+      Send. backend.rs's own comment gave "a tokio mutex rather than std" as the
+      reason it declared a separate lock; the precaution was real-sounding and
+      unnecessary, and taking it is what split the guard in two.
+
+      THE SHAPE ASSERTION, and why it is by shape:
+      exactly_one_mutex_guards_the_process_global_podman_bin reads lib.rs and
+      backend.rs and requires exactly ONE mutex declaration between them. The defect
+      is an interleaving — this crate passed 176/176 on the run immediately after the
+      failure — so no green run is evidence of its absence, and a lock that is
+      declared but never contended looks identical at runtime to no lock.
+
+      MUTATION-VERIFIED, because a guard that has only ever passed proves nothing:
+      planting `static SECOND_LOCK: OnceLock<Mutex<()>>` in backend.rs reds it with
+        "backend.rs:392: static SECOND_LOCK: ..."
+      named by file and line, and removing it greens again. The needles are assembled
+      with concat! rather than written whole — spelled out, the test matched ITSELF
+      and failed against a correct tree on its first run.
+
+      THE RACING TEST STAYS LIVE. a_prompt_podman_still_succeeds_under_the_same_budget
+      is NOT in scripts/test-known-red.txt and must not be added: it is the negative
+      control proving the backend succeeds inside its budget, and retiring it would
+      silence the harness race by discarding the assertion.
+
+      Full crate: 177 passed, 0 failed (176 before, plus the new guard). NOT OFFERED
+      AS PROOF THE RACE IS GONE — "passes N/N on re-run" is exactly the reading this
+      packet warns against. The evidence is the single declaration plus the mutation
+      arm; the suite result only shows nothing else broke.
+    ts: "2026-09-21T06:25:15Z"
+    host: macos

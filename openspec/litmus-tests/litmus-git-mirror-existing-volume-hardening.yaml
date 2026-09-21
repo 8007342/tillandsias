@@ -25,6 +25,7 @@ critical_path:
     command: "scripts/test-git-mirror-existing-volume-hardening.sh"
     timeout_ms: 60000
     expected_behavior: "PASS: git mirror existing-volume receive hardening fixture (order 579)"
+    assert_output_contains: "PASS: git mirror existing-volume receive hardening fixture (order 579)"
 
   - step: "entrypoint reapplies all mandatory receive keys outside one-time initialization"
     command: "grep -Fq 'config receive.denyNonFastForwards true' images/git/entrypoint.sh && grep -Fq 'config receive.denyDeletes true' images/git/entrypoint.sh && grep -Fq 'config receive.fsckObjects true' images/git/entrypoint.sh && echo 'ok: every-start receive hardening present'"

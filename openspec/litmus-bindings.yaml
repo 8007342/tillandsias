@@ -149,11 +149,14 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:added-test-is-referenced-shape
+  - litmus:reset-flags-accepted
   - litmus:tool-materialization
   - litmus:metrics-log-fallback-is-loud
   - litmus:gnuism-advisory-names-the-known-instances
   - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
+  - litmus:litmus-binding-truth
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
   - litmus:seam-writer-canonical-lock-shape
@@ -1215,6 +1218,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:vm-launch-graceful-failure-shape
+  - litmus:macos-vz-orphan-diagnosis
   coverage_ratio: 20
   last_verified: '2026-07-18'
 - spec_id: vsock-exec-authz

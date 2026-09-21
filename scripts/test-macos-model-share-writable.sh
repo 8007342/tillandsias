@@ -50,10 +50,24 @@
 # packet's own reproduce command was single-level and produced a false
 # retraction that propagated. USE THE PRODUCT'S SHAPE, NOT A PARAPHRASE.
 #
-# GRAMMAR — exactly one line:
-#   ^(ok:macos-model-share-writable:[0-9]+|violation:macos-model-share-writable:.*|unsupported:macos-model-share-writable:.*)$
+# GRAMMAR — one line, or two on a could-not-run (see below):
+#   ^(ok:macos-model-share-writable:[0-9]+|violation:macos-model-share-writable:.*|unsupported:macos-model-share-writable:.*|skip:macos-model-share-writable:.*)$
+#
+# A COULD-NOT-RUN PRINTS TWO LINES: the `unsupported:` detail, then the `skip:`
+# line the runner scores (1330-i4hu). Order is load-bearing.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# A precondition this fixture cannot satisfy: say what was not tested, then end
+# on the line the runner scores (1330-i4hu). scripts/run-litmus-test.sh
+# step_terminal_verdict (:960) consults ONLY the last non-empty line and
+# recognises only `skip:`/`advisory:`; with the detail line last the step falls
+# through to check_signal and :992 returns FAILURE. Never used for a red.
+cannot_run() {
+    echo "unsupported:macos-model-share-writable:$1"
+    echo "skip:macos-model-share-writable:$1"
+    exit 0
+}
 
 # --- Arm 0: the source-level guard, which needs no VM and no macOS ----------
 # If the load-bearing flag leaves the run-args, say so on every host, not only
@@ -66,26 +80,19 @@ if [ -f "$HEADLESS" ]; then
     fi
 fi
 
-[ "$(uname -s)" = "Darwin" ] || {
-    # The source guard above still ran, and that is the half a Linux CI lane
-    # can honestly answer. Say which half was skipped rather than report green.
-    echo "unsupported:macos-model-share-writable:not-darwin-source-arm-only"
-    exit 0
-}
+# The source guard above still ran, and that is the half a Linux CI lane can
+# honestly answer. Say which half was skipped rather than report green.
+[ "$(uname -s)" = "Darwin" ] || cannot_run "not-darwin-source-arm-only"
 
 TRAY="${TILLANDSIAS_TRAY_BIN:-$ROOT/dist/Tillandsias.app/Contents/MacOS/tillandsias-tray}"
-[ -x "$TRAY" ] || {
-    # A bare target/release binary has no com.apple.security.virtualization
-    # entitlement and cannot start a VM at all — name that, rather than let the
-    # caller meet it as a confusing "boot loader is invalid".
-    echo "unsupported:macos-model-share-writable:no-app-bundle-run-scripts/build-macos-tray.sh"
-    exit 0
-}
+# A bare target/release binary has no com.apple.security.virtualization
+# entitlement and cannot start a VM at all — name that, rather than let the
+# caller meet it as a confusing "boot loader is invalid".
+[ -x "$TRAY" ] || cannot_run "no-app-bundle-run-scripts/build-macos-tray.sh"
 
 HOST_CACHE="$HOME/Library/Caches/tillandsias/models"
 if [ -d "$HOST_CACHE" ] && [ -n "$(ls -A "$HOST_CACHE" 2>/dev/null)" ]; then
-    echo "unsupported:macos-model-share-writable:cache-not-empty-precondition-unmet"
-    exit 0
+    cannot_run "cache-not-empty-precondition-unmet"
 fi
 
 OUT="$(mktemp -t macos-model-share-writable)"
@@ -128,8 +135,7 @@ arm1="$(sed -n 's/^ARM1://p' "$OUT" | tr -d '\r')"
 arm2="$(sed -n 's/^ARM2://p' "$OUT" | tr -d '\r')"
 
 if [ -n "$arm0" ]; then
-    echo "unsupported:macos-model-share-writable:$arm0"
-    exit 0
+    cannot_run "$arm0"
 fi
 if [ -z "$arm1" ] || [ -z "$arm2" ]; then
     echo "violation:macos-model-share-writable:no-arm-output-guest-unreachable"

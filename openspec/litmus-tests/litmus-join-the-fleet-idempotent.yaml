@@ -7,7 +7,7 @@ description: >
   Order 1311-ajpm (operator direction 2026-09-20): ./skills/join-the-fleet is
   the idempotent onboarding for a worker on bare metal or in a forge, and
   scripts/check-fleet-membership.sh is its NON-MUTATING verifier. This binding
-  runs the fixture: two runs print the same verdict line and leave git status
+  runs the fixture (1311-ajpm arms 1-3, 1317-9ugn arms 4-6): two runs print the same verdict line and leave git status
   untouched; under the forge regime every host-only step is a named skip and
   the verdict's skipped= count equals the skip lines printed; a scaffold git
   dir with no pre-push hook yields todo:join-the-fleet:hooks:scripts/install-hooks.sh
@@ -25,9 +25,9 @@ critical_path:
     expected_behavior: "ok:join-the-fleet-scripts-parse"
     assert_exit: 0
     timeout_ms: 5000
-  - step: "the fixture's three arms hold"
-    command: "bash scripts/test-join-the-fleet-idempotent.sh 2>&1 | grep -E '^ok:join-the-fleet-idempotent:3/3$'"
-    expected_behavior: "ok:join-the-fleet-idempotent:3/3"
+  - step: "the fixture's six arms hold"
+    command: "bash scripts/test-join-the-fleet-idempotent.sh 2>&1 | grep -E '^ok:join-the-fleet-idempotent:6/6$'"
+    expected_behavior: "ok:join-the-fleet-idempotent:6/6"
     assert_exit: 0
     assert_output_nonempty: true
     timeout_ms: 120000

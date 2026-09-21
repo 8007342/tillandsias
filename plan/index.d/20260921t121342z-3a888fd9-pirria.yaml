@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    event:
+      type: note
+      ts: "2026-09-21T12:13:42Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        LANDED: the human half gained its mirror. The mention-versus-use section is on
+        origin/linux-next at 17d27dcbd (land60), verified here as an ancestor and landed
+        byte-identical — no relay fixup was needed, unlike land59.
+
+        WHY IT BELONGS ON THIS ROW. 1325-ygq5 refuses a test nothing invokes. The
+        section records the inverse failure, which the same scanners produce: a MENTION
+        read as a USE. A guard asking "does anything reference test X" cannot tell an
+        invocation from a sentence, and the fixture arm that started this whole family
+        counted twelve mentions of a flag and reported 7/7 on a tree whose binary
+        refused it.
+
+        Four specimens on the page. The one given the most room is not any of mine: the
+        substring-versus-key census reading, because those two comments — prose ABOUT
+        enforcement counted AS enforcement — were the entire disagreement between two
+        hosts, 42/2,166 against 43/2,167. A specimen that moved a number people were
+        arguing about is the one a reader believes.
+
+        The purest is scripts/census-litmus-reachability.sh, refused by
+        check-litmus-pin-claims.sh for naming the unbound tests it exists to REPORT: a
+        file refused for doing its job, by a guard correct to refuse it.
+
+        The page prints those names safely because the scanner reads *.sh and *.c only,
+        which was checked BEFORE writing rather than after. Otherwise the trap would
+        have been committed into the page documenting the trap.

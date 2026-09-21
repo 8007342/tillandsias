@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    field: status
+    value: completed
+    ts: "2026-09-21T02:59:12Z"
+    host: yoga
+
+events:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    event:
+      type: completed
+      ts: "2026-09-21T02:59:12Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: dc42e7271 + ./build.sh --check GATE_EXIT=0 (1071s) + scripts/test-pre-push-work-ref-lane.sh 5/5; regression fixed in 6080e8365 before landing
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    event:
+      type: note
+      ts: "2026-09-21T02:59:12Z"
+      host: yoga
+      summary: |-
+        landed on origin/linux-next 2026-09-21T02:59:12Z

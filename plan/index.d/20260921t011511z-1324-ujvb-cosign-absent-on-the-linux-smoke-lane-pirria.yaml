@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: no-linux-smoke-has-ever-verified-a-release-signature-because-cosign-is-absent-from-the-floor-host-and-unpackaged-for-its-distro-so-every-linux-report-carries-signatures-unverified
+    order: 1324-ujvb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags:
+      - release
+      - security
+      - testing
+      - low-end
+    estimated_hours: 3
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: 'cosign is absent from the Linux smoke host AND unpackaged for its distro, so §1s answers `cosign:could-not-run:cosign-absent`
+      on every run and no Linux smoke has ever established the AUTHENTICITY of a release artifact
+
+      '
+    context: "MEASURED on pirria 2026-09-21 during the v56.9.20.1 smoke:\n\n  $ command -v cosign    \
+      \        -> absent on the host\n  $ toolbox run -c tillandsias-builder -- command -v cosign  ->\
+      \ absent\n  $ toolbox run -c tillandsias-builder -- dnf list --available cosign\n    No matches\
+      \ found.\n\nSo §1s emitted `cosign:could-not-run:cosign-absent` and the report's verdict is\n`FAIL\
+      \ (signatures unverified: cosign absent)`. That is the runbook working as\n1273-4mak designed it\
+      \ — a third verdict, on the headline, that a reader cannot\nmiss — but it is a verdict this lane\
+      \ will emit EVERY TIME until something\nchanges.\n\nTHE GAP IS OLDER AND WIDER THAN THIS HOST. The\
+      \ runbook's own §1s records that\nthe missing signature check was declared \"NOT CHECKED\" in the\
+      \ 2026-08-28 Linux,\n2026-08-28 Windows and 2026-09-19 macOS reports — three platforms, three times\
+      \ —\nand that \"a gap everyone declares and nobody closes is a missing GATE, not a\nmissing observation\"\
+      . 1273-4mak added the verdict and the headline requirement;\nit did not put the tool on any host.\
+      \ Authenticity has therefore never been\nestablished for any release by any lane, only ever recorded\
+      \ as unestablished.\n\nWHAT INTEGRITY BUYS AND WHAT IT DOES NOT. install.sh checks the asset's SHA256\n\
+      against a SHA256SUMS fetched from the same place as the asset, which is\nself-consistent by construction:\
+      \ a substituted asset served with a regenerated\nmanifest passes. The `.cosign.bundle` beside every\
+      \ asset is the only artifact in\nthe set that answers WHO PRODUCED THIS, and nothing has ever read\
+      \ one.\n\nWHY THIS IS NOT A ONE-LINE FIX, and why the host that found it did not just do\nit. cosign\
+      \ is not in the toolbox distro's repositories, so closing this means\nfetching an unpackaged third-party\
+      \ binary from an upstream release and putting\nit in a BUILD toolbox. That is a supply-chain decision,\
+      \ and it has a\nbootstrapping problem of exactly the kind this row is about: the tool whose job\n\
+      is to verify provenance would arrive with its own provenance unverified unless\nits installation\
+      \ is itself checked (sigstore publishes checksums and signatures\nfor cosign; an installer that\
+      \ skips them reproduces the defect one level up).\nDeciding that alone, mid-release, as a side effect\
+      \ of wanting a cleaner smoke\nline, is the wrong way for it to happen.\n"
+    exit_criteria:
+      - 'a Linux smoke on the floor host emits `cosign:verified:1/1` for the artifact it installed (pre-fix
+        result: FAILS — `cosign:could-not-run:cosign-absent`, measured on pirria 2026-09-21 against v56.9.20.1)'
+      - 'the installation of cosign itself is verified, not merely downloaded: its checksum AND signature
+        are checked against sigstore''s published values, or it arrives from a signed distro package.
+        A provenance tool installed without provenance is this row''s own defect one level up.'
+      - 'NEGATIVE CONTROL: a host that still lacks cosign keeps emitting `cosign:could-not-run:<reason>`
+        and its report still reads `PASS (signatures unverified: …)` — the third verdict must survive,
+        because a fleet where only some hosts can verify must not have the others silently reporting clean'
+      - 'the decision is recorded either way: if the fleet chooses NOT to put cosign on floor hosts, the
+        runbook names that explicitly as a floor-host skip with its reason, so the next reader finds a
+        decision rather than an omission'
+    unscoreable: 'acquisition-path-not-chosen: toolbox-first via an ensure-style script, a host-level
+      package where a distro ships one, or a runbook-level floor-host skip are three different answers
+      with different blast radii, and the third is legitimate — a floor host that cannot verify is not
+      obliged to pretend. The measurement is complete and reproducible; the choice is a supply-chain call
+      and belongs with the operator rather than with the host that happened to run the smoke.
+
+      '
+    events:
+      - type: filed
+        ts: '2026-09-21T01:15:11Z'
+        agent_id: linux-pirria-claude-20260921t013000z
+        host: pirria
+        summary: 'Filed rather than fixed, deliberately. The coordinator offered the choice
+
+          ("either is a row; you choose") and the measurement made the choice: cosign is
+
+          not packaged for this toolbox, so closing it means installing an unpackaged
+
+          third-party binary into a build environment. That is a supply-chain decision
+
+          about the tool whose entire purpose is supply-chain verification, and it should
+
+          be made deliberately rather than at 01:30 by the host that wanted a tidier
+
+          report line.'

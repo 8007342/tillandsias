@@ -45,6 +45,7 @@ critical_path:
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-format_observed_launch_failure-classifier"
     timeout_ms: 5000
     expected_behavior: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
+    assert_output_contains: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
 
   - step: "the CDI launch-failure classification arms pass against the measured OCI-runtime stderr (665-zddn)"
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-cdi-classification-arms"
@@ -55,6 +56,7 @@ critical_path:
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-launch-breadcrumb-wired"
     timeout_ms: 5000
     expected_behavior: "ok: write_launch_breadcrumb called from format_observed_launch_failure"
+    assert_output_contains: "ok: write_launch_breadcrumb called from format_observed_launch_failure"
 
 observability:
   traces:

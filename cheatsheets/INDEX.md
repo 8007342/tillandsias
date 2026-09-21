@@ -160,7 +160,6 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - forge-paths-ephemeral-vs-persistent.md    — You're an agent (or human) writing files inside the forge container and need to… [pull-on-demand: stub]
 - forge-shared-cache-via-nix.md             — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
 - forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]
-- macos-guest-host-vsock-measurement.md        — measuring a guest→host vsock hop on macOS: why `--exec-guest` cannot prove it, the boot-oneshot + virtiofs side-channel method, and the seccomp shape. [bundled, verified]
 - forge-standalone-runner.md [DRAFT]        — is `cheatsheets/runtime/forge-standalone.md`. [bundled, partial-verify]
 - forge-transparency.md                     — Understanding which infrastructure services are transparently [bundled, partial-verify]
 - gpu-tier-detection.md [DRAFT]             — Determining which LLM models to pre-pull or lazy-load based on GPU VRAM, select… [bundled, partial-verify]
@@ -172,6 +171,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - local-inference.md                        — an agent inside the forge needs to call a local LLM — for triggers, summarisati… [pull-on-demand: stub]
 - logging-levels.md                         — Configuring log verbosity, enabling accountability windows, or troubleshooting … [bundled, partial-verify]
 - low-end-cpu-inference-floor.md            — deciding whether a small x86 host can serve the expert layer, hold a [pull-on-demand: project-committed]
+- macos-guest-host-vsock-measurement.md     — anything inside the macOS guest has to reach a host-native [bundled, partial-verify]
 - macos-pty-attach.md                       — implementing or debugging the macOS tray's live PTY-over-vsock [bundled, partial-verify]
 - macos-tray-diagnostics.md                 — an installed Tillandsias.app on a macOS host is misbehaving and you need to fig… [bundled, partial-verify]
 - macos-vz-guest-boot-baseline.md           — What a Virtualization.framework guest boot actually costs on this project's [bundled, partial-verify]
@@ -241,7 +241,13 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## tooling
 
-- recursive-grep-symlinks.md       — you are about to assert a UNIVERSAL NEGATIVE ("nothing in this tree [bundled, partial-verify]
+- a-test-is-not-done-until-it-can-fail.md — **Writing the assertion is the easy half.** The hard half is that something [bundled, partial-verify]
+- awk-word-boundary.md                    — an `awk` search came back empty and you are about to report the [bundled, partial-verify]
+- a-write-cannot-ask-a-question.md        — **A tool that writes by default cannot be used to ask whether a flag exists.** [bundled, partial-verify]
+- exit-status-is-not-an-answer.md         — **Check what it produced.** `cmd || fallback`, `if cmd; then`, and [bundled, partial-verify]
+- git-bash-cannot-fork-or-enumerate.md    — you are running a project script from Git Bash and it fails in a [bundled, partial-verify]
+- msys-cr-blindness.md                    — you are about to answer "does this file have CRLF line endings?" [bundled, partial-verify]
+- recursive-grep-symlinks.md              — you are about to assert a UNIVERSAL NEGATIVE ("nothing in this tree [bundled, partial-verify]
 
 ## utils
 

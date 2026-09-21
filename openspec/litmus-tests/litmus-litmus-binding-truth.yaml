@@ -1,0 +1,78 @@
+# @trace spec:ci-release
+# @trace order:1304-wbb2
+#
+# Order 1304-wbb2: nothing compared a litmus file's own `spec:` field with the
+# block it is listed under in openspec/litmus-bindings.yaml, so a misbound
+# litmus RUNS and is MISATTRIBUTED — the spec it declares reads covered while
+# holding zero tests, and the block it was filed under takes credit for a test
+# naming a different owner. Measured on the live corpus 2026-09-20: 69 such
+# bindings across 42 files, including two Windows tests filed under macOS and
+# one macOS test under Windows.
+#
+# The fixture keeps TWO CRITERIA SEPARATE with a mutation arm each, because a
+# fix for one can leave the other and both live in one script: 2a
+# misattribution (the new cross-check) and 2b invisibility (660-ryhn's
+# unbound refusal, which this change edits the same file as and must not
+# break).
+name: litmus:litmus-binding-truth
+spec: ci-release
+phase: pre-build
+description: >
+  Pin that a newly bound litmus must be bound under a block its own file
+  declares, that an unbound file is still refused, and that removing either
+  guard makes its arm fail — so neither check can quietly stop checking.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-litmus-binding-truth.sh
+  - workspace contains scripts/check-litmus-bindings.sh
+  - git is available, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-litmus-binding-truth.sh && test -x scripts/test-litmus-binding-truth.sh && echo 'ok: binding-truth-fixture-parses'"
+    expected_behavior: "ok: binding-truth-fixture-parses"
+    assert_exit: 0
+    timeout_ms: 5000
+
+  # `grep -E`, never `grep -q`, behind a pipe: grep -q exits at its first match
+  # and can SIGPIPE the upstream, which under pipefail inverts the pipeline's
+  # verdict (1306-ifhv / 1307-ermc). grep -E reads to the end and prints the
+  # matched line as this step's own evidence.
+  #
+  # `skip:no-git` is a legitimate outcome: the checks under test are
+  # diff-scoped against a base ref, so a tree with no git cannot answer the
+  # question and must say so rather than pass.
+  - step: "both criteria hold and both mutations red their arms"
+    command: "bash scripts/test-litmus-binding-truth.sh 2>&1 | tail -1 | grep -E '^(ok:litmus-binding-truth:4/4|skip:no-git)$'"
+    expected_behavior: "ok:litmus-binding-truth:4/4 (or skip:no-git)"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 300000
+
+anti_regression:
+  - claim: "the cross-check must not be gated on the runner being present"
+    why: >
+      Its first version sat inside the block gated on `[ -x "$RUNNER" ]` and was
+      therefore skipped wherever the runner was absent — including inside this
+      fixture, where arm 1 failed and arm 2 PASSED because the check never ran
+      and the mutated copy behaved identically. A static comparison of two
+      files needs no binary, and a check that quietly does not run is this
+      row's own subject.
+
+  - claim: "the mutation arms must neutralise the CONDITION, not the message"
+    why: >
+      Replacing a `violation:` echo leaves the enclosing `if … then … exit 1`
+      intact, so the mutant still refuses and the arm fails for a reason
+      unrelated to the mutation — or, worse, passes for one. Both arms mutate
+      the guard's condition.
+
+  - claim: "the standing 69 mismatches must stay advisory"
+    why: >
+      A hard refusal over the existing corpus converts one silent problem into
+      an undiagnosed red suite, which is 660-ryhn's own warning and the reason
+      its grandfathering ratchet exists. The cross-check is diff-scoped to
+      newly added bindings; the corpus cleanup is a separate change decided per
+      file, since a wrong block can mean the binding is wrong or the
+      declaration is wrong.

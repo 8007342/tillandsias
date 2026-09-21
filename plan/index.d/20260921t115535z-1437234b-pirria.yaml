@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    event:
+      type: note
+      ts: "2026-09-21T11:55:35Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        FILED AND LANDED: this row is on origin/linux-next at 90a14541f (land59),
+        verified here as an ancestor of that branch rather than taken from the relay.
+
+        The instrument, scripts/census-litmus-reachability.sh, landed with a relay-side
+        fixup: two names in its header comment were assembled rather than spelled,
+        because check-litmus-pin-claims.sh read the file REPORTING unbound tests as a
+        file CLAIMING them. The checker was right — a pin on an unbound test is as inert
+        as a pin on a missing one — and the specimen is now on the traps page as the
+        purest form of the shape: a file refused for doing its job, by a guard correct
+        to refuse it.
+
+        Nothing about the measurement changed: files 445, retired 12,
+        grandfathered-unbound 10, unbound 0, spec-binding-mismatch 24, with both
+        negative controls holding.

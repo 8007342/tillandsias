@@ -21,6 +21,11 @@
 # Usage: scripts/e2e-step2-macos.sh <LOG_DIR>
 set -uo pipefail
 
+# PRINT THE USAGE, do not let `set -u` speak for us: a missing argument used to
+# produce "line 24: $1: unbound variable", which names the shell's internals and
+# not the thing the caller got wrong. The usage was already written, four lines
+# up, in a comment nobody sees at the moment they need it.
+[ $# -ge 1 ] || { echo "usage: scripts/e2e-step2-macos.sh <LOG_DIR>" >&2; exit 2; }
 LOG_DIR="$1"
 mkdir -p "$LOG_DIR"
 

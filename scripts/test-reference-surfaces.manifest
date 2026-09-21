@@ -1,0 +1,26 @@
+# THE REFERENCE SURFACE — the one declaration of "what it means for a test to be
+# referenced" (order 1325-ygq5).
+#
+# A test is DONE when something that runs on its own can fail because of it.
+# This file names the things that "run on their own". It exists because the
+# packet's own unscoreable said the surface was four places and declared in
+# none: a fifth caller added tomorrow would make a referenced test look
+# unreferenced, and the guard would start naming innocent files. Now adding a
+# caller means adding a line here, and the verdict line carries the surface
+# count so a reader can see when it changes.
+#
+# Format: <organ> <path-or-glob>
+#   shell   — searched for the BASENAME of an added scripts/test-*.sh
+#   litmus  — searched for the declared `name:` of an added litmus yaml
+#
+# Globs are expanded by the guard, not by a shell at read time; a pattern that
+# matches nothing is reported, never silently skipped (that silence is the
+# whole failure shape this packet is about).
+
+shell   scripts/gate-steps.d/*.step
+shell   build.sh
+shell   scripts/local-ci.sh
+shell   scripts/hooks/*.sh
+shell   openspec/litmus-tests/*.yaml
+
+litmus  openspec/litmus-bindings.yaml

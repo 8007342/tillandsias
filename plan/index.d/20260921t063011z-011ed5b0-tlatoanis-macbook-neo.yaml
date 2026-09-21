@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    event:
+      type: evidence
+      ts: "2026-09-21T06:30:11Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t063011z
+      host: tlatoanis-macbook-neo
+      summary: |
+        PRE-FIX RESULT REPRODUCED ON A SECOND HOST — macneo, 2026-09-21, against the SHIPPED v56.9.21.1 (git 2f5f2a90a), which does NOT carry this row's half 1 (that landed on osx-next at e57d7f7a1, after the cut).
+
+          violation:macos-vz-orphan-diagnosis:failure-text-does-not-name-holder-75667
+
+        VERBATIM, captured by running a copy of the fixture that preserves its workdir, since the original removes it:
+
+          [exec-guest] starting VM…
+          [tillandsias-vz] guest sizing: 4 vCPU / 4 GiB (host: 6 cores / 8 GiB) — order 919-jii2
+          {"error":"start: VM start failed: Invalid virtual machine configuration. The boot loader is invalid."}
+
+        Exactly the phrase this row's title names. The start DOES fail under contention — the safe half works — and the message attributes it to the boot loader and the VM configuration, naming neither the holding process nor the contention.
+
+        THE GUEST WAS HEALTHY, which is what makes it a misdiagnosis rather than a true report. Immediately afterwards, same binary, same image, no tray running:
+          tillandsias-tray --exec-guest "echo alive"  ->  alive, status ok, exit_code 0
+
+        That standalone check is the one that discriminates, and it belongs FIRST in this kind of investigation. Without it, "invalid boot loader" reads as a broken image and the obvious next step is to destroy and reprovision — which is why this row's fixture also asserts the text steers away from --reset-guest.
+
+        WHAT THIS IS AND IS NOT. It is a second-regime pre-fix reproduction on a different host, so the behaviour is not one machine's dirty state. It is NOT a regression in v56.9.21.1 and NOT a defect of the fix: the explainer simply is not in that binary. The v56.9.21.1 README row carries it as known, filed and shipping, with the explainer landing in the next daily.
+
+        ONE OPEN QUESTION FOR THE FIX, not a request to change it. Does Virtualization.framework hand the host anything better than the generic configuration error, or must the tray probe the holder itself to say who has the image? The fixture's own lsof precondition shows the probe is cheap, so if the framework is silent the tray can still name the holder.

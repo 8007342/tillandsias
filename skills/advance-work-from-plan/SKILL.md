@@ -19,7 +19,11 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     scripts/check-committable-branch.sh
     git merge --no-edit origin/linux-next   # platform branches: BEFORE §2.0, not only before push
     ```
-    The last line is the executable Committable Branch Guard (order 476,
+    `<active-branch>` is where you START and where the plan-only lane writes
+    (claims, events, handoffs). Your CODE goes to a work ref, `work/<order>`,
+    created after the claim (§3) and pushed as often as you like without a
+    gate (§6; methodology `work_ref_lane`, 1315-4a7j / 1317-9ugn).
+    The `scripts/check-committable-branch.sh` line is the executable Committable Branch Guard (order 476,
     pinned by `litmus:committable-branch-guard-shape`): it prints one verdict
     line and exits `0` only when HEAD is on a committable branch (any named
     branch except `main`). On `blocked:committable-cycle-on-main` (or any
@@ -333,7 +337,18 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     # nobody on trunk can see it until the relay. Push the fragment to trunk
     # too (1153-j2nm); no build stamp is needed, the plan-only lane takes it:
     scripts/push-plan-fragments-to-trunk.sh        # -> ok:fragments-on-trunk:<sha>:<n>
+    # THEN THE WORK REF (1317-9ugn). The claim is on trunk; the code goes here:
+    git switch -c work/<order> origin/linux-next     # named by the order, started from trunk
     ```
+
+    The work ref is where you commit and push for the rest of the cycle: no
+    gate stamp, no trunk merge, the fast deciders WARN and nothing refuses
+    (`warn:pre-push:…`). Only the claim and the events go to `<active-branch>`
+    through the plan-only lane. The order of the whole flow, from
+    join-the-fleet §3: claim by order → `git switch -c work/<order>` from
+    `origin/linux-next` → commit and push to `work/<order>` freely → open the
+    PR (draft until the closure evidence is on the row) → the landing queue
+    integrates once → close by order after the landing proves.
 
     `push-plan-fragments-to-trunk.sh` builds one commit parented on
     `origin/linux-next` carrying only the NEW fragment files (temporary index
@@ -769,7 +784,7 @@ Hard rules:
 
 - **On Windows, name the runner beside a test count: native cargo or the gate's WSL re-exec.** A `cfg(all(test, unix))` module reports "7 passed" natively while three of its tests are broken, because the broken ones were never compiled; only the WSL re-exec runs them (972-umik commit B, 2026-09-05). Windows-native cargo output is not evidence about a unix-cfg module. And a litmus verdict from a Windows host before df5708607 (1049-s35z) is unearned: CRLF from jq.exe made bound tests unfindable, and the runner counted the skips as PASS.
 
-- **Under the relay protocol, `git pull --rebase` on linux-next fuses the two lanes.** A slow-gate host pushes gated code to `work/<order>` for the coordinator to relay-land and pushes ledger fragments directly through the plan-only lane. If both commits exist on the same local linux-next, a rebase carries the code into the "plan-only" push and the hook refuses it (`plan-only lane: not applicable — … outside plan/index.d/`), which is correct; the refusal's output offers `git push --no-verify`, which would push the violation through. Never use it. After a `work/` push, reset local linux-next to `origin/linux-next` before starting plan-only work, so the lanes never share a branch; if they already do, reset to trunk and cherry-pick the fragment commit alone after confirming the `work/` ref is safe on origin (lenovinha, 2026-09-05, 1059-pb2j).
+- **Under the relay protocol, `git pull --rebase` on linux-next fuses the two lanes.** (Since 1315-4a7j a `work/<order>` ref is UNGATED — it is where a host works, not a gated hand-off; the lane separation below still holds, and the coordinator's relay still lands a work ref a host cannot open a PR for.) A slow-gate host pushes code to `work/<order>` for the coordinator to relay-land and pushes ledger fragments directly through the plan-only lane. If both commits exist on the same local linux-next, a rebase carries the code into the "plan-only" push and the hook refuses it (`plan-only lane: not applicable — … outside plan/index.d/`), which is correct; the refusal's output offers `git push --no-verify`, which would push the violation through. Never use it. After a `work/` push, reset local linux-next to `origin/linux-next` before starting plan-only work, so the lanes never share a branch; if they already do, reset to trunk and cherry-pick the fragment commit alone after confirming the `work/` ref is safe on origin (lenovinha, 2026-09-05, 1059-pb2j).
 
 - **Relay-lane order is fetch, rebase, gate, push; and never sequence a destructive git command after a push in the same block.** Gating before the rebase invalidates the stamp and the hook refuses correctly (lenovinha, 2026-09-05). And `git push && …` is not enough when the push is refused by a hook that exits non-zero only sometimes: a `git reset --hard` placed after a push in one block ran on a refused push and discarded a commit that existed nowhere else, recovered from the reflog. Under the relay protocol a `work/` push is followed by a reset to keep the lanes apart, which makes this likelier: read the push's verdict line, then reset in a separate command.
 
@@ -785,30 +800,43 @@ Hard rules:
 
 ## 6 — Commit, Push & Checkpoint
 
-1.  **Durable Checkpointing**: At meaningful milestones (every 30–45 minutes), write an `agent_status_packet` as a `progress` or `checkpoint` event to a `plan/index.d/` fragment via `tillandsias-plan append-event <packet-id> progress ...` or fragment file, and commit/push it to your host's `<active-branch>`.
+1.  **Durable Checkpointing**: At meaningful milestones (every 30–45 minutes), write an `agent_status_packet` as a `progress` or `checkpoint` event to a `plan/index.d/` fragment via `tillandsias-plan append-event <packet-id> progress ...` or fragment file, and push it through the plan-only lane (`scripts/push-plan-fragments-to-trunk.sh`) — the fragment lives on trunk, not on the work ref.
     -   *Schema requirement*: Include current plan, touched files, partial evidence, and next checkpoint.
-2.  **targeted git add**: ONLY stage the intended files:
+2.  **targeted git add, then push the WORK REF** (1317-9ugn; methodology `work_ref_lane`):
     ```bash
     git add <specific-files>      # NEVER `git add -A` (cross-host churn)
     git commit -m "<slice-message>"   # cite trace + plan packet + any unblock-noop
-    git push origin <active-branch>
+    git push -u origin work/<order>   # ungated: no stamp, no trunk merge, the deciders warn
     ```
+    Push after every commit if you like. A work ref never races anyone: the
+    "remote moved, retrying" loop belongs to pushes at the shared branch, and a
+    work ref has one writer. If the hook prints `warn:pre-push:<decider>:` the
+    decider found something you will have to fix before the landing; fix it in
+    the next commit, the push already went through.
 
-### Integration Verification Gate (run AFTER every rebase/merge, BEFORE every push)
+    MIGRATION, NOT ENFORCEMENT (operator, 2026-09-20): a gated push straight to
+    `<active-branch>` still lands today, and the hook's refusals carry the same
+    affordance join-the-fleet §3 teaches; it will be refused later, once
+    `scripts/check-landing-provenance.sh` measures that most landings arrive
+    through the queue, and that flip is the operator's decision on a number.
+
+### Integration Verification Gate (run ONCE per unit of work, BEFORE the PR leaves draft)
 
 This gate is **non-negotiable**. The shared trunk has been broken twice by agents
 pushing an un-revalidated post-integration tree: a duplicate `#[test]` definition
 (E0428) and an orphan `>>>>>>>` conflict marker left inside `plan/index.yaml`.
 `./build.sh --check` alone does NOT catch the YAML class — `plan/`/`openspec/`
-files are data, not compiled. So a rebase/merge is only "done" when ALL of these
-pass on the merged tree:
+files are data, not compiled. The landing queue re-runs the gate at FULL on
+the merged candidate (1316-bnzt), so this run is what keeps your PR from being
+evicted, not what lands it. A merge of trunk into the work ref is only "done"
+when ALL of these pass on the merged tree:
 
 ```bash
-# SAME-branch catch-up only: rebase YOUR un-pushed commits onto origin/<active-branch>.
-# (CROSS-branch integration — sibling->trunk or main->branch — is MERGE-ONLY; never
-#  rebase/cherry-pick published commits across branches. See the integration_strategy
-#  in methodology/multi-host-development.yaml. The gate below runs for BOTH cases.)
-git fetch origin && git rebase origin/<active-branch>     # ≤3 retries
+# Bring trunk into the WORK REF by MERGE. Never rebase a pushed ref, and never
+# rebase/cherry-pick published commits across branches (integration_strategy in
+# methodology/multi-host-development.yaml). `git config rerere.enabled true`
+# (join-the-fleet §1) replays a resolution you already made.
+git fetch origin && git merge --no-edit origin/linux-next
 
 # 1. No conflict markers survived the resolution (the orphan-marker bug).
 #    Markers are EXACTLY 7 chars then space/EOL — do not match `=` separator lines:
@@ -830,7 +858,7 @@ elif command -v ruby >/dev/null 2>&1; then
 else
   echo "no sanctioned YAML validator available — do NOT substitute python3"; exit 1
 fi
-for y in $(git diff --name-only origin/<active-branch>..HEAD | grep -E '\.ya?ml$'); do
+for y in $(git diff --name-only origin/linux-next..HEAD | grep -E '\.ya?ml$'); do
   yamlcheck "$y" || { echo "INVALID YAML: $y"; exit 1; }
 done
 
@@ -838,13 +866,21 @@ done
 #    (also pinned by litmus:no-duplicate-rust-item-defs in the --ci-full suite):
 ./build.sh --check
 
-# Only now:
-git push origin <active-branch>
+# Only now: push the work ref, open the PR as a draft, and mark it ready once
+# the closure evidence is on the row. The landing queue integrates it ONCE.
+git push origin work/<order>
+gh pr create --base linux-next --head work/<order> --draft --fill
+gh pr ready <pr-number>        # after the row carries the closure evidence
 ```
 
-If any step fails, FIX or abort the rebase — **never push a tree that failed this
-gate.** A push that breaks the trunk costs every other agent their next cycle; the
-gate is the price of concurrent convergence.
+If any step fails, FIX it in the next commit — **never mark ready a tree that
+failed this gate.** A candidate that fails at the landing is evicted and costs
+the queue a full gate; the gate here is the price of a landing that goes
+through first time. If your host's token cannot open pull requests (the fleet's
+fine-grained token lacks "Pull requests: write" as of 2026-09-20 — an operator
+ask), push the work ref and send the coordinator its SHA: the relay lane lands
+it exactly as the queue would. Close by order only after the merge is on
+`origin/linux-next`.
 
 3.  **Durable Ledger Update**: Write a one-line outcome to your host's work-queue ledger (`plan/issues/<host>-next-work-queue-*.md`):
     ```
@@ -1002,8 +1038,8 @@ status `ready`. The packet closes only when every agent named in
     correctly, refuses an unknown reference, and reports a no-op instead of
     writing one. Add a narrative `progress`/`completed` event too if the detail
     is worth keeping — but the status transition is what actually closes it.
-3.  **Commit & Push Ledger**: Commit and push the final plan fragment edits to `origin/<active-branch>`.
-4.  **Attest**: with every commit pushed, run `scripts/finalize-cycle.sh <active-branch>`
+3.  **Commit & Push Ledger**: the final plan fragments go to trunk through the plan-only lane (`scripts/push-plan-fragments-to-trunk.sh`), never onto the work ref; on a platform branch commit them to `origin/<active-branch>` as well.
+4.  **Attest**: with every commit pushed (the work ref: `git log origin/work/<order>..HEAD` empty), run `scripts/finalize-cycle.sh <active-branch>`
     (verify boundary, record, land, re-verify, derive the `MO-FULL:` marker —
     never type it). It needs the §1 step 1b snapshot; without one the honest
     exit is landed-but-unattested, stated in the loop-status entry's first
@@ -1036,7 +1072,7 @@ A successful invocation MUST NOT exit with local-only work:
 1.  **Emit Blocked or Failed Event**: If you encounter an unresolvable error, blocker, or spec gap:
     -   Append a `blocked` or `failed` event to `events:` detailing the exact reason, the named blocker, and the smallest next diagnostic command.
     -   Flip status to `blocked` or `failed` (with `retryable: true|false`).
-    -   Commit and push to `origin/<active-branch>` so the Orchestrator can audit and reschedule it.
+    -   Push the event through the plan-only lane (`scripts/push-plan-fragments-to-trunk.sh`) so the Orchestrator can audit and reschedule it; push the work ref too, so the partial code is on origin.
 2.  **Fallback Selection**: Release your local lease, select your named fallback task, and begin the loop fresh.
 
 ---

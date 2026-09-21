@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: join-the-fleet-and-advance-work-from-plan-teach-the-work-ref-and-landing-flow-so-a-bootstrapped-agent-commits-and-pushes-freely-to-its-own-branch-and-integrates-once-per-unit-of-work
+    field: status
+    value: completed
+    ts: "2026-09-21T02:33:08Z"
+    host: macuahuitl
+
+events:
+  - packet_id: join-the-fleet-and-advance-work-from-plan-teach-the-work-ref-and-landing-flow-so-a-bootstrapped-agent-commits-and-pushes-freely-to-its-own-branch-and-integrates-once-per-unit-of-work
+    event:
+      type: completed
+      ts: "2026-09-21T02:33:08Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: dc42e7271 + scripts/test-join-the-fleet-idempotent.sh ok:join-the-fleet-idempotent:6/6 (arms 4-6: rerere, work-ref note, affordance identity)
+  - packet_id: join-the-fleet-and-advance-work-from-plan-teach-the-work-ref-and-landing-flow-so-a-bootstrapped-agent-commits-and-pushes-freely-to-its-own-branch-and-integrates-once-per-unit-of-work
+    event:
+      type: note
+      ts: "2026-09-21T02:33:08Z"
+      host: macuahuitl
+      summary: |-
+        closed by the coordinator after the landing on origin/linux-next (dc42e7271)

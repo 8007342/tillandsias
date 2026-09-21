@@ -123,11 +123,76 @@ fi
 # so `foogrep` and `mygit` remain unmatched.
 UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(/[^[:space:]|;&()]*/)?(cat|find|journalctl|coredumpctl|grep[[:space:]]+-[a-zA-Z]*[rR][a-zA-Z]*|git[[:space:]]+(log|diff|show|ls-files|ls-tree|grep)|cargo|podman[[:space:]]+(logs|events|ps|images)|docker[[:space:]]+(logs|ps|images))([[:space:]]|$)'
 
+# ORDER 1307-ermc — A printf/echo OF A VARIABLE IS A PRODUCER OF UNKNOWN SIZE.
+#
+# THIS OVERTURNS A DOCUMENTED DECISION RATHER THAN FILLING A GAP, so the
+# disproof is recorded here beside it. The header above says the dominant idiom
+# is `printf '%s' "$short_var" | grep -q`, "whose producer emits a SHA or a
+# branch name", and that the two genuinely exploitable sites found in the
+# August sweep were `printf '%s' "$var"` producers "which no static producer
+# list catches". Both halves were true and the conclusion — leave the class out
+# — held for five weeks.
+#
+# THE DISPROOF IS 1306-ifhv, measured on yoga 2026-09-20. The flaking line was
+# `printf '%s' "$out" | grep -qi 'ANCESTRY IS NOT USED' && ok … || bad …` in
+# scripts/test-salvage-audit.sh. `$out` was a captured audit transcript of
+# 15,569 BYTES. Under a default 64 KB pipe it fits one write and never flakes,
+# which is why forty replays were clean; under the 8,192-byte pipes a loaded
+# host hands out once its open pipes pass /proc/sys/fs/pipe-user-pages-soft it
+# needs two, and it flaked 2 in 20. So "the benign shape is small" is not a
+# property of the shape. It is a property of the VARIABLE, and the variable is
+# not visible from the text.
+#
+# WHY BROAD AND NOT NARROW. A rule that flagged only "large" variables would
+# need to know what a variable holds, which a text checker cannot; the honest
+# candidate was a variable-provenance test (was it assigned from a command
+# substitution of an unbounded command), and it was not attempted because the
+# breadth turned out to be cheap enough not to need it. MEASURED: 9 added lines
+# in 7 days fleet-wide come into scope from this plus the and-or admission
+# together. This guard is DIFF-SCOPED, so the legacy corpus is never asked;
+# only new lines pay, and they pay either one `# sigpipe-ok: <reason>` or a
+# `<<<` rewrite that removes the hazard entirely.
+PRODUCER_UNKNOWN_SIZE_RE='(^|[;&|(]|[[:space:]])(printf|echo)([[:space:]]|$)[^|]*"\$'
+
 # Consumers that stop reading before EOF.
 EARLY_EXIT_CONSUMER_RE='\|[[:space:]]*(grep[[:space:]]+[^|]*-[a-zA-Z]*q|grep[[:space:]]+[^|]*-m[[:space:]]*1|head[[:space:]]|sed[[:space:]]+-n?[[:space:]]*.?[0-9]*q)'
 
 # Contexts where the pipeline's status becomes a verdict.
+#
+# ORDER 1307-ermc — THE AND-OR SPELLING IS A VERDICT CONTEXT AND WAS NOT LISTED.
+# `producer | grep -q pat && ok "..." || bad "..."` reads the pipeline's status
+# exactly as `if !` does: under pipefail the status is 141 with the pattern
+# PRESENT, `&&` is skipped and `|| bad` fires on a successful match. This regex
+# anchors on a LEADING keyword, so that spelling was never a verdict context
+# here at all — not a pattern that was too narrow, a shape that was absent.
+#
+# MEASURED COST OF ADMITTING IT, on origin/linux-next over the 7 days to
+# 2026-09-20, counting lines ADDED to scripts/*.sh and build.sh: 22,117 added
+# lines, 167 with an early-exit grep -q, 19 with `&&`/`||` after that consumer,
+# 16 also carrying a printf/echo-of-a-variable producer — of which 7 were
+# ALREADY an if/while/until/elif context, leaving NINE that this change newly
+# brings into scope. Nine in a week, fleet-wide. An author meeting one writes
+# `grep -q PAT <<<"$var"`, which cannot SIGPIPE at all, or one `# sigpipe-ok:`.
 VERDICT_CONTEXT_RE='^[[:space:]]*(if[[:space:]]|while[[:space:]]|until[[:space:]]|elif[[:space:]])'
+
+# _is_verdict_context <logical-line> — true when the pipeline's status decides
+# something. Two spellings, and the second cannot be a leading-anchor regex:
+# what makes it a verdict is that `&&` or `||` follows the CONSUMER, so the
+# position of the consumer has to be known first.
+_is_verdict_context() {
+    local line="$1" after
+    case "$line" in
+        # Leading-keyword spelling, unchanged since 792-ksr8.
+        [[:space:]]*if\ *|if\ *|[[:space:]]*while\ *|while\ *|\
+        [[:space:]]*until\ *|until\ *|[[:space:]]*elif\ *|elif\ *) return 0 ;;
+    esac
+    # And-or spelling: strip up to and including the early-exiting consumer,
+    # then look for a branch in what remains.
+    after="$(printf '%s' "$line" | sed -E "s/.*${EARLY_EXIT_CONSUMER_RE}//")"  # sigpipe-ok: sed consumes its whole input; no early exit, no SIGPIPE
+    [ "$after" = "$line" ] && return 1
+    case "$after" in *'&&'*|*'||'*) return 0 ;; esac
+    return 1
+}
 
 file_sets_pipefail() {
     grep -qE '^[[:space:]]*set[[:space:]]+-[a-zA-Z]*o[[:space:]]+pipefail' "$1" 2>/dev/null
@@ -188,10 +253,26 @@ while IFS= read -r f; do
         case "$added" in
             *"sigpipe-ok:"*) continue ;;
         esac
-        printf '%s' "$added" | grep -qE "$VERDICT_CONTEXT_RE" || continue
-        printf '%s' "$added" | grep -qE "$EARLY_EXIT_CONSUMER_RE" || continue
+        # THESE FOUR LINES ARE THIS ORDER'S OWN SPECIMEN (1307-ermc). Until this
+        # change they were three instances of the and-or spelling with a
+        # printf-of-a-variable producer — the exact pair of properties being
+        # admitted below — inside the guard that exists to find them. They are
+        # BENIGN for the documented reason: `$added` is ONE logical line, so the
+        # producer completes in a single write and the reader never wins the
+        # race. That is the order's whole argument in four lines: the shape is
+        # idiomatic and unavoidable, a whole-repo rule would flag this file
+        # three times, and SIZE is the discriminator rather than shape.
+        #
+        # They are rewritten to the `<<<` form rather than annotated. An
+        # exemption would have been honest and cheaper; the rewrite is better
+        # because a here-string cannot SIGPIPE AT ALL, so the question stops
+        # being asked instead of being answered every time someone reads it.
+        _is_verdict_context "$added" || continue
+        grep -qE "$EARLY_EXIT_CONSUMER_RE" <<<"$added" || continue
         producer="${added%%|*}"
-        printf '%s' "$producer" | grep -qE "$UNBOUNDED_PRODUCER_RE" || continue
+        if ! grep -qE "$UNBOUNDED_PRODUCER_RE" <<<"$producer"; then
+            grep -qE "$PRODUCER_UNKNOWN_SIZE_RE" <<<"$producer" || continue
+        fi
 
         checked=$((checked + 1))
         violations=$((violations + 1))

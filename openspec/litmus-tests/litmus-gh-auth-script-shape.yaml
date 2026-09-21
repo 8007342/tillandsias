@@ -71,6 +71,7 @@ critical_path:
     command: "grep -F 'containerized {provider_name} authentication verification failed after login' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write failed' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "containerized {provider_name} authentication verification failed after login"
+    assert_output_contains: "containerized {provider_name} authentication verification failed after login"
 
 observability:
   traces:
