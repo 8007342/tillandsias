@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    event:
+      type: evidence
+      ts: "2026-09-21T16:38:27Z"
+      agent_id: linux-yoga-opus5-20260921t163827z
+      host: yoga
+      summary: |
+        FIELD-VERIFIED: the queue made its first real landing, on macuahuitl, against a
+        PR another host opened. Reported by the coordinator and VERIFIED HERE BY
+        ARTIFACT rather than from the report:
+          3048e72dc is an ancestor of origin/linux-next
+          it is a MERGE (3 parents listed by rev-list --parents, i.e. two parents)
+          its subject is `land(126): work/1329-m8dk into linux-next` — the queue's own
+            format, so the object on trunk was written by this code and not by a hand
+          its SECOND PARENT is cf9a616e0, which equals origin/refs/heads/work/1329-m8dk
+            exactly — the row's arm 4 property, holding in the field: GitHub closes the
+            PR by ancestry and no `gh pr merge` was called.
+        Run line: ok:land-queue:1 landed=1 evicted=0 requeued=0 skipped=0.
+
+        ONE THING THAT LOOKED LIKE A CONTRADICTION AND IS THE DESIGN WORKING. The
+        --dry-run said it "would gate a941c458e"; the landed merge is 3048e72dc and
+        a941c458e is not an object in this clone at all. That is correct: a dry run
+        BUILDS the merge locally to answer the conflict question and then stops, so its
+        merge commit is a different object from the one the real run later builds —
+        different timestamp, never pushed. If the two had been equal it would have meant
+        the dry run pushed something. Worth stating because the next reader will see two
+        SHAs for one landing and wonder which is real.
+
+        TWO PROCEDURE NOTES FROM THE FIELD, both from macuahuitl's run, both belonging
+        in the skill rather than in this code:
+          1. `gh pr create --fill` CANNOT resolve a work ref pushed from a
+             differently-named local branch; pass --title and --body explicitly.
+          2. The mechanical precondition before opening a PR is
+             `git diff --name-status base...head` — THREE dots — with no unexplained D.
+             A two-dot diff read a behind branch as 16 DELETIONS this afternoon. Two
+             dots asks "what differs between these tips", three asks "what did this
+             branch add since it diverged", and only the second is the question a PR
+             answers.
+
+        WHAT REMAINS UNEXERCISED IN THE FIELD, so the row's closure does not over-claim:
+        this run was ONE candidate, landed, at FULL. Eviction on a red gate, eviction on
+        a conflict, the re-queue when the target moves mid-gate, and the serialized
+        drain of more than one candidate are still only fixture-proven (arms 2, 3, 5, 6
+        of scripts/test-land-queue.sh, 13/13). The first multi-candidate drain is the
+        next thing worth recording here.
