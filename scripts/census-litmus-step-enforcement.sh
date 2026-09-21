@@ -48,7 +48,41 @@ esac
 
 commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
-awk -v MODE="$mode" '
+# ORDER 1334-57at. WHICH FILES CAN ACTUALLY RUN? An assert in a file no
+# suite executes is, in 1333-jpq5's words, "correct and inert": it can never
+# go red, so counting it as ENFORCED overstates enforcement. Measured at
+# 3048e72dc, 53 of 244 enforced steps were inert — 21.7%. REACHABLE here is
+# the same definition census-litmus-reachability.sh uses: BOUND in
+# litmus-bindings.yaml AND not `phase: retired`. Grandfathered-unbound is
+# NOT reachable — the grandfather list exempts a file from the binding
+# violation, it does not cause anything to run it.
+#
+# NAME FORM, NEVER THE FILENAME STEM. Bindings store `litmus:x`; the file is
+# `litmus-x.yaml`. Matching one against the other yields an empty set that
+# reads exactly like a real negative, which is how --list came to print zero
+# suites on 444 files (1330-bb87). Read the declared `name:` and compare that.
+_reach_list="$(mktemp)"
+trap 'rm -f "$_reach_list"' EXIT
+_bound="$(awk '/^  - litmus:/ {print $2}' openspec/litmus-bindings.yaml 2>/dev/null | sort -u)"
+if [ -z "$_bound" ]; then
+    echo "blocked:census:no-bound-names-read-from-litmus-bindings.yaml" >&2
+    exit 2
+fi
+for _f in "$TESTS_DIR"/*.yaml; do
+    [ -e "$_f" ] || continue
+    _name="$(grep -m1 '^name:' "$_f" | sed 's/name: *//' | tr -d ' \r')"
+    [ -n "$_name" ] || continue
+    grep -qxF "$_name" <<< "$_bound" || continue
+    grep -qE '^phase: *retired *$' "$_f" && continue
+    printf '%s\n' "$_f" >> "$_reach_list"
+done
+
+awk -v MODE="$mode" -v REACH="$_reach_list" '
+BEGIN {
+    # Reachable file paths, one per line, as the glob below names them.
+    while ((getline _l < REACH) > 0) if (_l != "") reach[_l] = 1
+    close(REACH)
+}
 function flush_step() {
     if (!in_step) return
     steps++
@@ -56,6 +90,7 @@ function flush_step() {
     if (has_eb) with_eb++
     if (enforced) {
         n_enf++
+        if (reach[eb_file]) n_enf_reach++; else n_enf_inert++
     } else {
         n_unenf++
         if (!has_eb) { unenf_no_eb++; return }
@@ -78,6 +113,7 @@ function flush_step() {
             if (MODE == "succeed") print eb_file ":" eb_lineno
         } else if (length(eb_val) > 60) {
             b_long++
+            if (reach[eb_file]) b_long_reach++
             if (MODE == "long") print eb_file ":" eb_lineno
         } else {
             b_other++
@@ -121,6 +157,8 @@ END {
     printf "  step blocks                                %6d\n", steps
     printf "    with an expected_behavior                %6d\n", with_eb
     printf "  ENFORCED   (assert_* or success_pattern)   %6d\n", n_enf
+    printf "    ENFORCED-REACHABLE (a suite runs it)     %6d\n", n_enf_reach
+    printf "    ENFORCED-INERT     (nothing runs it)     %6d\n", n_enf_inert
     printf "  UNENFORCED (none)                          %6d\n", n_unenf
     printf "    without expected_behavior                %6d\n", unenf_no_eb
     printf "    with expected_behavior                   %6d\n", unenf_eb
@@ -131,7 +169,8 @@ END {
     printf "    anything else                            %6d\n", b_other
     printf "                                             ------\n"
     printf "    sum                                      %6d\n", b_succeed + b_long + b_other + b_named
-    printf "\n  CLOSURE FIGURE, long OUTSIDE named-reason: %6d\n", b_long
+    printf "\n  CLOSURE FIGURE, long OUTSIDE named-reason, REACHABLE only: %d\n", b_long_reach
+    printf "  (same figure counting inert files too:                     %d)\n", b_long
 }
 ' "$TESTS_DIR"/*.yaml
 
