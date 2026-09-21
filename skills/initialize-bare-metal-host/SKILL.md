@@ -290,10 +290,39 @@ demonstrably did not fire, which is a stronger claim than it being absent.
 lane works, but they cannot show a credential path went unread, because the host
 had none to read.
 
-**Common to every leg:**
+**WHY "zero helper invocations" IS NOT ON ITS OWN AN ARM.** Found by pirria: a
+URL-scoped helper — `credential.https://github.com.helper`, which lenovinha and
+pirria both carry — is *never consulted for an `ssh://` URL*. Zero invocations
+is therefore guaranteed by SCOPE and says nothing about the lane. It is worth
+recording, but it is not evidence. The three arms below are.
+
+### The acceptance criterion, restated
+
+**(1) The push authenticated by the HOST CERT over ssh.** Add `-v` to
+`GIT_SSH_COMMAND` and keep the transcript:
+
+```
+debug1: Server accepts key: …/<host>.ed25519 ED25519-CERT SHA256:… explicit
+Authenticated to 127.0.0.1 ([127.0.0.1]:2223) using "publickey".
+remote: [relay] Atomic push to https://github.com/<owner>/<repo>.git succeeded
+remote: [pre-receive] Relay verified: upstream durably accepted the ref transaction
+```
+
+ssh offers the bare key *and* the certificate; the line that matters says
+**ED25519-CERT** was the one accepted. A plain `ED25519` acceptance would mean
+an `authorized_keys` path, not the CA — and this mirror has
+`AuthorizedKeysFile none`, so it should be impossible.
+
+**(2) No host-side GitHub credential path was read** — instrument per §Step 0
+(libsecret keyring PID; file store moved aside; or, where no helper exists at
+all, say so and claim less).
+
+**(3) `ls-remote` equality and no TOFU** — the ref on origin equals your local
+head at push time, and the push ran with `StrictHostKeyChecking=yes` against the
+`@cert-authority` file under `HostKeyAlias`.
 
 ```bash
-git ls-remote origin refs/heads/<ref>        # equals your local head at push time
+git ls-remote origin refs/heads/<ref>
 ```
 
 If trunk moves before you report leg (a), give **ancestry** rather than a stale
