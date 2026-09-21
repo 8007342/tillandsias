@@ -65,13 +65,23 @@ case "$out" in *"date -u"*) ok "the refusal carries a remedy the operator can ty
 _plant "$PAST"
 out="$(bash "$CHECK" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then ok "a ts two hours BEHIND is accepted (rc=0)"; else bad "a past ts was refused (rc=$rc) — this breaks every relay fold"; fi
-case "$out" in *note:fragment-ts-past:*) ok "the past skew is PRINTED, not swallowed" ;; *) bad "a past ts was accepted silently — the skew is invisible" ;; esac
+# SCOPED TO THE PROBE. The checker is diff-scoped and reports on EVERY newly
+# added fragment, so an unscoped match here passes as soon as any unrelated
+# fragment is more than the limit old — a true statement about someone else's
+# file standing in for the one this arm is about.
+case "$out" in *"note:fragment-ts-past:$PROBE:"*) ok "the past skew is PRINTED, not swallowed" ;; *) bad "a past ts was accepted silently — the skew is invisible" ;; esac
 
 # ── ARM 3: CONTROL — a clock-read ts is accepted with no note ───────────────
 _plant "$NOW"
 out="$(bash "$CHECK" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then ok "CONTROL: a ts read from the clock is accepted" ;else bad "CONTROL: a current ts was refused (rc=$rc)"; fi
-case "$out" in *note:fragment-ts-past:*) bad "CONTROL: a current ts produced a past-skew note" ;; *) ok "CONTROL: a current ts produces no note" ;; esac
+# SCOPED TO THE PROBE, and this is the arm that caught it. MEASURED on macneo
+# 2026-09-20: merging osx-next brought four of macbookair's fragments dated 930s
+# and 935s earlier, the checker noted them, and this control FAILED — reporting
+# that a clock-read ts had produced a past-skew note when the notes belonged to
+# other files entirely. Unscoped, ARM 2 can pass for the wrong reason and this
+# arm can fail for the wrong reason, from the same cause.
+case "$out" in *"note:fragment-ts-past:$PROBE:"*) bad "CONTROL: a current ts produced a past-skew note" ;; *) ok "CONTROL: a current ts produces no note" ;; esac
 
 # ── ARM 4: NEGATIVE CONTROL — the check is DIFF-SCOPED ──────────────────────
 # Fragments already on the base ref are not re-judged: one host's mistake must
