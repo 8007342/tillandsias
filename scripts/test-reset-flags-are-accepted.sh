@@ -64,7 +64,7 @@ esac
 # and no entry. This reads the array itself.
 _arr="$(awk '/let known_flags = \[/,/\];/' crates/tillandsias-headless/src/main.rs)"
 for f in --reset-state --reset-guest; do
-    if printf '%s' "$_arr" | grep -q "\"$f\""; then
+    if grep -q "\"$f\"" <<<"$_arr"; then
         ok "known_flags contains $f"
     else
         bad "known_flags does NOT contain $f — it will exit 2 however well the flag is documented"
@@ -78,7 +78,7 @@ _dispatched="$(grep -oE '^\s*let reset_[a-z]+ = user_args\.iter\(\)\.any\(\|a\| 
     crates/tillandsias-headless/src/main.rs | grep -oE -- '--reset-[a-z]+' | sort -u)"
 _missing=""
 for f in $_dispatched; do
-    printf '%s' "$_arr" | grep -q "\"$f\"" || _missing="$_missing $f"
+    grep -q "\"$f\"" <<<"$_arr" || _missing="$_missing $f"
 done
 if [ -z "$_missing" ]; then
     ok "every parsed --reset-* flag has an allow-list entry ($(printf '%s' "$_dispatched" | tr '\n' ' '))"

@@ -28,14 +28,14 @@ DIAG=crates/tillandsias-macos-tray/src/diagnose.rs
 
 # ---- ARMS 1-2: the label, run against the REAL binary -----------------------
 TRAY=target/debug/tillandsias-tray
-if [ ! -x "$TRAY" ]; then
+if [ "$(uname -s)" != "Darwin" ] || [ ! -x "$TRAY" ]; then
     # NAMED SKIP. A check that could not run must never claim what it would have
     # found (965-sxec). These two arms need a built binary; the source arms below
     # do not and still run.
-    skip "tray-not-built" "ARMS 1-2 need $TRAY (cargo build -p tillandsias-macos-tray); NOT a pass"
+    skip "tray-not-built-or-not-darwin" "ARMS 1-2 need $TRAY on macOS (cargo build -p tillandsias-macos-tray); elsewhere that path is a DIFFERENT crate's binary of the same name (measured on macuahuitl 2026-09-21: the Linux tray answered --diagnose and both arms read as FAIL); NOT a pass"
 else
     OUT_UNSET="$(env -u HOME "$TRAY" --diagnose --json 2>/dev/null)"
-    if printf '%s' "$OUT_UNSET" | grep -q '"image_root_source": "fallback:/tmp:HOME-unset"'; then
+    if grep -q '"image_root_source": "fallback:/tmp:HOME-unset"' <<<"$OUT_UNSET"; then
         ok "ARM1 with HOME unset, --diagnose LABELS its fallback root"
     else
         bad "ARM1 no fallback label in --diagnose output with HOME unset"
@@ -44,7 +44,7 @@ else
     # hard-coded to the fallback string, which would be a different defect
     # wearing this fix's clothes.
     OUT_SET="$("$TRAY" --diagnose --json 2>/dev/null)"
-    if printf '%s' "$OUT_SET" | grep -q '"image_root_source": "home"'; then
+    if grep -q '"image_root_source": "home"' <<<"$OUT_SET"; then
         ok "ARM2 CONTROL — with HOME set the same binary reports source=home"
     else
         bad "ARM2 control failed: HOME is set but source is not 'home'"
