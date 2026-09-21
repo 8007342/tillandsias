@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-traps-page-carries-a-test-is-not-done-until-something-that-runs-on-its-own-can-fail-because-of-it-filed-by-shape-so-the-lesson-is-not-stored-against-one-organ-and-paid-for-twice
+    packet_kind: docs
+    order: 1328-v3kp
+    status: ready
+    kind: docs
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [docs, cheatsheets, testing, agent-safety, floor]
+    estimated_hours: 1
+    owned_files:
+      - cheatsheets/tooling/a-test-is-not-done-until-it-can-fail.md
+    unscoreable: ""
+    verifiable_closure: |
+      The entry exists at cheatsheets/tooling/a-test-is-not-done-until-it-can-fail.md,
+      scripts/check-cheatsheet-frontmatter.sh passes, scripts/check-cheatsheet-refs.sh
+      resolves, cheatsheets/INDEX.md lists it, and images/default/cheatsheets is
+      in sync via scripts/stage-image-cheatsheets.sh --stage so pre-push guard 1b
+      does not refuse.
+    title: |
+      the traps page carries "a test is not done until something that runs on its own can fail because of it", filed by SHAPE rather than by organ, with the three specimens of 2026-09-20 as its exhibits
+    context: |
+      FILED BY SHAPE, AND THAT IS THE POINT. The same mistake arrived three
+      times in one day wearing three costumes, and the third instance happened
+      BECAUSE the lesson had been stored against the second's organ: pirria
+      wrote a litmus YAML and never bound it, learned the lesson as a fact
+      about litmus YAML, then wrote a shell fixture the same day and did not
+      wire it either. Storing a lesson against the organ is how a fleet pays
+      for it twice.
+
+      THE THREE SPECIMENS, all 2026-09-20:
+        * esmeraldinha, 1303-2d5g — a shell fixture that was correct, green and
+          carried a working mutation arm, and that NOTHING INVOKED. No litmus
+          named it, build.sh did not call it, and no gate checks that a new
+          test-*.sh is wired. Caught in review by macuahuitl before it landed.
+        * esmeraldinha, 1304-wbb2 — ARM 2 of a four-arm fixture scored green on
+          every run because the check it mutated was GATED BEHIND A BINARY THE
+          FIXTURE TREE DOES NOT HAVE. The check never ran, so the mutated copy
+          behaved identically to the real one: a false pass on top of a skipped
+          check, inside the fixture written to prove that check. Caught by the
+          fixture itself, minutes after it was written, only because a sibling
+          arm failed loudly enough to prompt a look.
+        * pirria, 1286-4437 — a litmus YAML whose seven commands were hand-run
+          and passing, never bound, so a suite reporting 37 PASS / 3 FAIL had
+          it in NEITHER number.
+
+      WHAT DEFEATS CARE HERE, stated in the entry because it is the reason a
+      habit is needed rather than more diligence: each test was correct and
+      each author competent, and two of the three were at that moment working
+      on rows about guards that cannot fail. The missing step is INVISIBLE FROM
+      WHERE THE AUTHOR STANDS — the terminal shows the fixture passing and
+      reports nothing about whether anything else will ever call it.
+
+      THE PAGE IS THE HUMAN HALF. Order 1325-ygq5 is the mechanical half: a
+      diff-scoped decider refusing a newly added test-*.sh that nothing
+      invokes, the way check-litmus-bindings.sh (660-ryhn) already refuses an
+      unbound litmus. The page exists beside it because a decider lands on NEW
+      work while a habit reaches the work that predates it.
+    next_action: >
+      None for this row; it is closed on arrival. If 1325-ygq5 lands a decider
+      whose refusal wording differs from this page's four-step rule, reconcile
+      the page to the decider rather than the reverse — the mechanical half is
+      the one a reader meets at 03:00.
+    provenance: |
+      Written on esmeraldinha 2026-09-21 at the coordinator's request, from
+      three specimens measured across the fleet on 2026-09-20. Two of the three
+      are this filer's own defects and are named as such rather than
+      anonymised. Closure verified here: check-cheatsheet-frontmatter
+      ok:cheatsheet-frontmatter:238 checked; check-cheatsheet-refs OK: 579
+      references resolved; INDEX.md lists the entry; stage-image-cheatsheets.sh
+      --stage reported cheatsheet-image-stage:ok files=253.
+
+      NOTE ON THE REFS COUNT, so nobody reads it as coverage: the page's
+      Related links are ordinary Markdown inline links, and
+      check-cheatsheet-refs.sh is blind to that shape (order 1300-k7wq, filed
+      from this host). The 579 is unchanged because the new links were never
+      examined, not because they resolved.
