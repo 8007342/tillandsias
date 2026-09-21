@@ -106,13 +106,27 @@ if [ -n "$missing_patterns" ]; then
 fi
 
 # --- the standing count: the number the ratchet closes against ---------------
+# The surface file list is built ONCE, outside the loop: it is invariant, and
+# rebuilding it per candidate ran a three-stage pipeline 360 times to produce
+# the same string.
+_shell_files="$(printf '%s' "$shell_surface" | grep . | tr '\n' ' ')"
+
+# Never `if ! grep ...` as a verdict (795-imz3): under this file's pipefail a
+# grep that exits at its first match can SIGPIPE its producer and invert the
+# guard, which is the same failure shape as the phantom unbound names measured
+# on yoga. Capture the status into a variable, then branch on the value.
+_is_referenced() {   # $1 = needle, $2 = space-separated file list -> 0 when found
+    [ -n "$2" ] || return 1
+    grep -rqlF -- "$1" $2 2>/dev/null
+    _rc=$?
+    case "$_rc" in 0) return 0 ;; *) return 1 ;; esac
+}
+
 standing=0
 for f in scripts/test-*.sh; do
     [ -e "$f" ] || continue
     b="$(basename "$f")"
-    if ! grep -rqlF -- "$b" $(printf '%s' "$shell_surface" | grep . | tr '\n' ' ') 2>/dev/null; then
-        standing=$((standing + 1))
-    fi
+    _is_referenced "$b" "$_shell_files" || standing=$((standing + 1))
 done
 
 if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
@@ -170,7 +184,7 @@ while IFS= read -r f; do
     # producer and, under pipefail, flip a MATCH into a failed pipeline —
     # measured live on yoga, three runs, three different phantom name sets.
     files="$(printf '%s' "$surface" | grep . | tr '\n' ' ')"
-    if [ -n "$files" ] && grep -rqlF -- "$needle" $files 2>/dev/null; then
+    if _is_referenced "$needle" "$files"; then
         continue
     fi
     if _grandfathered "$needle" "$grand"; then

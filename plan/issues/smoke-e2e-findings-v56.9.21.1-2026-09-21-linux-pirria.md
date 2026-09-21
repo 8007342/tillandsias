@@ -135,8 +135,23 @@ the guard before doing cycle work.
     reads as positive evidence that the installation anchor survived the reset,
     and on a host without that item it is evidence of nothing. 803-49re makes the
     anchor's survival load-bearing, so an auditor checking exactly that will take
-    this line as a yes. Say `preserved: none present` when the item is absent, or
-    name it as `absent (nothing to preserve)`.
+    this line as a yes.
+
+    THE REMEDY IS ALREADY WRITTEN, ON ANOTHER SURFACE. macneo hit the same
+    defect on macOS and fixed it (their F2,
+    plan/issues/smoke-macos-v56.9.21.1-macneo-2026-09-21.md): the announcer in
+    crates/tillandsias-macos-tray/src/reset_state.rs probes
+    `kc_present(PRESERVED_ANCHOR)` and, when the item is absent, prints
+    `[ABSENT BEFORE THIS RESET — nothing to preserve; the next vault will not
+    derive from it (803-49re). This reset neither caused nor repairs that.]`
+    — their own comment calls it "not a warning dressed as reassurance", which
+    is exactly the failure this packet names. Linux simply never got it.
+
+    THE EXACT SITE: scripts/clear-vault-host-credentials.sh sets
+    `_kept="$_kept keychain:$ANCHOR_ATTR"` UNCONDITIONALLY, with no presence
+    probe, and the final line interpolates it. Mirror the macOS shape with a
+    `secret-tool lookup` guard at that assignment; the wording is already
+    decided, so this is a port rather than a design.
 - events:
   - type: discovered
     ts: `2026-09-21T06:00:00Z`
