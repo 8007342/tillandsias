@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T11:17:06Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        AMENDMENT, on the coordinator ruling of 2026-09-21, resolving the tension this
+        row could not hold both sides of.
+
+        The exit criteria accept a NAMED REASON as a terminal state. verifiable_closure
+        asks the census to report long = 0. A step with a legitimate named reason stays
+        UNENFORCED and therefore stayed in the long bucket, so satisfying one clause
+        falsified the other. The resolution is a third bucket rather than a choice: the
+        census counts declared-unadjudicable steps separately and prints
+        CLOSURE FIGURE, long OUTSIDE named-reason. The closure clause is read against
+        that figure, and it is 0.
+
+        Grammar: a `# unenforced: <reason>` comment inside the step block. Two steps
+        carry it, both adjudicated rather than deferred.
+
+        CENSUS AT CLOSURE: ENFORCED 244, succeed 0, long 0 outside named-reason, named
+        reason 2, anything else 2167 — the last unmoved through every slice, which is
+        this row's own evidence that no step was relocated by rewording.
+
+        THE BUCKET LAUNDERED ON ITS FIRST DAY AND ITS OWN CONTROL CAUGHT IT. Control 1,
+        unmark a step and watch it return to the long bucket, passed. Control 2 did not:
+        a stray `# unenforced:` appended at FILE SCOPE raised the count from 2 to 3 with
+        no step changed. After the last step of a file the parser was still inside a
+        step, so a marker anywhere below it — including in a following top-level section
+        such as observability — attached to the last step seen. For about ten minutes
+        the mechanism built to record an honest declaration was a way to launder any
+        step out of the debt count from anywhere in the file, which is the exact defect
+        this whole family exists to prevent. Fixed by ending a step block at the next
+        column-0 key. Corpus figures unchanged by the fix: 2593 step blocks, 2167.
+
+        I ran that second control only because the prepending-mutation lesson from the
+        previous slice was still fresh. A day ago it would not have occurred to me, and
+        the hole would have shipped inside the thing that counts holes.
