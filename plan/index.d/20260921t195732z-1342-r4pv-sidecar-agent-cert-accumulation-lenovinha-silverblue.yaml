@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-ssh-lane-sidecar-adds-a-cert-to-the-agent-on-every-renewal-and-never-removes-the-expired-one-so-the-forge-push-lane-dies-of-maxauthtries-about-two-hours-after-boot
+    order: 1342-r4pv
+    status: in_progress
+    kind: fix
+    priority: p0
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, forge, ssh, agent-safety, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - images/git/ssh-lane-sidecar.sh
+    verifiable_closure: |
+      litmus:ssh-lane-sidecar-shape (scripts/test-ssh-lane-sidecar.sh) is the pin,
+      and it is the instrument that should have caught this and did not: its
+      renewal scenario renewed three times — UNDER the server MaxAuthTries cliff —
+      and asserted only that renewal had happened. It now runs past the cliff and
+      asserts the bound. Beyond the litmus, three arms:
+      The three arms are measured on a forge against a real sidecar, not a fixture.
+      1. FAILS-NOW, already captured and pasted in this row's first event: a
+         forge whose sidecar has renewed more than MaxAuthTries times cannot
+         authenticate, `ssh -v` ends `Too many authentication failures`, and the
+         mirror's sshd logs `Certificate invalid: expired` once per offer while
+         the cert ON DISK is valid.
+      2. AFTER THE FIX, on a sidecar that has renewed at least 7 times (past the
+         MaxAuthTries=6 cliff): `ssh-add -l` in the forge shows at most ONE
+         ED25519-CERT identity, and `ssh -v -p 2222 git@git-<mid> true` reaches
+         the command with the certificate accepted. "It works right after boot"
+         is NOT this arm — the defect does not exist right after boot.
+      3. The identity count is BOUNDED, not merely small: the same `ssh-add -l`
+         count after renewal n and after renewal n+5 is the same number.
+      be refused in review: the first six renewals of the BROKEN code also pass.
+    title: |
+      the ssh-lane sidecar adds a cert to the agent on every renewal and never removes the expired one, so the forge push lane dies of MaxAuthTries about two hours after boot — with a valid certificate sitting unused on disk
+    context: |
+      FOUND BY MEASURING 1341-mgry (amendment A1) AND FALSIFYING IT. The A1
+      prediction was that a forge's first push fails host-key verification. It
+      does not. Measured on the live forge tillandsias-tillandsias-forge-
+      maintenance, mid kvs69tkis9dfnbejbatg, OpenSSH_10.2p1, with the lane on
+      and the writer's own bare `@cert-authority git-<mid>` line:
+        debug1: Host 'git-kvs69tkis9dfnbejbatg' is known and matches the ED25519-CERT host certificate.
+        debug1: Found CA key in /run/tillandsias/ssh-known_hosts:1
+      Host key verification SUCCEEDS at port 2222 against the bare line. A1 is
+      dead and its writer fix must NOT be written. See 1341-mgry for the
+      instrument error that produced it.
+
+      WHAT THE SAME RUN FOUND INSTEAD, which is worse and real. The session
+      continues past the host key and then dies:
+        Received disconnect from 10.0.42.27 port 2222:2: Too many authentication failures
+        EXIT=255
+      In the forge, `ssh-add -l` lists 17 identities: 16 ED25519-CERTs and the
+      plain key, ALL ON THE SAME KEY, each cert a different serial. The sidecar
+      log's last line is `ok:ssh-lane-sidecar:renewed n=16`. The count matches
+      the renewal count exactly.
+
+      THE MECHANISM, in the code. `agent_add()` in images/git/ssh-lane-sidecar.sh
+      is `ssh-add -q "$KEY"` with no preceding `ssh-add -d`. ssh-agent dedupes
+      by key blob, and a certificate is a DISTINCT blob from the bare key and
+      from every other serial, so each renewal adds one more identity and
+      removes none. ssh then offers them oldest-first and the server counts
+      each one against MaxAuthTries (6, the default). The mirror's sshd says
+      `Certificate invalid: expired` for every offer it sees, then disconnects
+      before the newest cert is ever reached.
+
+      THE CREDENTIAL IS FINE, WHICH IS WHY NOTHING ALERTED. The cert on disk at
+      the moment of measurement was valid — serial 13385431346440221213, valid
+      2026-09-21T19:54:49 to 20:25:19, measured at 19:57. Vault is healthy,
+      issuance is healthy, the sidecar reports `ok:` on every tick. The lane is
+      broken anyway, and every instrument in the system reads green.
+
+      ONSET, and why the T11 flip would have shipped it. Renewal is every 1200 s
+      against a 30 m TTL, so the expired-cert count passes MaxAuthTries=6 after
+      roughly TWO HOURS of sidecar uptime. A forge pushes fine all morning and
+      then never again, and gets no worse-shaped error than "Too many
+      authentication failures", which names neither certificates nor the agent.
+      Any acceptance run on a fresh forge PASSES.
+
+      WHY BARE-METAL DOGFOODING NEVER SAW IT: the bare-metal lane mints on
+      demand through scripts/tillandsias-host-push-cert.sh and uses no agent, so
+      it cannot accumulate. This is the second defect in two days that lived
+      exactly in the gap between the two clients.
+    next_action: |
+      Held by lenovinha-silverblue. The fix is small; the ARM is the work.
+      1. In `agent_add()`, remove the key's existing identities before adding —
+         `ssh-add -d "$KEY" 2>/dev/null || true` then `ssh-add -q "$KEY"` — and
+         VERIFY that `-d` actually removes the CERT identities and not merely
+         the bare key on the OpenSSH in the image. If it does not, clear with
+         `ssh-add -D` and re-add, accepting the brief empty window.
+      2. Prove arm 3's bound by measurement, not by reading the patch.
+      3. Consider, and decide explicitly rather than by omission, whether the
+         sidecar should FAIL LOUD when `ssh-add -l` exceeds a small bound — the
+         whole point of this row is that every existing instrument read green
+         through a dead lane.
+      BLOCKS the T11 default flip (749-y8xx) on its own: flipping this on
+      without the fix breaks every forge's push lane about two hours after boot.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21, found while measuring amendment
+      A1 of the audited design 1340-tzsx and falsifying it. Related: 1341-mgry
+      (A1, falsified), 1340-tzsx (the audited design; this is the forge-client
+      defect its audit predicted would exist, though not the one it named),
+      749-y8xx (the T11 flip, which this blocks), 1313-prin (the bare-metal
+      lane, which cannot exhibit this).

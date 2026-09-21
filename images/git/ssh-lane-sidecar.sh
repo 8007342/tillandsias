@@ -173,9 +173,55 @@ request_cert() {
 
 fingerprint() { ssh-keygen -lf "$KEY.pub" 2>/dev/null | awk '{print $2}'; }
 
+# ORDER 1342-r4pv. CLEAR THE AGENT BEFORE ADDING, or the lane dies of
+# MaxAuthTries about two hours after boot.
+#
+# This used to be a bare `ssh-add -q "$KEY"`. ssh-agent dedupes by KEY BLOB,
+# and a certificate is a distinct blob from the bare key and from every other
+# serial, so each renewal added one more identity and removed none. Measured on
+# a forge whose sidecar had renewed 16 times: `ssh-add -l` listed 17 identities
+# on one fingerprint, ssh offered them oldest-first, the mirror's sshd answered
+# `Certificate invalid: expired` to each, and the session died on
+# `Too many authentication failures` with a VALID certificate sitting on disk
+# unused. Renewal is every RENEW_SECONDS against a 30 m TTL, so the stale count
+# passes the server's MaxAuthTries (6, the default) after roughly two hours:
+# the lane works all morning, then never again, and says nothing about
+# certificates or the agent when it stops.
+#
+# WHY `ssh-add -d` IS NOT THE FIX, measured rather than assumed because this
+# was the obvious first try: `-d` removes the bare key plus the cert that is IN
+# `$KEY-cert.pub` AT THAT MOMENT. Every PREVIOUS serial stays in the agent. In
+# a two-renewal fixture `-d` left one stale cert behind, which is the same leak
+# with a smaller constant. `-D` clears the agent outright, which is safe here
+# and only here: this agent is the sidecar's own and holds nothing else.
+#
+# The clear opens a window in which the agent is EMPTY, which is worse than
+# stale, so a failed re-add is retried once and then reported as a distinct,
+# louder failure than the old one — an empty agent must not be mistaken for the
+# tolerable "previous cert stays valid" case the renewal loop is written around.
 agent_add() {
-    SSH_AUTH_SOCK="$SOCK" ssh-add -q "$KEY" 2>/dev/null || return 1
-    return 0
+    SSH_AUTH_SOCK="$SOCK" ssh-add -D >/dev/null 2>&1 || true
+    if SSH_AUTH_SOCK="$SOCK" ssh-add -q "$KEY" 2>/dev/null; then
+        return 0
+    fi
+    if SSH_AUTH_SOCK="$SOCK" ssh-add -q "$KEY" 2>/dev/null; then
+        echo "warn:ssh-lane-sidecar:agent-add-retried" >&2
+        return 0
+    fi
+    echo "fail:ssh-lane-sidecar:agent-EMPTY-after-clear \
+the agent was cleared and could not be reloaded; the lane has NO identity at \
+all until the next tick, which is worse than a stale one" >&2
+    return 1
+}
+
+# ORDER 1342-r4pv. The bound, checkable at runtime rather than only in review.
+# The defect above was invisible because every instrument read green through a
+# dead lane: vault healthy, issuance healthy, `ok:` on every renewal tick. This
+# is the one reading that would have caught it. Expected is 2 — the bare key and
+# exactly one certificate — and anything above MaxAuthTries is already fatal to
+# the lane whatever the certificates say.
+agent_identity_count() {
+    SSH_AUTH_SOCK="$SOCK" ssh-add -l 2>/dev/null | grep -c . || true
 }
 
 # ── Renewal loop ────────────────────────────────────────────────────────────
@@ -187,7 +233,17 @@ renew_loop() {
         wait "$_sleep_pid" || true
         if out="$(request_cert)"; then
             if agent_add; then
-                echo "ok:ssh-lane-sidecar:renewed $(echo "$out" | sed 's/^ok:ssh-lane-sidecar:cert-issued //')"
+                # ORDER 1342-r4pv: the identity count travels on every renewal
+                # line, because the accumulation that killed this lane was
+                # visible ONLY here and this line used to omit it.
+                _ids="$(agent_identity_count)"
+                echo "ok:ssh-lane-sidecar:renewed $(echo "$out" | sed 's/^ok:ssh-lane-sidecar:cert-issued //') agent_identities=$_ids"
+                if [ "${_ids:-0}" -gt 3 ]; then
+                    echo "fail:ssh-lane-sidecar:agent-identity-leak agent_identities=$_ids \
+expected 2 (the key and one certificate); identities accumulate per renewal and \
+the server stops trying after MaxAuthTries, so this lane is heading for \
+'Too many authentication failures' with a VALID certificate on disk (1342-r4pv)" >&2
+                fi
             else
                 echo "fail:ssh-lane-sidecar:renew-agent-add" >&2
             fi

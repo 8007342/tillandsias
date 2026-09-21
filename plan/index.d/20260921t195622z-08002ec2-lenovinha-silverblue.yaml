@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    field: status
+    value: verified
+    ts: "2026-09-21T19:56:22Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    event:
+      type: completed
+      ts: "2026-09-21T19:56:22Z"
+      host: lenovinha-silverblue
+      summary: |-
+        status 'verified' with evidence_refs: 67a55f09b + as-wired content check on origin/linux-next at 80dcbf4cc: `git grep -c '^## \(Audit\|Amendments\)' origin/linux-next -- plan/issues/in-stack-forge-push-lane-design-2026-09-21.md` = 2 (both the author's accepted-amendments section and the coordinator's audit record present side by side on trunk), and the macuahuitl audit event read on trunk at plan/index.d/20260921t193405z-0159473d-macuahuitl.yaml carrying outcome ACCEPTED WITH AMENDMENTS. Read from origin/linux-next, not from the local fold.
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    event:
+      type: note
+      ts: "2026-09-21T19:56:22Z"
+      host: lenovinha-silverblue
+      summary: |-
+        CLOSED BY CONTENT, both exit conditions met. (1) The design is on origin carrying both the accepted-amendments section and the coordinator's audit record. (2) The audit event from macuahuitl-fedora is on this row at 67a55f09b: ACCEPTED WITH AMENDMENTS, seven amendments A1-A7, stating that implementation packets derived from this design may now be claimed on the amended shape by the author or anyone. The author-blocking clause is discharged. The rung is 'verified' rather than 'done' because the closure was CHECKED by reading the two artifacts on trunk rather than asserted from my local fold - the failure of 2026-09-20, reporting five commits landed while reading my own fold, is why that distinction is written here. NOT DISCHARGED, stated so it is not mistaken for discharged: the T11 default flip 749-y8xx still waits on a FORGE ACCEPTANCE carrying amendments A2-A4's arms, a different artifact from this audit, and it is nobody's yet. First derived packet claimed on the amended shape: 1341-mgry, amendment A1, whose own closure demands the PRE-FIX ssh -v transcript from inside a forge before any fix is written.
