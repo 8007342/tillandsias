@@ -1216,6 +1216,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:vm-launch-graceful-failure-shape
+  - litmus:macos-vz-orphan-diagnosis
   coverage_ratio: 20
   last_verified: '2026-07-18'
 - spec_id: vsock-exec-authz
