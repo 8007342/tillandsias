@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installers-capability-probe-asks-help-whether-a-flag-exists-so-it-is-defeated-by-exactly-the-defect-it-was-written-to-survive-a-help-that-advertises-a-flag-the-parser-rejects
+    event:
+      type: completed
+      ts: "2026-09-21T16:18:45Z"
+      agent_id: windows-yolanda-claude-20260921t161844z
+      host: yolanda-windows
+      summary: |-
+        landed at 731a6f199 (land62), VERIFIED BY CONTENT ON TRUNK rather than by the SHA -- the land rebases, so an ancestor check on a SHA I did not write proves nothing about what it carries. Read back from origin/linux-next: install-windows.ps1 carries exactly 1 guarded --reset-state attempt and 0 --help pattern-matches, and both the fixture and the litmus are present. Fixture reads ok:installer-probes-by-attempt-not-by-help:all with 8 of 8 arms, counted rather than eyeballed. THE ARM THAT MAKES THIS A FIX AND NOT A REWORDING is the behavioural one: a cmd stub that advertises --reset-state in --help and rejects it with exit 2 -- the v56.9.20.1 Linux shape -- is REJECTED by the attempt rule, while the same stub is ACCEPTED by the old --help rule, which the fixture asserts as a contrast so the difference is exercised and not merely claimed. Verified red against a reconstructed pre-fix installer, 4 of 8 arms flipping, with the sabotage asserting its own edit landed before the arms were read. THREE INSTRUMENT FAILURES ARE RECORDED IN THE FIXTURE because each produced a meaningless green: without MSYS_NO_PATHCONV=1 msys rewrites cmd.exe's /c into a path so cmd starts interactively and exits 0, making every stub including the liar read as supported; a parenthesised liar stub exited 0 and so failed to lie; and a presence-based arm stayed green against a pre-fix installer because the reporting lines naming ProbeExit outlive the probe, so it asserts cardinality now. A fourth was caught in the litmus step itself, where grep -c exits 1 on a count of zero and broke the chain on the PASSING case -- a guard red exactly when the code is right.
