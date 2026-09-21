@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-salvage-audit-gate-step-reds-intermittently-on-its-disclaimer-arm-while-the-same-capture-satisfies-the-ref-count-arm-so-a-run-cut-short-reads-as-an-assertion-failure
+    field: status
+    value: completed
+    ts: "2026-09-21T02:59:12Z"
+    host: yoga
+
+events:
+  - packet_id: the-salvage-audit-gate-step-reds-intermittently-on-its-disclaimer-arm-while-the-same-capture-satisfies-the-ref-count-arm-so-a-run-cut-short-reads-as-an-assertion-failure
+    event:
+      type: completed
+      ts: "2026-09-21T02:59:12Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: dc42e7271 + ./build.sh --check GATE_EXIT=0 + PASS: salvage-audit 14/14; pre-fix 2 red in 20 at pipe=8192, post-fix 0 in 20
+  - packet_id: the-salvage-audit-gate-step-reds-intermittently-on-its-disclaimer-arm-while-the-same-capture-satisfies-the-ref-count-arm-so-a-run-cut-short-reads-as-an-assertion-failure
+    event:
+      type: note
+      ts: "2026-09-21T02:59:12Z"
+      host: yoga
+      summary: |-
+        landed on origin/linux-next 2026-09-21T02:59:12Z
