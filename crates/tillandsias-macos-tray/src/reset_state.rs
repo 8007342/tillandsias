@@ -130,7 +130,13 @@ pub fn run_reset_state() -> Result<(), String> {
             .flatten()
             .is_some()
     };
-    let mark = |there: bool| if there { "" } else { " [ABSENT — nothing to do]" };
+    let mark = |there: bool| {
+        if there {
+            ""
+        } else {
+            " [ABSENT — nothing to do]"
+        }
+    };
 
     // NAME THE FILES, NOT THE DIRECTORY. This listed the image root TWICE with
     // two different parentheticals, which read as two separate things, and it
@@ -181,12 +187,16 @@ pub fn run_reset_state() -> Result<(), String> {
     let nvram = image_root.join("nvram.bin");
     let mut preserved: Vec<String> = vec![
         if anchor_there {
-            format!("keychain: {PRESERVED_ANCHOR} (anchors this INSTALLATION; the in-VM Vault derives from it — 803-49re)")
+            format!(
+                "keychain: {PRESERVED_ANCHOR} (anchors this INSTALLATION; the in-VM Vault derives from it — 803-49re)"
+            )
         } else {
             // NOT a warning dressed as reassurance. The reset is not the cause
             // and does not repair it; the operator is simply told the truth
             // about the thing this line exists to reassure them about.
-            format!("keychain: {PRESERVED_ANCHOR} [ABSENT BEFORE THIS RESET — nothing to preserve; the next vault will not derive from it (803-49re). This reset neither caused nor repairs that.]")
+            format!(
+                "keychain: {PRESERVED_ANCHOR} [ABSENT BEFORE THIS RESET — nothing to preserve; the next vault will not derive from it (803-49re). This reset neither caused nor repairs that.]"
+            )
         },
         format!("{} (the installed application)", app.display()),
         format!(
