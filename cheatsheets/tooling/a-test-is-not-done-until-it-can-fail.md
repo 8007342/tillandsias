@@ -347,6 +347,34 @@ git status --porcelain "$f" | wc -l  # expect >= 1 — a clean tree after an edi
 
 A no-op edit and a completed edit are indistinguishable from the command's
 output. They differ only in the file.
+
+**A `|| fallback` after a pipeline reports on the LAST command, not the one you
+cared about.** This is the most common spelling of tonight's whole subject and it
+was written four separate times today by someone documenting it:
+
+```bash
+coredumpctl list | grep -i keyring | tail -5 || echo "none"   # WRONG
+```
+
+`tail` succeeds whether or not `grep` matched, so the `|| echo "none"` **can
+never fire**. The command prints nothing and says nothing, and "no matches" is
+indistinguishable from "the tool is missing", "the pattern was wrong", or "I
+typed the path wrong". Every one of those is a silent empty screen.
+
+```bash
+n=$(coredumpctl list --no-pager 2>/dev/null | grep -ci keyring)
+echo "keyring coredumps: ${n:-0}"
+echo "control: $(coredumpctl list --no-pager 2>/dev/null | wc -l) lines total"   # >0 or the probe read nothing
+```
+
+Count into a variable, print the count, and print a **positive control** —
+something that must be non-zero if the pipeline worked at all. A bare zero and an
+unreadable source look identical; a zero beside a healthy control does not.
+
+The same shape in the other direction: `grep -q x file && echo yes` says nothing
+on a miss, and `if ! cmd | grep -q x` under `set -o pipefail` can be inverted by
+a SIGPIPE when `grep -q` exits at its first match. When the answer matters,
+capture the status you actually want and branch on the value.
 ## Related
 
 [exit-status-is-not-an-answer.md](exit-status-is-not-an-answer.md) — the same
