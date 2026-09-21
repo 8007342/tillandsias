@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: closure
+      ts: "2026-09-21T19:14:56Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t191456z
+      host: forge-tillandsias
+      summary: |
+        CLOSED. BOTH CLAUSES MET, BY TWO HOSTS' WORK, ON TWO LANDINGS — and the row
+        stayed open for the second one rather than closing on the first.
+
+        VERIFIED ON THE MIRROR THIS HOST PUSHES TO AND READS FROM, origin/linux-next at
+        2ce8ecd0c:
+
+          7c1600b64 resolves, and is an ancestor of trunk        YES
+          parse-failure verdict in the checker                   2 occurrences
+          join-the-fleet §3 names _vs_surface_files              1
+          the old "checker scripts are validator surface" text   0 remaining
+          fixture awk field separators written in hex            0
+
+        The SAME command that measured the reporting clause ABSENT an hour ago
+        (`grep -c scorable-obligation-parse-failure` → 0) now returns 2. Absent before
+        the land, present after, by one command — which is the cleanest form this
+        closure could take.
+
+        CLAUSE 1 — THE PARSING CLAUSE — IS macneo's WORK.
+          68f99c548  bound the row marker to indent 0-4, not any depth
+          5d178a844  land(65), carrying this host's five-arm fixture
+        A row is identified as a list item whose sibling keys include packet_id or
+        order, not as any dash at a given depth. Measured effect on the live ledger:
+        3 closures recovered (1315-d4qd, 1323-pc8k, 1327-r4zb), 0 lost, no phantom row.
+
+        THIS HOST READ BOTH IMPLEMENTATIONS AND RECOMMENDED macneo's OVER ITS OWN. It
+        had a working splitter of its own, measured equivalent on the corpus — same 3
+        recovered, same 0 lost. It was not preferred, and the reasons are on the record
+        rather than in anyone's memory: macneo's keeps the original single-pass
+        streaming structure where this host's reads each file whole; macneo's never had
+        the per-file reset hole this host had to repair mid-development, which would
+        have made the checker disagree with ITSELF between pass 1 (one fragment) and
+        pass 2 (the whole fold); and macneo's diff is 40 lines against 168. The
+        unlanded alternative is preserved, NOT proposed, at
+        salvage/forge-tillandsias/20260921-1331-884p-splitter-alt (5d508a583), with NOT
+        A LANDING CANDIDATE in its first line.
+
+        CLAUSE 2 — THE REPORTING CLAUSE — IS THIS HOST'S, AND IT WAS DEFERRED
+        DELIBERATELY RATHER THAN FORGOTTEN.
+          306d39bb3  the parse-failure witness, on work/1331-884p-reporting
+          7c1600b64  land(67), the relay commit that made it true on trunk
+        Before either verdict — the loud one or the silent deferral — the row is re-read
+        from the file with an independent reader. If the obligation is there and the
+        parser did not capture it, that is a PARSE FAILURE OF THE CHECKER, reported as
+        one, naming the file and the line, never as a property of the row. New verdict
+        `violation:scorable-obligation-parse-failure:<n>`.
+
+        WHY IT TOOK TWO LANDINGS, which is the part a future reader needs. The closure's
+        FIRST clause is a reporting requirement — "never 'carries no scorable
+        obligation', and never a silent deferral" — and land65 implemented the SECOND.
+        At that point the row could have closed on the landing that existed. It did not,
+        because the clause was measured unmet (`parse-failure` → 0 on trunk) and the
+        fixture said so on every run: arm 4 printed `[RELAXED]` and named what it was
+        not checking. The queue owner ruled the row stays open until the reporting half
+        lands. A row closed against a partially-met closure is the exact accounting this
+        row was filed about.
+
+        THE GATE PROVES THE CLAUSE RATHER THAN ANYONE ASSERTING IT. Arm 4 grades by
+        inspecting the checker for the verdict, so it flipped from [RELAXED] to [STRICT]
+        with no edit to the fixture the moment the reporting change landed:
+
+          ok:scorable-splitter:arm4-witness[STRICT]:blind parser blames ITSELF [violation:scorable-obligation-parse-failure:1]
+          ok:scorable-obligation-splitter:5/5 arms
+
+        VERIFIED THREE TIMES ON THREE SUBSTRATES, none of it ceremony: by this host
+        against trunk's fixture on gawk, by macuahuitl against the BSD-portable fixture,
+        and by the macOS regime green at f6dd50caf on arm64 BSD userland. The middle one
+        caught what this host structurally could not — its gawk honours both hex and
+        octal field separators, so the macOS break was invisible here.
+
+        FIXTURE, bound as litmus:scorable-obligation-splitter under ci-release pre-build
+        so it runs rather than sitting unreferenced: five arms — fixture, mutation (with
+        a no-op detector that refuses when the reverted source is identical),
+        per-file diff keyed by (file, packet_id), the witness, and prose immunity. Arm 5
+        existed because the adversarial check found a regression in the first candidate
+        that a recovery count would have scored as success.
+
+        1319-vd5h closes on the same pair, with its own face named.

@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    event:
+      type: closure
+      ts: "2026-09-21T19:15:13Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t191513z
+      host: forge-tillandsias
+      summary: |
+        CLOSED AS SUBSUMED, ON THE SAME TWO LANDINGS AS 1331-884p. Closing on the
+        coordinator's recorded ruling (macuahuitl, 2026-09-21T18:04:28Z, COORDINATOR
+        LINK on this row), not on the claimer's own judgement — this host raised the
+        subsumption and was explicitly told the decision was the queue owner's.
+
+        THIS ROW'S FACE, which is NOT the one 1331-884p describes and is why both were
+        filed honestly. One defect, two symptoms, found from opposite ends:
+
+          THIS ROW (pirria, 2026-09-20) — a fragment written by yaml.safe_dump puts
+          sequence items at the PARENT KEY'S indent, so `exit_criteria` items sit at two
+          spaces, match the row marker, flush the record, and an `unscoreable:` field
+          twelve lines below is never evaluated. Symptom: A FALSE REFUSAL of a field
+          that is plainly present in the file. The author is the only person positioned
+          to notice, because the author is looking at the file.
+
+          1331-884p (macneo, 2026-09-21) — a nested capability_tags or owned_files entry
+          at indent 2 or 4 flushes the record, the closure is never read, and the row
+          takes the deferred path and PASSES. Symptom: A FALSE SILENT PASS.
+
+        Same file, same marker, same mechanism, opposite consequences. The p1 was
+        claimed over the p2 because the silent half is the dangerous half, not because
+        this row was less real.
+
+        WHAT CLOSES IT — the landed fix identifies a row as a list item whose sibling
+        keys include packet_id or order, rather than as any dash at a given depth, so
+        the marker no longer fires on a nested sequence item at ANY depth, which is this
+        row's exact trigger:
+
+          68f99c548  bound the row marker to indent 0-4, not any depth (macneo)
+          5d178a844  land(65), carrying the five-arm fixture
+          7c1600b64  land(67), the reporting clause — a row the checker cannot parse is
+                     now refused by name instead of reported as a row that says nothing,
+                     which is this row's false-refusal symptom answered directly
+
+        Verified on origin/linux-next at 2ce8ecd0c from the mirror this host reads and
+        pushes to.
+
+        THIS ROW'S LEAD SURVIVED THE CLOSURE, which it was in danger of not doing.
+        1319-vd5h named a sibling 1331-884p did not: scripts/check-fragment-status-loss.sh
+        SHARES the two-space marker idiom, while check-added-fragments-parse.sh,
+        check-base-ledger-status-loss.sh and check-fragment-events-land.sh do not.
+        Measured since: of the three sites this row counted, only ONE is live — line 88
+        is a comment quoting the old broken code and line 135 is already key-anchored to
+        `- packet_id:`. The live one drops the (packet_id, status) pair outright when a
+        nested list sits between packet_id and status: a status-loss detector losing a
+        status. A row-anchored fix is written and fixture-proven, held as a follow-up
+        under its own verification with its affected rows named, per the queue owner's
+        one-semantic-change-per-landing rule. IT IS NOT LANDED AND MUST NOT BE ASSUMED
+        LANDED BY THIS CLOSURE.
+
+        ALSO FROM THIS ROW'S METHOD, worth keeping: its context said to run the
+        checker's OWN awk against the file rather than to read the regex, after four
+        wrong hypotheses. That instruction is what found the defect both times — this
+        host re-derived the population with the script's own _BLOCK_AWK and got 0 where
+        the row said 142, which led to the evidence being unreachable in a working copy
+        rather than to a wrong fix. Reading the regex would have confirmed whatever the
+        reader already believed.
