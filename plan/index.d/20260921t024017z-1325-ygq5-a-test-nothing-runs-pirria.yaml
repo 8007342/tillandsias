@@ -1,0 +1,97 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    order: 1325-ygq5
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags:
+      - testing
+      - gate
+      - fail-loud
+      - agent-safety
+      - litmus
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-added-test-is-referenced.sh
+    title: 'An ADDED scripts/test-*.sh or openspec/litmus-tests/*.yaml that no gate step, build.sh line
+      or litmus binding references is accepted silently, so a test that CANNOT FAIL A GATE is indistinguishable
+      at push time from one that guards something
+
+      '
+    context: "ONE RULE, TWO ORGANS, AND THE SAME HOST PRODUCED A SPECIMEN IN EACH ON THE SAME\nDAY. 2026-09-20/21,\
+      \ pirria:\n\n  SPECIMEN 1 (litmus organ). litmus:installer-reprovisions-on-install was written\n\
+      \  into openspec/litmus-tests/ and never added to openspec/litmus-bindings.yaml.\n  The suite ran\
+      \ ci-release to completion reporting 37 PASS / 3 FAIL with that\n  test in NEITHER number, and it\
+      \ was reported to the coordinator as verified.\n  Bound later, it did not even parse. (1304-wbb2\
+      \ owns the reconciliation guard;\n  esme's audit found sixteen unbound files at the time.)\n\n \
+      \ SPECIMEN 2 (shell organ). scripts/test-reset-flags-are-accepted.sh — written\n  the same night,\
+      \ to replace an arm that counted MENTIONS of a flag instead of\n  running the binary — was committed\
+      \ with NO gate-steps.d step, NO build.sh line\n  and NO litmus binding. `grep -rl test-reset-flags-are-accepted\n\
+      \  scripts/gate-steps.d/ build.sh openspec/` finds nothing. Its 7/7 could not fail\n  a gate. It\
+      \ replaced a test that could not fail FOR THE REASON IT NAMED with one\n  that could not fail AT\
+      \ ALL.\n\nWHY THE AUTHOR IS THE ONE PERSON WHO CANNOT SEE IT. Both artifacts run green when\ninvoked\
+      \ by hand, which is how an author checks. The file states its own spec and\nphase in its frontmatter\
+      \ (litmus) or prints its own ok: line (shell), so\neverything the author looks at says the test\
+      \ is real. Only the thing that never\nran — the suite, the gate — knows, and it reports its absence\
+      \ as a smaller total\nrather than as an error.\n\nTHE LESSON WAS ALREADY WRITTEN DOWN AND STILL\
+      \ DID NOT FIRE. The same host wrote\nup specimen 1, sent esme the authoring-side cause for 1304-wbb2\
+      \ (\"nothing in the\nauthoring path asks for the binding, and writing the file feels like finishing\"\
+      ),\nand then produced specimen 2 hours later. The lesson had been filed against the\nORGAN (a litmus\
+      \ YAML needs a bindings entry) rather than against the SHAPE (a\ntest is not done until something\
+      \ that runs on its own can fail because of it), so\nit did not fire when the artifact was a shell\
+      \ script.\n\nMEASURED POPULATION on trunk, 2026-09-21:\n\n  scripts/test-*.sh                  \
+      \       352\n    referenced by no step, build.sh, local-ci.sh or litmus   35\n  litmus tests declaring\
+      \ a name             445\n    absent from openspec/litmus-bindings.yaml                20\n\nFifty-five\
+      \ artifacts that no gate reaches. Some are deliberate (unbound-\ngrandfathered.txt is a real list\
+      \ with a ratchet, 660-ryhn); the defect is that\nDELIBERATE and FORGOTTEN are the same state, and\
+      \ nothing at push time tells them\napart.\n\nWHY A CHECKLIST IS THE WEAK FORM, and the coordinator's\
+      \ words are the right ones:\na checklist at the point of authoring is read by the same person who\
+      \ has just\nfinished the file and believes it is done. The strong form is a decider that\nfires\
+      \ at push time on the diff, like yoga's, and names the artifact.\n"
+    exit_criteria:
+      - 'an ADDED scripts/test-*.sh that no gate-steps.d/*.step, build.sh, local-ci.sh or litmus yaml
+        references is NAMED at push time (pre-fix result: FAILS — scripts/test-reset-flags-are-accepted.sh
+        was committed and pushed unreferenced on 2026-09-21, and its 7/7 could not fail a gate)'
+      - 'an ADDED openspec/litmus-tests/*.yaml whose declared name is absent from openspec/litmus-bindings.yaml
+        is NAMED at push time (pre-fix result: FAILS — litmus:installer-reprovisions-on-install, 2026-09-20,
+        ran in neither the pass nor the fail count of a completed suite)'
+      - 'DIFF-SCOPED, and this is what makes it landable: it fires on what THIS PUSH ADDS, never on the
+        standing corpus. Fifty-five artifacts are unreferenced today and a guard that refuses them all
+        turns one host''s mistake into every host''s red — the construction check-added-fragments-parse.sh
+        uses for the same reason (698-7n6q).'
+      - 'WARN in the migration phase, refusal later ON A NUMBER (operator direction): the verdict line
+        carries the standing count so the ratchet has something to close against, and the flip to refusal
+        is a decision someone makes against that number rather than a date'
+      - 'NEGATIVE CONTROL: a DELIBERATELY unreferenced artifact stays possible and is declared, not silently
+        tolerated — unbound-grandfathered.txt already holds that list for the litmus organ (660-ryhn)
+        and the shell organ needs the same affordance, or the guard converts a real practice into a lie'
+    unscoreable: 'reference-surface-not-enumerated: ''referenced by'' is four surfaces today (gate-steps.d
+      steps, build.sh, local-ci.sh, litmus yaml) and the set is not declared anywhere, so a fifth caller
+      added tomorrow makes a referenced test look unreferenced. The claimer either declares that list
+      in one place both the guard and the reader use — the shape 1305-udgs used for the three rosters
+      — or accepts false positives and says so. The measurement is complete and reproducible; the surface
+      list is the choice.
+
+      '
+    events:
+      - type: filed
+        ts: '2026-09-21T02:40:17Z'
+        agent_id: linux-pirria-claude-20260921t013500z
+        host: pirria
+        summary: 'Filed by the host that produced both specimens in one day, at the coordinator''s
+
+          direction, after they named the strong form: not a checklist at authoring time,
+
+          which the author reads having just decided they are finished, but a diff-scoped
+
+          decider that names the artifact at push time.
+
+          The rule it enforces is one sentence and it is organ-independent: A TEST IS NOT
+
+          DONE UNTIL SOMETHING THAT RUNS ON ITS OWN CAN FAIL BECAUSE OF IT. The artifact
+
+          type changes only which file you edit to make that true.'
