@@ -1,0 +1,57 @@
+packets:
+  - packet_id: a-fixture-that-plants-a-probe-fragment-in-the-live-plan-index-d-leaves-it-behind-when-the-run-is-cut-short-and-the-release-preflight-then-refuses-the-whole-ledger-as-incomplete
+    order: 1320-44rs
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, plan, fixture-hygiene, release-gate, agent-safety]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-pending-capability-row-does-not-wedge.sh
+      - scripts/check-no-fixture-writes-live-ledger.sh
+    verifiable_closure: |
+      scripts/check-no-fixture-writes-live-ledger.sh prints
+      `ok:fixtures-write-scaffolds-only:<n> checked` and exits 0 over every
+      scripts/test-*.sh, where a fixture that writes a path under the
+      checkout's own plan/index.d/ (or plan/loop_status.d/) rather than under a
+      scaffold it created is named as `violation:fixture-writes-live-ledger:<file>:<line>`;
+      and scripts/test-pending-capability-row-does-not-wedge.sh runs its probe
+      row inside a scaffold (a copied plan tree under mktemp) so that a run
+      killed at any point leaves nothing under the real plan/index.d/ — proven
+      by an arm that kills the fixture mid-run and asserts `git status
+      --porcelain plan/` is empty afterwards. PRE-FIX RESULT: FAILS on both —
+      measured 2026-09-20 on macuahuitl: the v56.9.20.1 release gate refused
+      `blocked:plan-ledger-incomplete` because
+      plan/index.d/20990101t000002z-1128-probe-noid.yaml (a `capabilities:`
+      row with no host_id, dated 2099) sat untracked in the live ledger
+      directory after a fixture run was cut short; the fold read it, dropped
+      it, and the strict release preflight refused the whole ledger.
+    next_action: |
+      A probe fragment written into the live ledger directory is invisible to
+      every host but the one running the fixture, survives the fixture's
+      death, and is read by the fold as real: on 2026-09-20 it cost a release
+      gate (about 45 minutes on the operator's desktop) and was found only by
+      `tillandsias-plan check --strict-fragments` naming the dropped entry.
+      The checker is a source scan (a fixture that composes a path from
+      "plan/index.d" and writes to it without a scaffold prefix); false
+      positives are fixtures that write through push-plan-fragments-to-trunk
+      or set-field into their OWN scaffold checkout — name the scaffold idiom
+      the checker accepts. Same family as the derived-tree and YAML-dump
+      specimens on cheatsheets/tooling/exit-status-is-not-an-answer.md: the
+      author is the one person who cannot see it.
+
+      THE TRIGGER, MEASURED ON THE THIRD READ: the residue is not (only) a run cut
+      short by chance. litmus:preflight-front-door runs `./build.sh --preflight`
+      INSIDE the release gate's pre-build litmus tier; the door enumerates
+      gate-steps.d and runs step 275 (this fixture, ~17 s) under its 5 s per-guard
+      deadline, then kills the process group (SIGKILL after -k 2) mid-arm — the
+      exit trap that removes the probes never runs — and the release preflight
+      litmus later in the same suite reads an incomplete ledger. Both release-gate
+      runs of the cut refused on it. Interim (commit 60b9c8300): the door's
+      precondition table names this fixture as a `live-ledger` skip; the gate step
+      still runs it in full. This row removes the reason for the skip entry and
+      deletes it: a fixture that can be SIGKILLed at any instruction must not have
+      written into the live tree at that instruction.

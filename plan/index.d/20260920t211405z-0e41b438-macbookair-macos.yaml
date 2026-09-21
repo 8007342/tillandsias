@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    field: status
+    value: completed
+    ts: "2026-09-20T21:14:05Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: completed
+      ts: "2026-09-20T21:14:05Z"
+      host: macbookair-macos
+      summary: |-
+        status 'completed' with evidence_refs: 28ce80c75 (verified on origin/linux-next by file existence, not by diff): scripts/test-macos-vsock-inference-closure.sh, openspec/litmus-tests/litmus-macos-vsock-inference-closure.yaml, the binding under host-guest-transport, and try_start_vsock_forwarder at 4 production sites. TWO RUNS. (1) 2026-09-19T19:09:17Z hand-proof of the transport: a container on the enclave network ran curl http://inference:11434/api/version and received a body composed on the macOS host, tray logging ACCEPTED and the host server logging the GET. (2) 2026-09-20 product-path closure, the fixture: LIVE forwarder=running inference=absent body=[{"version":"host-native-closure-probe"}]; DEAD (same forwarder, dead host port) forwarder=running inference=absent body=[]; ok:macos-vsock-inference-closure:4, mutation-verified so the control varies one thing. Litmus checkers green: yaml-parses 449, bindings bound=424 grandfathered=10 (bound, not excused), pin-claims 93, expression-pinning clean.

@@ -1,0 +1,46 @@
+packets:
+  - packet_id: the-usage-a-host-sees-when-it-makes-a-mistake-is-the-stale-one-so-the-tool-s-most-read-surface-is-the-one-nobody-keeps-current
+    order: 1322-qfxs
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, tooling, usage, agent-safety, docs]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/test-plan-usage-surfaces-agree.sh
+    verifiable_closure: |
+      scripts/test-plan-usage-surfaces-agree.sh prints
+      `ok:plan-usage-surfaces-agree:<n> subcommands` and exits 0: for every
+      tillandsias-plan subcommand that documents a write target or a required
+      flag, the top-level help, the per-subcommand error-path usage, and the
+      branch the code takes agree with each other. PRE-FIX RESULT: FAILS on
+      two, both from 2026-09-20. (1) `tillandsias-plan append-event` with no
+      arguments prints "WRITE TARGET differs from set-field's, invisibly at
+      the call site: a NEW plan/index.d/ fragment when the packet was DECLARED
+      in one, the folded plan/index.yaml otherwise", while the append-event
+      path in crates/tillandsias-plan/src/main.rs has NO base branch: it calls
+      fragments::fragment_dir(&index) and writes there unconditionally, and the
+      fragment header it emits says "Events go to the OVERLAY, never to
+      plan/index.yaml" — MEASURED by yoga on the installed binary (build-id b0417c6cbd30c339, not the checkout.s source-revision): `append-event 765-xpct` wrote plan/index.d/20260920t234004z-32c36abe-yoga.yaml and left plan/index.yaml untouched — the usage string is false about the artifact that runs, not only the source (yoga planned a full
+      ./build.sh --check on the strength of that sentence before the
+      coordinator corrected it). (2) append-event's ERROR path prints a usage
+      string without --summary-file while the top-level help advertises it
+      (macneo, who passed prose through "$(cat file)" twice on that basis).
+    next_action: |
+      THE PHRASING IS THE DEFECT, not just the fact (yoga): "invisibly at the
+      call site" is the construction that stops a reader checking — it says
+      the truth is unobservable from where you stand, so looking is pointless.
+      A plain wrong sentence is caught by the next person who tries it; a
+      wrong sentence that explains why you cannot verify it is not. The fix
+      deletes the claim of unobservability, not only the target.
+      THE FAILURE DIRECTION: both specimens make the tool sound MORE
+      restrictive than it is (a gate that is not owed, a flag that does not
+      exist) — safe for data, expensive for hosts: nobody corrupts a ledger,
+      everybody pays a gate they did not owe. Not cosmetic.
+      Filed by the coordinator from yoga's two lines (their tree was under a
+      gate); macneo's specimen is the second surface. Owner: any Linux host
+      with the plan crate warm; a small row.
