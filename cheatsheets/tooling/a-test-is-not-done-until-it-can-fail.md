@@ -185,11 +185,32 @@ test*, which is exactly the thing you are trying to rule out. So look for:
 ```bash
 #[allow(dead_code)]              # the compiler already told someone, and lost
 "retired by order …"             # in a doc comment, with the code still present
-grep -c '<fn name>'  → 2         # the definition and one test, nothing else
+# then, for each caller you find: is THAT caller reachable?
 ```
 
-The dead giveaway is a symbol whose only references are **its own definition, a
-doc comment, and a test**. The compiler will not warn: the test is a real use.
+**Counting mentions does not work, and this page had it wrong in its first
+version.** It said the giveaway was a symbol with exactly two references — its
+definition and a test. Measured against this page's own specimens, in the file
+they live in:
+
+```
+cloud_overflow_row                      7 mentions
+resolved_max_cloud_projects_in_menu     8 mentions
+refresh_local_projects                  3 mentions
+```
+
+None is two, and the two called sharpest above are the two with the most
+mentions. The heuristic finds only the no-caller case and misses the transitive
+one — so as first written it would have cleared every specimen on this page,
+including the one it calls the sharpest.
+
+The rule that actually holds: **an item is not dead because nothing mentions it,
+it is dead because everything that mentions it is itself dead.**
+`cloud_overflow_row` has a definition, a real call, a doc reference and tests —
+four healthy-looking mentions — and the call sits inside the retired builder.
+No count can see that. You have to ask what the *caller's* reachability is, which
+is one step of recursion, and that step is exactly why the compiler can do this
+and a grep cannot.
 
 ### What to do
 
@@ -197,8 +218,9 @@ doc comment, and a test**. The compiler will not warn: the test is a real use.
 excluding the test itself.**
 
 ```bash
-grep -n '<symbol>' <file>        # then subtract: the definition, its doc, its tests
-                                 # if nothing survives, the green means nothing
+grep -n "<symbol>" <file>        # then, for each caller: is that caller reachable?
+                                 # recurse until you reach a live entry point,
+                                 # or run out -- a test is NOT a live entry point
 ```
 
 And when you find such an island, do not delete on sight — **follow the value
