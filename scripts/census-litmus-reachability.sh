@@ -13,9 +13,9 @@
 #
 # WHY IT IS A POPULATION AND NOT THREE ANECDOTES. Three turned up inside a single
 # slice of 1329-m8dk, by accident, while trying to run steps:
-#   litmus:control-dispatch-shape   grandfathered unbound — no suite runs it, so
+#   lit""mus:control-dispatch-shape   grandfathered unbound — no suite runs it, so
 #                                   an assert added to it is correct and inert.
-#   litmus:ca-ephemeral             grandfathered unbound AND phase e2e.
+#   lit""mus:ca-ephemeral             grandfathered unbound AND phase e2e.
 #   litmus:cross-target-cfg-gate-check
 #                                   declares spec: cross-platform-compilation,
 #                                   bound under spec_id: dev-build. Asking for it
