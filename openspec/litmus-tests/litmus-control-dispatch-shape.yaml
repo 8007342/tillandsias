@@ -87,6 +87,7 @@ critical_path:
     command: "grep -F 'fn unix_socket_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'fn vsock_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'fn symmetric_variants_match_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'fn response_shaped_variants_are_response_only_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs"
     timeout_ms: 3000
     expected_behavior: "response_shaped_variants_are_response_only_on_both_transports"
+    assert_output_contains: "response_shaped_variants_are_response_only_on_both_transports"
 
   - step: "control_dispatch module registered in main.rs"
     # If the `mod control_dispatch;` line is removed, the dispatchers'

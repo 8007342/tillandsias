@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T09:03:52Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        SLICE ONE of the remainder esme handed to a Linux host. Census published as a
+        script, 15 of the long-sentence steps enforced, 12 demonstrated red on mutation.
+
+        THE CENSUS IS NOW A SCRIPT, scripts/census-litmus-step-enforcement.sh, which was
+        this row's deliverable. It implements the key-anchored reading rule and names the
+        commit it measured, so the next disagreement about the number is settled in ten
+        seconds rather than argued.
+
+        I COULD NOT VALIDATE IT AGAINST esme's COMMIT d8fd427 — it is unreachable from
+        this checkout, never having reached linux-next — so I validated against the row's
+        own stated RECONCILIATION instead, which is the better control. Both readings on
+        this tree: substring gives ENFORCED 207, long 39, other 2166; key-anchored gives
+        205, 40, 2167. That is the same minus-one/minus-one delta esme reported between
+        42/2,166 and 43/2,167, produced by the same two comment-exhibits, both verified
+        present by content after their line numbers drifted.
+
+        THE SLICE. long 40 to 25, ENFORCED 205 to 220, and the control the row demands:
+        "anything else" stays EXACTLY 2167. No step was moved between buckets by
+        rewording. Each assert reuses its own step's expected_behavior text verbatim, so
+        prose and assertion cannot drift.
+
+        TWELVE DEMONSTRATED by mutating the subject, re-running the spec and restoring.
+        Two of them are worth naming because the runner itself printed the assert as the
+        failing condition, which is proof of the exact mechanism rather than a pass-rate
+        delta: "literal not found: ok: store-readme-not-a-fragment-real-malformed-still-
+        surfaces" and "literal not found: ok: named empty phase bucket is not-a-failure
+        but is not called PASS".
+
+        THREE NOT DEMONSTRATED, with reasons rather than claims. The filterless twin at
+        litmus-litmus-name-filter-fail-loud-shape.yaml:42 shares the subject and verdict
+        string of :29 and is never reached, because the runner stops at the first failing
+        step. litmus-control-dispatch-shape.yaml:82 is in a test on the 660-ryhn
+        grandfathered UNBOUND list, so no suite runs it and the assert is correct but
+        inert until it is bound — 1325-ygq5 intersecting this row. And
+        litmus-forge-diagnostics-e2e.yaml:60 is post-build/e2e over a diagnostics annex
+        this host does not have.
+
+        THE MEASUREMENT REGIME IS THE LESSON, and it bit three times. Every number above
+        is from inside the builder toolbox; outside it cargo is absent and
+        observability-metrics reads 50 percent while methodology-accountability reads 81,
+        both of which are 100 inside. I also began by running the step commands in a bare
+        shell and concluded five were broken — they are not, they need the runner's
+        helper functions, its sequential state from earlier steps, and its command
+        assembly. And two of the twelve files are not executed by a size-instant run at
+        all: loop-status is size quick, forge-diagnostics-e2e is post-build. A pass rate
+        that never executed a step is not evidence about that step, which is this
+        family's own sentence at the level of the instrument rather than the assert.
