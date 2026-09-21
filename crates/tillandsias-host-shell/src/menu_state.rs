@@ -1016,6 +1016,20 @@ mod tests {
             provisioning_failure: None,
         };
 
+        // SPEC tray-ux, "Refresh is idempotent": rendering twice from the same
+        // inputs must produce the same menu item for item. Asserted here, on the
+        // same populated state the parity test already builds, because the
+        // requirement is cheap to satisfy accidentally and expensive to notice
+        // losing — a menu that reorders or re-ids between refreshes breaks every
+        // id-keyed dispatch downstream, and nothing else in this suite would say
+        // so. `MenuItem` derives PartialEq, so this is a real structural
+        // comparison and not a label check.
+        assert_eq!(
+            build(&state),
+            build(&state),
+            "two renders from identical inputs must be identical item for item",
+        );
+
         let menu = build(&state);
         let items = match &menu {
             MenuStructure::Ready { items } => items,
