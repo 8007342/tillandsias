@@ -135,6 +135,7 @@ critical_path:
     command: "mf_stage prod 0 OUT -- grep -cF 'forge-plan' images/default/config-overlay/opencode/instructions/forge-discovery.md && mf_holds_literal OUT '1' && grep -F 'forge-plan' images/default/config-overlay/opencode/instructions/forge-discovery.md | grep -qF 'plan_answer' && echo \"ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance\""
     timeout_ms: 3000
     expected_behavior: "ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance"
+    assert_output_contains: "ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance"
 
 observability:
   traces:
