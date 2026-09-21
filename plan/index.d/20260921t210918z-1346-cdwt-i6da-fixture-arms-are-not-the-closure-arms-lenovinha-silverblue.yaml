@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-initialize-bare-metal-host-fixture-prints-the-verdict-1312-i6da-closes-on-while-testing-three-different-and-weaker-arms-against-a-stub-podman
+    order: 1346-cdwt
+    status: pending
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [testability, agent-safety, fail-loud, git-mirror, skills]
+    estimated_hours: 4
+    owned_files:
+      - scripts/test-initialize-bare-metal-host-idempotent.sh
+    verifiable_closure: |
+      litmus:initialize-bare-metal-host-idempotent, with its arms made to BE
+      1312-i6da's arms or the row's closure rewritten to state what the fixture
+      actually proves. Whichever way it is resolved, two things must hold.
+      FIRST, the fixture must be able to FAIL for the reasons the closure cares
+      about: with a real container stopped it must red, and its arm-1 verdict
+      must no longer disagree with the real checker's verdict on the same host.
+      SECOND, any arm it cannot perform where it runs must be a NAMED SKIP that
+      does not count toward the pass total — the present 3/3 counts a
+      substituted arm as if it were the closure's.
+      A run of the fixture on a host whose stack is UP is not evidence for this
+      row: the defect is that such a run is indistinguishable from one where
+      the stack is down.
+    title: |
+      the initialize-bare-metal-host fixture prints the exact verdict 1312-i6da closes on, while testing three different and weaker arms against a stub podman that makes real host state irrelevant
+    context: |
+      MEASURED ON lenovinha 2026-09-21, while the worker loop asked whether
+      1312-i6da could close. It cannot, and the reason is that its closure
+      names a fixture verdict rather than the arms themselves.
+
+      THE CLOSURE of 1312-i6da requires
+      `scripts/test-initialize-bare-metal-host-idempotent.sh` to print
+      `ok:initialize-bare-metal-host:3/3`, WHERE the three arms are: (1)
+      IDEMPOTENT - the skill's commands run TWICE ON A REAL HOST yield the same
+      checker verdict and NO container's creation timestamp changes; (2)
+      REBUILD FROM NOTHING - after `podman system reset --force` on a
+      pre-authorised smoke host the skill's commands alone restore the verdict;
+      (3) TROUBLESHOOTING - a stopped mirror yields the todo: line.
+
+      WHAT THE FIXTURE ACTUALLY DOES. It builds a STUB podman - its own comment
+      says "No real container is touched" - and prepends it to PATH for every
+      invocation, so the real podman is never consulted. Arm 1 asks whether the
+      CHECKER returns the same string twice against fixed synthetic output; it
+      never runs the skill's commands and never compares creation timestamps
+      (grep -c CreatedAt = 0). Arm 2 is not rebuild-from-nothing at all but
+      SEEDLESS, a different and much cheaper claim (grep -c 'system reset' = 0).
+      Arm 3 is stubbed likewise.
+
+      THE MEASUREMENT THAT SETTLES IT, and it is one line. The fixture's own
+      arm-1 PASS prints the verdict it validated:
+        ok:bare-metal-host:lenovinha:...  lane=off
+      while the real checker on the same host at the same moment prints:
+        ok:bare-metal-host:lenovinha:...  lane=wired:til:host-push:lenovinha
+      The fixture is describing a host that does not exist. It would print 3/3
+      on a machine with the entire stack down, which is precisely the condition
+      the skill exists to detect and repair.
+
+      WHAT IS NOT WRONG HERE, so the fix does not overshoot: a stub is the RIGHT
+      tool for arm 3 and for the seedless claim - both are about what the
+      CHECKER says in a given state, and manufacturing that state is legitimate
+      and fast. The defect is that the stubbed arms are counted as the closure's
+      arms and reported under a verdict string the closure treats as proof of
+      them. 1312-i6da's arm 2 in particular cannot run here at all: it needs a
+      pre-authorised smoke host, and pretending otherwise is what produced a
+      substituted arm.
+    next_action: |
+      Unclaimed. Decide FIRST, with the coordinator, which way it resolves -
+      strengthen the fixture or restate the closure - because doing both
+      independently is how a row acquires two incompatible definitions of done.
+      Then: make every arm the fixture cannot perform a named skip excluded
+      from the total, and give the fixture one arm that touches the real host so
+      it can disagree with reality. 1312-i6da MUST NOT be closed on the present
+      3/3; its procedure slice is separately satisfied on trunk at 80dcbf4cc and
+      that is a different claim from its fixture arms.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21 from the scheduled worker loop,
+      on being asked whether 1312-i6da still held work here. Fourth instance
+      tonight of 1345-8hyg (a model of the thing is not the thing), after
+      ssh-keygen -F vs the ssh client (1341-mgry), build-image.sh vs a lane
+      launch (1344-q6uc), and a renewal fixture that ran under the cliff
+      (1342-r4pv). Related: 1312-i6da (the row this blocks closing).
