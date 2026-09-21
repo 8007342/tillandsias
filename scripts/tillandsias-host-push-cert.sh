@@ -117,4 +117,35 @@ if [ "$_principals" != "$PRINCIPAL" ]; then
 fi
 
 mv -f "$_tmp" "$CERT" || { echo "fail:host-push-cert:cert-install"; exit 1; }
-echo "ok:host-push-cert:$CERT"
+
+# ── Host verification: trust the CA, never a pinned key ────────────────────
+#
+# The mirror is REBUILT often, and each rebuild mints a new host key. A pinned
+# known_hosts entry therefore breaks on the next rebuild with REMOTE HOST
+# IDENTIFICATION HAS CHANGED, which a reader resolves by disabling checking —
+# the worst outcome. The design already publishes a host CA; the forge's
+# gitconfig writer caches its @cert-authority line, and this reuses that file
+# verbatim rather than deriving a second copy that could drift.
+#
+# WHY HostKeyAlias IS REQUIRED, measured rather than assumed: the mirror's host
+# certificate is valid for the principal git-<mirror-id>, and ssh matches a host
+# certificate against the name you ASKED FOR. Connecting to 127.0.0.1 by address
+# can never match it, and -o HostName=127.0.0.1 does not help because it makes
+# ssh key the known_hosts lookup on the address too. HostKeyAlias is the option
+# for exactly this shape: connect to the published loopback port, verify the key
+# under the certified name.
+_kh_src="${TILLANDSIAS_HOST_CA_KNOWN_HOSTS:-$HOME/.cache/tillandsias/forge-gitconfig/${TILLANDSIAS_PROJECT:-tillandsias}.known_hosts}"
+_kh="$CONF_BASE/known_hosts"
+if [ -r "$_kh_src" ]; then
+    cp -f "$_kh_src" "$_kh" 2>/dev/null && chmod 600 "$_kh" 2>/dev/null
+    _alias="$(awk '/^@cert-authority/{print $2; exit}' "$_kh" 2>/dev/null)"
+else
+    _alias=""
+fi
+if [ -n "$_alias" ]; then
+    echo "ok:host-push-cert:$CERT known_hosts=$_kh alias=$_alias"
+else
+    # The cert is usable; host verification is not wired. Say so rather than
+    # letting the caller discover it at the push.
+    echo "ok:host-push-cert:$CERT known_hosts=ABSENT:$_kh_src"
+fi
