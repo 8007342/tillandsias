@@ -37,6 +37,27 @@ The third host then wrote a shell fixture **the same day** and did not wire it
 either — because the lesson had been stored against *litmus YAML*, and this
 was a `.sh`. Storing the lesson against the organ is how you pay for it twice.
 
+**A fourth specimen, and it caught the author of the section below on the night
+it was written.** `cargo build -p tillandsias-headless` printed `Finished`, and
+the file just edited — `src/tray/mod.rs` — was never compiled: `mod tray` sits
+behind `#[cfg(feature = "tray")]`, and `tray` is not in `default`. The change had
+a plain compile error and reached a pull request. Same shape as specimen 2, a
+different gate: there the check was behind a binary the fixture tree lacked, here
+the code was behind a feature the build did not enable.
+
+The control that settles it takes ten seconds — put a deliberate error in the
+file and see which invocation notices:
+
+```bash
+cargo build -p <crate>                    # 0 errors  -> does not reach the file
+cargo build -p <crate> --features <feat>  # 2 errors  -> reaches it
+```
+
+**`Finished` means the build finished, not that it compiled your work.** Before
+reading a green build as verification, confirm the build reaches the file: a
+feature gate, a `#[cfg]`, a workspace member excluded by default, or a target
+filter will each produce a confident green over code nobody compiled.
+
 ## The rule
 
 **Do not report a test as done on the strength of its own output.** Report it
