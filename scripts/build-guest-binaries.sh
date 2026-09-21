@@ -180,7 +180,11 @@ staging_is_current() {
 # toolchain then refuses -- two hops to learn a fact knowable in one. This
 # names the missing tool in the verify verdict itself.
 restage_blocker() {
-    if command -v nix >/dev/null 2>&1; then
+    # ORDER 790-mbk9: the nix lane is a CAPABILITY, not a binary on PATH — the
+    # toolbox rung carries nix on hosts that have none. Ask the lane (its
+    # `capability` NEVER creates); `command -v nix` under-reports and the
+    # nix-lane fixture refuses it (caught by the pre-cut litmus, 2026-09-21).
+    if [[ -x "$ROOT/scripts/nix-toolbox.sh" ]] && "$ROOT/scripts/nix-toolbox.sh" capability >/dev/null 2>&1; then
         return 1
     fi
     if command -v aarch64-linux-musl-gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then

@@ -238,7 +238,7 @@ while read -r _l _ls _remote_ref _rs; do
             _all_salvage=0; _all_work=0
             ;;
         refs/heads/salvage/*)
-            _all_marker=0
+            _all_marker=0; _all_work=0   # a salvage ref is not the work lane (1315-4a7j regression caught by litmus:salvage-net-roundtrip, 2026-09-21)
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
             # deletions through with the same enthusiasm as rescues: during
             # 874-s8vf's bring-up a salvage ref was deleted with one command
