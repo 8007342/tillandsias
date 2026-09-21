@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T16:15:01Z"
+      agent_id: linux-yoga-opus5-20260921t161501z
+      host: yoga
+      summary: |
+        PRE-ACCEPTANCE BASELINE FROM THE SECOND REGIME (yoga), taken BEFORE the mirror
+        lane exists here, because it cannot be taken afterwards. Not a claim on this
+        row — the precondition for the acceptance is still false here
+        (88b0679d9 is not an object in this clone, so lenovinha's six mirror-lane fixes
+        have not relayed) and lenovinha's client-half procedure is not written yet.
+        Recorded so whoever writes that procedure has both instruments.
+
+        WHY THE TEMPLATE'S CREDENTIAL ARM IS VACUOUS ON THIS HOST. Lenovinha's
+        acceptance proves credential isolation partly by "gnome-keyring-daemon
+        --components=secrets PID unchanged". Measured on yoga 2026-09-21:
+          repo-scope credential.helper  store --file=.git/.gh-credentials
+          global / system helper        none
+          libsecret helper configured   0
+          gnome-keyring-daemon --components=secrets  running, PID 3807
+        Git on this host does not read the keyring AT ALL. That PID is therefore
+        unchanged in the success case and in the failure case alike — the arm cannot
+        distinguish the two worlds and would be a green that means nothing. Same shape
+        as the controls retired on 1307-ermc the same night.
+
+        THE SUBSTITUTED INSTRUMENT, agreed with the coordinator before running: the
+        host's configured credential path is proven UNREAD, with whatever instrument
+        fits that path. Here that is the file store MOVED ASIDE for the three legs — a
+        push that succeeds with the credential absent proves the lane needs none, which
+        is strictly stronger than "not touched". An atime check is the weaker form and
+        would need the filesystem's behaviour confirmed first.
+
+        AND THE INSTRUMENT IS FALSIFIED, which is the point of taking this now. Today,
+        with no mirror lane, the same command run twice:
+          credential PRESENT     rc=1    non-fast-forward rejection — it AUTHENTICATED
+                                         and reached ref negotiation
+          credential MOVED ASIDE rc=128  fatal: unable to get password from user
+        Two different failures, distinguishable by exit status and by text. So the
+        instrument discriminates on this host TODAY, and a success under the lane later
+        will mean something. Had both arms failed identically, "it succeeded without a
+        credential" would have been unreadable and nobody would have known.
+
+        ONE CONSEQUENCE FOR THE PROCEDURE'S WORDING: the three legs must be pushes that
+        would otherwise SUCCEED. The baseline above used a no-op push that was rejected
+        non-fast-forward, so the contrast was rc=1 vs rc=128 rather than success vs
+        failure. An acceptance leg that fails for an unrelated reason while the
+        credential is absent proves nothing either way.
+
+        The credential file was restored and verified non-empty after the test.
