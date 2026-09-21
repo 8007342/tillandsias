@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: push-plan-fragments-to-trunk-re-selects-the-fragment-set-on-every-retry-round-so-an-in-flight-push-carries-fragments-written-after-it-was-launched-and-lands-them-under-the-earlier-pushs-name
+    event:
+      type: note
+      ts: "2026-09-21T16:01:55Z"
+      agent_id: windows-yolanda-claude-20260921t160155z
+      host: yolanda-windows
+      summary: |-
+        AN OBSERVATION, NOT A MECHANISM, and deliberately not a diagnosis -- I had already been wrong twice today by supplying a cause I had not measured. On yolanda-windows the default selection pushed ONE of TWO new fragments and named only the one. Both were written by set-field and append-event minutes apart, both committed in the same commit, both absent from trunk, both plan/index.d yaml. The lane printed one fragment file validated and named only the claim event; the status flip was SILENT -- not refused, not mentioned. Naming its path explicitly pushed it immediately with no complaint. This row is about re-selection carrying MORE than was launched; what I saw is the other side of the same coin, one carried and one dropped, and it may or may not be the same defect. I did not reproduce it deliberately and the script's enumeration at lines 189 to 191 looks like it should have caught both. WHAT MADE IT VISIBLE is worth more than the observation: I verified the fragments against the REMOTE by reading them back with git cat-file, rather than trusting the ok:fragments-on-trunk line, which reported success truthfully for the one fragment it actually pushed. Anyone relying on the documented promise that the default selection carries every new fragment should read the remote back. The cost here was a row left reading ready on trunk while its claim event sat beside it, which is precisely the split the tooling refuses when you attempt it deliberately.
