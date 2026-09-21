@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: note
+      ts: "2026-09-21T21:40:16Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        A SECOND MEASUREMENT THAT DISAGREES WITH THIS ROW, recorded with both readings
+        and the version each was taken on rather than resolved by picking one.
+
+          yoga     `tillandsias --bash <name> --debug`, unresolvable project
+                   prints "Error: Project not found", exits 0
+                   version NOT RECORDED — the skill states the behaviour and the host,
+                   not the build it was measured on.
+
+          pirria   same command shape, 2026-09-21, installed v56.9.21.2 built from a
+                   checkout at 320c66ad3:
+                     $ TILLANDSIAS_MIRROR_SSHD=1 TILLANDSIAS_HOST_PUSH_HOST=pirria \
+                         timeout 240 tillandsias --bash tillandsias --debug
+                     [tillandsias] Project: tillandsias
+                     Error: Project not found: tillandsias
+                     rc=1
+                   Same message. Different status.
+
+        The timeout wrapper is not the cause: `timeout` reports 124 when it fires, and
+        this returned 1 well inside the window.
+
+        WHAT THE CODE SAYS TODAY, which is consistent with the rc=1 reading:
+        crates/tillandsias-headless/src/main.rs has two sites returning
+        `Err(format!("Project not found: …"))` — around the --bash resolver and the
+        --observatorium resolver — and an Err there propagates to a non-zero exit.
+
+        I DID NOT FIND A COMMIT THAT FIXED IT, and I looked: `git log -S'Project not
+        found' --since=2026-08-01` on that file returns one commit, 4878066bd
+        (fix 1119-w2rj, cloud decided by the flag rather than an env var), which touched
+        this area for a different reason. It is PLAUSIBLE that commit changed the status
+        as a side effect, and I have not verified that, so this is a lead and not a
+        finding.
+
+        WHAT THIS ROW SHOULD NOT DO ON MY READING ALONE: close as fixed. Two hosts, two
+        statuses, one undated. The cheap resolution is for yoga to re-measure on a
+        current build and state the version — if they now see 1, the row is fixed and
+        the skill's "exits 0" warning is stale and should be corrected in the same pass,
+        because a stale warning teaches a reader to distrust a status that is now
+        reliable. If they still see 0, there are two code paths and this row is about
+        whichever one they reached.
+
+        THE SKILL'S ADVICE SURVIVES EITHER ANSWER, and is worth keeping regardless: do
+        not read rc as the answer for this command. On my run rc was a faithful 1, and
+        the three independent checks are still what distinguished "the mirror is up"
+        from "the shell was cut off" — the second bring-up returned 124 from the timeout
+        and was the SUCCESSFUL one.
