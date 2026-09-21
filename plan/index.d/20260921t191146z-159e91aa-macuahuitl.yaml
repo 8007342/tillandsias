@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    field: status
+    value: completed
+    ts: "2026-09-21T19:11:46Z"
+    host: macuahuitl
+
+events:
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    event:
+      type: completed
+      ts: "2026-09-21T19:11:46Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7c1600b64
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    event:
+      type: note
+      ts: "2026-09-21T19:11:46Z"
+      host: macuahuitl
+      summary: |-
+        join-the-fleet §3 states the rebuild rule conditionally with both hash directions and names bash scripts/check-plan-binary-current.sh as the instrument; §1.4 names the checker's real verdict grammar; landed at 7c1600b64 by the page's author
