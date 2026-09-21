@@ -104,9 +104,25 @@ cat > "$TMPD/oneshot.sh" <<ONESHOT
 #!/usr/bin/env bash
 set -u
 OUT=$GUEST_RESULT
-arm() { # arm <label> <cid:port>
+arm() { # arm <label> <cid:port|TRAY>
   install -d /run/tillandsias
-  printf '%s\n' "\$2" > /run/tillandsias/vsock-forward
+  if [ "\$2" = "TRAY" ]; then
+    # THE LIVE ARM TAKES ITS TARGET FROM THE TRAY, not from us (1309-rb3p).
+    # Seeding the file here would mask the writer entirely: the closure would
+    # pass whether or not the product could configure itself, which is the whole
+    # thing this row added. We WAIT instead — the oneshot runs at boot and the
+    # tray sends on its control-wire connect, so the guest is legitimately ahead.
+    rm -f /run/tillandsias/vsock-forward
+    waited=0
+    while [ ! -s /run/tillandsias/vsock-forward ] && [ "\$waited" -lt 240 ]; do
+      sleep 5; waited=\$((waited+5))
+    done
+    echo "\$1:target-from-tray-after-\${waited}s=[\$(cat /run/tillandsias/vsock-forward 2>/dev/null || echo MISSING)]"
+  else
+    # The MUTATION arm must pose a target the tray would never send, so it
+    # writes one directly. That is the only place a seeded value belongs.
+    printf '%s\n' "\$2" > /run/tillandsias/vsock-forward
+  fi
   podman rm -f tillandsias-inference tillandsias-vsock-forwarder >/dev/null 2>&1
   LITMUS_PODMAN_MODE=1 timeout 900 tillandsias-headless --status-check >/home/forge/src/.vsock-closure-sc-\$1.log 2>&1
   local fwd; fwd="\$(podman inspect -f '{{.State.Status}}' tillandsias-vsock-forwarder 2>/dev/null || echo absent)"
@@ -118,7 +134,7 @@ arm() { # arm <label> <cid:port>
   echo "\$1:forwarder=\$fwd inference=\$inf body=[\$body]"
 }
 {
-  arm LIVE "2:$PORT_LIVE"
+  arm LIVE "TRAY"
   arm DEAD "2:$PORT_DEAD"
   echo "done"
 } > "\$OUT" 2>&1
@@ -180,6 +196,14 @@ say "DEAD: ${dead:-<none>}"
 
 pass=0; fail=0
 ck() { if [ "$2" = "$3" ]; then say "ok   $1"; pass=$((pass+1)); else say "FAIL $1 (want '$2', got '$3')"; fail=$((fail+1)); fi; }
+
+# ARM 0 — the PRODUCT configured the guest. Without this a green would not
+# distinguish "the tray wrote the target" from "something else did".
+case "$live" in
+    *"target-from-tray-after-"*"=[2:"*) say "ok   the TRAY configured the guest over the control wire"; pass=$((pass+1)) ;;
+    *"MISSING"*) say "FAIL the tray never wrote the target — the writer did not fire (1309-rb3p)"; fail=$((fail+1)) ;;
+    *) say "FAIL no readable target line from the guest: ${live:-<none>}"; fail=$((fail+1)) ;;
+esac
 
 # ARM 1 — the closure itself.
 case "$live" in
