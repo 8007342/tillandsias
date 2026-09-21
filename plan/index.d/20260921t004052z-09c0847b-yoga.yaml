@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: implemented
+      ts: "2026-09-21T00:40:52Z"
+      agent_id: linux-yoga-opus5-20260921t004052z
+      host: yoga
+      summary: |
+        SLICE 1 BUILT AND GATED: work/765-xpct at b61931e79, ./build.sh --check
+        GATE_EXIT=0, verified on origin by artifact. scripts/change-class.sh and
+        scripts/test-change-class.sh, at ok:change-class:14/14.
+
+        IT IS WIRED TO NOTHING, and that is the slice boundary rather than an omission.
+        No gate is keyed to the selector; build.sh is untouched. Nothing this commit
+        does changes what any check runs on any host. The selector matrix in build.sh —
+        the part that actually causes a check to be SKIPPED — is slice 2, after pirria
+        reviews it, because their front door reads the same region and cross-substrate
+        review is how this class of defect gets caught at all.
+
+        THE APPROVAL IS ONE CRITERION OF SIX AND THE FILE SAYS SO IN ITS OWN HEADER. A
+        reader who later finds this selector skipping a gate it should not is looking at
+        a bug, and the operator's approval is irrelevant to that bug. Stating it in the
+        source rather than only here, because the source is where that reader will be.
+
+        IT DOES NOT OWN A TAXONOMY. Classes come from `gate-stamp.sh classify`, which
+        takes paths on stdin and returns the sorted unique set in ONE spawn — built for
+        exactly this under 765-dt8h and needing no change. gate_stamp_classify_path is
+        already TOTAL and its `*)` arm already exists so "an unclassified path fails
+        closed instead of silently belonging to whatever a scoped gate claimed", which
+        is this row's requirement written down before this row.
+
+        TIERS AS ALLOW-LISTS, NOT DENY-LISTS, and this is a decision rather than a
+        style: LIGHT = {plan-ledger, docs}; SCOPED adds {specs, methodology,
+        build-scripts}; FULL is everything else including `other`. A class added to the
+        taxonomy next month lands in NEITHER list, so the tree stays FULL until a human
+        decides — instead of being swept into a cheap tier because nobody considered it.
+
+        FIVE FAIL-CLOSED PATHS, each with a negative test AND a control, because "always
+        answers FULL" passes every negative test and is worthless:
+          unknown path -> FULL (control: LIGHT is reachable at all)
+          unresolvable base ref -> FULL, and the evidence SAYS unresolved rather than
+            reporting an empty diff — those two are indistinguishable otherwise
+          build.sh, local-ci.sh, run-litmus-test.sh and change-class.sh itself -> FULL
+            although build-scripts is a SCOPED class; a selector cannot judge a change to
+            itself using itself
+          last FULL run older than 24h -> refuse to skip, with the control running the
+            IDENTICAL tree with a fresh marker to prove the arm measures the AGE
+          never run, and a MALFORMED marker -> both read `never`, never epoch 0
+            (maximally stale) and never 0 seconds (maximally fresh)
+        Plus: an UNTRACKED crates/ file moves LIGHT to FULL, because a gate runs over
+        the worktree and a new .rs nobody has git-added compiles all the same. And the
+        evidence line carries base, classes and last-full age.
+
+        MUTATION-MEASURED, NOT ASSUMED. Admitting `other` to LIGHT reds the unknown-path
+        arm alone; dropping the 24h bound reds the staleness arm while leaving its
+        control green; emptying the self-paths list reds all three self-edit arms. Every
+        guard has a measurement of what its absence looks like.
+
+        ONE DEFECT IN THE FIXTURE, FOUND AND FIXED HERE, and it is the day's recurring
+        shape one more time. The never-recorded arm first matched on the PROSE of the
+        message and failed against CORRECT behaviour — a guess at wording reads exactly
+        like the absence of the property. The selector now emits a stable
+        `last-full=never` token and the arm asserts on that. The sentence stays for the
+        human; the token is what a checker is entitled to rely on.
+
+        RUN AGAINST THE REAL TREE ONCE BEFORE BEING TRUSTED. On this checkout it answers
+        FULL, "because the change edits what decides the gate" — correct, and the first
+        thing a new instrument should be made to say about its own arrival.
+
+        NEXT, and none of it is in slice 1: the build.sh selector matrix keyed to
+        declared input classes; the keep-unconditional set as DATA with a comment per
+        entry naming its incident (599-4wzr, dd8fd63f, 668-2xeh), so removing an entry
+        is a reviewable diff; the pilot on check-fragment-status-loss and
+        check-groundtruth-mutable-status-pins; and the measured saving reported back to
+        the operator in numbers — landings per day, gate minutes per landing before and
+        after, and the share that qualified LIGHT and SCOPED. 1316-bnzt's queue stays
+        FULL for every candidate until that lands.
