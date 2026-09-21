@@ -64,6 +64,32 @@ DIR="${TILLANDSIAS_SSH_DIR:-/tmp/tillandsias-sshd}"
 PORT="${TILLANDSIAS_SSHD_PORT:-2222}"
 RENEW_SECONDS="${TILLANDSIAS_HOST_CERT_RENEW_SECONDS:-28800}"
 TOKEN_FILE="${TILLANDSIAS_VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-token}"
+
+# ORDER 1313-prin. THE RELAY'S token sink, which is NOT this script's.
+#
+# A push arriving over ssh runs tillandsias-receive under sshd, and sshd gives
+# the forced command ONLY what SetEnv passes — the container's environment is
+# not inherited. Over the anonymous git:// daemon the relay inherits the
+# entrypoint's env, which is why that path always worked and this one never had.
+#
+# MEASURED on lenovinha 2026-09-21: a push over the ssh lane was rejected with
+# "[relay] git-mirror Vault Agent token is expired or unavailable" and
+# "[pre-receive] Push rejected: configured upstream did not durably accept the
+# ref transaction", while `vault-cli lookup-self` run by hand in the container
+# succeeded. Under a sanitized environment — `env -i PATH=... vault-cli
+# lookup-self` — it returns rc=2, because VAULT_TOKEN_FILE then falls back to
+# its default /run/secrets/vault-token, which does not exist in this image.
+#
+# ONLY THIS ONE VARIABLE IS PASSED. VAULT_ADDR already defaults to
+# https://vault:8200 and VAULT_CACERT to /etc/tillandsias/ca.crt, both correct
+# inside this image; passing them again would be decoration that can drift.
+#
+# AND IT IS DELIBERATELY *NOT* $TOKEN_FILE. This script's TOKEN_FILE is the
+# SIGNER sink when the host-push lane is on — a token whose single policy
+# permits certificate signing and CANNOT read secret/github/token. Handing that
+# to the relay would swap a working credential for one that is guaranteed to
+# fail, and the failure would look exactly like this defect.
+RELAY_TOKEN_FILE="${TILLANDSIAS_RELAY_VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-token}"
 VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_CACERT="${VAULT_CACERT:-/etc/tillandsias/ca.crt}"
 RECEIVE_PATH="${TILLANDSIAS_RECEIVE_PATH:-/usr/local/bin/tillandsias-receive}"
@@ -227,7 +253,7 @@ ForceCommand $RECEIVE_PATH
 # T6 (749-2fqj): the wrapper's fixed-path inputs. Sessions inherit no container
 # env; these are the ONLY channel, and the wrapper fails loud when they are
 # empty rather than guessing a repository.
-SetEnv TILLANDSIAS_RECEIVE_ROOT=$RECEIVE_ROOT TILLANDSIAS_RECEIVE_PROJECT=$RECEIVE_PROJECT TILLANDSIAS_MIRROR_ID=$MID
+SetEnv TILLANDSIAS_RECEIVE_ROOT=$RECEIVE_ROOT TILLANDSIAS_RECEIVE_PROJECT=$RECEIVE_PROJECT TILLANDSIAS_MIRROR_ID=$MID VAULT_TOKEN_FILE=$RELAY_TOKEN_FILE
 ExposeAuthInfo yes
 AllowTcpForwarding no
 AllowAgentForwarding no
