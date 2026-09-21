@@ -4617,7 +4617,7 @@ fn ensure_desktop_icon() {
         return;
     }
 
-    let svg = tillandsias_core::genus::TillandsiaIcons::icon_svg(
+    let svg = tillandsias_core::genus::icons::icon_svg(
         tillandsias_core::genus::TillandsiaGenus::Ionantha,
         tillandsias_core::genus::PlantLifecycle::Bloom,
     );
