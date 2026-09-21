@@ -114,7 +114,36 @@ if [[ -z "${REFS//[[:space:]]/}" ]]; then
     echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
     exit 0
 fi
+# ORDER 1315-4a7j. THE AFFORDANCE, in one place so every refusal carries the
+# COMPLETE preferred workflow rather than a fragment of it. A warning that names
+# a better lane without saying how to use it leaves the reader exactly where the
+# refusal did.
+work_lane_affordance() {
+    echo "  prefer work branches: git switch -c work/<order>; push there freely;" >&2
+    echo "  open the PR with: gh pr create --base linux-next --head work/<order>" >&2
+    echo "  the landing queue integrates it. See ./skills/join-the-fleet §3" >&2
+}
+
+# ORDER 1315-4a7j, operator direction 2026-09-20, PHASE 1: MIGRATION, NOT
+# ENFORCEMENT. On a work/<order> push the deciders still RUN — their findings
+# are the reason to run them — but nothing they find blocks. Each red one prints
+# one `warn:pre-push:<decider>:` line with the affordance, and the hook exits 0.
+#
+# The deciders all funnel through refuse(), so this is one change rather than a
+# per-decider edit; a decider added later inherits the behaviour without its
+# author having to know this row exists.
+WORK_REF_LANE="${WORK_REF_LANE:-0}"
+
 refuse() {
+    if [[ "$WORK_REF_LANE" == "1" ]]; then
+        local _d="${TILLANDSIAS_HOOK_DECIDER:-pre-push}"
+        echo "warn:pre-push:${_d}: $1" >&2
+        shift
+        for line in "$@"; do echo "  $line" >&2; done
+        work_lane_affordance
+        echo "" >&2
+        return 0
+    fi
     echo "" >&2
     echo "${RED}✗ pre-push refused: $1${RST}" >&2
     shift
@@ -185,6 +214,7 @@ refuse() {
 # like from the outside: nothing fails, nothing is saved.
 _all_salvage=1
 _all_marker=1
+_all_work=1            # ORDER 1315-4a7j
 _any_ref=0
 _salvage_delete=""
 while read -r _l _ls _remote_ref _rs; do
@@ -205,7 +235,7 @@ while read -r _l _ls _remote_ref _rs; do
             # exactly the host in the middle of a cut, and exactly the state
             # where the stamp is busy. A freeze that cannot be declared without
             # passing the gate it exists to protect is not a mechanism.
-            _all_salvage=0
+            _all_salvage=0; _all_work=0
             ;;
         refs/heads/salvage/*)
             _all_marker=0
@@ -221,9 +251,22 @@ while read -r _l _ls _remote_ref _rs; do
                 _salvage_delete="$_remote_ref"
             fi
             ;;
-        *) _all_salvage=0; _all_marker=0 ;;
+        refs/heads/work/*)
+            # ORDER 1315-4a7j. The work lane. Not a salvage (that is a COPY of a
+            # dirty tree with its own deletion protection); a work ref is a real
+            # branch of real commits, and it is where a host works.
+            _all_salvage=0; _all_marker=0
+            ;;
+        *) _all_salvage=0; _all_marker=0; _all_work=0 ;;
     esac
 done < <(printf '%s\n' "$REFS")
+
+# ORDER 1315-4a7j. EVERY ref in this push must be a work ref, so a work ref
+# cannot smuggle a platform branch past the gate in the same push — the same
+# reasoning the salvage exemption uses, and for the same reason.
+if [[ "$_any_ref" -eq 1 && "$_all_work" -eq 1 ]]; then
+    WORK_REF_LANE=1
+fi
 if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
     echo "${GRN}✓ local gate: coordination marker ref under refs/tillandsias/ — exempt by design (1176-9vqn); it is not a branch, no gate reads it and no release ships it${RST}" >&2
     exit 0
