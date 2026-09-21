@@ -288,6 +288,42 @@ into an id that something else parses back out; the compiler cannot see across a
 string, and a green suite may not either. Grep for how the value is *formatted*,
 then find the parser on the far side.
 
+## The command ran, reported success, and did something else
+
+Every failure above is a check that could not see its subject. This one is
+smaller and more common: **the command you wrote is not the command that ran**,
+it succeeded, and the artefact is wrong. Exit status cannot help — the thing that
+ran really did succeed.
+
+Two, collected on 2026-09-21 while writing the sections above:
+
+| What was written | What ran | How it looked |
+|---|---|---|
+| `awk 'NR==n{…}'` with an anchor line matched by `grep -n "^Storing…"` | the line begins `was a \`.sh\`. Storing…`, so the anchor matched nothing, `n` was empty, and the insertion never happened | **clean tree**, and `git commit` answered `nothing to commit` — which reads like "already done" |
+| a git command inside backticks in a double-quoted `git commit -m "…"` | bash ran the search and pasted **another host's commit log** — author, date and body — into the message | the commit **succeeded**; 230 lines where 37 were meant; one stray `command not found` in unrelated output was the only symptom |
+
+The second is the fleet's existing rule for plan fragments arriving somewhere
+new: **prose goes through a quoted heredoc, never through a double-quoted
+argument.** `"..."` runs backticks and `$(…)`, and expands `$var`; `<<'EOF'`
+runs nothing.
+
+```bash
+git commit -F - <<'MSG'      # nothing in here is interpreted
+…
+MSG
+```
+
+**The check is the artefact, not the status.** After an edit that was supposed to
+change a file, assert the change is there before committing it:
+
+```bash
+grep -c '<the new text>' "$f"        # expect >= 1
+git status --porcelain "$f" | wc -l  # expect >= 1 — a clean tree after an edit
+                                     # means the edit did not happen
+```
+
+A no-op edit and a completed edit are indistinguishable from the command's
+output. They differ only in the file.
 ## Related
 
 [exit-status-is-not-an-answer.md](exit-status-is-not-an-answer.md) — the same
