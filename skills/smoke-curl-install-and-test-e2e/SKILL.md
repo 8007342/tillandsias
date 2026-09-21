@@ -667,6 +667,33 @@ VAULT_DATA_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/vault-data"
 test ! -e "$VAULT_DATA_DIR"
 ```
 
+**AFTER THE REPROVISION, CHECK THAT THE IMAGES WERE REBUILT — AND SCOPE IT TO
+`localhost/`.** An empty store proves the reset destroyed; it does not prove the
+reprovision rebuilt. The natural check is "no image predates `run_start`", and
+written without a scope it is WRONG in a way that reads as a failure:
+
+```bash
+# CORRECT: locally BUILT images only.
+podman images --format '{{.CreatedAt}}\t{{.Repository}}' \
+  | grep 'localhost/' | awk -F'\t' -v rs="$RUN_START_LOCAL" '$1 < rs' \
+  | tee target/smoke-e2e/01-images-predating.txt
+test ! -s target/smoke-e2e/01-images-predating.txt
+```
+
+A PULLED BASE IMAGE'S `CreatedAt` IS ITS UPSTREAM BUILD DATE, not the moment
+this host fetched it. `alpine:3.20` reports its upstream build — months old —
+however freshly it was pulled a minute ago, and so do `caddy`, `hashicorp/vault`
+and `fedora-minimal`. Unscoped, the check reports those as "images predating
+run_start" on a perfectly healthy reprovision.
+
+MEASURED on pirria 2026-09-21: 30 `localhost/` tag-rows, none predating
+run_start, beside 5 base images every one of which predates it by construction.
+The stable-channel report claimed "all recreated — 0 predate run_start" over all
+15 images while its evidence file held only the 20 `localhost/` lines it had
+actually examined — a true measurement described with a scope it did not have.
+Either error is available to the next reader: count the base images and report a
+false failure, or omit them and claim more than you measured.
+
 `scripts/clear-vault-host-credentials.sh` removes it but only best-effort —
 it is written from inside a container under a subuid, so a rootless `rm -rf`
 can be refused and the script still exits 0 with a `warn:` line. A

@@ -25,8 +25,9 @@ per boot, refreshed on demand and after a login) and the per-project running
 state; rendering it twice from the same inputs SHALL produce the same menu; a
 repository that disappears remotely SHALL disappear from the menu on the next
 refresh; and when the list exceeds the menu's page size it SHALL fan out into
-paged submenus rather than end in a dead item, with the page size read from one
-place and named in the overflow label.
+paged submenus rather than end in a dead item; the overflow label SHALL state
+how many more remain (the page size is an implementation constant read from
+one place, not a number the user can act on).
 
 @trace spec:tray-ux
 
