@@ -11672,7 +11672,7 @@ async fn ensure_ssh_lane_sidecar(
         // And the material the HOST needs to use it: a 0600 plain file the push
         // path reads with no secret-service call. Keyring off the hot path is
         // the operator's requirement for this whole design.
-        let _doc = crate::vault_bootstrap::mint_host_approle_document(
+        crate::vault_bootstrap::mint_host_approle_document(
             &crate::vault_bootstrap::host_push_role_name(push_host.trim()),
             &host_push_approle_path(push_host.trim()),
             debug,
