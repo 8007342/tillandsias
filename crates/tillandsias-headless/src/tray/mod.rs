@@ -4560,7 +4560,51 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
 /// Same as [`run_tray_mode`] but with the `--debug` flag plumbed through so
 /// the containerized-gh / cloud-refresh paths can emit `[tillandsias] gh: …`
 /// stderr breadcrumbs. @trace spec:remote-projects
+/// Ensure the GNOME/XDG desktop launcher actually has an icon to find.
+///
+/// WHY THIS LIVES IN THE BINARY AND NOT THE INSTALLER. `scripts/install.sh`
+/// writes `~/.local/share/applications/tillandsias.desktop` with `Icon=tillandsias`
+/// — a bare theme name, which is correct — but nothing ever put a file by that
+/// name on the XDG icon search path, so every fresh install has shown a blank
+/// launcher for as long as anyone remembers. The installer cannot fix it alone:
+/// it is curl-piped and has no access to repo assets, and rendering an SVG would
+/// need a converter on the user's machine. The binary already EMBEDS the icon
+/// art, so it is the one component that can always produce it.
+///
+/// The smoking gun for how long this was broken: `scripts/uninstall.sh` has
+/// always removed `hicolor/{32x32,128x128,256x256}/apps/tillandsias.png` — three
+/// paths the installer never created. The remove side was written and the
+/// install side never was, and nothing compared them.
+///
+/// Writes the SCALABLE svg rather than rendered pngs: no converter is needed,
+/// and `hicolor/scalable` is preferred by every icon theme over fixed sizes.
+/// Best-effort by construction — a tray that cannot write an icon must still
+/// start, so every failure here is swallowed and the launcher simply stays bare.
+fn ensure_desktop_icon() {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return;
+    };
+    let dir = home.join(".local/share/icons/hicolor/scalable/apps");
+    let dest = dir.join("tillandsias.svg");
+
+    // Re-write only when absent or empty: this runs on every tray start, and a
+    // user who has themed their own icon should not have it clobbered hourly.
+    if dest.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+        return;
+    }
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+
+    let svg = tillandsias_core::genus::TillandsiaIcons::icon_svg(
+        tillandsias_core::genus::TillandsiaGenus::Ionantha,
+        tillandsias_core::genus::PlantLifecycle::Bloom,
+    );
+    let _ = std::fs::write(&dest, svg);
+}
+
 pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
+    ensure_desktop_icon();
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
     let state =
