@@ -33,10 +33,28 @@
 # holding nvram and requires the SAME assertion to RED, so the arm that passes
 # is known to discriminate. Without it this file measures nothing.
 #
-# GRAMMAR — exactly one line:
-#   ^(ok:macos-vz-orphan-diagnosis:[0-9]+|violation:macos-vz-orphan-diagnosis:.*|unsupported:macos-vz-orphan-diagnosis:.*)$
+# GRAMMAR — one line, or two on a could-not-run (see below):
+#   ^(ok:macos-vz-orphan-diagnosis:[0-9]+|violation:macos-vz-orphan-diagnosis:.*|unsupported:macos-vz-orphan-diagnosis:.*|skip:macos-vz-orphan-diagnosis:.*)$
+#
+# A COULD-NOT-RUN PRINTS TWO LINES, and the order is load-bearing (1330-i4hu).
+# The `unsupported:` line carries the detail a reader needs; the `skip:` line
+# is what scripts/run-litmus-test.sh scores, because step_terminal_verdict
+# (:960) consults ONLY the last non-empty line and recognises only
+# `skip:`/`advisory:` there. With the detail line last, the step falls through
+# to check_signal, whose success pattern does not match, and :992 returns
+# FAILURE — so a host that merely lacks the app bundle reds the suite with
+# "Check implementation" against a fixture behaving exactly as designed.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# A precondition this fixture cannot satisfy: say what was not tested, then end
+# on the line the runner scores (1330-i4hu). Never used for a failure — a red
+# that returns `skip:` is six characters that make a defect disappear.
+cannot_run() {
+    echo "unsupported:macos-vz-orphan-diagnosis:$1"
+    echo "skip:macos-vz-orphan-diagnosis:$1"
+    exit 0
+}
 ARMS=0
 
 # --- Arm 0: the source guard, which needs no VM and no macOS ----------------
@@ -61,35 +79,29 @@ if [ -f "$VZ" ]; then
     ARMS=$((ARMS + 1))
 fi
 
-[ "$(uname -s)" = "Darwin" ] || {
-    echo "unsupported:macos-vz-orphan-diagnosis:not-darwin-source-arm-only"
-    exit 0
-}
+# The source arm above still ran, and that is the half a Linux CI lane can
+# honestly answer. Name the half that was skipped rather than report green.
+[ "$(uname -s)" = "Darwin" ] || cannot_run "not-darwin-source-arm-only"
 
 TRAY="${TILLANDSIAS_TRAY_BIN:-$ROOT/dist/Tillandsias.app/Contents/MacOS/tillandsias-tray}"
-[ -x "$TRAY" ] || {
-    # A bare target/release binary carries no com.apple.security.virtualization
-    # entitlement and cannot start a VM at all — name that, rather than let the
-    # caller meet it as the very "boot loader is invalid" this file is about.
-    echo "unsupported:macos-vz-orphan-diagnosis:no-app-bundle-run-scripts/build-macos-tray.sh"
-    exit 0
-}
+# A bare target/release binary carries no com.apple.security.virtualization
+# entitlement and cannot start a VM at all — name that, rather than let the
+# caller meet it as the very "boot loader is invalid" this file is about.
+[ -x "$TRAY" ] || cannot_run "no-app-bundle-run-scripts/build-macos-tray.sh"
 
 NVRAM="$HOME/Library/Application Support/tillandsias/nvram.bin"
-[ -f "$NVRAM" ] || {
-    echo "unsupported:macos-vz-orphan-diagnosis:no-provisioned-guest-image"
-    exit 0
-}
+[ -f "$NVRAM" ] || cannot_run "no-provisioned-guest-image"
 
-holders() { /usr/sbin/lsof -t "$NVRAM" 2>/dev/null | tr '\n' ' '; }
+holders() {
+    # Space-separated, with NO trailing separator: the caller turns spaces into
+    # commas for the message, and a trailing space became a trailing comma.
+    /usr/sbin/lsof -t "$NVRAM" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//'
+}
 
 # PRECONDITION. A VM already running here (a live tray, another session) makes
 # arm 1 fail for a reason that is not the subject. Refuse rather than guess.
 PRE="$(holders)"
-[ -z "$PRE" ] || {
-    echo "unsupported:macos-vz-orphan-diagnosis:image-already-held-by-pid-${PRE// /,}-precondition-unmet"
-    exit 0
-}
+[ -z "$PRE" ] || cannot_run "image-already-held-by-pid-${PRE// /,}-precondition-unmet"
 
 WORK="$(mktemp -d -t macos-vz-orphan)"
 LIVE_TRAY=""

@@ -29,18 +29,32 @@
 # ensures eight images and creates a one-shot forge. DO NOT wire this into
 # build.sh --check; it is a smoke-family fixture.
 #
-# GRAMMAR — exactly one line:
-#   ^(ok:macos-vsock-inference-closure:[0-9]+|violation:macos-vsock-inference-closure:.*|unsupported:macos-vsock-inference-closure:.*)$
+# GRAMMAR — one line, or two on a could-not-run (see below):
+#   ^(ok:macos-vsock-inference-closure:[0-9]+|violation:macos-vsock-inference-closure:.*|unsupported:macos-vsock-inference-closure:.*|skip:macos-vsock-inference-closure:.*)$
+#
+# A COULD-NOT-RUN PRINTS TWO LINES: the `unsupported:` detail, then the `skip:`
+# line the runner scores (1330-i4hu). Order is load-bearing.
 set -uo pipefail
+
+# A precondition this fixture cannot satisfy: say what was not tested, then end
+# on the line the runner scores (1330-i4hu). scripts/run-litmus-test.sh
+# step_terminal_verdict (:960) consults ONLY the last non-empty line and
+# recognises only `skip:`/`advisory:`; with the detail line last the step falls
+# through to check_signal and :992 returns FAILURE. Never used for a red.
+cannot_run() {
+    echo "unsupported:macos-vsock-inference-closure:$1"
+    echo "skip:macos-vsock-inference-closure:$1"
+    exit 0
+}
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 say() { printf '  %s\n' "$1" >&2; }
 
-[ "$(uname -s)" = "Darwin" ] || { echo "unsupported:macos-vsock-inference-closure:not-darwin"; exit 0; }
+[ "$(uname -s)" = "Darwin" ] || cannot_run "not-darwin"
 
 TRAY="${TILLANDSIAS_TRAY_BIN:-$ROOT/dist/Tillandsias.app/Contents/MacOS/tillandsias-tray}"
 # A bare target/release binary has no com.apple.security.virtualization
 # entitlement and cannot start a VM at all, and it stages no guest (701-kgvk).
-[ -x "$TRAY" ] || { echo "unsupported:macos-vsock-inference-closure:no-app-bundle-run-scripts/build-macos-tray.sh"; exit 0; }
+[ -x "$TRAY" ] || cannot_run "no-app-bundle-run-scripts/build-macos-tray.sh"
 
 GUEST_ASSET="$(dirname "$TRAY")/../Resources/guest/tillandsias-headless-aarch64-unknown-linux-musl"
 if [ -r "$GUEST_ASSET" ]; then
@@ -52,15 +66,15 @@ if [ -r "$GUEST_ASSET" ]; then
     _ctl="$(grep -ac 'tillandsias-inference' "$GUEST_ASSET" 2>/dev/null || echo 0)"
     _lane="$(grep -ac 'tillandsias-vsock-forwarder' "$GUEST_ASSET" 2>/dev/null || echo 0)"
     if [ "$_ctl" -eq 0 ] 2>/dev/null; then
-        echo "unsupported:macos-vsock-inference-closure:cannot-inspect-guest-asset"; exit 0
+        cannot_run "cannot-inspect-guest-asset"
     fi
     if [ "$_lane" -eq 0 ] 2>/dev/null; then
-        echo "unsupported:macos-vsock-inference-closure:bundled-guest-predates-the-forwarder-lane"; exit 0
+        cannot_run "bundled-guest-predates-the-forwarder-lane"
     fi
 fi
 
 SRC_SHARE="${TILLANDSIAS_HOST_SRC_SHARE:-$HOME/src}"
-[ -d "$SRC_SHARE" ] || { echo "unsupported:macos-vsock-inference-closure:no-home-src-share"; exit 0; }
+[ -d "$SRC_SHARE" ] || cannot_run "no-home-src-share"
 
 PORT_LIVE="${TILLANDSIAS_VSOCK_TEST_PORT:-42421}"
 PORT_DEAD="${TILLANDSIAS_VSOCK_DEAD_PORT:-49997}"   # nothing binds this on the host
