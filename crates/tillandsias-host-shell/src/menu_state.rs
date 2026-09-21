@@ -52,10 +52,21 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Maximum number of cloud projects that appear directly in the `Cloud`
-/// submenu before being collapsed behind a single overflow leaf. Matches
-/// the Linux tray's `MAX_CLOUD_PROJECTS_IN_MENU` constant verbatim so the
-/// two trays clip the same way.
+/// PAGE SIZE for the `Cloud` submenu: how many projects appear at one level
+/// before the remainder fans out into a nested "… N more" submenu.
+///
+/// THIS IS NO LONGER A CLIP. It used to be, and the comment here used to say the
+/// two trays "clip the same way" — which was accurate about the truncation and
+/// silent about the fact that the projects past it could not be reached at all
+/// (order 591-33s6). Every page now carries the next one, so the number below
+/// changes how DEEP the menu is, never how much of it exists.
+///
+/// Raising it is a one-line change and is safe on Windows and macOS, whose menus
+/// scroll natively. It is NOT free on Linux: DBusMenu does not scroll, so a page
+/// taller than the screen clips off the bottom with no affordance — which is the
+/// asymmetry that produced this constant in the first place. Nobody has yet
+/// measured a real fleet repo count against a real screen, so it stays at 10
+/// until someone does.
 ///
 /// @trace spec:host-shell-architecture
 pub const MAX_CLOUD_PROJECTS_IN_MENU: usize = 10;
@@ -511,7 +522,9 @@ fn truncate_80(s: &str) -> String {
 /// 1. `status`
 /// 2. `local-projects` — submenu of `~/src` entries; each project has
 ///    Claude / Codex / OpenCode / OpenCode Web / Observatorium / Maintenance
-/// 3. `cloud-projects` — submenu capped at `MAX_CLOUD_PROJECTS_IN_MENU` + overflow
+/// 3. `cloud-projects` — submenu paged at `MAX_CLOUD_PROJECTS_IN_MENU` per level,
+///    the remainder fanned out into nested "… N more" submenus (591-33s6).
+///    Every project is reachable; the page size sets depth, not visibility.
 /// 4. `---` — separator
 /// 5. `version` — disabled footer
 /// 6. `quit`
@@ -624,16 +637,70 @@ pub fn build(state: &MenuState) -> MenuStructure {
     MenuStructure::Ready { items }
 }
 
-fn build_cloud_projects(state: &MenuState) -> MenuItem {
-    let total = state.cloud_projects.len();
-    let visible = total.min(MAX_CLOUD_PROJECTS_IN_MENU);
-
-    let mut children: Vec<MenuItem> = state
-        .cloud_projects
+/// ORDER 591-33s6. Build one page of projects, fanning the remainder out into a
+/// nested submenu rather than truncating them behind a dead leaf.
+///
+/// WHAT THIS REPLACES AND WHY IT SAT SO LONG. The previous shape took the first
+/// `MAX_CLOUD_PROJECTS_IN_MENU` projects and pushed a single `MenuItem::leaf`
+/// labelled "… All cloud projects (N)…". `leaf` is ENABLED, so every platform
+/// rendered a live, clickable control — and every platform's handler for it is
+/// an empty arm (macOS `action_host.rs`, Windows `notify_icon.rs`) or a write to
+/// stderr no GUI user can see (Linux). Activating it dismissed the menu, because
+/// menus dismiss on activation everywhere, and nothing happened in exchange. The
+/// operator's report reads as "the menu loses focus", and the focus loss is
+/// ordinary; the defect is the nothing that follows it. Projects past the cap
+/// were genuinely unreachable for seven weeks.
+///
+/// THE ASSUMPTION THAT KEPT IT OPEN was recorded in the Linux tray as
+/// `TODO(@tray-overflow)`: that a real picker "still wants a GtkWindow", needing
+/// a GTK application thread, GResource setup and a theming hook that the
+/// StatusNotifierItem/DBusMenu tray does not have. That is true of a *window*
+/// and false of a *submenu*. A nested submenu is native on all three toolkits —
+/// NSMenu, Win32 HMENU, DBusMenu — costs no window plumbing, and does not
+/// dismiss its parent when opened. The fix was one level down from where
+/// everyone was looking.
+///
+/// PAGING RATHER THAN A TALLER LIST, deliberately. Win32 menus auto-scroll and
+/// NSMenu grows scroll arrows, so on those two the cap buys nothing; DBusMenu
+/// has no scrolling, so on Linux a long list clips off-screen and that asymmetry
+/// is why the cap exists. A paged fan-out is the shape that WORKS on all three,
+/// which the row's own constraint prefers over an elegant form that works on one.
+fn build_project_pages(
+    projects: &[ProjectEntry],
+    scope: &str,
+    page: usize,
+    podman_ready: bool,
+    target: TargetSurface,
+) -> Vec<MenuItem> {
+    let take = projects.len().min(MAX_CLOUD_PROJECTS_IN_MENU);
+    let mut items: Vec<MenuItem> = projects[..take]
         .iter()
-        .take(visible)
-        .map(|p| build_project_submenu("cloud", p, state.podman_ready, state.target))
+        .map(|p| build_project_submenu(scope, p, podman_ready, target))
         .collect();
+
+    let rest = &projects[take..];
+    if !rest.is_empty() {
+        // A SUBMENU, never a leaf. The id stays rooted at CLOUD_PROJECTS_OVERFLOW
+        // so anything still resolving that prefix keeps resolving, and each page
+        // gets a distinct suffix because ids must be unique across the tree.
+        items.push(MenuItem::submenu(
+            format!("{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, page + 1),
+            format!("\u{2026} {} more", rest.len()),
+            build_project_pages(rest, scope, page + 1, podman_ready, target),
+        ));
+    }
+
+    items
+}
+
+fn build_cloud_projects(state: &MenuState) -> MenuItem {
+    let mut children: Vec<MenuItem> = build_project_pages(
+        &state.cloud_projects,
+        "cloud",
+        0,
+        state.podman_ready,
+        state.target,
+    );
 
     if children.is_empty() {
         if state.cloud_projects_loaded {
@@ -649,13 +716,6 @@ fn build_cloud_projects(state: &MenuState) -> MenuItem {
                 "fetching your GitHub repos from the in-VM gh client",
             ));
         }
-    }
-
-    if total > visible {
-        children.push(MenuItem::leaf(
-            ids::CLOUD_PROJECTS_OVERFLOW,
-            format!("\u{2026} All cloud projects ({})\u{2026}", total),
-        ));
     }
 
     MenuItem::submenu(ids::CLOUD_PROJECTS, "\u{2601}\u{FE0F} Cloud", children)
@@ -979,11 +1039,39 @@ mod tests {
             "cloud submenu caps at {} + 1 overflow leaf",
             MAX_CLOUD_PROJECTS_IN_MENU,
         );
-        assert_eq!(
-            cloud_node.children.last().unwrap().id,
-            ids::CLOUD_PROJECTS_OVERFLOW,
+        // ORDER 591-33s6. The page link is a SUBMENU, and this is the assertion
+        // whose absence let the bug live seven weeks. The old tests pinned that
+        // the overflow row EXISTED and that it was counted; neither asked what it
+        // did. A `MenuItem::leaf` wired to an empty match arm satisfied both, so
+        // the suite stayed green while projects 11..N were unreachable on every
+        // platform. Pin the BEHAVIOUR: it must carry children, or it is a dead
+        // button again.
+        let page_link = cloud_node.children.last().unwrap();
+        assert!(
+            page_link.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW),
+            "last child should be the page link, got {}",
+            page_link.id,
         );
-        assert!(cloud_node.children.last().unwrap().label.contains("22"));
+        assert!(
+            !page_link.children.is_empty(),
+            "the overflow row must FAN OUT, not be an enabled no-op leaf (591-33s6)",
+        );
+        assert!(page_link.label.contains("12"), "names how many remain");
+
+        // EVERY project is reachable by walking the pages. This is the property
+        // the operator actually asked for, so it is asserted directly rather than
+        // inferred from a count at one level.
+        fn reachable(node: &MenuItem) -> usize {
+            if node.id.starts_with("project.") {
+                return 1;
+            }
+            node.children.iter().map(reachable).sum()
+        }
+        assert_eq!(
+            reachable(cloud_node),
+            22,
+            "all 22 cloud projects must be reachable through the page chain",
+        );
     }
 
     /// @trace spec:host-shell-architecture, spec:macos-native-tray.ui.menu-parity@v1
