@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: under-the-work-ref-lane-the-pre-push-hook-prints-a-terminal-line-claiming-the-gate-is-current-for-a-tree-it-warned-about-and-did-not-enforce
+    event:
+      type: evidence
+      ts: "2026-09-21T16:40:09Z"
+      agent_id: linux-yoga-opus5-20260921t164009z
+      host: yoga
+      summary: |
+        SECOND HOST, SAME DEFECT, INDEPENDENTLY — yoga, 2026-09-21T04:0xZ. Appending
+        rather than filing, since lenovinha filed this row this morning from the same
+        shape. Two hosts hit it within hours of 1315-4a7j landing.
+
+        MY INSTANCE, and it differs from lenovinha's in the trigger: theirs was a push
+        after a FAILED ./build.sh --check; mine was a push after NO check at all, with
+        the stamp merely STALE because I had edited build.sh since the last gate. Same
+        line, same falsehood, two different ways of arriving. That matters for the
+        fixture the fix will need — an arm built only on "the gate failed" would not
+        cover "the gate was never re-run".
+
+        REPRODUCED WITH A SYNTHETIC PUSH LINE, so it does not depend on what my worktree
+        happened to contain:
+          printf 'refs/heads/x <sha> refs/heads/work/765-xpct <zero>' | bash \
+              scripts/hooks/pre-push-local-gate.sh origin <url>
+          -> rc=0, terminal line:
+             "✓ local gate: preflight clean, ./build.sh --check current for this tree"
+          while on the SAME tree at the SAME moment:
+             scripts/gate-stamp.sh verify -> stale:tree-changed-since-gate
+
+        THE CONTRAST HOLDS AND IS WORTH RECORDING, because it bounds the blast radius:
+        the same stale stamp aimed at refs/heads/linux-next still prints
+        "✗ pre-push refused: the tree changed since ./build.sh --check last passed".
+        The integration gate is untouched. It is ONLY the work lane that reports a
+        falsehood, and only in its terminal line — the decider itself is correct and
+        warns.
+
+        THE MECHANISM, in the words the coordinator asked me to put here: CODE AFTER A
+        RETURNED refuse() RUNS IN A STATE IT WAS NEVER WRITTEN FOR. 1315-4a7j made
+        refuse() warn-and-return on the work lane instead of exiting. Everything after
+        the stamp decider was written on the assumption that reaching it means the
+        decider passed. The terminal line at scripts/hooks/pre-push-local-gate.sh:2030
+        is unconditional and therefore asserts something the decider disproved moments
+        earlier.
+
+        I FOUND IT BY ACCIDENT, not by looking — I noticed the line while pushing
+        something else and checked it because it contradicted what I knew about my own
+        tree. That is the argument for the fix stating the lane rather than being
+        silenced: a reader who did NOT happen to know the stamp was stale has no way to
+        catch this from the output.

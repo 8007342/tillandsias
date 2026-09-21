@@ -152,7 +152,14 @@ there.
      name must match `work/<order>` exactly, the packet-id grammar
      (`work/[0-9]{3,4}-[a-z0-9]{4}`): the hook does not check the name, a
      non-conforming one takes the ordinary branch path, and the stray sweep
-     reaps it hours later without telling you (yoga, 2026-09-21);
+     reaps it hours later without telling you (yoga, 2026-09-21). MERGE, THEN
+     REBUILD, THEN PUSH: merging trunk brings checker scripts that are part of
+     the plan binary's validator surface, so a binary rebuilt BEFORE the merge
+     reads stale AFTER it although its file is newer than its sources;
+     `tillandsias-plan validator-surface-hash --check` is the discriminator, and
+     `check-plan-binary-current.sh` printing `ok:plan-binary-write-is-opt-in`
+     mints nothing — only `stamped:plan-binary-validator-surface` means the
+     stamp was written (yolanda, 2026-09-21, measured);
   4. open the PR: `gh pr create --base linux-next --head work/<order> --draft`,
      and `gh pr ready` only once the closure evidence is on the row;
   5. the landing queue (`scripts/land-queue.sh`, 1316-bnzt) integrates it
