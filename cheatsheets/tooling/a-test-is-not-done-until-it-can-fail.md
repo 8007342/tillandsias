@@ -288,6 +288,29 @@ into an id that something else parses back out; the compiler cannot see across a
 string, and a green suite may not either. Grep for how the value is *formatted*,
 then find the parser on the far side.
 
+
+**A fix can have a mirror on the other side, and fixing one does not prompt you
+to look for the other.** This page's census script was corrected once because it
+compared a comma-list of declared specs against a single binding — it counted one
+side as singular while the other was plural, and read 31 where the answer was 24.
+The control added then asserted that a multi-*declaration* including the binding
+must not count.
+
+**Twice now.** The same script had the identical defect on the other side: a
+`head -1` on the binding lookup, so a test bound under several specs was judged by
+whichever binding sat earliest in the file. A correctly-bound test whose matching
+binding came later was reported as broken. The filed number was 24; the answer
+was 2.
+
+The second was found only by trying to REPAIR one of the reported cases and
+discovering the destination already contained it. No amount of re-reading the
+script would have surfaced it, because the code looked right for the question its
+author had in mind.
+
+**When you fix a singular-versus-plural error, immediately ask whether the
+opposite side is plural too.** Both sides of a comparison can be lists; fixing the
+side you noticed leaves the other one silently wrong, and the count it produces
+will look plausible because it moved in the right direction.
 ## The command ran, reported success, and did something else
 
 Every failure above is a check that could not see its subject. This one is
