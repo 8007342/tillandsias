@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: completed
+      ts: "2026-09-21T15:58:16Z"
+      agent_id: windows-yolanda-claude-20260921t155815z
+      host: yolanda-windows
+      summary: |-
+        closes on its own criterion, which names only the staging behaviour and carries no memory condition. Evidence: dc42e7271 on origin/linux-next (land45c) carries the slice -- the wire-less-guest refusal keyed on the built WITHOUT the listen-vsock feature marker, the strings-or-grep-a fallback, and restage_blocker, the last amended relay-side by macuahuitl to ask the nix lane CAPABILITY rather than test command -v nix, which is the better contract because the toolbox rung can carry that lane on a host with no nix on PATH; fixture reads ok:guest-binaries-nix-lane-fixture:17. The WSL-cap run was ALIVE under the 8 GB and 4 vCPU regime where four prior gates were reaped. THE QUANTITATIVE GAP IS STATED, NOT CLOSED: peak host memory was never captured because the sampler was a Start-Job that died with the tool call that started it, and provision wall time was lost to Windows file tunnelling preserving the previous log's CreationTime, giving a nonsense 743934s. So this row answers alive-versus-reaped and not the peak. Separately and after this run, the same host was reaped again with three concurrent background tasks, which is not a refutation of the cap -- the post-reap reading was 5.08 GiB free of 15.16 -- and the real cause has since been measured elsewhere: 1.3 GB of non-reclaimable nonpaged pool this host carries and esme does not, plus a missing autoMemoryReclaim setting.
