@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+- packet_id: a-flag-allowlist-maintained-beside-a-help-text-derives-the-advertisement-and-the-enforcement-from-two-different-lists-so-the-parser-refuses-what-the-help-promises-and-the-one-the-operator-reads-is-not-the-one-that-decides
+  order: 1323-pc8k
+  status: ready
+  kind: design
+  priority: p2
+  desired_release: v0.5
+  release_target: fail-loud-diagnosis-milestone
+  pickup_role: any
+  capability_tags:
+  - linux
+  - macos
+  - windows
+  - fail-loud
+  - instrument
+  estimated_hours: 2
+  owned_files:
+  - crates/tillandsias-headless/src/main.rs
+  title: |
+    a flag allow-list maintained beside a --help text derives the advertisement and the enforcement
+    from two different lists, so the parser refuses what --help promises — and the list the operator
+    reads is not the list that decides
+  context: |
+    TWO EXHIBITS, both read from the tag v56.9.20.1 (cc9efe7ad).
+
+    EXHIBIT A — the defect, Linux. crates/tillandsias-headless/src/main.rs carries
+    an allow-list of known flags around lines 612-651. At the tag it contains ZERO
+    occurrences of reset-state while --help advertises the flag, so the published
+    binary ADVERTISES --reset-state and REJECTS it at the parser:
+    "Unsupported option: --reset-state", install_exit=2. Found by pirria's Linux
+    curl-install smoke at section 1; confirmed independently from source by three
+    hosts (macuahuitl, yolanda, macneo).
+
+    EXHIBIT B — the shape that cannot have it, macOS.
+    crates/tillandsias-macos-tray/src/main.rs has NO allow-list. Every recognised
+    mode dispatches and EXITS the process; anything flag-shaped that survives to
+    the fall-through is unknown by construction:
+
+      281:    if args.iter().any(|a| a == "--reset-state") {
+      282:        require_no_live_tray("--reset-state");
+      283:        match reset_state::run_reset_state() {
+      387:    if let Some(unknown) = args.iter().skip(1).find(|a| a.starts_with('-')) {
+      392:        std::process::exit(2);
+
+    281 < 387, so the flag is handled before the refusal can see it. There is no
+    second list to forget to update: the set of accepted flags IS the set of
+    dispatches, and it cannot drift from itself.
+
+    MEASURED BEHAVIOURALLY WITH A CONTROL on macneo, which is what makes the
+    acceptance mean something rather than being an unfalsifiable pass:
+
+      tillandsias-tray --reset-state      -> body refuses (missing reprovision path), EXIT=1
+      tillandsias-tray --no-such-flag-xyz -> "Error: unknown flag", EXIT=2
+
+    The same binary rejects an unknown flag with a different message and a
+    different exit code, so the first is the parser ACCEPTING and the body
+    deciding.
+
+    THE GENERAL CLAIM. An allow-list beside a --help text is a defect GENERATOR,
+    not a defect: two lists of the same facts, updated by hand, where the list
+    that refuses is not the list the operator reads. It is this fleet's recurring
+    family — a verdict produced by something other than the thing whose success it
+    claims — in the argument parser, and it fails in the worst direction, because
+    the operator followed the documentation and the tool called them wrong.
+
+    NOT A CHANGE FOR THE FIX-FORWARD CUT, and this row does not ask for one. The
+    one-line allow-list entry is the right fix for the release. pirria is adding
+    the headless twin of the Windows known_flags_match_the_dispatch_in_main test,
+    which pins the two lists to each other — cheaper, lands now, and does not
+    preclude this.
+
+    WINDOWS IS A THIRD SHAPE AND IT IS NOT GUARDED, which this row asserted
+    wrongly in its first draft and corrects here before publication. The Windows
+    tray keeps an allow-list AND has a test, so it reads as bound — but
+    known_flags_match_the_dispatch_in_main (main.rs:366) iterates KNOWN_FLAGS and
+    requires each ENTRY to appear at least twice in main.rs. It walks the LIST,
+    never the dispatches. So it catches listed-and-unused and cannot catch
+    used-and-unlisted, which is precisely the Linux defect's direction. The
+    Windows tray is clean today because the entry happens to exist at main.rs:69,
+    not because anything would notice if it did not. A test that walks one of two
+    lists guards one direction and looks like it guards both — which is this row's
+    own subject, one level up: the check and the property it appears to assert
+    come from different places. pirria's headless twin walks the DISPATCHES, which
+    is the direction that matters and the direction Windows still lacks.
+  verifiable_closure: |
+    Either the headless parser has no standalone flag allow-list (the accepted set
+    IS the dispatch set, macOS shape), OR a test binds the list to the dispatch so
+    that adding a dispatch without the list entry, or an entry without a dispatch,
+    FAILS. Demonstrated both directions by mutation: add a dispatch for a new flag
+    without listing it and the test must fail; list a flag with no dispatch and the
+    test must fail. A behavioural arm runs the built binary with the new flag and a
+    control flag that does not exist, and requires the two to differ — the control
+    is what distinguishes "accepted" from "the probe cannot fail".
+  next_action: |
+    Decide the shape AFTER the fix-forward cut ships, with pirria's known-flags
+    test in hand: it may already close the class cheaply enough that removing the
+    list is not worth the churn. If so, close this row citing that test rather than
+    changing the parser — a row that records why a change was NOT made is worth as
+    much as one that records a change.
