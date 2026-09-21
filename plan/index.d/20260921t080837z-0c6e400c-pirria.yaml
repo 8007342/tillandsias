@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    field: next_action
+    value: |-
+      A HOOK-LEVEL FIXTURE ARM IS MISSING, and it is the one gap this packet's own
+      closure demonstrated twice. scripts/test-added-test-is-referenced.sh proves the
+      GUARD across ten hermetic arms and knew nothing about either hook defect —
+      silent-on-success, then a warning painted under a green check — because both
+      lived in the HOOK's RENDERING of the guard's answer, not in the answer. Both
+      were caught only by watching a dry-run push. The arm to add exercises the hook
+      block against a guard stub returning each of ok / warn / refuse and asserts the
+      rendered line matches the verdict, so a future edit cannot repaint a warning.
+
+      SECOND, THE ENFORCEMENT FLIP, unchanged: the guard WARNS today and the phase
+      ends by a decision against a number, not a date. Standing was 40 unreferenced
+      shell tests when this landed and the verdict line carries it on every run and
+      every push transcript. Set TILLANDSIAS_ADDED_TEST_REFERENCE_ENFORCE=1 in the
+      hook and step 419 together; both already honour it, and the hook's refusal now
+      routes through refuse(), so a work ref warns rather than hard-refusing.
+    ts: "2026-09-21T08:08:37Z"
+    host: pirria

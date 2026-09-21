@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    field: status
+    value: verified
+    ts: "2026-09-21T08:08:31Z"
+    host: pirria
+
+events:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    event:
+      type: completed
+      ts: "2026-09-21T08:08:31Z"
+      host: pirria
+      summary: |-
+        status 'verified' with evidence_refs: 7ef88563c — push-time half observed AS WIRED on a dry-run push, both paths: unreferenced present renders the warning + warn:added-test-unreferenced:1 + the file named; clean renders ok:added-test-referenced:2 checked standing=40 surfaces=6. Gate half fired as wired at 15476e954 (step 419, ok:added-test-guard-proven:10; bound litmus in ci-release 46/46)
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    event:
+      type: note
+      ts: "2026-09-21T08:08:31Z"
+      host: pirria
+      summary: |-
+        next_action's named condition met; litmus organ's push-time naming remains hermetic, stated on the row
