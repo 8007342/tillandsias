@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    field: status
+    value: completed
+    ts: "2026-09-21T02:59:15Z"
+    host: pirria
+
+events:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    event:
+      type: completed
+      ts: "2026-09-21T02:59:15Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 0e8d62e0c; litmus:terminal-verdict 16/16; full gate green (Gate phases totalled 2365s) on work/1309-fhxb 1b7c057a7; BEFORE 95% (42/44) FAIL -> AFTER 100% (44/44) PASS on one tree with only the runner swapped
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    event:
+      type: note
+      ts: "2026-09-21T02:59:15Z"
+      host: pirria
+      summary: |-
+        closed — a named skip and a declared advisory are terminal verdicts, never a pass and never a failure; test verdicts derived from steps so an all-skip test cannot report a vacuous green

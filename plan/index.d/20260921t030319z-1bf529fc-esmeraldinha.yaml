@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    field: status
+    value: completed
+    ts: "2026-09-21T03:03:19Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    event:
+      type: completed
+      ts: "2026-09-21T03:03:19Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: dc42e7271 (land 45c), an ancestor of origin/linux-next, verified BY CONTENT not by the salvage ref's SHA: check-litmus-bindings.sh carries the binding-spec-mismatch refusal, scripts/test-litmus-binding-truth.sh is present, and openspec/litmus-bindings.yaml carries litmus:litmus-binding-truth. Run against the LANDED tree: scripts/test-litmus-binding-truth.sh -> ok:litmus-binding-truth:4/4, and scripts/check-litmus-bindings.sh -> ok:litmus-bindings:files=443 bound=427 retired=6 grandfathered=10. 2a ships as a diff-scoped refusal naming the file, the declared set and the offending block, on the CORRECTED rule (membership, at-least-once) — the closure's original equality/exactly-once wording is false against the corpus it governs, since spec: is a comma-separated list in 14 of 430 files and 42 names are multi-bound by design. The 69 standing mismatches stay ADVISORY per 660-ryhn's ratchet reasoning and are cleanup decided per file. 2b needed no new guard: check-litmus-bindings.sh already refuses a new unbound litmus, and the sixteen this host first reported as strays were ten grandfathered plus six phase:retired — my own lookup error, corrected on the row; fixture arms 3-4 pin that 2b stays guarded. NOT DONE and named on the row: the runner's named skip when it filters a bound litmus out by spec or tier, and the 69-mismatch cleanup.
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    event:
+      type: note
+      ts: "2026-09-21T03:03:19Z"
+      host: esmeraldinha
+      summary: |-
+        The cross-check ships with a four-arm fixture whose two mutation arms prove each guard can fail; verified against the landed tree rather than the branch it was written on.

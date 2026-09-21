@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-compares-a-litmus-files-own-spec-field-with-the-block-it-is-bound-under-so-a-misbound-litmus-runs-misattributed-and-an-unbound-file-is-invisible-to-the-unfiltered-gate-run
+    event:
+      type: note
+      ts: "2026-09-21T03:03:17Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        CLOSED. A binding must sit under a spec its own file declares, and the check that says so can fail.
+
+        === LANDED, AND VERIFIED BY CONTENT ===
+        dc42e7271 (land 45c) is an ancestor of origin/linux-next; windows-next levelled to 0e8d62e0c. Verified by CONTENT rather than by the salvage ref's SHA, because a land here rebases and an ancestry read can say MISSING while the work is present:
+          scripts/check-litmus-bindings.sh carries the `binding-spec-mismatch` refusal
+          scripts/test-litmus-binding-truth.sh is present
+          openspec/litmus-bindings.yaml carries `- litmus:litmus-binding-truth`
+        Run against the LANDED tree, not the branch it was written on:
+          scripts/test-litmus-binding-truth.sh  ->  ok:litmus-binding-truth:4/4
+          scripts/check-litmus-bindings.sh      ->  ok:litmus-bindings:files=443 bound=427 retired=6 grandfathered=10
+
+        === WHAT SHIPPED ===
+        2a, the missing cross-check: a newly bound litmus whose block is NOT among the specs its own file declares is REFUSED, naming the file, the declared set and the offending block. Diff-scoped to bindings ADDED in the change.
+
+        MEMBERSHIP, NOT EQUALITY; AT LEAST ONCE, NOT EXACTLY ONCE — and this corrected the row's own closure wording before any code was written. `spec:` is a COMMA-SEPARATED LIST in 14 of 430 files and 42 names are bound under more than one block BY DESIGN, so the literal rule would have refused a large slice of a healthy corpus. Both literal forms were run against the real corpus first and the output was absurd before it was interesting, which is what sent me back to the rule rather than to the tree.
+
+        THE 69 STAY ADVISORY. A hard refusal over the standing mismatches would convert one silent problem into an undiagnosed red suite — 660-ryhn's own warning, and the reason its grandfathering ratchet exists. Cleanup is a separate change decided PER FILE, because a wrong block can mean the BINDING is wrong or the DECLARATION is wrong and only a reader can tell which. One of the 69 is this filer's own litmus, bound under ci-release while declaring init-command by the coordinator's hand during land 21; it is named on the row rather than quietly fixed.
+
+        2b WAS ALREADY GUARDED and this row's second half was re-scoped rather than implemented. scripts/check-litmus-bindings.sh (660-ryhn) already refuses a new unbound litmus at creation time and accounts for the whole corpus. The sixteen "unbound" files this host first reported were TEN GRANDFATHERED PLUS SIX `phase: retired` — my error, from looking up the filename stem in a list that stores the `litmus:` name form. Arms 3 and 4 of the fixture pin that 2b STAYS guarded, since this change edits the same script.
+
+        === THE FIXTURE, AND WHY IT BUILDS A GIT REPO ===
+        scripts/test-litmus-binding-truth.sh, 4/4, bound as litmus:litmus-binding-truth under ci-release — the block its own file declares, making it the first subject of the rule it implements.
+          arm 1  misbound -> refused, naming both ids
+          arm 2  remove the cross-check -> arm 1 accepts     (mutation)
+          arm 3  unbound  -> still refused                    (660-ryhn holds)
+          arm 4  remove the unbound check -> arm 3 accepts    (mutation)
+        EACH ARM COMMITS A REAL GIT REPO. The checks under test are diff-scoped against a base ref; a plain fixture directory has no base ref, the whole block is skipped, and the fixture would report green while exercising nothing.
+
+        === THREE DEFECTS THE FIXTURE CAUGHT IN ITS OWN SUBJECT, WITHIN MINUTES ===
+        1. THE CROSS-CHECK WAS GATED ON THE RUNNER. I had placed it inside the block guarded by `[ -x "$RUNNER" ]`. It is a static comparison of two files and needs no binary, so it was SKIPPED wherever the runner was absent — including inside its own fixture. Now a standalone git-gated block.
+        2. ARM 2 PASSED FOR THE WRONG REASON. Because the check never ran, `misbound` was always empty, so the mutated copy behaved identically to the real one and the arm scored green. A FALSE PASS SITTING ON TOP OF A SKIPPED CHECK — this row's own subject, reproduced inside its own fixture.
+        3. BOTH MUTATIONS TARGETED THE MESSAGE, NOT THE GUARD. Replacing a `violation:` echo leaves the enclosing `if … exit 1` intact, so the mutant still refuses. Both now neutralise the CONDITION.
+
+        === WHAT REMAINS, SO THE CLOSE IS NOT READ AS THE WHOLE ROW ===
+        The NAMED SKIP when the runner filters a bound litmus out by spec or tier is NOT implemented here — the runner still prints nothing in that case. And the 69-mismatch cleanup is untouched by design. Both are named on the row.
+
+        === ATTRIBUTION ===
+        The authoring-side root is pirria's: the fact is declared TWICE and only one declaration is load-bearing, and the non-load-bearing one (the file's own `spec:` line) is the one the author is already writing — with the runner compounding it by resolving a test name to its spec and printing how to run it, which reads as confirmation while the spec run omits it. pirria's addendum from tonight, "a test is not done until something that runs on its own can fail because of it", applies to shell fixtures exactly as to litmus YAML and is filed as 1325-ygq5; this filer shipped precisely that defect on 1303-2d5g and it was caught in review.
+
+        === THE METHOD NOTE THE COORDINATOR ASKED FOR ===
+        Every correct diagnosis on this row came from reading the whole output; every wrong one came from truncating it and theorising into the gap. The rule correction, the grandfathered sixteen, the runner-gated skip, the false pass, and a near-miss false finding against 1287-h6qn's landed fix were each one full read away, and each cost a cycle to learn twice.

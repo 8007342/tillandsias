@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    field: status
+    value: completed
+    ts: "2026-09-21T03:22:13Z"
+    host: yoga
+
+events:
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    event:
+      type: completed
+      ts: "2026-09-21T03:22:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 0e8d62e0c + ./build.sh --check GATE_EXIT=0 + scripts/test-sigpipe-guard-sees-paths-and-continuations.sh 15/15; siblings sigpipe-verdict-pipelines 11, sigpipe-verdict-measured 5/5, pre-push-version-guard 4/4
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    event:
+      type: note
+      ts: "2026-09-21T03:22:13Z"
+      host: yoga
+      summary: |-
+        landed on origin/linux-next; amendment 5bd456cb2 verified present
