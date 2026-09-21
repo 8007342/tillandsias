@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-21T16:02:03Z"
+      agent_id: windows-yolanda-claude-20260921t160202z
+      host: yolanda-windows
+      summary: |-
+        WHAT THE WSL CAP ACTUALLY MEASURED, recorded after the fact because it changes how this row's alive-versus-reaped result should be read. Diffing this host against esmeraldinha, the other Windows host, settled it and the cause was never the gate. Idle nonpaged pool here is 1790 MB against esme's 484 MB -- 1.3 GB of NON-RECLAIMABLE kernel memory this host carries and that one does not, on the same 16 GB. I shut WSL down completely and nonpaged stayed at 1795 MB, which rules out WSL and Tillandsias both. Available at idle: 4938 MB here, 9136 MB there. Second cause, and free to fix: autoMemoryReclaim=gradual was absent from this host's wslconfig and present on esme's since before the hosts diverged, so this guest's balloon only ever grew and never handed memory back. Third, and the one I got wrong on purpose without knowing it: I set processors=4 believing I was matching esme. esme is an Intel N100 with FOUR logical CPUs, so that value gives their guest 100 percent of the machine; this host has SIXTEEN, so the same literal gave mine 25 percent and a different policy entirely. Matching a number is not matching a config. All three corrected under operator direction. Fourth and mine to fix by behaviour: the reap that followed this row's run took THREE concurrent background tasks, a cargo build and a litmus suite and a polling loop; esme runs one heavy thing at a time and their 4-core box enforces by hardware the discipline this one needs imposed deliberately. The machine also carries a Copilot-class AI stack esme cannot load at all -- Recall enabled, an AMD VitisAI NPU execution provider, and 784 MB resident across three workload hosts -- now disabled pending a restart. SO THE CAP WAS NEVER THE VARIABLE IT LOOKED LIKE. This row's alive result stands as recorded, and the peak it failed to capture would have been measuring a host carrying 1.3 GB of driver memory that nobody had noticed.
