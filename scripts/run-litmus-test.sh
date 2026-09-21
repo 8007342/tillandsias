@@ -410,6 +410,12 @@ _PER_TEST_LOG=""
 LITMUS_LAST_TEST_TIMED_OUT=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
+# ORDER 1309-fhxb — STEP-level verdicts. Added beside the test-level counters,
+# never replacing them: every existing line keeps its format and position.
+STEPS_SKIPPED=0
+STEPS_ADVISORY=0
+TESTS_ADVISORY=0
+TESTS_VERDICT_SKIPPED=0
 # ORDER 1187-iij8. A SECOND DIMENSION ON THE SAME REDS, never a fourth bucket.
 #
 # Every test counted here is ALSO counted in TESTS_FAILED, deliberately. A
@@ -925,6 +931,50 @@ size_matches_filter() {
 # while the live command-substitution path kept wedging the gate.
 
 # Check if output matches success/failure criteria
+# ORDER 1309-fhxb. Is this step's output a TERMINAL NON-FAILURE VERDICT — a named
+# skip or a declared advisory — rather than a pass or a defect?
+#
+# THE DEFECT. A step that emitted `skip:no-cargo` on a host without cargo, and one
+# that emitted `advisory:bash-hazards:pgrep-f-literal:pipelines=4:files=3` from a
+# lint that calls itself advisory, were both scored FAIL — each having exited
+# ZERO and asserted nothing. MEASURED: 144 corpus steps invoke a script that can
+# emit a named skip while declaring an expectation that does not admit one (of
+# 2580 steps, 104 skip-capable scripts, 20 expectations that admit the word). The
+# exposure concentrates on floor and platform-minority hosts, because the absent
+# precondition is usually the HOST — which makes it worst exactly where a red is
+# least likely to be believed.
+#
+# WIDENING WHAT COUNTS AS A NON-FAILURE MUST NOT WIDEN WHAT COUNTS AS A PASS, and
+# that is this function's whole burden. A skip is a question NOT ASKED. It is
+# never a pass, never a failure, and it must never become a way to make a red
+# disappear by printing six characters.
+#
+# SO A FAILURE VERDICT ANYWHERE IN THE OUTPUT WINS, whatever follows it: the
+# fleet's own failure grammar (violation:/refused:/blocked:/FAIL) is checked
+# FIRST and short-circuits. A step that genuinely failed and then printed a skip
+# line — by accident or by fabrication — stays red. scripts/test-litmus-terminal-
+# verdict.sh plants exactly that and asserts it.
+#
+# AND THE LINE MUST BE THE STEP'S OWN VERDICT, not a mention in passing: only the
+# LAST non-empty line is consulted, which is where a script states its outcome.
+step_terminal_verdict() { # <output> -> prints skip|advisory|"" on stdout
+    local out="$1" last=""
+
+    # A failure verdict anywhere outranks everything. Anchored at line start so a
+    # script DESCRIBING the grammar (this fleet writes such scripts) is not read
+    # as emitting it.
+    if grep -qE '^(violation|refused|blocked):' <<<"$out" || grep -qE '^FAIL' <<<"$out"; then
+        return 0
+    fi
+
+    last="$(grep -vE '^[[:space:]]*$' <<<"$out" | tail -n 1)"
+    case "$last" in
+        skip:[a-z0-9]*)     printf 'skip' ;;
+        advisory:[a-z0-9]*) printf 'advisory' ;;
+    esac
+    return 0
+}
+
 check_signal() {
     local output="$1"
     local success_pattern="$2"
@@ -1568,6 +1618,13 @@ run_litmus_test_file() {
     local combined_output=""
     local step_index=0
 
+    # ORDER 1309-fhxb. A TEST's verdict is DERIVED from its steps, and the case
+    # that forces this is the one a step-only count cannot see: a test whose every
+    # executed step is a SKIP asked no question, and counting it PASSED is
+    # 1273-4mak's vacuous green one level up. 1049-s35z's comment preserves that
+    # exact shape — a suite reporting `1/1 executed, 100%, PASS` while two born-red
+    # tests sat unobserved.
+    local _t_pass=0 _t_skip=0 _t_advisory=0
     for idx in "${!step_commands[@]}"; do
         local step_name="${step_names[$idx]}"
         local step_command="${step_commands[$idx]}"
@@ -1701,6 +1758,30 @@ run_litmus_test_file() {
         # migration discipline; the corpus was 156/156 strict at flip
         # time). TILLANDSIAS_LITMUS_STRICT_EXIT=0 is the emergency opt-out
         # — using it on a red is a finding to file, not a fix.
+        # ORDER 1309-fhxb. A named skip or a declared advisory is a TERMINAL
+        # NON-FAILURE verdict and is decided BEFORE every arm below, because each
+        # of those arms asks "did the output match what a PASS looks like" and a
+        # skip is not a failed pass — it is a question not asked.
+        #
+        # EXCEPT where the step declared assert_exit and the status disagrees:
+        # then the step asserted something and it was false, and no line the
+        # script printed afterwards may overrule that. This is the ruling's
+        # "a non-zero exit where the step declares assert_exit 0 still FAILS".
+        step_verdict="$(step_terminal_verdict "$step_output")"
+        if [[ -n "$step_verdict" && -n "$step_assert_exit" && "$exit_code" != "$step_assert_exit" ]]; then
+            step_verdict=""
+        fi
+        if [[ -n "$step_verdict" ]]; then
+            if [[ "$step_verdict" == "skip" ]]; then
+                STEPS_SKIPPED=$((STEPS_SKIPPED+1)); _t_skip=$((_t_skip+1))
+                printf ' %b[SKIP]%b %s\n' "${YELLOW}" "${NC}" "$(grep -vE '^[[:space:]]*$' <<<"$step_output" | tail -n 1)" >&2
+            else
+                STEPS_ADVISORY=$((STEPS_ADVISORY+1)); _t_advisory=$((_t_advisory+1))
+                printf ' %b[ADVISORY]%b %s\n' "${YELLOW}" "${NC}" "$(grep -vE '^[[:space:]]*$' <<<"$step_output" | tail -n 1)" >&2
+            fi
+            continue
+        fi
+
         if [[ -z "$step_structured" && $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
             if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-1}" != "0" ]]; then
                 # ORDER 1018-5f5a. This arm already NAMED the number on its
@@ -1775,6 +1856,7 @@ run_litmus_test_file() {
         fi
 
         # Step matched expected behavior — surface success only after validation.
+        _t_pass=$((_t_pass+1))
         printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
     done
 
@@ -1797,6 +1879,27 @@ run_litmus_test_file() {
         return 1
     fi
 
+    # ORDER 1309-fhxb — THE TEST'S VERDICT, DERIVED FROM ITS STEPS.
+    #   any failing step                      -> FAIL (returned above, 1)
+    #   no passing step + >=1 skipped step    -> SKIPPED (2): the test asked no
+    #                                            question, so it leaves the rate's
+    #                                            denominator entirely. Counting it
+    #                                            PASSED is the vacuous green
+    #                                            1049-s35z's comment preserves —
+    #                                            `1/1 executed, 100%, PASS` while
+    #                                            two born-red tests sat unobserved.
+    #   >=1 advisory step, no failing step    -> ADVISORY (3): a property HELD,
+    #                                            with a note. Counts with passed.
+    #   otherwise                             -> PASSED (0)
+    # A test with SOME passing and SOME skipped steps is PASSED: a property held,
+    # and a question beside it was not asked. The `Step Verdicts:` line is where a
+    # reader sees which — that is why it is printed even when every test passes.
+    if [[ "$_t_pass" -eq 0 && "$_t_skip" -gt 0 ]]; then
+        return 2
+    fi
+    if [[ "$_t_advisory" -gt 0 ]]; then
+        return 3
+    fi
     return 0
 }
 
@@ -1951,17 +2054,32 @@ run_tests_for_spec() {
         # test-by-test. Capture is two clock reads; emission is batched at
         # suite end. Best-effort: a stubbed clock yields t0=0 and the record
         # is dropped downstream, never poisoned.
-        local _pt_t0 _pt_dur _pt_rc
+        local _pt_t0 _pt_dur _pt_rc _lt_verdict
         _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
         LITMUS_LAST_TEST_TIMED_OUT=0
-        if run_litmus_test_file "$test_file" "$spec_id"; then
-            _pt_rc=0
-            log_test_result "$spec_id" "$test_name" "PASS" ""
-        else
-            _pt_rc=1
-            log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
-            spec_failed=1
-        fi
+        # ORDER 1309-fhxb: 2 = SKIPPED (asked no question), 3 = ADVISORY (held,
+        # with a note). Both are non-failures and neither is a plain PASS.
+        # `set -e` IS IN FORCE (:44). A BARE call whose function returns non-zero
+        # exits the whole runner — and the old `if run_litmus_test_file; then`
+        # suppressed that only because a condition context does. Returning 2 or 3
+        # from the derivation therefore KILLED THE SUITE MID-RUN, silently: the
+        # first ADVISORY test ended the stream with no summary and an exit status
+        # that read as success downstream. Measured here 2026-09-20, and the only
+        # symptom was output that stopped rather than output that complained.
+        if run_litmus_test_file "$test_file" "$spec_id"; then _lt_verdict=0; else _lt_verdict=$?; fi
+        case "$_lt_verdict" in
+            0)  _pt_rc=0
+                log_test_result "$spec_id" "$test_name" "PASS" "" ;;
+            2)  _pt_rc=0
+                TESTS_VERDICT_SKIPPED=$((TESTS_VERDICT_SKIPPED+1))
+                log_test_result "$spec_id" "$test_name" "SKIP" "every executed step was a named skip — no question asked (1309-fhxb)" ;;
+            3)  _pt_rc=0
+                TESTS_ADVISORY=$((TESTS_ADVISORY+1))
+                log_test_result "$spec_id" "$test_name" "PASS" "" ;;
+            *)  _pt_rc=1
+                log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
+                spec_failed=1 ;;
+        esac
         # 956-llei: a killed test's elapsed time is its budget — censored data.
         # Record rc 124 so the slowest-tests table and the timing consumer can
         # tell "took 30s" from "was stopped at 30s".
@@ -2039,6 +2157,38 @@ print_summary() {
     coverage_text="[$spec_count/$total_specs specs]"
     printf '%bCoverage%b: %d%% %s\n' "${BOLD}" "${NC}" "$covered_specs" "$coverage_text" >&2
     printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
+    # ORDER 1309-fhxb. ADDED LINES, never a reshape of the ones above: the census
+    # on the row names seven parsers of this surface, and
+    # test-litmus-missing-bound-test-reds.sh asserts the LITERAL string
+    # `Pass Rate: 100% (1/1 executed)`.
+    #
+    # STEP VERDICTS, and the definition is printed with them so nobody re-derives
+    # the denominator from the numbers. An ADVISORY is a property that held with
+    # a note, so it counts with passed. A SKIP is a question NOT ASKED, so it
+    # leaves the denominator entirely — scoring it either way is a claim nobody
+    # measured.
+    # ORDER 1309-fhxb — the four TEST verdicts, commensurable with the rate above.
+    # THE DENOMINATOR NARROWS BY CONSTRUCTION, not by arithmetic: total_executed is
+    # TESTS_PASSED + TESTS_FAILED, and a SKIPPED test increments neither, so a test
+    # that asked no question leaves the rate entirely. ADVISORY tests are logged
+    # PASS and therefore counted with passed — a property held, with a note.
+    # TWO POPULATIONS, TWO LABELS. TESTS_SKIPPED already counted things that were
+    # NEVER ATTEMPTED — a test bound to several specs and already executed, and a
+    # diff-scope skip — long before a verdict skip existed. Printing both under
+    # the word "skipped" would put a definition on the line that is true of only
+    # part of what it counts, which is 1049-s35z's shape with a footnote, and it
+    # would make the test line's `skipped=` incommensurable with the step line's.
+    # So: `skipped=` is VERDICT skips only, and `not-run=` is what was never
+    # attempted. Neither is in the rate's denominator, and neither ever was.
+    printf '%bTest Verdicts%b: passed=%d advisory=%d skipped=%d not-run=%d failed=%d\n' "${BOLD}" "${NC}" \
+        "$((TESTS_PASSED - TESTS_ADVISORY))" "${TESTS_ADVISORY:-0}" "${TESTS_VERDICT_SKIPPED:-0}" \
+        "$(( ${TESTS_SKIPPED:-0} - ${TESTS_VERDICT_SKIPPED:-0} ))" "${TESTS_FAILED:-0}" >&2
+    printf '               skipped = its executed steps asked no question; not-run = never attempted (already executed for another spec, or out of diff scope); both outside the rate; advisory held its property and counts with passed\n' >&2
+    if [[ "${STEPS_SKIPPED:-0}" -gt 0 || "${STEPS_ADVISORY:-0}" -gt 0 ]]; then
+        printf '%bStep Verdicts%b: advisory=%d skipped=%d\n' "${BOLD}" "${NC}" \
+            "${STEPS_ADVISORY:-0}" "${STEPS_SKIPPED:-0}" >&2
+        printf '               advisory counts with passed (a property held, with a note); skipped is excluded from the rate (a question not asked)\n' >&2
+    fi
 
     # Order 765-mza8: the skip ledger. A scoped run states its cost in coverage
     # on EVERY run, including when it skipped nothing, because "silent
