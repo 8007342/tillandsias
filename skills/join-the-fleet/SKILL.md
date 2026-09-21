@@ -66,8 +66,18 @@ Bare metal (all three OSes):
    creates or reuses `tillandsias-builder` (methodology `toolbox_first_scripts`).
    macOS and Windows hosts have no toolbox; the checker skips this by name.
 4. **A runnable, current plan binary**: `scripts/cycle-preflight.sh` resolves
-   or rebuilds it; `scripts/check-plan-binary-current.sh` must answer with the
-   literal `ok:validator-surface:<hash>` lane (1287-h6qn). A stale binary mints
+   or rebuilds it; `bash scripts/check-plan-binary-current.sh` must end with
+   `ok:plan-binary-current` — its stamp line reads
+   `stamped:plan-binary-validator-surface:<hash>`, `ok:plan-binary-write-is-opt-in`
+   is a read-only pass that mints nothing, and any `stale:` or `blocked:` line
+   is a stop (1287-h6qn). The `ok:validator-surface:<hash>` literal is the plan
+   binary's own `validator-surface-hash --check` answer, which the checker
+   consumes (it then prints `ok:validator-surface:content-verified` on stderr
+   and ends `ok:plan-binary-current`); this page used to ask the worker to look
+   for the subcommand's literal as the checker's verdict (1338-2sae).
+   Name the script, not the `validator-surface-hash --check` subcommand alone:
+   in a forge, a redirected CARGO_TARGET_DIR makes the subcommand answer
+   `unknown:validator-surface`, which is not a verdict. A stale binary mints
    orders the fold never allocated.
 5. **Credential channel**: `scripts/check-credential-channel.sh` (982-sguu).
    `blocked:*` means STOP AND REPORT to the coordinator; do not start
@@ -153,13 +163,26 @@ there.
      (`work/[0-9]{3,4}-[a-z0-9]{4}`): the hook does not check the name, a
      non-conforming one takes the ordinary branch path, and the stray sweep
      reaps it hours later without telling you (yoga, 2026-09-21). MERGE, THEN
-     REBUILD, THEN PUSH: merging trunk brings checker scripts that are part of
-     the plan binary's validator surface, so a binary rebuilt BEFORE the merge
-     reads stale AFTER it although its file is newer than its sources;
-     `tillandsias-plan validator-surface-hash --check` is the discriminator, and
-     `check-plan-binary-current.sh` printing `ok:plan-binary-write-is-opt-in`
-     mints nothing — only `stamped:plan-binary-validator-surface` means the
-     stamp was written (yolanda, 2026-09-21, measured);
+     REBUILD, THEN PUSH — CONDITIONALLY, on what the merge touches. The plan
+     binary's VALIDATOR SURFACE is crates/tillandsias-plan/src/*.rs (the files
+     matching `_vs_surface_files` in scripts/check-plan-binary-current.sh), the
+     crate's Cargo.toml, and the named Cargo.lock stanzas. A merge touching the
+     surface requires merge → rebuild → push, and the surface hash MUST move.
+     Shell checker scripts and test scripts are NOT members: a shell-only
+     change needs no rebuild, and the hash MUST be unchanged — an assertion
+     that it must move on such a landing reads a correct rebuild as a failed
+     one (1338-2sae; the forge read the function instead of accepting this
+     page's earlier unconditional sentence, and yolanda verified the hash
+     byte-identical across a landing that carried a checker and a test). A
+     binary rebuilt BEFORE a surface-touching merge reads stale AFTER it
+     although its file is newer than its sources. The instrument is
+     `bash scripts/check-plan-binary-current.sh` — name it, not the
+     `tillandsias-plan validator-surface-hash --check` subcommand alone, which
+     returns a non-verdict wherever CARGO_TARGET_DIR is redirected out of the
+     checkout; compare the hash VALUE in the direction the change predicts, and
+     note that `ok:plan-binary-write-is-opt-in` mints nothing — only
+     `stamped:plan-binary-validator-surface` means the stamp was written
+     (yolanda, 2026-09-21, measured);
   4. open the PR: `gh pr create --base linux-next --head work/<order> --draft`,
      and `gh pr ready` only once the closure evidence is on the row;
      Before `gh pr ready`, the pre-ready check: MERGE `origin/linux-next` INTO
