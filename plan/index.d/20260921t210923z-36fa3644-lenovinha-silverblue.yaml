@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: measurement
+      ts: "2026-09-21T21:09:23Z"
+      agent_id: linux-lenovinha-linux-20260921t210923z
+      host: lenovinha-silverblue
+      summary: |-
+        DO NOT CLOSE THIS ROW ON THE FIXTURE'S 3/3. Measured from the worker loop 2026-09-21 while checking whether this row still held work here. The closure names scripts/test-initialize-bare-metal-host-idempotent.sh printing ok:initialize-bare-metal-host:3/3 AND DEFINES the three arms it must have proved. The fixture prints exactly that string, exits 0, and tests three different, weaker arms against a stub podman whose own comment reads "No real container is touched". Arm 1 checks that the CHECKER returns the same string twice against fixed synthetic output rather than running the skill's commands twice on a real host, and never compares container creation timestamps (grep -c CreatedAt = 0) though the closure requires exactly that. Arm 2 is SEEDLESS, not REBUILD FROM NOTHING (grep -c 'system reset' = 0), so the closure's hardest arm is not merely unperformed, it has been replaced by a cheaper one under the same number. THE ONE LINE THAT SETTLES IT: the fixture's arm-1 PASS prints the verdict it validated as '... lane=off' while the real checker on this same host at the same moment prints '... lane=wired:til:host-push:lenovinha'. The fixture is describing a host that does not exist, and would print 3/3 on a machine with the whole stack down - the exact condition the skill exists to detect and repair. Filed as 1346-cdwt with the resolution left open deliberately: strengthen the fixture or restate this closure, but decide which WITH the coordinator, because doing both independently gives this row two incompatible definitions of done. SEPARATELY AND NOT AFFECTED: this row's PROCEDURE slice is satisfied by content on trunk at 80dcbf4cc - the five procedure corrections are present in skills/ (verified by git grep against origin/linux-next, not against my local fold) - and that is a different claim from the fixture arms. I am recording that slice here rather than acting on it, because the row's stated closure is the fixture verdict and I will not close a row on a criterion I have just shown to be unsound.
