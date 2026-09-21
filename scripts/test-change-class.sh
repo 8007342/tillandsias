@@ -294,6 +294,25 @@ else
     ok "S6: with no full gate ever recorded nothing may be skipped — a first run is the whole one"
 fi
 
+# ══ PATH NARROWING (765-xpct slice 2) ══════════════════════════════════════
+# A declared input may be `path:<glob>` as well as a class. THE PAIR IS THE ARM:
+# a skip alone would pass against "narrowing is ignored", and a run alone would
+# pass against "path globs always match".
+scaffold narrow
+mkdir -p "$W/crates/other/src"; echo "fn main(){}" > "$W/crates/other/src/main.rs"
+if may pilot "" plan-ledger path:crates/tillandsias-plan/*; then
+    ok "N1: a change to ANOTHER crate may be skipped by a guard keyed to crates/tillandsias-plan — this is the whole saving, and declaring the class `rust` instead loses it"
+else
+    bad "N1: a guard keyed to the plan crate ran for a change to a different crate — the narrowing is not applied and a code-only cycle saves nothing"
+fi
+rm -rf "$W/crates/other"; mkdir -p "$W/crates/tillandsias-plan/src"
+echo "fn main(){}" > "$W/crates/tillandsias-plan/src/main.rs"
+if may pilot "" plan-ledger path:crates/tillandsias-plan/*; then
+    bad "N2: a change to the PLAN CRATE ITSELF was skipped — the glob matches nothing and the narrowing is silently total"
+else
+    ok "N2: a change to crates/tillandsias-plan makes the same guard RUN — the glob narrows without blinding"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

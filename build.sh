@@ -3323,8 +3323,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # tillandsias-plan performs — measured at 2,381ms of the warm --check by the
     # velocity audit, and a pure function of those two path families.
     _step "Checking for fragment status transitions the fold discards..."
-    if _class_may_skip fragment-status-loss plan-ledger rust; then
-        _class_skip_line fragment-status-loss plan-ledger rust
+    if _class_may_skip fragment-status-loss plan-ledger path:crates/tillandsias-plan/*; then
+        _class_skip_line fragment-status-loss plan-ledger path:crates/tillandsias-plan/*
     elif ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
         exit 1
@@ -3724,8 +3724,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # against LIVE packet status, so it reads all three and nothing else.
     # Measured at 1,083ms of the warm --check by the velocity audit.
     _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
-    if _class_may_skip groundtruth-mutable-status-pins specs plan-ledger rust; then
-        _class_skip_line groundtruth-mutable-status-pins specs plan-ledger rust
+    if _class_may_skip groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*; then
+        _class_skip_line groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*
     elif ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
         _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
         exit 1

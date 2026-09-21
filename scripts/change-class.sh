@@ -285,10 +285,40 @@ change_class_may_skip() {
     case "$age" in never) return 1 ;; esac
     [ "$age" -le "$CHANGE_CLASS_FULL_MAX_AGE_S" ] || return 1
 
+    # A DECLARED INPUT IS EITHER A CLASS OR A PATH GLOB (`path:<glob>`), and the
+    # second is not a second taxonomy — it is a NARROWING of the first.
+    #
+    # WHY IT EXISTS, measured: the two pilot guards read the plan ledger and the
+    # PLAN CRATE. Declared in classes alone the nearest truth is `rust`, which
+    # covers every crate in the tree — so a change to tillandsias-podman, which
+    # cannot affect the plan fold, forced both guards to run and a code-only
+    # cycle saved NOTHING. Measured on yoga 2026-09-21 with `rust` declared:
+    # classes=rust -> fragment-status-loss RUNS, groundtruth-mutable-status-pins
+    # RUNS. The row's own text had said it correctly all along —
+    # "key: plan-ledger ∪ plan-core incl. crates/tillandsias-plan" — and I
+    # collapsed plan-core to `rust` when wiring it, which is the whole saving.
+    #
+    # gate_stamp_classify_path is NOT changed: its nine classes stay exactly as
+    # 765-dt8h defined them, and a path glob only ever makes a guard run MORE
+    # often than its class would, never less — an unmatched glob leaves the
+    # class test to decide and every uncertainty still answers "run it".
     local c d
     while IFS= read -r c; do
         [ -n "$c" ] || continue
-        for d in "$@"; do [ "$c" = "$d" ] && return 1; done
+        for d in "$@"; do
+            case "$d" in path:*) continue ;; esac
+            [ "$c" = "$d" ] && return 1
+        done
     done <<< "$classes"
+
+    local p g
+    for d in "$@"; do
+        case "$d" in path:*) g="${d#path:}" ;; *) continue ;; esac
+        while IFS= read -r p; do
+            [ -n "$p" ] || continue
+            # shellcheck disable=SC2254 — the glob MUST expand; that is the match.
+            case "$p" in $g) return 1 ;; esac
+        done <<< "$(change_class_paths 2>/dev/null)"
+    done
     return 0
 }
