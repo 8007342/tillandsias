@@ -220,11 +220,40 @@ TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
 Exiting the shell leaves the stack up. `RC=124` from a `timeout` wrapper is the
 interactive shell being cut off, not a failure.
 
-**BUT DO NOT READ rc AS THE ANSWER.** Measured by yoga: `tillandsias --bash
-<name> --debug` on an UNRESOLVABLE project prints `Error: Project not found`
-and **exits 0** — so a real failure reads as CLEANER than the timeout. Only the
-three checks below distinguish them, which is why they are three independent
-reads and not a convenience.
+**CORRECTED 2026-09-21 — THE BINARY IS FINE; THE MEASUREMENT WAS NOT.** This
+paragraph used to say, on yoga's report, that `tillandsias --bash <name>
+--debug` on an unresolvable project exits 0. **It does not: it exits 1.**
+Re-measured directly on v56.9.21.2, three consecutive runs; pirria
+independently on a build from 320c66ad3; lenovinha independently on their
+checkout build — rc=1 every time, three hosts and one answer. The row filed
+against it (1338-i23k) is closed OBSOLETED: the defect never existed.
+
+**And the warning did measurable harm before it was corrected.** Lenovinha had
+recorded `RC=1` hours earlier while relaunching their lane, and read past it —
+because this page told them the clean status was the untrustworthy one. A wrong
+caution does not merely fail to help: it spends a reader's attention teaching
+them to discard the correct signal they already hold.
+
+**What actually happened is the warning worth having.** The original reading
+came from a COMPOUND command — `… tillandsias … > log 2>&1 ; echo "RC=$?" ;
+tail -5 log` — run in the background. The `RC=` line was never read; what was
+read was the harness's `[exited with code 0]` for the whole task, and that
+compound **ends in `tail`**, whose status is 0 whatever the binary did.
+
+> **A compound command's status belongs to its LAST element, and a harness's
+> "exited with code N" reports that — never your subject's.** Measure the
+> subject's status directly: the command alone, its own `$?`, nothing after it.
+> The same rule one layer down is why a pipeline's status is its last stage's.
+
+A stale caution is not harmless — it teaches readers to distrust a status that
+is reliable, which is how a working signal stops being read at all. That is why
+this is corrected in place rather than deleted.
+
+**The three checks below stay exactly as they are.** They caught the real
+failure — the stack was genuinely not up, because a bare name had been passed
+where a path was wanted — while the diagnosis of WHY was wrong. A structure that
+surfaces a true failure through a mistaken cause is doing its job, and that is
+the reason they are three independent reads and not a convenience.
 
 **Done when** all three are true — check each, they fail independently:
 
