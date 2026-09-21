@@ -220,11 +220,17 @@ TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
 Exiting the shell leaves the stack up. `RC=124` from a `timeout` wrapper is the
 interactive shell being cut off, not a failure.
 
+**BUT DO NOT READ rc AS THE ANSWER.** Measured by yoga: `tillandsias --bash
+<name> --debug` on an UNRESOLVABLE project prints `Error: Project not found`
+and **exits 0** — so a real failure reads as CLEANER than the timeout. Only the
+three checks below distinguish them, which is why they are three independent
+reads and not a convenience.
+
 **Done when** all three are true — check each, they fail independently:
 
 ```bash
 podman exec tillandsias-git-<project> sh -c \
-  'echo "SSHD=${TILLANDSIAS_MIRROR_SSHD:-unset} MID=${TILLANDSIAS_MIRROR_ID:-unset} TOKENFILE=${TILLANDSIAS_VAULT_TOKEN_FILE:-unset}"; pgrep -a sshd || echo "sshd NOT running"'
+  'echo "SSHD=${TILLANDSIAS_MIRROR_SSHD:-unset} MID=${TILLANDSIAS_MIRROR_ID:-unset} TOKENFILE=${TILLANDSIAS_VAULT_TOKEN_FILE:-unset}"; p=$(cat /tmp/tillandsias-sshd/sshd.pid 2>/dev/null); if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo "sshd running pid=$p"; else echo "sshd NOT running"; fi'
 podman ps --format '{{.Names}}\t{{.Ports}}' | grep git-      # expect 127.0.0.1:2223->2222/tcp
 ls -l ~/.config/tillandsias/host-push/                       # expect <host>.approle.json, mode 0600
 ```
@@ -306,6 +312,18 @@ measurement.
 | leg | ref |
 |---|---|
 | (a) | `linux-next` — a plan-only commit cherry-picked onto a clean base off `origin/linux-next` |
+
+**Leg (a) needs a fetch, and expects to lose a race.** Run `git fetch origin`
+(an anonymous https read — confirm with `GIT_TRACE=1` that no helper runs)
+**immediately** before the plan-only push, then rebase and push at once. The
+hook keys the cheap lane on the remote tip being a LOCAL OBJECT, and **a push
+through the mirror fetches nothing** — the relay carries refs up and brings
+nothing down — so a clone that has not fetched since trunk moved is told
+`plan-only lane: not applicable — remote base <sha> is not present locally`.
+On a busy trunk expect to lose once: yoga saw an 82-second push lose to a
+plan-only move and the relay answer `[pre-receive] REJECT: stale old object ID
+does not match current ref`. **That is the staleness guard working, not a lane
+fault.** Fetch, rebase, push again.
 | (b) | `work/<order>` |
 | (c) | another side branch — a `salvage/<host>/<date>-<slug>` ref |
 
@@ -316,27 +334,62 @@ on their host git never reads the keyring at all, so a "keyring PID unchanged"
 arm cannot fail there even when a credential IS read. An arm that cannot fail is
 not an arm.
 
+**Two instruments, and the SECOND decides.** `--get-regexp` says what is
+*configured*; `git credential fill` under `GIT_TRACE=1` says what actually
+*runs*. A host can differ between them.
+
 ```bash
-git config --show-origin --get-regexp 'credential.*helper'
+git config --show-origin --get-regexp 'credential.*helper'        # CONFIGURED
+printf 'protocol=https\nhost=github.com\n\n' | GIT_TRACE=1 git credential fill   # RUNS
 ```
 
 **Use `--get-regexp`, not `--get-all credential.helper`.** The latter misses
 URL-scoped keys such as `credential.https://github.com.helper`, and on lenovinha
 it returns *empty* while a helper is configured — a false "no credential path
-here" that was written into this session's notes before it was caught.
+here" that reached this session's notes before it was caught.
 
-Then pick the instrument that matches what you found:
+**Yoga's host is the cautionary example, and it corrects an earlier version of
+this page.** This section once said "on yoga git never reads the keyring at
+all". That claim was derived with `--get-all` — the instrument this very section
+warns against — applied to themselves. `--get-regexp` shows a keyring helper
+configured GLOBALLY there (`credential.https://github.com.helper` →
+`gh auth git-credential`). The conclusion survives, but for a narrower reason
+than stated: a **repo-scope empty** `credential.helper` entry RESETS the
+inherited list before the file store is added, and the trace shows exactly one
+`run_command` — `credential-store --file=.git/.gh-credentials` — and nothing
+else. **Delete that one empty line and the keyring path goes live.** So: a host
+with a keyring helper configured, correctly concluded unused, right for a reason
+one config edit away from false. Record which instrument you used and what it
+showed.
+
+Then pick the instrument that matches what actually RUNS:
 
 **Instrument A — a libsecret/keyring helper** (e.g. `!gh auth git-credential`):
 
 ```bash
-pgrep -f 'gnome-keyring-daemon.*components=secrets' | head -1   # before AND after
+for p in $(pgrep -x gnome-keyring-d); do
+  tr '\0' ' ' < /proc/$p/cmdline | grep -q 'components=secrets' && echo "$p"
+done                                            # before AND after| head -1   # before AND after
 grep -ac 'git-credential' <transcript>                          # expect 0
 ```
 
 Name the daemon **by component**: there are two on a Silverblue host,
 `--daemonize --login` and `--start --foreground --components=secrets`. Secret
 Service is the second, and `ps -C gnome-keyring-d | head -1` can return either.
+
+**Do NOT use `pgrep -f 'gnome-keyring-daemon.*components=secrets'`.** Run from a
+tool call, the enclosing `bash -c` carries that pattern in *its own* command
+line, so `pgrep -f` matches the agent's shell as well as the daemon — the
+self-matching-instrument shape of 1287-myx8. Measured here: that pattern
+returned **two** pids, the daemon and the shell. `head -1` happened to return the
+daemon only because the boot-time daemon has the lower pid; had the daemon
+restarted and taken a higher one, the "before AND after" compare would have been
+comparing *shell* pids and would have read a changed shell as a changed daemon.
+
+A bracket (`gnome-keyring-daemo[n]`) does **not** reliably fix it either — if the
+unbracketed pattern appears anywhere else in the same command line, it
+self-matches again, which is exactly what happened when this was tested. `-x`
+matches the executable name only and never the pattern, so it cannot self-match.
 
 **Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`):
 
@@ -417,6 +470,14 @@ all, say so and claim less).
 **(3) `ls-remote` equality and no TOFU** — the ref on origin equals your local
 head at push time, and the push ran with `StrictHostKeyChecking=yes` against the
 `@cert-authority` file under `HostKeyAlias`.
+
+**Check equality against GITHUB, never against the mirror.** The mirror REFUSES
+`ls-remote` by design — its force-command is receive-pack only, so it answers
+`fail:tillandsias-receive:not-receive-pack`. And do not silence that refusal:
+yoga nearly filed "the mirror has no linux-next ref" because a `2>/dev/null`
+turned a principled refusal into empty output, which is indistinguishable from
+an absent ref. (The same suppression cost this host ten push attempts mislabelled
+as races earlier in the same session.)
 
 ```bash
 git ls-remote origin refs/heads/<ref>
