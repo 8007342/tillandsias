@@ -25,6 +25,11 @@ critical_path:
   - step: "run build.sh --release in CI context"
     command: "CI=true ./build.sh --release 2>&1 | tee /tmp/ci_build.log"
     timeout_ms: 600000
+    # unenforced: the command is a pipeline ending in `tee`, and a step child
+    # shell does not inherit pipefail (1293-wka4; the runner pipefail is
+    # shape-gated, never blanket), so assert_exit would adjudicate tee rather
+    # than build.sh. The artifact half of this prose is already the next step.
+    # Declared under 1329-m8dk rather than enforced vacuously.
     expected_behavior: "exits 0, produces release artifact in target/release/bundle/appimage/"
 
   - step: "verify release artifact created"
@@ -81,3 +86,4 @@ observability:
 rollback:
   on_failure: "verify CI detection logic in scripts/build.sh detects CI=true or GITHUB_ACTIONS"
   command: "grep -n 'CI=' scripts/build.sh && grep -n 'GITHUB_ACTIONS' scripts/build.sh"
+
