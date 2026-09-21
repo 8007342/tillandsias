@@ -1,0 +1,29 @@
+# @trace order:1286-4437, spec:ci-release
+name: litmus:reset-flags-accepted
+spec: ci-release
+description: >
+  ORDER 1286-4437, the defect pirria's v56.9.20.1 Linux smoke measured: the
+  headless parser's flag allow-list (known_flags) shipped without the reset
+  flags it documents and dispatches, so the published installer's
+  `tillandsias --reset-state` exited 2 on every Linux host. The fixture RUNS the
+  built binary rather than counting mentions (the arm it replaces counted
+  twelve mentions of --reset-state and none of them was the allow-list entry):
+  --reset-guest under TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 must reach its
+  dispatch (an inert refusal, exit 1, never "Unsupported option"), --reset-state
+  is covered structurally on the array (under OK=0 it would still provision),
+  and an unknown flag is still refused with exit 2 as the negative control.
+  Post-build, because it needs the binary this gate just built. Pre-fix result
+  on the v56.9.20.1 binary: reset-flags-accepted 4/7.
+severity: critical
+size: instant
+phase: post-build
+preconditions:
+  - workspace contains scripts/test-reset-flags-are-accepted.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+critical_path:
+  - step: "the fixture runs the built binary and every arm holds (7/7)"
+    command: "bash scripts/test-reset-flags-are-accepted.sh 2>&1 | tail -1"
+    expected_behavior: "reset-flags-accepted 7/7"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 60000

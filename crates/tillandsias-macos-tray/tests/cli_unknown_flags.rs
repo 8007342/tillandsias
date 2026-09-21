@@ -48,10 +48,27 @@ fn supported_flag_is_not_swallowed_by_the_unknown_flag_guard() {
         .output()
         .expect("tray binary runs");
 
-    assert_ne!(
-        out.status.code(),
-        Some(2),
-        "--diagnose is supported and must not hit the unknown-flag refusal; stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
+    // ASSERT THE REFUSAL, NOT THE EXIT CODE. Exit 2 is OVERLOADED on this
+    // binary: the unknown-flag guard exits 2, and so does `--diagnose` when the
+    // host is NOT PROVISIONED (install-macos.sh documents "first install is
+    // 2 / not provisioned"). So `assert_ne!(code, Some(2))` claims to test the
+    // guard while actually testing whether this machine happens to have a
+    // provisioned guest.
+    //
+    // MEASURED on macneo 2026-09-21, mid-smoke, right after --reset-state
+    // cleared the image root: DIAG_EXIT=2, ZERO occurrences of "unknown flag"
+    // in the output, and the last line reading "Status: NOT PROVISIONED". The
+    // test went red having found nothing wrong with the guard it names.
+    //
+    // It was latent until 1286-4437 made reset-then-provision the DEFAULT
+    // install path, which puts every macOS host in the unprovisioned state for
+    // the length of a provision — so this would now fail on any host gating
+    // during that window, not just here.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("unknown flag"),
+        "--diagnose is supported and must not hit the unknown-flag refusal; \
+         exit={:?} stderr: {stderr}",
+        out.status.code()
     );
 }

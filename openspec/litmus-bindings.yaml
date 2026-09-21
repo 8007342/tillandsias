@@ -149,6 +149,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:reset-flags-accepted
   - litmus:tool-materialization
   - litmus:metrics-log-fallback-is-loud
   - litmus:gnuism-advisory-names-the-known-instances
