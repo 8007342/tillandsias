@@ -241,22 +241,60 @@ measurement.
 | (b) | `work/<order>` |
 | (c) | another side branch — a `salvage/<host>/<date>-<slug>` ref |
 
-For **each** leg, capture four artifacts. Keep the push transcript in a file and
-cite the FILE, not remembered text:
+**Step 0, before any leg: find out which credential path your host actually
+has.** The arm being proven is *"this host's configured credential path is
+proven unread"* — and the instrument for that differs by host. Measured by yoga:
+on their host git never reads the keyring at all, so a "keyring PID unchanged"
+arm cannot fail there even when a credential IS read. An arm that cannot fail is
+not an arm.
+
+```bash
+git config --show-origin --get-regexp 'credential.*helper'
+```
+
+**Use `--get-regexp`, not `--get-all credential.helper`.** The latter misses
+URL-scoped keys such as `credential.https://github.com.helper`, and on lenovinha
+it returns *empty* while a helper is configured — a false "no credential path
+here" that was written into this session's notes before it was caught.
+
+Then pick the instrument that matches what you found:
+
+**Instrument A — a libsecret/keyring helper** (e.g. `!gh auth git-credential`):
+
+```bash
+pgrep -f 'gnome-keyring-daemon.*components=secrets' | head -1   # before AND after
+grep -ac 'git-credential' <transcript>                          # expect 0
+```
+
+Name the daemon **by component**: there are two on a Silverblue host,
+`--daemonize --login` and `--start --foreground --components=secrets`. Secret
+Service is the second, and `ps -C gnome-keyring-d | head -1` can return either.
+
+**Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`):
+
+```bash
+mv <store-file> <store-file>.acceptance-aside      # before the three legs
+… run the legs …
+mv <store-file>.acceptance-aside <store-file>      # restore immediately after
+grep -ac 'git-credential' <transcript>             # expect 0
+```
+
+A push that succeeds while the credential is **absent from disk** proves the
+lane needs none. Restore the file as soon as the legs are done — leaving it
+aside breaks every ordinary push on that host.
+
+**Either way, leave the helper CONFIGURED.** Zero invocations then means it
+demonstrably did not fire, which is a stronger claim than it being absent.
+
+**If no helper is configured at all**, say so and claim less: the legs show the
+lane works, but they cannot show a credential path went unread, because the host
+had none to read.
+
+**Common to every leg:**
 
 ```bash
 git ls-remote origin refs/heads/<ref>        # equals your local head at push time
-grep -ac 'git-credential' <transcript>       # expect 0
-pgrep -f 'gnome-keyring-daemon.*components=secrets' | head -1   # before AND after
 ```
-
-**Name the keyring daemon by component.** There are two on a Silverblue host —
-`--daemonize --login` and `--start --foreground --components=secrets`. Secret
-Service is the second; `ps -C gnome-keyring-d | head -1` can return either.
-
-**Leave the gh helper configured.** `credential.https://github.com.helper` stays
-in place, so zero invocations means it demonstrably did not fire — which is a
-stronger claim than it being absent.
 
 If trunk moves before you report leg (a), give **ancestry** rather than a stale
 equality: `git merge-base --is-ancestor <your-sha> origin/linux-next`.
