@@ -78,13 +78,27 @@ for f in "$TESTS_DIR"/litmus-*.yaml; do
     decl="$(grep -m1 '^spec:' "$f" | sed 's/^spec:[[:space:]]*//; s/[[:space:]]*$//')"
     [ -n "$decl" ] || continue
     declset="$(printf '%s' "$decl" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep . || true)"
-    ln="$(grep -n "^  - ${nm}\$" "$BINDINGS" | head -1 | cut -d: -f1)"
-    [ -n "$ln" ] || continue
-    under="$(awk -v L="$ln" 'NR<=L && /^- spec_id:/{s=$3} END{print s}' "$BINDINGS")"
-    [ -n "$under" ] || continue
-    grep -qxF -- "$under" <<< "$declset" && continue
+    # ORDER 1333-jpq5. EVERY binding for this name, not the first.
+    # The first version took `head -1`, so a test bound under TWO specs was
+    # judged on whichever appeared earlier in the file. litmus:cross-platform-tray
+    # is bound under no-terminal-flicker AND tray-app, declares tray-app, and was
+    # reported as a mismatch it is not. A mismatch exists only when NO binding
+    # matches ANY declared spec.
+    matched=0
+    unders=""
+    for ln in $(grep -n "^  - ${nm}\$" "$BINDINGS" | cut -d: -f1); do
+        u="$(awk -v L="$ln" 'NR<=L && /^- spec_id:/{s=$3} END{print s}' "$BINDINGS")"
+        [ -n "$u" ] || continue
+        unders="${unders}${u} "
+        grep -qxF -- "$u" <<< "$declset" && matched=1
+    done
+    [ "$matched" -eq 1 ] && continue
+    [ -n "$unders" ] || continue
     mismatch=$((mismatch + 1))
-    [ "$list" -eq 1 ] && echo "spec-binding-mismatch  $nm  declares=[$decl]  bound-under=$under"
+    # Report EVERY block it is bound under, not one of them: a reader deciding
+    # which side is wrong needs to see whether the test is bound once in the
+    # wrong place or several times in several places.
+    [ "$list" -eq 1 ] && echo "spec-binding-mismatch  $nm  declares=[$decl]  bound-under=${unders% }"
 done
 
 echo "census:litmus-reachability files=$files retired=$retired grandfathered-unbound=$gf unbound=$unbound spec-binding-mismatch=$mismatch"
