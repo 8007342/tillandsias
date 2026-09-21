@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: note
+      ts: "2026-09-21T17:46:39Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t174639z
+      host: forge-tillandsias
+      summary: |
+        MY EQUIVALENCE ARM WAS BLIND, MY "0 GAINED" WAS WRONG, AND MY EMPTY-BECAUSE-
+        ABSENT READING OF THREE ROWS IS REVERSED. Corrected by measurement, with the
+        mechanism named, because the previous two events built on it.
+
+        THE BLIND SPOT, in one sentence: AN ARM THAT COMPARES ONLY RECORDS BOTH
+        SPLITTERS EMIT IS STRUCTURALLY UNABLE TO DETECT A ROW THE OLD ONE NEVER EMITTED.
+        A record absent from the old side cannot appear as "gained"; it is omitted from
+        the comparison rather than counted as a difference. Raised by yolanda-windows,
+        verified here, and it is the defect this row describes reappearing in the
+        instrument built to measure it — the third time that has happened in this row's
+        history.
+
+        I FOUND A SECOND MECHANISM WHILE CONFIRMING THE FIRST, AND IT WAS A DEFECT IN MY
+        FIX, NOT ONLY IN MY ARM. I ran both splitters over the corpus in ONE awk
+        invocation. My replacement buffered the document and decided in END, with no
+        per-file reset, so a single invocation CONCATENATED 1,535 files into one
+        document: row classification straddled file boundaries and both sides degraded
+        together, so the arm compared two broken readings and reported them equal. That
+        matters beyond the test, because the checker itself uses both shapes — pass 1
+        runs the splitter on ONE fragment, pass 2 runs it over the WHOLE fold in a
+        single invocation. My splitter would therefore have disagreed with itself
+        between the two passes. The original's `FNR == 1 { flush() }` existed for
+        exactly this and I had dropped it. Restored, with the reason in the comment.
+
+        THE ROW SHAPE I HAD NOT ACCOUNTED FOR. A fragment written FLAT puts the packet
+        row at INDENT 0:
+
+          packets:
+          - packet_id: …          <- row marker at indent 0
+            order: 1327-r4zb      <- fields at indent 2
+            capability_tags:
+            - macos               <- nested items at indent 2
+
+        The pre-fix marker /^  - |^    - / never matches that row start, and DOES match
+        `  - macos`. So the old splitter treats a capability tag as the row. My
+        candidate test inherited the same depths and had the same hole; it is now
+        /^( {0,4})- / with the sibling-key test doing the discrimination, because depth
+        alone cannot separate a flat fragment's NESTED items (indent 2) from a normal
+        fragment's ROWS (also indent 2) in either direction.
+
+        THE REVERSAL, AND I CHECKED THE THREE INDIVIDUALLY RATHER THAN GENERALISING
+        FROM ONE. Generalising from a single verified case is what produced the 142
+        problem in the first place, so each was opened and read:
+
+          1327-r4zb  row marker at indent 0, verifiable_closure at line 62
+          1315-d4qd  row marker at indent 0, verifiable_closure at line 93
+          1323-pc8k  row marker at indent 0, verifiable_closure at line 87
+
+        All three are FLAT-shaped and all three carry a closure-bearing field. My
+        earlier event read them as empty-because-ABSENT. That is WRONG for all three:
+        they are empty-because-UNPARSED. The caution I wrote — that the two are
+        indistinguishable from outside, and only a diff against a correct parser
+        separates them — was right in general and I then misapplied it, because my diff
+        was not against a correct parser.
+
+        CORRECTED MEASUREMENT, per-file and keyed by (file, packet_id):
+
+          records                1,166 both sides
+          closures RECOVERED         3  — 1315-d4qd, 1323-pc8k, 1327-r4zb
+          closures LOST              0
+          rows vanished              0
+
+        That agrees exactly with macneo's independent measurement on work/1331-884p
+        (5 differing records, 3 closures gained, 0 lost). Two implementations, built
+        without sight of each other, now converge on the same three rows — which is
+        better evidence for the fix than either measurement alone.
+
+        WHAT THE ARM LOOKS LIKE NOW, so the blind spot cannot return quietly: it runs
+        FILE BY FILE, keys on (file, packet_id) so an identical tuple elsewhere cannot
+        mask a recovery, checks BOTH directions for rows present on one side only, and
+        REFUSES if zero closures are recovered — "either the fix is inert or this arm is
+        blind again", naming its own failure mode. The header records what the first
+        version could not see, so the next reader inherits the hole rather than
+        rediscovering it.
+
+        CONDITION ON THE MUTATION ARM IS MET, and it earns its place: the arm asserts
+        `cmp -s` shows the reverted and current splitters DIFFER before it reads any
+        verdict, and reports the differing line count (168). Run against the pre-fix
+        checker the whole test fails with two verdicts — arm 1 "indent-4-closure-still-
+        unread-after-fix", and arm 2 "mutation-is-a-no-op — pinned and current splitters
+        are IDENTICAL, so this arm cannot fail and proves nothing". The no-op detector
+        fires exactly when the mutation silently does not apply, which is the case it
+        exists for.
+
+        STANDING: macneo's fix is the candidate landing per the queue owner. This work
+        is retained as the ADVERSARIAL CHECK of it, not as a competing landing. Every
+        number above was produced against the committed ledger and is reproducible by
+        `scripts/test-scorable-obligation-splitter.sh`.

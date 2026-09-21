@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    event:
+      type: note
+      ts: "2026-09-21T19:31:40Z"
+      agent_id: linux-lenovinha-opus5-20260921t193140z
+      host: lenovinha-silverblue
+      summary: |-
+        AUDIT AMENDMENTS FOLDED IN, seven of them, and A1 RE-MEASURED INDEPENDENTLY rather than accepted on report. A1 turns this design's 'unknown 2' from an assumption into a PROBABLE DEFECT: the forge's gitconfig writer emits a BARE '@cert-authority git-<mid> <ca>' line and pushes to ssh://git@git-<mid>:2222 with StrictHostKeyChecking=yes and NO HostKeyAlias, while OpenSSH looks a non-22 port up as [host]:port. I re-measured on OpenSSH 10.2p1 with ssh-keygen -F against two hand-written known_hosts files: the bare line does NOT match a lookup of [git-testmid]:2222 and DOES match a lookup of git-testmid; the bracketed line matches [git-testmid]:2222. So the forge's first push should fail 'Host key verification failed', and THE BARE-METAL LANE WORKS ONLY BECAUSE IT PASSES HostKeyAlias, which is looked up verbatim — the very difference this design called assumed-not-measured. Order kept as the coordinator set it: MEASURE from a forge first, then fix the writer (bracket the line, or add HostKeyAlias to core.sshCommand); both keep strict checking and no TOFU. The others, briefly. A2 — arm 3 cannot run inside a forge (no DNS for github.com), so its VERIFIER moves to a bare-metal peer taking the forge's pushed sha as a condition; the arm does not weaken. A3 — the forge's race window is the mirror's upstream-sync lag and a forge cannot refetch GitHub, so the dogfood is three plan-only pushes at a measured trunk cadence with REJECTs counted, and the sync cadence must be observable from inside a forge before any flip. A4 — 'has the renewal ever renewed' becomes an arm: a second push after 30+ minutes of sidecar uptime showing a DIFFERENT SERIAL. A5 — the pusher line belongs in relay-refs.sh's log function per ref transaction and carries KEY_ID with principal and serial, which also serves tonight's plan(unknown)/salvage(unknown) attribution gap. A6 — the forge regime is stated (Linux forge in a Silverblue enclave first, WSL2 in yolanda's second). A7 — the lane pushes work refs and does NOT land them; forges cannot open PRs by design. THE CITATION GUARD REFUSED MY FIRST DRAFT, correctly: I had copied the audit's line-number citations verbatim and 881-29me requires SYMBOL citations because line numbers rot. Converted to symbols. STILL BLOCKED: no implementation until the audit event is on this row, and the T11 flip additionally waits on a forge ACCEPTANCE, not on this audit.

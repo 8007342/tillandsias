@@ -93,7 +93,7 @@
 # correction satisfy the gate with a closure the declaration could not use.
 #
 # Grammar (one line on stdout, nothing else):
-#   ^(ok:scorable-obligations:[0-9]+ checked|violation:scorable-obligation-missing:[0-9]+|skip:no-new-packets)$
+#   ^(ok:scorable-obligations:[0-9]+ checked|violation:scorable-obligation-missing:[0-9]+|violation:scorable-obligation-parse-failure:[0-9]+|skip:no-new-packets)$
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -147,6 +147,8 @@ EOF
 
 checked=0
 violations=0
+parse_failures=0
+pdetail=""
 corrected=0
 regime_broken=0
 rdetail=""
@@ -211,8 +213,44 @@ _BLOCK_AWK='
         # Everything nested inside a row — its events, its exit_criteria — is
         # deeper, so anchoring to those two depths keeps the block boundary
         # exactly at the row.
-        /^  - |^    - / {
-            flush(); pid = ""; first = ""; buf = ""; unscoreable = "no"; inclosure = 0
+        # A ROW IS A LIST ITEM WHOSE FIRST KEY IS packet_id OR order — NOT any
+        # dash at a given depth. ORDER 1331-884p.
+        #
+        # This matched /^  - |^    - /, i.e. ANY list item at 2 or 4 spaces. A
+        # capability_tags entry and an owned_files entry sit at exactly those
+        # depths, so a nested item RESET THE ROW mid-record: pid, first and
+        # unscoreable were cleared together and everything after it — including
+        # the verifiable_closure — was never captured.
+        #
+        # MEASURED on macneo 2026-09-21: 142 of 1,450 fragments in plan/index.d
+        # contained at least one packet whose closure this pass could not read.
+        # The failure was SILENT, which is the serious half: an unparsed row
+        # emitted no usable record, fell to the deferred path below (1071-adhj)
+        # and PASSED, and a deferral is indistinguishable from a satisfied
+        # obligation. The loud half was wrong in the other direction — when the
+        # id happened to survive, the refusal read "carries no scorable
+        # obligation" about a file that carried one, which cost five wrong
+        # repairs before the awk was instrumented.
+        #
+        # Both documented row forms start with one of these two keys: fragments
+        # write `- packet_id: x`, and plan/index.yaml writes `- order: 873-vgyg`
+        # with packet_id a line below (the reason the id rule keeps its optional
+        # dash). A nested value item (`- plan`, `- scripts/foo.sh`) has no key
+        # and cannot match.
+        # THE DEPTH ANCHOR STAYS, BOUNDED. Dropping it entirely re-created
+        # this very defect out of documentation: plan/index.yaml carries a
+        # `- packet_id: ...` line at indent 14 INSIDE A BLOCK SCALAR, as prose
+        # explaining how a repair fragment works. An unanchored marker mints a
+        # PHANTOM packet there, whose id is the trailing comment last word, and
+        # the real row loses its closure to it — record count 1167 against 1166.
+        # Rows live at 0, 2 or 4 (flat fragments, nested fragments, the base
+        # index); nothing legitimate is deeper, so deep prose is out of reach.
+        # Found by the forge adversarial check against this branch.
+        # NO APOSTROPHES ANYWHERE ABOVE: this awk program is a single-quoted
+        # shell string and one would end it (see the \047 note further down).
+        /^( {0,4})-[ \t]+(packet_id|order):[ \t]*[^ \t]/ {
+            flush(); pid = ""; first = ""; buf = ""; unscoreable = "no"
+            inclosure = 0
         }
         # Then take the id from wherever in the row it appears — ON the marker
         # line (`- packet_id: x`, every fragment and most base rows) or on a
@@ -336,7 +374,13 @@ while IFS= read -r f; do
         else
             # NOT in this fragment's bytes. That is not yet a verdict: the
             # obligation may live in a correction fragment (1071-adhj). Defer.
-            printf '%s\x1f%s\n' "$pid" "$f" >> "$_PENDING"
+            # Carry WHAT THE PARSER CAPTURED (`body`, the closure's first
+            # line) into the deferral. The witness below must fire only when
+            # the parser captured NOTHING — a row whose closure was read and
+            # is merely prose is correctly told it carries no SCORABLE
+            # obligation, and calling that a parse failure would be a second
+            # message that describes the parser instead of the file.
+            printf '%s\x1f%s\x1f%s\n' "$pid" "$f" "$body" >> "$_PENDING"
         fi
     done < <(awk "$_BLOCK_AWK" "$f")
 done <<EOF
@@ -377,12 +421,56 @@ if [ -s "$_PENDING" ] && [ "${#_fold_files[@]}" -gt 0 ]; then
     done < <(awk "$_BLOCK_AWK" "${_fold_files[@]}")
 fi
 
+# ── THE WITNESS: does the row's OWN TEXT carry what the parser did not read? ─
+# ORDER 1331-884p. The refusal "carries no scorable obligation" describes what
+# this script PARSED and asserts it about the FILE. When the two disagree the
+# message is confidently wrong, it names an actionable remedy that is already
+# present, and the reader spends their repairs on the file instead of the
+# parser. Measured cost: five wrong repairs on 1330-j5is (the field's spelling,
+# its block-scalar form, the row's indentation, staleness of the staged blob,
+# and a known-good control copied verbatim) before anyone instrumented the awk.
+#
+# So before EITHER verdict — the loud one or the silent deferral — re-read the
+# row out of the file with an INDEPENDENT reader. If the field is there and the
+# parser did not capture it, that is a PARSE FAILURE of this script, and it is
+# reported as one, naming the file and the line it could not parse. It is never
+# reported as a property of the row.
+_row_obligation_line() { # $1=file $2=packet_id -> "<line>:<field>" or empty
+    awk -v want="$2" '
+        $0 ~ /^(  |    )- (packet_id|order):/ { inrow = 0; rowstart = NR }
+        $0 ~ /^[ \t]*-?[ \t]*packet_id:[ \t]*/ {
+            nf = split($0, F, /[ \t]+/)
+            if (F[nf] == want) inrow = 1
+        }
+        # AN EMPTY QUOTED SCALAR IS NOT AN OBLIGATION. `verifiable_closure: ""`
+        # unquotes to nothing, which the parser deliberately keeps empty and
+        # keeps refused. The parser read it correctly, so this is a silent row
+        # and NOT a parse failure — witnessing it would turn a correct refusal
+        # into a false accusation against the checker itself.
+        inrow && $0 ~ /^[ \t]*(verifiable_closure|unscoreable):[ \t]*("")?[ \t]*$/ { next }
+        inrow && $0 ~ /^[ \t]*(verifiable_closure|unscoreable):[ \t]*\047\047[ \t]*$/ { next }
+        inrow && $0 ~ /^[ \t]*verifiable_closure:[ \t]*[^ \t]/ { print NR ":verifiable_closure"; exit }
+        inrow && $0 ~ /^[ \t]*unscoreable:[ \t]*[^ \t]/        { print NR ":unscoreable";        exit }
+    ' "$1" 2>/dev/null | head -1
+}
+
 # ── ADJUDICATE what pass 1 deferred ─────────────────────────────────────────
 while IFS= read -r row; do
     [ -n "$row" ] || continue
     pid="${row%%$'\x1f'*}"
-    f="${row#*$'\x1f'}"
-    if grep -Fxq "$pid" "$_SATISFIED" 2>/dev/null; then
+    _r="${row#*$'\x1f'}"
+    f="${_r%%$'\x1f'*}"
+    _captured="${_r#*$'\x1f'}"
+    if [ -n "$_captured" ]; then
+        _witness=""
+    else
+        _witness="$(_row_obligation_line "$f" "$pid")"
+    fi
+    if [ -n "$_witness" ]; then
+        # The field IS in the row. This script failed to read it. Say THAT.
+        parse_failures=$((parse_failures + 1))
+        pdetail="${pdetail}  ${f}:${_witness%%:*}: packet '${pid}' carries '${_witness#*:}' at that line and this checker did not parse it — the row was NOT evaluated. This is a defect in check-scorable-obligation-added.sh, not in the fragment: do not edit the fragment to satisfy it (1331-884p)"$'\n'
+    elif grep -Fxq "$pid" "$_SATISFIED" 2>/dev/null; then
         corrected=$((corrected + 1))
         cdetail="${cdetail}  ${f}: packet '${pid}' has no obligation in its own bytes; another fragment or the base index supplies one — accepted on the FOLDED packet (1071-adhj)"$'\n'
     else
@@ -404,6 +492,18 @@ done < "$_PENDING"
 if [ "$checked" -eq 0 ]; then
     echo "skip:no-new-packets"
     exit 0
+fi
+
+if [ "$parse_failures" -gt 0 ]; then
+    # MORE SPECIFIC THAN "missing", and reported INSTEAD of it: a row this
+    # script could not parse has not been judged, so calling it unscored would
+    # be an assertion about a file nobody read.
+    echo "violation:scorable-obligation-parse-failure:$parse_failures"
+    printf '%s' "$pdetail" >&2
+    echo "  The obligation is IN the fragment at the line named above." >&2
+    echo "  A row this checker cannot parse must never pass by deferral, and" >&2
+    echo "  must never be reported as a row that says nothing (1331-884p)." >&2
+    exit 1
 fi
 
 if [ "$violations" -gt 0 ]; then

@@ -80,5 +80,34 @@ case "$_len" in
     *)         [ "$_len" -gt 0 ] && _gh="seeded" ;;
 esac
 
-echo "ok:bare-metal-host:${HOSTNAME_SHORT}:enclave=up mirror=up router=up inference=up github=${_gh}"
+# ORDER 1313-prin. THE LANE FIELD, because a green that is TRUE AND ADJACENT
+# gets read as coverage. This verdict said nothing about the ssh push lane, so a
+# host could read ok:bare-metal-host:... and believe the lane was proven. It is
+# not: the lane is proven ONLY by the three acceptance legs (skill section 6).
+# This field reports what can be READ, so the checker stays non-mutating — it
+# mints no certificate and starts nothing.
+_lane="off"
+_lane_flag="$(podman exec "$MIRROR" sh -c 'echo "${TILLANDSIAS_MIRROR_SSHD:-0}"' 2>/dev/null | tr -d '\r\n ')"
+if [ "$_lane_flag" = "1" ]; then
+    _sshd_up=0
+    # NOT pgrep: sshd RETITLES itself to "sshd: /usr/sbin/sshd ... [listener]",
+    # so 'pgrep -x sshd' misses it and reports a WIRED lane as unwired —
+    # measured here, and it would have been wrong on every host.
+    # And NOT 'pgrep -f sshd' either: that pattern matches this very probe's own
+    # command line, the self-matching-instrument shape of 1287-myx8. The pid
+    # file is written by sshd itself and needs no pattern at all.
+    podman exec "$MIRROR" sh -c 'p=$(cat /tmp/tillandsias-sshd/sshd.pid 2>/dev/null); [ -n "$p" ] && kill -0 "$p" 2>/dev/null' 2>/dev/null && _sshd_up=1
+    if [ "$_sshd_up" -ne 1 ]; then
+        _lane="unwired:sshd-not-running"
+    else
+        _princ="$(podman exec "$MIRROR" sh -c 'grep -h "^til:host-push:" /tmp/tillandsias-sshd/authorized_principals 2>/dev/null | head -1' 2>/dev/null | tr -d '\r\n ')"
+        if [ -n "$_princ" ]; then
+            _lane="wired:$_princ"
+        else
+            _lane="unwired:no-host-principal"
+        fi
+    fi
+fi
+
+echo "ok:bare-metal-host:${HOSTNAME_SHORT}:enclave=up mirror=up router=up inference=up github=${_gh} lane=${_lane}"
 exit 0

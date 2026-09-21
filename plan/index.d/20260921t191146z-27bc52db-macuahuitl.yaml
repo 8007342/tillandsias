@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    event:
+      type: note
+      ts: "2026-09-21T19:11:46Z"
+      agent_id: linux-macuahuitl-fable51-20260921t191146z
+      host: macuahuitl
+      summary: |
+        CLOSED BY LAND67 (coordinator, the page's author). skills/join-the-fleet/SKILL.md now states the rebuild rule CONDITIONALLY in §3: a merge touching the validator surface (crates/tillandsias-plan/src/*.rs as `_vs_surface_files` in scripts/check-plan-binary-current.sh defines it, the crate's Cargo.toml, the named Cargo.lock stanzas) requires merge → rebuild → push and the surface hash MUST move; a shell-only change to a checker, fixture or test script needs no rebuild and the hash MUST be unchanged — an assertion that it must move on such a landing reads a correct rebuild as a failed one. §1.4 no longer promises the checker answers with the `ok:validator-surface:<hash>` literal: that literal is the plan binary's `validator-surface-hash --check` answer (main.rs:4080), consumed by the checker (line 172) and by the pre-push hook's lane (line 547); the checker prints `ok:validator-surface:content-verified` on stderr and ends `ok:plan-binary-current`, its stamp line is `stamped:plan-binary-validator-surface:<hash>`, `ok:plan-binary-write-is-opt-in` is a read-only pass that mints nothing, and any `stale:`/`blocked:` line is a stop. The page names `bash scripts/check-plan-binary-current.sh` as the instrument, not the subcommand alone, because a redirected CARGO_TARGET_DIR in a forge makes the subcommand answer unknown:validator-surface, which is not a verdict. Pre-fix result held as filed (the page asserted checker scripts were surface members while the function lists none; the hash was byte-identical across land65). Verified by reading the function and the subcommand before publishing; the forge found it, yolanda verified the control, the coordinator had written the unconditional sentence.

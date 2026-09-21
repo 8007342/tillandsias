@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: claim
+      ts: "2026-09-21T17:33:32Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t173332z
+      host: forge-tillandsias
+      summary: |
+        Claimed by forge-tillandsias (in-forge, Claude). Scope note recorded at claim
+        time, because it changes what "done" means for this row.
+
+        SUBSUMES 1319-vd5h. Same owned file (scripts/check-scorable-obligation-added.sh),
+        same marker regex /^  - |^    - /, same mechanism: a list item at indent 2 or 4
+        flushes the packet record mid-row. The two rows are the defect's two faces —
+        1319-vd5h is the FALSE REFUSAL (a yaml.safe_dump fragment's indentless
+        exit_criteria items flush the row, so an `unscoreable:` below is never
+        evaluated), this row is the FALSE SILENT PASS (a nested capability_tags or
+        owned_files entry flushes the row, the closure is never read, and the row takes
+        the deferred path). The fix this row asks for — identify a row as a list item
+        whose sibling keys include packet_id or order, rather than as any dash at a
+        given depth — resolves both. Cross-branch fold run before claiming:
+        `scripts/check-claims-across-branches.sh --batch 1331-884p 1319-vd5h` answered
+        ok:cross-branch-claims:2 sibling branch(es) checked, 2 packet(s) — neither was
+        claimed anywhere.
+
+        I am NOT closing 1319-vd5h; that is the queue owner's call. An event goes on it
+        pointing here so nobody edits the same file in parallel.
+
+        CARRIED FORWARD FROM 1319-vd5h, which this row does not mention:
+        scripts/check-fragment-status-loss.sh SHARES the two-space marker idiom at 3
+        sites. check-added-fragments-parse.sh, check-base-ledger-status-loss.sh and
+        check-fragment-events-land.sh do not. Fixing one splitter and leaving the other
+        leaves the defect alive in the file nobody looked at, so this claim covers both
+        or records why not.
+
+        CONSTRAINT: no cargo invocation while the shared WSL2 utility VM is under
+        yolanda-windows' paired memory measurement. This row is bash and awk, so the
+        hold does not block it.

@@ -1,0 +1,32 @@
+# @trace order:1331-884p, spec:ci-release
+name: litmus:scorable-obligation-splitter
+spec: ci-release
+description: >
+  ORDER 1331-884p (subsumes 1319-vd5h): the scorable-obligation checker's row
+  splitter started a packet row at ANY list item at indent 2 or 4, so a nested
+  capability_tags or owned_files entry, or a yaml.safe_dump indentless
+  exit_criteria item, flushed the record mid-row and the closure below it was
+  never read — the row took the deferred path and PASSED SILENTLY, or (1319's
+  face) an unscoreable field present in the file was refused as absent. The
+  fixture pins the row boundary in five arms, including a MUTATION arm that
+  reverts the splitter and requires the fixture to fail, a prose-immunity arm
+  (an example row inside a block scalar must neither eat the closure nor mint a
+  phantom packet — the regression the adversarial check caught on the first
+  fix, plan/index.yaml line 92097 at indent 14), and a REGRESSION GUARD against
+  the pinned pre-fix splitter (a closure the old splitter read and the new one
+  does not is a failure). Pre-build: it needs only bash and awk. Pre-fix
+  result on the unfixed script: arm 1 FAILS (the indent-4 fragment yields an
+  empty closure).
+severity: high
+size: instant
+phase: pre-build
+preconditions:
+  - workspace contains scripts/test-scorable-obligation-splitter.sh
+  - workspace contains scripts/check-scorable-obligation-added.sh
+critical_path:
+  - step: "the five row-boundary arms hold against the checked-in splitter"
+    command: "bash scripts/test-scorable-obligation-splitter.sh 2>&1"
+    expected_behavior: "ok:scorable-obligation-splitter:5/5 arms"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 60000

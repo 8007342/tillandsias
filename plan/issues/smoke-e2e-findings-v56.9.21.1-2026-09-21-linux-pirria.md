@@ -10,6 +10,10 @@
 
 **VERDICT: PASS (signatures unverified: cosign absent).**
 
+smoke:pirria:v56.9.21.1:PASS
+
+(The machine-read verdict line, exactly as pirria reported it on the fleet channel at 06:27Z citing c229e8e49. Added by the coordinator on 2026-09-21 because `scripts/promote-stable.sh` accepts a report only when PASS and the exact version share one line, and the VERDICT line above carries PASS without the version. The verdict itself is pirria's, unchanged.)
+
 This is the fix-forward re-run after v56.9.20.1 shipped uninstallable on Linux.
 **The defect is repaired on the published artifact:** `install_exit=0`, and zero
 `Unsupported option` lines.

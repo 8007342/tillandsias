@@ -1,0 +1,97 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-only-lane-validates-for-ten-minutes-per-attempt-against-a-trunk-that-moves-every-few-minutes-so-a-floor-host-loses-all-three-attempts-and-cannot-publish-a-claim-at-all
+    packet_kind: defect
+    order: 1337-sj62
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-lane, floor-tier, coordination]
+    estimated_hours: 4
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    unscoreable: ""
+    verifiable_closure: |
+      EITHER of these is an acceptable closure, and they are alternatives, not
+      a pair:
+
+      A. OUTCOME. A floor-tier host's plan-only push LANDS under a trunk that
+         moves every 84-296 seconds, measured in a real fleet window rather
+         than at rest.
+      B. COST. The lane's per-attempt cost is bounded by the DELTA since the
+         base it last validated, rather than revalidating the whole fold
+         against each new tip.
+
+      B implies A on this host; A without B would mean the race was won some
+      other way and is still a closure. State which one was achieved.
+    title: |
+      the plan-only lane validates for about ten minutes per attempt against a trunk that moves every few minutes, so a floor host loses all three attempts and cannot publish a claim at all
+    context: |
+      THE LANE EXISTS SO A FLOOR HOST CAN PUBLISH A CLAIM NOW. Its own header
+      says "a claim that separates nobody for two hours is not a claim". On
+      esmeraldinha, during an active fleet window, it publishes nothing at all.
+
+      MEASURED 2026-09-21, one host, one script, five windows:
+
+        window        fragments  outcome
+        05:53-07:02Z      4      landed on attempt 3 of 3
+        07:03-07:19Z      1      landed attempt 1, quiet trunk
+        08:06-08:17Z      2      landed attempt 1, after a rebase following a
+                                 fold-check refusal
+        ->17:47Z          4      REFUSED, refused:fragments-to-trunk:raced:3
+        ->17:51Z          4      REFUSED, refused:fragments-to-trunk:raced:3
+
+      Three lands, two outright refusals, and the refusals are consecutive and
+      current. The fragments were unpublishable from this host and had to be
+      handed to a fat host to land on their behalf.
+
+      THE REGIME, because the number means nothing without it. Floor tier:
+      Intel N100, 4 logical CPUs, checkout on a drvfs mount inside WSL2. The
+      expensive step is the lane's validation of trunk's fold with the new
+      fragments, which costs ABOUT TEN MINUTES per attempt here against about
+      one minute on macuahuitl. Trunk moved eight times in the 05:53-07:02Z
+      window with gaps of 84 to 296 seconds while the fleet was busy. A bound
+      of three attempts at ten minutes each cannot win against a cadence of
+      two to five minutes; the same bound at one minute per attempt wins
+      comfortably, which is why this reproduces on the floor tier and nowhere
+      else.
+
+      WHAT IS NOT THE PROBLEM, so nobody re-derives it. Not fragment count:
+      the one-fragment push and the four-fragment push both landed when trunk
+      was quiet. Not the hook's other checks, which pass in seconds. Not
+      network. Not a wrong base: attempts 2 and 3 correctly rebuild on the new
+      tip, and the fold check that refused a push earlier the same night
+      (1261-bn7v, a push that would have dropped twelve of another host's
+      fragments) is a guard working exactly as designed. The cost is the
+      revalidation itself, repeated in full against each new tip although the
+      FRAGMENTS never change between attempts - only the base does.
+
+      ONE COORDINATION DATUM FROM THE SAME NIGHT, because it bears on any fix
+      that reads the worktree: a background agent spawned into the SAME
+      working directory ran git checkout and moved this session's HEAD
+      mid-flight. Nothing was lost and the reflog said checkout and not reset,
+      but the lane selects fragments FROM THE WORKTREE, so an agent switching
+      branches under a running push can silently change the set being pushed.
+      Committing agents want an isolated worktree.
+    next_action: >
+      CANDIDATES, not criteria - the closure is the outcome, and an
+      implementer who finds a third shape should take it. (1) Cache the fold
+      validation against the base it validated, so a moved base rechecks only
+      the delta rather than the whole fold; the fragments are identical across
+      attempts and only the base differs. (2) Fall back automatically to the
+      work-ref flow when the attempts are exhausted, so a losing push ends in a
+      pushed ref rather than in nothing. Raising the retry bound is NOT a
+      candidate: it trades a refusal for a slower refusal and leaves the
+      asymmetry intact. Measure on a floor host during a BUSY window, because
+      this does not reproduce at rest - a quiet-trunk run lands on attempt 1
+      and proves nothing.
+    provenance: |
+      esmeraldinha 2026-09-21. Five windows measured across one night while
+      doing unrelated work, which is why the regime is trustworthy: nobody was
+      trying to produce this result. Filed at the coordinator's request after
+      the second consecutive refusal left four fragments stranded; they landed
+      only because a fat host fetched the ref and pushed them on this host's
+      behalf.

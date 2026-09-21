@@ -1,0 +1,106 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-only-push-lane-answers-nothing-new-and-exits-zero-when-a-commits-plan-changes-are-all-outside-the-paths-it-carries-so-a-report-that-will-never-land-is-indistinguishable-from-one-that-just-did
+    order: 1336-k4ih
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [agent-safety, measurement, plan-lane, release]
+    estimated_hours: 2
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+    title: |
+      the plan-only lane answers skip:fragments-to-trunk:nothing-new and EXITS 0 when a commit's plan/ changes lie entirely outside the paths it carries, so a report that will never land looks exactly like one that just did
+    context: |
+      MEASURED 2026-09-21 on yolanda-windows, pushing the v56.9.21.1 Windows
+      smoke report.
+
+      WHAT HAPPENED. The report was committed at plan/issues/smoke-e2e-findings-v56.9.21.1-2026-09-21-windows-yolanda.md
+      and pushed with scripts/push-plan-fragments-to-trunk.sh. The lane
+      answered:
+
+        skip:fragments-to-trunk:nothing-new
+
+      and exited 0. Nothing landed. The file was still absent from
+      origin/linux-next, and I only learned that by reading it back with
+      git cat-file against the remote.
+
+      THE LANE IS BEHAVING CORRECTLY AND THAT IS THE POINT. Its scope is
+      plan/index.d and plan/loop_status.d; plan/issues/*.md is neither, so
+      there genuinely was nothing new FOR THIS LANE to carry. The defect is
+      that the verdict is reported in the vocabulary of success for a caller
+      who has just committed work under plan/ and asked this tool to push it.
+      "nothing new" is true of the lane's own scope and false of the caller's
+      intent, and the two are indistinguishable at the exit code and at the
+      line.
+
+      WHY THIS IS NOT A DOCUMENTATION PROBLEM. A host that has read the
+      script's header knows the scope. A host mid-cycle, having just written a
+      report, runs the plan push because that is what one runs for plan work,
+      reads ok-shaped output and a zero exit, and moves on. The report then sits
+      unpushed for as long as nobody re-reads the remote. On this run the cost
+      was minutes because I check pushes against the remote by habit; the same
+      shape has cost this fleet hours before, and an unpushed claim gains
+      priority as it sits under earliest-wins.
+
+      THIS IS THE FOURTH ZERO-EXIT-MEANS-FAILURE INSTANCE ON THIS HOST IN ONE
+      DAY, and the regimes differ enough that it is a class and not a script:
+        - a pre-push refusal read through `| tail -12`: the hook printed its
+          reason and the pipe discarded it; the wrapper reported 0. I then
+          diagnosed a defect that did not exist.
+        - `winget install` of Sysinternals FAILED a package hash check; piped
+          through `Select-Object -Last 8`, the wrapper reported 0, and I nearly
+          reported the install as successful.
+        - this lane: skip + exit 0 while nothing landed.
+        - the forge's fleet checker (yolanda-tillandsias-forge, same box):
+          printed EXIT=0 alongside todos=2.
+      In every case the verdict was in the TEXT and the exit code was not it.
+      Two of the four were pipes I introduced; two were tools reporting a
+      non-success outcome through a success code.
+    next_action: |
+      Nobody holds this.
+      1. NAME WHAT WAS NOT CARRIED. When no explicit paths were given and the
+         commit range touches plan/ files outside plan/index.d and
+         plan/loop_status.d, the skip line must LIST those paths. The caller's
+         own file appearing in a "not carried" list is unambiguous in a way
+         that "nothing-new" can never be.
+      2. DISTINGUISH THE TWO SKIPS. `nothing-new` should mean "every fragment
+         you have is already on trunk". A commit carrying plan/ work this lane
+         does not handle is a different outcome and deserves a different token,
+         so a reader can tell them apart without knowing the lane's scope.
+      3. SAY WHERE IT GOES. plan/issues/*.md lands through a work ref and a PR;
+         the skip line should say so, because the host reading it is by
+         definition one that did not know.
+      Do NOT fix this by widening the lane to carry plan/issues. The lane's
+      narrow scope is what lets it skip the build stamp; the defect is the
+      report, not the boundary.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable includes the fixture
+      that would score it, and pinning a litmus name before it exists is
+      refused by 885-92iu. When it lands the guard is
+      litmus-plan-lane-names-uncarried-paths, driving the script on a commit
+      whose only plan/ change is a plan/issues/*.md file and asserting the
+      verdict NAMES that path and is not the bare nothing-new token; same
+      commit as the fix (1136-n8sh).
+    verifiable_closure: |
+      On a commit whose plan/ changes are all outside plan/index.d and
+      plan/loop_status.d, scripts/push-plan-fragments-to-trunk.sh emits a skip
+      verdict that LISTS the uncarried paths and names the lane that does carry
+      them, rather than the bare skip:fragments-to-trunk:nothing-new. Pre-fix
+      result, measured on yolanda-windows 2026-09-21: a commit whose only plan/
+      change was the v56.9.21.1 smoke report produced
+      skip:fragments-to-trunk:nothing-new with exit 0, named no path, and landed
+      nothing — the absence confirmed by git cat-file against origin/linux-next
+      after the tool had reported no problem.
+
+events:
+  - packet_id: the-plan-only-push-lane-answers-nothing-new-and-exits-zero-when-a-commits-plan-changes-are-all-outside-the-paths-it-carries-so-a-report-that-will-never-land-is-indistinguishable-from-one-that-just-did
+    event:
+      type: note
+      ts: "2026-09-21T17:45:00Z"
+      host: yolanda-windows
+      summary: |-
+        found by reading the pushed file back from the remote rather than by trusting the ok line; the habit that caught it is the same one that caught a fragment silently dropped from an earlier push on this host the same day

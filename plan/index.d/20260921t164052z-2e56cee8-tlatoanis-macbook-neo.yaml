@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: correction
+      ts: "2026-09-21T16:40:52Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t164052z
+      host: tlatoanis-macbook-neo
+      summary: |
+        CORRECTION TO THIS ROW'S POPULATION FIGURE. The row says 142 of 1,450 fragments contain a packet whose closure the checker cannot read. THAT NUMBER IS WRONG AND OVERSTATES THE DEFECT BY TWO ORDERS OF MAGNITUDE. The measured figure is 3.
+
+        HOW I GOT IT WRONG, twice, in the same measurement.
+        First, the metric counted every packet whose captured closure text was empty. An EVENT fragment has no verifiable_closure at all, so it counts as unreadable under that metric — conflating ABSENT with UNPARSEABLE. Most of the 142 are event fragments doing nothing wrong.
+        Second, when I re-measured I selected candidate files with a grep for the phrase verifiable_closure, which matched PROSE MENTIONS of the key inside other fields — one fragment's unscoreable text quotes the key in a sentence — so the denominator was 164 when the real count of fragments carrying the key is 123. Mention versus use, in my own instrument, which is the same trap this night produced three times elsewhere.
+
+        THE MEASURED NUMBERS, with a line-anchored selector for the key and the same metric applied to both versions of the splitter:
+          fragments carrying a real verifiable_closure key      123
+          yielded no closure text, OLD splitter                   9
+          yielded no closure text, NEW splitter                   6
+        The 6 that remain all carry verifiable_closure with an explicitly empty string. That is a DELIBERATE empty closure, which the checker already documents and already refuses through the missing-obligation path. They are not parse failures and the fix must not reclassify them.
+
+        SO THE FIX RESOLVES 3 FRAGMENTS, not 142.
+
+        THE DEFECT ITSELF IS UNCHANGED AND STILL REAL. The splitter does reset its record on any list item at indent 2 or 4, and a closure written below such an item is not read — demonstrated directly, not inferred: row 1330-j5is was refused for carrying no scorable obligation while carrying a verifiable_closure AND an explicit unscoreable, and re-indenting its list items from 4 to 6 made it pass with no other change. What I had wrong is how MANY existing fragments are shaped that way. Almost all use indent 6 for list items, so the tree has largely avoided it by convention rather than by the checker being right.
+
+        WHAT THIS CHANGES ABOUT THE ROW'S PRIORITY. It is still a real defect and still fails silently in the direction that looks like success, but it is not a fleet-wide 142-row problem. If the priority was set by the number, it should be revisited. I am not lowering it unilaterally.
+
+        ALSO WITHDRAWN: the closure's regression-corpus clause naming "the 142" as the corpus. The corpus is the 3 affected fragments plus a composed fixture; the 6 empty-closure rows belong in the fixture as a NEGATIVE control, because a fix that starts refusing them would be a new false-refusal class.
+
+        ALSO NOT IMPLEMENTED, and deliberately: the closure asked for a packet whose closure cannot be parsed to be REFUSED rather than deferred. I built that, measured it, and removed it before proposing it. With the splitter fixed, the only rows that reach it are the 6 deliberately-empty ones, so the branch would have converted a documented, handled case into a new refusal — shipping a false-refusal class to satisfy my own closure text. The refuse-not-defer principle stands as an argument; it needs a signal that distinguishes unparseable from empty, and I do not have one.

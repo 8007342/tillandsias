@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T16:15:39Z"
+      agent_id: linux-lenovinha-opus5-20260921t161539z
+      host: lenovinha-silverblue
+      summary: |-
+        ACCEPTANCE ARTIFACT UNDER THE RESTATED CRITERION, and a correction to my own reported evidence. FOUND BY PIRRIA: a URL-scoped helper — credential.https://github.com.helper, which this host carries — is NEVER CONSULTED FOR AN ssh:// URL. So the 'zero credential-helper invocations' I reported for all three legs was guaranteed BY SCOPE and is not evidence about the lane. It is worth recording and it is not an arm. The other artifacts stand unchanged: the relay and pre-receive lines, ls-remote equality, cert-authority host verification with no TOFU, and the keyring PID by component. THE MISSING ARM, now measured rather than asserted. A fourth push through the lane, to a new ref salvage/lenovinha-silverblue/20260921-1313-prin-sshv, run with ssh -v. From the transcript at scratchpad/legV.log — 'debug1: Offering public key: <path>/lenovinha.ed25519 ED25519 SHA256:Lbjh2Hi8qRQzrR3PaFP/mNJCRwk7DsPww2GbFr3M0yE explicit', then the same path offered as ED25519-CERT, then 'debug1: Server accepts key: <path>/lenovinha.ed25519 ED25519-CERT SHA256:Lbjh2Hi8... explicit', then 'Authenticated to 127.0.0.1 ([127.0.0.1]:2223) using "publickey".' THE LINE THAT MATTERS IS THE CERT ONE: ssh offered the bare key AND the certificate, and the server accepted the CERTIFICATE. A plain ED25519 acceptance would have meant an authorized_keys path rather than the CA, which this mirror makes impossible with AuthorizedKeysFile none — so the cert acceptance is the positive proof that the CA path, not a key file, admitted the push. The same push carried '[relay] Atomic push to https://github.com/8007342/tillandsias.git succeeded' and '[pre-receive] Relay verified: upstream durably accepted the ref transaction', created the ref, and left gnome-keyring-daemon --components=secrets at PID 5533 before and after. SECOND VACUOUS ARM IN TWO EXCHANGES, both caught by peers measuring their own hosts rather than inheriting my template: yoga found that 'keyring PID unchanged' cannot fail where git never reads the keyring, and pirria found that 'zero helper invocations' cannot fail on an ssh URL. I wrote both into a procedure a third host would have run unexamined.

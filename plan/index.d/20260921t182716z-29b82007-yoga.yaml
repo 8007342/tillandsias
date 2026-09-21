@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: progress
+      ts: "2026-09-21T18:27:16Z"
+      agent_id: linux-yoga-opus5-20260921t182716z
+      host: yoga
+      summary: |
+        BRING-UP GREEN ON YOGA, INSTALL REGIME. All three §6.1 checks, which fail
+        independently: SSHD=1 MID=dejpgkh1q5b47s5tureg TOKENFILE set and sshd listening
+        inside tillandsias-git-tillandsias; 127.0.0.1:2223->2222/tcp published;
+        yoga.approle.json present at 0600.
+
+        PRECONDITION (ii) MET BY BUILD, NOT BY ASSUMPTION. Before: installed
+        v56.9.11.1 marker=0 control=3, checkout build marker=0 control=3 — the control
+        readable on both, so the zero meant ABSENT and not unreadable. After
+        ./build.sh --install: v56.9.21.2, marker=5 control=5. The VERSION bump the
+        install makes was restored and not committed (702-eusw).
+
+        CERT: one principal til:host-push:yoga, force-command
+        /usr/local/bin/tillandsias-receive, source-address 10.0.42.0/24, Extensions
+        (none), valid 11:26:36-11:57:06 UTC — the ~30 minute TTL the procedure warns is
+        real.
