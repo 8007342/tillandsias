@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: claim
+      ts: "2026-09-21T18:07:15Z"
+      agent_id: linux-yoga-opus5-20260921t180716z
+      host: yoga
+      summary: |
+        YOGA ACCEPTANCE SLICE CLAIMED. Both gates verified from this host before
+        claiming: 88b0679d9 is an ancestor of origin/linux-next AND of HEAD, 0 commits
+        behind origin, and lenovinha's written procedure is present at
+        skills/initialize-bare-metal-host/SKILL.md §6 (275cce0a8 an ancestor).
+
+        REGIME CHOSEN: THE INSTALL PATH, deliberately, because it is the one lenovinha's
+        run does not evidence. Their §6 says so plainly — their acceptance ran entirely
+        with ./target/release/tillandsias while the installed binary stayed v56.9.12.2
+        and `./build.sh --install` was never run there. Two regimes are offered; taking
+        the same one twice would make this host a repetition rather than a second
+        regime, which is the whole reason the dogfooding is spread across hosts.
+
+        THE PRECONDITION PROBE, run before anything else, on BOTH binaries present here:
+          /var/home/tlatoani/.local/bin/tillandsias (v56.9.11.1)  marker=0 control=3
+          ./target/release/tillandsias                            marker=0 control=3
+        The control reads 3 on both, so `strings` can read these binaries and a marker
+        of 0 MEANS ABSENT rather than unreadable — which is exactly what the control is
+        for. NEITHER binary carries the fixes: the installed one is three releases older
+        than the cut, and the checkout build is stale relative to the tree it sits in.
+        So the probe's answer is "build before proceeding", and it would have been
+        invisible without it — `--version` prints no sha and cannot answer this.
+
+        That is also a finding about the release timeline in §6 generalising: the note
+        says v56.9.21.1 was cut ~11h before the fixes landed, so every host on that
+        release is stale. This host is further back still (v56.9.11.1), so the same
+        conclusion arrives by a different route.
+
+        NEXT: ./build.sh --install, then re-probe the INSTALLED binary and require
+        marker>=1 before touching the lane. The VERSION bump that --install makes will
+        be restored and not committed (702-eusw).
