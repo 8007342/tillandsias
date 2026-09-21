@@ -121,16 +121,191 @@ lane, or clear the container deliberately if you know it is yours.
 Expected in v1 — see below. `sshd NOT running` inside the mirror is the current
 state, not a fault you can fix here.
 
-## v1 limits
+## 6 — The credential-free push lane (Silverblue dogfooders)
 
-**The ssh push lane is not up. Pushes still take the keyring path.** Work is in
-flight on 1310-5e6g; the mirror's host-signer identity is not yet wired, so the
-Vault signer answers 403 and the mirror's sshd does not start. v2 of this skill
-adds the lane when it works, and the fleet-wide instruction waits for a host
-push that has travelled host → mirror → GitHub.
+**Who this is for.** The Silverblue hosts are the dogfooders — lenovinha, yoga,
+pirria. Windows and macOS likely never need it.
 
-`tillandsias --github-status` does not exist yet either — it is a 1288-5qpn
-deliverable. Step 2's checker reports the `github=` field in its place.
+**Preconditions, both testable before you start.** The lane's six fixes must be
+on trunk, and your own tree must contain them:
+
+```bash
+git merge-base --is-ancestor 88b0679d9 origin/linux-next && echo "fixes on trunk"
+git rev-list --count HEAD..origin/linux-next        # 0, or merge first
+```
+
+If the first prints nothing, **stop** — the lane cannot come up, and every
+failure below will be one of the six rather than anything about your host.
+
+**The lane stays default-off.** Both variables are explicit on every command;
+nothing here changes a default for anyone else.
+
+### 6.1 — Bring the stack up with the lane on
+
+```bash
+TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia \
+TILLANDSIAS_MIRROR_SSHD=1 \
+TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
+  tillandsias --bash <project> --debug
+```
+
+Exiting the shell leaves the stack up. `RC=124` from a `timeout` wrapper is the
+interactive shell being cut off, not a failure.
+
+**Done when** all three are true — check each, they fail independently:
+
+```bash
+podman exec tillandsias-git-<project> sh -c \
+  'echo "SSHD=${TILLANDSIAS_MIRROR_SSHD:-unset} MID=${TILLANDSIAS_MIRROR_ID:-unset} TOKENFILE=${TILLANDSIAS_VAULT_TOKEN_FILE:-unset}"; pgrep -a sshd || echo "sshd NOT running"'
+podman ps --format '{{.Names}}\t{{.Ports}}' | grep git-      # expect 127.0.0.1:2223->2222/tcp
+ls -l ~/.config/tillandsias/host-push/                       # expect <host>.approle.json, mode 0600
+```
+
+`sshd NOT running` with all three variables set means the signer agent has no
+sink — look at `/tmp/tillandsias-sshd/sshd.err` **inside the container**, not at
+`podman logs` (two producers write "Connection from" into different files; the
+container log's are the git daemon's healthcheck, every 2 seconds).
+
+### 6.2 — Mint this host's push certificate
+
+```bash
+scripts/tillandsias-host-push-cert.sh
+```
+
+**Done when** it prints one line:
+
+```
+ok:host-push-cert:<…>/<host>.ed25519-cert.pub known_hosts=<…>/known_hosts alias=git-<mirror-id>
+```
+
+`known_hosts=ABSENT:<path>` means the host-CA cache is missing — the certificate
+is usable but host verification is not wired, and §6.3 will fail at
+verification rather than at authentication. Any `fail:` line installs nothing.
+
+Verify what you were handed rather than trusting the verdict:
+
+```bash
+ssh-keygen -L -f ~/.config/tillandsias/host-push/$(hostname -s).ed25519-cert.pub
+```
+
+Expect `user certificate`; `Principals:` carrying **exactly one** line,
+`til:host-push:<host>`; `force-command /usr/local/bin/tillandsias-receive`;
+`source-address` the **enclave subnet** (10.0.42.0/24, NOT 127.0.0.1/32 — a host
+arrives through the rootless published port and sshd sees an enclave peer);
+`Extensions: (none)`; and ~30 minutes of validity.
+
+**The TTL is real.** A cert minted more than half an hour ago fails
+`Permission denied (publickey)`. Re-run the mint; that is the design, not a
+fault.
+
+### 6.3 — Push through the lane
+
+```bash
+KH=~/.config/tillandsias/host-push/known_hosts
+K=~/.config/tillandsias/host-push/$(hostname -s).ed25519
+ALIAS=$(awk '/^@cert-authority/{print $2; exit}' "$KH")
+
+GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$KH -o StrictHostKeyChecking=yes \
+  -o HostKeyAlias=$ALIAS -o BatchMode=yes -o IdentitiesOnly=yes -i $K -p 2223" \
+  git push "ssh://git@127.0.0.1/srv/git/<project>" HEAD:refs/heads/<ref>
+```
+
+**`HostKeyAlias` is required, and `StrictHostKeyChecking=yes` is not optional.**
+The mirror's host certificate is valid for the principal `git-<mirror-id>`, and
+ssh matches a host certificate against the name you ASKED FOR — connecting to
+`127.0.0.1` by address can never match it. `-o HostName=…` does not help; it
+makes ssh key the known_hosts lookup on the address too. Never use
+`StrictHostKeyChecking=no`: it TOFUs a key that changes on every mirror rebuild,
+and the next connection fails `REMOTE HOST IDENTIFICATION HAS CHANGED`.
+
+**Done when** the remote says both lines:
+
+```
+remote: [relay] Atomic push to https://github.com/<owner>/<repo>.git succeeded
+remote: [pre-receive] Relay verified: upstream durably accepted the ref transaction
+```
+
+A `[pre-receive] Push rejected: configured upstream did not durably accept the
+ref transaction` means the relay failed and **refused rather than stranding your
+ref** — that is correct behaviour. Read the `[relay]` line above it for the
+cause; it names the layer.
+
+### 6.4 — The three acceptance legs, and their artifacts
+
+Run all three the same way. One leg taken differently is not a third
+measurement.
+
+| leg | ref |
+|---|---|
+| (a) | `linux-next` — a plan-only commit cherry-picked onto a clean base off `origin/linux-next` |
+| (b) | `work/<order>` |
+| (c) | another side branch — a `salvage/<host>/<date>-<slug>` ref |
+
+For **each** leg, capture four artifacts. Keep the push transcript in a file and
+cite the FILE, not remembered text:
+
+```bash
+git ls-remote origin refs/heads/<ref>        # equals your local head at push time
+grep -ac 'git-credential' <transcript>       # expect 0
+pgrep -f 'gnome-keyring-daemon.*components=secrets' | head -1   # before AND after
+```
+
+**Name the keyring daemon by component.** There are two on a Silverblue host —
+`--daemonize --login` and `--start --foreground --components=secrets`. Secret
+Service is the second; `ps -C gnome-keyring-d | head -1` can return either.
+
+**Leave the gh helper configured.** `credential.https://github.com.helper` stays
+in place, so zero invocations means it demonstrably did not fire — which is a
+stronger claim than it being absent.
+
+If trunk moves before you report leg (a), give **ancestry** rather than a stale
+equality: `git merge-base --is-ancestor <your-sha> origin/linux-next`.
+
+### 6.5 — What this proves, and what it does not
+
+It proves the lane for **your host**, with the lane **default-off**. It proves
+nothing about the **forge** client, which pushes through the same sshd and the
+same `tillandsias-receive` but has not been exercised. Do not cite another
+host's legs as evidence for your own, and do not cite any of them as evidence
+for the forge.
+
+## Limits
+
+**The ssh push lane works, on a host that has the six fixes** (§6). It stays
+**default-off**: nothing comes up unless `TILLANDSIAS_MIRROR_SSHD=1` and
+`TILLANDSIAS_HOST_PUSH_HOST` are both given explicitly. A host without them
+behaves exactly as it did before, and pushes take the keyring path.
+
+**`tillandsias --github-status` still does not exist** — it is a 1288-5qpn
+deliverable. §2's checker reports the `github=` field in its place.
+
+**Which binary.** `tillandsias` on `PATH` may be an older install than your
+checkout builds. The installed app **refuses** to rebuild the enclave from its
+own older embedded assets and says so, which is correct — but this skill's
+commands assume whichever binary matches the tree you are testing. Use
+`./target/release/tillandsias` when working from a checkout, and suspect a stale
+binary FIRST when behaviour does not match the source:
+
+```bash
+strings target/release/tillandsias | grep -c '<a-symbol-your-change-added>'
+```
+
+**Before you say "filed", "closed" or "landed".** A host whose pushes are
+silently not arriving is indistinguishable from a quiet one until someone runs
+status on the other end:
+
+```bash
+git ls-remote origin refs/heads/linux-next
+git rev-list --count origin/linux-next..HEAD     # 0, or it never left
+```
+
+**A merge is part of the read.** `tillandsias-plan` folds from the WORKTREE, so
+a stale fold answers confidently and wrongly — a row read `ready` here while its
+claim sat on trunk 26 commits ahead. Check before trusting any status:
+
+```bash
+git rev-list --count HEAD..origin/linux-next     # 0, or merge first
+```
 
 ## Repairs
 
@@ -142,3 +317,6 @@ evolves — it is a log of what actually broke, not of what might.
 - date: 2026-09-20 | host: lenovinha-silverblue | symptom: the whole enclave absent; `tillandsias-vault` had been `Exited (143)` for three days and nobody noticed | command: `podman ps -a --format '{{.Names}}\t{{.Status}}'` | fix: `tillandsias --ensure-enclave` — it is idempotent and re-provisions policies, so it is safe to run on a partially-up host
 - date: 2026-09-20 | host: lenovinha-silverblue | symptom: every relay push failing `fatal: Authentication failed`, mirror otherwise healthy | command: `podman exec tillandsias-git-<project> sh -c 'curl -s -o /dev/null -w "%{http_code}" --cacert /etc/tillandsias/ca.crt -H "X-Vault-Token: $(cat /tmp/tillandsias-vault-token)" https://vault:8200/v1/secret/data/github/token'` (200 means present, 403 means the mirror cannot read it, 404 means unseeded) | fix: the operator seeds it with `tillandsias --github-login --with-token`; no agent may do this
 - date: 2026-09-20 | host: lenovinha-silverblue | symptom: lane launch exits non-zero with "REFUSING to launch tillandsias-<project>-forge-maintenance: the name is held by a RUNNING container" | command: `podman ps --format '{{.Names}}' \| grep forge-maintenance` | fix: a previous lane of your own left it running; remove it deliberately (`podman rm -f <name>`) only after confirming no sibling lane owns it — order 494 refuses automatically because the workspace may hold unpushed work
+- date: 2026-09-20 | host: lenovinha-silverblue | symptom: this skill's own commands fail because `tillandsias` on PATH is an older install than the checkout builds; the app refuses with "Continuing would rebuild the enclave's images from this older app's embedded assets" | command: `tillandsias --version` against `./target/release/tillandsias --version` | fix: use the checkout's binary when testing a checkout; the refusal is correct and is protecting you from a silent runtime downgrade
+- date: 2026-09-20 | host: lenovinha-silverblue | symptom: a code change appears to have no effect and you begin diagnosing a logic bug that does not exist | command: `strings target/release/<bin> \| grep -c '<symbol-your-change-added>'` | fix: rebuild; a stale release binary cost four diagnostic steps here, and this check settles it in ten seconds — run it FIRST
+- date: 2026-09-21 | host: lenovinha-silverblue | symptom: sshd is running and the cert is valid, but every push through the lane is rejected with "[relay] Vault Agent token is expired or unavailable" or "Could not resolve host: github.com", while the same commands run by hand inside the container succeed | command: `podman exec <mirror> sh -c 'env -i PATH=/usr/local/bin:/usr/bin:/bin sh -c "vault-cli lookup-self >/dev/null 2>&1; echo rc=\$?"'` — rc=2 reproduces it | fix: sshd hands a forced command ONLY what SetEnv passes; the container's environment is not inherited. The rendered sshd_config must carry VAULT_TOKEN_FILE and the six proxy variables. Over the anonymous git:// daemon the relay inherits the entrypoint's env, which is why that path works and this one did not
