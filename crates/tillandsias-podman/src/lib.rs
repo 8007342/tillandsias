@@ -1104,8 +1104,8 @@ fn podman_cmd_sync_std() -> std::process::Command {
 /// That variable is PROCESS-global and cargo runs tests in parallel threads
 /// inside a single process, so every test in this crate that points it at a
 /// stub must take the SAME guard. Two modules previously each declared their
-/// own — `env_lock()` in the module below and a `tokio::sync::Mutex` in
-/// backend.rs — and two mutexes over one variable serialise nothing against
+/// own — a `std::sync::Mutex` in the module below and a `tokio::sync::Mutex`
+/// in backend.rs — and two mutexes over one variable serialise nothing against
 /// each other.
 ///
 /// MEASURED rather than reasoned about: backend.rs's prompt test installed its
@@ -1114,19 +1114,31 @@ fn podman_cmd_sync_std() -> std::process::Command {
 /// failing with a wall of a's where it expected `ok`. The workspace gate
 /// reported that as a NEW failure on a head that touched neither file.
 ///
-/// A std mutex, not a tokio one, and it IS held across `.await` in backend.rs's
-/// `#[tokio::test]`s. That is sound because those default to the CURRENT-THREAD
-/// flavor, whose future is never required to be `Send`. The earlier reasoning
-/// for a tokio mutex was a precaution that was not needed, and taking it is
-/// what split the lock in two.
+/// A TOKIO MUTEX, and the reason is worth keeping because the obvious argument
+/// against it is wrong in a way that compiles. backend.rs holds this guard
+/// across an `.await`; its `#[tokio::test]`s default to the current-thread
+/// flavor, so a std guard held there is SOUND — and `clippy::await_holding_lock`
+/// denies it anyway, which is a gate failure, not an opinion. Soundness was
+/// never the binding constraint. backend.rs's original instinct to reach for a
+/// tokio mutex was right; what was wrong was declaring a SECOND one instead of
+/// sharing this.
+///
+/// Sync callers take it with `blocking_lock`, which is correct precisely
+/// because they are not in a runtime — it panics if it ever is, which is the
+/// loud failure rather than the deadlock.
 #[cfg(test)]
-pub(crate) fn podman_bin_env_lock() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| std::sync::Mutex::new(()))
-        .lock()
-        // A test that panicked while holding this poisoned it; the variable is
-        // still ours to serialise, so recover rather than cascade (833-u85z).
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+pub(crate) static PODMAN_BIN_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Blocking acquisition for the crate's SYNC tests (order 1329-ud87). Async
+/// tests take `PODMAN_BIN_ENV_LOCK.lock().await` directly.
+///
+/// No poison recovery to write: a tokio mutex is not poisoned by a panicking
+/// holder, so the recovery `std::sync::Mutex` needed here (833-u85z) has no
+/// counterpart — one behaviour difference this change deliberately accepts,
+/// and the cascade that recovery prevented cannot occur for the same reason.
+#[cfg(test)]
+pub(crate) fn podman_bin_env_lock() -> tokio::sync::MutexGuard<'static, ()> {
+    PODMAN_BIN_ENV_LOCK.blocking_lock()
 }
 
 #[cfg(test)]
@@ -1319,7 +1331,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
     fn stub_podman(
         script: &str,
     ) -> (
-        (std::sync::MutexGuard<'static, ()>, impl Drop),
+        (tokio::sync::MutexGuard<'static, ()>, impl Drop),
         std::path::PathBuf,
     ) {
         use std::io::Write;
@@ -1401,9 +1413,9 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
     /// defect it guards is an interleaving: the crate passed 176/176 on the
     /// run right after the failure, so no amount of green proves its absence.
     ///
-    /// Two modules each declared their own guard — one std here, one tokio in
-    /// backend.rs — and two mutexes over one variable serialise nothing against
-    /// each other. Each author was fixing a real hazard and each fix was
+    /// Two modules each declared their own guard — a std one here, a tokio one
+    /// in backend.rs — and two mutexes over one variable serialise nothing
+    /// against each other. Each author was fixing a real hazard and each fix was
     /// correct within its module; nothing in either file could see the other.
     /// This test is what makes the third one impossible to add silently.
     ///
@@ -1427,8 +1439,13 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
                 if trimmed.starts_with("//") {
                     continue;
                 }
-                let declares_static_mutex =
-                    trimmed.starts_with("static ") && trimmed.contains("Mutex<()>");
+                // Visibility prefixes count: the one real declaration is
+                // `pub(crate) static`, and a bare `starts_with("static ")`
+                // would have missed it and passed a tree with two locks.
+                let is_static_item = trimmed.starts_with("static ")
+                    || trimmed.starts_with("pub static ")
+                    || trimmed.starts_with("pub(crate) static ");
+                let declares_static_mutex = is_static_item && trimmed.contains("Mutex<()>");
                 // The needles are ASSEMBLED rather than written whole: spelled out,
                 // these two lines would match themselves and the test would fail
                 // against a correct tree (it did, on the first run).
@@ -1455,7 +1472,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
     /// a second one, and two mutexes over one process-global variable serialise
     /// nothing against each other. The name stays because a dozen call sites
     /// below read well with it.
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    fn env_lock() -> tokio::sync::MutexGuard<'static, ()> {
         super::podman_bin_env_lock()
     }
 

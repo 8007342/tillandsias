@@ -388,7 +388,6 @@ mod tests {
     // defaults to the current-thread flavor, whose future is never required to
     // be `Send`. The tokio mutex this replaces was a precaution that was not
     // needed, and taking it is what split the lock in two.
-    use crate::podman_bin_env_lock as podman_bin_env_lock_shared;
 
     /// Order 690-7adz, the packet's fourth exit criterion: drive a deliberately
     /// STALLED podman stand-in and assert the failure is bounded and named.
@@ -402,7 +401,7 @@ mod tests {
         use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
 
-        let _env_guard = podman_bin_env_lock_shared();
+        let _env_guard = crate::PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-stalled-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
@@ -466,7 +465,7 @@ mod tests {
         use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
 
-        let _env_guard = podman_bin_env_lock_shared();
+        let _env_guard = crate::PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-prompt-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
