@@ -176,6 +176,7 @@ specs:
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
   - litmus:reset-state-contract
+  - litmus:installer-probes-by-attempt-not-by-help
   - litmus:installer-swap-atomicity
   - litmus:installer-reprovisions-on-install
   - litmus:validator-surface-currency
