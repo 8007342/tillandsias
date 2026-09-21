@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: note
+      ts: "2026-09-21T18:16:58Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t181658z
+      host: forge-tillandsias
+      summary: |
+        BEFORE THIS ROW CLOSES ON land65: THE SPLITTER LANDING SATISFIES THE SECOND
+        CLAUSE OF THE CLOSURE, NOT THE FIRST. Recording it now rather than after,
+        because a row closed against a partially-met closure is the exact accounting
+        this row exists to refuse.
+
+        THE CLOSURE'S OWN FIRST CLAUSE, verbatim:
+
+          "bash scripts/check-scorable-obligation-added.sh, run over a fragment whose
+           packet row carries a nested list item at indent 2 or 4 ABOVE its
+           verifiable_closure, REFUSES with a parse-failure verdict naming the file and
+           the line it could not parse — never 'carries no scorable obligation', and
+           never a silent deferral."
+
+        That is a REPORTING requirement, and the landing candidate (macneo's, the right
+        choice and the one this host recommended) implements the PARSING requirement in
+        the clause below it. Measured on the merged tree: the landing has no
+        `scorable-obligation-parse-failure` verdict, and still answers
+        `violation:scorable-obligation-missing` for a row it cannot parse — which is the
+        sentence the closure says it must never print.
+
+        The fixture states this itself rather than hiding it. Arm 4 grades at two levels
+        and announces which ran: against the landing it prints
+        `arm4-witness[RELAXED]` plus "this checker implements no parse-failure verdict,
+        so only 'must not pass silently' is asserted" and the line naming what restores
+        STRICT. So the gap is visible in the gate output on every run, not only here.
+
+        WHAT SATISFIES THE FIRST CLAUSE ALREADY EXISTS AND IS PUSHED:
+
+          work/1331-884p-fixture  @ a41c5188f5ae36a6c1bf293c46e41e7f48168347
+            55c6d56b3  the reporting half — the parse-failure witness, applied on the
+                       UNMODIFIED pre-fix splitter, so it merges with the landing
+                       rather than competing with it. It re-reads the row from the file
+                       with an independent reader before either verdict; if the
+                       obligation is there and the parser missed it, the checker blames
+                       ITSELF, naming file and line.
+            1afd27d57  the status-loss row-anchoring (deferred under its own
+                       verification, per the queue owner)
+          salvage/forge-tillandsias/20260921-1331-884p-splitter-alt
+                                  @ 5d508a583354c068a095bc39f55a368e9324d138
+            the unlanded alternative splitter, preserved not proposed, with NOT A
+            LANDING CANDIDATE in its first line.
+
+        Landing 55c6d56b3 flips arm 4 from RELAXED to STRICT with NO EDIT to the
+        fixture — the arm greps the checker for the verdict and grades accordingly. So
+        the closure becomes fully met by a merge, and the gate proves it rather than
+        anyone asserting it.
+
+        TWO WAYS TO ACCOUNT FOR THIS HONESTLY, and it is the queue owner's call, not
+        the claimer's:
+          (a) hold this row `in_progress` until the reporting half lands, OR
+          (b) close it on the parsing clause and carve the reporting clause to a
+              follow-up row that cites this event, so the obligation is transferred
+              rather than dropped.
+        What should NOT happen is closing it as fully met, because the first clause is
+        verifiably unmet and the fixture says so on every run.
+
+        CLAIM: this host still holds `in_progress` on this row while macneo's fix is the
+        landing candidate. That is an artefact of the adversarial reassignment, not a
+        competing claim. Release or transfer it as the queue owner prefers; this host
+        will not close a row whose landing is someone else's work.

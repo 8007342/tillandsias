@@ -162,6 +162,17 @@ there.
      stamp was written (yolanda, 2026-09-21, measured);
   4. open the PR: `gh pr create --base linux-next --head work/<order> --draft`,
      and `gh pr ready` only once the closure evidence is on the row;
+     Before `gh pr ready`, the pre-ready check: MERGE `origin/linux-next` INTO
+     THE WORK REF FIRST, then `git diff --name-status origin/linux-next...work/<order>`
+     must show no `D` line the body does not explain. The order matters and it
+     was learned the expensive way (macneo, 2026-09-21, PR #131): a work ref
+     that is behind trunk can have MORE THAN ONE merge base, git picks one and
+     says so only in a warning (`multiple merge bases, using <sha>`), and the
+     three-dot diff then describes a history that is not the one the PR
+     proposes — it showed zero deletions where the two-dot diff showed about a
+     hundred. Treat that warning as a STOP, not noise: merge trunk, re-run,
+     and only when the two-dot and three-dot diffs agree does the check mean
+     what it says.
   5. the landing queue (`scripts/land-queue.sh`, 1316-bnzt) integrates it
      ONCE, gated as one serialized landing: today every candidate pays the
      FULL tier; the light and scoped tiers (proportional to the paths a PR

@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    order: 1339-had5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, instrument, fail-loud, tooling]
+    estimated_hours: 2
+    owned_files: [openspec/litmus-tests/litmus-scorable-obligation-splitter.yaml]
+    title: |
+      a litmus step written `cmd 2>&1 | tail -1` that ALSO carries `assert_exit: 0` asserts TAIL's exit
+      status, never the subject's — tail succeeds whatever the subject did, so the assertion is
+      decoration and the step survives on `expected_behavior` alone
+    context: |
+      MEASURED ON forge-tillandsias 2026-09-21, found while applying a stream-
+      reading caution to this host's own newly-landed fixture.
+
+      THE MECHANISM. A shell pipeline's exit status is its LAST element's. So in
+
+        command: "bash scripts/test-scorable-obligation-splitter.sh 2>&1 | tail -1"
+        assert_exit: 0
+
+      `assert_exit` tests `tail`, which exits 0 after successfully printing a
+      line — including the line that says the subject failed. Measured against a
+      deliberately failing subject (the pre-fix splitter):
+
+        last line  : [violation:scorable-obligation-splitter]
+        pipeline rc: 0        <- the value assert_exit: 0 compares against
+        expected   : [ok:scorable-obligation-splitter:5/5 arms]
+        → expected_behavior MISMATCH, so the step does fail
+
+      THE STEP IS CAUGHT, BY ONE OF ITS TWO ASSERTIONS. `expected_behavior` does
+      all the work; `assert_exit` contributes nothing and cannot. It reads as a
+      second, independent check and is not one. Relax the comparison, or let a
+      future arm's last line happen to match, and the step becomes an accept
+      that cannot refuse — with an exit assertion still sitting there implying
+      otherwise.
+
+      POPULATION — DERIVED PER STEP, NOT GREPPED PER FILE. A file-level grep
+      over-counts, because an `assert_exit` may sit on a DIFFERENT step than the
+      piped one. Parsed all 448 files in openspec/litmus-tests/ with a YAML
+      parser, walked each step, and required the SAME STEP to carry both a
+      command whose pipeline ENDS in tail/head and an `assert_exit`:
+
+        litmus files parsed                                448 of 448 (0 unparsed)
+        steps whose command ends in a tail/head pipe       123
+        of those, same step also carries assert_exit         4
+        of those 4, genuinely vacuous                        3
+
+      THE FOURTH IS A FALSE POSITIVE OF MY OWN DETECTOR and is named here rather
+      than quietly dropped, because the error is the same class as the defect:
+      litmus-forge-as-only-runtime.yaml matched on the STRING ending in
+      `| head -1`, but that pipe is inside a command substitution
+      (`FORGE_IMG=$(podman images … | head -1) && … && podman run …`), so the
+      exit status is the final `podman run` and its `assert_exit` IS
+      load-bearing. My detector measured "the command text ends in a pipe to
+      tail" when the property is "the PIPELINE'S exit status is tail's". Near
+      the property, not on it.
+
+      THE THREE GENUINE ONES, all exactly `bash <script> 2>&1 | tail -1` with
+      `assert_exit: 0`:
+
+        litmus-added-test-is-referenced-shape.yaml    ok:added-test-guard-proven:10
+        litmus-reset-flags-accepted.yaml              reset-flags-accepted 7/7
+        litmus-scorable-obligation-splitter.yaml      ok:scorable-obligation-splitter:5/5 arms
+
+      A SECOND, SEPARABLE HALF — THE VERDICT LEAVES BY THE OTHER DOOR. In the
+      splitter fixture `note()` writes stdout and `fail()` writes stderr, and
+      the final `violation:` line goes to stderr. Measured on a failing run with
+      the streams separated:
+
+        real exit status                 1   (correct; the process does signal)
+        violation/FAIL lines on stdout   0
+        violation/FAIL lines on stderr   5
+        last line of stdout              ok:scorable-splitter:arm5-prose-immunity:…
+
+      So a reader capturing ONLY stdout sees a stream ENDING IN `ok:` with no
+      failure anywhere in it. The litmus binding is not that reader — it uses
+      `2>&1` — but any pipeline that takes one stream and not the other is, and
+      which half it sees depends on its redirection rather than on the state of
+      the world. That is how two hosts produced two honest accounts of one
+      command earlier tonight.
+
+      A PREDICTION THAT WAS WRONG, recorded because the next reader will have
+      the same intuition. I predicted that mixed buffering under a pipe — stdout
+      block-buffered, stderr unbuffered — would reorder the merged stream so
+      `tail -1` returned an arm's `ok:` line instead of the verdict. MEASURED: it
+      does not; the last line is `violation:scorable-obligation-splitter`,
+      correctly. Stream reordering under a pipe is a real phenomenon and it is
+      NOT what happens here, so nobody should re-derive it as the explanation.
+      The defect is the exit status, not the ordering.
+
+      NOT THE BINDING AUTHOR'S SLIP. `| tail -1` is there to keep a verdict line
+      readable, which is reasonable; `assert_exit` is there because steps
+      normally have one. Each is defensible and their combination is not, and
+      nothing in the binding grammar says so.
+    verifiable_closure: |
+      bash scripts/check-litmus-binding-assertions.sh (new) — a litmus step whose command is a pipeline
+      ENDING in tail/head and which also carries `assert_exit` is REFUSED, naming the file and the step,
+      because the assertion tests the pipe and not the subject. A pipe inside a command substitution is
+      NOT flagged (litmus-forge-as-only-runtime.yaml is the negative control and must pass).
+      PRE-FIX RESULT, so the closure is falsifiable — FAILS today: three steps match
+      (litmus-added-test-is-referenced-shape, litmus-reset-flags-accepted,
+      litmus-scorable-obligation-splitter), and against a failing subject the splitter step measures
+      pipeline rc 0 while the subject's own rc is 1.
+    next_action: |
+      Two changes, and they are separable.
+      FIRST, the three steps: drop the pipe so the status is the subject's — `assert_exit` then asserts
+      the fixture, and `expected_behavior` can match against the full output instead of one line.
+      Where a single line is genuinely wanted, keep the pipe and DELETE `assert_exit` rather than
+      leaving a decoration that reads as a check.
+      SECOND, the guard above, so the combination cannot return. Write it with the negative control
+      named — a detector that flags a substitution-internal pipe repeats this row's own false positive.
+      SEPARATELY and NOT in this row's scope: the splitter fixture's final verdict line should reach
+      stdout in both the pass and fail cases, keeping per-arm detail on stderr, so the verdict is
+      readable regardless of redirection. That rides the fixture's own ref.
+    trace: [order:1331-884p]
