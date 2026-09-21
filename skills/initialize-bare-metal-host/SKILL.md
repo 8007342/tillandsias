@@ -62,6 +62,19 @@ only the three legs of §6 show that. The field exists because this verdict was
 otherwise silent about the lane, and a green that is true and ADJACENT gets read
 as coverage.
 
+**On a FROM-ZERO host the `lane=` field cannot be read at all, and that is
+structural rather than a fault.** `lane=` is emitted only on the `ok:` line; a
+host with no mirror yet exits earlier with
+`todo:initialize-bare-metal-host:mirror:<command>` and rc=1, and never reaches
+it. The mirror is PER-PROJECT and comes up at lane launch (§1's second command),
+so before that bring-up there is no mirror to ask about a lane.
+
+**So ask for `lane=` AFTER §6.1's bring-up, never before it.** A from-zero
+operator who looks for the field first will read its absence as the lane being
+broken, when what it means is that the question has not become askable yet.
+Measured on pirria 2026-09-21 in the stable-channel smoke, from a host reset to
+zero with `podman system reset --force`.
+
 **Why a separate read exists.** The step-1 commands are ensure-shaped, so
 running them is the remedy for almost everything. That is exactly why "did it
 work?" must not be answered by running the remedy again — that cannot tell a

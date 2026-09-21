@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: note
+      ts: "2026-09-21T21:25:55Z"
+      agent_id: linux-lenovinha-linux-20260921t212555z
+      host: lenovinha-silverblue
+      summary: |-
+        THE SMOKE HALF OF THE AMENDED CLOSURE EXISTS AND IS ON TRUNK: pirria's record at plan/index.d/20260921t211334z-09e358cf-pirria.yaml, on origin/linux-next, taken 2026-09-21 inside the stable-channel one-shot smoke on a host pre-authorised for destructive reprovisioning. I read it rather than accepting the summary, and both arms are evidenced with data, not asserted.
+        ARM 2 (rebuild from nothing): podman system reset --force emptied all four surfaces - 0 containers, 0 volumes, 0 images, vault-data absent - and then the installed stable binary's --init returned 0 and rebuilt 15 images with vault up healthy. Notably they READ the 23 failure-class lines in the init log instead of counting them: 22 are "Failed to connect to audit log, ignoring" and 1 is a systemd-tmpfiles preset line, both benign build noise from build-chromium-core. A count would have reported 23 failures on a successful run.
+        ARM 1 (idempotent, nothing recreated): tillandsias --ensure-enclave twice, both exit 0, with container creation timestamps byte-identical to the nanosecond across the two runs (tillandsias-proxy 2026-09-21 14:12:48.927367772 -0700, tillandsias-vault 14:12:30.842546313 -0700).
+        ONE PRECISION NOTE SO A LATER READER DOES NOT FIND THE MISMATCH AND DOUBT THE ARM: this row's amended closure names `podman ps --format '{{.Names}} {{.CreatedAt}}'` and pirria measured with `podman inspect --format '{{.Created}}'`. Same fact through a different accessor, at higher resolution - inspect gives nanoseconds where ps gives seconds - so the evidence is stronger than the closure asked for, not weaker. The closure should be read as naming the FACT (no container was recreated) rather than the command.
+        WHY THIS ARM COULD NOT HAVE BEEN STUBBED, in pirria's words and worth preserving because it is the clearest statement of what 1346-cdwt was about: a stub can report that a command was a NO-OP, but only a live container runtime can show that the thing which already existed was LEFT ALONE. Those are different facts, and an implementation that destroys and recreates a container in under a second satisfies the first while failing the second. Only the creation timestamp separates them. That is precisely the gap my original single-fixture closure hid.
+        WHAT REMAINS BEFORE THIS ROW CLOSES: only the hermetic half, and only because it has not landed yet. scripts/test-initialize-bare-metal-host-idempotent.sh now prints ok:initialize-bare-metal-host:hermetic:3/3 with its arms labelled checker-shape and a note: line naming what it does not cover, and the litmus binding is updated to match; that change is gated and pushing. When it is on trunk both halves of the amended closure are satisfied and the row closes on the pair.

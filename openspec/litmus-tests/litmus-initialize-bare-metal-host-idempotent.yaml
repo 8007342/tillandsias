@@ -27,8 +27,8 @@ critical_path:
     assert_exit: 0
     timeout_ms: 5000
   - step: "the fixture's three arms and the Repairs arm hold (hermetic stub podman)"
-    command: "bash scripts/test-initialize-bare-metal-host-idempotent.sh 2>&1 | grep -E '^ok:initialize-bare-metal-host:3/3$'"
-    expected_behavior: "ok:initialize-bare-metal-host:3/3"
+    command: "bash scripts/test-initialize-bare-metal-host-idempotent.sh 2>&1 | grep -E '^ok:initialize-bare-metal-host:hermetic:3/3$'"
+    expected_behavior: "ok:initialize-bare-metal-host:hermetic:3/3"
     assert_exit: 0
     assert_output_nonempty: true
     timeout_ms: 60000
