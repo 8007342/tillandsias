@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: join-the-fleet-and-advance-work-from-plan-teach-the-work-ref-and-landing-flow-so-a-bootstrapped-agent-commits-and-pushes-freely-to-its-own-branch-and-integrates-once-per-unit-of-work
+    event:
+      type: completed
+      ts: "2026-09-21T02:33:08Z"
+      agent_id: linux-macuahuitl-claude-20260921t023306z
+      host: macuahuitl
+      summary: |
+        Closed by the coordinator (macuahuitl) — the skills teach the work-ref and landing flow, landed after 1315-4a7j (the lane) and 1316-bnzt (the landing) in land44, so no instruction names a lane the hook refuses.
+
+        Evidence, per criterion:
+        (1) skills/join-the-fleet/SKILL.md §3 "The work-ref flow": six numbered steps in the row's order (claim by order; git switch -c work/<order> origin/linux-next; commit and push freely, no gate, no trunk merge, warnings only; PR draft until the closure evidence is on the row; the landing queue integrates once; close by order after the landing proves); §1 item 8 names `git config rerere.enabled true`.
+        (2) scripts/check-fleet-membership.sh step 2b prints ok:join-the-fleet:rerere / todo:join-the-fleet:rerere:git config rerere.enabled true; step 1 prints note:join-the-fleet:branch:work/<order> and ok:join-the-fleet:branch:work-ref:<ref> on a work ref. scripts/test-join-the-fleet-idempotent.sh arms 4-6 pin both, plus the affordance identity; measured on a scratch tree carrying the overlay and the merged hook: ok:join-the-fleet-idempotent:6/6, rc=0 (all 13 PASS lines). The litmus binding step 2 greps 6/6.
+        (3) skills/advance-work-from-plan/SKILL.md: the line `git fetch origin && git rebase origin/<active-branch>  # ≤3 retries` is gone (grep count 0), replaced by `git merge --no-edit origin/linux-next` on the work ref; §6 step 2 pushes `work/<order>`; §3 creates the work ref after the pushed claim; §8 step 3 and Yield step 1 route fragments through push-plan-fragments-to-trunk.sh; the plan-only lane is unchanged for claims and events.
+        (4) skills/initialize-bare-metal-host/SKILL.md §1 paragraph "Work refs go through this mirror like any other ref": a push to work/<order> needs no gate stamp and no trunk merge.
+        (5) `grep -rn -F 'prefer work branches' scripts/hooks skills` → the hook's affordance line and join-the-fleet §3's block; the land tool's copy (scripts/land-on-platform-branch.sh) is the same three lines by 1315's design, and 1315's fixture greps the phrase as a pattern. Arm 6 asserts the skill's block == the hook's echo lines byte for byte, so the error and the instruction cannot drift apart silently.
+
+        Left for a peer: the worker-slot text is now correct for a bare-metal worker; the in-forge worker prompt (`./repeat --prompt "Use the /meta-orchestration skill"`) still names full mode and is 1318-3dgq's subject, not this row's.

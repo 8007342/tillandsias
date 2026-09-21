@@ -35,6 +35,14 @@ alias). It opens an interactive shell; exiting it leaves the stack running.
 `TILLANDSIAS_HOST_PROJECT_ROOT` defaults to `$HOME/src`. Set it to the parent of
 your checkout.
 
+**Work refs go through this mirror like any other ref** (1317-9ugn; methodology
+`work_ref_lane`, 1315-4a7j). A push to `work/<order>` needs no gate stamp and
+no trunk merge: the pre-push hook's deciders run and warn, nothing refuses, and
+the mirror's relay carries the ref upstream on the same sweep as a platform
+branch. Only `main` and the platform branches carry the gate. So a host whose
+mirror is up can push its work ungated as often as it likes, and "the mirror
+relays `fatal:` for a work ref" is the same benign sweep noise §5 describes.
+
 ## 2 — Verify, without repairing
 
 ```bash

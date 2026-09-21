@@ -154,6 +154,7 @@ specs:
   - litmus:gnuism-advisory-names-the-known-instances
   - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
+  - litmus:litmus-binding-truth
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
   - litmus:seam-writer-canonical-lock-shape

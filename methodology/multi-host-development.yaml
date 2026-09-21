@@ -138,7 +138,7 @@ multi_host_development:
         '/' (release/*) substitute '-' and record the true base in the
         ledger claim.
       creation_regex: >
-        ^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$
+        ^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|work/[0-9]{3,4}-[a-z0-9]{4})$
       scope: >
         Tillandsias-repo convention only (platform_branches.scope applies).
         Hook/launcher CODE stays convention-neutral: patterns and path lists
@@ -260,18 +260,54 @@ multi_host_development:
       This admits fragments ONLY, for the suffixed-token era, and says nothing
       about whether lanes are sanctioned (criterion 1), the missing reaper
       (criterion 5), or the green-exit command.
+    work_ref_lane: >
+      ORDER 1315-4a7j, operator direction 2026-09-20. A `work/<order>` ref is
+      the DEFAULT place a host commits and pushes, as often as it likes, with
+      NO gate stamp and NO trunk merge required. Integration happens once, by
+      landing, not on every push.
+
+      THIS PARAGRAPH REPLACES A CONTRADICTION ACROSS THREE DOCUMENTS, which is
+      why it is stated here rather than in the hook. Until today the hook said
+      a work ref was "the GATED hand-off and demands the stamp"
+      (pre-push-local-gate.sh:154), this methodology said pre_push_gate
+      EXCLUDES work/<order> while calling it "a GATED commit", and
+      branch_namespaces.creation_regex admitted no `work/` ref at all — so a
+      work branch was simultaneously required to be gated, exempt from the
+      gate, and not a legal ref name. Three documents, three answers. The
+      measured consequence: 92 salvage/* refs against 34 work/* on origin,
+      hosts using the emergency rescue lane as their everyday branch because it
+      was the only ungated one.
+
+      WHY: concurrent pushes to an integration branch race each other. Measured
+      2026-09-20 — 13 of ~46 land runs needed a retry, one needed three; on one
+      host, 10 gate cycles across two slices with 5 lost purely to RE-GATING AN
+      UNCHANGED TREE after another host pushed first. That is not an argument
+      against gating. It is an argument against re-gating a tree that did not
+      change, and the fix is to move the race from every push to one
+      serialized landing.
+
+      WHAT IS UNCHANGED: the integration gate on main and the platform
+      branches. There is no server CI, the local gate is the only safety net,
+      and this lane does not remove it — a push to linux-next still demands the
+      stamp. The plan-only fragment lane is unchanged; it is small,
+      trunk-parented, adopts stamps, and is not the churn.
+
+      MIGRATION, NOT ENFORCEMENT (operator, 2026-09-20): nothing new refuses in
+      this phase. The work lane opens, the fast deciders still run on a work
+      push and WARN, and every existing refusal carries an AFFORDANCE naming
+      the complete preferred workflow rather than a fragment of it. Enforcement
+      is a later, operator-triggered decision, and its trigger is a NUMBER:
+      scripts/check-landing-provenance.sh classifies how integration actually
+      arrives, so the flip rests on measured behaviour and not on preference.
     pre_push_gate_amendment: >
       pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/*,
-      salvage/* and work/<order> refs (mid-cycle lane checkpoints need no
-      trunk merge; a work/<order> ref is a GATED commit a slow-gate host hands
-      to the coordinator, who merges it into linux-next and gates the union on
-      a fast host, so the slowest gate never enters the land tool's
-      race-loss re-gate loop — 2026-09-05, lenovinha's four-attempt land and
-      yolanda's two lost pushes). The hook already behaves this way:
+      salvage/* and work/<order> refs: mid-cycle lane checkpoints need no trunk
+      merge, and per work_ref_lane above a work/<order> ref is UNGATED — it is
+      where a host works, not a hand-off it must first make green. The hook
+      already behaves this way for the trunk-merge half:
       scripts/hooks/pre-push-linux-next-merged.sh matches exactly the two
-      platform refs; the local gate stamp still applies to every push. The
-      lane green-exit procedure and ledger checkpoints MUST merge
-      origin/linux-next first when <base> != linux-next, preserving the
+      platform refs. The lane green-exit procedure and ledger checkpoints MUST
+      merge origin/linux-next first when <base> != linux-next, preserving the
       gate's intent for platform branches.
     side_branch_for_cost_constrained_hosts: >
       A host MAY work on `<platform>-side-<feature>` instead of committing
