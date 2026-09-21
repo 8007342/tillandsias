@@ -235,7 +235,18 @@ _BLOCK_AWK='
         # with packet_id a line below (the reason the id rule keeps its optional
         # dash). A nested value item (`- plan`, `- scripts/foo.sh`) has no key
         # and cannot match.
-        /^[ \t]*-[ \t]+(packet_id|order):[ \t]*[^ \t]/ {
+        # THE DEPTH ANCHOR STAYS, BOUNDED. Dropping it entirely re-created
+        # this very defect out of documentation: plan/index.yaml carries a
+        # `- packet_id: ...` line at indent 14 INSIDE A BLOCK SCALAR, as prose
+        # explaining how a repair fragment works. An unanchored marker mints a
+        # PHANTOM packet there, whose id is the trailing comment last word, and
+        # the real row loses its closure to it — record count 1167 against 1166.
+        # Rows live at 0, 2 or 4 (flat fragments, nested fragments, the base
+        # index); nothing legitimate is deeper, so deep prose is out of reach.
+        # Found by the forge adversarial check against this branch.
+        # NO APOSTROPHES ANYWHERE ABOVE: this awk program is a single-quoted
+        # shell string and one would end it (see the \047 note further down).
+        /^( {0,4})-[ \t]+(packet_id|order):[ \t]*[^ \t]/ {
             flush(); pid = ""; first = ""; buf = ""; unscoreable = "no"
             inclosure = 0
         }
