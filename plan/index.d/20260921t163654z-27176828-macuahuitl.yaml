@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: decision
+      ts: "2026-09-21T16:36:54Z"
+      agent_id: linux-macuahuitl-claude-20260921t163654z
+      host: macuahuitl
+      summary: |
+        EXPERIMENT MARKED SUCCESSFUL by the coordinator against the operator's bar (2026-09-20: "credential-free push on linux-next, and some work and other side branches successfully, before we mark the experiment as successful"). Three legs, each by artifact from lenovinha (transcript file named on their host): (a) linux-next 5945bfd3e..1215d10cc — the fragment at 1215d10cc is the push itself; (b) work/1313-prin 80a4face3..88b0679d9; (c) salvage/lenovinha-silverblue/20260921-1313-prin-acceptance at 88b0679d9. Each: "[relay] Atomic push to https://github.com/8007342/tillandsias.git succeeded" and "[pre-receive] Relay verified: upstream durably accepted the ref transaction"; ls-remote equal to the local head at push time and an ancestor of origin/linux-next now; `grep -ac git-credential` over the transcript = 0 with credential.https://github.com.helper still configured on the host (the helper demonstrably not firing, not absent); gnome-keyring-daemon --components=secrets PID 5533 before and after; push URL ssh://git@127.0.0.1 on the published 2223 with StrictHostKeyChecking=yes, a @cert-authority UserKnownHostsFile and HostKeyAlias — no TOFU. Scope of the claim: one host (lenovinha), the lane default-off, the six client-half fixes on work/1313-prin at 88b0679d9 and relayed to trunk by the coordinator; a second host's acceptance and the default-on flip are the next slices, the Pi 5 fleet server and shared experts later (operator direction 2026-09-20).
