@@ -1586,6 +1586,80 @@ pub async fn mint_approle_auto_auth_for_container(
     Ok(secret_name)
 }
 
+/// ORDER 1313-prin. Mint a host's AppRole document to a PLAIN FILE, 0600.
+///
+/// The container path above writes a podman secret, which a host process
+/// cannot read. A host that mints its push certificate on demand needs the
+/// role_id/secret_id pair on its own filesystem.
+///
+/// WHY A PLAIN FILE IS THE RIGHT ANSWER HERE AND NOT A RETREAT. The operator's
+/// requirement for this whole design is the KEYRING OFF THE HOT PATH. This
+/// function runs at provision time, where the launcher has already read the
+/// root token once; the file it writes is then read by `git push` with no
+/// secret-service call at all. Putting this material in the keyring instead
+/// would reintroduce exactly the per-push read the design exists to remove,
+/// and on this fleet that read can abort gnome-keyring 50 (1265-8qr6).
+///
+/// WHAT THIS MATERIAL CAN DO, so the tradeoff is legible: it authenticates as
+/// one AppRole whose single policy permits exactly
+/// `ssh-client-signer/sign/host-<host>`. It cannot read secret/github/token,
+/// cannot sign for any other host, and cannot sign a HOST certificate. A
+/// stolen copy mints push certs for this host until the SecretID is revoked —
+/// which is why it is 0600 in the user's own config dir and never in the repo.
+pub async fn mint_host_approle_document(
+    role: &str,
+    dest: &Path,
+    debug: bool,
+) -> Result<(), String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    let credentials = client
+        .issue_approle_credentials(role)
+        .await
+        .map_err(|e| format!("vault issue_approle_credentials for {role} failed: {e}"))?;
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    // Write 0600 BEFORE the content exists, not after: a create-then-chmod
+    // leaves a window where the document is world-readable, and on a
+    // multi-user host that window is the whole vulnerability.
+    let tmp = dest.with_extension("tmp");
+    {
+        let mut opts = fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        use std::io::Write as _;
+        let mut fh = opts
+            .open(&tmp)
+            .map_err(|e| format!("cannot open {}: {e}", tmp.display()))?;
+        let body = format!(
+            "{{\"role_id\":\"{}\",\"secret_id\":\"{}\"}}\n",
+            credentials.role_id(),
+            credentials.secret_id()
+        );
+        fh.write_all(body.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
+    }
+    fs::rename(&tmp, dest).map_err(|e| format!("cannot install {}: {e}", dest.display()))?;
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] host AppRole document written to {}",
+            dest.display()
+        );
+    }
+    Ok(())
+}
+
 /// Short-lived podman-secret mount for a synchronous container command.
 ///
 /// The underlying Vault token remains in the revocation registry and is

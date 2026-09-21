@@ -11471,6 +11471,26 @@ pub(crate) const MIRROR_SSHD_HOST_PORT: u16 = 2223;
 /// convention someone has to remember.
 pub(crate) const MIRROR_SIGNER_TOKEN_SINK: &str = "/tmp/tillandsias-vault-signer-token";
 /// ORDER 1288-5qpn. The unroutable URL a push is redirected to when the SSH
+
+/// ORDER 1313-prin. Where this host's push AppRole document lives.
+///
+/// Under the user's own config dir, 0600, one file per host identity. NOT in
+/// the repo (a credential in a worktree is one `git add -A` from a push) and
+/// NOT in the keyring, because the whole point of this design is that the push
+/// path makes no secret-service call.
+pub(crate) fn host_push_approle_path(host: &str) -> std::path::PathBuf {
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
+                .join(".config")
+        });
+    base.join("tillandsias")
+        .join("host-push")
+        .join(format!("{host}.approle.json"))
+}
 /// lane is ENABLED but its host-CA cache is absent. It exists so the failure
 /// happens at the push rather than being absorbed by the anonymous git://
 /// redirect, and so git's own error text names the lane: git reports "Unable
@@ -11649,6 +11669,16 @@ async fn ensure_ssh_lane_sidecar(
         )
         .await
         .map_err(|e| format!("[ssh-lane] host-push identity provisioning failed: {e}"))?;
+        // And the material the HOST needs to use it: a 0600 plain file the push
+        // path reads with no secret-service call. Keyring off the hot path is
+        // the operator's requirement for this whole design.
+        let _doc = crate::vault_bootstrap::mint_host_approle_document(
+            &crate::vault_bootstrap::host_push_role_name(push_host.trim()),
+            &host_push_approle_path(push_host.trim()),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[ssh-lane] host AppRole document mint failed: {e}"))?;
     }
     // Cache the host CA public key first: the gitconfig writer runs inside
     // the forge run-arg builders and must find it on disk.
