@@ -40,7 +40,8 @@
 //!
 //! Linux's converter, `build_menu` (see
 //! `crates/tillandsias-headless/src/tray/mod.rs::build_menu`) surfaces a
-//! status header, then the `~/src` and `Cloud` submenus when authenticated.
+//! status header, then the `Cloud` submenu when authenticated. (The `~/src`
+//! submenu was REMOVED by order 997-e4v2 — Cloud is the only project list.)
 //! Agents (`Seedlings`), Observatorium and OpenCode Web also live in that
 //! tree. All three trays render this shape in a stable order because all
 //! three call `build()` — the parity is structural now rather than
@@ -268,7 +269,8 @@ impl SelectedAgent {
 /// A single host-side project surfaced in the menu.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProjectEntry {
-    /// Display name (typically the directory basename of `~/src/<name>`).
+    /// Display name. For cloud entries this is the repo name; the `~/src`
+    /// basename sense is historical (997-e4v2 removed the local list).
     pub name: String,
     /// Local projects: filesystem path on the host. Cloud projects: the
     /// `owner/repo` slug returned by `gh`.
@@ -502,7 +504,8 @@ fn truncate_80(s: &str) -> String {
 /// ## Top-level item contract (Ready) — login-gated
 ///
 /// The body is **auth-gated**: exactly one of `{github-login}` OR
-/// `{~/src, Cloud}` is emitted, never both — matching the Linux golden.
+/// `{Cloud}` is emitted, never both — matching the Linux golden. (997-e4v2
+/// removed the `~/src` half; this line used to name it and was stale prose.)
 /// Agent selection lives inside each per-project submenu, not at top level.
 ///
 /// This item set is UX-curation-governed: adding, removing, or reordering
@@ -520,8 +523,9 @@ fn truncate_80(s: &str) -> String {
 ///
 /// Logged **in** (expanded) — 6 items:
 /// 1. `status`
-/// 2. `local-projects` — submenu of `~/src` entries; each project has
-///    Claude / Codex / OpenCode / OpenCode Web / Observatorium / Maintenance
+/// 2. (removed) `local-projects` — the `~/src` submenu was deleted by order
+///    997-e4v2. Cloud is the only project list. Kept as a numbered tombstone
+///    so the list below still lines up with what the menu actually emits.
 /// 3. `cloud-projects` — submenu paged at `MAX_CLOUD_PROJECTS_IN_MENU` per level,
 ///    the remainder fanned out into nested "… N more" submenus (591-33s6).
 ///    Every project is reachable; the page size sets depth, not visibility.
@@ -559,7 +563,7 @@ pub fn build(state: &MenuState) -> MenuStructure {
     }
 
     // (2) Auth-gated body. Mirror the Linux golden `build_menu`: emit exactly
-    //     one of {GitHub Login} OR {~/src + Cloud}, never both.
+    //     one of {GitHub Login} OR {Cloud}, never both (997-e4v2).
     match &state.login {
         // Order 626-r7kq (operator-approved surface, 2026-08-09T08:33Z): the
         // not-yet-known window gets its OWN disabled row, distinct from the
@@ -680,9 +684,27 @@ fn build_project_pages(
 
     let rest = &projects[take..];
     if !rest.is_empty() {
-        // A SUBMENU, never a leaf. The id stays rooted at CLOUD_PROJECTS_OVERFLOW
-        // so anything still resolving that prefix keeps resolving, and each page
-        // gets a distinct suffix because ids must be unique across the tree.
+        // A SUBMENU, never a leaf. Each page gets a distinct suffix because ids
+        // must be unique across the tree.
+        //
+        // THESE IDS RESOLVE TO `Inert`, AND THAT IS CORRECT — corrected here
+        // after macneo-macos checked it on real hardware rather than taking my
+        // word. An earlier version of this comment claimed the id "stays rooted
+        // at CLOUD_PROJECTS_OVERFLOW so anything still resolving that prefix
+        // keeps resolving". Nothing resolves by prefix: `menu_action.rs` matches
+        // `ids::CLOUD_PROJECTS_OVERFLOW` EXACTLY, so `…overflow.1` falls through
+        // to `resolve_project`, which only strips `project.`, and lands on
+        // `MenuAction::Inert`.
+        //
+        // It is harmless because enabledness comes from the ITEM, not from the
+        // resolved action: `MenuItem::submenu` sets `enabled: true` and the macOS
+        // adapter maps `enabled: item.enabled` directly, so the row is an enabled
+        // NSMenuItem with children and AppKit opens it on hover without ever
+        // dispatching. Worth knowing that it is a NEAR-MISS: had any adapter
+        // keyed enabledness off the resolved action instead, every page row would
+        // have rendered disabled, and a disabled NSMenuItem does not open its
+        // submenu — the pages would have been unreachable on macOS while looking
+        // correct on Linux. If you add such an adapter, give these ids an action.
         items.push(MenuItem::submenu(
             format!("{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, page + 1),
             format!("\u{2026} {} more", rest.len()),
@@ -953,7 +975,7 @@ mod tests {
 
     /// @trace spec:host-shell-architecture, spec:windows-native-tray
     ///
-    /// Logged-in menu: status + ~/src submenu + Cloud submenu + separator +
+    /// Logged-in menu: status + Cloud submenu + separator +
     /// version + quit = 6 top-level items, matching the Linux tray 1:1.
     /// Agent selection lives inside each per-project submenu (7 leaves each).
     #[test]
