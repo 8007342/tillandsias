@@ -55,6 +55,7 @@ critical_path:
     command: "cargo test -p tillandsias-headless forge_gitdir_staging_hands_root_staged_trees_to_forge_uid 2>&1"
     timeout_ms: 120000
     expected_behavior: "forge_gitdir_staging_hands_root_staged_trees_to_forge_uid ... ok"
+    assert_output_contains: "forge_gitdir_staging_hands_root_staged_trees_to_forge_uid ... ok"
 
 observability:
   traces:

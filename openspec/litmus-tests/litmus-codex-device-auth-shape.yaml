@@ -18,6 +18,7 @@ critical_path:
     command: "scripts/test-codex-device-auth.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex device auth command, require-only install, opaque schema, and fail-loud probe"
+    assert_output_contains: "PASS: Codex device auth command, require-only install, opaque schema, and fail-loud probe"
 
   - step: "pin the Rust provider schema and prohibit the generic paste-token branch"
     command: "grep -Fq 'login_program: \"/usr/local/bin/codex-device-auth\"' crates/tillandsias-headless/src/main.rs && grep -Fq 'credential_path: \"~/.codex/auth.json\"' crates/tillandsias-headless/src/main.rs && grep -Fq 'vault_field: \"credentials_b64\"' crates/tillandsias-headless/src/main.rs && echo 'ok: codex device schema'"
@@ -28,11 +29,13 @@ critical_path:
     command: "scripts/test-codex-oauth-restore.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex OAuth restored byte-identically with mode 0600 and no surface leak"
+    assert_output_contains: "PASS: Codex OAuth restored byte-identically with mode 0600 and no surface leak"
 
   - step: "harvest creation, rotation, and signal-exit changes before teardown"
     command: "scripts/test-codex-oauth-harvest.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex OAuth creation, rotation, and signal-exit harvest"
+    assert_output_contains: "PASS: Codex OAuth creation, rotation, and signal-exit harvest"
 
 observability:
   traces:

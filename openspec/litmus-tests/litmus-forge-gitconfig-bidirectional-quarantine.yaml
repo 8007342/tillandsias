@@ -23,6 +23,7 @@ critical_path:
     command: "cargo test -p tillandsias-headless forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts"
     timeout_ms: 120000
     expected_behavior: "forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts ... ok"
+    assert_output_contains: "forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts ... ok"
 
 observability:
   traces:

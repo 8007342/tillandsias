@@ -111,6 +111,7 @@ critical_path:
     command: "scripts/test-codex-mcp-registration.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, and wired before launch"
+    assert_output_contains: "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, and wired before launch"
 
   - step: "default image copies and installs the Codex registration helper"
     # Order 605-u9g5 exit criterion 1a: the executable helper is COPYed into

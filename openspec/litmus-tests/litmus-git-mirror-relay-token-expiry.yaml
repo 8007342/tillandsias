@@ -20,6 +20,7 @@ critical_path:
     command: "scripts/test-git-mirror-relay-token-expiry.sh"
     timeout_ms: 60000
     expected_behavior: "PASS: git-mirror relay distinguishes expired mirror token from absent GitHub token (order 414)"
+    assert_output_contains: "PASS: git-mirror relay distinguishes expired mirror token from absent GitHub token (order 414)"
 
   - step: "vault-cli exposes lookup and graceful current-token revocation"
     command: "grep -Fq 'lookup-self)' images/git/vault-cli.sh && grep -Fq 'revoke-self)' images/git/vault-cli.sh && grep -Fq 'auth/token/lookup-self' images/git/vault-cli.sh && grep -Fq 'auth/token/revoke-self' images/git/vault-cli.sh && echo 'ok: vault-cli token verbs'"

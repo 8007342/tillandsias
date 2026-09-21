@@ -62,6 +62,7 @@ critical_path:
     command: "scripts/test-support/podman-mock.sh network create tillandsias-enclave >/dev/null 2>&1; a=$?; scripts/test-support/podman-mock.sh system prune -f >/dev/null 2>&1; b=$?; scripts/test-support/podman-mock.sh compose up -d >/dev/null 2>&1; c=$?; if [ \"$a\" -eq 0 ] && [ \"$b\" -eq 0 ] && [ \"$c\" -eq 0 ]; then echo 'ok: deliberate-no-ops-still-succeed'; else echo \"BAD network=$a system=$b compose=$c\"; fi"
     timeout_ms: 10000
     expected_behavior: "ok: deliberate-no-ops-still-succeed"
+    assert_output_contains: "ok: deliberate-no-ops-still-succeed"
 
 observability:
   traces:
