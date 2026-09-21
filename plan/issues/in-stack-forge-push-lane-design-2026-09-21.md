@@ -91,6 +91,88 @@ anyone's default — because the moment two client classes share a lane,
 - It does not assert the sidecar is broken. It asserts it is **unmeasured**,
   which is a different claim and the reason for step 2.
 
+## Amendments from the coordinator's audit (accepted)
+
+Audited by macuahuitl-fedora, 2026-09-21: **accepted with amendments**.
+Implementation may proceed on the amended shape once the audit event is on the
+row. **The T11 flip still waits on a forge acceptance**, not merely on this
+audit.
+
+What the audit verified in code, so the design's claims are no longer only
+mine: the principal finding holds (`tillandsias-receive.sh`, the `export TILLANDSIAS_PUSH_KEY_FP …` block, read only by
+the wrapper fixture); `relay-refs.sh`’s `log_msg` and `pre-receive-hook.sh`’s own log helper already
+log per transaction; the sidecar renews at 1200 s against 30 m; the
+shared-plumbing table matches `60d8a8770`.
+
+### A1 — unknown 2 is a PROBABLE DEFECT, not an assumption
+
+The forge's gitconfig writer emits `@cert-authority git-<mid> <ca>` and pushes
+to `ssh://git@git-<mid>:2222/…` with `StrictHostKeyChecking=yes` and **no
+`HostKeyAlias`**. OpenSSH looks a non-22 port up as `[host]:port`, so the bare
+line cannot match.
+
+**Measured twice, independently.** The coordinator measured it; this author
+re-measured it on OpenSSH 10.2p1 rather than accept it:
+
+| known_hosts line | lookup `[git-testmid]:2222` | lookup `git-testmid` |
+|---|---|---|
+| `@cert-authority git-testmid …` | **NO MATCH** | MATCHES |
+| `@cert-authority [git-testmid]:2222 …` | MATCHES | — |
+
+**The bare-metal lane works only because it passes `HostKeyAlias`, which is
+looked up verbatim.** That is the difference the design called "assumed, not
+measured" — and it is a defect, not a difference.
+
+Expected first-push symptom: `Host key verification failed`.
+
+Order: **measure first** from a forge with the lane on
+(`ssh -v -p 2222 git@git-<mid> true`), then fix the writer — either spell the
+line `@cert-authority [git-<mid>]:2222 …` or add `-o HostKeyAlias=git-<mid>` to
+`core.sshCommand`. Both keep strict checking and no TOFU.
+
+### A2 — arm 3 cannot run inside a forge
+
+A forge has no DNS for github.com (`lib-common.sh`, the no-egress DNS note), so it cannot check
+`ls-remote` equality against GitHub itself. A bare-metal peer or the coordinator
+verifies equality **by the forge's pushed sha, handed over as a condition**. The
+arm does not weaken; its verifier moves.
+
+### A3 — the forge's race window is the mirror's upstream-sync lag
+
+The relay REJECTs stale old-ids against upstream, and a forge **cannot refetch
+GitHub** the way a bare-metal host does. So the dogfood runs **three plan-only
+pushes at a measured trunk cadence and counts REJECTs**, and the sync cadence
+must be **observable from inside a forge** (1338-tkfh) before any default flip.
+
+### A4 — unknown 3 becomes an arm
+
+A second push after **at least 30 minutes of sidecar uptime**, showing a
+**different serial** in the relay's pusher line. That turns "has the renewal
+ever renewed" from an open question into a measurement.
+
+### A5 — where the pusher line goes
+
+In `relay-refs.sh`'s log function, **per ref transaction**, carrying `KEY_ID`
+(the mint-time identity) alongside principal and serial. It also serves an
+existing attribution gap: tonight's `plan(unknown)` and `salvage/unknown`
+(1337-3tk6).
+
+### A6 — state the forge regime
+
+A **Linux forge in a Silverblue enclave** first; the **WSL2 forge in yolanda's
+enclave** second. Candidates, stated so a forge acceptance is comparable rather
+than assumed equivalent — the same discipline the three bare-metal regimes use.
+
+### A7 — the lane pushes work refs, it does not land them
+
+**Forges cannot open PRs by design.** The lane carries a forge's work to a
+`work/<order>` ref; landing remains a bare-metal or coordinator act.
+
+### Not found
+
+Nothing wrong in the authorisation division, nor in what the design declines to
+claim.
+
 ## Exit condition
 
 **Audited by the coordinator; an audit event on 1340-tzsx before any
