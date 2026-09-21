@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    field: status
+    value: in_progress
+    ts: "2026-09-21T21:54:16Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    event:
+      type: note
+      ts: "2026-09-21T21:54:16Z"
+      host: forge-tillandsias
+      summary: |-
+        claimed by forge-tillandsias; escalated — the two remaining steps cannot fail at all, not merely one vacuous assertion

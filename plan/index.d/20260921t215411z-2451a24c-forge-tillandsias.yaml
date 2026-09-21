@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    event:
+      type: note
+      ts: "2026-09-21T21:54:11Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t215411z
+      host: forge-tillandsias
+      summary: |
+        CORRECTION, AND IT IS AN ESCALATION: THE TWO REMAINING STEPS CANNOT FAIL AT ALL.
+        This row as filed says the vacuous `assert_exit` is caught by
+        `expected_behavior`, so only one of two assertions is real. THAT IS WRONG. When
+        any structured assertion is declared, `expected_behavior` IS NEVER READ, and
+        these steps declare only assertions that are unconditionally true.
+
+        READ FROM THE RUNNER, not inferred — scripts/run-litmus-test.sh:1018-1023:
+
+          "Declaring ANY of them adjudicates the step by those fields ONLY — the
+           expected_behavior sentence beside them becomes documentation and cannot
+           change the verdict, which is the whole point of the row."
+
+        And the implementation agrees. `structured_assert_declared()` returns true when
+        any of assert_exit / assert_output_contains / assert_output_matches is set, and
+        `structured_assert_matches()` then checks ONLY the declared assert_* fields.
+        `expected_behavior` is not a parameter to it and is never consulted.
+
+        SO FOR A STEP SHAPED `cmd 2>&1 | tail -1` DECLARING ONLY
+        `assert_exit: 0` AND `assert_output_nonempty: true`:
+
+          assert_exit          compares TAIL's exit status, which is 0 whenever tail
+                               printed a line — including the line saying the subject
+                               failed
+          assert_output_nonempty  tail always prints a line, so this is always true
+          expected_behavior    documentation; cannot change the verdict
+
+        BOTH DECLARED ASSERTIONS ARE UNCONDITIONALLY TRUE. The step passes whatever the
+        subject does. It is not a weak check, it is an ACCEPT THAT CANNOT REFUSE, sitting
+        in the release gate, and the `expected_behavior` line beside it names the exact
+        output it is not comparing.
+
+        THE TWO AFFECTED STEPS, re-derived per step after this correction:
+
+          litmus-added-test-is-referenced-shape.yaml
+            bash scripts/test-added-test-is-referenced.sh 2>&1 | tail -1
+            declares assert_exit + assert_output_nonempty · expected "ok:added-test-guard-proven:10"
+          litmus-reset-flags-accepted.yaml
+            bash scripts/test-reset-flags-are-accepted.sh 2>&1 | tail -1
+            declares assert_exit + assert_output_nonempty · expected "reset-flags-accepted 7/7"
+
+        THE THIRD IS ALREADY FIXED and is why the population moved. This row's own
+        binding, litmus-scorable-obligation-splitter.yaml, now reads
+        `bash scripts/test-scorable-obligation-splitter.sh 2>&1` with no pipe, so
+        `assert_exit: 0` adjudicates the FIXTURE's exit status and the step can refuse.
+        Fixed in the same landing family that carried the fixture; I did not do it and
+        found it by re-measuring rather than by assuming my earlier reading still held.
+
+        WHY I GOT IT WRONG THE FIRST TIME, since it is the same error this row is about.
+        I measured the SHELL behaviour — ran the command, saw `expected_behavior`'s
+        string not equal the last line, and concluded "the gate catches it". I never
+        checked whether the RUNNER compares that field. I measured the thing I could see
+        from a shell instead of the thing that adjudicates, which is measuring near the
+        property rather than on it. The correct instrument was the runner's source, and
+        it was twenty lines long.
+
+        CONSEQUENCE FOR THE CLOSURE, which is now stronger: a guard is not enough to
+        check the pipe-plus-assert_exit combination. It must also refuse a step whose
+        ONLY declared assertions cannot discriminate — `assert_exit` on a pipeline whose
+        last element is tail/head, with no assert_output_contains or
+        assert_output_matches beside it. The pipe is the mechanism; the absence of a
+        discriminating assertion is the defect.

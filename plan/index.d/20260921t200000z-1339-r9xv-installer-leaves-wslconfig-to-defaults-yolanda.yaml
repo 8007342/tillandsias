@@ -1,0 +1,141 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    order: 1339-r9xv
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, install, wsl2, agent-safety, measurement, user-experience]
+    estimated_hours: 6
+    owned_files:
+      - scripts/install-windows.ps1
+      - docs/cheatsheets/runtime/wsl/wslconfig-tunables.md
+    title: |
+      the Windows installer never inspects or configures `.wslconfig`, so a user's first build runs on whatever WSL defaults give them — on a 16-core host that is 16 vCPUs inside an uncapped balloon with no memory reclaim, which killed four gates here before a two-host diff found the cause
+    context: |
+      OPERATOR DIRECTION 2026-09-21: users must have a flawless out-of-box
+      experience, and the local fixes this fleet discovered must be made
+      durable rather than living in one host's tuning.
+
+      MEASURED: `grep -c wslconfig scripts/install-windows.ps1` = 0. The
+      installer downloads the tray, verifies its hash, resets state and
+      provisions — and never looks at the file that decides whether the guest
+      can build anything.
+
+      WHAT THE DEFAULTS DID ON A CAPABLE HOST. yolanda-windows is a Ryzen AI 7
+      350, 16 logical CPUs, 15.16 GiB. With `memory=5GB` and NO `processors`
+      line the guest took all 16 vCPUs inside 4.8 GiB — roughly 320 MB per
+      vCPU. FOUR CONSECUTIVE GATES WERE KILLED by the harness for host memory,
+      at 11.5% to 18.3% host available. Nothing inside the guest saw a problem:
+      `free -m` read healthy at every reap, because the guest cannot see the
+      host being starved.
+
+      THE WEAKER HOST WAS THE RELIABLE ONE, which is the finding that should
+      drive the fix. esmeraldinha is an Intel N100, FOUR logical CPUs, 15.78
+      GiB, and has never been reaped running the same gates. The differences
+      were entirely configuration and workload:
+
+      1. `autoMemoryReclaim=gradual` was ABSENT here and present there. Without
+         it the balloon only grows; the guest never returns memory to Windows.
+      2. `processors` IS A POLICY, NOT A NUMBER. esme runs `processors=4` —
+         100% of a 4-core machine. Copying the literal `4` onto a 16-core host
+         gives the guest 25% and a different config entirely. Matching a number
+         is not matching a config, and a user copying a forum snippet will make
+         exactly this mistake.
+      3. esme's 4-of-4 vCPUs SERIALISE their own concurrency by accident. A
+         16-core host lets several heavy tasks genuinely run in parallel and
+         hold memory simultaneously.
+      4. Test parallelism is unbounded by the knob everyone reaches for.
+         `build.sh` derives CARGO_BUILD_JOBS=1 on BOTH hosts (guest MemTotal
+         under 16 GiB), but the Rust test harness defaults to one thread per
+         logical CPU and is NOT constrained by it — 24 of 25 `cargo test`
+         invocations in the tree are unpinned (esme's measurement). So the cap
+         equalises the compile phase and nothing else.
+
+      FACTS A USER CANNOT DISCOVER AND WILL BE BITTEN BY:
+      - WSL2 RUNS EVERY DISTRO IN ONE UTILITY VM, one kernel, one memory pool.
+        `free` inside any distro describes the VM. The `.wslconfig` cap is a
+        ceiling for the whole VM shared by every distro, not an allocation per
+        distro. Two hosts on this fleet independently misread their own
+        instruments because of this.
+      - MOST OF THE BALLOON IS RECLAIMABLE PAGE CACHE. Measured at 10.8% host
+        available: `sync; echo 3 > /proc/sys/vm/drop_caches` in the guest
+        returned host available 1,774 -> 3,302 MB and vmmemWSL 6.96 -> 4.95
+        GiB in seconds, with guest available UNCHANGED (5,715 -> 5,818) because
+        nothing needed it. `autoMemoryReclaim=gradual` reaches the same place
+        far too slowly to help acute pressure.
+      - A Copilot-class Windows host loads an AI stack a small host cannot:
+        Recall enabled, an AMD VitisAI NPU execution provider, and 784 MB
+        resident across three WorkloadsSessionHost processes. Absent entirely
+        on the N100.
+
+      WHY p1: this is the FIRST-RUN experience on exactly the hardware a user
+      would buy to run this product well. A 16-core machine performs WORSE out
+      of the box than a 4-core one, the failure is a killed build with no
+      in-guest symptom, and the remedy took this fleet four dead gates, a
+      two-host config diff and a poolmon investigation to find. A user gets none
+      of that.
+    next_action: |
+      Nobody holds this.
+      1. INSPECT AND REPORT AT INSTALL TIME. Read `%UserProfile%\.wslconfig`,
+         compute the host's logical CPU count and total RAM, and state what the
+         guest will actually get. A user who is told "your guest will take 16
+         vCPUs inside 4.8 GiB" has been given the finding that cost this fleet
+         a day.
+      2. REFUSE OR WARN ON A KNOWN-BAD RATIO, loudly and by name. The measured
+         failure shape is many vCPUs against little memory; ~320 MB per vCPU
+         killed four gates. Name the numbers in the message, not a generality.
+      3. OFFER THE CONFIGURATION, DO NOT IMPOSE IT. `.wslconfig` is the user's
+         file and may hold settings for other work; writing it silently is
+         worse than the defect. Show the recommended block, say what each line
+         does and why, and write it ONLY on consent — the same discipline the
+         destructive reset already follows.
+      4. `autoMemoryReclaim=gradual` IS THE SINGLE HIGHEST-VALUE LINE and is
+         `[experimental]`, so it must be added as a section rather than
+         appended to `[wsl2]` — a naive append produces a file that silently
+         does nothing.
+      5. DOCUMENT THE MEASURED VALUES, not just the knobs. The existing
+         cheatsheet says what each tunable does; it does not say which values,
+         why, or what the failure looks like. Add: the 320 MB-per-vCPU failure,
+         the processors-is-a-policy trap, the one-VM fact, the drop_caches
+         lever with its measured numbers, and that CARGO_BUILD_JOBS does not
+         bound test threads.
+      Do NOT fix this by lowering the memory cap alone. The cap is already what
+      makes build.sh derive jobs=1; the defect is the RATIO and the missing
+      reclaim, and a smaller cap makes compilation worse without addressing
+      either.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is installer behaviour
+      plus documentation, and the honest machine check — that an install on a
+      host with a known-bad `.wslconfig` ratio emits a named warning naming the
+      numbers — needs the warning's vocabulary to exist first. Pinning a litmus
+      name before that is refused by 885-92iu. When it lands the guard is
+      litmus-installer-reports-wsl-guest-shape, driving the installer against a
+      synthetic `.wslconfig` of 16 vCPUs at 4.8 GiB and asserting the named
+      warning, with a well-configured control asserting silence — both arms,
+      since a warning that fires always is the accept-that-cannot-refuse this
+      fleet has met four times; same commit as the fix (1136-n8sh).
+    verifiable_closure: |
+      `scripts/install-windows.ps1` reports the guest shape the user's
+      `.wslconfig` will produce (vCPUs, memory, whether autoMemoryReclaim is
+      set), names a known-bad ratio when it finds one, and offers the
+      recommended configuration on consent without writing the file silently;
+      and the WSL cheatsheet carries the MEASURED values with their failure
+      modes. Pre-fix result, measured 2026-09-21: `grep -c wslconfig
+      scripts/install-windows.ps1` = 0, and on a 16-core 15.16 GiB host the
+      defaults produced 16 vCPUs inside 4.8 GiB and four consecutive
+      harness-killed gates at 11.5-18.3% host available, while a 4-core host
+      with `processors=4` and `autoMemoryReclaim=gradual` ran the same gates
+      without a single reap.
+
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-21T20:00:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed on operator direction that local fixes must be made durable; the finding that should drive it is that the WEAKER host builds more reliably, so the defect is configuration and workload rather than hardware
