@@ -31,9 +31,10 @@ preconditions:
   - workspace contains scripts/test-reference-surfaces.manifest
 critical_path:
   - step: "every arm of the guard holds, refusals included (10/10)"
-    command: "bash scripts/test-added-test-is-referenced.sh 2>&1 | tail -1"
+    command: "bash scripts/test-added-test-is-referenced.sh 2>&1"
     expected_behavior: "ok:added-test-guard-proven:10"
     assert_exit: 0
+    assert_output_contains: "ok:added-test-guard-proven:"
     assert_output_nonempty: true
     timeout_ms: 120000
   - step: "the guard answers on this checkout and carries the standing count the ratchet closes against"
