@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    event:
+      type: progress
+      ts: "2026-09-21T02:59:18Z"
+      agent_id: linux-yoga-opus5-20260921t025918z
+      host: yoga
+      summary: |
+        LANDED: 0e8d62e0c on origin/linux-next, verified here by ancestry against a
+        freshly fetched ref and by artifact (scripts/check-sigpipe-verdict-pipelines-
+        added.sh and its fixture present on trunk). The work-ref SHA c1c5ec571 is the
+        gated one; 0e8d62e0c is the one a reader of trunk can find, and per
+        join-the-fleet §3 step 6 it is the one that belongs on a closure.
+
+        Row stays in_progress only because the coordinator's amendment to its closure
+        has not landed yet; the code is on trunk.

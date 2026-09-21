@@ -1,0 +1,19 @@
+# Deliberately unreferenced shell tests (order 1325-ygq5) — the SHELL organ's
+# ratchet list, the sibling of openspec/litmus-tests/unbound-grandfathered.txt.
+#
+# The guard is DIFF-SCOPED, so the standing corpus does not need to be listed
+# here: it names only what a push ADDS. This file exists for the one case
+# diff-scoping cannot express — an artifact that is deliberately not reachable
+# from any gate (a manual repro, an operator-run drill, a fixture for a
+# platform this host cannot run) and is being added today.
+#
+# Writing a name here is a DECLARATION, not a suppression: it converts "nobody
+# noticed" into "someone decided", which is the entire difference the packet
+# names between DELIBERATE and FORGOTTEN. Say why on the same line after a `#`.
+#
+# THE ONLY ROUTINE EDIT IS A DELETION. A name added here should be rare enough
+# that a reviewer reads it and asks. If this list grows, the guard has been
+# turned into a rubber stamp and the practice it protects has become a lie.
+#
+# (empty — no deliberately-unreferenced shell test has been added since the
+#  guard landed)

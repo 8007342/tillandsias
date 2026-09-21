@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: landed
+      ts: "2026-09-21T03:00:01Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t030001z
+      host: tlatoanis-macbook-neo
+      summary: |
+        LANDED in 0e8d62e0c (land46). The macOS arm's smoke findings are on trunk.
+
+        WHAT LANDED, from the v56.9.20.1 macOS smoke on macneo (smoke:macneo:v56.9.20.1:PASS):
+          a2befac95  the refusal's doubled colon ("not executable:: /Applications/...") — the
+                     shared constant already ends in a colon and the Windows arm honoured it;
+                     the macOS body did not. Contract ARM 7 now asserts both directions.
+          378365288  F1 the destroyed list named the image root TWICE and named the DIRECTORY
+                     as destroyed while listing nvram.bin — inside it — as preserved;
+                     F2 the announcement now reports OBSERVATION, every line derived from a
+                     filesystem or keychain lookup, absent paths marked, and a missing anchor
+                     stating that the next vault will not derive from it and that this reset
+                     neither caused nor repairs that;
+                     F4 cli_unknown_flags asserted --diagnose does not exit 2, where 2 is
+                     OVERLOADED (unknown-flag refusal AND "not provisioned") — it would have
+                     redded any Mac gating during the provision window this order makes the
+                     default; F5 e2e-step2-macos.sh prints its usage.
+          3de513b2f  the fmt reflow, the smoke report, and the F3 evidence event.
+
+        TWO DEFECTS OF MINE IN THE FIXTURE, caught on Linux at relay and fixed there, recorded because both are the family this order keeps meeting:
+          1. test-reset-state-no-home-refusal.sh ARMS 1-2 ran target/debug/tillandsias-tray
+             whenever that path was executable. On Linux that path exists and is A DIFFERENT
+             CRATE'S BINARY OF THE SAME NAME, so the arms interrogated a program they were
+             never about and reported FAIL — inside a pre-build litmus every Linux release
+             gate runs. A binary PATH is not a binary IDENTITY. Now guarded on uname with a
+             named skip; the five source arms still run everywhere.
+          2. Two verdict pipelines (printf | grep -q) refused by 1307-ermc: grep -q exits at
+             the first match, the writer takes SIGPIPE, and under pipefail the status is 141
+             ON A SUCCESSFUL MATCH. Rewritten as here-strings.
+        Both were invisible to a macOS gate. That is the argument for the relay's
+        cross-platform preflight, made at this host's expense rather than in the abstract.
+
+        VERIFIED AFTER THE LANDING, on the regime only this host can run: the edited fixture
+        passes 7/7 on macOS, so the uname guard cost the Darwin arms nothing.
+
+        STILL OPEN AND NOT CLAIMED CLOSED BY THIS: --reset-state's destructive branch has
+        never been live-fired. The refusal branch is measured (it fired on this host's real
+        broken state, with a control); the destroy path is exercised only through the
+        installer's own call during the smoke, which is the product path, not a direct
+        invocation. The ordering that puts the refusal before the ANNOUNCEMENT and before any
+        removal remains verified by source order, not by a live run.

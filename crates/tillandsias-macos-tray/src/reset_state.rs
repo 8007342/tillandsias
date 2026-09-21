@@ -87,54 +87,122 @@ pub fn run_reset_state() -> Result<(), String> {
     if !is_executable(&app) {
         // Same rule as the skipped line: the SHARED constant carries the wording,
         // this body supplies only the platform path it could not find.
+        // "{} {}", NOT "{}: {}". The shared constant already ENDS in a colon —
+        // that trailing colon is part of its contract, and the Windows arm
+        // honours it (notify_icon.rs). Mine did not, so v56.9.20.1 shipped
+        // "...not executable:: /Applications/..." in the operator-facing
+        // refusal. One character, in the one message a broken host sees.
         return Err(format!(
-            "{}: {}",
+            "{} {}",
             tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH,
             app.display()
         ));
     }
 
-    let image_root = crate::diagnose::image_root();
+    // ORDER 1315-d4qd — BEFORE the announcement, not merely before the deletion.
+    // With HOME unset the root resolves to /tmp/Library/..., and the announcement
+    // below is built from the SAME root as the removals: it would name /tmp
+    // paths, do exactly what it named, exit 0, and leave the operator told that
+    // the local state was cleared while it sat untouched at the real root. The
+    // two halves agreeing is what makes that unreadable as a failure, so the
+    // refusal has to precede the first thing the operator is shown.
+    let image_root = crate::diagnose::image_root_for_destruction()?;
     let caches = caches_dir();
     let cache_root = tillandsias_core::cache_root::cache_root();
 
-    let mut destroyed: Vec<String> = vec![
-        format!(
-            "{} (VM state: rootfs, kernel, initrd, cidata, console log)",
-            image_root.display()
-        ),
-        format!(
-            "{} (provision markers, heartbeat/crashloop state, rotated console log)",
-            image_root.display()
-        ),
-    ];
+    // THE ANNOUNCEMENT STATES WHAT IS THERE, NOT WHAT THIS CODE INTENDS.
+    // Every line below is derived from a filesystem or keychain LOOKUP, and a
+    // path that is absent says so rather than being listed as though it were
+    // about to be destroyed or preserved. An operator reads these lists to
+    // decide whether to let the reset proceed; a list of intentions cannot
+    // support that decision, and on macneo 2026-09-21 it actively misled —
+    // v56.9.20.1 printed "WILL BE PRESERVED: keychain: installation-uuid-v1"
+    // on a host where that anchor was ABSENT (security(1) rc=44), while both
+    // credentials the reset CLEARS were present. The durable half was missing
+    // and the disposable half survived, and the announcement reported the
+    // reassuring opposite. Preserving nothing is a harmless no-op; SAYING so
+    // when the anchor is gone is not, because that line is exactly what tells
+    // an operator their vault will still be derivable (803-49re).
+    let present = |p: &Path| p.exists();
+    let kc_present = |target: &str| {
+        crate::installation_uuid::read_credential_string(target)
+            .ok()
+            .flatten()
+            .is_some()
+    };
+    let mark = |there: bool| {
+        if there {
+            ""
+        } else {
+            " [ABSENT — nothing to do]"
+        }
+    };
+
+    // NAME THE FILES, NOT THE DIRECTORY. This listed the image root TWICE with
+    // two different parentheticals, which read as two separate things, and it
+    // named the DIRECTORY as destroyed when only specific files inside it go —
+    // then listed nvram.bin, which lives in that same directory, as PRESERVED.
+    // The behaviour was right and the text contradicted itself.
+    let mut destroyed: Vec<String> = vec![format!(
+        "{} (the guest's files below; the directory itself REMAINS)",
+        image_root.display()
+    )];
+    for f in [
+        "rootfs.img",
+        "rootfs.qcow2",
+        "vmlinuz",
+        "initramfs.img",
+        "cidata.iso",
+        "console.log",
+        "console.log.prev",
+        "heartbeat.state",
+        "crashloop.state",
+    ] {
+        let p = image_root.join(f);
+        destroyed.push(format!("  {f}{}", mark(present(&p))));
+    }
+    let prov = image_root.join("provision");
+    destroyed.push(format!("  provision/{}", mark(present(&prov))));
+
     if let Some(c) = &caches {
         destroyed.push(if keep_models() {
             format!(
-                "{} (except models/, kept by TILLANDSIAS_RESET_KEEP_MODELS=1)",
-                c.display()
+                "{} (except models/, kept by TILLANDSIAS_RESET_KEEP_MODELS=1){}",
+                c.display(),
+                mark(present(c))
             )
         } else {
-            format!("{}", c.display())
+            format!("{}{}", c.display(), mark(present(c)))
         });
     }
     for t in CLEARED_CREDENTIALS {
-        destroyed.push(format!("keychain: {t}"));
-        destroyed.push(format!(
-            "{}",
-            cache_root.join(format!("fallback_{t}")).display()
-        ));
+        destroyed.push(format!("keychain: {t}{}", mark(kc_present(t))));
+        let fb = cache_root.join(format!("fallback_{t}"));
+        destroyed.push(format!("{}{}", fb.display(), mark(present(&fb))));
     }
-    destroyed.push(format!("{}", cache_root.join("vault-data").display()));
+    let vd = cache_root.join("vault-data");
+    destroyed.push(format!("{}{}", vd.display(), mark(present(&vd))));
 
+    let anchor_there = kc_present(PRESERVED_ANCHOR);
+    let nvram = image_root.join("nvram.bin");
     let mut preserved: Vec<String> = vec![
-        format!(
-            "keychain: {PRESERVED_ANCHOR} (anchors this INSTALLATION; the in-VM Vault derives from it — 803-49re)"
-        ),
+        if anchor_there {
+            format!(
+                "keychain: {PRESERVED_ANCHOR} (anchors this INSTALLATION; the in-VM Vault derives from it — 803-49re)"
+            )
+        } else {
+            // NOT a warning dressed as reassurance. The reset is not the cause
+            // and does not repair it; the operator is simply told the truth
+            // about the thing this line exists to reassure them about.
+            format!(
+                "keychain: {PRESERVED_ANCHOR} [ABSENT BEFORE THIS RESET — nothing to preserve; the next vault will not derive from it (803-49re). This reset neither caused nor repairs that.]"
+            )
+        },
         format!("{} (the installed application)", app.display()),
         format!(
-            "{} (EFI variable store — preserved as installation identity; see this module's gap-4 note)",
-            image_root.join("nvram.bin").display()
+            "{} (EFI variable store — preserved as installation identity; see this module's gap-4 note){}",
+            nvram.display(),
+            mark(present(&nvram))
         ),
     ];
     if keep_models() {

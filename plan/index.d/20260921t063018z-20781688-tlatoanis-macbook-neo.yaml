@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-install-resets-and-reprovisions-the-local-state-on-every-platform-and-then-runs-the-platform-initialisation-itself-so-a-curl-bash-or-irm-iex-install-is-also-the-repair-for-a-broken-local-state
+    event:
+      type: correction
+      ts: "2026-09-21T06:30:18Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t063018z
+      host: tlatoanis-macbook-neo
+      summary: |
+        CORRECTION TO THE EVENT I APPENDED TO THIS ROW MINUTES AGO (fragment 20260921t062818z-3b706a58), which is on trunk and immutable, so this append is the remedy rather than an edit.
+
+        THAT EVENT PLACED THE ORPHAN-DIAGNOSIS RESULT ON THIS ROW AND CALLED IT "a real finding for this tag". Both are wrong in the same way, and a reader could take it as a regression introduced by v56.9.21.1.
+
+        WHAT IT ACTUALLY IS — the documented PRE-FIX behaviour of 1253-gina, whose title already names it: a killed tray orphans the virtualization helper and every later VM start fails as an invalid boot loader. The explainer that names the holder is that row's half 1, and it landed on osx-next at e57d7f7a1 AFTER the v56.9.21.1 cut. So the shipped binary was never supposed to have it. The correct home is 1253-gina, where I have appended the full result with the verbatim text, and it counts as a second-regime pre-fix reproduction on a different host — not a regression, and not a defect of the fix.
+
+        The measurements themselves stand unchanged and are not withdrawn: the verbatim contended-start text, and the standalone exec-guest showing the guest healthy. Only the placement and the characterisation were wrong.
+
+        WHY I GOT IT WRONG. I treated "the fixture is newly landed and fails on the shipped binary" as evidence about the shipped binary, without checking whether the code the fixture tests was IN that binary. The check is one git command against the tag and I did not run it. That is the same error as reading a stale dist/ bundle's failure as a release finding an hour earlier, which I did catch — a binary is not the tag it was installed from, and a fixture's subject is not automatically present in whatever binary is to hand.

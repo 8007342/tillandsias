@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-independent-mutexes-guard-one-process-global-podman-bin-so-the-stub-tests-still-race-and-the-gate-reds-on-an-unrelated-head
+    field: progress_summary
+    value: |2-
+
+      TRAPS LINE — A GUARD VERIFIED ONCE IS NOT VERIFIED AFTER WHAT IT GUARDS
+      CHANGED. Re-run the mutation arm after every change to the thing under guard,
+      not only when the guard itself is edited.
+
+      THE SPECIMEN IS THIS ROW. exactly_one_mutex_guards_the_process_global_podman_bin
+      was written against a std lock and mutation-verified: a planted second
+      declaration reddened it by file and line. The fix then changed the lock TYPE to
+      tokio, and the declaration changed with it from `static` to `pub(crate) static`.
+      The guard detected declarations with starts_with("static "), so after the change
+      it would have MISSED THE ONLY LOCK IN THE TREE and passed a two-lock tree — and
+      it still passed, twice, because a tree with one undetected lock and a tree with
+      zero locks are the same count to a test that counts what it can see.
+
+      WHAT MAKES IT A TRAP RATHER THAN A SLIP: nothing about the edit looked like it
+      touched the guard. The guard's own file was not modified; its assertion was not
+      weakened; its earlier mutation run was real. The only thing that moved was the
+      SHAPE OF WHAT IT READS. A guard that reads source is coupled to the spelling of
+      its subject, and changing the subject silently re-scopes the guard.
+
+      Caught only because the mutation arm was re-run after the type change instead of
+      being trusted from before it — the same discipline as 1328-v3kp's page, one
+      level further on: a test is not done until it can fail, AND it is not still done
+      after the thing it watches has changed shape.
+    ts: "2026-09-21T06:57:54Z"
+    host: macos

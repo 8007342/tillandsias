@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    order: 1331-884p
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, tooling, instrument, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-scorable-obligation-added.sh
+    title: |
+      check-scorable-obligation-added resets its packet record on ANY list item at indent 2 or 4, so a
+      closure written at that indent is never read — the row is then DEFERRED and passes silently, and
+      when the id survives the refusal blames the file for what the checker failed to parse
+    context: |
+      MEASURED ON THE LIVE LEDGER, macneo, 2026-09-21.
+
+      THE SPLITTER. The script resets the packet record on a line matching
+      /^  - |^    - /. That is meant to be the PACKET ROW marker. It equally
+      matches any NESTED LIST ITEM at those depths — a capability_tags entry, an
+      owned_files entry — and when it fires mid-row it clears pid, first and
+      unscoreable together. Everything after it in that row, including the
+      verifiable_closure, is never captured.
+
+      POPULATION — 142 of 1,450 fragments in plan/index.d contain at least one
+      packet whose closure the checker cannot read. Re-derive it with the
+      script's own _BLOCK_AWK block over the fragment directory, counting
+      records whose third field is empty; nothing else is needed and the list
+      should be regenerated rather than trusted from here.
+
+      THE SILENT HALF IS THE SERIOUS ONE. A row the checker cannot parse is NOT
+      refused. It goes to the deferred path (1071-adhj, the obligation may live
+      in a correction fragment) and passes. So a packet can enter trunk with its
+      obligation unread, and the gate that exists to read it says nothing.
+      DEFERRAL IS INDISTINGUISHABLE FROM A SATISFIED OBLIGATION, which is the
+      whole defect — the check reports on its own parse, not on the file.
+
+      THREE ROWS OF MINE ARE ALREADY ON TRUNK THIS WAY — 1315-d4qd, 1323-pc8k
+      and 1327-r4zb. Each emits an id with an EMPTY closure field. They are not
+      bad rows; they are unchecked ones.
+
+      THE LOUD HALF IS WRONG IN THE OTHER DIRECTION. When the id happens to
+      survive to the end of the file, the refusal reads "carries no scorable
+      obligation — add a verifiable_closure". That is true of what the checker
+      PARSED and false of the file. 1330-j5is was refused this way while
+      carrying a verifiable_closure, and then refused again after an explicit
+      unscoreable field was added, because both sat below a nested list item at
+      indent 4. Re-indenting that row's list items from 4 to 6 — out of the row
+      marker's reach — made it pass with NO other change. The known-good
+      fragment I compared against (1146-xs6s) uses indent 6 and a flow sequence
+      for capability_tags, which is why it never hit this.
+
+      COST OF THE MESSAGE BEING WRONG. It named the file and an actionable
+      remedy, both confidently, and the remedy was already present. That sent me
+      through five wrong repairs — the field's spelling, its block-scalar form,
+      the packet row's own indentation, staleness of the staged blob, and a
+      known-good control copied verbatim — before instrumenting the awk and
+      watching the reset fire on a capability_tags entry. A refusal that
+      describes the parser's state as if it were the file's content costs the
+      reader every one of those.
+
+      NOT A YAML DEFECT. List items at the parent key's indent are legal YAML
+      and are used across the tree; the checker's reading rule is narrower than
+      the format it reads, and nothing documents that.
+    verifiable_closure: |
+      bash scripts/check-scorable-obligation-added.sh, run over a fragment whose
+      packet row carries a nested list item at indent 2 or 4 ABOVE its
+      verifiable_closure, REFUSES with a parse-failure verdict naming the file
+      and the line it could not parse — never "carries no scorable obligation",
+      and never a silent deferral.
+      A row is identified as a list item whose sibling keys include packet_id or
+      order, not as any dash at a given depth.
+      MUTATION ARM — revert the splitter and the fixture must fail, and the
+      failure must name the nested item it mistook for a row.
+      REGRESSION CORPUS — the 142 fragments above must each yield a NON-EMPTY
+      closure field after the fix; they are real history and the fix must read
+      what they already carry.
+      PRE-FIX RESULT, so the closure is falsifiable — FAILS today, both
+      directions, 142 of 1,450 unread and 1330-j5is refused for a closure it
+      carried.
+    next_action: |
+      Fix the splitter first, then SWEEP the 142 and report which packets
+      genuinely lack an obligation. Those get CORRECTION FRAGMENTS naming the
+      closure.
+      DO NOT HAND-EDIT ANY FRAGMENT IN THE MEANTIME, and do not rewrite the
+      base. Coordinator ruling, 2026-09-21 — the 142 and the three rows named
+      above are UNCHECKED, NOT BAD; a fragment is append-only and the defect is
+      the checker's. Anyone "tidying" a fragment to satisfy the current reader
+      would be altering another host's record to work around a tool bug.

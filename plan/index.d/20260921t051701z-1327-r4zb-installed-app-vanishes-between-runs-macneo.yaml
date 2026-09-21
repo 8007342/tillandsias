@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+- packet_id: the-installed-macos-app-bundle-disappears-from-applications-between-runs-on-macneo-with-the-vm-state-left-intact-which-is-the-exact-state-the-reset-state-pre-flight-guard-exists-for-and-no-mechanism-is-known
+  order: 1327-r4zb
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  release_target: fail-loud-diagnosis-milestone
+  pickup_role: any
+  capability_tags:
+  - macos
+  - fail-loud
+  - instrument
+  estimated_hours: 2
+  owned_files:
+  - scripts/install-macos.sh
+  title: |
+    /Applications/Tillandsias.app disappears between runs on macneo while the VM state survives —
+    twice now, the second time from a verified-running install — and nothing on the host records
+    who removed it
+  context: |
+    BOUNDED OBSERVATION. NO MECHANISM IS CLAIMED. This row exists so the THIRD
+    occurrence answers a question instead of repeating one.
+
+    OCCURRENCE 2 (the one with a known-good starting state), macneo 2026-09-21:
+      T        ~01:12-01:21Z  the v56.9.20.1 smoke installed the app; --version read
+                              from /Applications; a tray was later observed RUNNING
+                              as pid 71034 with its command path
+                              /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray
+      T+4h      05:09:32Z     run_start of the v56.9.21.1 smoke: /Applications/Tillandsias.app
+                              ABSENT. 1.2-2.6 GiB of VM state under the image root intact.
+    OCCURRENCE 1, ~2026-09-20, recorded in reset_state.rs's module doc: app gone,
+    1.2 GiB of VM state surviving, cause never identified. Its starting state was
+    INFERRED, not verified, which is what occurrence 2 improves on.
+
+    WHAT WAS CHECKED AND WHAT IT YIELDED:
+      * not in ~/.Trash
+      * no .bak and no staging directory left in /Applications (the installer's
+        atomic-swap residue from 1281-pgit would be visible there)
+      * the only Tillandsias-adjacent system-log traffic in the window is
+        com.apple.cache_delete purgeable-space QUERIES issued by a tillandsias-*
+        process. A query is not a removal and is not read as one here.
+      * DISK PRESSURE REFUTED: 305 GiB free on both volumes, 30 percent used, and
+        the 268 GB rootfs.img is sparse (2.1 GiB actual). The cache_delete traffic
+        was therefore a query against an uncontended volume and explains nothing.
+
+    WHY IT MATTERS BEYOND TIDINESS. An app absent from /Applications with the VM
+    state intact is EXACTLY the state --reset-state's pre-flight guard was written
+    for (1286-4437): the guard refuses, names the missing reprovision path, and
+    destroys nothing, because destroying the state there would leave nothing to
+    reprovision from. The guard has now fired for real on this host. But the guard
+    is the SYMPTOM HANDLER; whatever removes the bundle is upstream of it, and on a
+    host where this recurs an operator's install silently stops existing between
+    uses.
+
+    NOT CLAIMED: that the installer removes it; that macOS removes it; that it is
+    related to the ~/Applications copy (1315-d4qd's F3) beyond both being true on
+    this host; that it happens anywhere but macneo. Nobody has looked on another
+    Mac.
+  verifiable_closure: |
+    A THIRD OCCURRENCE IS OBSERVED WITH A TIMESTAMP, or the instrument runs across
+    a window containing no occurrence and says so.
+
+    The instrument, which must be in place BEFORE the next window:
+      1. A detached once-a-minute stamp, writing OUTSIDE the bundle (the bundle is
+         what disappears, so a log inside it dies with the evidence):
+           while :; do
+             printf '%s %s\n' "$(date -u +%FT%TZ)" \
+               "$(ls -ldi /Applications/Tillandsias.app 2>&1)" \
+               >> "$HOME/tillandsias-app-watch.log"
+             sleep 60
+           done
+         The INODE is why `ls -ldi` and not `ls -ld`: an inode change means the
+         bundle was REPLACED (a swap), while a transition to "No such file or
+         directory" means it was REMOVED. Those are different events and the
+         existing evidence cannot tell them apart.
+      2. At the next run_start, before anything else touches the host:
+           log show --predicate 'eventMessage CONTAINS "Tillandsias.app"' --last 4h
+
+    WHAT A NON-EMPTY RESULT LOOKS LIKE, so the next reader is not left deciding:
+      * From (1): two adjacent lines whose second reads `No such file or directory`
+        bound the removal to a 60-second window; the last line before it carries the
+        inode that existed until then. Two adjacent lines with DIFFERENT inodes and
+        no absence between them is a replacement, not a removal, and closes this row
+        differently.
+      * From (2): any line naming a process and Tillandsias.app in that window is
+        the actor. `rm`, `Finder`, `installd`, `mds` and a launchd-managed cleanup
+        would each appear differently; the point is to have the line, not to guess
+        which it will be.
+      * BOTH EMPTY across a window that CONTAINS an occurrence is itself a result:
+        it means the removal is not logged and the stamp missed it, which narrows
+        the next instrument rather than leaving the question open.
+  next_action: |
+    Start the stamp loop on macneo and leave it running across at least one
+    inter-smoke window, then read both instruments at the next run_start and append
+    what they say — including "no occurrence in this window", which is the outcome
+    that makes a later positive result interpretable. Do NOT reinstall or tidy
+    /Applications before reading them: the current state IS the evidence.

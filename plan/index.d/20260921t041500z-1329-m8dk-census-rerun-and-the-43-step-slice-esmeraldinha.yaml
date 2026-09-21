@@ -1,0 +1,124 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    packet_kind: improvement
+    order: 1329-m8dk
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, adjudication, corpus, floor, no-build]
+    estimated_hours: 6
+    owned_files:
+      - openspec/litmus-tests
+    unscoreable: ""
+    verifiable_closure: |
+      THE SLICE IS THE 43, and each one ends in one of exactly two states:
+        * it carries an assert_* or a success_pattern that FAILS when the
+          behaviour it describes is mutated — demonstrated, not asserted; or
+        * it carries a NAMED REASON on this row why it cannot, in the form
+          `<file>:<line> — <reason>`, where "the prose is not adjudicable" is
+          an acceptable reason and "no time" is not.
+      No step moves from the 43 to the 2,167 by rewording its
+      expected_behavior; that would launder an unenforced step into the
+      corpus bucket and is the defect this family is about.
+
+      A re-run of the census (the script this row publishes, key-anchored rule,
+      commit named) reports `long sentence (>60 chars)` = 0 and the total
+      unchanged at 2,211.
+    title: |
+      re-run the 1252-znbn census with the reading rule written down and the commit named, publish the table, then enforce the 43 unenforced long-sentence steps that actually remain
+    context: |
+      THE ROW'S 64 IS STALE AND THE NUMBER IS NOW 1. Nineteen were enforced
+      between 1252-znbn's claim and tonight; one survives. Measured twice, on
+      two hosts, and the two censuses now RECONCILE EXACTLY — which they did
+      not at first, and the reason they did not is the useful part.
+
+      THE READING RULE, yoga's, with one clause this re-run had to add:
+        * A STEP is a `- step:` block, delimited by the NEXT `- step:` AT ANY
+          INDENT. Line-block attribution, not a text split.
+        * ENFORCED means the block contains at least one of assert_exit,
+          assert_output_contains, assert_output_matches,
+          assert_output_nonempty or success_pattern — **AS A KEY**, matched
+          `^[[:space:]]*<name>:`, NOT as a substring anywhere in the block.
+        * UNENFORCED means it contains none of them.
+      THE `AS A KEY` CLAUSE IS THE WHOLE RECONCILIATION. A substring match
+      counts a step as enforced when a COMMENT merely MENTIONS one of the
+      tokens, and this corpus contains exactly two such comments:
+        openspec/litmus-tests/litmus-mode-only-regression-gate.yaml:56
+          "# a success_pattern (a regex, unlike expected_behavior) so a legitimate skip"
+        openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml:25
+          "# ORDER 1282-rkkm / 1293-wka4. THE assert_exit HERE WAS MINE AND IT WAS"
+      Both are PROSE ABOUT ENFORCEMENT being counted AS enforcement — a census
+      of "is this step enforced?" fooled by a comment discussing the question.
+      With the substring rule esmeraldinha read 42/2,166; with the key rule it
+      reads 43/2,167, identical to yoga.
+
+      THE TABLE. esmeraldinha, commit d8fd427aafc35038a5daafe6cfec17f5618ca2b4,
+      openspec/litmus-tests/*.yaml top level, key-anchored rule:
+
+        files                                        444
+        step blocks                                2,589
+          with an expected_behavior                2,323
+        ENFORCED   (assert_* or success_pattern)     198
+        UNENFORCED (none)                          2,391
+          without expected_behavior                  180
+          with expected_behavior                   2,211
+        UNENFORCED + expected_behavior, by bucket:
+          mentions "succeed"                           1
+          long sentence (>60 chars)                   43
+          anything else                            2,167
+                                               ---------
+          sum                                      2,211
+
+      WHAT THIS RECONCILES: every figure yoga reported for trunk tonight —
+      444 files, 2,589 step blocks, 2,323 with an expected_behavior, succeed=1,
+      long=43, other=2,167. Independently derived on a second host, and the
+      single surviving succeed-step is the SAME one yoga named:
+      litmus-podman-mock-refuses-unknown-invocations.yaml:61,
+      `expected_behavior: "ok: deliberate-no-ops-still-succeed"`.
+
+      WHAT IT DOES NOT RECONCILE, and this stays open: the row's own census
+      (64 succeed-steps) against yoga's rule applied at the same pre-2026-09-19
+      commit (20). This re-run CANNOT settle that — it measures today's trunk,
+      not that commit — and the candidate causes remain yoga's three: a
+      different step delimiter, a different definition of ENFORCED, or a
+      different commit. Anyone who needs it settled must re-run this script AT
+      that commit; the script is the row's deliverable precisely so that is a
+      ten-second job rather than an argument.
+
+      TWO BUCKETS ARE NOT A SLICE. The 2,167 prose-only steps are NOT work for
+      this row. They are 1252-znbn's own open question — whether a prose
+      expected_behavior is meant to adjudicate at all — and they stay with
+      yoga's row. Moving them here would answer a design question by attrition.
+      The 1 surviving succeed-step is a single edit and rides with the 43.
+    next_action: >
+      Start by RE-RUNNING THE CENSUS and pasting the table with your commit,
+      because these numbers move: nineteen of the original 64 were enforced
+      while the row sat. Then take the 43 long-sentence steps one at a time.
+      For each, the test is not "does an assert exist" but "does the assert
+      FAIL when the behaviour is mutated" — mutate the subject, watch it red,
+      restore. A step whose prose cannot be turned into an assert gets its
+      named reason on this row instead, which is a legitimate outcome and not
+      a failure. DO NOT reword an expected_behavior to shorten it under 60
+      characters: that moves the step into the 2,167 bucket and enforces
+      nothing, which is laundering rather than fixing. The census script lives
+      in this row's provenance and is ~30 lines of awk; it needs no build and
+      runs in seconds on the floor tier.
+    provenance: |
+      Filed by esmeraldinha (windows) 2026-09-21, at the coordinator's request
+      and on yoga-silverblue's reading rule and measurement. 1252-znbn is the
+      PARENT and remains yoga's; this row is the carve-off they agreed to, and
+      it exists because the parent's headline number is three days stale.
+
+      The census was re-derived independently here rather than copied: same
+      corpus, same rule, a second host, and the numbers agree exactly once the
+      `as a key` clause is applied. The two comment-exhibits above were found
+      by diffing a substring reading against a key-anchored one, which is the
+      only reason the clause is stated rather than assumed.
+
+      Yoga's own caution is carried forward verbatim in spirit: the
+      prose-vs-enforceability gap is ~74 steps and NOT 2,276; the larger figure
+      is wrong and nobody should re-derive it.

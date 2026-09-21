@@ -57,6 +57,7 @@ critical_path:
     command: "bash scripts/test-mirror-receive-wrapper.sh force-upgraded 2>&1 | tail -1"
     timeout_ms: 20000
     expected_behavior: "ok:receive-fixture:force-and-delete-refused-on-upgraded-volume"
+    assert_output_contains: "ok:receive-fixture:force-and-delete-refused-on-upgraded-volume"
 
   - step: "T7: fsckObjects is EFFECTIVE on the upgraded volume (malformed object refused; permissive control copy accepts)"
     command: "bash scripts/test-mirror-receive-wrapper.sh fsck-upgraded 2>&1 | tail -1"

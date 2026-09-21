@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-independent-mutexes-guard-one-process-global-podman-bin-so-the-stub-tests-still-race-and-the-gate-reds-on-an-unrelated-head
+    order: 1329-ud87
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [runtime, tests, flake, podman]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-podman/src/backend.rs
+      - crates/tillandsias-podman/src/lib.rs
+    unscoreable: ""
+    verifiable_closure: |
+      ONE lock guards every write to TILLANDSIAS_PODMAN_BIN in this crate, and a
+      test asserts that the two modules use the SAME one rather than each
+      declaring its own — a source-shape assertion, because the race is
+      load-dependent and a green run proves nothing about it.
+
+      DO NOT CLOSE THIS BY RE-RUNNING THE SUITE UNTIL IT PASSES. The failure is
+      an interleaving; its absence on any one run is not evidence.
+    title: |
+      backend.rs and lib.rs each built their OWN mutex for the same process-global TILLANDSIAS_PODMAN_BIN, so stub tests across the two modules still overwrite each other and the workspace gate reds on heads that changed neither
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-20, on a ./build.sh --check of an
+      osx-next head that touches neither file:
+
+        backend::tests::a_prompt_podman_still_succeeds_under_the_same_budget
+        panicked at backend.rs:493
+          left: "aaaaaaaa...\naaaaaaaa..." (40 a's per line, thousands of lines)
+         right: "ok"
+
+      fail:test-baseline:ran=2475 new-red=1, reported as a NEW failure this change
+      broke. It broke nothing: the same test passes alone and the whole crate
+      passes on the next run (176/176).
+
+      THE LEFT VALUE NAMES THE CULPRIT. That output is verbatim the stub at
+      lib.rs:1268 — `while [ $i -lt 2000 ]; do echo 'aaaa…40…aaaa'; done` — from
+      a_chatty_sync_podman_does_not_deadlock_on_a_full_pipe. The prompt test
+      installed `echo ok`, the chatty test then pointed the same process-global
+      variable at its own stub, and the prompt test executed the CHATTY binary.
+      So this is read off the failure output rather than inferred from timing.
+
+      WHY THE EXISTING GUARDS DO NOT GUARD. Both modules found this hazard and
+      each fixed it LOCALLY:
+        lib.rs:1370      env_lock()            std::sync::Mutex in a OnceLock
+        backend.rs:391   PODMAN_BIN_ENV_LOCK   tokio::sync::Mutex, const_new
+      Two mutexes over one variable serialize nothing against each other. Each
+      comment is correct about its own module and silent about the other;
+      backend.rs:373 says "Both stub-driven tests below", which is true of that
+      module and false of the test BINARY, where lib.rs's stub tests share the
+      process. Order 793-a62g fixed exactly this failure mode inside backend.rs
+      and its fix cannot reach across the module line.
+
+      WHY IT MATTERS BEYOND ONE FLAKE. It reds the workspace gate under the
+      banner "NEW FAILURES … this change broke them", on heads that touched
+      neither file. That is a false attribution aimed at whoever is pushing, and
+      the cheap way out of it is the harmful one — adding the test to
+      test-known-red.txt would retire a real assertion (that a prompt podman
+      succeeds inside its budget) to silence a race in the harness.
+    deliverable: |
+      Collapse the two locks into one guard for the variable, used by every
+      stub-installing test in the crate, whichever module it lives in. A tokio
+      mutex cannot be held across lib.rs's sync tests and a std mutex cannot be
+      held across backend.rs's `.await`, so the shared guard has to be one the
+      async tests can hold — a `tokio::sync::Mutex` the sync tests enter through
+      a runtime-free path, or a parking-lot-style guard both can take.
+
+      THEN ASSERT THE SHAPE, because the race is load-dependent: a test that
+      greps this crate for a second mutex declaration over TILLANDSIAS_PODMAN_BIN
+      and fails when one appears. Without it the next module to install a stub
+      writes a third lock and the comment above is rediscovered a third time.
+
+      DO NOT add the failing test to test-known-red.txt.
+    next_action: >
+      Read backend.rs:371-391 and lib.rs:1284-1376 together — each is a correct
+      fix with a scope that stops at its module. Decide the shared guard first
+      (the async/sync asymmetry is the whole design question), then move both
+      call sites onto it, then add the source-shape assertion that a second lock
+      cannot come back.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-20 from a ./build.sh --check of
+      osx-next carrying 1253-gina and two trunk merges, neither of which touches
+      crates/tillandsias-podman. The panic text, the a-stub at lib.rs:1268 and
+      both lock declarations are quoted from this tree; the "passes alone,
+      passes on re-run" pair was executed here. Not reproduced on demand — the
+      interleaving is load-dependent, and this packet does not claim a reproduce
+      command it does not have.

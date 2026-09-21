@@ -5,7 +5,7 @@
 # test-join-the-fleet-idempotent.sh — pins the contract of
 # scripts/check-fleet-membership.sh, the verifier behind ./skills/join-the-fleet.
 #
-# THREE ARMS, matching the row's closure:
+# SIX ARMS (three from 1311-ajpm, three from 1317-9ugn):
 #   1. IDEMPOTENT AND NON-MUTATING: two runs on this checkout print the same
 #      verdict line, and `git status --porcelain` is byte-identical before and
 #      after — the checker reports, it never installs.
@@ -22,7 +22,7 @@
 # runs the real probes, because idempotence is a property of the whole walk.
 #
 # Grammar (one line on stdout last):
-#   ok:join-the-fleet-idempotent:3/3 | fail:join-the-fleet-idempotent:<n> arm(s)
+#   ok:join-the-fleet-idempotent:6/6 | fail:join-the-fleet-idempotent:<n> arm(s)
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -95,8 +95,55 @@ else
     bad "arm3: expected todo:join-the-fleet:hooks:scripts/install-hooks.sh with rc!=0, got rc=$r4: $(printf '%s\n' "$o4" | tail -2 | tr '\n' ' ')"
 fi
 
+# ---- arms 4-6 (ORDER 1317-9ugn: the work-ref flow) --------------------------
+# A scratch repository so the arms pin the checker's OWN lines for rerere and
+# the branch case, independent of how this host is configured. The scratch has
+# no scripts/, no plan/ and no hooks, so every other step is a todo or a named
+# skip; the arms grep only their own lines.
+scratch="$W/repo"
+mkdir -p "$scratch" && git -C "$scratch" init -q . >/dev/null 2>&1
+git -C "$scratch" checkout -q -b work/1317-9ugn 2>/dev/null || git -C "$scratch" symbolic-ref HEAD refs/heads/work/1317-9ugn
+
+echo "arm 4 — RERERE: off yields the todo naming the config command; on yields ok"
+git -C "$scratch" config rerere.enabled false
+o5="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
+git -C "$scratch" config rerere.enabled true
+o6="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
+if printf '%s\n' "$o5" | grep -q -e '^todo:join-the-fleet:rerere:git config rerere.enabled true$'; then
+    good "rerere off: todo names 'git config rerere.enabled true'"
+else
+    bad "arm4: rerere off did not yield the todo: $(printf '%s\n' "$o5" | grep -e rerere | tr '\n' ' ')"
+fi
+if printf '%s\n' "$o6" | grep -q -e '^ok:join-the-fleet:rerere$'; then
+    good "rerere on: ok:join-the-fleet:rerere"
+else
+    bad "arm4: rerere on did not yield ok: $(printf '%s\n' "$o6" | grep -e rerere | tr '\n' ' ')"
+fi
+
+echo "arm 5 — WORK REF: a checkout on work/<order> is noted, never a branch todo"
+if printf '%s\n' "$o6" | grep -q -e '^note:join-the-fleet:branch:work/1317-9ugn$'; then
+    good "note:join-the-fleet:branch:work/1317-9ugn printed"
+else
+    bad "arm5: no branch note for the work ref: $(printf '%s\n' "$o6" | grep -e branch | tr '\n' ' ')"
+fi
+if printf '%s\n' "$o6" | grep -q -e '^todo:join-the-fleet:branch:'; then
+    bad "arm5: a work ref was reported as a branch todo"
+else
+    good "no branch todo on a work ref"
+fi
+
+echo "arm 6 — AFFORDANCE: the skill's §3 block is byte-identical to what the pre-push hook prints"
+HOOK="$ROOT/scripts/hooks/pre-push-local-gate.sh"; SKILL="$ROOT/skills/join-the-fleet/SKILL.md"
+hook_lines="$(sed -n '/^work_lane_affordance() {$/,/^}$/p' "$HOOK" | sed -n 's/^    echo "  \(.*\)" >&2$/\1/p')"
+skill_lines="$(sed -n '/<!-- affordance:begin -->/,/<!-- affordance:end -->/p' "$SKILL" | grep -v -e '<!--' -e '^ *```' | sed 's/^  //')"
+if [ -n "$hook_lines" ] && [ "$hook_lines" = "$skill_lines" ]; then
+    good "affordance agrees word for word ($(printf '%s\n' "$hook_lines" | grep -c .) lines)"
+else
+    bad "arm6: hook and skill disagree:"; printf '  hook : %s\n' "$hook_lines"; printf '  skill: %s\n' "$skill_lines"
+fi
+
 if [ "$fails" = 0 ]; then
-    echo "ok:join-the-fleet-idempotent:3/3"
+    echo "ok:join-the-fleet-idempotent:6/6"
     exit 0
 fi
 echo "fail:join-the-fleet-idempotent:$fails arm(s)"

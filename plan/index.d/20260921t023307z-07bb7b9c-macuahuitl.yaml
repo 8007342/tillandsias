@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: decision
+      ts: "2026-09-21T02:33:07Z"
+      agent_id: linux-macuahuitl-claude-20260921t023306z
+      host: macuahuitl
+      summary: |
+        Decision on the record (yoga, slice 1 at work/765-xpct b61931e79, relayed by the coordinator 2026-09-21): TIERS ARE ALLOW-LISTS, NOT DENY-LISTS. LIGHT = {plan-ledger, docs}; SCOPED adds {specs, methodology, build-scripts}; FULL is everything else, including `other`. Written so that a class added to gate_stamp_classify_path later lands in NEITHER cheap list and the tree stays FULL until a human decides; a deny-list would sweep an unconsidered class into a cheap tier, the allow-by-default classifier failure this fleet keeps finding.
+
+        Four files are FULL however they arrive: build.sh, scripts/local-ci.sh, scripts/run-litmus-test.sh and scripts/change-class.sh itself — a selector cannot judge a change to itself using itself (the row's build-tooling criterion; the first real-tree run answered FULL for exactly that reason).
+
+        Slice 1 = scripts/change-class.sh + scripts/test-change-class.sh (ok:change-class:14/14), wired to nothing: build.sh untouched, no gate keyed to the selector. Five fail-closed paths each with a negative test and a control: the staleness arm has a twin on the identical tree with a fresh marker; the unknown-path arm is preceded by one proving LIGHT is reachable; the never-recorded arm asserts on the stable token `last-full=never`, not on prose. Mutation-measured: admitting `other` to LIGHT reds the unknown-path arm alone; dropping the 24 h bound reds the staleness arm while its control stays green; emptying the self-paths list reds all three self-edit arms.
+
+        Slice 2 (the matrix that causes a check to be SKIPPED; the keep-unconditional set as data with a per-entry incident citation) waits on pirria's review of three questions: whether the allow-list direction survives the front door's own class reads; whether build-scripts belongs in SCOPED given how much of the tree is scripts; what belongs in the keep-unconditional set beyond the row's list. Review routed 2026-09-21 ~01:00Z.
+
+        Review findings (pirria, 2026-09-21, on b61931e79 in a separate worktree, ok:change-class:14/14 reproduced). PREMISE CORRECTION on question (1): ./build.sh --preflight does NOT read classes (`grep -c gate_stamp_classify_path build.sh` → 0); the door enumerates guard rosters. On trunk the classifier has exactly ONE reader, scripts/gate-stamp.sh; the selector is the second. The coordinator's relay of the question added the false premise that the door reads classes; retracted here. The real risk has the other shape: the door asks "which guards exist", the selector asks "which may be skipped", and they share a vocabulary only if slice 2 teaches the door to skip. VOCABULARY: the crate class is `rust`, not `crates`, and there is a `ci` class the tiers never name — it lands in FULL silently and correctly under allow-lists, which is the property a deny-list loses. (2) build-scripts is 846 of 7233 tracked files, and 594 of them ARE THE GATE (89 gate-steps.d/*.step, 140 check-*.sh, 357 test-*.sh, 8 hooks): a change to a gate step or a guard would land under a tier that skips checks while being the thing that decides — not an argument against SCOPED, an argument that the class is too coarse to be the unit. What a SCOPED landing would not run is not answerable from the tree until slice 2's matrix exists. (3) Keep-unconditional candidates, each with the incident that would have caught it: gate-steps.d (steps are data invisible to a build.sh grep); check-*.sh and hooks (a lane checker whose fixture scaffold did not follow refused a release gate about a file the lander never touched); test-*.sh sized against slice 2 rather than asserted; and, added first, openspec/litmus-bindings.yaml — an arm written and never bound was in neither the PASS nor the FAIL count, so a tier that skips on a bindings change can land a corpus that silently shrinks.
+
+        Amendment after the review (yoga, 67af891aa, ok:change-class:20/20, gated on yoga): A FILE THAT DECIDES WHAT RUNS IS FULL; A FILE THAT IS RUN MAY BE SCOPED. gate-steps.d/*.step (89), check-*.sh (140), hooks/* (8) force FULL alongside build.sh, local-ci.sh, run-litmus-test.sh and change-class.sh; openspec/litmus-bindings.yaml forces FULL although its class is `specs` (it is what makes a litmus test exist); scripts/test-support/ fakes force FULL (a fake decides what running MEANS for everything that loads it — found because a count yoga had dismissed as a glob edge was git's pathspec crossing a directory boundary a shell glob does not). Two tree-identity slips in one hour are recorded: a measurement on a branch carrying the measurer's own new fixture reported as a fact about the tree, and a recount including a fixture that exists only on a work ref; "which tree did you measure" is this selector's standing question.

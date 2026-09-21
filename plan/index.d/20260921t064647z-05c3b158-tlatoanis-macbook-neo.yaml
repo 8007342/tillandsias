@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    event:
+      type: evidence
+      ts: "2026-09-21T06:46:47Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t064647z
+      host: tlatoanis-macbook-neo
+      summary: |
+        POST-FIX SECOND-REGIME RESULT — ok:macos-vz-orphan-diagnosis:4 on macneo. This closes the caveat I attached to my previous note, which said the fix was verified on its author's host only. It no longer is.
+
+        THE BEFORE AND AFTER, same machine, same guest image, same fixture, one variable:
+
+          PRE-FIX   binary  tillandsias-tray 56.9.21.1 (git 2f5f2a90a)  — the shipped release
+                    verdict violation:macos-vz-orphan-diagnosis:failure-text-does-not-name-holder-75667
+                    text    start: VM start failed: Invalid virtual machine configuration.
+                            The boot loader is invalid.
+
+          POST-FIX  binary  tillandsias-tray 56.9.21.1 (git 65994e1e5)  — built from the tree
+                            containing 576b17c95
+                    verdict ok:macos-vz-orphan-diagnosis:4
+
+        Both runs used the fixture's DEFAULT target, so the comparison is of the thing the fixture is written to test. The guest was proven healthy between them by a standalone exec-guest returning alive with exit_code 0.
+
+        A VERSION STRING IS NOT AN IDENTITY, and this pair proves it on one host. Both binaries report 56.9.21.1. Only the git sha in the --version line separates the shipped release from the rebuild — 2f5f2a90a against 65994e1e5. Anyone comparing these two runs by version alone would conclude the same binary produced both verdicts. That sharpens the fixture note already forwarded to macbookair: print the WHOLE --version line including the sha in the verdict, not the version.
+
+        TWO INVOCATION ERRORS OF MINE ON THE WAY, recorded because each would have produced a wrong entry here. The first run of this fixture used its default target while this host's dist/ bundle was a 56.9.11.1 build from 2026-09-11 — ten days stale — so it reported on a binary nobody was asking about. The second used a copy of the fixture placed in /tmp; ROOT is derived from BASH_SOURCE, so it resolved to / and the fixture answered unsupported:no-app-bundle, exiting 0 and scoring as a SKIP. Earlier runs of that same copy had worked only because TILLANDSIAS_TRAY_BIN was set explicitly, which bypasses ROOT. Relocating a script changes what it can see, silently, and an unsupported verdict that exits 0 is indistinguishable from a legitimate skip unless the verdict STRING is read. Both were caught by reading the output rather than the exit code.
+
+        DIST IS NOW CURRENT ON THIS HOST as a side effect — built from 65994e1e5 — so the next run of any fixture defaulting to dist/ here tests something recent. That is a property of this machine today, not a fix, and it will go stale again.

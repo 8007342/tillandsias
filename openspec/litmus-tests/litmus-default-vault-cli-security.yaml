@@ -19,6 +19,7 @@ critical_path:
     command: "scripts/test-default-vault-cli-security.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: default Vault CLI CA selection, Vault-token curl-argv secrecy, stdin bodies, and shared semantics"
+    assert_output_contains: "PASS: default Vault CLI CA selection, Vault-token curl-argv secrecy, stdin bodies, and shared semantics"
 
   - step: "default helper contains no insecure curl fallback"
     command: "! grep -qE '^[^#]*curl[^|]*(\\s-k\\s|--insecure)' images/default/vault-cli.sh && grep -Fq '/etc/tillandsias/ca.crt' images/default/vault-cli.sh && grep -Fq '/run/tillandsias/ca-bundle.crt' images/default/vault-cli.sh && echo 'ok: verified dual CA shape'"

@@ -18,6 +18,42 @@ ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 [ -x "$CHECK" ] || { echo "skip:salvage-audit:no-check-script"; echo "salvage-audit: 0 passed, 0 failed (skipped)"; exit 0; }
 
+# ── THE MATCHER (order 1306-ifhv) ───────────────────────────────────────────
+# line_matches <haystack> <glob> — true when some LINE of <haystack> matches.
+#
+# THIS EXISTS INSTEAD OF `printf '%s' "$out" | grep -q <pat>`, which is the
+# defect 1306-ifhv names. `grep -q` exits on its FIRST match; printf takes
+# SIGPIPE on the write it is still doing; and under `set -o pipefail` the
+# pipeline is NON-ZERO WITH THE PATTERN PRESENT, so `|| bad` fires on a
+# SUCCESSFUL MATCH. The failure is a false ABSENCE, which is exactly the class
+# of bug this whole file was written to prevent in the audit — committed inside
+# the audit's own test.
+#
+# WHETHER IT FIRES IS A PROPERTY OF THE PIPE, NOT OF THE ARM. Measured on yoga
+# 2026-09-20 under `set -uo pipefail` with the pattern present: payload 23141
+# bytes printf=0 grep=0; 66403 bytes printf=141 grep=0; 132758 bytes printf=141
+# grep=0. The real capture (~15.5 KB here, 22808 B on macuahuitl) fits a default
+# 64 KB pipe in ONE write, so an unloaded replay never flakes — 40 of 40 clean
+# there, 6 of 6 here. A LOADED GATE is the difference: once the user's open
+# pipes pass /proc/sys/fs/pipe-user-pages-soft the kernel hands out ONE-PAGE
+# (4 KB) pipes, printf needs six writes, and grep is gone after the first. So
+# EVERY such match in this file is converted, not merely the two arms observed
+# failing; which arm loses is a property of the machine.
+#
+# It scans LINES rather than the whole string because that is what grep did:
+# a `*a*b*` glob over the flat capture would match `a` on one line and `b` on
+# another, which grep's `a.*b` cannot do, and that difference is a false PASS.
+# `read` is fed a here-string, never a pipeline, so there is no writer left to
+# kill and no pipeline status to misread.
+line_matches() {
+    local _hay="$1" _pat="$2" _l
+    while IFS= read -r _l; do
+        # shellcheck disable=SC2254 — the glob MUST expand; that is the match.
+        case "$_l" in $_pat) return 0 ;; esac
+    done <<< "$_hay"
+    return 1
+}
+
 have_refs=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
 
 TMPDIR_ARM2B="$(mktemp -d)"
@@ -48,9 +84,11 @@ have_work=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origi
 if [ "$have_salv" -eq 0 ] && [ "$have_work" -eq 0 ]; then
     echo "skip: ARM 1b — this clone has neither salvage nor work refs"
 else
-    printf '%s' "$out" | grep -q 'patterns=.*salvage.*work' \
-        && ok "ARM 1b: the default header names BOTH stranding surfaces" \
-        || bad "ARM 1b: the default no longer names both namespaces — work/ is where a blocked host is TOLD to put a gated tree"
+    if line_matches "$out" '*patterns=*salvage*work*'; then
+        ok "ARM 1b: the default header names BOTH stranding surfaces"
+    else
+        bad "ARM 1b: the default no longer names both namespaces — work/ is where a blocked host is TOLD to put a gated tree"
+    fi
     # And it must actually AUDIT them, not merely name them: the ref count has to
     # account for both, or the header is decoration over a one-surface sweep.
     n_audited="$(printf '%s' "$verdict" | sed -n 's/^ok:salvage-audit:\([0-9]*\)r:.*/\1/p')"
@@ -96,7 +134,7 @@ _stale_n="$(printf '%s' "$out" | grep -c 'is-AHEAD' || true)"
 _relay_n="$(printf '%s' "$out" | grep -c -e 'ref-may-be-AHEAD' -e 'ABSENT-from-' || true)"
 if [ "${_stale_n:-0}" -gt 0 ]; then
     ok "ARM 2: differing files carry a DIRECTION label, not a bare 'differs'"
-elif printf '%s' "$verdict" | grep -q ':0w:'; then
+elif line_matches "$verdict" '*:0w:*'; then
     echo "skip:salvage-audit:nothing-differs — no direction label to check on this clone"
 elif [ "${_relay_n:-0}" -gt 0 ]; then
     # Differences exist and all of them are labelled. The label just is not the
@@ -171,9 +209,16 @@ fi
 # ── ARM 3: it says ancestry is not the test ─────────────────────────────────
 # A ref relayed by cherry-pick is never an ancestor and is fully landed. If this
 # script ever starts using ancestry, this line is what should disappear first.
-printf '%s' "$out" | grep -qi 'ANCESTRY IS NOT USED' \
-    && ok "ARM 3: the output states that ancestry is not the integration test" \
-    || bad "ARM 3: the ancestry disclaimer is gone — a cherry-picked relay will read as stranded"
+# nocasematch reproduces the `-i` this arm has always used; it is set for the
+# one match and unset immediately, so no later `case` in this file inherits it.
+shopt -s nocasematch
+if line_matches "$out" '*ANCESTRY IS NOT USED*'; then
+    shopt -u nocasematch
+    ok "ARM 3: the output states that ancestry is not the integration test"
+else
+    shopt -u nocasematch
+    bad "ARM 3: the ancestry disclaimer is gone — a cherry-picked relay will read as stranded"
+fi
 
 # ── ARM 4: an unresolvable branch refuses, it does not report nothing ────────
 out2="$(timeout 60 bash "$CHECK" --branch refs/heads/no-such-branch-1226 2>&1 | tail -1)"
@@ -206,6 +251,75 @@ for flag in --branch --pattern --remote; do
         bad "ARM 6: '$flag' wanted fail:salvage-audit:missing-value:*, got '$v' (rc=$rc)"
     fi
 done
+
+# ── ARM 7: A PRESENT PATTERN IS NEVER REPORTED AS ABSENT (order 1306-ifhv) ──
+# The regression arm for this file's own matchers. It asserts the PROPERTY the
+# arms above depend on — a match that is there reads as there — rather than the
+# mechanism by which the old spelling lost it.
+#
+# IT OPENS WITH ITS NEGATIVE CONTROL, and the control is the point: the arm
+# first proves the broken world is reachable ON THIS HOST by running the OLD
+# spelling over a payload whose pattern is unquestionably present. If the old
+# spelling still passes here, the hazard is not reproducible on this machine and
+# the arm SKIPS BY NAME. It does not pass. A green from an arm that could not
+# reach the failure is the third verdict, not the first.
+#
+# THE PAYLOAD IS OVERSIZED RATHER THAN THE PIPE UNDERSIZED. The field condition
+# is a one-page (4 KB) pipe handed out once the user's open pipes pass
+# /proc/sys/fs/pipe-user-pages-soft, which bash cannot request. A payload past
+# the 64 KB default forces the same thing the small pipe forces — more than one
+# write, with the reader gone after the first — and does it deterministically,
+# with no dependence on what else the host happens to be running.
+_pat_txt='ANCESTRY IS NOT USED'
+_arm7_payload="$_pat_txt
+$(head -c 200000 /dev/zero | tr '\0' 'x')"
+
+_old_rc=0
+( set -o pipefail; printf '%s' "$_arm7_payload" | grep -qi "$_pat_txt" ) || _old_rc=$?  # hazard-exempt:1306-ifhv
+_new_rc=0
+shopt -s nocasematch
+line_matches "$_arm7_payload" "*${_pat_txt}*" || _new_rc=$?
+shopt -u nocasematch
+
+if [ "$_old_rc" -eq 0 ]; then
+    echo "skip:salvage-audit:sigpipe-unreproducible-here — the old spelling still"\
+         "reported the pattern present over $(printf '%s' "$_arm7_payload" | wc -c) bytes,"\
+         "so this host's pipe never made the writer block and the control did not run"
+elif [ "$_new_rc" -eq 0 ]; then
+    ok "ARM 7: the old spelling read a PRESENT pattern as absent (rc=$_old_rc) and line_matches reads it as present — the false-absence class is closed"
+else
+    bad "ARM 7: line_matches ALSO failed to find a pattern that is present (rc=$_new_rc); the replacement has the same defect as what it replaced"
+fi
+
+# AND THE SPELLING CANNOT COME BACK. A source guard over this file, because the
+# fix is only worth the arms it covers and the next arm is written by someone
+# who did not read this comment.
+#
+# THE PATTERN IS ASSEMBLED, NOT WRITTEN: a literal here would match its own
+# definition and this guard would report itself as the violation it exists to
+# find. The scan also drops the line that builds it.
+# THE PATTERN IS ASSEMBLED, NOT WRITTEN: a literal here would match its own
+# definition and the guard would report itself as the violation it exists to
+# find. Lines that pipe into an early-exiting matcher ON PURPOSE — ARM 7's own
+# negative control, and this guard's own two scans — carry the marker below and
+# are excluded by it, so the exemption is visible at the line it applies to
+# rather than encoded in what the scan happens not to reach.
+_hz_mark='hazard-exempt:1306-ifhv'
+_hz_a="$(printf '| %s -q' grep)"
+_hz_b="$(printf '| %s -qi' grep)"
+# COMMENT LINES ARE NOT ASSERTIONS. The helper above quotes the defective
+# spelling in order to explain it, and a scan that cannot tell an explanation
+# from an assertion reports the documentation as the bug.
+_hz_hits="$(grep -n -F -e "$_hz_a" -e "$_hz_b" "$0" \
+            | grep -v -F "$_hz_mark" | grep -v '^[0-9][0-9]*:[[:space:]]*#')"   # hazard-exempt:1306-ifhv
+_hz_n="$(printf '%s' "$_hz_hits" | grep -c . || true)"
+if [ "${_hz_n:-0}" -eq 0 ]; then
+    ok "ARM 7b: no assertion in this file matches through an early-exiting reader on a pipe"
+else
+    bad "ARM 7b: $_hz_n assertion(s) still pipe a captured variable into an early-exiting matcher — under pipefail a present pattern can read as absent:
+$_hz_hits"
+fi
+
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then

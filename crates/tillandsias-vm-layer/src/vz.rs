@@ -157,6 +157,70 @@ pub const PROVISION_STATE_SHARE_TAG: &str = "provision-state";
 /// Where the guest mounts that share.
 pub const PROVISION_STATE_GUEST_DIR: &str = "/var/lib/tillandsias/provision";
 
+#[cfg(target_os = "macos")]
+/// Who else currently holds the VM's NVRAM open? (order 1253-gina)
+///
+/// Virtualization.framework reports a start refused because another process
+/// still holds the VM's files as `Invalid virtual machine configuration. The
+/// boot loader is invalid.` — a sentence describing a MALFORMED EFI CONFIG,
+/// which sends the reader at the disk. Measured repeatedly on
+/// tlatoanis-macbook-air: the image is healthy and a
+/// `com.apple.Virtualization.VirtualMachine` child of a tray that already
+/// exited is still holding `nvram.bin` and `rootfs.img`. Killing that one pid
+/// makes the identical start succeed with no change to any file.
+///
+/// THE GAP BETWEEN THOSE READINGS IS THE COST: the obvious response to "the
+/// boot loader is invalid" is `--reset-guest`, which DESTROYS the guest disk
+/// and the in-VM vault to repair what a stop would have cleared.
+///
+/// Best-effort by contract — this runs on a path that is ALREADY failing and
+/// must never fail or hang it. An empty answer just means the caller reports
+/// the framework's message unadorned, exactly as before this order.
+fn nvram_holder_pids(nvram: &Path) -> Vec<String> {
+    let Ok(out) = std::process::Command::new("/usr/sbin/lsof")
+        .arg("-t")
+        .arg(nvram)
+        .stderr(std::process::Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+/// Name the cause of a VZ start failure when we can see it (order 1253-gina);
+/// return the framework's own text unchanged when we cannot.
+fn explain_start_failure(err: &str, nvram: Option<&Path>) -> String {
+    let Some(nvram) = nvram else {
+        return format!("VM start failed: {err}");
+    };
+    let holders = nvram_holder_pids(nvram);
+    if holders.is_empty() {
+        return format!("VM start failed: {err}");
+    }
+    let who = if holders.len() == 1 {
+        format!("pid {}", holders[0])
+    } else {
+        format!("pids {}", holders.join(", "))
+    };
+    format!(
+        "VM start failed: {err}\n\nBUT THE IMAGE IS PROBABLY FINE. {who} still has {} open \
+         — a live VM already running on this image: a \
+         Virtualization.framework helper left by an earlier start whose owner went away or \
+         never stopped it (order 1253-gina). Virtualization.framework reports a file held by someone else as an invalid \
+         boot loader, which describes the disk rather than what happened.\n\nDO NOT --reset-guest \
+         for this: it destroys the guest disk and the in-VM vault to fix what a stop clears. Stop \
+         the holder instead:\n\n    kill {}\n\nthen start again; if the pid survives, kill -9 it.",
+        nvram.display(),
+        holders.join(" "),
+    )
+}
+
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
     pub fn new(guest_cid: u32, image_root: PathBuf) -> Self {
@@ -2418,7 +2482,7 @@ impl VmRuntime for VzRuntime {
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             if let Ok(result) = rx.try_recv() {
-                result.map_err(|e| format!("VM start failed: {e}"))?;
+                result.map_err(|e| explain_start_failure(&e, spec.nvram.as_deref()))?;
                 break;
             }
             if Instant::now() >= deadline {

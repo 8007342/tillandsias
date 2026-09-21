@@ -139,10 +139,37 @@ run_gate 0 "GATE the here-string rewrite of the same check passes"
 printf '#!/usr/bin/env bash\nset -uo pipefail\nif cat /etc/hosts | grep -q root; then :; fi # sigpipe-ok: bounded\n' > "$repo/scripts/victim.sh"
 run_gate 0 "GATE a recorded sigpipe-ok exemption is honoured"
 
-# 5. NEGATIVE CONTROL — a bounded producer must NOT be refused, or the gate
-#    would be the false-alarm generator this packet argued against.
+# 5. RETIRED BY MEASUREMENT (order 1307-ermc) — this arm used to assert the
+#    OPPOSITE, and the old assertion is kept here rather than deleted.
+#
+#    IT REQUIRED: "a bounded producer must NOT be refused, or the gate would be
+#    the false-alarm generator this packet argued against." That was 792-ksr8's
+#    decision, and it held for five weeks.
+#
+#    WHAT OVERTURNED IT: 1306-ifhv, measured on yoga 2026-09-20. The flaking
+#    line was a printf of a variable holding a 15,569-byte captured transcript.
+#    Under a 64 KB pipe it fits one write and never flakes — forty replays
+#    clean; under the 8 KB pipes a loaded host hands out once its open pipes
+#    pass /proc/sys/fs/pipe-user-pages-soft, it flaked 2 in 20. "Bounded" is a
+#    property of the VARIABLE and is not visible from the text, so a text
+#    checker cannot have this arm and catch that defect.
+#
+#    THE FALSE-ALARM CONCERN WAS NOT WRONG, IT WAS PRICED. The gate is
+#    diff-scoped, and over the 7 days to 2026-09-20 exactly 9 added lines
+#    fleet-wide come into scope. Each pays one `# sigpipe-ok:` or a `<<<`
+#    rewrite. Arm 6 below is the relief valve on this very line.
+#
+#    THIS IS THE SECOND COPY OF THIS CONTROL. The other is arm 5 of
+#    test-sigpipe-guard-sees-paths-and-continuations.sh, and it was found first;
+#    this one surfaced only because the sibling fixtures were run before gating.
+#    Two fixtures encoding one decision is how a retired decision comes back.
 printf '#!/usr/bin/env bash\nset -uo pipefail\nif printf %%s "$PWD" | grep -q x; then :; fi\n' > "$repo/scripts/victim.sh"
-run_gate 0 "GATE NEGATIVE bounded printf producer is not refused"
+run_gate 1 "GATE a bounded printf producer IS now refused — the breadth is chosen (1307-ermc), and this arm is its record"
+
+# 6. AND ITS RELIEF VALVE, on the same line. Arm 5 alone is a refusal; 5 and 6
+#    together are a choice with its price shown.
+printf '#!/usr/bin/env bash\nset -uo pipefail\nif printf %%s "$PWD" | grep -q x; then :; fi # sigpipe-ok: $PWD is one path\n' > "$repo/scripts/victim.sh"
+run_gate 0 "GATE the same bounded line clears with one sigpipe-ok — the breadth costs a line, not a rewrite"
 
 # 6. A file WITHOUT pipefail cannot have the defect, so it is not refused.
 printf '#!/usr/bin/env bash\nset -u\nif cat /etc/hosts | grep -q root; then :; fi\n' > "$repo/scripts/victim.sh"

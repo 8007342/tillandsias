@@ -71,6 +71,7 @@ gating_points:
     command: "bash scripts/check-ca-bind-migration.sh"
     timeout_ms: 60000
     expected_behavior: "ok:ca-bind-current:<n>, or an explicit skip: when podman has nothing to inspect"
+    assert_output_matches: "(ok:ca-bind-current:[0-9]+|skip:)"
 
   # MEASURED RED ON yoga 2026-09-04 AND FILED, not wired-and-hoped: this host
   # returns `desync:enclave-ca-key-secret` rc=1 because the CA bundle was
@@ -84,6 +85,7 @@ gating_points:
   - step: "the proxy's key secret matches the CA bundle it is bound to (998-3z6g)"
     command: "bash scripts/check-enclave-ca-consistency.sh"
     timeout_ms: 60000
+    assert_output_matches: "(ok:enclave-ca-consistent|skip:)"
     expected_behavior: "ok:enclave-ca-consistent, or an explicit skip: when the secret or cert is absent"
 
 observability:

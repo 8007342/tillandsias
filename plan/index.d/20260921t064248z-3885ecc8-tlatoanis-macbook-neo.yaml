@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-killed-tray-orphans-the-virtualization-helper-and-every-later-vm-start-fails-as-an-invalid-boot-loader
+    event:
+      type: note
+      ts: "2026-09-21T06:42:48Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t064248z
+      host: tlatoanis-macbook-neo
+      summary: |
+        THE FIX LANDED — origin/linux-next at 576b17c95 (land50), and the explainer lives in crates/tillandsias-vm-layer/src/vz.rs (the refusal text around line 216, which names the holder and carries the DO NOT --reset-guest steer).
+
+        VERIFIED AT THE REF RATHER THAN TAKEN ON DESCRIPTION, since the citation is the point of this event: both strings the fixture asserts are present in the tree at 576b17c95. Note for anyone reading the commit alone — 576b17c95 is a MERGE commit and its own --stat shows unrelated plan fragments, so the explainer is not visible in the diff of that SHA. It is in the tree at that ref, which is what the citation means and what I checked.
+
+        This pairs with the pre-fix event above. That one is the second-regime evidence FOR this fix, measured on macneo against the shipped v56.9.21.1, which never carried the explainer: a contended start reported an invalid boot loader, named neither the holder nor the contention, with a guest proven healthy by a standalone exec-guest immediately afterwards. The refusal text at 216 is the direct answer to that — it says the message describes the disk rather than what happened, which is exactly what the pre-fix text did.
+
+        STILL UNVERIFIED BY ME, and stated so nobody reads this as a post-fix pass. I have NOT run the fixture against a binary built from 576b17c95. The installed app on this host is the shipped v56.9.21.1 (pre-fix), and this host's dist/ bundle is a 56.9.11.1 build from 2026-09-11 — ten days older still, which is what made my first run of that fixture meaningless. A post-fix second-regime result needs a tray built from this ref; until someone runs it, the fix is verified by its own author's host only.

@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-if-not-pipeline-guard-catches-if-not-pipeline-and-not-pipeline-and-and-ok-or-or-bad-the-same-sigpipe-inversion-in-the-spelling-the-salvage-audit-fixture-uses-throughout
+    event:
+      type: implemented
+      ts: "2026-09-21T01:30:04Z"
+      agent_id: linux-yoga-opus5-20260921t013004z
+      host: yoga
+      summary: |
+        BUILT AND GATED: work/1307-ermc at c1c5ec571, ./build.sh --check GATE_EXIT=0,
+        verified on origin by artifact. FIXTURE, as the fold will ask:
+        scripts/test-sigpipe-guard-sees-paths-and-continuations.sh, PASS 15/15.
+        Siblings green in the same run: test-sigpipe-verdict-pipelines 11,
+        test-sigpipe-verdict-measured 5/5, test-pre-push-version-guard-sigpipe 4/4.
+
+        WHAT CHANGED, in scripts/check-sigpipe-verdict-pipelines-added.sh only:
+          _is_verdict_context() replaces the leading-anchor regex test at the old line
+          191. The and-or spelling cannot be a leading anchor — what makes it a verdict
+          is that `&&` or `||` follows the CONSUMER, so the consumer's position has to
+          be located first.
+          PRODUCER_UNKNOWN_SIZE_RE admits a printf/echo of a variable, checked only
+          when UNBOUNDED_PRODUCER_RE (line 130's neighbour) misses.
+        scripts/check-no-spawn-in-if-not.sh is UNTOUCHED, per the investigated event.
+
+        THE CONTRACT CHANGED AND THIS IS THE SENTENCE FOR IT: THE GUARD NOW FLAGS
+        CORRECT CODE IN THE BOUNDED CASE, ON PURPOSE. It cannot tell a variable holding
+        a SHA from one holding a transcript, because that is not visible from the text.
+
+        TWO NEGATIVE CONTROLS WERE RETIRED, IN PLACE, WITH THEIR DISPROOF. Both
+        asserted that a bounded printf producer must NOT be refused — 792-ksr8's
+        decision encoded as a test, twice. Admitting the producer breaks both by
+        construction. Each now asserts the new behaviour with the OLD assertion, the
+        measurement and the date recorded above it, and each gained a companion arm
+        showing the same line cleared by ONE `# sigpipe-ok:`. A refusal with no remedy
+        beside it reads as a bug; a refusal with its price shown reads as a decision.
+
+        THE SECOND COPY WAS FOUND ONLY BY RUNNING THE SIBLINGS BEFORE GATING, and the
+        lesson belongs on the row rather than in a message: ONE DECISION LIVED IN TWO
+        FIXTURES. Retiring it in the fixture named on the row would have left the other
+        asserting the opposite, and the row would have closed with the tree
+        contradicting itself. Noted in both files.
+
+        THE SPECIMEN IS REWRITTEN, NOT ANNOTATED. The guard's own lines 191-194 were
+        three instances of the and-or spelling with a printf-of-a-variable producer,
+        inside the guard that exists to find them, benign because `$added` is one
+        logical line. They are now `grep -qE "$RE" <<<"$var"`. An exemption would have
+        been honest and cheaper; a here-string cannot SIGPIPE AT ALL, so the question
+        stops being asked instead of being re-answered by every future reader. The
+        first user of the new rule was the file implementing it.
+
+        ARMS: A1 one-line and-or; A2 the REAL 1306-ifhv continued form; A3 regression
+        that the if-not spelling still reds; B the producer admission ISOLATED in a
+        plain if-context, so it cannot pass on the context half alone; C the escape
+        hatch on the new shape; C2 a negative control that a pipeline whose status
+        NOBODY READS is not flagged — without C2, "flag every printf into a grep -q"
+        would pass every other arm in the file.
+
+        ONE DEFECT OF MINE, CAUGHT BY A SIBLING CHECKER: the first version of these
+        arms wrote the defective patterns LITERALLY into heredoc test data, and
+        check-no-spawn-in-if-not.sh refused the file over A3's `if !` line. The whole-
+        repo checker scans TEXT and cannot distinguish a specimen from a use. The
+        fixture's own header warns about exactly this forty lines above where I was
+        typing, and names the established remedy — assemble the needle from $P and $BS
+        at runtime. Applied.
+
+        WHAT THIS ROW DECLINED, with its disproof, already recorded at 040fe79fe: the
+        row's own next_action asked to extend the WHOLE-REPO checker. That matcher was
+        built, run once — 269 VIOLATIONS ACROSS ~100 FILES, build.sh included — and
+        reverted. 792-ksr8 ran the same sweep in August and made this guard diff-scoped
+        for that reason.
+
+        THE BREADTH IS PRICED. Reading rule published BEFORE the number: lines ADDED to
+        scripts/*.sh and build.sh on origin/linux-next over the 7 days to 2026-09-20,
+        counting a line with a single `|` that is not `||`, an early-exit grep -q, a
+        branch AFTER that consumer, and a printf/echo of a variable before it. UPPER
+        BOUND — it counts added lines, so a moved or re-indented line counts.
+          22,117 added lines
+            167 with an early-exit grep -q
+             19 with && or || after it
+             16 also with a printf/echo-of-a-variable producer
+              7 of those ALREADY an if/while/until/elif context
+              9 NEWLY in scope
+        Nine a week fleet-wide, each paying one `# sigpipe-ok:` or a `<<<` rewrite.
+
+        VARIABLE PROVENANCE: could-not-do, stated before reaching for a heuristic. It
+        is tractable for a literal assignment — the retired control's own `v="some
+        text"` is visibly bounded — and that is precisely why it was not built. It
+        works for literals and fails for every variable assigned from a command
+        substitution, which is every instance that has bitten this fleet, 1306-ifhv
+        included. A rule right about the safe cases and wrong about the dangerous ones
+        is worse than a broad rule with an escape hatch.

@@ -141,6 +141,16 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             UnixSocket,
         ) => Unsupported,
 
+        // SetVsockForwardTarget is vsock-only and host->guest: the TRAY learns
+        // the host endpoint from its own environment and tells the guest, which
+        // is a fact only the host side can know (order 1309-rb3p). Registered
+        // here deliberately rather than left to a catch-all — the comment above
+        // records that an unregistered variant answering Unsupported is how two
+        // earlier omissions were caught on their first live run, and that
+        // property is worth more than the line it costs.
+        (SetVsockForwardTarget { .. }, Vsock) => Handle,
+        (SetVsockForwardTarget { .. }, UnixSocket) => Unsupported,
+
         // DeliverCredentials and GetVaultHandover are vsock-only (for in-VM credential delivery/handover)
         (DeliverCredentials { .. } | GetVaultHandover { .. }, Vsock) => Handle,
         (DeliverCredentials { .. } | GetVaultHandover { .. }, UnixSocket) => Unsupported,
@@ -197,8 +207,42 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use tillandsias_control_wire::{ControlMessage, ErrorCode, PtyDirection, PtyExit, VmPhase};
+
+    /// ORDER 1309-rb3p. The host→guest target must be HANDLED on vsock and
+    /// REFUSED on the unix socket — and refused by NAME, not by falling into a
+    /// catch-all. This matrix's own comment records that an unregistered
+    /// variant answering Unsupported is how two earlier omissions were caught
+    /// on their first live run; this asserts the registration exists so that
+    /// property is not quietly spent.
+    #[test]
+    fn set_vsock_forward_target_is_vsock_only() {
+        use ControlMessage::SetVsockForwardTarget as T;
+        assert_eq!(
+            decide_route(
+                &T {
+                    cid: 2,
+                    port: 42421
+                },
+                TransportKind::Vsock
+            ),
+            DispatchOutcome::Handle,
+            "the tray tells the guest the host endpoint over vsock"
+        );
+        assert_eq!(
+            decide_route(
+                &T {
+                    cid: 2,
+                    port: 42421
+                },
+                TransportKind::UnixSocket
+            ),
+            DispatchOutcome::Unsupported,
+            "nothing on the unix path can know the host's vsock port"
+        );
+    }
 
     /// Construct one envelope per variant for the matrix tests. Keeps
     /// the test bodies short.
