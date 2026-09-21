@@ -1460,6 +1460,55 @@ async fn serve_ready_stream(
                     }
                 }
             }
+            ControlMessage::SetVsockForwardTarget { cid, port } => {
+                // ORDER 1309-rb3p, the last half of 830-xsk2. The tray learns
+                // the host endpoint from ITS OWN environment and tells us;
+                // nothing in the guest can know the port the host chose.
+                //
+                // /run IS tmpfs AND THAT IS THE DESIGN. The value dies with the
+                // boot, so it cannot go stale and a reprovisioned guest is
+                // configured by the next VM start like any other. A file under
+                // /etc or /var would reintroduce the first-boot problem this
+                // row rejected twice.
+                //
+                // Written here, READ AT CONTAINER START by
+                // `vsock_forward_target()` — not cached at process start, which
+                // would sample before the tray had spoken and pin a `None` for
+                // the life of the process.
+                let dir = std::path::Path::new("/run/tillandsias");
+                let outcome = std::fs::create_dir_all(dir)
+                    .and_then(|()| std::fs::write(dir.join("vsock-forward"), format!("{cid}:{port}\n")));
+                match outcome {
+                    Ok(()) => {
+                        eprintln!(
+                            "[tillandsias] host-native inference target set: cid {cid} port {port} \
+                             — the next inference start will forward inference:11434 to the host"
+                        );
+                    }
+                    Err(err) => {
+                        // LOUD, and answered on the wire. A silent failure here
+                        // leaves the tray believing the lane is configured while
+                        // the guest quietly starts the ordinary inference
+                        // container — two ends disagreeing with nothing to say so.
+                        eprintln!("[tillandsias] could not record the host-native inference target: {err}");
+                        let err_env = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Internal,
+                                message: format!("SetVsockForwardTarget failed: {err}"),
+                            },
+                        };
+                        if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)
+                            .await
+                            .is_err()
+                        {
+                            break 'connection;
+                        }
+                    }
+                }
+            }
             #[cfg(unix)]
             ControlMessage::PtyStdinEof { session_id } => {
                 // Order 925-eofi. Same bounded queue as the input bytes, so an
