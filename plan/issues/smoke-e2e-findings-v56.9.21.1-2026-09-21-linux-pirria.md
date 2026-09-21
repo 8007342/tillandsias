@@ -229,6 +229,25 @@ the guard before doing cycle work.
   in database`. Guards sharing substrate must not run beside a reset — the hazard
   1314-2mdv names, demonstrated rather than argued. The 138 s figure reported
   above is from the clean earlier run.
+
+- **THE SMOKE'S OWN §2 REDS TWO ci-release FIXTURES, AND THEY ARE NOT FINDINGS.**
+  After this run, `litmus:guest-binary-embed-integrity` and
+  `litmus:tool-dispatch-lib` failed on this host. Both reach for the builder
+  toolbox (22, 23 and 17 mentions across their scripts), and §2 destroyed it —
+  the pre-state table above records `builder toolbox 1 → 0`. Recreating it with
+  `scripts/with-tillandsias-builder.sh true` and re-running takes the suite from
+  93% to **100% (46/46), zero failed**, with no code change in between.
+
+  Recorded because I first called them "not mine" on the strength of a check
+  that asked whether either fixture READ a file I had touched. That establishes
+  authorship and says nothing about causation, which is the question that
+  mattered: my run destroyed the substrate they need. macuahuitl named the
+  regime; the measurement is theirs, not mine.
+
+  ANY HOST RUNNING THIS SMOKE SHOULD EXPECT THESE TWO RED AFTERWARDS and should
+  recreate the toolbox before reading a post-smoke suite as evidence about the
+  tree. A suite run on a substrate the smoke just wiped is measuring the wipe.
+
 - Previously filed and still open from the v56.9.20.1 report: the §0.2b DISTILLED
   arm's lexical version comparison, and the mention-counting litmus arm (the
   latter now replaced by `scripts/test-reset-flags-are-accepted.sh`).

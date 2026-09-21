@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    event:
+      type: completed
+      ts: "2026-09-21T08:03:59Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        The decider the packet asked for, landed and gated. Not a checklist at authoring
+        time — a diff-scoped guard that fires on the push and NAMES the artifact.
+
+        WHAT SHIPPED. scripts/check-added-test-is-referenced.sh, wired into the pre-push
+        hook and gate step 419, covering BOTH organs as one question with two needles: a
+        shell test's basename, a litmus yaml's declared name. Filed against the SHAPE,
+        which is the whole correction — the first specimen's lesson was filed against
+        the ORGAN and so did not fire hours later when the artifact was a shell script.
+
+        THE UNSCOREABLE IS ANSWERED, not accepted. scripts/test-reference-surfaces.manifest
+        is the one declaration of what "referenced" means, and the verdict line carries
+        surfaces=6 so a fifth caller added tomorrow is visible instead of silently
+        turning referenced tests into false positives.
+
+        THE NEGATIVE CONTROL IS scripts/unreferenced-grandfathered.txt, deliberately
+        EMPTY: diff-scoping already covers the standing corpus, so any name written
+        there is a live declaration a reviewer should stop on rather than a suppression
+        list that grows.
+
+        PROVEN BY ITS REFUSALS, because a guard for "this test cannot fail a gate" that
+        has only ever been seen passing is this packet's own defect one level up. Ten
+        hermetic arms; mutation-proven three ways — blanking the counter reds 3 arms,
+        dropping the grandfather affordance reds 1, a silent green on a missing
+        manifest reds 1.
+
+        THE REPLAY IS ASYMMETRIC AND SHOULD STAY STATED. Run against its own commit the
+        guard names scripts/test-reset-flags-are-accepted.sh, exactly as it should have.
+        The litmus specimen CANNOT be replayed from history: file and binding landed in
+        the same commit c27da2dc3, because the miss had been caught by then. Its unbound
+        state existed only in the working tree where the suite reported 37 PASS / 3 FAIL,
+        so its coverage is the hermetic arm, by construction rather than re-measurement.
+
+        THREE THINGS THIS COST, each recorded because each is the packet's own subject
+        recurring while the packet was being closed.
+
+        The gate refused the first version: line 113 used `if ! grep ...` as a verdict,
+        795-imz3, where pipefail plus a SIGPIPE'd producer can invert the answer. A
+        guard about tests that cannot fail, written with a check that could silently
+        answer backwards.
+
+        The fixture spelled five throwaway litmus names as literals, and
+        check-litmus-pin-claims read them as this file's own broken pin claims — the
+        mention-versus-use shape again, one level up. The prefix is now built.
+
+        And the near-miss worth the row: my background wrapper printed "exited with code
+        0" while the gate itself had GATE EXIT=1. Reading the wrapper instead of the
+        thing it wrapped is the same error as reading a test's own ok: line instead of
+        asking whether anything runs it.
+
+        ALSO CORRECTED HERE. I reported two ci-release reds as "not mine" on the
+        strength of a check that asked whether either fixture READ a file I had touched.
+        That establishes authorship and is silent on causation. macuahuitl named the
+        regime: this host's smoke had destroyed the builder toolbox, which both reach
+        for. Recreated it, re-ran, 46/46 and 100%, no code change between. They were
+        host state and are recorded in the smoke report's not-checked list.
