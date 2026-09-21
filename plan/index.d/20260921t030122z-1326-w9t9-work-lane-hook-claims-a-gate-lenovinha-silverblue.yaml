@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: under-the-work-ref-lane-the-pre-push-hook-prints-a-terminal-line-claiming-the-gate-is-current-for-a-tree-it-warned-about-and-did-not-enforce
+    order: 1326-w9t9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [gate, tooling, agent-safety, work-lane, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a change to the
+      hook's tail plus a fixture arm; the arm's name cannot be pinned before it
+      is written (885-92iu) and it lands in the same commit as the change
+      (1136-n8sh). Future arm: scripts/test-pre-push-work-lane-summary.sh —
+      "a work-lane push that warned prints the warning count and does NOT claim
+      the gate is current".
+    verifiable_closure: |
+      On a work/<order> push whose stamp is stale, the hook's TERMINAL line
+      states what it waived and does not assert a gate it did not enforce —
+      e.g. `⚠ work lane: pushed with N warning(s); ./build.sh --check NOT
+      current` — and N equals the number of `warn:pre-push:` lines emitted.
+      On a work-lane push with ZERO warnings, and on any non-work-lane push,
+      the existing ✓ line is unchanged. MUTATION ARM: restore the unconditional
+      ✓ and the new arm REDS.
+      PRE-FIX RESULT, MEASURED (this is the specimen, not a reconstruction):
+      gate stamp on disk read `stamped 2026-09-21T01:27:35Z` from the previous
+      PASSING gate; commit at 19:54:52 local; `./build.sh --check` FAILED with
+      DONE_RC=101 (clippy let_unit_value); the push seconds later SUCCEEDED and
+      its stderr carried exactly one line —
+      `warn:pre-push:pre-push: the tree changed since ./build.sh --check last
+      passed` — followed by
+      `✓ local gate: preflight clean, ./build.sh --check current for this tree`.
+      Afterwards `scripts/gate-stamp.sh verify` on the SAME unchanged tree
+      answered `stale:tree-changed-since-gate`.
+    title: |
+      under the work-ref lane the pre-push hook prints a terminal line claiming ./build.sh --check is CURRENT for a tree it had just warned was stale — the summary asserts a gate the lane waived
+    context: |
+      FOUND BY lenovinha-silverblue 2026-09-20, pushing to work/1313-prin
+      immediately after a gate that failed.
+
+      NOT A STAMP BUG, AND THAT WAS CHECKED RATHER THAN ASSUMED. My first
+      reading was that the two disagreed about one tree — the hook saying
+      current, gate-stamp.sh verify saying stale minutes later with nothing
+      changed. The coordinator named the check that decides it: does the push's
+      stderr carry a `warn:pre-push:` line above the ✓? It does, exactly one.
+      So the stamp was CORRECT throughout; the lane warned, waived and
+      continued, and only the SUMMARY was false. Had that line been absent, the
+      stamp would have read current after a failed --check, which is a
+      different and worse defect (the stamp is written only by a passing
+      --check by design).
+
+      THE MECHANISM, read from the hook's source. Under 1315-4a7j a push whose
+      refs are all work/<order> sets WORK_REF_LANE=1, and every refuse() in
+      that lane prints `warn:pre-push:<decider>: …` plus the affordance and
+      RETURNS 0 — warnings only, by design, which is the point of the lane. The
+      terminal ✓ line is printed UNCONDITIONALLY at the end of the hook, so it
+      runs whether or not anything was waived.
+
+      WHY IT MATTERS DESPITE THE LANE BEING UNGATED BY DESIGN. The ungated lane
+      is deliberate and this row does not argue with it. What is wrong is that
+      the LAST LINE A HUMAN OR AGENT READS says the gate is current when the
+      hook just declined to enforce it. A warning above a green summary is read
+      as the summary; I read it that way myself, and only noticed because I had
+      the failing gate's exit code in the same terminal. An agent pushing
+      unattended sees ✓ and reports the push as gated — which is how ungated
+      code reaches a relay described as the GATED hand-off.
+
+      THE FIX IS SMALL: count the warnings, and let the tail say what happened.
+      Roughly ten lines in refuse() and the tail.
+    next_action: |
+      Nobody holds this. Offered to yoga as 1315-4a7j's follow-on since they own
+      the work-ref lane; anyone may take it. What is LEFT:
+      1. Count `warn:pre-push:` emissions in the work lane (a counter in
+         refuse(), since the lane's refuse() is the only place they are made).
+      2. Make the terminal line conditional: with N>0 print the warning count
+         AND that the gate is NOT current; with N=0 keep the existing ✓
+         verbatim, so a clean work-lane push is unchanged.
+      3. Leave every non-work-lane path exactly as it is — this row is about
+         the summary under the waiving lane, not about the lane.
+      4. The fixture arm named in unscoreable, with the mutation that restores
+         the unconditional ✓ and reds.
+      SCRIPTS/ IS FROZEN for the v56.9.21.1 fix-forward cut; this lands after
+      the back-merge push.
+    provenance: |
+      Measured by lenovinha-silverblue 2026-09-20 on work/1313-prin; mechanism
+      read from scripts/hooks/pre-push-local-gate.sh by macuahuitl-fedora, who
+      also named the warn-line check that distinguished this from a stamp-write
+      bug. Related: 1315-4a7j (the work-ref lane), 1313-prin (the push that
+      surfaced it).
+
+events:
+  - packet_id: under-the-work-ref-lane-the-pre-push-hook-prints-a-terminal-line-claiming-the-gate-is-current-for-a-tree-it-warned-about-and-did-not-enforce
+    event:
+      type: note
+      ts: "2026-09-21T03:01:22Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260921t030122z
+      summary: |-
+        specimen measured on a real push; the warn-line check separated this from a stamp-write bug
