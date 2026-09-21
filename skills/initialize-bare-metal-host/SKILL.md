@@ -220,6 +220,12 @@ TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
 Exiting the shell leaves the stack up. `RC=124` from a `timeout` wrapper is the
 interactive shell being cut off, not a failure.
 
+**BUT DO NOT READ rc AS THE ANSWER.** Measured by yoga: `tillandsias --bash
+<name> --debug` on an UNRESOLVABLE project prints `Error: Project not found`
+and **exits 0** — so a real failure reads as CLEANER than the timeout. Only the
+three checks below distinguish them, which is why they are three independent
+reads and not a convenience.
+
 **Done when** all three are true — check each, they fail independently:
 
 ```bash
@@ -306,6 +312,18 @@ measurement.
 | leg | ref |
 |---|---|
 | (a) | `linux-next` — a plan-only commit cherry-picked onto a clean base off `origin/linux-next` |
+
+**Leg (a) needs a fetch, and expects to lose a race.** Run `git fetch origin`
+(an anonymous https read — confirm with `GIT_TRACE=1` that no helper runs)
+**immediately** before the plan-only push, then rebase and push at once. The
+hook keys the cheap lane on the remote tip being a LOCAL OBJECT, and **a push
+through the mirror fetches nothing** — the relay carries refs up and brings
+nothing down — so a clone that has not fetched since trunk moved is told
+`plan-only lane: not applicable — remote base <sha> is not present locally`.
+On a busy trunk expect to lose once: yoga saw an 82-second push lose to a
+plan-only move and the relay answer `[pre-receive] REJECT: stale old object ID
+does not match current ref`. **That is the staleness guard working, not a lane
+fault.** Fetch, rebase, push again.
 | (b) | `work/<order>` |
 | (c) | another side branch — a `salvage/<host>/<date>-<slug>` ref |
 
@@ -316,16 +334,35 @@ on their host git never reads the keyring at all, so a "keyring PID unchanged"
 arm cannot fail there even when a credential IS read. An arm that cannot fail is
 not an arm.
 
+**Two instruments, and the SECOND decides.** `--get-regexp` says what is
+*configured*; `git credential fill` under `GIT_TRACE=1` says what actually
+*runs*. A host can differ between them.
+
 ```bash
-git config --show-origin --get-regexp 'credential.*helper'
+git config --show-origin --get-regexp 'credential.*helper'        # CONFIGURED
+printf 'protocol=https\nhost=github.com\n\n' | GIT_TRACE=1 git credential fill   # RUNS
 ```
 
 **Use `--get-regexp`, not `--get-all credential.helper`.** The latter misses
 URL-scoped keys such as `credential.https://github.com.helper`, and on lenovinha
 it returns *empty* while a helper is configured — a false "no credential path
-here" that was written into this session's notes before it was caught.
+here" that reached this session's notes before it was caught.
 
-Then pick the instrument that matches what you found:
+**Yoga's host is the cautionary example, and it corrects an earlier version of
+this page.** This section once said "on yoga git never reads the keyring at
+all". That claim was derived with `--get-all` — the instrument this very section
+warns against — applied to themselves. `--get-regexp` shows a keyring helper
+configured GLOBALLY there (`credential.https://github.com.helper` →
+`gh auth git-credential`). The conclusion survives, but for a narrower reason
+than stated: a **repo-scope empty** `credential.helper` entry RESETS the
+inherited list before the file store is added, and the trace shows exactly one
+`run_command` — `credential-store --file=.git/.gh-credentials` — and nothing
+else. **Delete that one empty line and the keyring path goes live.** So: a host
+with a keyring helper configured, correctly concluded unused, right for a reason
+one config edit away from false. Record which instrument you used and what it
+showed.
+
+Then pick the instrument that matches what actually RUNS:
 
 **Instrument A — a libsecret/keyring helper** (e.g. `!gh auth git-credential`):
 
@@ -433,6 +470,14 @@ all, say so and claim less).
 **(3) `ls-remote` equality and no TOFU** — the ref on origin equals your local
 head at push time, and the push ran with `StrictHostKeyChecking=yes` against the
 `@cert-authority` file under `HostKeyAlias`.
+
+**Check equality against GITHUB, never against the mirror.** The mirror REFUSES
+`ls-remote` by design — its force-command is receive-pack only, so it answers
+`fail:tillandsias-receive:not-receive-pack`. And do not silence that refusal:
+yoga nearly filed "the mirror has no linux-next ref" because a `2>/dev/null`
+turned a principled refusal into empty output, which is indistinguishable from
+an absent ref. (The same suppression cost this host ten push attempts mislabelled
+as races earlier in the same session.)
 
 ```bash
 git ls-remote origin refs/heads/<ref>
