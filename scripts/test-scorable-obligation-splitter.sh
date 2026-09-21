@@ -76,6 +76,38 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/scorable-splitter.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 note() { printf '%s\n' "$*"; }
+
+# ── SELF-CHECK: can this awk MEASURE, before any arm judges the subject ──────
+# THE THIRD STATE. Arm 4 already grades SUBJECT-WRONG against SUBJECT-LACKS-
+# CAPABILITY. This is the third and it was missing: I-COULD-NOT-MEASURE.
+#
+# Every arm below splits on the unit separator. An awk that does not honour the
+# separator reads every field EMPTY — and an empty closure field is precisely
+# what this fixture treats as the defect. So the arms would report [] and print
+# failure text BLAMING THE SPLITTER, in a fixture written to protect it.
+# MEASURED, macOS 2026-09-21: the one-true-awk does not honour a hex field
+# separator (-F'\x1f'), only octal (-F'\037'), and arms 1, 3, 4 and 5 returned
+# [] against a CORRECT fix. Bound under ci-release, that would have redded the
+# macOS release gate with a confident accusation against the right code.
+#
+# A guard that cannot tell "the subject is wrong" from "I could not measure the
+# subject" will, on the day it breaks, indict whatever it was pointed at.
+# So: assert the fixture's OWN PARSE before it reports on anything. Eleven
+# separators reading empty is not a plausible measurement, it is a broken
+# instrument, and it must refuse rather than accuse.
+sep_probe="$(printf 'a\037b\n' | awk -F'\037' '{print NF}' 2>/dev/null)"
+if [ "$sep_probe" != "2" ]; then
+    printf 'could-not-run:scorable-splitter:awk-field-separator-unsupported NF=%s expected=2 awk=%s\n' \
+        "${sep_probe:-<none>}" "$(awk --version 2>&1 | head -1 | tr -d '\n')"
+    {
+        echo "  This awk does not honour the unit separator, so EVERY arm would read an"
+        echo "  empty field and report it as the subject failing. That is a MEASUREMENT"
+        echo "  failure, NOT a verdict on the splitter — nothing here is an accusation."
+        echo "  Use an awk that honours octal field separators, or run this on another host."
+    } >&2
+    exit 2
+fi
+
 fail() { printf 'FAIL:%s\n' "$*" >&2; rc=1; }
 
 # Extract the _BLOCK_AWK program body from a checker source.
@@ -189,7 +221,7 @@ lost=$(join -t"$SEP" -j1 "$tmp/K-old.txt" "$tmp/K-new.txt" 2>/dev/null \
 
 [ "$lost" -eq 0 ] || fail "scorable-splitter:arm3:closures LOST under the fix: $lost — a boundary change must never un-read a closure"
 if [ "$recovered" -lt 1 ]; then
-    fail "scorable-splitter:arm3:no closures recovered on the live corpus — either the fix is inert or this arm is blind again (it was, once: see the header)"
+    fail "scorable-splitter:arm3:no closures recovered on the live corpus — three readings and only a broken instrument is silent about which: the fix is inert, or this arm is blind again (it was, once: see the header), or THIS RUN COULD NOT MEASURE — the separator self-check above is what tells those apart, so if it passed and this still fires, the instrument is fine and the subject or the arm is not"
 else
     note "ok:scorable-splitter:arm3-per-file-diff:$n_old records, $recovered closure(s) recovered, 0 lost"
     join -t"$SEP" -j1 "$tmp/K-old.txt" "$tmp/K-new.txt" 2>/dev/null \
@@ -320,6 +352,13 @@ fi
 if [ $rc -eq 0 ]; then
     note "ok:scorable-obligation-splitter:5/5 arms"
 else
-    note "violation:scorable-obligation-splitter" >&2
+    # THE VERDICT LEAVES BY THE SAME DOOR IN BOTH CASES. This used to go to
+    # stderr while the pass verdict went to stdout, so a reader capturing only
+    # stdout saw a stream ENDING IN `ok:` with no failure line anywhere in it —
+    # measured: real exit status 1, zero violation/FAIL lines on stdout, five on
+    # stderr, last stdout line `ok:…arm5-prose-immunity`. Which half a reader
+    # sees should not depend on their redirection. Per-arm detail stays on
+    # stderr; the VERDICT is always on stdout (1339-had5).
+    note "violation:scorable-obligation-splitter"
 fi
 exit $rc
