@@ -837,12 +837,22 @@ fn build_project_submenu(
         })
         .collect();
 
-    let label_base = project.full_name.as_deref().unwrap_or(&project.name);
-    let label = if project.ready && scope == "local" {
-        format!("{} \u{2713}", label_base)
-    } else {
-        label_base.to_string()
-    };
+    // ORDER 997-e4v2. The label used to gain a "✓" for a READY project when
+    // `scope == "local"`. That branch is unreachable: `build_project_submenu`
+    // has exactly one call site and it always passes "cloud", so the ready-tick
+    // has not rendered since the local list was removed. Deleted rather than
+    // left to read as a live affordance.
+    //
+    // `scope` itself STAYS, and is not vestigial despite having one caller: it
+    // is part of the id grammar (`project.<scope>.<name>`) that
+    // `menu_action::resolve_project` parses back out. Dropping the parameter
+    // would change every project id and break resolution — which is the kind of
+    // tidy-looking removal that turns a menu into a set of inert rows.
+    let label = project
+        .full_name
+        .as_deref()
+        .unwrap_or(&project.name)
+        .to_string();
 
     MenuItem::submenu(id, label, children)
 }
