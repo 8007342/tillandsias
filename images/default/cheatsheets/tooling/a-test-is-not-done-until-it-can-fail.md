@@ -1,5 +1,5 @@
 ---
-tags: [testing, fixtures, litmus, false-positive, agent-safety, fail-loud, guard-cannot-fail]
+tags: [testing, fixtures, litmus, false-positive, agent-safety, fail-loud, guard-cannot-fail, mention-vs-use]
 languages: [bash, yaml]
 since: 2026-09-21
 last_verified: 2026-09-21
@@ -90,6 +90,63 @@ a newly added `test-*.sh` nothing invokes, the way `check-litmus-bindings.sh`
 it is here because a decider lands on new work while a habit reaches the work
 that predates it.
 
+## The other half: a file that talks ABOUT tests is read as a file that claims them
+
+The page so far is about a test nothing runs. This is its mirror: **a mention
+read as a use.** A scanner asking "does this file reference test X?" cannot
+tell an invocation from a sentence, and neither can a fixture asking "does the
+source contain string Y?" Both answer a question about TEXT and report it as a
+question about BEHAVIOUR.
+
+Four specimens, all on this fleet, three of them on 2026-09-21 alone:
+
+| Specimen | What it counted | What it reported |
+|---|---|---|
+| the reset-flag litmus arm, order 1286-4437 | 12 **mentions** of `--reset-state` in the tree | 7/7 green — on a tree whose binary refused the flag, so the release shipped uninstallable |
+| the step-enforcement census, order 1329-m8dk | `assert_exit` as a **substring** anywhere in a step block | two steps ENFORCED whose only match was a COMMENT discussing enforcement |
+| a fixture's throwaway names, order 1325-ygq5 | five synthetic `litmus:…` names written as literals | `check-litmus-pin-claims.sh` read them as that file's own broken claims — five refusals in a ci-release suite |
+| `census-litmus-reachability.sh`, order 1333-jpq5 | two grandfathered-unbound tests named in its header | the same scanner refused the file — whose entire purpose is to REPORT unbound tests |
+
+The last one is the shape at its purest: the file was refused for doing its
+job, by a guard that was right to refuse it. Its author had already dodged this
+exact trap in the fixture two rows earlier and still walked into it, because
+the first dodge was remembered as a fixture trick rather than as a property of
+every file that discusses a test by name.
+
+**The second specimen is the load-bearing one**, because it changed a number
+two hosts were arguing about. Under a substring reading the census read
+42 unenforced-long / 2,166 other; under a key-anchored reading, 43 / 2,167. The
+whole disagreement was two comments — prose ABOUT enforcement counted AS
+enforcement — and the hosts reconciled exactly once the rule was written down as
+`^[[:space:]]*<name>:`, a KEY, never a substring.
+
+### What to do
+
+**Writing a file that names tests:** assemble the prefix so no scanner sees a
+token you did not mean as a claim.
+
+```bash
+L="lit""mus"            # in shell; the scanner greps for the joined literal
+printf 'name: %s:orphan-shape\n' "$L"
+```
+
+In Markdown, name them freely — `check-litmus-pin-claims.sh` scans `*.sh` and
+`*.c` only, which is why this page can print them and that script could not.
+
+**Writing a scanner or a fixture:** match as a KEY, anchored, never as a
+substring — and say in one line what you are entitled to conclude.
+
+```bash
+grep -qE '^[[:space:]]*assert_exit:'  "$f"   # a key: this step asserts
+grep -qF  'assert_exit'               "$f"   # a mention: someone wrote the word
+```
+
+**The test of whether you have this right:** can your check distinguish a file
+that USES the thing from a file that DISCUSSES it? If not, you are counting
+prose, and prose about a guard is the one text most likely to appear in files
+that have no guard at all — because that is what people write while fixing the
+absence.
+
 ## Related
 
 [exit-status-is-not-an-answer.md](exit-status-is-not-an-answer.md) — the same
@@ -109,3 +166,13 @@ was caught in review by macuahuitl before it landed; the third by its author
 running the full suite and finding their test in neither the pass count nor
 the fail count. Written at the coordinator's request as the human half of
 1325-ygq5.
+
+The mention-versus-use section was added 2026-09-21 by pirria, from four
+specimens: the reset-flag arm that counted mentions and let an uninstallable
+release ship (1286-4437); the substring-versus-key census reading that was the
+entire disagreement between two hosts' counts (1329-m8dk, on yoga's rule); a
+fixture whose five throwaway names were read as its own claims (1325-ygq5); and
+`census-litmus-reachability.sh`, refused by that same scanner for naming the
+unbound tests it exists to report (1333-jpq5). The last three happened on one
+day, to one host, who had already dodged the trap once — which is the argument
+for the page rather than a row.
