@@ -3386,11 +3386,32 @@ fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
     // needs window plumbing this module does not have (see TODO below), so the
     // item becomes an informational, non-clickable row.
     //
-    // PARITY, not preference: the macOS tray already treats its overflow row
-    // as inert (`MenuAction::CloudOverflow | MenuAction::Inert => {}` in
-    // action_host.rs) and the Windows tray has no such control at all. Linux
-    // was the only tray shipping a dead button, so disabling it converges the
-    // three rather than inventing a fourth behaviour.
+    // CORRECTION 2026-09-21 (order 591-33s6). The paragraph that stood here
+    // claimed "the macOS tray already treats its overflow row as inert ... and
+    // the Windows tray has no such control at all. Linux was the only tray
+    // shipping a dead button." EVERY CLAUSE OF THAT WAS WRONG, and it is left
+    // named rather than quietly deleted because the wrongness is why this sat
+    // open for seven weeks.
+    //
+    // Windows DOES have the control: all three trays build their menus from
+    // `tillandsias_host_shell::menu_state::build`, whose overflow row was
+    // `MenuItem::leaf` — ENABLED on every platform. And macOS being "inert" is
+    // not a converged good state; the inert arm IS the dead button. So all
+    // three shipped it, not one.
+    //
+    // Worse, the fix this paragraph describes never shipped EITHER. It landed
+    // in `build_cloud_projects_submenu`, which order 628-p5tj had already
+    // retired to `#[allow(dead_code)]`. `cloud_overflow_row` has no live
+    // caller; nor does `resolved_max_cloud_projects_in_menu`, so the
+    // `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` remedy the label advertises does
+    // nothing. The test `cloud_overflow_row_is_informational_not_a_dead_button`
+    // has been green throughout, because it exercises the retired function.
+    //
+    // THE SHAPE WORTH CARRYING AWAY: the fix and the test that proved it moved
+    // into dead code together, so nothing in the tree could report the
+    // difference — a green test over an unreachable path reads exactly like a
+    // closed bug. Superseded by the paged fan-out in the shared builder, which
+    // is live on all three platforms.
     //
     // The label now carries a remedy the user can actually act on instead of a
     // promise the control does not keep.
