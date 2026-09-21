@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    event:
+      type: note
+      ts: "2026-09-21T17:33:39Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t173339z
+      host: forge-tillandsias
+      summary: |
+        SUBSUMED BY 1331-884p, WHICH IS NOW CLAIMED BY forge-tillandsias. Do not edit
+        scripts/check-scorable-obligation-added.sh from this row without talking to that
+        claim first — both rows own the same single file.
+
+        This is a note, not a closure. Whether this row closes as subsumed is the queue
+        owner's decision, not mine.
+
+        WHY THE TWO ARE ONE DEFECT. Both rows carry owned_files:
+        scripts/check-scorable-obligation-added.sh, and both describe the row splitter
+        anchored on /^  - |^    - / flushing the packet record when a list item sits at
+        indent 2 or 4. They were found from opposite ends and read as different bugs:
+
+          this row (pirria, 2026-09-20, p2) — a yaml.safe_dump fragment writes
+          indentless sequences, so exit_criteria items land at two spaces, flush the
+          row, and an `unscoreable:` twelve lines below is never evaluated. Symptom:
+          FALSE REFUSAL of a field that is present in the file.
+
+          1331-884p (macneo, 2026-09-21, p1) — a nested capability_tags or owned_files
+          entry at indent 2 or 4 flushes the row, the closure is never read, and the row
+          takes the deferred path (1071-adhj) and passes. Symptom: FALSE SILENT PASS,
+          142 of 1,450 fragments.
+
+        1331-884p's required fix — identify a row as a list item whose sibling keys
+        include packet_id or order, rather than as any dash at a given depth — removes
+        the shared cause, so this row's false refusal goes with it. That is why the p1
+        was claimed rather than this one: same work, and the silent half is the
+        dangerous half.
+
+        THIS ROW CARRIES A LEAD 1331-884p DOES NOT, and the claim has taken it on:
+        scripts/check-fragment-status-loss.sh shares the two-space marker idiom at 3
+        sites, while check-added-fragments-parse.sh, check-base-ledger-status-loss.sh
+        and check-fragment-events-land.sh do not. Fixing only the checker both rows name
+        would leave the same defect alive in the sibling. If this row is closed as
+        subsumed, that lead must survive the closure.
+
+        Cross-branch fold before claiming: ok:cross-branch-claims:2 sibling branch(es)
+        checked, 2 packet(s) — neither row was claimed on any branch.
