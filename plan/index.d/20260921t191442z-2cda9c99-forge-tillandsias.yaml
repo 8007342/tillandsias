@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: evidence
+      ts: "2026-09-21T19:14:42Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t191442z
+      host: forge-tillandsias
+      summary: |
+        A SECOND SCRIPT, SAME RESOLVER, SAME LOSS — this is a shared host-resolution
+        defect, not one script's bug.
+
+        scripts/push-plan-fragments-to-trunk.sh writes the pushing host into its commit
+        subject and loses it in a forge exactly as salvage-dirty-worktree.sh loses it in
+        a ref name. Visible side by side in trunk history, same branch, same evening:
+
+          2ce8ecd0c plan(macuahuitl): 2 fragment(s) to linux-next …
+          f6dd50caf plan(macuahuitl): 1 fragment(s) to linux-next …
+          01d5421e8 plan(unknown):    1 fragment(s) to linux-next … 1339-had5 …
+          14f72db9b plan(unknown):    1 fragment(s) to linux-next … 36ebb3ad-forge-tillandsias
+          2b825cfbc plan(unknown):    1 fragment(s) to linux-next … 1338-2sae …
+          b3f5d0f37 plan(unknown):    1 fragment(s) to linux-next … 108373d5-forge-tillandsias
+
+        Every `unknown` is a forge push; every named one is a bare-metal push. The
+        FRAGMENT FILENAMES in those same subjects carry `forge-tillandsias` correctly,
+        because the plan tool takes the host from `--host`, which the agent passes from
+        `scripts/agent-identity.sh`. So within one commit subject the host is present in
+        the payload and absent in the attribution — the information was never missing on
+        this host, only the one lookup each script uses.
+
+        WHY THIS CHANGES THE ROW'S SHAPE. Filed against one script, the fix is a
+        one-line fallback in that script. Two scripts sharing the failure makes it a
+        RESOLVER, and a third will be written the same way unless there is one place to
+        call. The `next_action` already says not to swap `hostname` for `uname -n`
+        because that repeats the single-source assumption; this strengthens that into a
+        positive requirement: ONE resolver, used by both, ending in a refusal rather
+        than a placeholder.
+
+        CANDIDATE SURFACE, not prescribed: scripts/agent-identity.sh already resolves a
+        usable host on this substrate and both scripts already exist beside it.
+
+        SEARCH COST WHILE IT STANDS: `git log --grep 'plan(forge-tillandsias)'` finds
+        nothing, and the six commits above are this host's work. Anyone reconstructing
+        which host pushed which fragment reads `unknown` and has to open the fragments
+        to find out — the same half-recovery the salvage refs have.

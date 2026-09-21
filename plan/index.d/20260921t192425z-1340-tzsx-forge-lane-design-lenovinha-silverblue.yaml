@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    order: 1340-tzsx
+    status: in_progress
+    kind: design
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, forge, ssh, design, agent-safety, operator-ruling]
+    estimated_hours: 3
+    owned_files:
+      - plan/issues/in-stack-forge-push-lane-design-2026-09-21.md
+    unscoreable: |
+      the-deliverable-is-a-design-and-an-audit-not-an-artifact. This row closes
+      on a DESIGN being written, pushed, and AUDITED. There is no test that can
+      pass or fail for it; scoring it with a litmus would require inventing the
+      acceptance for an implementation this row exists to precede. The closure
+      below is checkable by reading the row's events, not by running anything.
+    verifiable_closure: |
+      The design document is on origin, and an AUDIT EVENT from
+      macuahuitl-fedora is on this row stating the audit's outcome. Until both
+      are true, NO implementation packet derived from this design may be
+      claimed — by anyone, INCLUDING THE AUTHOR. The T11 default flip
+      (749-y8xx) additionally waits on this audit.
+    title: |
+      the in-stack (forge) push lane design — written for audit before any implementation, because the forge client has never been exercised and the T11 flip would be its first run on every host at once
+    context: |
+      OPERATOR ORDER 2026-09-21: the fixes land, then the design is filed as a
+      committed pushed artifact, then the coordinator audits it, and ONLY THEN
+      implementation. The design's exit condition is written to block the author
+      as well as anyone else.
+
+      THE DESIGN IS plan/issues/in-stack-forge-push-lane-design-2026-09-21.md.
+
+      WHY IT IS NEEDED. Dogfooding the bare-metal lane found six defects, five
+      of which live in the MIRROR or its lane and fire for any pusher including
+      a forge; they are on trunk at 60d8a8770. The forge's own authenticated
+      push lane has still never been exercised, and the T11 flip would be its
+      first exercise on every host simultaneously, with the relay failing
+      closed — which reads as a fleet-wide outage of a feature that had already
+      landed.
+
+      THE FINDING THE DESIGN TURNS ON, measured: TILLANDSIAS_PUSH_PRINCIPAL is
+      exported by tillandsias-receive and CONSUMED BY NOTHING IN PRODUCTION. The
+      only reader is scripts/test-mirror-receive-wrapper.sh, a fixture that
+      mints its own certificate. tillandsias-receive performs no authorisation
+      on the principal — that is sshd's AuthorizedPrincipalsFile, and the
+      division is correct — so the principal is extracted, exported and
+      discarded. The distinct til:host-push principal therefore buys REVOCATION
+      (separate roles and policies, which works) but NOT DISTINGUISHABILITY:
+      after authentication nothing records who pushed. That gap matters the
+      moment two client classes share one lane.
+
+      A CLAIM I NEARLY FILED AND DID NOT, because I checked: that the host
+      principal breaks test-mirror-receive-wrapper.sh, which asserts the
+      principal is exactly til:forge-push:<mid>. It does not — the fixture mints
+      its own cert with its own CA and asserts what it minted.
+    next_action: |
+      Held by lenovinha-silverblue, and BLOCKED ON THE AUDIT BY DESIGN. What is
+      LEFT, in order:
+      1. The coordinator audits the design and records an audit event here.
+      2. Only then may implementation packets be derived and claimed.
+      3. The forge acceptance — one forge, one push, artifacts in the shape the
+         bare-metal acceptance uses — precedes the T11 flip regardless.
+      Do NOT start step 2 before step 1, including the author. Three acceptance
+      arms and two instruments of the bare-metal work were falsified by peers
+      measuring their own hosts; a design written alone for a client that has
+      never run deserves the same treatment before code follows it.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21 on the operator's ordering
+      (fixes land, design filed and pushed, coordinator audits, then
+      implementation). Related: 1313-prin (the bare-metal lane), 749-y8xx (the
+      T11 flip, which waits on this audit), 1312-i6da (the per-host procedure),
+      749-54pv and 749-6uby (the lane's original staged design).
+
+events:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    event:
+      type: note
+      ts: "2026-09-21T19:24:25Z"
+      host: lenovinha-silverblue
+      agent_id: linux-lenovinha-opus5-20260921t192425z
+      summary: |-
+        design filed for audit; the exit condition blocks the author as well as anyone else
