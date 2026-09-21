@@ -148,7 +148,11 @@ there.
   3. commit and push to `work/<order>` as often as you like: no gate stamp, no
      trunk merge, the fast deciders run and WARN (`warn:pre-push:…`), nothing
      refuses. Bring trunk in with `git merge origin/linux-next` when you need
-     it (never rebase a pushed ref; rerere replays your resolutions);
+     it (never rebase a pushed ref; rerere replays your resolutions). The ref
+     name must match `work/<order>` exactly, the packet-id grammar
+     (`work/[0-9]{3,4}-[a-z0-9]{4}`): the hook does not check the name, a
+     non-conforming one takes the ordinary branch path, and the stray sweep
+     reaps it hours later without telling you (yoga, 2026-09-21);
   4. open the PR: `gh pr create --base linux-next --head work/<order> --draft`,
      and `gh pr ready` only once the closure evidence is on the row;
   5. the landing queue (`scripts/land-queue.sh`, 1316-bnzt) integrates it

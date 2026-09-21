@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-platforms-state-root-falls-back-to-a-silent-default-when-its-home-variable-is-unset-and-since-reset-state-those-roots-are-destructive-so-a-scrubbed-environment-turns-a-repair-into-a-no-op-that-reports-success
+    event:
+      type: note
+      ts: "2026-09-21T03:00:08Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t030008z
+      host: tlatoanis-macbook-neo
+      summary: |
+        F3'S EVIDENCE LANDED in 0e8d62e0c (land46) as part of the macOS smoke slice. The ROW ITSELF REMAINS OPEN — nothing in that landing changes any destructive path's resolution.
+
+        WHAT LANDED: the evidence only (two installed copies on macneo, /Applications at 56.9.20.1 and ~/Applications at 56.9.11.1, with the LaunchServices observation and its explicit non-claim).
+
+        WHAT DID NOT LAND, and is this row's next slice as accepted by the coordinator:
+          * image_root() still falls back to /tmp silently for readers — the LABEL
+            (image_root_source) landed earlier in the slice, so a reader can now SEE which
+            root answered, but the resolution itself is unchanged and the destructive caller's
+            refusal is the only hard stop.
+          * reset_state.rs still derives its reprovision path from the LITERAL
+            /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray. Accepted direction:
+            resolve from std::env::current_exe and walk up to the bundle, keep the literal as
+            a fallback, and refuse NAMING BOTH if neither resolves.
+          * The Linux sibling (cache_root -> std::env::temp_dir, which the macOS body also
+            calls for the fallback_* credential copies and vault-data) and the Windows sibling
+            (LOCALAPPDATA -> C:\Users\Public\AppData\Local, a real shared multi-user path) are
+            untouched and are their owners' to fix under this row's evidence.
+
+        THE FRAMING THAT MAKES F3 BELONG HERE rather than on a row of its own: it is the
+        MIRROR IMAGE of the HOME case, not a second instance. HOME unset resolves the state
+        root to somewhere that does not exist and the reset PROCEEDS against nothing while
+        reporting success — fails OPEN. The hardcoded /Applications path resolves to somewhere
+        that does not exist and the reset REFUSES although everything needed is present —
+        fails CLOSED. Both come from deriving a destructive path without asking the host, and
+        a fix that only addressed one direction would leave the other looking correct.
+
+        NOT MEASURED, stated so the row does not inherit it as settled: which contexts actually
+        have HOME unset (the LaunchServices regime, 980-xcaf, is the one candidate that would
+        put a shipped path on this and its HOME behaviour is unmeasured); and whether
+        LaunchServices prefers /Applications in general — it did on this host, which had just
+        had /Applications rewritten, exactly the condition that would favour it.

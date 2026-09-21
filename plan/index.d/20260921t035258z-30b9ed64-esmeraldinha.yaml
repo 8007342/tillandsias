@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-traps-page-carries-a-test-is-not-done-until-something-that-runs-on-its-own-can-fail-because-of-it-filed-by-shape-so-the-lesson-is-not-stored-against-one-organ-and-paid-for-twice
+    field: status
+    value: completed
+    ts: "2026-09-21T03:52:58Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: the-traps-page-carries-a-test-is-not-done-until-something-that-runs-on-its-own-can-fail-because-of-it-filed-by-shape-so-the-lesson-is-not-stored-against-one-organ-and-paid-for-twice
+    event:
+      type: completed
+      ts: "2026-09-21T03:52:58Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: cheatsheets/tooling/a-test-is-not-done-until-it-can-fail.md exists and is committed with its derived copy (the commit hook staged it: '[cheatsheets] 2 authored change(s) -> 2 derived file(s) staged into this commit (order 448)'). Closure conditions verified on esmeraldinha 2026-09-21: scripts/check-cheatsheet-frontmatter.sh rc=0 ok:cheatsheet-frontmatter:238 checked; scripts/check-cheatsheet-refs.sh rc=0 OK: 579 cheatsheet references resolved; cheatsheets/INDEX.md lists the entry in its tooling section; scripts/stage-image-cheatsheets.sh --stage reported cheatsheet-image-stage:ok files=253 dest=images/default/cheatsheets so pre-push guard 1b is satisfied. Filed by SHAPE with three specimens: 1303-2d5g (fixture nothing invoked), 1304-wbb2 (arm green because the check it mutated was gated behind an absent binary), 1286-4437 (litmus unbound, in neither the pass nor the fail count). Names 1325-ygq5 as the mechanical half. CAVEAT recorded on the row: the refs count is unchanged at 579 because the page's Related links are inline markdown, a shape that checker is blind to per 1300-k7wq — the links were not examined rather than resolved.
+  - packet_id: the-traps-page-carries-a-test-is-not-done-until-something-that-runs-on-its-own-can-fail-because-of-it-filed-by-shape-so-the-lesson-is-not-stored-against-one-organ-and-paid-for-twice
+    event:
+      type: note
+      ts: "2026-09-21T03:52:58Z"
+      host: esmeraldinha
+      summary: |-
+        The entry is written, committed with its derived copy, and all four closure conditions verified on this host.

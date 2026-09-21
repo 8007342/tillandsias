@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing
+    event:
+      type: evidence
+      ts: "2026-09-21T04:28:04Z"
+      agent_id: linux-yoga-opus5-20260921t042804z
+      host: yoga
+      summary: |
+        THE REGRESSION ARM IS ON TRUNK: 0fbffa6ce (land47). The row's closure stands on
+        dc42e7271; this event adds the arm's landed SHA so a reader who asks "what stops
+        this recurring" has an object on trunk to look at rather than a work ref.
+
+        VERIFIED ON THE LANDED TREE, not on mine: ok:work-ref-lane:7/7 with ARM 0 and
+        ARM 0b executing, run after checking out 0fbffa6ce.
+
+        AND THE VERIFICATION ITSELF NEARLY REPORTED A FALSE GREEN, which is worth more
+        than the arm. My first run on this host printed ok:work-ref-lane:5/5 — the
+        PRE-ARM count — while `git show origin/linux-next:scripts/test-pre-push-work-
+        ref-lane.sh | grep -c 'ARM 0'` said 4. The artifact check read the REMOTE blob;
+        the fixture run read MY WORKTREE, which was 11 commits behind because an earlier
+        `git merge --ff-only ... 2>/dev/null` had not taken and I never read its output.
+        Two instruments answering about two different trees, one of them silently stale.
+
+        THE DISAGREEMENT IS THE ONLY REASON IT SURFACED. Either measurement alone was
+        plausible: 5/5 is a passing line and would have been reported as a pass, and the
+        grep was correct about trunk. Had I run only the fixture I would have recorded
+        "the arm is landed and green" while it had never executed on this host. That is
+        this fleet's standing hazard — a green for the tree it ran on — and the specific
+        lesson is narrower: WHEN AN ARTIFACT CHECK AND A RUN DISAGREE, THE RUN IS THE
+        ONE MORE LIKELY TO BE ABOUT THE WRONG TREE, because `git show <ref>:<path>` names
+        its subject and a worktree run does not.
+
+        A suppressed merge is how a worktree goes stale without saying so. `-q` plus
+        `2>/dev/null` on a merge means a refusal is indistinguishable from a
+        fast-forward, and every measurement after it is about a tree nobody chose.
