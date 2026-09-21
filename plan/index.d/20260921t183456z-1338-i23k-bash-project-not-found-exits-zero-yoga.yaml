@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    order: 1338-i23k
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [cli, fail-loud, exit-status, forge, agent-safety]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias/src/main.rs
+      - skills/initialize-bare-metal-host/SKILL.md
+    verifiable_closure: |
+      `tillandsias --bash <name> --debug` with a name that resolves to no
+      project prints its error AND exits non-zero, and a fixture asserts both
+      halves separately - the message and the status - because the message was
+      never the missing half. PRE-FIX RESULT, measured on yoga 2026-09-21 with
+      the installed v56.9.21.2 binary:
+
+        $ TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia TILLANDSIAS_MIRROR_SSHD=1 \
+          TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
+          timeout 600 tillandsias --bash tillandsias --debug < /dev/null
+        [tillandsias] maintenance mode enabled
+        [tillandsias] Project: tillandsias
+        Error: Project not found: tillandsias
+        [exited with code 0]
+
+      The same invocation with a resolvable argument (`--bash .` from inside the
+      project) brings the stack up and is cut off by the timeout with 124, so
+      the two outcomes are SUCCESS=0 and FAILURE=0 while the only non-zero
+      status in the whole procedure belongs to the HAPPY path.
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The deliverable
+      IS the fixture, so naming a litmus here would pin a test nothing defines
+      yet and be refused. The guard to write, in the same commit as the fix:
+      openspec/litmus-tests/litmus-launcher-exit-status-on-unresolvable-project.yaml,
+      asserting the STATUS and the MESSAGE as separate steps — the message was
+      never the missing half — with a control that a resolvable project still
+      exits 0 on its own path, or "always exit 1" passes the new arm.
+    title: |
+      `tillandsias --bash` with an unresolvable project prints "Error: Project not found" and EXITS 0, so a caller that checks the status proceeds against a stack that was never brought up
+    context: |
+      FOUND WHILE RUNNING THE MIRROR SSH-LANE ACCEPTANCE (1313-prin) on yoga,
+      not by looking for it. skills/initialize-bare-metal-host/SKILL.md 6.1
+      tells the reader to wrap the bring-up in `timeout` and that `RC=124` is
+      the interactive shell being cut off rather than a failure. A reader who
+      follows that and sees 0 reads it as cleaner still, mints a host
+      certificate against a stack that does not exist, and meets the real
+      failure two steps later as `Permission denied (publickey)` - an
+      authentication symptom for a cause that is not authentication.
+
+      WHAT CAUGHT IT IS THE SHAPE WORTH KEEPING. 6.1 carries THREE done-when
+      checks and says in its own words that they fail independently: the
+      container env plus sshd, the published port, and the approle file. All
+      three came back empty against an exit code of success, and the state was
+      right. A single check keyed on the exit status would have agreed with the
+      bug.
+
+      SAME FAMILY, ALREADY FILED, CITED SO THE PATTERN IS VISIBLE RATHER THAN
+      REDISCOVERED: 1296-jutd - a REFUSED land and a REFUSED push both reach the
+      harness as exit 0 on a Windows host. 1336-k4ih - the plan-only lane
+      answers skip:fragments-to-trunk:nothing-new and EXITS 0. And the
+      1076-kft9 class one layer down, where a pipeline's status is its LAST
+      stage: measured twice on yoga the same day, `git ls-remote <mirror> |
+      head -8` reported rc=0 while ls-remote had failed with
+      `fail:tillandsias-receive:not-receive-pack`, and a `2>/dev/null` on the
+      same command turned that refusal into empty output that read as an absent
+      ref. Capture first, then read - never let a pipe or a redirect stand
+      between a failure and the status that reports it.
+    next_action: >
+      Make the not-found path exit non-zero in crates/tillandsias/src/main.rs
+      and add a fixture asserting the STATUS and the MESSAGE as separate arms,
+      with a control that a resolvable project still exits 0 on its own path -
+      otherwise "always exit 1" passes the new arm. Then audit the sibling
+      launchers (--opencode, --claude, --codex, --observatorium) for the same
+      shape rather than fixing only the one that was measured, and say on this
+      row which of them were checked and which were not.
+    provenance: |
+      Measured and filed by yoga (linux-yoga-opus5) 2026-09-21 during the
+      1313-prin mirror-lane acceptance, install regime, installed binary
+      v56.9.21.2. The mistake that triggered it was mine - `<project>` takes a
+      path and I passed a bare name - but the exit status is a defect
+      independent of the argument being wrong.
