@@ -27,6 +27,7 @@
 # Usage: scripts/census-litmus-step-enforcement.sh [--list-long] [--list-succeed]
 #   --list-long     print `<file>:<line>` for every long-sentence step (the slice)
 #   --list-succeed  print `<file>:<line>` for every surviving succeed-step
+#   --list-named    print `<file>:<line>` for every step declared unadjudicable
 #
 # Emits the table on stdout, commit named, so a pasted result always says which
 # tree it measured.
@@ -40,6 +41,7 @@ mode="table"
 case "${1:-}" in
     --list-long) mode="long" ;;
     --list-succeed) mode="succeed" ;;
+    --list-named) mode="named" ;;
     "") ;;
     *) echo "usage: $0 [--list-long|--list-succeed]" >&2; exit 2 ;;
 esac
@@ -58,6 +60,18 @@ function flush_step() {
         n_unenf++
         if (!has_eb) { unenf_no_eb++; return }
         unenf_eb++
+        # ORDER 1329-m8dk, coordinator ruling 2026-09-21. NAMED REASON FIRST.
+        # A step that genuinely cannot be adjudicated is a TERMINAL state under
+        # the exit criteria of this row, but it stays UNENFORCED and so kept
+        # landing in a debt bucket: the closure asked for long = 0 while the
+        # criteria accepted a named reason, and both could not hold. Counted
+        # separately it is neither hidden nor carried as backlog. Grammar: a
+        # `# unenforced: <reason>` comment inside the step block.
+        if (named_here) {
+            b_named++
+            if (MODE == "named") print eb_file ":" eb_lineno
+            return
+        }
         # Bucket precedence: succeed first, then long sentence, then the rest.
         if (eb_val ~ /succeed/) {
             b_succeed++
@@ -75,11 +89,21 @@ FNR == 1 { files++ }
     # A new step block closes the previous one, at ANY indent.
     if ($0 ~ /^[[:space:]]*-[[:space:]]+step:/) {
         flush_step()
-        in_step = 1; enforced = 0; eb_line = ""; eb_val = ""
+        in_step = 1; enforced = 0; eb_line = ""; eb_val = ""; named_here = 0
         eb_file = FILENAME; eb_lineno = FNR
         next
     }
     if (!in_step) next
+    # A step block ENDS at the next column-0 key, not merely at the next step.
+    # Without this, a `# unenforced:` marker sitting after the last step in a
+    # file — or anywhere in a following top-level section such as
+    # `observability:` — still attaches to the last step seen, and the bucket
+    # meant to record an honest declaration becomes a way to launder a step out
+    # of the debt count from anywhere in the file. Caught by its own negative
+    # control (ORDER 1329-m8dk): a stray marker at file scope moved the count
+    # from 2 to 3 with no step changed.
+    if ($0 ~ /^[A-Za-z_][A-Za-z0-9_-]*:/) { flush_step(); in_step = 0; next }
+    if ($0 ~ /^[[:space:]]*#[[:space:]]*unenforced:/) named_here = 1
     # AS A KEY, never a substring: a comment mentioning assert_exit is prose.
     if ($0 ~ /^[[:space:]]*(assert_exit|assert_output_contains|assert_output_matches|assert_output_nonempty|success_pattern):/) enforced = 1
     if ($0 ~ /^[[:space:]]*expected_behavior:/ && eb_line == "") {
@@ -103,9 +127,11 @@ END {
     printf "  UNENFORCED + expected_behavior, by bucket:\n"
     printf "    mentions \"succeed\"                       %6d\n", b_succeed
     printf "    long sentence (>60 chars)                %6d\n", b_long
+    printf "    named reason (declared unadjudicable)  %6d\n", b_named
     printf "    anything else                            %6d\n", b_other
     printf "                                             ------\n"
-    printf "    sum                                      %6d\n", b_succeed + b_long + b_other
+    printf "    sum                                      %6d\n", b_succeed + b_long + b_other + b_named
+    printf "\n  CLOSURE FIGURE, long OUTSIDE named-reason: %6d\n", b_long
 }
 ' "$TESTS_DIR"/*.yaml
 

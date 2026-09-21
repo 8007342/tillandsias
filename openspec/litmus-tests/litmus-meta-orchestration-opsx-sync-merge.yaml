@@ -50,6 +50,7 @@ critical_path:
     command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
     timeout_ms: 90000
     expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
+    assert_output_contains: "PASS: blocked cycle preserved startup tracked and untracked bytes"
 
 observability:
   traces:
