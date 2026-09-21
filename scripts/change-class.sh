@@ -253,3 +253,42 @@ change_class_tier() {
     echo "change-class: FULL base=${mb:0:9} classes=$(printf '%s' "$classes" | tr '\n' ',')" >&2
     return 0
 }
+
+# change_class_may_skip <guard> <keep-list> <declared-classes...> -> 0 when the
+# guard may be skipped. THE DECISION LIVES HERE AND THE DATA LIVES IN build.sh,
+# deliberately: the row asks for the selector matrix to be in build.sh where a
+# reader of the gate can see it, and a decision nobody can call from a fixture
+# is a decision nobody can falsify. So build.sh owns the keep-unconditional
+# list and passes it in; this owns the rule and is testable.
+#
+# EVERY UNCERTAINTY ANSWERS "NO". An unreadable class set, a guard on the
+# keep list, a last-FULL run that is stale or was never recorded, the selector
+# switched off — each returns 1 and the guard runs. The only path to 0 is a
+# readable class set that does not intersect the guard's declared inputs, under
+# a full gate recent enough to still vouch for everything else.
+change_class_may_skip() {
+    local guard="$1" keep="$2"; shift 2
+    [ "${TILLANDSIAS_CLASS_SELECTOR:-on}" = "on" ] || return 1
+
+    local _l _first
+    while IFS= read -r _l; do
+        _first="${_l%%[[:space:]]*}"
+        [ -n "$_first" ] || continue
+        [ "$_first" = "$guard" ] && return 1
+    done <<< "$keep"
+
+    local classes
+    classes="$(change_class_set 2>/dev/null)" || return 1
+    [ -n "$classes" ] || return 1
+
+    local age; age="$(change_class_full_run_age_s)"
+    case "$age" in never) return 1 ;; esac
+    [ "$age" -le "$CHANGE_CLASS_FULL_MAX_AGE_S" ] || return 1
+
+    local c d
+    while IFS= read -r c; do
+        [ -n "$c" ] || continue
+        for d in "$@"; do [ "$c" = "$d" ] && return 1; done
+    done <<< "$classes"
+    return 0
+}

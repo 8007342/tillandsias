@@ -179,6 +179,75 @@ source "$SCRIPT_DIR/scripts/common.sh"
 # no-op fallback are both `|| true`-guarded.
 . "$SCRIPT_DIR/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# ── ORDER 765-xpct: THE CHANGE-CLASS GATE SELECTOR ───────────────────────────
+#
+# Runs a guard only when the change could have affected what it checks. The
+# operator approved BOTH LIGHT AND SCOPED on 2026-09-20, recorded verbatim on
+# 765-xpct (yoga at 302118c56, macuahuitl independently) — scope reduction is
+# the symmetric twin of bar_raise_governance and the loop must not self-enact
+# it. That approval is ONE of six criteria; the rest are the fail-closed paths
+# in scripts/change-class.sh and its 20/20 fixture.
+#
+# BEST-EFFORT SOURCE, AND THE FALLBACK RUNS EVERYTHING. If the library is
+# missing or unreadable the stub below answers FULL to every question, so a tree
+# without it gates exactly as it did before this order. That is the only safe
+# direction: the cost of guessing wrong here is a check that did not run.
+. "$SCRIPT_DIR/scripts/change-class.sh" 2>/dev/null || true
+command -v change_class_tier >/dev/null 2>&1 || {
+    change_class_tier() { echo FULL; }
+    change_class_set()  { return 1; }
+    change_class_record_full_run() { :; }
+}
+
+# THE KEEP-UNCONDITIONAL SET IS DATA, ONE ENTRY PER LINE, EACH NAMING THE
+# INCIDENT IT WOULD HAVE CAUGHT. Removing an entry is then a reviewable diff
+# with a citation to argue against, not an edit to a regex nobody reads.
+# A guard named here runs on every gate whatever the change class, forever,
+# until someone deletes its line and says why in the same commit.
+_CLASS_KEEP_UNCONDITIONAL='
+gate-stamp-verify            599-4wzr  a stale stamp vouched for a tree nobody built
+release-preflight            599-4wzr  the release gate is the only tier that runs pre-build litmus
+version-bump-isolation       dd8fd63f  a version bump rode in with unrelated code
+plan-schema-divergence       440       the status vocabulary and the schema disagreed silently
+added-fragments-parse        668-2xeh  an unreadable fragment reached trunk through the plan lane
+script-exec-bits             668-2xeh  a checker shipped non-executable and was never invoked
+guard-activation-audit       440       a guard shipped ORPHANED, invoked by nothing, and passed
+salvage-net-roundtrip        1315-4a7j a salvage-only push was classified as the work lane and the
+                                       874-w2gc deletion refusal became a warning, refusal text intact
+'
+
+_CLASS_SKIPPED=0        # how many guards this run did NOT run. A run that
+                        # skipped anything is NOT a FULL run and must never
+                        # record one — otherwise a chain of scoped runs keeps
+                        # renewing its own licence to be scoped, forever.
+_CLASS_SET_MEMO=""      # computed once per run; empty until first asked
+_class_set_once() {
+    [ -n "$_CLASS_SET_MEMO" ] && return 0
+    _CLASS_SET_MEMO="$(change_class_set 2>/dev/null)" || _CLASS_SET_MEMO="(unavailable)"
+    [ -n "$_CLASS_SET_MEMO" ] || _CLASS_SET_MEMO="(unavailable)"
+    return 0
+}
+
+# _class_may_skip <guard> <declared-classes...> — build.sh owns the DATA, the
+# library owns the RULE (change_class_may_skip), so the rule is reachable from
+# scripts/test-change-class.sh and the matrix stays where a reader of the gate
+# will find it.
+_class_may_skip() {
+    local guard="$1"; shift
+    _class_set_once
+    change_class_may_skip "$guard" "$_CLASS_KEEP_UNCONDITIONAL" "$@"
+}
+
+# _class_skip_line <guard> <declared-classes...> — the POSITIVE statement of what
+# did not run and why. Never a silent omission: a green that does not say what it
+# skipped is read as full coverage, which is the failure this row exists to stop.
+_class_skip_line() {
+    local guard="$1"; shift
+    _CLASS_SKIPPED=$((_CLASS_SKIPPED + 1))
+    local base; base="$(git -C "$SCRIPT_DIR" merge-base HEAD "origin/${TILLANDSIAS_TRUNK_BRANCH:-linux-next}" 2>/dev/null | cut -c1-9)"
+    _info "skip:class-selector:$guard — declared-inputs=$(printf '%s,' "$@" | sed 's/,$//') changed-classes=$(printf '%s' "$_CLASS_SET_MEMO" | tr '\n' ',' | sed 's/,$//') base=${base:-unknown} last-full=$(change_class_full_run_age_s)s-ago"
+}
+
 # 765-uti9 quick win (velocity audit F2/F10): anchor for the build-preamble
 # record — everything between here and the --check timer (git hooks, podman
 # registries, dev-proxy ensure, sidecar staging) was invisible to timing:,
@@ -1520,9 +1589,31 @@ _write_gate_stamp() {
         _info "No tracked file was written during the gate"
     fi
 
+    # ORDER 765-xpct — A RUN THAT SKIPPED GUARDS MUST NOT STAMP `--scope full`.
+    # That stamp is what every later reader consults to ask "was this tree fully
+    # gated", including the release gate's freshness check. Writing `full` after
+    # the selector skipped anything would make a scoped run indistinguishable
+    # from a whole one — which is precisely the silence this row exists to
+    # prevent, one level up from the litmus tier that --check never runs.
+    #
+    # The scope written is the class set the run actually covered, in
+    # gate-stamp's own vocabulary (765-dt8h), so `gate-stamp.sh scope` reads it
+    # back and enforce_stamp_scope compares it against what is being pushed.
+    # AND THE FULL-RUN MARKER IS ONLY TOUCHED WHEN NOTHING WAS SKIPPED: a chain
+    # of scoped runs must never renew its own licence to keep being scoped.
     _step "Writing the gate stamp..."
-    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
-        _info "Gate stamp recorded (pre-push will accept this tree)"
+    _stamp_scope=full
+    if [ "${_CLASS_SKIPPED:-0}" -gt 0 ]; then
+        _stamp_scope="$(printf '%s' "$_CLASS_SET_MEMO" | tr '\n' ',' | sed 's/,$//')"
+        _warn "class selector skipped ${_CLASS_SKIPPED} guard(s); stamping scope=$_stamp_scope, NOT full"
+    fi
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope "$_stamp_scope" --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
+        if [ "${_CLASS_SKIPPED:-0}" -eq 0 ]; then
+            change_class_record_full_run
+            _info "Gate stamp recorded, scope=full (pre-push will accept this tree)"
+        else
+            _info "Gate stamp recorded, scope=$_stamp_scope — this run was NOT full and the last-full marker is unchanged"
+        fi
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
         # Never leave a live token behind: an unconsumed token is a standing
@@ -3227,12 +3318,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan-binary probe usage check passed"
 
+    # PILOT 1 of the class selector (765-xpct). Declared inputs: the plan ledger
+    # and the plan crate, because this guard reads plan/index.d and the fold that
+    # tillandsias-plan performs — measured at 2,381ms of the warm --check by the
+    # velocity audit, and a pure function of those two path families.
     _step "Checking for fragment status transitions the fold discards..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+    if _class_may_skip fragment-status-loss plan-ledger rust; then
+        _class_skip_line fragment-status-loss plan-ledger rust
+    elif ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
         exit 1
+    else
+        _info "Fragment status-loss check passed"
     fi
-    _info "Fragment status-loss check passed"
 
     # Order 831-ezea. The sibling of the check above, on the other axis: that
     # one asks whether a fragment's CLOSURE reached the fold; this one asks
@@ -3621,12 +3719,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
     # ratification harness on the next legitimate ledger update (it fired 3x:
     # 394d twice, 394e). Terminal pins and frozen-fixture pins are exempt.
+    # PILOT 2 of the class selector (765-xpct). Declared inputs: the spec/litmus
+    # corpus, the plan ledger, and the plan crate — it compares groundtruth pins
+    # against LIVE packet status, so it reads all three and nothing else.
+    # Measured at 1,083ms of the warm --check by the velocity audit.
     _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
+    if _class_may_skip groundtruth-mutable-status-pins specs plan-ledger rust; then
+        _class_skip_line groundtruth-mutable-status-pins specs plan-ledger rust
+    elif ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
         _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
         exit 1
+    else
+        _info "Groundtruth status-pin guard passed"
     fi
-    _info "Groundtruth status-pin guard passed"
 
     # Order 440 / 599-4wzr: the status vocabulary in plan/index.yaml
     # (default_status_values) and plan/schema.yaml (statuses) must not diverge —
