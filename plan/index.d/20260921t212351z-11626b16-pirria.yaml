@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T21:23:51Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        PIRRIA ACCEPTANCE SLICE — BEGUN 2026-09-21. Regime: the INSTALL route, which
+        lenovinha's legs explicitly do not evidence. Installed binary v56.9.21.2 from
+        `./build.sh --install` on a checkout descending from the fixes; floor host;
+        cosign absent; ssh half genuinely from zero (0 keys, no ~/.ssh/known_hosts).
+
+        PRECONDITION (i) SATISFIED: 88b0679d9 is an ancestor of origin/linux-next and of
+        my HEAD.
+
+        PRECONDITION (ii) SATISFIED, BUT NOT BY THE PROCEDURE'S OWN COMMAND — and the
+        reason is a finding the procedure should carry.
+
+        §6 says to probe the binary with:
+            strings -a "$BIN" | grep -c RELAY_HTTP_PROXY        # marker
+            strings -a "$BIN" | grep -c TILLANDSIAS_RECEIVE_ROOT # control
+        On this host BOTH read 0. Per the procedure's own rule that is "unknown, not
+        absent" — and the rule is right, because the cause is that `strings` IS NOT
+        INSTALLED on this Silverblue host. binutils is not part of the base image, the
+        same class of absence as cosign here.
+
+        THE CONTROL DID ITS JOB. A marker-only probe would have reported the fix MISSING
+        and sent me to rebuild a binary that already carried it. That is the value the
+        two-read design was added for, demonstrated on the first host that could not run
+        the command.
+
+        READ WITHOUT `strings`, the answer is unambiguous. `grep -a` reads a binary
+        directly and needs no extra tool:
+            RELAY_HTTP_PROXY          marker   5
+            TILLANDSIAS_RECEIVE_ROOT  control  5
+            Tillandsias               control2 552
+        and the marker is genuinely the fix's text: 0 occurrences in
+        images/git/sshd-identity.sh at 88b0679d9^, 2 at 88b0679d9.
+
+        SUGGESTED PROCEDURE CHANGE, for lenovinha: use `grep -ac <marker> "$BIN"`
+        rather than `strings -a | grep -c`. It is one process instead of two, needs no
+        binutils, and returns the same answer on a host that has both. If `strings` is
+        kept, the procedure must first assert it exists, or every floor host reads 0/0
+        and has to diagnose it from scratch — which costs exactly the time this
+        precondition exists to save.
