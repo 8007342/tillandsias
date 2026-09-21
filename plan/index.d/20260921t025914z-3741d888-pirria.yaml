@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ci-release-litmus-runner-reports-a-step-as-fail-when-it-emitted-a-declared-advisory-or-a-named-skip-so-a-floor-host-without-cargo-and-an-advisory-only-lint-both-read-as-defects
+    event:
+      type: note
+      ts: "2026-09-21T02:59:14Z"
+      agent_id: linux-pirria-claude-20260921t030000z
+      host: pirria
+      summary: |
+        CLOSED. Landed at 0e8d62e0c (land46) with the relay-side binding
+        litmus:reset-flags-accepted.
+
+        WHAT IT DOES: a step whose LAST non-empty line is `skip:` or `advisory:` is
+        reported SKIPPED or ADVISORY — never PASS, never FAIL. A failure verdict anywhere
+        (violation:/refused:/blocked:/FAIL) outranks it, and a step declaring assert_exit
+        that the status contradicts still FAILS whatever it printed. Test verdicts are
+        DERIVED from steps, so a test whose every executed step is a skip is SKIPPED and
+        leaves the rate's denominator — the vacuous green 1049-s35z's comment preserves,
+        `1/1 executed, 100%, PASS` while two born-red tests sat unobserved.
+
+        MEASURED, one tree, one host, only the runner swapped:
+
+          BEFORE  Pass Rate: 95% (42/44 executed)   Status: [FAIL]
+                  [FAIL] litmus:bash-composition-hazards-advisory-shape
+                  [FAIL] litmus:spawn-failure-names-program
+          AFTER   Pass Rate: 100% (44/44 executed)  Status: [PASS]
+                  Test Verdicts: passed=43 advisory=1 skipped=0 not-run=4 failed=0
+                  Step Verdicts: advisory=1 skipped=3
+
+        Exactly the two tests the row names. Three skipped STEPS and zero skipped TESTS,
+        because every skipped step sits in a test that also held a property — the two
+        numbers disagreeing is the semantics, not a fault.
+
+        EXPOSURE THIS COVERS: 144 corpus steps invoke a script that can emit a named skip
+        while declaring an expectation that does not admit one (of 2580 steps, 104
+        skip-capable scripts, 20 expectations that admit the word). It concentrates on
+        floor and platform-minority hosts, because the absent precondition is usually the
+        HOST — worst exactly where a red is least likely to be believed.
+
+        THE DENOMINATOR NARROWED BY CONSTRUCTION, not by arithmetic: total_executed is
+        TESTS_PASSED + TESTS_FAILED and a SKIPPED test increments neither. Two
+        populations got two labels — `skipped=` for verdict skips, `not-run=` for what
+        was never attempted (dedup, diff-scope) — because printing both under one word
+        puts a definition on the line that is true of only part of what it counts.
+
+        CONSUMER CENSUS, corrected: no consumer asserts the Pass Rate line's TEXT. The
+        live readers are `Status: [PASS|FAIL]` and `[FAIL]`, plus MO-SMOKE in the two
+        e2e launchers, which reads the agent's line and not the runner's. My first census
+        claimed test-litmus-missing-bound-test-reds.sh asserted the literal string; it
+        does not — that grep had matched the file's own COMMENT. The line still keeps its
+        format, for the better reason: 1049-s35z's comment is the preserved record of the
+        vacuous green this change retires, and reshaping the line would make that record
+        read falsely.
+
+        THREE DEFECTS FOUND IN THIS WORK, all mine, each now an arm:
+          - a bare call under `set -e` that killed the suite MID-CORPUS with no summary
+            and a status that reads as success downstream — the shape the runner's own
+            comment calls "worse than a gate that is down, because nobody goes looking
+            for it", reintroduced inside a fix for a reporting defect;
+          - a definition arm that broke on its own improvement, because it pinned my
+            sentence rather than the property;
+          - a dead heredoc whose literal name check-litmus-pin-claims read as a CLAIM,
+            and then the comment explaining that trap, which spelled the name twice and
+            refused again at 2 instead of 1.
