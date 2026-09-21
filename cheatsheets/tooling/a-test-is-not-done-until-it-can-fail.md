@@ -214,8 +214,20 @@ dead. The warning raised the count and pushed the symbol further from the
 So the metric moves away from firing in proportion to how carefully someone has
 explained the thing it is meant to catch, and it degrades fastest on exactly the
 items a person cared enough to annotate. It is not a weak signal; it is
-anti-correlated with care. (The warning in question was written by the same
-person who then found the flaw — which is how it came to light at all.)
+anti-correlated with care. Put sharply: **the annotation is evidence that someone
+looked, and the metric reads looking as health.** Anything that counts mentions
+is counting attention and scoring it backwards.
+
+(The warning in question was written by the same person who then found the flaw,
+and who had not noticed they had caused the discrepancy they were explaining —
+which is how it came to light at all.)
+
+**And note what actually surfaced it**, because it is the transferable part: not
+either author being careful, but two people measuring the same symbol at
+different times and **reconciling the disagreement instead of picking a number.**
+Two measurements that disagree are worth more than one that is confident. Had
+either of us simply trusted our own count, the heuristic would have shipped, and
+it would have shipped looking reasonable.
 
 The rule that actually holds: **an item is not dead because nothing mentions it,
 it is dead because everything that mentions it is itself dead.**
