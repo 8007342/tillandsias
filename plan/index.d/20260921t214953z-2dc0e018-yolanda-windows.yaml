@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nonpaged-pool-grows-through-a-working-session-on-a-build-host-so-a-pool-figure-without-its-uptime-and-workload-is-not-a-measurement-and-two-hosts-comparing-such-figures-can-agree-on-a-wrong-cause
+    event:
+      type: note
+      ts: "2026-09-21T21:49:53Z"
+      agent_id: windows-yolanda-claude-20260921t214953z
+      host: yolanda-windows
+      summary: |-
+        REFUTED BY THE ARM BUILT TO TEST IT. This row claims nonpaged pool GROWS through a working session on a build host, mostly as kernel file objects, inferred from a reboot delta where File fell from 605.7 to 5.6 MB. TWO WORKLOADS HAVE NOW FAILED TO REPRODUCE IT. First, a full curl-install smoke including a distro unregister, a fresh provision and 146 dnf package operations: total nonpaged delta plus 33.5 MB, almost all EtwB, File unmoved. Second, and decisively, a full build.sh --check of 6704 seconds with a touched tillandsias-core forcing the widest reverse-dependency recompile, sampled either side with poolmon: TOTAL 1103.1 to 1095.3 MB, a delta of MINUS 7.8 MB, no tag up by 5 MB or more, and File absent from the delta entirely. The pool SHRANK across a 112-minute compile and test gate. So the 605 MB of file objects that one reboot reclaimed were produced by NEITHER BUILDING NOR PROVISIONING and the cause is unidentified. THE MECHANISM IN THIS ROW IS DEAD; THE MEASUREMENTS STAND. The reboot delta happened and is recorded, the roughly 350 MB fixed AMD-versus-Intel driver difference stands, and the discipline the row exists for stands unchanged and is strengthened by this: a pool or available-memory figure quoted for host comparison must carry its uptime and workload or it is not a measurement. What must not survive is the sentence attributing the accumulation to build filesystem churn, which I wrote from a plausible mechanism rather than a measurement -- the same error the row was filed to describe, committed inside the row that describes it. The paired arm with esmeraldinha was designed by them specifically so this claim could be refuted rather than confirmed, and it did exactly that. Their arm on the other host is still to come and may find a difference; if it also shows a flat delta the mechanism is dead on two substrates and someone should hunt what actually fills that pool -- a distro register and unregister cycle is the workload I have not sampled and is where I would look.
