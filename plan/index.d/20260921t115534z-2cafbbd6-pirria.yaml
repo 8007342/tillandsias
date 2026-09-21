@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T11:55:34Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        LANDED: the named-reason bucket, its amendment, and the file-scope laundering
+        hole its own control caught are on origin/linux-next at 90a14541f (land59),
+        verified here as an ancestor rather than taken from the relay.
+
+        That commit is NOT byte-identical to the work ref it came from, and the
+        difference is worth recording rather than glossing. The relay carried a fixup on
+        top: two comment lines in scripts/census-litmus-reachability.sh, and the
+        executable bit on scripts/census-litmus-step-enforcement.sh.
+
+        The comment lines are this row meeting its own subject one last time. That
+        script exists to REPORT unbound litmus tests, and naming two of them in its
+        header made check-litmus-pin-claims.sh read the report as the file's own claims.
+        The checker was right to refuse: its rule is that a pin on an UNBOUND test is as
+        inert as a pin on a missing one, which is the sentence 1325-ygq5 is built on.
+
+        The exec bit is the more transferable half, and the mechanism is named rather
+        than guessed: the file went 755 to 644 at abbb6f76f because that commit rewrote
+        it as `awk ... > tmp && mv tmp file`. The mv replaces the INODE, so the file
+        takes the new one umask mode and the exec bit dies with the old inode. Nothing
+        warns, nothing on the push path looks at modes, and the litmus tier would have
+        found it at the next cut. An audit of every shell script and step file this
+        session touched found exactly one such regression.
+
+        Both fixes were applied locally at 78d0e1331 and verified byte-for-byte against
+        the landed tree, because a later push from this checkout would otherwise have
+        silently REVERTED them.

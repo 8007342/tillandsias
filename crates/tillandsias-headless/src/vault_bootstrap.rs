@@ -1586,6 +1586,80 @@ pub async fn mint_approle_auto_auth_for_container(
     Ok(secret_name)
 }
 
+/// ORDER 1313-prin. Mint a host's AppRole document to a PLAIN FILE, 0600.
+///
+/// The container path above writes a podman secret, which a host process
+/// cannot read. A host that mints its push certificate on demand needs the
+/// role_id/secret_id pair on its own filesystem.
+///
+/// WHY A PLAIN FILE IS THE RIGHT ANSWER HERE AND NOT A RETREAT. The operator's
+/// requirement for this whole design is the KEYRING OFF THE HOT PATH. This
+/// function runs at provision time, where the launcher has already read the
+/// root token once; the file it writes is then read by `git push` with no
+/// secret-service call at all. Putting this material in the keyring instead
+/// would reintroduce exactly the per-push read the design exists to remove,
+/// and on this fleet that read can abort gnome-keyring 50 (1265-8qr6).
+///
+/// WHAT THIS MATERIAL CAN DO, so the tradeoff is legible: it authenticates as
+/// one AppRole whose single policy permits exactly
+/// `ssh-client-signer/sign/host-<host>`. It cannot read secret/github/token,
+/// cannot sign for any other host, and cannot sign a HOST certificate. A
+/// stolen copy mints push certs for this host until the SecretID is revoked —
+/// which is why it is 0600 in the user's own config dir and never in the repo.
+pub async fn mint_host_approle_document(
+    role: &str,
+    dest: &Path,
+    debug: bool,
+) -> Result<(), String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    let credentials = client
+        .issue_approle_credentials(role)
+        .await
+        .map_err(|e| format!("vault issue_approle_credentials for {role} failed: {e}"))?;
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    // Write 0600 BEFORE the content exists, not after: a create-then-chmod
+    // leaves a window where the document is world-readable, and on a
+    // multi-user host that window is the whole vulnerability.
+    let tmp = dest.with_extension("tmp");
+    {
+        let mut opts = fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        use std::io::Write as _;
+        let mut fh = opts
+            .open(&tmp)
+            .map_err(|e| format!("cannot open {}: {e}", tmp.display()))?;
+        let body = format!(
+            "{{\"role_id\":\"{}\",\"secret_id\":\"{}\"}}\n",
+            credentials.role_id(),
+            credentials.secret_id()
+        );
+        fh.write_all(body.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
+    }
+    fs::rename(&tmp, dest).map_err(|e| format!("cannot install {}: {e}", dest.display()))?;
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] host AppRole document written to {}",
+            dest.display()
+        );
+    }
+    Ok(())
+}
+
 /// Short-lived podman-secret mount for a synchronous container command.
 ///
 /// The underlying Vault token remains in the revocation registry and is
@@ -4076,6 +4150,76 @@ pub fn mirror_push_principal(mirror_id: &str) -> String {
     format!("til:forge-push:{mirror_id}")
 }
 
+/// ORDER 1313-prin. The HOST push principal, distinct from the forge's.
+///
+/// A certificate that names WHO is pushing is what the audit trail is for, and
+/// revoking one identity must not take the other with it. A host pushing under
+/// `til:forge-push:<mirror-id>` would be indistinguishable from a lane
+/// container in the mirror's log, and revoking the host would revoke every
+/// forge.
+pub fn host_push_principal(host: &str) -> String {
+    format!("til:host-push:{host}")
+}
+
+/// Minted per-host push policy: `update` on the exact
+/// `ssh-client-signer/sign/host-<host>` path and nothing else (D12 shape).
+pub fn host_push_policy_name(host: &str) -> String {
+    format!("ssh-host-push-{host}")
+}
+
+/// The per-host client-signer ROLE name, deliberately the same string as its
+/// policy, for the same one-role-one-policy visibility the lane side uses.
+pub fn host_push_role_name(host: &str) -> String {
+    host_push_policy_name(host)
+}
+
+/// Render the per-host push policy for ONE host.
+pub fn render_host_push_policy_hcl(host: &str) -> String {
+    format!(
+        "# Minted at host-push provision (order 1313-prin). ONE host's push\n\
+         # identity: sign-only, exact path, wildcards refused.\n\
+         path \"{SSH_CLIENT_SIGNER_MOUNT}/sign/host-{host}\" {{\n  capabilities = [\"update\"]\n}}\n"
+    )
+}
+
+/// Per-host client-signer role config, mirroring
+/// [`build_client_signer_role_config`] with ONE difference: the principal.
+///
+/// WHY A SEPARATE ROLE AND NOT A WIDENED ONE. `allowed_users` is an exact list
+/// with no globbing (V3/D3). Adding the host principal to the forge's role
+/// would let that ONE role mint EITHER identity, which is exactly the
+/// cross-identity grant the distinct-principal design exists to prevent.
+///
+/// `source-address` IS THE ENCLAVE SUBNET, THE SAME AS THE FORGE'S, and this
+/// was measured rather than assumed. A host connects through the rootless
+/// published port, and podman SNATs it onto the container network: the mirror's
+/// sshd logs `Connection from 10.0.42.14`, an enclave peer, in
+/// /tmp/tillandsias-sshd/sshd.err. An earlier draft of this narrowed it to
+/// 127.0.0.1/32 on the strength of a line read from the WRONG log — the git
+/// daemon's healthcheck output in the container log — and that cert would have
+/// been refused at authentication for every host push, reading as a bad key.
+/// The host and forge certs have the SAME address scope because they arrive
+/// the same way.
+pub fn build_host_push_signer_role_config(host: &str, enclave_subnet: &str) -> serde_json::Value {
+    serde_json::json!({
+        "key_type": "ca",
+        "allow_user_certificates": true,
+        "allowed_users": host_push_principal(host),
+        "default_user": "git",
+        // A stolen host key+cert still cannot open a shell, forward a port, or
+        // forward an agent (D4).
+        "allowed_extensions": "",
+        "default_extensions": {},
+        "default_critical_options": {
+            "force-command": "/usr/local/bin/tillandsias-receive",
+            "source-address": enclave_subnet,
+        },
+        "ttl": "30m",
+        "max_ttl": "1h",
+        "key_id_format": "{{role_name}}|{{token_display_name}}",
+    })
+}
+
 /// Opaque per-project mirror hostname `git-<mirror-id>` (24 chars, a single
 /// valid DNS label). The DNS swap point itself is
 /// `git_mirror_service_identity` (main.rs, order 659-8faj); this derivation
@@ -4415,6 +4559,82 @@ pub async fn provision_host_signer_approle_for_launch(
     let root_token = read_and_handover_root_token(debug)?;
     let client = vault_client(&base_url, &root_token, debug)?;
     provision_host_signer_approle(&client, mirror_id, debug).await
+}
+
+/// ORDER 1313-prin. Provision ONE host's push identity: the ssh role, its
+/// minted policy, and the AppRole bound to exactly that policy.
+///
+/// THREE THINGS, IN THIS ORDER, and the order is the safety property:
+/// ssh role, then policy, then AppRole. Policy-before-role means a
+/// half-provisioned host fails CLOSED at login rather than open at sign time —
+/// the same ordering `provision_mirror_ssh_roles` and
+/// `provision_lane_signer_approle` already rely on.
+///
+/// SEPARATE FROM THE FORGE'S ROLE, NOT A WIDENING OF IT. `allowed_users` is an
+/// exact list with no globbing (V3/D3), so adding `til:host-push:<host>` to the
+/// forge role would let that ONE role mint EITHER identity — the cross-identity
+/// grant the distinct-principal design exists to prevent. A host and a lane
+/// must be distinguishable in the mirror's log, and revoking one must not
+/// revoke the other.
+pub async fn provision_host_push_identity(
+    client: &VaultClient,
+    host: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let role = host_push_role_name(host);
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] provisioning host-push identity {role} -> {}",
+            host_push_principal(host)
+        );
+    }
+    client
+        .write_ssh_role(
+            SSH_CLIENT_SIGNER_MOUNT,
+            &format!("host-{host}"),
+            build_host_push_signer_role_config(host, enclave_subnet),
+        )
+        .await
+        .map_err(|e| format!("write host-push ssh role host-{host}: {e}"))?;
+
+    let hcl = render_host_push_policy_hcl(host);
+    reject_sign_wildcard(&host_push_policy_name(host), &hcl)?;
+    client
+        .write_policy(&host_push_policy_name(host), &hcl)
+        .await
+        .map_err(|e| format!("mint policy {}: {e}", host_push_policy_name(host)))?;
+
+    client
+        .enable_approle()
+        .await
+        .map_err(|e| format!("enable_approle: {e}"))?;
+    client
+        .create_approle_agent_role(
+            &role,
+            &[&host_push_policy_name(host)],
+            APPROLE_TOKEN_TTL_SECS,
+            APPROLE_TOKEN_MAX_TTL_SECS,
+        )
+        .await
+        .map_err(|e| format!("create_approle_agent_role {role}: {e}"))?;
+    Ok(role)
+}
+
+/// Launch-path wrapper for [`provision_host_push_identity`], built the same way
+/// the other launch-time mints are.
+pub async fn provision_host_push_identity_for_launch(
+    host: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    provision_host_push_identity(&client, host, enclave_subnet, debug).await
 }
 
 /// Read the host-signer CA public key (T10: the forge's `@cert-authority`
@@ -6099,6 +6319,66 @@ mod tests {
             mirror_host_signer_role_name("bbb"),
             "the host-signer role must be PER-MIRROR; one shared role carrying every mirror's \
              policy is cross-project host-certificate signing with no wildcard anywhere"
+        );
+    }
+
+    /// ORDER 1313-prin. The host push identity is DISTINCT from the forge's,
+    /// and its role is separate so neither can mint the other's principal.
+    #[test]
+    fn host_push_identity_is_distinct_from_the_forge() {
+        assert_eq!(host_push_principal("lenovinha"), "til:host-push:lenovinha");
+        assert_ne!(
+            host_push_principal("lenovinha"),
+            mirror_push_principal("kvs69tkis9dfnbejbatg"),
+            "a host pushing under the forge principal is indistinguishable from a lane in the \
+             mirror's log, and revoking one would revoke the other"
+        );
+        assert_eq!(
+            host_push_role_name("lenovinha"),
+            host_push_policy_name("lenovinha")
+        );
+        assert_ne!(
+            host_push_role_name("lenovinha"),
+            host_push_role_name("yoga"),
+            "the push role is PER-HOST; one shared role would let any host mint any host's cert"
+        );
+        let hcl = render_host_push_policy_hcl("lenovinha");
+        assert!(reject_sign_wildcard("ssh-host-push-lenovinha", &hcl).is_ok());
+    }
+
+    /// ORDER 1313-prin. REGRESSION GUARD FOR A RETRACTED CHANGE. An earlier
+    /// draft narrowed the host cert's source-address to 127.0.0.1/32, on the
+    /// strength of a line read from the WRONG log — the git daemon's
+    /// healthcheck output in the container log rather than sshd's own
+    /// /tmp/tillandsias-sshd/sshd.err. sshd actually logs
+    /// `Connection from 10.0.42.14`, an ENCLAVE peer, because rootless podman
+    /// SNATs the published-port connection onto the container network. That
+    /// cert would have been refused at authentication for every host push,
+    /// reading as a bad key — the exact failure it claimed to prevent.
+    #[test]
+    fn host_push_role_keeps_the_enclave_source_address() {
+        let cfg = build_host_push_signer_role_config("lenovinha", "10.0.42.0/24");
+        let src = cfg["default_critical_options"]["source-address"]
+            .as_str()
+            .expect("source-address");
+        assert_eq!(
+            src, "10.0.42.0/24",
+            "the host cert must carry the ENCLAVE subnet: a host arrives through the rootless \
+             published port and sshd sees an enclave peer, so 127.0.0.1/32 would refuse every \
+             host push at authentication"
+        );
+        assert_eq!(
+            cfg["allowed_users"].as_str(),
+            Some("til:host-push:lenovinha")
+        );
+        assert_eq!(
+            cfg["allowed_extensions"].as_str(),
+            Some(""),
+            "a stolen host cert must not be able to open a shell or forward anything"
+        );
+        assert_eq!(
+            cfg["default_critical_options"]["force-command"].as_str(),
+            Some("/usr/local/bin/tillandsias-receive")
         );
     }
 

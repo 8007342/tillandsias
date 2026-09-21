@@ -4677,6 +4677,15 @@ fn build_git_run_args(
             args.push("--env".into());
             args.push(format!("TILLANDSIAS_MIRROR_ID={mid}"));
         }
+        // ORDER 1313-prin: the mirror renders a SECOND authorized-principals line
+        // for this host when one is configured, so a host cert and a forge cert
+        // are distinguishable in its log and revoking one leaves the other.
+        if let Ok(push_host) = std::env::var("TILLANDSIAS_HOST_PUSH_HOST")
+            && !push_host.trim().is_empty()
+        {
+            args.push("--env".into());
+            args.push(format!("TILLANDSIAS_HOST_PUSH_HOST={}", push_host.trim()));
+        }
         // PUBLISH THE AUTHENTICATED LISTENER ONLY, on loopback, so a native
         // rootless host can reach it — it cannot route to the enclave bridge
         // (the same constraint vault_host_publish_arg documents for Vault).
@@ -11486,6 +11495,25 @@ pub(crate) const MIRROR_SIGNER_TOKEN_SINK: &str = "/tmp/tillandsias-vault-signer
 pub(crate) const SSH_LANE_UNWIRED_REFUSAL_URL: &str =
     "tillandsias-ssh-lane-unwired://host-ca-cache-missing";
 
+/// ORDER 1313-prin. Where this host's push AppRole document lives.
+///
+/// Under the user's own config dir, 0600, one file per host identity. NOT in
+/// the repo (a credential in a worktree is one `git add -A` from a push) and
+/// NOT in the keyring, because the whole point of this design is that the push
+/// path makes no secret-service call.
+pub(crate) fn host_push_approle_path(host: &str) -> std::path::PathBuf {
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
+                .join(".config")
+        });
+    base.join("tillandsias")
+        .join("host-push")
+        .join(format!("{host}.approle.json"))
+}
 /// One flag flips the whole ssh push lane (mirror sshd + sidecar + forge
 /// wiring): T4-T10 land dark and T11 (749-y8xx) owns the default flip.
 pub(crate) fn mirror_ssh_push_lane_enabled() -> bool {
@@ -11640,6 +11668,33 @@ async fn ensure_ssh_lane_sidecar(
     crate::vault_bootstrap::provision_lane_signer_approle_for_launch(mirror_id, debug)
         .await
         .map_err(|e| format!("[ssh-lane] AppRole provisioning failed: {e}"))?;
+    // ORDER 1313-prin: when a HOST push identity is configured, provision it in
+    // the same breath. One variable enables the whole thing — the Vault role,
+    // its minted policy, its AppRole, and (via the mirror env below) the second
+    // line in the mirror's authorized-principals file. Unset means the lane
+    // behaves exactly as it did for the forge alone, so enabling a host
+    // identity is an explicit act rather than a side effect of the lane flag.
+    if let Ok(push_host) = std::env::var("TILLANDSIAS_HOST_PUSH_HOST")
+        && !push_host.trim().is_empty()
+    {
+        crate::vault_bootstrap::provision_host_push_identity_for_launch(
+            push_host.trim(),
+            &enclave_subnet(),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[ssh-lane] host-push identity provisioning failed: {e}"))?;
+        // And the material the HOST needs to use it: a 0600 plain file the push
+        // path reads with no secret-service call. Keyring off the hot path is
+        // the operator's requirement for this whole design.
+        crate::vault_bootstrap::mint_host_approle_document(
+            &crate::vault_bootstrap::host_push_role_name(push_host.trim()),
+            &host_push_approle_path(push_host.trim()),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[ssh-lane] host AppRole document mint failed: {e}"))?;
+    }
     // Cache the host CA public key first: the gitconfig writer runs inside
     // the forge run-arg builders and must find it on disk.
     let ca_pub = crate::vault_bootstrap::read_mirror_host_ca_public_key(debug)

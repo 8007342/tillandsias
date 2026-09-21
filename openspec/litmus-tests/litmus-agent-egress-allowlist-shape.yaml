@@ -24,6 +24,7 @@ critical_path:
     command: "grep -Fxq 'acl github_release_assets ssl::server_name --client-requested release-assets.githubusercontent.com' images/proxy/squid.conf && ! grep -Eq '^acl github_release_assets .*([.]chatgpt[.]com|[.]claude[.]com|antigravity-cli-auto-updater-974169037036[.]us-central1[.]run[.]app)' images/proxy/squid.conf && grep -Fxq 'ssl_bump splice all' images/proxy/squid.conf && echo \"ok: exact bump ACL excludes agent domains; splice-all fallback active\""
     timeout_ms: 3000
     expected_behavior: "ok: exact bump ACL excludes agent domains; splice-all fallback active"
+    assert_output_contains: "ok: exact bump ACL excludes agent domains; splice-all fallback active"
 
 observability:
   traces:

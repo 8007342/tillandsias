@@ -37,11 +37,13 @@ critical_path:
     command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh spec-traceability --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq 'executed: 0' <<<\"$output\" && grep -Fq 'Status: [NO-TESTS-EXECUTED]' <<<\"$output\" && ! grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: named empty phase bucket is not-a-failure but is not called PASS'"
     timeout_ms: 5000
     expected_behavior: "ok: named empty phase bucket is not-a-failure but is not called PASS"
+    assert_output_contains: "ok: named empty phase bucket is not-a-failure but is not called PASS"
 
   - step: "a filterless phase bucket with every bound test excluded still passes"
     command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq '(executed: 0,' <<<\"$output\" && ! grep -Fq 'Total: 0 ' <<<\"$output\" && grep -Fq 'Status: [NO-TESTS-EXECUTED]' <<<\"$output\" && ! grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: filterless empty phase bucket is not-a-failure but is not called PASS'"
     timeout_ms: 10000
     expected_behavior: "ok: filterless empty phase bucket is not-a-failure but is not called PASS"
+    assert_output_contains: "ok: filterless empty phase bucket is not-a-failure but is not called PASS"
 
 observability:
   traces:

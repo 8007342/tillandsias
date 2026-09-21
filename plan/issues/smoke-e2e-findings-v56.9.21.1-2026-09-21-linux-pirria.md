@@ -135,8 +135,23 @@ the guard before doing cycle work.
     reads as positive evidence that the installation anchor survived the reset,
     and on a host without that item it is evidence of nothing. 803-49re makes the
     anchor's survival load-bearing, so an auditor checking exactly that will take
-    this line as a yes. Say `preserved: none present` when the item is absent, or
-    name it as `absent (nothing to preserve)`.
+    this line as a yes.
+
+    THE REMEDY IS ALREADY WRITTEN, ON ANOTHER SURFACE. macneo hit the same
+    defect on macOS and fixed it (their F2,
+    plan/issues/smoke-macos-v56.9.21.1-macneo-2026-09-21.md): the announcer in
+    crates/tillandsias-macos-tray/src/reset_state.rs probes
+    `kc_present(PRESERVED_ANCHOR)` and, when the item is absent, prints
+    `[ABSENT BEFORE THIS RESET — nothing to preserve; the next vault will not
+    derive from it (803-49re). This reset neither caused nor repairs that.]`
+    — their own comment calls it "not a warning dressed as reassurance", which
+    is exactly the failure this packet names. Linux simply never got it.
+
+    THE EXACT SITE: scripts/clear-vault-host-credentials.sh sets
+    `_kept="$_kept keychain:$ANCHOR_ATTR"` UNCONDITIONALLY, with no presence
+    probe, and the final line interpolates it. Mirror the macOS shape with a
+    `secret-tool lookup` guard at that assignment; the wording is already
+    decided, so this is a port rather than a design.
 - events:
   - type: discovered
     ts: `2026-09-21T06:00:00Z`
@@ -214,6 +229,25 @@ the guard before doing cycle work.
   in database`. Guards sharing substrate must not run beside a reset — the hazard
   1314-2mdv names, demonstrated rather than argued. The 138 s figure reported
   above is from the clean earlier run.
+
+- **THE SMOKE'S OWN §2 REDS TWO ci-release FIXTURES, AND THEY ARE NOT FINDINGS.**
+  After this run, `litmus:guest-binary-embed-integrity` and
+  `litmus:tool-dispatch-lib` failed on this host. Both reach for the builder
+  toolbox (22, 23 and 17 mentions across their scripts), and §2 destroyed it —
+  the pre-state table above records `builder toolbox 1 → 0`. Recreating it with
+  `scripts/with-tillandsias-builder.sh true` and re-running takes the suite from
+  93% to **100% (46/46), zero failed**, with no code change in between.
+
+  Recorded because I first called them "not mine" on the strength of a check
+  that asked whether either fixture READ a file I had touched. That establishes
+  authorship and says nothing about causation, which is the question that
+  mattered: my run destroyed the substrate they need. macuahuitl named the
+  regime; the measurement is theirs, not mine.
+
+  ANY HOST RUNNING THIS SMOKE SHOULD EXPECT THESE TWO RED AFTERWARDS and should
+  recreate the toolbox before reading a post-smoke suite as evidence about the
+  tree. A suite run on a substrate the smoke just wiped is measuring the wipe.
+
 - Previously filed and still open from the v56.9.20.1 report: the §0.2b DISTILLED
   arm's lexical version comparison, and the mention-counting litmus arm (the
   latter now replaced by `scripts/test-reset-flags-are-accepted.sh`).

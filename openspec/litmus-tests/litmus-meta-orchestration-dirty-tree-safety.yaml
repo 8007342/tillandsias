@@ -39,6 +39,7 @@ critical_path:
     command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
     timeout_ms: 90000
     expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
+    assert_output_contains: "PASS: blocked cycle preserved startup tracked and untracked bytes"
 
   - step: "local full-install preparation preserves tracked release and dashboard state"
     # 60s: 5.2s standalone on windows (measured 2026-08-16); the old 10s left

@@ -21,6 +21,7 @@ critical_path:
     command: "scripts/test-git-mirror-relay-verified-ack.sh"
     timeout_ms: 60000
     expected_behavior: "PASS: git mirror relay-verified acknowledgement fixture (orders 318+369)"
+    assert_output_contains: "PASS: git mirror relay-verified acknowledgement fixture (orders 318+369)"
 
   - step: "failed relay reconciles exported heads via a non-forced fetch outside quarantine"
     command: "grep -Fq \"env -u GIT_QUARANTINE_PATH\" images/git/relay-refs.sh && grep -Fq \"'refs/heads/*:refs/heads/*'\" images/git/relay-refs.sh && ! grep -Fq \"'+refs/heads/*:refs/heads/*'\" images/git/relay-refs.sh && echo 'ok: non-forced reconcile shape'"

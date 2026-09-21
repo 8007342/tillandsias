@@ -1,0 +1,44 @@
+# @trace order:1325-ygq5, spec:ci-release
+name: litmus:added-test-is-referenced-shape
+spec: ci-release
+description: >
+  ORDER 1325-ygq5. A test added in either organ can be referenced by nothing,
+  and nothing said so at push time — so a fixture that CANNOT FAIL A GATE read
+  identically to one that guards something. Two specimens on the same host on
+  the same day: a litmus yaml never added to the bindings, which ran in neither
+  the pass nor the fail count of a completed suite and was reported as verified;
+  and a shell test committed with no step, no build.sh line and no binding,
+  whose 7/7 could not fail anything.
+
+  This fixture pins the guard that names them, and its arms are chosen so the
+  REFUSALS are what is observed. A guard for "this test cannot fail a gate"
+  that has only ever been seen passing is the same defect one level up, which
+  is why the clean-pass arm here is the least interesting one: the load-bearing
+  arms are ENFORCE=1 refusing with exit 1, the missing-manifest refusal (no
+  definition of "referenced" must never read as green), and the grandfather
+  arm proving a DELIBERATELY unreferenced artifact stays possible and is
+  DECLARED rather than silently tolerated.
+
+  Every arm runs against a hermetic throwaway repo, so nothing here depends on
+  the state of this checkout. Mutation-proven: blanking the counter reds 3
+  arms, dropping the grandfather affordance reds 1, and returning a silent
+  green for a missing manifest reds 1.
+severity: critical
+size: instant
+phase: pre-build
+preconditions:
+  - workspace contains scripts/check-added-test-is-referenced.sh
+  - workspace contains scripts/test-reference-surfaces.manifest
+critical_path:
+  - step: "every arm of the guard holds, refusals included (10/10)"
+    command: "bash scripts/test-added-test-is-referenced.sh 2>&1 | tail -1"
+    expected_behavior: "ok:added-test-guard-proven:10"
+    assert_exit: 0
+    assert_output_nonempty: true
+    timeout_ms: 120000
+  - step: "the guard answers on this checkout and carries the standing count the ratchet closes against"
+    command: "bash scripts/check-added-test-is-referenced.sh 2>/dev/null"
+    expected_behavior: "a verdict line carrying standing= and surfaces="
+    assert_exit: 0
+    assert_output_matches: "standing=[0-9]+ surfaces=[0-9]+"
+    timeout_ms: 60000

@@ -1,0 +1,73 @@
+# @trace spec:ci-release
+# @trace order:1323-5taw
+#
+# Order 1323-5taw: install-windows.ps1 decided whether the downloaded tray
+# supports --reset-state by GREPPING ITS --help. The purpose is sound and
+# still wanted -- TILLANDSIAS_VERSION can pin a tag that predates the flag,
+# and calling it unconditionally would turn every pinned-older install into a
+# hard failure. The INSTRUMENT was wrong: it asked the binary what it CLAIMS,
+# not what it DOES.
+#
+# THE SPECIMEN IS REAL, AT A REAL TAG. v56.9.20.1's published Linux headless
+# advertises --reset-state in --help and rejects it at the parser (allow-list
+# at crates/tillandsias-headless/src/main.rs:612-651 carries no entry;
+# pirria's curl-install died with `Unsupported option: --reset-state`,
+# install_exit=2). Against that binary the --help probe answers YES, the
+# installer proceeds, and it Dies on the exit 2 the probe existed to avoid.
+#
+# WHY THE BEHAVIOURAL ARM BUILDS A LIAR. Source assertions can only say the
+# installer stopped reading --help; they cannot say the replacement
+# DISCRIMINATES. So the fixture builds three cmd stubs -- one that supports
+# the flag, one that advertises it in --help and refuses it with exit 2, and
+# one that refuses silently -- and requires the attempt rule to reject the
+# liar while the old --help rule accepts it. That contrast arm is the row.
+#
+# TWO INSTRUMENT FAILURES ARE RECORDED IN THE FIXTURE ITSELF, because both
+# produced green-looking runs that meant nothing. (1) Without
+# MSYS_NO_PATHCONV=1, msys rewrites cmd.exe's bare `/c` into a Windows path,
+# cmd starts INTERACTIVELY and exits 0, so every stub reads as supported.
+# (2) An arm that tested for the PRESENCE of the guard string and `ProbeExit`
+# stayed green against a reconstructed pre-fix installer, because the
+# reporting lines that mention $ProbeExit outlive the probe they report on.
+# It now asserts CARDINALITY: exactly one line both sets the guard and passes
+# the flag. That line is the attempt.
+name: litmus:installer-probes-by-attempt-not-by-help
+spec: ci-release
+phase: pre-build
+description: >
+  Pin 1323-5taw: install-windows.ps1 decides whether to run --reset-state by
+  ATTEMPTING it under TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 and reading the
+  outcome -- never by grepping --help -- and a binary whose --help mentions
+  the flag while its parser rejects it is treated as UNSUPPORTED. The
+  behavioural arm builds that liar as a cmd stub and requires the attempt
+  rule to reject it while demonstrating that the old --help rule accepts it.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-installer-probes-by-attempt-not-by-help.sh
+  - workspace contains scripts/install-windows.ps1
+  - the behavioural arms need cmd.exe, so they SKIP BY NAME off msys; a green
+    run on Linux exercises the four source arms only and must not be read as
+    a behavioural pass
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-installer-probes-by-attempt-not-by-help.sh && test -x scripts/test-installer-probes-by-attempt-not-by-help.sh && echo 'ok: installer-probe-fixture-parses'"
+    timeout_ms: 10000
+    expected_behavior: "ok: installer-probe-fixture-parses"
+
+  - step: "every arm passes against the real installer: no --help decision, exactly one guarded attempt, the decision taken from its exit code, and the liar stub rejected while the old --help rule accepts it"
+    command: "bash scripts/test-installer-probes-by-attempt-not-by-help.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok:installer-probes-by-attempt-not-by-help:all"
+
+  - step: "SOURCE PIN: the installer carries no --help-derived capability decision, and exactly one guarded attempt -- asserted on the file directly so a fixture that stopped looking cannot hide it"
+    # `|| true` ON EVERY COUNT IS LOAD-BEARING, and its absence fails the
+    # PASSING case only: grep -c exits 1 when the count is 0, so the
+    # help-matches=0 we WANT broke the && chain and reported red on a correct
+    # tree. A guard that is red exactly when the code is right is worse than
+    # no guard. Counts are read as numbers here, never as exit codes.
+    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/ipa.$$ && n=$(grep -c 'TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.*--reset-state' /tmp/ipa.$$ || true) && h=$(grep -c \"match *'--reset-state'\" /tmp/ipa.$$ || true) && rm -f /tmp/ipa.$$ && test \"$n\" -eq 1 && test \"$h\" -eq 0 && echo \"ok: attempts=$n help-matches=$h\""
+    timeout_ms: 15000
+    expected_behavior: "ok: attempts=1 help-matches=0"

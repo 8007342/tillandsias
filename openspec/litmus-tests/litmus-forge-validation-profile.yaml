@@ -18,6 +18,7 @@ critical_path:
     command: "scripts/test-forge-validate.sh"
     timeout_ms: 10000
     expected_behavior: "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
+    assert_output_contains: "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
 
   - step: "validate production profile shell syntax"
     command: "bash -n scripts/forge-validate.sh scripts/check-forge-service-health.sh scripts/test-forge-validate.sh && echo 'ok: validation scripts parse successfully'"

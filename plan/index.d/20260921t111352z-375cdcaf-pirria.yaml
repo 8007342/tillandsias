@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T11:13:52Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        SLICE TWO, and the named reasons the row's exit criteria ask for.
+
+        Landed predecessors cited: the census script and the first fifteen asserts are on
+        origin/linux-next at 8ef27b784, the three cfg-gate arms at 030ce5ba5.
+
+        CENSUS NOW: ENFORCED 244, succeed 0, long 2, anything else 2167 — unmoved across
+        all three slices, which is the row's own proof that no step was relocated by
+        rewording.
+
+        NAMED REASONS, in the form the row requires.
+
+          openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml:30 — the prose
+          describes a side effect of a BACKGROUNDED pipeline and is not adjudicable from
+          the step's own result. The file already says so: an author added assert_exit
+          here under 1252-znbn criterion 4, found it vacuous because the whole pipeline is
+          backgrounded with an ampersand inside the step's own shell so it returns 0 the
+          instant it forks, and removed it rather than leave something that looked like a
+          check. Enforcing it would re-add that exact assert.
+
+          openspec/litmus-tests/litmus-ci-unchanged-behavior.yaml:28 — same defect by a
+          different route. The command is a pipeline ending in tee, and 1293-wka4 records
+          that a step's child shell does not inherit pipefail, so assert_exit would
+          adjudicate tee rather than build.sh. The runner's pipefail is shape-gated, never
+          blanket. The second clause of the prose is already the next step's job.
+
+          openspec/litmus-tests/litmus-ca-ephemeral.yaml:73 and :87 — asserts ADDED and
+          correct, but not demonstrable here: the test is on the 660-ryhn grandfathered
+          UNBOUND list and is phase e2e, so no suite runs it. Third unrunnable test met on
+          this row, after control-dispatch-shape and the cfg-gate spec/binding mismatch.
+
+        TWENTY-TWO OF TWENTY-FOUR DEMONSTRATED by mutating the subject, re-running at the
+        phase and size the TEST declares, and restoring. Nineteen script-backed, two cargo
+        tests reddened by panicking the test body, and the succeed-step reddened by making
+        the podman mock's deliberate no-op arm exit non-zero.
+
+        MY NEGATIVE CONTROL WAS VACUOUS, AND THAT IS THE MOST USEFUL THING ON THIS ROW.
+        The first sweep PREPENDED a marker to the literal each assert searches for.
+        assert_output_contains is a SUBSTRING check, so the marked string still contained
+        the original, every assert still passed, and eighteen live asserts reported as
+        dead. Replacing rather than prepending turns all nineteen red at once. Stopping at
+        that zero would have produced a large, confident, entirely false finding and
+        plausibly "repaired" eighteen working asserts.
+
+        I built a guard this session for tests that cannot fail, then wrote a control that
+        could not fail, inside the work that guard exists to support.
+
+        FOUR INSTRUMENT FAULTS ON THIS ROW, each yielding a specific plausible wrong
+        answer and none announcing itself: a bare shell without the runner's helper
+        functions and sequential state said five steps were broken; running outside the
+        builder toolbox where cargo is absent said two specs were red on trunk; a
+        size-instant filter against a size-quick test said an assert did not bite; and the
+        prepending mutation said eighteen did not. A fifth was structural rather than
+        interpretive — an inner bash consumed a while-read loop's stdin, so twenty-four
+        targets silently became one and the output looked like a finished run.
+
+        THE GENERAL RULE THIS ROW EARNED: measured-not-assumed only helps when the
+        measurement itself is checked. Every fault above passed the "I measured it" test.
