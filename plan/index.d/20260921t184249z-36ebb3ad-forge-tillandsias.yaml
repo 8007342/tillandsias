@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    event:
+      type: note
+      ts: "2026-09-21T18:42:49Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t184249z
+      host: forge-tillandsias
+      summary: |
+        §1.4 RESTATED AS ATTRIBUTION AND SUBSTRATE, NOT ABSENCE — and the two readings
+        that appeared to conflict are BOTH CORRECT, on different hosts.
+
+        THE CONCERN RAISED: that this row asserts the checker "never prints" the literal
+        `ok:validator-surface:<hash>`, which would be refuted by anyone running the
+        subcommand, and a row refuted on one claim gets its others discounted.
+
+        THE ROW DOES NOT ASSERT THAT. Its words are: "§1.4 says
+        check-plan-binary-current.sh 'must answer with the literal
+        `ok:validator-surface:<hash>` lane'. ON THIS HOST it answers
+        `stamped:plan-binary-validator-surface:…` plus
+        `ok:plan-binary-write-is-opt-in+role-satisfies:…`". Scoped to this host when
+        written, and it stays scoped.
+
+        RE-MEASURED HERE WITH THE STREAMS SEPARATED, because the obvious hypothesis was
+        that the earlier capture had swallowed stderr:
+
+          stdout only   ok:plan-binary-write-is-opt-in+role-satisfies:…
+          stderr only   stamped:plan-binary-validator-surface:…
+                        ok:plan-binary-write-is-opt-in+role-satisfies:…
+          subcommand    unknown:validator-surface — … This is NOT a freshness verdict.
+
+        `ok:validator-surface:content-verified` appears on NEITHER stream here, and the
+        original capture used `2>&1`, so this was never a stream artefact on this side.
+
+        WHY BOTH READINGS ARE TRUE. check-plan-binary-current.sh:170-182 asks the BINARY
+        first and only prints `ok:validator-surface:content-verified` when the
+        subcommand answered `ok:validator-surface:*`. On a bare-metal host with a
+        checkout above the binary the subcommand answers with the literal, so the
+        checker prints the content-verified line to stderr — measured on
+        yolanda-windows, `ok:validator-surface:b1d6bcc42be30c85`. In a forge with
+        CARGO_TARGET_DIR redirected out of the checkout the subcommand answers
+        `unknown:`, that branch is never taken, and the checker falls through to the
+        stamp path. Same code, two substrates, two honest outputs.
+
+        SO THE §1.4 DEFECT IS SHARPER THAN THE ROW FIRST PUT IT, not weaker, and it is
+        TWO defects rather than one:
+
+          ATTRIBUTION — the page tells the reader to expect the literal from
+          check-plan-binary-current.sh. The literal is the SUBCOMMAND's
+          (crates/tillandsias-plan/src/main.rs), which the checker CONSUMES at line 172;
+          the checker's own verdict is `ok:plan-binary-write-is-opt-in+role-satisfies:`
+          on stdout, with the surface lines on stderr. A worker grepping the checker's
+          stdout for the literal will not find it on ANY host.
+
+          UNREACHABILITY — in a forge the literal cannot be produced at all, because the
+          subcommand that mints it returns a non-verdict there. §1.4 is a membership
+          requirement ("must answer with the literal … lane"), so as written it is
+          UNSATISFIABLE ON EVERY FORGE IN THE FLEET, while the fleet checker separately
+          passes the same host on the stamp path. A worker who takes §1.4 literally
+          concludes their forge is broken; the fleet checker says it is fine; both are
+          reading the same binary.
+
+        STREAM SPLIT, worth naming though not filed tonight: the checker's VERDICT is on
+        stdout and its EVIDENCE is on stderr. Anyone reading it through a pipeline that
+        redirects one and not the other sees half of it, and which half depends on the
+        redirection rather than on the state of the world. That is how two careful hosts
+        produced two different accounts of the same command today.
+
+        THE ROW'S OTHER TWO CLAIMS ARE UNTOUCHED by this and were measured with
+        controls: §3's assertion that checker shell scripts are validator-surface
+        members is false (a merge carrying BOTH a checker and a new test script left the
+        hash byte-identical at d5bcff7f…), and the forge discriminator answers
+        `unknown:validator-surface`.
+
+        SUGGESTED WORDING for the §1.4 fix, replacing the membership claim: name
+        `bash scripts/check-plan-binary-current.sh` as the instrument, say its verdict is
+        on stdout and its surface evidence on stderr, and state that
+        `ok:validator-surface:<hash>` comes from the SUBCOMMAND and is unavailable
+        wherever CARGO_TARGET_DIR is redirected out of the checkout — in which case
+        `stamped:plan-binary-validator-surface:` is the line that carries the fact.
