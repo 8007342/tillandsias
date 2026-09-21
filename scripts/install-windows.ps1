@@ -546,12 +546,41 @@ try {
     # install into a hard failure at a step that did not exist when that tag
     # shipped.
     #
-    # PROBE BY CONTENT, not by version arithmetic: ask the binary what it
-    # supports and read the answer. A version comparison would have to know
-    # which tag first carried the flag, and would be wrong for any build that
-    # is not on that line.
-    $ResetHelp = & cmd.exe /c "`"$InstalledExe`" --help 2>&1"
-    $HasResetState = ($ResetHelp -join "`n") -match '--reset-state'
+    # PROBE BY ATTEMPT, NOT BY ADVERTISEMENT (order 1323-5taw). This asked
+    # `--help` whether the flag existed, which is defeated by exactly the
+    # defect it was written to survive: a binary whose --help MENTIONS a flag
+    # its parser REJECTS. That binary is not hypothetical -- v56.9.20.1's
+    # published Linux headless does precisely this (its allow-list at
+    # crates/tillandsias-headless/src/main.rs:612-651 carries no entry, and
+    # pirria's install died on `Unsupported option: --reset-state`,
+    # install_exit=2). Against such a tray the --help probe answers YES, the
+    # installer proceeds, and it Dies on the exit 2 the probe existed to avoid.
+    #
+    # So attempt the flag and read the OUTCOME. The attempt is non-destructive
+    # BY CONSTRUCTION: TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the flag's own
+    # documented opt-out, honoured inside the binary, so a supporting tray
+    # announces the skip and provisions the existing state (exit 0) while a
+    # tray that does not know the flag refuses with "unknown flag" (exit 2).
+    # That distinguishes a parser that honours the flag from a --help that
+    # merely mentions it, which is the fleet's standing rule for stale
+    # binaries: probe a refusal by asking for the refusal.
+    #
+    # NOT a version comparison: that would have to know which tag first
+    # carried the flag and would be wrong for any build off that line.
+    $ProbeLog = Join-Path $env:TEMP "tillandsias-reset-probe.log"
+    & cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& `"$InstalledExe`" --reset-state > `"$ProbeLog`" 2>&1"
+    $ProbeExit = $LASTEXITCODE
+    $ProbeOut = if (Test-Path $ProbeLog) { (Get-Content $ProbeLog -Raw) } else { "" }
+    Remove-Item $ProbeLog -Force -ErrorAction SilentlyContinue
+    # Exit 0 means the parser accepted it. An unknown-flag refusal is exit 2
+    # and names itself; anything else is treated as unsupported too, because a
+    # probe that cannot get a clean acceptance must not authorise a
+    # destructive call.
+    $HasResetState = ($ProbeExit -eq 0)
+    if (-not $HasResetState) {
+        SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
+        if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
+    }
     if (-not $HasResetState) {
         SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
         SayWn "  the install is complete, but a broken local state was NOT repaired."
