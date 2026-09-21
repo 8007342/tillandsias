@@ -643,6 +643,30 @@ pub enum ControlMessage {
         env: Vec<(String, String)>,
         cwd: Option<String>,
     },
+    /// Tray → guest: where the host-native inference endpoint is reachable over
+    /// vsock, so the in-guest forwarder can relay `inference:11434` to it
+    /// (order 1309-rb3p, closing 830-xsk2's last half).
+    ///
+    /// SENT AFTER READY, READ AT CONTAINER START. The host binds its vsock
+    /// listener inside `VzRuntime::start()`, before the guest is Ready and
+    /// before the control wire is usable, so this cannot ride the bind. The
+    /// tray sends it on the post-`wait_phase_ready` path every tray stream
+    /// already uses; headless persists it to /run/tillandsias/vsock-forward and
+    /// reads it when it starts an inference container. /run is tmpfs, so the
+    /// value dies with the boot and cannot go stale — a reprovisioned guest is
+    /// configured by the next VM start like any other.
+    ///
+    /// NO CAPABILITY BIT, and that is a property rather than an omission:
+    /// `derive_psk` binds the BUILD VERSION into the channel key, so peers at
+    /// different versions cannot complete a handshake and this variant can
+    /// never reach a peer that does not already know it. See 1309-rb3p.
+    ///
+    /// `cid` is carried rather than assumed: the host is CID 2 today, and a
+    /// field that says so is cheaper than a constant nobody can find when it
+    /// changes.
+    ///
+    /// @trace spec:vsock-transport
+    SetVsockForwardTarget { cid: u32, port: u32 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -972,6 +996,7 @@ impl ControlMessage {
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
             ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
             ControlMessage::PtyOpenData { .. } => "PtyOpenData",
+            ControlMessage::SetVsockForwardTarget { .. } => "SetVsockForwardTarget",
         }
     }
 }
@@ -2659,6 +2684,13 @@ mod tests {
                 },
                 "PtyOpenData",
             ),
+            (
+                ControlMessage::SetVsockForwardTarget {
+                    cid: 2,
+                    port: 42421,
+                },
+                "SetVsockForwardTarget",
+            ),
         ]
     }
 
@@ -2741,6 +2773,7 @@ mod tests {
             ControlMessage::MetricsSnapshotReply { .. } => 29,
             ControlMessage::PtyStdinEof { .. } => 30,
             ControlMessage::PtyOpenData { .. } => 31,
+            ControlMessage::SetVsockForwardTarget { .. } => 32,
         }
     }
 
@@ -2775,7 +2808,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 32;
+        const DECLARED_VARIANTS: usize = 33;
 
         let samples = one_sample_per_variant();
         assert_eq!(

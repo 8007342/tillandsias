@@ -531,6 +531,44 @@ async fn poll_vm_status_once(
         tracing::warn!(%err, "credentials delivery / handover check failed during status poll");
     }
 
+    // ORDER 1309-rb3p — tell the guest where the host-native inference endpoint
+    // is, closing 830-xsk2's last half.
+    //
+    // HERE, AND NOT AT LISTENER-BIND TIME. The host binds its vsock listener
+    // inside VzRuntime::start(), where the guest is not yet Ready and the
+    // control wire does not exist. This poll runs AFTER wait_phase_ready and
+    // already holds a handshaked client, so it is the first place the guest can
+    // actually be told.
+    //
+    // ON EVERY POLL, DELIBERATELY. The write is idempotent, and /run is tmpfs —
+    // so a guest that restarted under a still-running tray silently loses the
+    // file, and re-asserting is what repairs that without anyone noticing it
+    // broke. A send-once-at-Ready design would leave that guest configured in
+    // the tray's belief only.
+    //
+    // OPT-IN, matching the listener it pairs with: unset, nothing is sent and
+    // the guest starts its ordinary inference container. The lane costs nothing
+    // when it is off (the same discipline the listener's own comment insists on).
+    //
+    // BEST-EFFORT: a failure here is logged and does NOT fail the status poll.
+    // The poll's job is the VM's phase, and an inference lane that could not be
+    // configured must not cost the operator their status chip.
+    if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT")
+        && let Ok(port) = port_s.trim().parse::<u32>()
+    {
+        let set_env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            // CID 2 is the host as seen from the guest. Carried in the
+            // message rather than assumed guest-side so the value is
+            // greppable from one end.
+            body: ControlMessage::SetVsockForwardTarget { cid: 2, port },
+        };
+        if let Err(err) = client.request(&set_env).await {
+            tracing::warn!(%err, port, "could not set the guest's host-native inference target");
+        }
+    }
+
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
         seq: client.allocate_seq(),
@@ -2766,6 +2804,36 @@ async fn run_push_listener(
             if let Ok(mut guard) = menu_state.lock() {
                 guard.guest_version = guest_version;
             }
+            // ORDER 1309-rb3p — tell the guest where the host-native inference
+            // endpoint is, on EVERY (re)connection.
+            //
+            // HERE AND NOT ONLY IN poll_vm_status_once, and this placement was
+            // MEASURED rather than reasoned: the poll is suppressed entirely
+            // while the push subscription is delivering ("SC-07", the fallback
+            // branch below), so a send that lives only in the poll never fires
+            // on a healthy tray. A first cut did exactly that and the guest's
+            // target file was still MISSING after 240s.
+            //
+            // A RECONNECT IS THE POINT, not an accident of placement: /run is
+            // tmpfs, so a guest that restarted under a still-running tray loses
+            // the file, and the reconnect that follows is precisely when it must
+            // be told again.
+            if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT")
+                && let Ok(port) = port_s.trim().parse::<u32>()
+            {
+                    let set_env = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: client.allocate_seq(),
+                        body: ControlMessage::SetVsockForwardTarget { cid: 2, port },
+                    };
+                    // Best-effort: the subscription is what this connection is
+                    // for, and an inference lane that could not be configured
+                    // must not cost the operator their status pushes.
+                if let Err(err) = client.request(&set_env).await {
+                    tracing::warn!(%err, port, "could not set the guest's host-native inference target");
+                }
+            }
+
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
