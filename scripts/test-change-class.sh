@@ -114,7 +114,14 @@ esac
 # ─────────────────────────────────────────────────── ARM 5
 # THE GATE'S OWN DECIDERS -> FULL even though build-scripts is a SCOPED class.
 # A selector cannot judge a change to itself using itself.
-for self in build.sh scripts/run-litmus-test.sh scripts/change-class.sh; do
+# One case per GROUP pirria's composition measured, not one per file: the
+# groups take different glob arms and a single representative would leave two
+# arms untested. `ci` is checked too — it is a class the tiers never name, and
+# the allow-list direction is supposed to put it in FULL silently.
+for self in build.sh scripts/run-litmus-test.sh scripts/change-class.sh \
+            scripts/gate-steps.d/999-probe.step scripts/check-probe-765.sh \
+            scripts/hooks/probe-765.sh scripts/test-support/fake-765.sh \
+            openspec/litmus-bindings.yaml; do
     scaffold "self-$(printf '%s' "$self" | tr '/.' '--')"
     mkdir -p "$W/$(dirname "$self")"
     echo "# touched" >> "$W/$self"
@@ -125,6 +132,22 @@ for self in build.sh scripts/run-litmus-test.sh scripts/change-class.sh; do
         bad "ARM 5: editing $self gave '$t5' — the gate would be chosen by the file being changed. why: $(why)"
     fi
 done
+
+# ─────────────────────────────────────────────────── ARM 5b
+# A `ci` PATH IS FULL THOUGH NO TIER NAMES IT. pirria's review noted that the
+# classifier's vocabulary has nine classes and these tiers name seven; `ci` is
+# unmentioned. Under allow-lists that means FULL, silently and correctly — and
+# this arm is what makes "silently" auditable, because a reader checking the
+# tiers against the vocabulary will otherwise wonder if it was forgotten.
+scaffold ci-class
+mkdir -p "$W/.github/workflows"
+echo "on: push" > "$W/.github/workflows/x.yml"
+t5b="$(tier)"
+if [ "$t5b" = "FULL" ]; then
+    ok "ARM 5b: a .github/ path is FULL although no tier names the 'ci' class — the allow-list direction handles an unnamed class without anyone having remembered it"
+else
+    bad "ARM 5b: a ci-class path gave '$t5b' — an unnamed class reached a cheap tier. why: $(why)"
+fi
 
 # ─────────────────────────────────────────────────── ARM 6
 # A STALE LAST-FULL RUN REFUSES TO SKIP. The change itself qualifies LIGHT; only

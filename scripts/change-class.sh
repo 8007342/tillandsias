@@ -56,10 +56,53 @@ CHANGE_CLASS_FULL_MAX_AGE_S="${TILLANDSIAS_FULL_GATE_MAX_AGE_S:-86400}"
 CHANGE_CLASS_LIGHT_SET="plan-ledger docs"
 CHANGE_CLASS_SCOPED_SET="plan-ledger docs specs methodology build-scripts"
 
-# Classes that force FULL however they arrive. build-scripts is in the SCOPED
-# set above because most script edits are scoped work — but the four files that
-# decide what the gate itself DOES cannot be judged by the gate they configure.
-CHANGE_CLASS_SELF_PATHS="build.sh scripts/local-ci.sh scripts/run-litmus-test.sh scripts/change-class.sh"
+# ── PATHS THAT FORCE FULL HOWEVER THEY ARRIVE ────────────────────────────────
+#
+# THE LINE, and it is the one thing in this file worth arguing about:
+# A FILE THAT DECIDES WHAT RUNS IS FULL. A FILE THAT IS RUN MAY BE SCOPED.
+#
+# `build-scripts` is in the SCOPED set, and pirria's review of slice 1 measured
+# why that class alone is too coarse to be the unit. Of 845 tracked
+# build-scripts files on 2026-09-20: 89 are scripts/gate-steps.d/*.step (the
+# gate's deciders, DATA that a name-grep of build.sh cannot see — 1063-nraf),
+# 140 are scripts/check-*.sh (the guards), 8 are scripts/hooks/* (the pre-push
+# lane), and 356 are scripts/test-*.sh (the fixtures). One class cannot be
+# right for both "a helper that formats a report" and "the file that decides
+# whether a check runs at all".
+#
+# So the first three groups force FULL. A tier that can skip a change to a
+# .step file can skip the file that decides whether a check runs — the selector
+# would be choosing its own scope from the diff that changes its own scope.
+#
+# THE FIXTURES ARE DELIBERATELY NOT HERE, and this is a decision rather than an
+# omission. SCOPED runs the fixtures; it drops cargo. A test-*.sh edit under
+# SCOPED is therefore still executed by the tier that lands it, so the file
+# that is RUN is covered by running it. Making all 352 unconditional would cost
+# most of SCOPED's value to re-cover something the tier already does. What
+# would change this: slice 2's matrix showing a SCOPED landing that does NOT
+# run the fixture it touched. pirria raised these as a candidate rather than a
+# recommendation and asked for the measurement; that measurement is slice 2's.
+#
+# scripts/test-support/* IS HERE AND THE FIXTURES ARE NOT, which looks
+# inconsistent until you name what each one is. Those four files — a podman
+# mock, a secret-tool fake, a github-login fake, a litmus podman guard — are
+# not fixtures that SCOPED would execute. They are FAKES that fixtures LOAD, so
+# a change to one is not covered by "the tier that lands it runs it": the tier
+# runs the fixture, and the fixture's verdict depends on the fake behaving like
+# the real thing. A fake that silently changes behaviour turns every fixture
+# loading it green for the wrong reason, and nothing in SCOPED would notice.
+# pirria's formulation, which is better than mine: a fake is not a file that is
+# run, it is a file that DECIDES WHAT RUNNING MEANS for everything that loads
+# it. Same category as the deciders, one level down — and four files, so it
+# costs SCOPED nothing.
+#
+# openspec/litmus-bindings.yaml is class `specs` (SCOPED) and is here anyway,
+# and it is the one pirria would have added first: the bindings file is WHAT
+# MAKES A LITMUS TEST EXIST. Their measured incident — a litmus arm written and
+# never bound, with the suite reporting 37 PASS / 3 FAIL and that test in
+# NEITHER number — is a corpus silently shrinking. A tier that skips on a
+# bindings change can land that.
+CHANGE_CLASS_GATE_OWNING_GLOBS="build.sh scripts/local-ci.sh scripts/run-litmus-test.sh scripts/change-class.sh scripts/gate-steps.d/* scripts/check-*.sh scripts/hooks/* scripts/test-support/* openspec/litmus-bindings.yaml"
 
 _cc_say() { printf '%s\n' "$*"; }
 
@@ -94,13 +137,16 @@ change_class_set() {
     printf '%s\n' "$paths" | bash "$CHANGE_CLASS_ROOT/scripts/gate-stamp.sh" classify
 }
 
-# _cc_touches_self <paths> — does the change edit what decides the gate?
+# _cc_touches_self <paths> — does the change edit what DECIDES what runs?
+# Prints the first offending path on stdout so the refusal can name it; a
+# refusal that says "something in the gate" sends the reader back to the diff.
 _cc_touches_self() {
-    local p self
+    local p g
     while IFS= read -r p; do
         [ -n "$p" ] || continue
-        for self in $CHANGE_CLASS_SELF_PATHS; do
-            [ "$p" = "$self" ] && return 0
+        for g in $CHANGE_CLASS_GATE_OWNING_GLOBS; do
+            # shellcheck disable=SC2254 — the glob MUST expand; that is the match.
+            case "$p" in $g) printf '%s\n' "$p"; return 0 ;; esac
         done
     done <<< "$1"
     return 1
@@ -153,9 +199,10 @@ change_class_tier() {
         return 0
     fi
 
-    if _cc_touches_self "$paths"; then
+    local offender
+    if offender="$(_cc_touches_self "$paths")"; then
         _cc_say FULL
-        echo "change-class: FULL because the change edits what decides the gate ($CHANGE_CLASS_SELF_PATHS) — a selector cannot judge its own change with itself" >&2
+        echo "change-class: FULL gate-owning=$offender — a file that decides WHAT RUNS cannot be judged by a tier chosen from the diff that changes it" >&2
         return 0
     fi
 
