@@ -4661,6 +4661,15 @@ fn build_git_run_args(
             args.push("--env".into());
             args.push(format!("TILLANDSIAS_MIRROR_ID={mid}"));
         }
+        // ORDER 1313-prin: the mirror renders a SECOND authorized-principals line
+        // for this host when one is configured, so a host cert and a forge cert
+        // are distinguishable in its log and revoking one leaves the other.
+        if let Ok(push_host) = std::env::var("TILLANDSIAS_HOST_PUSH_HOST")
+            && !push_host.trim().is_empty()
+        {
+            args.push("--env".into());
+            args.push(format!("TILLANDSIAS_HOST_PUSH_HOST={}", push_host.trim()));
+        }
         // PUBLISH THE AUTHENTICATED LISTENER ONLY, on loopback, so a native
         // rootless host can reach it — it cannot route to the enclave bridge
         // (the same constraint vault_host_publish_arg documents for Vault).
@@ -11624,6 +11633,23 @@ async fn ensure_ssh_lane_sidecar(
     crate::vault_bootstrap::provision_lane_signer_approle_for_launch(mirror_id, debug)
         .await
         .map_err(|e| format!("[ssh-lane] AppRole provisioning failed: {e}"))?;
+    // ORDER 1313-prin: when a HOST push identity is configured, provision it in
+    // the same breath. One variable enables the whole thing — the Vault role,
+    // its minted policy, its AppRole, and (via the mirror env below) the second
+    // line in the mirror's authorized-principals file. Unset means the lane
+    // behaves exactly as it did for the forge alone, so enabling a host
+    // identity is an explicit act rather than a side effect of the lane flag.
+    if let Ok(push_host) = std::env::var("TILLANDSIAS_HOST_PUSH_HOST")
+        && !push_host.trim().is_empty()
+    {
+        crate::vault_bootstrap::provision_host_push_identity_for_launch(
+            push_host.trim(),
+            &enclave_subnet(),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[ssh-lane] host-push identity provisioning failed: {e}"))?;
+    }
     // Cache the host CA public key first: the gitconfig writer runs inside
     // the forge run-arg builders and must find it on disk.
     let ca_pub = crate::vault_bootstrap::read_mirror_host_ca_public_key(debug)

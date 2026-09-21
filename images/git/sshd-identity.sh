@@ -40,6 +40,10 @@
 #   TILLANDSIAS_SSH_DIR                  default /tmp/tillandsias-sshd
 #   TILLANDSIAS_SSHD_PORT                default 2222
 #   TILLANDSIAS_HOST_CERT_RENEW_SECONDS  default 28800 (8 h; fixtures shrink it)
+#   TILLANDSIAS_HOST_PUSH_HOST           optional — when set, the authorized
+#                                        principals file also carries
+#                                        til:host-push:<host> (1313-prin). Unset
+#                                        renders exactly the forge line, as before.
 #   TILLANDSIAS_VAULT_TOKEN_FILE         default /tmp/tillandsias-vault-token
 #   VAULT_ADDR / VAULT_CACERT            default https://vault:8200 / /etc/tillandsias/ca.crt
 #   TILLANDSIAS_RECEIVE_PATH             default /usr/local/bin/tillandsias-receive
@@ -154,15 +158,35 @@ request_cert() {
 }
 
 # ── T5 rendering ───────────────────────────────────────────────────────────
+# ORDER 1313-prin: the file renders the forge principal ALWAYS and the host
+# principal WHEN ONE IS CONFIGURED, one line each.
+#
+# WHY TWO IDENTITIES AND NOT ONE SHARED. A certificate that names WHO is
+# pushing is what the audit trail is for, and revoking one identity must not
+# take the other with it. A host pushing under til:forge-push:<mid> would be
+# indistinguishable from a lane container in the mirror's log, and revoking the
+# host would revoke every forge.
+#
+# THE ONE-LINE GUARD IS WIDENED, NOT WEAKENED. It used to assert the file was
+# EXACTLY the single forge line and die otherwise. It now asserts the file is
+# EXACTLY the expected SET — same falsifiability, one more member when the host
+# principal is configured. An unconfigured mirror renders exactly one line and
+# behaves as before, so enabling a host identity is an explicit act.
 write_principals() {
     _want="til:forge-push:$MID"
+    _want_n=1
+    if [ -n "${TILLANDSIAS_HOST_PUSH_HOST:-}" ]; then
+        _want="$_want
+til:host-push:${TILLANDSIAS_HOST_PUSH_HOST}"
+        _want_n=2
+    fi
     if [ -f "$PRINCIPALS_FILE" ] && [ "$(cat "$PRINCIPALS_FILE")" != "$_want" ]; then
         die "principals-violation"
     fi
     printf '%s\n' "$_want" > "$PRINCIPALS_FILE.tmp" && mv -f "$PRINCIPALS_FILE.tmp" "$PRINCIPALS_FILE" \
         || die "principals-unwritable"
-    # Refuse to proceed if the installed file is anything but the single line.
-    [ "$(grep -c . "$PRINCIPALS_FILE")" = "1" ] || die "principals-violation"
+    # Refuse to proceed if the installed file is anything but the expected set.
+    [ "$(grep -c . "$PRINCIPALS_FILE")" = "$_want_n" ] || die "principals-violation"
     [ "$(cat "$PRINCIPALS_FILE")" = "$_want" ] || die "principals-violation"
 }
 
