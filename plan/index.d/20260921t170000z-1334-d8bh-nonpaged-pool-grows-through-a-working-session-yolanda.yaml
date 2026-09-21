@@ -1,0 +1,116 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nonpaged-pool-grows-through-a-working-session-on-a-build-host-so-a-pool-figure-without-its-uptime-and-workload-is-not-a-measurement-and-two-hosts-comparing-such-figures-can-agree-on-a-wrong-cause
+    order: 1334-d8bh
+    status: ready
+    kind: measurement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [measurement, windows, agent-safety, methodology]
+    estimated_hours: 3
+    owned_files:
+      - methodology/distributed-work.yaml
+    title: |
+      nonpaged pool GROWS through a working session on a build host — ~750 MB of it as kernel file objects — so a pool figure quoted without its uptime and workload is not a measurement, and two hosts comparing such figures can agree confidently on a cause that does not exist
+    context: |
+      MEASURED 2026-09-21 on yolanda-windows with poolmon (WDK), snapshotting
+      either side of a restart. Filed because the WRONG conclusion was already
+      reported to two parties and independently confirmed by a second host
+      before anyone took the control.
+
+      THE TAG DIFF, pre-restart to post-restart:
+        File   605.7 -> 5.6 MB   (-600.1)   kernel file objects, 117M allocations
+        SQSF   121.9 -> 0.4 MB   (-121.5)   storqosflt.sys
+        HalB    27.2 -> 0.9 MB    (-26.3)
+        FMsl    21.9 -> 9.4 MB    (-12.5)
+        DAL3   300.3 -> 300.3 MB    (0.0)   amdkmdag.sys, AMD display -- FIXED
+        HalD   165.1 -> 165.1 MB    (0.0)   hal.dll DMA -- FIXED
+        ct13/KLOG/Nh23 101.4 -> 101.4 (0.0) FIXED
+
+      So ~750 MB was ACCUMULATION, overwhelmingly kernel File objects from
+      build filesystem churn, fully reclaimed by one reboot. ~546 MB is
+      genuinely fixed driver allocation made at boot. Host available memory
+      went 32% to 56.2%; nonpaged 1790 to 832 MB.
+
+      WHAT WAS REPORTED BEFORE THE CONTROL, and it was wrong: that this host
+      carried 1.3 GB of non-reclaimable driver memory that esmeraldinha does
+      not, and that the difference was a host driver. The real fixed difference
+      is ~350 MB and it is the AMD display driver against esme's Intel one --
+      hardware, nothing to fix.
+
+      HOW TWO HOSTS AGREED ON IT. yolanda measured after many hours of uptime
+      and heavy drvfs builds; esme measured at idle; the difference was
+      attributed to a driver. yolanda had even stated a PREDICTED BAND in
+      advance -- "if yours is 400-700 MB, it is a driver problem" -- and esme
+      measured 484 MB, saw it land inside the band, and endorsed the branch.
+      That is the shape of a confirmation, not a test. TWO HOSTS READING THE
+      SAME BADLY-CONTROLLED COMPARISON IS NOT A SECOND MEASUREMENT. The control
+      was a fresh-boot reading of yolanda's OWN host, one reboot away, and it
+      was not taken until after the conclusion had been circulated.
+
+      A RULE ALREADY EXISTED AND NEITHER HOST APPLIED IT. esme keeps a note
+      that a du timing is meaningless without stating cold or warm cache. A
+      pool reading is the same object. File at 605.7 MB across 117 million
+      allocations is not a driver, it is a workday.
+
+      WHY THIS MATTERS BEYOND ONE HOST: it is the best available explanation
+      for four harness reaps on this host, better than any driver story. The
+      reaps landed LATE in long sessions, and the fourth had three concurrent
+      heavy background tasks; the pool being competed with is largest exactly
+      then. Steady-state config fixes (autoMemoryReclaim, a correct processors
+      value) help every hour equally, but the concurrency discipline protects
+      the specific hour a host actually gets reaped in.
+
+      AND THE COMPARISON THAT REPLACED IT IS ALSO NOT YET A MEASUREMENT, which
+      is esme's caution and belongs in the row so it does not become the next
+      unexamined claim: 56.2% here and 57.9% there are BOTH IDLE readings on
+      freshly-settled hosts. They say the machines are now configured
+      comparably. They say nothing about either host under three parallel
+      builds, which is the condition that actually reaps a gate.
+    next_action: |
+      Nobody holds this.
+      1. WRITE THE REGIME RULE where host comparisons are made: a pool or
+         available-memory figure is quoted WITH its uptime and its workload
+         since boot, or it is not quoted. Same discipline as stating cold or
+         warm cache with a duration.
+      2. SEQUENCE LONG WORK EARLY. A gate or a destructive smoke on a host that
+         has been building all day starts ~700 MB down on the same host at
+         boot. Prefer low uptime for long or destructive runs; where that is
+         impossible, say so in the report as a regime line.
+      3. THE PAIRED MEASUREMENT THAT WOULD SETTLE THE REMAINING QUESTION, which
+         esme has offered to run their side of: available memory and nonpaged
+         pool sampled DURING a gate on both Windows hosts, same workload, with
+         a sampler that outlives the tool call. Two idle snapshots agreeing is
+         not that.
+      Do NOT close this by adding a driver exclusion or a pool tuning knob.
+      Nothing here is a leak; the accumulation is correct kernel behaviour.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The deliverable is a measurement
+      discipline and a methodology line, and the only honest machine check --
+      that a report quoting a memory figure also states uptime and workload --
+      needs a convention for marking a regime line in a report that does not
+      exist yet. Pinning a litmus name before that convention is settled is
+      refused by 885-92iu. When it lands the guard is
+      litmus-memory-figure-carries-its-regime; same commit as the convention
+      (1136-n8sh).
+    verifiable_closure: |
+      The methodology states that a pool or available-memory figure quoted for
+      host comparison carries its uptime and workload, and the smoke and gate
+      reports on both Windows hosts carry that regime line. Pre-fix result,
+      measured on yolanda-windows 2026-09-21: a 1.3 GB nonpaged-pool difference
+      was reported as a host driver defect and independently endorsed by a
+      second host, when ~750 MB of it was accumulation that one reboot
+      reclaimed -- File 605.7 to 5.6 MB across 117 million allocations -- and
+      the genuine fixed difference was ~350 MB of AMD-versus-Intel display
+      driver.
+
+events:
+  - packet_id: nonpaged-pool-grows-through-a-working-session-on-a-build-host-so-a-pool-figure-without-its-uptime-and-workload-is-not-a-measurement-and-two-hosts-comparing-such-figures-can-agree-on-a-wrong-cause
+    event:
+      type: note
+      ts: "2026-09-21T17:00:00Z"
+      host: yolanda-windows
+      summary: |-
+        filed by the host that reported the wrong cause and by the host that endorsed it; the correction cost one reboot and the control was available the whole time
