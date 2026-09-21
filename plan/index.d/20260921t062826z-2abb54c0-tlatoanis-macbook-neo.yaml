@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-platforms-state-root-falls-back-to-a-silent-default-when-its-home-variable-is-unset-and-since-reset-state-those-roots-are-destructive-so-a-scrubbed-environment-turns-a-repair-into-a-no-op-that-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-21T06:28:26Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t062826z
+      host: tlatoanis-macbook-neo
+      summary: |
+        F3 ORIGIN IDENTIFIED — the shadowing bundle is a DEV BUILD, not an abandoned release.
+
+        MEASURED on macneo 2026-09-21, after the v56.9.21.1 install:
+          /Applications/Tillandsias.app          tillandsias-tray 56.9.21.1 (git 2f5f2a90a)
+          ~/Applications/Tillandsias.app         tillandsias-tray 56.9.11.1 (git df944af67)
+          <repo>/dist/Tillandsias.app            tillandsias-tray 56.9.11.1 (git df944af67)
+
+        The ~/Applications copy and the repository's dist/ bundle are THE SAME BUILD — same version, same commit, both dated 2026-09-11/12. So that copy was almost certainly installed from a local dev build on 2026-09-11, not left behind by any installer.
+
+        WHY THIS CHANGES THE FINDING RATHER THAN CONFIRMING IT. The earlier reading was that the installer fails to clean up an older location. It does not: install-macos.sh writes /Applications and has no business touching ~/Applications, and no release ever put a bundle there. What actually happened is that a developer-built bundle landed in a location macOS honours and the installer never inspects, and it has shadowed the installed app since. The defect is not a missing cleanup; it is that BOTH locations are live to LaunchServices while only one is ever updated, and nothing on the host says which one an operator will get.
+
+        THE INTERACTION WITH THIS ROW IS UNCHANGED AND IS THE POINT. reset_state.rs derives its reprovision path from the literal /Applications/Tillandsias.app/... An operator whose live app is the ~/Applications one gets REFUSING to destroy anything while holding a working install — the fail-CLOSED mirror of the HOME case's fail-OPEN, and now with a plausible way for real hosts to reach it that does not require anyone to have done anything unusual.
+
+        A SECOND CONSUMER OF THE SAME ASSUMPTION, found the same way. scripts/test-macos-vz-orphan-diagnosis.sh defaults its target to <repo>/dist/Tillandsias.app/Contents/MacOS/tillandsias-tray. On this host that is the ten-day-old build, so the fixture silently exercised a stale binary against a current guest and produced a verdict about neither. A binary PATH is not a binary IDENTITY — the same lesson that put an ungated mod declaration on trunk earlier in this cycle. Forwarded to macbookair as a fixture slice: print the target's --version in the verdict, and refuse when the target is older than the provisioned image.
