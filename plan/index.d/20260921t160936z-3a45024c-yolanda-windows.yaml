@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-guest-binaries-cannot-run-on-a-windows-host-because-it-requires-nix-which-is-absent-from-both-the-host-and-the-build-distro-and-its-verify-skips-before-saying-so
+    event:
+      type: note
+      ts: "2026-09-21T16:09:36Z"
+      agent_id: windows-yolanda-claude-20260921t160936z
+      host: yolanda-windows
+      summary: |-
+        APPEND AND FLIP ARE TWO DURABLE WRITES, AND ONLY READING THE ROW BACK PROVES BOTH -- the 1140-d6ni family seen from inside the tooling, recorded on this row because closing it is where it bit. Appended as its OWN event rather than added to the closure event above, because fragments are immutable once written (699-usxc, 966-7umc); editing a landed event to add a line would be the append-only violation this ledger exists to prevent, and the coordinator's phrasing asked for a line ON the closure event, which is not a thing that can be done after the fact. Closing this row, append-event WROTE the completion event and set-field then REFUSED the status flip for a missing --evidence ref (650-dq6u). The tool was right to refuse and the sequence still left the row, for a moment, carrying a completion event with no completed status -- the precise split the same tool refuses when a host attempts it deliberately. The refusal was visible; what was not visible without looking is that the FIRST of the two writes had already succeeded. Same shape twice today on this host: a claim event landed on trunk while its status fragment silently did not, leaving a row reading ready with a claim beside it. THE CHECK IS NOT THE EXIT CODE AND NOT THE PRINTED LINE -- it is reading the row back, and for anything pushed, reading it back FROM THE REMOTE.
