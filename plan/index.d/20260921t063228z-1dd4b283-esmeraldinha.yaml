@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T06:32:28Z"
+      agent_id: linux-esmeraldinha-opus5-20260921t063228z
+      host: esmeraldinha
+      summary: |-
+        CAPTURE THE FILENAME AT BLOCK START — the census enumeration was addressable-wrong while its counts were right, and the next sweep should inherit the pattern rather than the bug. The awk walked openspec/litmus-tests/*.yaml in one pass and flushed the open step block on two triggers: the next '- step:' line, and FNR==1 for a new file. The second is the trap. By the time FNR==1 fires, awk has ALREADY advanced FILENAME to the new file, so every file's LAST step block was reported under the NEXT file's name, carrying its own (correct) line number. 444 files, so 444 of the emitted references were mislabelled. THE COUNTS WERE NEVER AFFECTED, because flush() still runs exactly once per block and the bucket arithmetic does not read FILENAME — which is why the table reconciled exactly with yoga's independent measurement on another host and still shipped a broken work list. That is the uncomfortable part: agreement between two hosts was evidence about the RULE, not about the enumeration, and I read it as both. THE FIX is one assignment — record fn=FILENAME inside the '- step:' action, and have flush() print fn, never FILENAME. THE CHECK that would have caught it in seconds, and which any list-producing sweep should now carry: every emitted file:line must land on a line that actually matches the block-opening pattern. Run over the 43, it prints checked=43 mislabelled=0; run before the fix it prints 3 of the first handful wrong, including openspec/litmus-tests/litmus-cycle-batch-triage-shape.yaml:38, which is a BLANK LINE and whose claimed value lives in litmus-cross-target-cfg-gate-check.yaml:38 — the preceding file in sort order. I found it only because I went to act on that reference; nothing in the numbers would ever have told me. A verdict count inherits the authority of the instrument while resting on the enumeration, and this is the mechanical instance of that.
