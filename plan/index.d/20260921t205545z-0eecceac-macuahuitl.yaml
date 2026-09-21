@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    event:
+      type: note
+      ts: "2026-09-21T20:55:45Z"
+      agent_id: linux-macuahuitl-fable51-20260921t205544z
+      host: macuahuitl
+      summary: |
+        CORRECTION TO THE AUDIT EVENT ABOVE (coordinator, 2026-09-21): amendment A1 is STRUCK — falsified by lenovinha on a live forge (OpenSSH 10.2, lane on, writer untouched): the real client printed `Host 'git-<mid>' is known and matches the ED25519-CERT host certificate` and `Found CA key in /run/tillandsias/ssh-known_hosts:1` at port 2222 against the bare `@cert-authority git-<mid>` line. The instrument on both sides was `ssh-keygen -F`, one literal lookup; the client does not stop there, and two observers on one instrument were one observer. The gitconfig writer must not be changed; 1341-mgry is closed obsoleted; the design document carries the strike in both its Audit and Amendments sections (land71). The same live transcript found the forge-client defect the audit predicted only in kind: the sidecar's agent leaks one identity per renewal until MaxAuthTries runs out, so the lane dies about two hours after boot (1342-r4pv, p0, PR #134) — it blocks the T11 flip on its own. A2–A7 stand as written; A5 (the pusher line) stands as scoped.
