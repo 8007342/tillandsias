@@ -119,11 +119,17 @@ fi
 C4="$TMP/c4"; fresh_clone "$C4"
 out4="$(run_seed "$C4" "salvage/never-pushed-9999-zzzz")"; rc4=$?
 head4="$(git -C "$C4" symbolic-ref --short -q HEAD || echo '<detached>')"
+# Matched with `case`, not `printf | grep -q`: grep -q exits on its FIRST match,
+# the producer dies 141, and under pipefail the pipeline's status is 141 WITH
+# the pattern present -- a verdict guard that inverts exactly when it matters
+# (795-imz3, 1307-ermc).
+warned4=0
+case "$out4" in *WARNING*) warned4=1 ;; esac
 if [ "$rc4" -ne 0 ]; then
     bad "ARM 4: a never-pushed seed hard-failed (rc=$rc4) — B6 forbids this; it DOAs a launch inside the mirror's reconcile window"
 elif [ "$head4" != "$TRUNK" ]; then
     bad "ARM 4: a never-pushed seed left HEAD on '$head4' instead of the clone's own '$TRUNK'"
-elif ! printf '%s' "$out4" | grep -q 'WARNING'; then
+elif [ "$warned4" -ne 1 ]; then
     bad "ARM 4: a never-pushed seed was silent — it fell back to '$TRUNK' with nothing in the log, and a silent fallback is indistinguishable from a successful seed"
 else
     ok "ARM 4: a never-pushed seed stays on '$TRUNK', warns LOUDLY, and returns 0 — fail-soft (B6) survives"
