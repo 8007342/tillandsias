@@ -252,6 +252,48 @@ for path in ${paths_to_stage[@]+"${paths_to_stage[@]}"}; do
     fi
 done
 
+
+# ORDER 1321-2ixp, ITEM 2. RESTORE THE EXECUTABLE BIT AT SNAPSHOT TIME, because
+# this is the last moment anyone can know it was meant.
+#
+# A Windows checkout cannot express the bit: core.filemode is false there, and a
+# NEW file stages as 100644 whatever it is. MEASURED — scripts/
+# test-windows-host-lane-refusal.sh and its controls arrived through yolanda's
+# salvage relay at 100644, every ./build.sh --check passed for a day of Linux
+# lands, and the v56.9.20.1 release gate refused litmus:windows-host-lane-refusal
+# step 1 (`test -x`) on the first tier that runs it.
+#
+# THE RELAYING HOST CANNOT KNOW. By the time the ref is relayed the mode is just
+# what the tree says; nothing distinguishes "was 100644 on purpose" from "the
+# substrate could not say 100755". Restoring on the relay side alone — which is
+# what ff82d1001 did for one file — fixes that file and leaves the NEXT Windows
+# salvage carrying the same defect. This row's next_action says so in as many
+# words.
+#
+# SHEBANG IS THE SIGNAL, and it is the one the closure specifies: a file whose
+# first line is `#!` is meant to be run. A file without one keeps 100644, which
+# is the second arm of the fixture.
+#
+# SCOPED TO THE PATHS THIS SALVAGE STAGED, never `git ls-files -s` over the whole
+# index. The temp index carries the entire tree, so a repo-wide sweep would flip
+# unrelated files that were 100644 on purpose and silently change them inside a
+# recovery copy — turning a tool that preserves a worktree into one that edits it.
+#
+# BEST-EFFORT BY CONTRACT, like every other step here: a path that cannot be
+# read or re-staged is left exactly as it is. This runs on the path that exists
+# to preserve work, and it must never be the reason the copy fails.
+restored=0
+for path in ${paths_to_stage[@]+"${paths_to_stage[@]}"}; do
+    [ -f "$path" ] || continue
+    _mode="$(git ls-files -s -- "$path" 2>/dev/null | cut -d' ' -f1)"
+    [ "$_mode" = "100644" ] || continue
+    IFS= read -r _first < "$path" 2>/dev/null || continue
+    case "$_first" in '#!'*) ;; *) continue ;; esac
+    git update-index --chmod=+x -- "$path" 2>/dev/null || continue
+    echo "note:exec-bit-restored:${path}"
+    restored=$((restored + 1))
+done
+
 tree="$(git write-tree 2>/dev/null)" || { echo "fail:salvage:write-tree"; exit 1; }
 head_sha="$(git rev-parse HEAD 2>/dev/null)" || { echo "fail:salvage:no-head"; exit 1; }
 
