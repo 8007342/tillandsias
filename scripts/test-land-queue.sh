@@ -472,7 +472,25 @@ GATE
 # redirect, so a hungry gh tests the fd the LIST is read on rather than one
 # subprocess's plumbing. Two guards, and the arm must fail if EITHER is removed.
 sed -i '2i cat >/dev/null 2>&1 || true' "$GH_BIN"
-out9="$(run_queue)"
+
+# BOUNDED, BECAUSE THE DEFECT'S FAILURE MODE IS A HANG AND NOT A WRONG ANSWER.
+# Measured 2026-09-21: with the fd-3 read reverted and a stdin-hungry gh, this
+# arm did not print a wrong verdict — it BLOCKED, and the whole fixture died at
+# its own 600 s bound with rc=124 and no ARM 9 line at all. A silent hang is the
+# worst failure an arm can have: it is indistinguishable from a slow host, it
+# produces no verdict to read, and whoever meets it goes looking for an
+# infrastructure problem instead of the assertion that fired. So the subject is
+# bounded HERE and a timeout is reported as this arm's own named failure.
+out9="$(timeout 120 env \
+    TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
+    TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
+    TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
+    TILLANDSIAS_TRUNK_BRANCH=linux-next \
+    bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" 2>&1)"
+_rc9=$?
+if [ "$_rc9" -eq 124 ]; then
+    bad "ARM 9: the queue BLOCKED (timeout 120s) with a stdin-consuming gate and gh — the candidate list is being read on stdin and a reader in the loop is waiting on it. This is the field defect of 2026-09-21, and its shape is a hang rather than a wrong answer."
+else
 n9="$(printf '%s' "$out9" | sed -n 's/^land:\([0-9]*\) .*/\1/p' | tr '\n' ',')"
 case "$out9" in
     *"ok:land-queue:3 "*)
@@ -485,6 +503,7 @@ case "$out9" in
         bad "ARM 9: a stdin-consuming gate cut the drain short (landed '$n9') — the candidate list is being eaten by the loop body, which is the field defect of 2026-09-21
 $(printf '%s' "$out9" | tail -3)" ;;
 esac
+fi
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then
