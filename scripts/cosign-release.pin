@@ -1,0 +1,48 @@
+# @trace spec:ci-release, plan 1324-ujvb
+#
+# THE TRUST ANCHOR for cosign itself. One record, four fields, no logic.
+#
+# WHY A PIN AND NOT "download the latest release". A provenance tool installed
+# without provenance is this row's defect one level up: a cosign fetched from
+# whatever the release API answers today can verify every artifact we ship and
+# be, itself, unverified. The pin is what makes the FIRST link checkable — the
+# only link that cannot be checked by the tool it is bootstrapping.
+#
+# WHY THE SHA256 IS NOT ENOUGH ON ITS OWN, and this is the part that is easy to
+# implement past. A hash proves the bytes match what whoever wrote this line
+# saw. It says nothing about whether those bytes are the release sigstore
+# published — if the pin was copied from a compromised page, the hash check
+# passes and looks like diligence. So the hash gates EXECUTION, and then the
+# executed cosign verifies its OWN release signature against sigstore's
+# certificate and transparency log. Two different questions:
+#
+#   sha256   "are these the bytes the pin names?"     -> may I run this at all
+#   sigstore "did sigstore publish these bytes?"      -> is the pin itself honest
+#
+# Neither subsumes the other. Running only the hash trusts this file; running
+# only the signature means executing an unverified binary to ask it whether it
+# should have been executed.
+#
+# THE IDENTITY IS READ FROM THE CERTIFICATE, NOT ASSUMED. cosign's releases are
+# NOT signed by a GitHub Actions workflow identity, which is the plausible guess
+# and is wrong — they are signed by a GCP service account through Google's OIDC
+# issuer. Pinning the guess would fail verification for the wrong reason and
+# read as a broken download. Verified on 2026-09-22 by decoding the bundle's
+# certificate:
+#     X509v3 Subject Alternative Name: critical
+#         email:keyless@projectsigstore.iam.gserviceaccount.com
+#     1.3.6.1.4.1.57264.1.1: https://accounts.google.com
+#
+# TO ROLL THIS FORWARD: change the version, download the new asset and its
+# .sigstore.json, re-read the certificate identity (do not carry these two lines
+# over on faith — an upstream signing-identity change is exactly the event this
+# file exists to notice), recompute the hash, and re-run
+# scripts/test-ensure-cosign.sh, whose negative controls must still reject.
+#
+# Fields are `key=value`, one per line, `#` comments ignored.
+
+version=v3.1.3
+asset=cosign-linux-amd64
+sha256=4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
+certificate_identity=keyless@projectsigstore.iam.gserviceaccount.com
+certificate_oidc_issuer=https://accounts.google.com
