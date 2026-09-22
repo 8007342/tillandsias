@@ -257,6 +257,26 @@ if [ "$CREATE_UPDATE_COUNT" -gt 0 ]; then
         PRE_FETCH_REDACTED="$(redact_output "$PRE_FETCH")"
         log_msg "Pre-push fetch failed (non-fatal, push may still succeed): $PRE_FETCH_REDACTED"
     fi
+    # @trace spec:git-mirror-service
+    # ORDER 1350-ku7v (T1). The fetch above has just refreshed the tracking
+    # namespace; this is the freshest the mirror's knowledge of upstream ever
+    # gets, so it is where the sync state is republished.
+    #
+    # WHY HERE AND NOT ONLY ON THE RECONCILER TICK: the push about to happen
+    # is exactly the event this row was filed about — a host racing upstream
+    # and being told it is stale. Republishing on the reconciler alone would
+    # leave the state up to MIRROR_RECONCILE_INTERVAL old at the one moment a
+    # consumer is most likely to read it.
+    #
+    # NON-FATAL, ALWAYS, and it must never touch this script's exit status: a
+    # relay that refused a legitimate push because a verdict could not be
+    # written would be a worse defect than the blindness being fixed. The
+    # publisher's own failure path is loud on stderr.
+    SYNC_STATE="${SYNC_STATE:-/usr/local/share/git-service/publish-sync-state}"
+    if [ -x "$SYNC_STATE" ]; then
+        env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+            "$SYNC_STATE" "$(pwd)" >/dev/null 2>&1 || true
+    fi
 fi
 
 # receive-pack exposes proposed objects through GIT_OBJECT_DIRECTORY and
@@ -302,6 +322,18 @@ if [ -n "$PUSH_URL" ]; then
     else
         FETCH_OUTPUT_REDACTED="$(redact_output "$FETCH_OUTPUT")"
         log_msg "Reconcile fetch non-fast-forward (expected if locally stranded): $FETCH_OUTPUT_REDACTED"
+    fi
+    # @trace spec:git-mirror-service
+    # ORDER 1350-ku7v (T1). Republish after the post-failure reconcile too.
+    # THIS IS THE ARM THAT MATTERS MOST: the push was just REFUSED, and the
+    # reconcile has either caught the exported heads up or found them
+    # genuinely stranded. Leaving the pre-push verdict standing here would
+    # publish the state of a mirror that no longer exists, and the reader it
+    # would mislead is the agent deciding whether to retry.
+    SYNC_STATE="${SYNC_STATE:-/usr/local/share/git-service/publish-sync-state}"
+    if [ -x "$SYNC_STATE" ]; then
+        env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+            "$SYNC_STATE" "$(pwd)" >/dev/null 2>&1 || true
     fi
 fi
 

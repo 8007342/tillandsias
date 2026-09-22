@@ -339,6 +339,34 @@ run_auth_probe() {
     return 0
 }
 
+# @trace spec:git-mirror-service
+# Order 1350-ku7v (T1): publish the mirror's SYNC STATE on the same lifecycle
+# as the auth verdict — once after the startup sweep and on every reconciler
+# tick — so its staleness is bounded by MIRROR_RECONCILE_INTERVAL for the same
+# reason the auth verdict's is.
+#
+# THE CADENCE IS THE RECONCILER'S ON PURPOSE, not a timer of its own. The
+# reconciler tick is the moment the tracking refs this state is computed from
+# have just been refreshed; publishing on any other schedule would report a
+# distance measured against data of unrelated age, and "behind by 0" computed
+# against an hour-old fetch is the exact false comfort this row was filed
+# about.
+#
+# A MISSING PUBLISHER IS ANNOUNCED, NEVER SILENT. An absent sync-state must
+# read to a consumer as not-current (fail closed), and a mirror that cannot
+# publish one has to say so here — otherwise the only evidence is an absence,
+# which is indistinguishable from a mirror nobody asked.
+SYNC_STATE="${SYNC_STATE:-/usr/local/share/git-service/publish-sync-state}"
+run_sync_state() {
+    if [ ! -x "$SYNC_STATE" ]; then
+        retry_msg "[git-mirror] sync-state NOT published: $SYNC_STATE missing"
+        return 0
+    fi
+    OUT="$("$SYNC_STATE" "$1" 2>&1)" || true
+    [ -n "$OUT" ] && retry_msg "[git-mirror] sync-state: $OUT"
+    return 0
+}
+
 start_mirror_reconciler() {
     if [ ! -x "$RECONCILE_HEADS" ]; then
         retry_msg "[git-mirror] periodic reconciler NOT started: $RECONCILE_HEADS missing"
@@ -354,6 +382,9 @@ start_mirror_reconciler() {
                 # Refresh the upstream write-authorization verdict every tick
                 # so the forge guard's freshness bound holds (order 756-2jnj).
                 run_auth_probe "$m"
+                # And the sync state, immediately after the reconcile that
+                # refreshed the tracking refs it reads (order 1350-ku7v).
+                run_sync_state "$m"
             done
         done
     ) &
@@ -664,6 +695,13 @@ done
 for mirror in "$GIT_SERVICE_ROOT"/*; do
     [ -d "$mirror" ] || continue
     run_auth_probe "$mirror"
+    # @trace spec:git-mirror-service
+    # Order 1350-ku7v (T1): and the first sync state, for the same reason —
+    # a forge launching right after this mirror must not read an absent
+    # (= not-current) state for a whole reconcile interval. This is also the
+    # publish that runs on a LOCAL-ONLY mirror, where the honest answer is
+    # heads-unknown/no-tracking-data rather than silence.
+    run_sync_state "$mirror"
 done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"
