@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    field: status
+    value: obsoleted
+    ts: "2026-09-22T00:39:46Z"
+    host: yoga
+
+events:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: completed
+      ts: "2026-09-22T00:39:46Z"
+      host: yoga
+      summary: |-
+        status 'obsoleted' with evidence_refs: 66dfa91bf + three hosts measuring rc=1 (yoga v56.9.21.2 x3, pirria 320c66ad3, lenovinha checkout build)
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: note
+      ts: "2026-09-22T00:39:46Z"
+      host: yoga
+      summary: |-
+        the defect never existed; filed on a misread exit code, correction landed
