@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-linux-desktop-launcher-asks-for-an-icon-named-tillandsias-and-nothing-has-ever-put-one-on-the-icon-search-path-while-the-uninstaller-has-always-removed-three-such-files
+    packet_kind: bug
+    order: 1334-gv33
+    status: in_progress
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [linux, install, desktop, fail-loud, floor]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - scripts/uninstall.sh
+    unscoreable: ''
+    title: |
+      the Linux desktop launcher asks for an icon named "tillandsias" and nothing has ever put one on the XDG search path, while the uninstaller has always removed three such files
+    context: |
+      OPERATOR REPORT 2026-09-21: a fresh Linux install creates a GNOME desktop
+      launcher with no icon, and has not had one for a long time. Low importance,
+      long-lived.
+
+      MEASURED ON pirria AGAINST A FRESH INSTALL OF v56.9.21.2, not inferred:
+
+        ~/.local/share/applications/tillandsias.desktop   EXISTS
+          Icon=tillandsias                                 a bare theme name
+        icons matching "tillandsias" on any XDG path      ZERO
+
+      So the launcher is correct and the lookup simply resolves to nothing. It is
+      not a malformed .desktop, not a wrong Icon= value, and not a missing entry:
+      it is a name with nothing behind it.
+
+      THE PROOF THAT THE INSTALL SIDE WAS NEVER WRITTEN, rather than broken
+      later: scripts/uninstall.sh has always removed exactly three paths —
+      hicolor/{32x32,128x128,256x256}/apps/tillandsias.png — that no install path
+      has ever created. grep for "hicolor" across the repo's shell and rust
+      returns those three lines and nothing else. The REMOVE side exists, the
+      INSTALL side does not, and nothing in the tree compares them. An
+      archived spec (openspec/changes/archive/2026-03-24-desktop-launchers/)
+      describes the launcher; no executable gate survived it.
+
+      WHY THE INSTALLER CANNOT FIX IT ALONE, which is probably why it stalled:
+      scripts/install.sh is curl-piped and has no access to repo assets, and
+      rendering an SVG to PNG would put a converter dependency on the user's
+      machine. The binary already EMBEDS the icon art (tillandsias-core genus.rs,
+      include_bytes! over assets/icons/<species>/<state>.svg), so the binary is
+      the one component that can always produce the file.
+    exit_criteria:
+      - 'a fresh install produces a launcher with a visible icon: after install and one tray start, a file exists on the XDG icon search path under the name the .desktop requests'
+      - 'the fix does not add a runtime dependency (no SVG->PNG converter on the user machine) and does not require a release-pipeline change'
+      - 'SYMMETRY: every icon path the uninstaller removes is one an install path creates, or is documented as a legacy sweep. The three png paths predate this row and stay as upgrade hygiene.'
+      - 'a user who has themed their own icon is not clobbered on every tray start'
+      - 'NEGATIVE CONTROL: with the write disabled, the icon is absent and the launcher is bare again — demonstrated, not assumed'
+    verifiable_closure: |
+      On a host with no tillandsias icon: start the tray once, then
+       returns a non-empty file
+      at hicolor/scalable/apps/tillandsias.svg, and the GNOME launcher renders it.
+    next_action: >
+      Landed a first fix: the tray writes hicolor/scalable/apps/tillandsias.svg
+      from its embedded art on startup when absent or empty, and uninstall.sh
+      now removes that path too. Scalable rather than rendered pngs so no
+      converter is needed. Still open: (1) confirm on a REAL fresh install with a
+      GNOME session that the icon renders in the shell, which this host could not
+      do tonight because the tray was not restarted under a desktop session;
+      (2) decide whether the three legacy png paths should also be produced for
+      themes that ignore scalable/, and (3) the gate this row exposes but does not
+      close — nothing compares what the installer creates against what the
+      uninstaller removes, and that asymmetry is what hid this for months.
+    provenance: |
+      Filed by pirria 2026-09-21 at operator direction. Diagnosis by a repo
+      investigation agent plus an empirical check of this host's own fresh
+      install. The uninstall/install asymmetry was the agent's find and is the
+      single most convincing piece of evidence on the row.
+    events:
+      - type: filed
+        ts: '2026-09-21T18:08:26Z'
+        agent_id: linux-pirria-claude-20260921t050924z
+        host: pirria
+        summary: |-
+          Filed with the fix already landed for the common case, because the
+          diagnosis was unambiguous and the change is small. What stays open is
+          the part this host could not do: see it render in a real GNOME session.

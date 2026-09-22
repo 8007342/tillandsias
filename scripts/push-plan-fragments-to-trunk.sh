@@ -139,9 +139,42 @@ if [ -z "$PLAN" ]; then
 fi
 case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 
-HOST="$(hostname -s 2>/dev/null || hostname 2>/dev/null || true)"
+# HOST RESOLUTION GOES THROUGH THE ONE RESOLVER, AND REFUSES RATHER THAN
+# INVENTING (order 1337-3tk6). This used to be `hostname -s` with a literal
+# "unknown" fallback. The forge image does not ship a `hostname` executable, so
+# every ref this script pushed from a forge was attributed to `salvage/unknown/`
+# — six such refs across nineteen days, every one forge-shaped, against roughly
+# a hundred host-attributed refs from bare-metal hosts.
+#
+# THE FALLBACK WAS A PLACEHOLDER, NOT A SECOND RESOLVER. It did not try another
+# source and it did not refuse; it minted a plausible-looking name and pushed
+# under it. Meanwhile $HOSTNAME, /etc/hostname and `uname -n` all answered
+# correctly in the same container.
+#
+# scripts/agent-identity.sh already solved exactly this, as order 743-mgf3, for
+# exactly this reason — its `node-name` probe is hostname -s -> hostname ->
+# uname -n -> /etc/hostname, domain-stripped and lowercased with bash builtins,
+# and it is already shared with scripts/mo-full-attest.sh's host label. This
+# script simply never adopted it. Calling it is the fix; a second hand-rolled
+# chain would be a third copy to drift.
+#
+# AND IT REFUSES ON EMPTY. A salvage ref exists to be FOUND BY SOMEONE ELSE, so
+# one that cannot name its origin host is half a recovery. Refusing loudly at
+# the moment of creation, while the operator is present, beats discovering it
+# when someone needs the ref.
+# $ROOT, NOT BASH_SOURCE (1337-3tk6 follow-up; found by lenovinha-silverblue).
+# Both scripts `cd "$ROOT"` above this line and BASH_SOURCE[0] is the INVOCATION
+# path, so after the cd a relative invocation from anywhere but the repo root
+# resolves this against the wrong directory and the script refuses with
+# "agent-identity.sh node-name returned nothing" when it was never FOUND — a
+# refusal naming the wrong cause, in the rescue path.
+_ai="$ROOT/scripts/agent-identity.sh"
+HOST="$([ -x "$_ai" ] && "$_ai" node-name 2>/dev/null || true)"
 HOST="$(printf '%s' "$HOST" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
-[ -n "$HOST" ] || HOST="unknown"
+if [ -z "$HOST" ]; then
+    echo "refused:host-unresolved: scripts/agent-identity.sh node-name returned nothing, so this push would be attributed to no host (1337-3tk6). Nothing pushed." >&2
+    exit 2
+fi
 BRANCH="$(git symbolic-ref --short -q HEAD 2>/dev/null || echo detached)"
 HEAD_SHORT="$(git rev-parse --short HEAD 2>/dev/null || echo none)"
 

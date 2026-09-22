@@ -28,5 +28,6 @@ critical_path:
     command: "bash scripts/test-scorable-obligation-splitter.sh 2>&1"
     expected_behavior: "ok:scorable-obligation-splitter:5/5 arms"
     assert_exit: 0
+    assert_output_contains: "ok:scorable-obligation-splitter:5/5 arms"
     assert_output_nonempty: true
     timeout_ms: 60000

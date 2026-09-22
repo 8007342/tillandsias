@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    field: status
+    value: in_progress
+    ts: "2026-09-21T21:45:47Z"
+    host: pirria
+
+events:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    event:
+      type: note
+      ts: "2026-09-21T21:45:47Z"
+      host: pirria
+      summary: |-
+        claimed by pirria while the mirror-lane legs wait on an operator token seed; the instrument and its two controls are already on trunk

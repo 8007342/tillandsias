@@ -37,6 +37,27 @@ The third host then wrote a shell fixture **the same day** and did not wire it
 either — because the lesson had been stored against *litmus YAML*, and this
 was a `.sh`. Storing the lesson against the organ is how you pay for it twice.
 
+**A fourth specimen, and it caught the author of the section below on the night
+it was written.** `cargo build -p tillandsias-headless` printed `Finished`, and
+the file just edited — `src/tray/mod.rs` — was never compiled: `mod tray` sits
+behind `#[cfg(feature = "tray")]`, and `tray` is not in `default`. The change had
+a plain compile error and reached a pull request. Same shape as specimen 2, a
+different gate: there the check was behind a binary the fixture tree lacked, here
+the code was behind a feature the build did not enable.
+
+The control that settles it takes ten seconds — put a deliberate error in the
+file and see which invocation notices:
+
+```bash
+cargo build -p <crate>                    # 0 errors  -> does not reach the file
+cargo build -p <crate> --features <feat>  # 2 errors  -> reaches it
+```
+
+**`Finished` means the build finished, not that it compiled your work.** Before
+reading a green build as verification, confirm the build reaches the file: a
+feature gate, a `#[cfg]`, a workspace member excluded by default, or a target
+filter will each produce a confident green over code nobody compiled.
+
 ## The rule
 
 **Do not report a test as done on the strength of its own output.** Report it
@@ -147,6 +168,237 @@ prose, and prose about a guard is the one text most likely to appear in files
 that have no guard at all — because that is what people write while fixing the
 absence.
 
+## The third kind: a test that RUNS, PASSES, and reaches nothing
+
+The page opens with a test nothing runs. Then the mirror: a mention read as a
+use. This is the one that is hardest to see, because from every angle it looks
+like the healthy case — **the test is bound, the suite executes it, and it
+passes.** What it exercises is unreachable from any live path, so its greenness
+is evidence about nothing, and worse: the fact that it is green is what makes
+the dead scaffolding underneath look load-bearing.
+
+Three specimens, all on this fleet on 2026-09-21, all found while fixing
+something else:
+
+| Specimen | The test | What it reached |
+|---|---|---|
+| `cloud_overflow_row_is_informational_not_a_dead_button` (591-33s6) | green for seven weeks; asserts the overflow row "must name a remedy the user can actually act on" | a helper called from exactly one place — a builder carrying `#[allow(dead_code)]` and *"retired by order 628-p5tj"*. The live tray shipped an enabled no-op the whole time |
+| `refresh_local_projects_picks_up_new_checkout` (997-e4v2) | green | a method with no production caller at all; its only other reference is its own doc comment |
+| `resolved_max_cloud_projects_in_menu` + `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` (591-33s6) | green, two tests | a resolver reachable only from the same retired builder — while a **live** code path printed a tip telling users to set the environment variable that could not work |
+
+**The first is the one to remember, because it is the whole failure in one
+sentence: the fix and its proof migrated into dead code together, so nothing in
+the tree could report the difference.** A repair was written, a test was written
+to pin it, both landed in a function that had been retired, and for seven weeks
+the row read as fixed, the suite read as green, and the user still could not
+reach the thing.
+
+The third is the sharpest in a different way: dead code is inert, but this dead
+code was still being **advertised**. A live handler told users about a knob that
+a retired function was the only reader of.
+
+**Resolved 2026-09-21, and the resolution has its own lesson.** The third
+specimen was closed the obvious way — the live builder now reads
+`TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` itself, so the advertisement is true. But the
+operator had meanwhile measured the thing the whole feature rested on, and
+**gnome-shell scrolls its tray popup**, which is the opposite of the premise
+that produced the cap. So the honest repair was not "make the knob work": it was
+"stop needing the knob", with the knob kept live and tested as a fallback for a
+surface that really does clip.
+
+Note what each instrument would have said on its own. The mention-count
+heuristic: fine, 8 mentions. The test suite: green. A reachability audit: now
+reachable, specimen closed. **Every one of them would have signed off on a
+feature whose stated justification was false**, because none of them can check a
+premise — they check wiring. The comment even said `Nobody has yet measured a
+real fleet repo count against a real screen, so it stays at 10 until someone
+does`: it named its own missing evidence, in the file, and the number stayed
+anyway. An unmeasured constant with a plausible rationale is indistinguishable
+from a measured one at the call site, and the rationale was load-bearing.
+
+So add to the tell: when a constant or a branch carries a comment explaining
+**why** it must exist, ask when that reason was last checked against the world.
+A dead code path is found by reading the tree. A dead *reason* is only found by
+measuring, and it will pass every test you own until you do.
+
+### The tell
+
+Coverage answers "was this executed?" and cannot answer "does anything live
+reach it?" — a test is a caller, so it makes its subject reachable *from the
+test*, which is exactly the thing you are trying to rule out. So look for:
+
+```bash
+#[allow(dead_code)]              # the compiler already told someone, and lost
+"retired by order …"             # in a doc comment, with the code still present
+# then, for each caller you find: is THAT caller reachable?
+```
+
+**Counting mentions does not work, and this page had it wrong in its first
+version.** It said the giveaway was a symbol with exactly two references — its
+definition and a test. Measured against this page's own specimens, in the file
+they live in:
+
+```
+cloud_overflow_row                      7 mentions
+resolved_max_cloud_projects_in_menu     8 mentions
+refresh_local_projects                  3 mentions
+```
+
+None is two, and the two called sharpest above are the two with the most
+mentions. The heuristic finds only the no-caller case and misses the transitive
+one — so as first written it would have cleared every specimen on this page,
+including the one it calls the sharpest.
+
+**The count is not merely weak — it decays as you document the problem.** Two
+people measured `cloud_overflow_row` in the same file on the same evening and got
+different answers: 5 and 7. Neither was wrong. They measured at different
+commits, and in between, a comment had been added WARNING that the function was
+dead. The warning raised the count and pushed the symbol further from the
+"2 mentions" signal.
+
+So the metric moves away from firing in proportion to how carefully someone has
+explained the thing it is meant to catch, and it degrades fastest on exactly the
+items a person cared enough to annotate. It is not a weak signal; it is
+anti-correlated with care. Put sharply: **the annotation is evidence that someone
+looked, and the metric reads looking as health.** Anything that counts mentions
+is counting attention and scoring it backwards.
+
+(The warning in question was written by the same person who then found the flaw,
+and who had not noticed they had caused the discrepancy they were explaining —
+which is how it came to light at all.)
+
+**And note what actually surfaced it**, because it is the transferable part: not
+either author being careful, but two people measuring the same symbol at
+different times and **reconciling the disagreement instead of picking a number.**
+Had either of us simply trusted our own count, the heuristic would have shipped,
+and it would have shipped looking reasonable.
+
+That happened **twice in the same evening**, on unrelated work. A census of
+litmus step enforcement read 42 / 2,166 on one host and 43 / 2,167 on another.
+Reconciling those two numbers is what found the missing `as a key` clause — two
+comments *mentioning* an assert token were being counted *as* enforcement. Same
+shape as the 5-against-7: **the gap was the finding, and neither number alone
+could have produced it.**
+
+The general form is worth more than either instance. A single measurement is
+always self-consistent, so it never announces that it is wrong. Two that disagree
+are the only free evidence you get — and the instinct is to end the discomfort by
+choosing the more plausible one, which discards precisely the signal. Do not
+resolve a disagreement between two measurements by picking. Resolve it by finding
+the mechanism that produces both.
+
+The rule that actually holds: **an item is not dead because nothing mentions it,
+it is dead because everything that mentions it is itself dead.**
+`cloud_overflow_row` has a definition, a real call, a doc reference and tests —
+four healthy-looking mentions — and the call sits inside the retired builder.
+No count can see that. You have to ask what the *caller's* reachability is, which
+is one step of recursion, and that step is exactly why the compiler can do this
+and a grep cannot.
+
+### What to do
+
+**Do not ask whether the test passes. Ask what reaches the code it exercises,
+excluding the test itself.**
+
+```bash
+grep -n "<symbol>" <file>        # then, for each caller: is that caller reachable?
+                                 # recurse until you reach a live entry point,
+                                 # or run out -- a test is NOT a live entry point
+```
+
+And when you find such an island, do not delete on sight — **follow the value
+across every boundary first**. A parameter that looks vestigial may be serialised
+into an id that something else parses back out; the compiler cannot see across a
+string, and a green suite may not either. Grep for how the value is *formatted*,
+then find the parser on the far side.
+
+
+**A fix can have a mirror on the other side, and fixing one does not prompt you
+to look for the other.** This page's census script was corrected once because it
+compared a comma-list of declared specs against a single binding — it counted one
+side as singular while the other was plural, and read 31 where the answer was 24.
+The control added then asserted that a multi-*declaration* including the binding
+must not count.
+
+**Twice now.** The same script had the identical defect on the other side: a
+`head -1` on the binding lookup, so a test bound under several specs was judged by
+whichever binding sat earliest in the file. A correctly-bound test whose matching
+binding came later was reported as broken. The filed number was 24; the answer
+was 2.
+
+The second was found only by trying to REPAIR one of the reported cases and
+discovering the destination already contained it. No amount of re-reading the
+script would have surfaced it, because the code looked right for the question its
+author had in mind.
+
+**When you fix a singular-versus-plural error, immediately ask whether the
+opposite side is plural too.** Both sides of a comparison can be lists; fixing the
+side you noticed leaves the other one silently wrong, and the count it produces
+will look plausible because it moved in the right direction.
+## The command ran, reported success, and did something else
+
+Every failure above is a check that could not see its subject. This one is
+smaller and more common: **the command you wrote is not the command that ran**,
+it succeeded, and the artefact is wrong. Exit status cannot help — the thing that
+ran really did succeed.
+
+Two, collected on 2026-09-21 while writing the sections above:
+
+| What was written | What ran | How it looked |
+|---|---|---|
+| `awk 'NR==n{…}'` with an anchor line matched by `grep -n "^Storing…"` | the line begins `was a \`.sh\`. Storing…`, so the anchor matched nothing, `n` was empty, and the insertion never happened | **clean tree**, and `git commit` answered `nothing to commit` — which reads like "already done" |
+| a git command inside backticks in a double-quoted `git commit -m "…"` | bash ran the search and pasted **another host's commit log** — author, date and body — into the message | the commit **succeeded**; 230 lines where 37 were meant; one stray `command not found` in unrelated output was the only symptom |
+
+The second is the fleet's existing rule for plan fragments arriving somewhere
+new: **prose goes through a quoted heredoc, never through a double-quoted
+argument.** `"..."` runs backticks and `$(…)`, and expands `$var`; `<<'EOF'`
+runs nothing.
+
+```bash
+git commit -F - <<'MSG'      # nothing in here is interpreted
+…
+MSG
+```
+
+**The check is the artefact, not the status.** After an edit that was supposed to
+change a file, assert the change is there before committing it:
+
+```bash
+grep -c '<the new text>' "$f"        # expect >= 1
+git status --porcelain "$f" | wc -l  # expect >= 1 — a clean tree after an edit
+                                     # means the edit did not happen
+```
+
+A no-op edit and a completed edit are indistinguishable from the command's
+output. They differ only in the file.
+
+**A `|| fallback` after a pipeline reports on the LAST command, not the one you
+cared about.** This is the most common spelling of tonight's whole subject and it
+was written four separate times today by someone documenting it:
+
+```bash
+coredumpctl list | grep -i keyring | tail -5 || echo "none"   # WRONG
+```
+
+`tail` succeeds whether or not `grep` matched, so the `|| echo "none"` **can
+never fire**. The command prints nothing and says nothing, and "no matches" is
+indistinguishable from "the tool is missing", "the pattern was wrong", or "I
+typed the path wrong". Every one of those is a silent empty screen.
+
+```bash
+n=$(coredumpctl list --no-pager 2>/dev/null | grep -ci keyring)
+echo "keyring coredumps: ${n:-0}"
+echo "control: $(coredumpctl list --no-pager 2>/dev/null | wc -l) lines total"   # >0 or the probe read nothing
+```
+
+Count into a variable, print the count, and print a **positive control** —
+something that must be non-zero if the pipeline worked at all. A bare zero and an
+unreadable source look identical; a zero beside a healthy control does not.
+
+The same shape in the other direction: `grep -q x file && echo yes` says nothing
+on a miss, and `if ! cmd | grep -q x` under `set -o pipefail` can be inverted by
+a SIGPIPE when `grep -q` exits at its first match. When the answer matters,
+capture the status you actually want and branch on the value.
 ## Related
 
 [exit-status-is-not-an-answer.md](exit-status-is-not-an-answer.md) — the same
@@ -176,3 +428,12 @@ fixture whose five throwaway names were read as its own claims (1325-ygq5); and
 unbound tests it exists to report (1333-jpq5). The last three happened on one
 day, to one host, who had already dodged the trap once — which is the argument
 for the page rather than a row.
+
+The third-kind section was added 2026-09-21 by pirria at esme-windows'
+suggestion, from three specimens surfaced in one evening while fixing 591-33s6
+and 997-e4v2. esme found the first and the third and wrote the auditing rule the
+section ends on; the framing that this is a distinct failure — not "a test
+nothing runs" but "a test that runs and passes over code nothing reaches" — is
+theirs. The cross-boundary warning comes from a near-miss on the same row: a
+`scope` parameter with one caller looked vestigial and is parsed back out of an
+id string, so removing it would have resolved every menu row to inert.
