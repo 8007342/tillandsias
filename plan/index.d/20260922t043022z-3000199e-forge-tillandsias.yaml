@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: evidence
+      ts: "2026-09-22T04:30:22Z"
+      agent_id: forge-forge-tillandsias-claude-20260922t043022z
+      host: forge-tillandsias
+      summary: |
+        THE CARRIED LEAD IS NOW LANDED, and this closes the last thing 1331-884p left
+        open. The row completed on its two clauses; this records that the sibling it
+        carried forward from 1319-vd5h did not evaporate with the closure.
+
+        That closure said explicitly of the status-loss fix: "IT IS NOT LANDED AND MUST
+        NOT BE ASSUMED LANDED BY THIS CLOSURE." It is landed now.
+
+        VERIFIED BY CONTENT on origin/linux-next 95f48988d, property beside sha:
+
+          scripts/check-fragment-status-loss.sh          row-anchored marker present
+          scripts/test-fragment-status-loss-row-boundary.sh   5/5 arms
+          checker verdict on this forge                  ok:no-fragment-status-loss:366 checked
+
+        WHAT IT FIXED — two faults in three lines, each hiding the other:
+          FLUSH anchored to a bare dash at indent 2, so a nested list BETWEEN packet_id
+          and status dropped the pair — a status-loss detector losing a status.
+          CAPTURE required indent 2 or 4, so a FLAT fragment's packet_id was never read
+          at all: not a lost pair but an UNREAD ROW, invisible to the pass.
+
+        THE FIVE ROWS IT RECOVERED ARE THE UNION OF BOTH FACES OF THIS ROW, which
+        neither 1319-vd5h nor 1331-884p predicted:
+          1315-d4qd, 1323-pc8k, 1327-r4zb   flat shape — the same three the splitter fix recovered
+          1313-w78k, 1314-2mdv              yaml.safe_dump indentless — 1319-vd5h's own evidence rows
+        The status-loss pass was failing on precisely the fragments both rows were filed
+        about. The measurement found that; no one reasoned it out in advance.
+
+        ONE SITE, NOT THREE. 1319-vd5h named three; measuring them first showed only one
+        live — line 88 is a comment quoting the old broken code, and the `status:` LWW
+        pass was already key-anchored. Two of its three were already safe.
+
+        AND MY OWN MEASURING SCRIPT CARRIED THE BUG THE SUBJECT DOCUMENTS. My first
+        derivation attributed the five to the WRONG files, because `flush()` at `FNR==1`
+        emits with the NEW filename while pid/st still hold the previous file's — that
+        is 864-hv2n, quoted in that very script's comments, reproduced in the instrument
+        written to measure it. Binding the filename to the pid at capture time corrected
+        the attribution: the count stayed five, the names changed. Reporting the first
+        run would have handed the fleet five plausible, wrong row ids.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    field: status
+    value: completed
+    ts: "2026-09-22T04:30:13Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    event:
+      type: completed
+      ts: "2026-09-22T04:30:13Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 95f48988d
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    event:
+      type: note
+      ts: "2026-09-22T04:30:13Z"
+      host: forge-tillandsias
+      summary: |-
+        population zero: no litmus step declares a structured assertion it does not adjudicate by; three instances fixed in d051a120c and f64b1a442, landed 95f48988d
