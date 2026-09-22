@@ -679,6 +679,39 @@ pub fn build(state: &MenuState) -> MenuStructure {
     items.push(MenuItem::disabled(ids::VERSION, ver_str, "informational"));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
+    // (5) LINUX ONLY: the project list goes LAST, below the footer.
+    //
+    // OPERATOR REPORT 2026-09-22: "clicking on a project expands the options
+    // within the same space, so it goes under the existing menus."
+    //
+    // WHY THIS IS A LINUX-ONLY REORDER AND NOT A PARITY BREAK WORTH AVOIDING.
+    // gnome-shell renders a nested DBusMenu submenu INLINE — measured in the
+    // extension's own source, `dbusMenu.js:590`, where `children-display ==
+    // 'submenu'` maps unconditionally to `PopupMenu.PopupSubMenuMenuItem`, an
+    // expanding section. There is no branch that produces a flyout, so the
+    // shape is the shell's choice and no property we can set changes it.
+    // Expanding a project therefore INSERTS its seven harness rows into the
+    // list, pushing everything below it down and off the fold.
+    //
+    // NSMenu and Win32 HMENU both open a real flyout over the parent, which
+    // displaces nothing — so on those two surfaces the footer-last convention
+    // is right and there is nothing to fix. Reordering them to match Linux
+    // would move `Quit` out of its conventional last slot on two platforms to
+    // solve a problem neither of them has.
+    //
+    // So the ID SET stays identical on all three (the parity that 628-p5tj
+    // bought and the tests still assert); only the Linux ORDER differs, and it
+    // differs for a measured rendering difference rather than for drift. With
+    // the list last, an expansion grows into the scroll region the operator
+    // already confirmed works instead of displacing the footer.
+    if state.target == TargetSurface::LinuxTray
+        && let Some(pos) = items.iter().position(|i| i.id == ids::CLOUD_PROJECTS)
+    {
+        let cloud = items.remove(pos);
+        items.push(MenuItem::separator());
+        items.push(cloud);
+    }
+
     MenuStructure::Ready { items }
 }
 
@@ -970,12 +1003,34 @@ mod tests {
     /// pass.
     #[test]
     fn top_level_id_sequence_is_pinned_for_all_platforms() {
-        fn ids_of(state: &MenuState) -> Vec<String> {
-            build(state)
+        // THIS TEST ONLY EVER BUILT THE WINDOWS MENU, for its whole life.
+        //
+        // `MenuState::initial()` sets `target: TargetSurface::WindowsTray`, and
+        // every state below is derived from it, so "pinned for all platforms"
+        // was pinning ONE platform three times. Found 2026-09-22 when a
+        // deliberate Linux-only reorder did not fail it — the change should have
+        // tripped invariant (a) immediately, and the silence is what exposed the
+        // fixture.
+        //
+        // It is the same defect family as the rest of this file's history: a
+        // name that asserts coverage, a body that does not have it, and nothing
+        // able to report the gap because the assertions themselves all passed.
+        // The test was not weak; it was aimed at one platform while claiming
+        // three.
+        //
+        // `ids_of` now takes the surface explicitly, and every invariant below
+        // runs across all three.
+        fn ids_of_on(state: &MenuState, target: TargetSurface) -> Vec<String> {
+            let mut st = state.clone();
+            st.target = target;
+            build(&st)
                 .top_items()
                 .iter()
                 .map(|i| i.id.clone())
                 .collect()
+        }
+        fn ids_of(state: &MenuState) -> Vec<String> {
+            ids_of_on(state, TargetSurface::WindowsTray)
         }
 
         // 1. Cold start, logged out, nothing ready.
@@ -1024,6 +1079,60 @@ mod tests {
                 seq.last().map(String::as_str),
                 Some(ids::QUIT),
                 "{name}: quit is not last: {seq:?}"
+            );
+        }
+
+        // a2. THE SWEEP THE NAME ALWAYS PROMISED: every surface, every state.
+        //
+        // Status is first everywhere, unconditionally. The LAST item is where
+        // the three surfaces legitimately differ, and the difference is stated
+        // here rather than left implicit:
+        //
+        //   Windows / macOS — `quit` is last. Their menus open a real flyout
+        //     over the parent, so an expanded project displaces nothing and the
+        //     conventional footer-last layout is correct.
+        //   Linux — the CLOUD LIST is last, below the footer, because
+        //     gnome-shell expands a submenu INLINE (dbusMenu.js:590 maps
+        //     children-display=submenu to PopupSubMenuMenuItem unconditionally;
+        //     no branch yields a flyout). With the list anywhere but last, an
+        //     expansion pushes the footer down and off the fold — measured by
+        //     the operator, 2026-09-22.
+        //
+        // Asserted as a POSITIVE expectation per surface, never as "quit is
+        // last unless Linux", so that a Linux menu which lost its project list
+        // fails here instead of quietly satisfying a negation.
+        for target in [
+            TargetSurface::WindowsTray,
+            TargetSurface::MacosTray,
+            TargetSurface::LinuxTray,
+        ] {
+            let seq = ids_of_on(&ready, target);
+            assert_eq!(
+                seq.first().map(String::as_str),
+                Some(ids::STATUS),
+                "{target:?}: status line is not first: {seq:?}"
+            );
+            let expected_last = match target {
+                TargetSurface::LinuxTray => ids::CLOUD_PROJECTS,
+                _ => ids::QUIT,
+            };
+            assert_eq!(
+                seq.last().map(String::as_str),
+                Some(expected_last),
+                "{target:?}: unexpected last item: {seq:?}"
+            );
+            // The ID SET is identical on all three — only the order differs.
+            // This is the parity 628-p5tj bought, and it is what stops the
+            // Linux reorder above from becoming general drift.
+            let mut here = seq.clone();
+            here.sort();
+            let mut win = ids_of_on(&ready, TargetSurface::WindowsTray);
+            win.sort();
+            here.retain(|i| i != ids::SEPARATOR);
+            win.retain(|i| i != ids::SEPARATOR);
+            assert_eq!(
+                here, win,
+                "{target:?}: top-level id SET diverged from Windows (order may differ, membership may not)"
             );
         }
 
