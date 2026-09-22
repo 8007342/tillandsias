@@ -2821,12 +2821,18 @@ fn handle_cloud_overflow_click(state: &TrayUiState) {
             .unwrap_or(project.name.as_str());
         eprintln!("[tillandsias] tray:   - {}", label);
     }
+    // The tip that stood here told the user to "set TILLANDSIAS_MAX_CLOUD_MENU_ITEMS=<n>
+    // to raise the menu cap (default 10)". Two separate falsehoods, both fixed
+    // 2026-09-21: nothing on the live path read that variable (its only reader
+    // sat behind the builder 628-p5tj retired), and there is no longer a cap to
+    // raise — the menu renders every project. The variable is now real and read
+    // by `menu_state::resolved_cloud_page_size`, but it LOWERS the count into
+    // pages rather than raising it, so advising it here would be advising the
+    // user to hide their own projects.
     eprintln!(
-        "[tillandsias] tray: tip — set TILLANDSIAS_MAX_CLOUD_MENU_ITEMS=<n> \
-         to raise the menu cap (default {}), or use \
-         ~/.config/tillandsias/cloud-projects.toml to bookmark favourites \
-         once that file lands (TODO @tray-overflow)",
-        MAX_CLOUD_PROJECTS_IN_MENU
+        "[tillandsias] tray: every project above is in the menu; \
+         set TILLANDSIAS_MAX_CLOUD_MENU_ITEMS=<n> only if your desktop clips \
+         the list, which splits it into <n>-per-level pages"
     );
 }
 

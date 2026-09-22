@@ -197,6 +197,30 @@ The third is the sharpest in a different way: dead code is inert, but this dead
 code was still being **advertised**. A live handler told users about a knob that
 a retired function was the only reader of.
 
+**Resolved 2026-09-21, and the resolution has its own lesson.** The third
+specimen was closed the obvious way — the live builder now reads
+`TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` itself, so the advertisement is true. But the
+operator had meanwhile measured the thing the whole feature rested on, and
+**gnome-shell scrolls its tray popup**, which is the opposite of the premise
+that produced the cap. So the honest repair was not "make the knob work": it was
+"stop needing the knob", with the knob kept live and tested as a fallback for a
+surface that really does clip.
+
+Note what each instrument would have said on its own. The mention-count
+heuristic: fine, 8 mentions. The test suite: green. A reachability audit: now
+reachable, specimen closed. **Every one of them would have signed off on a
+feature whose stated justification was false**, because none of them can check a
+premise — they check wiring. The comment even said `Nobody has yet measured a
+real fleet repo count against a real screen, so it stays at 10 until someone
+does`: it named its own missing evidence, in the file, and the number stayed
+anyway. An unmeasured constant with a plausible rationale is indistinguishable
+from a measured one at the call site, and the rationale was load-bearing.
+
+So add to the tell: when a constant or a branch carries a comment explaining
+**why** it must exist, ask when that reason was last checked against the world.
+A dead code path is found by reading the tree. A dead *reason* is only found by
+measuring, and it will pass every test you own until you do.
+
 ### The tell
 
 Coverage answers "was this executed?" and cannot answer "does anything live

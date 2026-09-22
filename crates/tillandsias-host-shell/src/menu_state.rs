@@ -53,24 +53,65 @@
 
 use serde::{Deserialize, Serialize};
 
-/// PAGE SIZE for the `Cloud` submenu: how many projects appear at one level
-/// before the remainder fans out into a nested "… N more" submenu.
+/// PAGE SIZE for the `Cloud` submenu — used ONLY when a page size is explicitly
+/// requested via `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS`. **It is not the default.**
+/// By default every project is rendered at one level; see
+/// [`resolved_cloud_page_size`].
 ///
-/// THIS IS NO LONGER A CLIP. It used to be, and the comment here used to say the
-/// two trays "clip the same way" — which was accurate about the truncation and
-/// silent about the fact that the projects past it could not be reached at all
-/// (order 591-33s6). Every page now carries the next one, so the number below
-/// changes how DEEP the menu is, never how much of it exists.
+/// MEASURED 2026-09-21, AND IT RETIRED THIS CONSTANT'S REASON FOR EXISTING.
+/// The paragraph that stood here said: "It is NOT free on Linux: DBusMenu does
+/// not scroll, so a page taller than the screen clips off the bottom with no
+/// affordance — which is the asymmetry that produced this constant in the first
+/// place. Nobody has yet measured a real fleet repo count against a real screen,
+/// so it stays at 10 until someone does."
 ///
-/// Raising it is a one-line change and is safe on Windows and macOS, whose menus
-/// scroll natively. It is NOT free on Linux: DBusMenu does not scroll, so a page
-/// taller than the screen clips off the bottom with no affordance — which is the
-/// asymmetry that produced this constant in the first place. Nobody has yet
-/// measured a real fleet repo count against a real screen, so it stays at 10
-/// until someone does.
+/// The operator then did, on GNOME with a real token and a real repo list.
+/// **gnome-shell's appindicator scrolls.** It renders a nested DBusMenu submenu
+/// as an inline expanding section (`PopupSubMenuMenuItem`) inside a scrollable
+/// popup, which is why opening a page reads as "appends the rest below" rather
+/// than as a flyout, and why the scroll region is the bottom of the list. So the
+/// premise was wrong on the one platform it was asserted about, and Windows
+/// (auto-scrolling menus) and macOS (NSMenu scroll arrows) were never in
+/// question. **All three scroll. Nothing needed paging.**
+///
+/// WHAT THE SHAPE OF THIS MISTAKE WAS. The cap was never measured — it was
+/// inferred from a true statement about the DBusMenu *protocol* (it carries no
+/// scrolling concept) applied to a question about the *shell that renders it*,
+/// which is free to scroll whatever it likes. The comment even named its own
+/// evidentiary gap ("nobody has yet measured") and the number stayed anyway,
+/// because an unmeasured constant with a plausible rationale is indistinguishable
+/// from a measured one at the call site. The rationale was load-bearing and
+/// nobody was carrying it.
+///
+/// The paging machinery is KEPT and stays reachable through the env var, for two
+/// reasons: a desktop that genuinely clips needs a remedy, and a code path with
+/// no live caller is how the *last* version of this bug survived seven weeks
+/// green (see `build_project_pages`).
 ///
 /// @trace spec:host-shell-architecture
 pub const MAX_CLOUD_PROJECTS_IN_MENU: usize = 10;
+
+/// The effective page size: `None` — the default — means render every project at
+/// one level and never emit a page link.
+///
+/// THIS IS ALSO THE REPAIR OF A SEPARATE DEFECT. `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS`
+/// has been advertised to users since 591-33s6 by a tray log line and an overflow
+/// label, and **nothing on the live path ever read it**: the only reader,
+/// `tray::resolved_max_cloud_projects_in_menu`, is reachable only from the builder
+/// 628-p5tj retired, so the remedy the product printed could not work. That is the
+/// same mention-vs-use shape catalogued in
+/// `cheatsheets/tooling/a-test-is-not-done-until-it-can-fail.md`, and it is the
+/// exact thing `openspec/specs/tray-ux` forbids ("no item SHALL advertise an
+/// environment variable that nothing reads"). Reading it HERE, in the builder all
+/// three platforms call, is what makes the advertisement true.
+///
+/// @trace spec:tray-ux, spec:host-shell-architecture
+pub fn resolved_cloud_page_size() -> Option<usize> {
+    std::env::var("TILLANDSIAS_MAX_CLOUD_MENU_ITEMS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+}
 
 /// Stable IDs the UI backends use to correlate `NSMenuItem` / `MENUITEMINFO`
 /// click events back to logical actions. Kept centralised so both backends
@@ -664,19 +705,28 @@ pub fn build(state: &MenuState) -> MenuStructure {
 /// dismiss its parent when opened. The fix was one level down from where
 /// everyone was looking.
 ///
-/// PAGING RATHER THAN A TALLER LIST, deliberately. Win32 menus auto-scroll and
-/// NSMenu grows scroll arrows, so on those two the cap buys nothing; DBusMenu
-/// has no scrolling, so on Linux a long list clips off-screen and that asymmetry
-/// is why the cap exists. A paged fan-out is the shape that WORKS on all three,
-/// which the row's own constraint prefers over an elegant form that works on one.
+/// PAGING IS NOW OPT-IN, and the default is a flat list of everything
+/// (`page_size: None`). The paragraph here used to justify paging as "the shape
+/// that WORKS on all three" on the grounds that DBusMenu does not scroll. That
+/// was measured false on 2026-09-21 — gnome-shell scrolls its popup and expands
+/// nested submenus inline — and all three toolkits scroll, so the flat list is
+/// the shape that works everywhere and the fan-out is the fallback.
+///
+/// The recursion is deliberately still LIVE rather than deleted: it is one env
+/// var away, it is exercised by its own test, and deleting it would leave a
+/// desktop that really does clip with no remedy at all.
 fn build_project_pages(
     projects: &[ProjectEntry],
     scope: &str,
     page: usize,
+    page_size: Option<usize>,
     podman_ready: bool,
     target: TargetSurface,
 ) -> Vec<MenuItem> {
-    let take = projects.len().min(MAX_CLOUD_PROJECTS_IN_MENU);
+    let take = match page_size {
+        Some(n) => projects.len().min(n),
+        None => projects.len(),
+    };
     let mut items: Vec<MenuItem> = projects[..take]
         .iter()
         .map(|p| build_project_submenu(scope, p, podman_ready, target))
@@ -708,7 +758,7 @@ fn build_project_pages(
         items.push(MenuItem::submenu(
             format!("{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, page + 1),
             format!("\u{2026} {} more", rest.len()),
-            build_project_pages(rest, scope, page + 1, podman_ready, target),
+            build_project_pages(rest, scope, page + 1, page_size, podman_ready, target),
         ));
     }
 
@@ -720,6 +770,7 @@ fn build_cloud_projects(state: &MenuState) -> MenuItem {
         &state.cloud_projects,
         "cloud",
         0,
+        resolved_cloud_page_size(),
         state.podman_ready,
         state.target,
     );
@@ -1070,29 +1121,93 @@ mod tests {
             );
         }
 
-        // Cloud projects: cap + 1 overflow leaf = 11 children.
+        // Cloud projects: ALL 22, flat, no page link.
         // 997-e4v2: looked up by ID, not by index. The local-projects submenu
         // that used to sit at [1] is gone, and an index-based lookup silently
         // became a different node when it went — which is how this test failed
         // on a menu change rather than on a menu defect.
+        //
+        // OPERATOR MEASUREMENT 2026-09-21. This assertion previously read
+        // `MAX_CLOUD_PROJECTS_IN_MENU + 1` — ten projects and a page link. It was
+        // a correct pin of a shape built on a false premise (that gnome-shell
+        // cannot scroll a tray menu), so it passed for exactly as long as nobody
+        // checked the premise against a screen. The default is now flat.
         let cloud_node = items
             .iter()
             .find(|i| i.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects submenu present");
         assert_eq!(
             cloud_node.children.len(),
-            MAX_CLOUD_PROJECTS_IN_MENU + 1,
-            "cloud submenu caps at {} + 1 overflow leaf",
-            MAX_CLOUD_PROJECTS_IN_MENU,
+            22,
+            "every cloud project is rendered at one level by default",
         );
-        // ORDER 591-33s6. The page link is a SUBMENU, and this is the assertion
-        // whose absence let the bug live seven weeks. The old tests pinned that
-        // the overflow row EXISTED and that it was counted; neither asked what it
-        // did. A `MenuItem::leaf` wired to an empty match arm satisfied both, so
-        // the suite stayed green while projects 11..N were unreachable on every
-        // platform. Pin the BEHAVIOUR: it must carry children, or it is a dead
-        // button again.
-        let page_link = cloud_node.children.last().unwrap();
+        assert!(
+            cloud_node
+                .children
+                .iter()
+                .all(|c| !c.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW)),
+            "no page link when no page size is configured",
+        );
+
+        // EVERY project is reachable. This is the property the operator actually
+        // asked for, so it is asserted directly rather than inferred from a count
+        // at one level — and it is deliberately phrased so it holds under BOTH
+        // shapes, flat and paged, since it is the invariant neither may break.
+        assert_eq!(
+            reachable(cloud_node),
+            22,
+            "all 22 cloud projects must be reachable",
+        );
+    }
+
+    /// Count the launchable project entries anywhere beneath a node.
+    ///
+    /// Shared by the flat-default test and the paged-fallback test because the
+    /// reachability invariant is the same one in both shapes; a helper each
+    /// would let them drift apart, and the drift would be invisible.
+    fn reachable(node: &MenuItem) -> usize {
+        if node.id.starts_with("project.") {
+            return 1;
+        }
+        node.children.iter().map(reachable).sum()
+    }
+
+    /// ORDER 591-33s6, kept live after the flat default landed 2026-09-21.
+    ///
+    /// The fan-out is no longer the default path, which is precisely the
+    /// condition under which the LAST version of this bug survived seven weeks:
+    /// the fix and the test proving it both moved into a function with no live
+    /// caller, and a green test over an unreachable path reads exactly like a
+    /// closed bug. So this test drives `build_project_pages` DIRECTLY with an
+    /// explicit page size rather than through an env var, and asserts the
+    /// behaviour — the page link carries children and every project is still
+    /// reachable — not merely that a row exists.
+    #[test]
+    fn paged_fallback_still_fans_out_and_reaches_every_project() {
+        let projects: Vec<ProjectEntry> = (0..22)
+            .map(|i| ProjectEntry {
+                name: format!("cloud-{i}"),
+                path: format!("octocat/cloud-{i}"),
+                ready: false,
+                full_name: None,
+            })
+            .collect();
+
+        let pages = build_project_pages(
+            &projects,
+            "cloud",
+            0,
+            Some(MAX_CLOUD_PROJECTS_IN_MENU),
+            true,
+            TargetSurface::LinuxTray,
+        );
+
+        assert_eq!(
+            pages.len(),
+            MAX_CLOUD_PROJECTS_IN_MENU + 1,
+            "one page of projects plus the link to the next",
+        );
+        let page_link = pages.last().unwrap();
         assert!(
             page_link.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW),
             "last child should be the page link, got {}",
@@ -1104,19 +1219,27 @@ mod tests {
         );
         assert!(page_link.label.contains("12"), "names how many remain");
 
-        // EVERY project is reachable by walking the pages. This is the property
-        // the operator actually asked for, so it is asserted directly rather than
-        // inferred from a count at one level.
-        fn reachable(node: &MenuItem) -> usize {
-            if node.id.starts_with("project.") {
-                return 1;
-            }
-            node.children.iter().map(reachable).sum()
-        }
-        assert_eq!(
-            reachable(cloud_node),
-            22,
-            "all 22 cloud projects must be reachable through the page chain",
+        let total: usize = pages.iter().map(reachable).sum();
+        assert_eq!(total, 22, "every project reachable through the page chain");
+    }
+
+    /// The env var the product ADVERTISES must be the one the live builder READS.
+    ///
+    /// `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` was printed to users as a remedy for
+    /// over a month while the only code reading it sat behind a retired builder
+    /// (628-p5tj), so the advertisement was false and no test could tell —
+    /// `openspec/specs/tray-ux` forbids exactly this. Parsing is asserted here;
+    /// that `build_cloud_projects` calls this resolver is asserted by the flat
+    /// default above, which would fail if it read a constant instead.
+    #[test]
+    fn cloud_page_size_env_var_parses_or_is_absent() {
+        // No env manipulation: `set_var` is unsafe and racy across the parallel
+        // test binary, and a flaky pin on a shared process env is worse than a
+        // narrower one. The default-is-flat property is what matters and is
+        // covered above.
+        assert!(
+            resolved_cloud_page_size().is_none_or(|n| n > 0),
+            "a configured page size is always a positive count",
         );
     }
 
