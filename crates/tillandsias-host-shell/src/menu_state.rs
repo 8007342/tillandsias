@@ -755,11 +755,43 @@ fn build_project_pages(
         // have rendered disabled, and a disabled NSMenuItem does not open its
         // submenu — the pages would have been unreachable on macOS while looking
         // correct on Linux. If you add such an adapter, give these ids an action.
-        items.push(MenuItem::submenu(
-            format!("{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, page + 1),
-            format!("\u{2026} {} more", rest.len()),
-            build_project_pages(rest, scope, page + 1, page_size, podman_ready, target),
-        ));
+        //
+        // WINDOWS IS SAFE FOR A SECOND, STRONGER REASON (esme-windows, measured
+        // in `notify_icon.rs:3905` rather than reasoned): an `MF_POPUP` item
+        // generates no `WM_COMMAND` at all. Win32 opens the submenu and never
+        // dispatches, and a command id is only minted in the LEAF branch — so on
+        // Windows `MenuAction::Inert` for a page link is unreachable by
+        // construction, not merely harmless. Two independent reasons is what we
+        // want here, because the first one depends on every adapter continuing to
+        // choose correctly and the second does not.
+        //
+        // WHICH LEAVES EXACTLY ONE WAY BACK INTO THE ORIGINAL BUG, and it is the
+        // reason for the guard below. A page link that carried NO children would
+        // take the leaf branch on Windows, be minted a live command id, dispatch
+        // to `Inert`, and do nothing — while looking like a perfectly ordinary
+        // enabled row. That is 591-33s6 exactly, re-entered through a different
+        // door. The adapter cannot tell the difference, and neither can a reader.
+        //
+        // It is unreachable today (`rest` is non-empty, so the recursive call
+        // returns at least one item), which is precisely why it is worth pinning:
+        // an invariant that holds by accident of the current arithmetic is one
+        // edit away from not holding, and nothing downstream would report it.
+        let children = build_project_pages(rest, scope, page + 1, page_size, podman_ready, target);
+        debug_assert!(
+            !children.is_empty(),
+            "a page link must never be childless: it would render as a dispatching \
+             leaf on Win32 and re-enter 591-33s6",
+        );
+        // Degrade by OMITTING the row rather than shipping a dead button. A
+        // missing row is visible and wrong; a dead row is invisible and wrong,
+        // and this whole order is about the difference.
+        if !children.is_empty() {
+            items.push(MenuItem::submenu(
+                format!("{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, page + 1),
+                format!("\u{2026} {} more", rest.len()),
+                children,
+            ));
+        }
     }
 
     items
@@ -1221,6 +1253,70 @@ mod tests {
 
         let total: usize = pages.iter().map(reachable).sum();
         assert_eq!(total, 22, "every project reachable through the page chain");
+    }
+
+    /// A page link must NEVER be childless, at any page size or list length.
+    ///
+    /// Raised by esme-windows after measuring `notify_icon.rs`: Win32 mints a
+    /// command id only in the LEAF branch, so a childless page link would become
+    /// an enabled, dispatching row wired to `MenuAction::Inert` — a dead button
+    /// that looks ordinary, which is 591-33s6 re-entered through a different
+    /// door. Today it cannot happen, because `rest` is non-empty whenever the
+    /// link is emitted. That is exactly why it is pinned: the invariant holds by
+    /// an accident of the current arithmetic, and nothing downstream of the
+    /// builder could report its loss — the adapter cannot tell a childless
+    /// submenu from a leaf, and neither can a reader.
+    ///
+    /// Swept rather than sampled, including the boundary lengths (exactly one
+    /// page, one over) where an off-by-one would put an empty tail page.
+    #[test]
+    fn no_page_link_is_ever_childless() {
+        fn walk(node: &MenuItem, seen_links: &mut usize) {
+            if node.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW) {
+                *seen_links += 1;
+                assert!(
+                    !node.children.is_empty(),
+                    "childless page link {} would dispatch as a dead leaf on Win32",
+                    node.id,
+                );
+            }
+            for child in &node.children {
+                walk(child, seen_links);
+            }
+        }
+
+        for page_size in 1..=5usize {
+            for count in 0..=12usize {
+                let projects: Vec<ProjectEntry> = (0..count)
+                    .map(|i| ProjectEntry {
+                        name: format!("cloud-{i}"),
+                        path: format!("octocat/cloud-{i}"),
+                        ready: false,
+                        full_name: None,
+                    })
+                    .collect();
+
+                let pages = build_project_pages(
+                    &projects,
+                    "cloud",
+                    0,
+                    Some(page_size),
+                    true,
+                    TargetSurface::LinuxTray,
+                );
+
+                let mut links = 0;
+                let mut reached = 0;
+                for item in &pages {
+                    walk(item, &mut links);
+                    reached += reachable(item);
+                }
+                assert_eq!(
+                    reached, count,
+                    "page_size={page_size} count={count}: every project must stay reachable",
+                );
+            }
+        }
     }
 
     /// The env var the product ADVERTISES must be the one the live builder READS.
