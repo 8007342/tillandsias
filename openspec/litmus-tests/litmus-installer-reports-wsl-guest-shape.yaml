@@ -1,0 +1,70 @@
+# @trace spec:init-command
+# @trace order:1339-r9xv
+#
+# Order 1339-r9xv: scripts/install-windows.ps1 mentioned `.wslconfig` ZERO
+# times, so a user's first build ran on whatever WSL defaults gave them.
+#
+# MEASURED, yolanda-windows 2026-09-21. On a 16-logical-CPU host with 15.16
+# GiB, the defaults produced a guest holding ALL 16 vCPUs inside a 4.8 GiB
+# balloon -- roughly 320 MB per vCPU -- and FOUR CONSECUTIVE BUILDS WERE
+# KILLED for host memory. The same gates on esmeraldinha, a FOUR-core N100,
+# with `processors=4` (100% of that machine) and `autoMemoryReclaim=gradual`,
+# were never killed once. THE MORE CAPABLE MACHINE WAS THE UNRELIABLE ONE and
+# the difference was entirely configuration: a missing reclaim setting,
+# `processors` copied as a NUMBER when it is a POLICY, and test threads that
+# CARGO_BUILD_JOBS does not bound (24 of 25 cargo test invocations unpinned).
+#
+# THE FIX REPORTS AND OFFERS; IT NEVER WRITES THE USER'S FILE. `.wslconfig`
+# belongs to the user and may carry settings for unrelated work, so writing it
+# silently would be a worse defect than the one being fixed. Arm 5 is the arm
+# that enforces that, and it is the arm most worth reading.
+#
+# ARM 0 IS WRITTEN FIRST AND ON PURPOSE. Every other arm reads the installer
+# source; if that read fails they see nothing and would report the SUBJECT as
+# broken. This fleet met that failure five times in one night. Arm 0 refuses
+# with could-not-run and says a measurement failure is NOT a verdict.
+name: litmus:installer-reports-wsl-guest-shape
+spec: init-command
+phase: pre-build
+description: >
+  Pin 1339-r9xv: the Windows installer derives and REPORTS the guest shape the
+  user's `.wslconfig` will produce, NAMES a known-bad vCPU-to-memory ratio with
+  its measured numbers, warns that `autoMemoryReclaim` under `[wsl2]` is inert,
+  and NEVER writes `.wslconfig` itself. Falsifiable against the pre-fix
+  installer (5 arms red) and against a sabotage that writes the file (arm 5).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-installer-reports-wsl-guest-shape.sh
+  - workspace contains scripts/install-windows.ps1
+  - the fixture reads SOURCE only and needs no Windows host, so it runs
+    everywhere; it asserts nothing about a live WSL guest
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-installer-reports-wsl-guest-shape.sh && test -x scripts/test-installer-reports-wsl-guest-shape.sh && echo 'ok: wsl-guest-shape-fixture-parses'"
+    timeout_ms: 10000
+    expected_behavior: "ok: wsl-guest-shape-fixture-parses"
+    assert_exit: 0
+    assert_output_contains: "ok: wsl-guest-shape-fixture-parses"
+
+  - step: "all seven arms pass against the real installer: it reads .wslconfig, derives the effective shape, names the ratio with its numbers, warns about [experimental], never writes the file, and refuses to advise when it cannot read the host"
+    command: "bash scripts/test-installer-reports-wsl-guest-shape.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:installer-reports-wsl-guest-shape:7/7 arms"
+    assert_exit: 0
+    assert_output_contains: "ok:installer-reports-wsl-guest-shape:7/7 arms"
+
+  # SOURCE PIN, asserted on the file directly so a fixture that stopped
+  # looking cannot hide it. The write-path count is the one that matters:
+  # zero is the requirement, and an earlier version of this arm could not
+  # catch its own sabotage because it demanded the write verb and the path be
+  # ADJACENT. `|| true` on every count is load-bearing -- grep -c exits 1 on a
+  # legitimate zero and would fail this step on a CORRECT tree.
+  - step: "SOURCE PIN: the installer references .wslconfig and contains zero write paths targeting it"
+    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/wgs.$$ && m=$(grep -c 'wslconfig' /tmp/wgs.$$ || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item)[^\\n]*\\$WslCfgPath' /tmp/wgs.$$ || true) && rm -f /tmp/wgs.$$ && test \"$m\" -gt 0 && test \"$w\" -eq 0 && echo \"ok: wslconfig-mentions=$m writes=$w\""
+    timeout_ms: 15000
+    expected_behavior: "ok: wslconfig-mentions=<n>0 writes=0"
+    assert_exit: 0
+    assert_output_contains: "writes=0"
