@@ -73,12 +73,18 @@ if [ "$n" = "1" ]; then
 else
     bad "expected 1 hit, got '${n:-<no verdict>}'; output was: $out"
 fi
-if printf '%s\n' "$out" | grep -q 'src/capped.rs'; then
+# HERE-STRING, not `printf | grep -q`: grep -q exits on its first match and
+# SIGPIPEs the producer, which under pipefail surfaces as 141 -- a failure that
+# fires only when the pattern MATCHES. Caught on a sibling branch by
+# check-sigpipe-verdict-pipelines-added and fixed here BEFORE that decider saw
+# this PR, because the same hazard does not become acceptable by being in a
+# different file.
+if grep -q 'src/capped.rs' <<<"$out"; then
     ok "names the file holding the admission"
 else
     bad "did not name src/capped.rs: $out"
 fi
-if printf '%s\n' "$out" | grep -q 'src/plain.rs'; then
+if grep -q 'src/plain.rs' <<<"$out"; then
     bad "COUNTED THE DECOY — the pattern matches words, not claims"
 else
     ok "did not count the decoy"
