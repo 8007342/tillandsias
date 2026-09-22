@@ -46,6 +46,17 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
 # is invisible to every name-based scan (1063-nraf).
+# SECOND REGIME (order 1302-7j8p / macneo's checker). RUN ON THE REGIME, not
+# inferred from it: the four arms below were executed on darwin, on the host that
+# produced this row's evidence, and the verdict recorded is the fixture's own
+# output — not a claim about --preflight's summary, which is a different
+# measurement and belongs on the row.
+#
+# This step is the one case where the darwin run is not a courtesy: the defect it
+# guards EXISTS ONLY on a host without setsid, so a Linux-only attestation would
+# be an attestation from the regime that cannot reproduce the bug.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-22 darwin ok:preflight-setsid-probe:4"
+
 STEP_DESC="Checking the preflight probes for setsid and names its isolation mode (1352-vmbc)"
 STEP_SCRIPT="scripts/test-preflight-setsid-probe.sh"
 STEP_ERROR="the preflight's setsid probe or its isolation-mode verdict was removed (1352-vmbc) — without the probe, every guard on a host with no setsid dies in its exec and the step reports ran=0; without the verdict token, a degraded run reads as an isolated one. Do NOT 'fix' by deleting setsid: build.sh's own comment records nine survivors and broken 124 detection from the run that tried"
