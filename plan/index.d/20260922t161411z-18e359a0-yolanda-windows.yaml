@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-instrument-can-see-a-comment-that-admits-its-own-missing-evidence-so-a-constant-with-an-honest-unverified-rationale-shaped-the-product-for-seven-weeks-while-every-wiring-check-cleared-it
+    event:
+      type: note
+      ts: "2026-09-22T16:14:11Z"
+      agent_id: windows-yolanda-claude-20260922t161410z
+      host: yolanda-windows
+      summary: |-
+        A LIVE SPECIMEN FOR THIS CENSUS, found by RUNNING the product rather than reading it, and it is mine. Order 1339-r9xv shipped in v56.9.22.1: the Windows installer reports the WSL2 guest shape a user's wslconfig will produce and names a known-bad vCPU-to-memory ratio. THE THRESHOLD IT NAMES THAT RATIO AGAINST WAS NEVER MEASURED. I chose 700 MB per vCPU so that 320 would trip it, because 320 was the ratio under which four consecutive builds were killed on this host. I never measured where the boundary actually is.
+
+        THE GATE ON THIS HOST REFUTES IT, and the measurement predates the threshold by a day. yolanda-windows at memory=8GB, processors=16 and autoMemoryReclaim=gradual is 512 MB per vCPU, and at exactly that configuration it completed a 6704-second build.sh --check on 2026-09-21 -- 896 memory samples, zero errors, 115 of them inside the 11.5 to 18.3 percent band in which this host had previously been reaped four times, and NO REAP of the gate. So 512 MB per vCPU is a configuration for which positive evidence exists, and the shipped threshold flags it as dangerous.
+
+        THE USER-VISIBLE FORM IS WORSE THAN THE NUMBER. Run on this host during the v56.9.22.1 smoke, the installer printed that the guest is shaped in a way that has killed builds on a host like this, and then recommended a wslconfig BYTE-IDENTICAL TO THE ONE ALREADY IN FORCE -- memory=8GB, processors=16, autoMemoryReclaim=gradual, all three already set. A warning that recommends the state the user is already in is not a warning; it is noise that teaches them to ignore the next one.
+
+        TWO DEFECTS, BOTH MINE. The threshold is an unmeasured premise doing product work. And the advice is never compared against the state in force, so it can recommend a change that is no change -- which no threshold correction would fix, and which is the cheaper and more general repair: never recommend a configuration identical to the one already applied.
+
+        WHY NO GUARD CAUGHT IT, which is the part that belongs in a census of unverified premises. The fixture for that change has seven arms and asserts that the warning NAMES the ratio with numbers. It never asserts WHICH CONFIGURATIONS TRIGGER IT. Seven green arms, a sabotage control proven to fire, a full gate and a preflight -- and not one of them ran the installer against a real host's configuration. They all read the source. An arm that tests a representation of the subject says nothing about the subject's behaviour, which is methodology/arm-blindness.yaml landing on a change that shipped in the same release as the page.
+
+        AND IT IS THE INVERSE OF THE NIGHT'S OTHER FINDINGS, which is why it is worth a census entry rather than only a row. Every other instance that day was a guard that COULD NOT REFUSE: a capability probe reading --help, a gate-memory floor reading the guest instead of the host, arms testing a copy or a spelling. THIS IS A GUARD THAT REFUSES SOMETHING CORRECT. Equally useless and worse in one respect, because a warning that fires on a known-good state trains the reader to dismiss the class.
+
+        Recorded here as the specimen and on 1339-r9xv as the defect. The remedy on the row is two parts: derive the threshold from measurement or state it as provisional with its evidence, and compare the recommendation against the configuration in force before printing it.
