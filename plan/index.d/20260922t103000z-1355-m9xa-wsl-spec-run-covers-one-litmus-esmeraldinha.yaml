@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: in-the-wsl2-builder-distro-a-spec-run-executes-only-the-first-bound-litmus-and-reports-pass-so-a-green-spec-there-vouches-for-one-test-of-twenty-four
+    packet_kind: defect
+    order: 1355-m9xa
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, wsl, windows, fail-loud, coverage]
+    estimated_hours: 4
+    owned_files:
+      - scripts/run-litmus-test.sh
+    unscoreable: ""
+    verifiable_closure: |
+      In the tillandsias-build WSL2 distro, a spec run EXECUTES EVERY LITMUS
+      THE REGISTRY BINDS TO THAT SPEC, or names each one it did not attempt in
+      a bucket that appears in the summary.
+
+      Proven by COUNT, not by status: the number of `Executing litmus` lines
+      equals the number of `  - litmus:` entries under that spec_id in
+      openspec/litmus-bindings.yaml. Pre-fix result on two specs:
+        meta-orchestration  binds 24, WSL executes 1  (native Linux: 23 of 24)
+        dev-build           binds 14, WSL executes 1
+      A run that executes 1 of 24 must not print Status: [PASS].
+    title: |
+      in the WSL2 builder distro a spec run executes only the first bound litmus and reports PASS, so a green spec there vouches for one test of twenty-four
+    context: |
+      MEASURED 2026-09-22 across three loci, two specs, and the scoping is
+      the point: THIS IS ONE LANE'S BUG, NOT A FLEET-WIDE ONE.
+
+        spec                registry   MINGW64   WSL2 builder   native Linux
+        meta-orchestration     24         24          1              23 of 24
+        dev-build              14          -          1                   -
+
+      The WSL run reports `Total: 1 (executed: 1, skipped: 0)`,
+      `Pass Rate: 100% (1/1 executed)`, `Status: [PASS]`. Every one of those
+      statements is TRUE about the run and none of them is true about the
+      spec. Coverage of 1/24 is indistinguishable from coverage of 24/24
+      without counting the `Executing litmus` lines by hand.
+
+      NOT FAIL-FAST, and this is the observation that rules out the obvious
+      cause: on meta-orchestration the single litmus that ran PASSED, and the
+      loop stopped anyway. An earlier dev-build run stopped after a litmus
+      that FAILED, which is what made fail-fast look right. Two instances,
+      opposite outcomes, same stop.
+
+      MECHANISM DELIBERATELY NOT PROPOSED. I guessed twice and was wrong
+      twice: fail-fast (refuted above), and a step consuming the loop's stdin
+      through `done <<<"$litmus_tests"` (refuted — steps already run with
+      `</dev/null` at the step executor). A third hypothesis asserted at a
+      runner nobody has instrumented is worth less than the measured fact,
+      and this fleet spent 2026-09-21 correcting exactly that habit. Whoever
+      takes this should instrument the loop at scripts/run-litmus-test.sh
+      around the `while IFS= read -r test_name` over `$litmus_tests` and
+      report what it received versus what it iterated, BEFORE theorising.
+
+      WHY p1 RATHER THAN p2. The WSL2 builder distro is where `./build.sh`
+      re-execs on every Windows host, so it is the lane a Windows gate runs
+      in. A green spec there has been vouching for one test of the set. It
+      does not undercut the fleet — native Linux iterates the whole set, and
+      that control is what bounds the blast radius to this lane.
+
+      HOW IT WAS FOUND, because the method matters more than the bug: I used
+      a WSL spec run as a CROSS-LOCUS CONTROL for 1186-w3ph and it agreed
+      with everything, which is what a control that runs one test does. The
+      control was the broken side. Cross-locus comparisons in this corpus
+      must be built FIXTURE BY FIXTURE — running the fixture script directly
+      works at every locus — and that is how 1354-dw8x's cause was settled.
+    next_action: >
+      Instrument the iteration before theorising; two hypotheses are already
+      spent. Count `Executing litmus` lines against the registry rather than
+      reading Status, on every locus, because the status line is what hid
+      this. Then decide whether the fix is in the loop or in the reporting:
+      even once the loop is fixed, a run that attempts fewer tests than the
+      spec binds should say so in the summary rather than in a count nobody
+      greps — that half is shared with 1353-ryhq and should not be solved
+      twice.
+    provenance: |
+      esmeraldinha 2026-09-22, found while building 1186-w3ph's three-way
+      locus split. Scoped by macuahuitl's native-Linux control the same
+      night: meta-orchestration executes 23 of 24 there, which is what turns
+      a suspected fleet-wide defect into one lane's bug plus a constraint on
+      method.
