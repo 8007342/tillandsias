@@ -63,7 +63,7 @@ critical_path:
   # ADJACENT. `|| true` on every count is load-bearing -- grep -c exits 1 on a
   # legitimate zero and would fail this step on a CORRECT tree.
   - step: "SOURCE PIN: the installer references .wslconfig and contains zero write paths targeting it"
-    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/wgs.$$ && m=$(grep -c 'wslconfig' /tmp/wgs.$$ || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item)[^\\n]*\\$WslCfgPath' /tmp/wgs.$$ || true) && rm -f /tmp/wgs.$$ && test \"$m\" -gt 0 && test \"$w\" -eq 0 && echo \"ok: wslconfig-mentions=$m writes=$w\""
+    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/wgs.$$ && m=$(grep -c 'wslconfig' /tmp/wgs.$$ || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item).*\\$WslCfgPath' /tmp/wgs.$$ || true) && rm -f /tmp/wgs.$$ && test \"$m\" -gt 0 && test \"$w\" -eq 0 && echo \"ok: wslconfig-mentions=$m writes=$w\""
     timeout_ms: 15000
     expected_behavior: "ok: wslconfig-mentions=<n>0 writes=0"
     assert_exit: 0

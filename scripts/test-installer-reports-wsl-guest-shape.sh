@@ -95,8 +95,8 @@ fi
 # forbid exactly that. An arm that cannot catch its own named sabotage is
 # not an arm. Allow any run of non-newline characters between the verb and
 # the path, and count every match rather than asking whether one exists.
-_w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item)[^\n]*\$WslCfgPath' "$CODE" 2>/dev/null || true)
-_w=$((_w + $(grep -cE '\$WslCfgPath[^\n]*(-Value|>>|>)' "$CODE" 2>/dev/null || true)))
+_w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item).*\$WslCfgPath' "$CODE" 2>/dev/null || true)
+_w=$((_w + $(grep -cE '\$WslCfgPath.*(-Value|>>|>)' "$CODE" 2>/dev/null || true)))
 if [ "$_w" -eq 0 ]; then
     _ok "ARM 5: the installer never writes .wslconfig -- it reports and offers only"
 else
