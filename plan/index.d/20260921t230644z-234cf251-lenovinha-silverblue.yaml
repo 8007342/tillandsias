@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: measurement
+      ts: "2026-09-21T23:06:44Z"
+      agent_id: linux-lenovinha-linux-20260921t230644z
+      host: lenovinha-silverblue
+      summary: |-
+        THE GUARD'S VERDICT IS NON-DETERMINISTIC ON UNCHANGED STATE, measured 2026-09-21 ~22:30Z. Three consecutive runs of scripts/check-credential-channel.sh, seconds apart, nothing changed, daemon pid 2358834 throughout:
+          run 1 -> unknown:secret-service-unprobed
+          run 2 -> missing:no-credential-channel
+          run 3 -> missing:no-credential-channel
+        The fact the discriminator reads is STABLE across that same window: busctl --user list | grep -c org.freedesktop.secrets returned 1, 1, 1.
+        SO THE DISCRIMINATOR IS NOT THE ONLY PRODUCER. missing:no-credential-channel is emitted at three sites in the guard (774, 810, 877) and unknown:secret-service-unprobed at two (723, 874). Which arm is reached depends on how the capped gh probes TERMINATE, and against a locked collection gh HANGS, so the verdict depends on timing rather than on host state - exactly when the verdict matters most.
+        WHAT IT COSTS THE FLEET: this line is routed on. join-the-fleet branches on it and the worker loop halts committable work on a stop-and-report. A verdict that flips between two of its five exits on identical state can tell two hosts, or one host twice inside a minute, different things about one condition. It did that to me tonight.
+        ARM A NOW STANDS WITHOUT THE CRASH. Even if the SIGABRT mechanism is never proven - even if yoga's host runs clean for a month - removing or redesigning the capped probes stops the guard answering differently to one question. Coordinator has ordered arm A first on exactly this ground and routed it to pirria, with me as reviewer because I know where the five producers are.
+        DESIGN CONSTRAINTS FOR THE REPLACEMENT PROBE, recorded on the row so they are not only in a message: (1) 988-7kxf - the probe stays BOUNDED, because an unbounded probe hung and deleting timeout outright flips the verdict to blocked:gh-cli-only; but it must never be killed MID-KEYRING-CALL. (2) ONE producer per verdict string. (3) The pre-fix flip demonstrated above is the FAILS result the fix must turn green: three runs, one verdict. (4) Never invoke gh against a locked collection. (5) NEW, from the coordinator's own probes: their `timeout 10 busctl ... Locked` diagnostic is ALSO a D-Bus client under a kill. It has always returned in milliseconds, but under load it is the same shape as the suspect. So the redesign must additionally answer HOW A HUMAN MAY SAFELY ASK THE DAEMON WHETHER IT IS LOCKED - the operator needs that question answerable without becoming another client that can be killed mid-call.
+        IT IS MINE. I wrote the unknown/missing discriminator earlier this session as the fix for a fatal Locked read, and I verified my own producer was correct without checking whether the verdict it joins had other producers. That is "cite the log FILE, not the matched text" in a new dialect - two producers writing one VERDICT - and it is the fourth instrument of mine corrected today, the first broken while fixing something else.

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: amendment
+      ts: "2026-09-21T22:14:24Z"
+      agent_id: linux-lenovinha-linux-20260921t221424z
+      host: lenovinha-silverblue
+      summary: |-
+        AMENDMENT on the coordinator's ruling, two changes, both narrowing what this row may claim and where it may be tested.
+
+        (1) WHERE ARM B MAY RUN, and this is a consent rule rather than a scheduling note. A successful reproduction ABORTS A REAL PERSON'S KEYRING and costs them another unlock. So arm B is not to be taken on macuahuitl (the operator's desktop), and by the same logic not on any host whose owner has not agreed to that specific run. It needs a THROWAWAY SESSION, or a host whose owner consents PER RUN. The row therefore WAITS for such a host rather than waiting for a convenient crash, and nobody should read the absence of a reproduction as the mechanism being doubtful. I note this against myself: my own instinct was to reproduce it here the moment my collection is unlocked, which would have spent the operator's unlock without asking, on a host I do not own.
+
+        (2) THE FOUR-HOST DISCRIMINATOR, recorded AS A DISCRIMINATOR AND NOT AS PROOF, which is the whole point of how it is phrased. Coordinator's negative controls: pirria has three days on ONE daemon pid with zero coredumps and wraps no gh call in timeout; yoga likewise. Against lenovinha and macuahuitl, which both wrap gh in timeout during gates and have both aborted with identical frames. So across four hosts the variable that tracks the crash is WRAPPED GH DURING GATES. That is a correlation over four hosts with no controlled variable, not a demonstrated cause: the crashing pair also share other properties (they are the two hosts running the heaviest gates, and gate load is itself the thing that makes a cap expire), and four is a small population in which several properties coincide. It is strong enough to ORDER the work - arm A first, because it is cheap, ours, and removes the suspected trigger without needing the mechanism proven - and too weak to close arm B or to report upstream as a cause. If arm A lands and the crashes stop on both hosts, that is evidence; it is still not a controlled result, and the row should say so when it closes.
+
+        NEITHER CHANGE TOUCHES ARM A. It remains ours and startable now, and 988-7kxf still means the caps are redesigned rather than deleted: an unbounded probe hung, and removing timeout outright flips the verdict to blocked:gh-cli-only.

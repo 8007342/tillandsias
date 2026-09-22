@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-initialize-bare-metal-host-fixture-prints-the-verdict-1312-i6da-closes-on-while-testing-three-different-and-weaker-arms-against-a-stub-podman
+    field: status
+    value: implemented
+    ts: "2026-09-21T21:12:53Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: the-initialize-bare-metal-host-fixture-prints-the-verdict-1312-i6da-closes-on-while-testing-three-different-and-weaker-arms-against-a-stub-podman
+    event:
+      type: progress
+      ts: "2026-09-21T21:12:53Z"
+      host: lenovinha-silverblue
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: scripts/test-initialize-bare-metal-host-idempotent.sh now prints ok:initialize-bare-metal-host:hermetic:3/3 plus a note: line naming the uncovered real-host arms; arms relabelled (checker-shape); arm 1 no longer echoes synthetic verdict contents; openspec/litmus-tests/litmus-initialize-bare-metal-host-idempotent.yaml updated in both command and expected_behavior. Fixture run green after the change.
+  - packet_id: the-initialize-bare-metal-host-fixture-prints-the-verdict-1312-i6da-closes-on-while-testing-three-different-and-weaker-arms-against-a-stub-podman
+    event:
+      type: note
+      ts: "2026-09-21T21:12:53Z"
+      host: lenovinha-silverblue
+      summary: |-
+        RESOLVED BY THE CODE IN THIS COMMIT AND THE AMENDMENT ON 1312-i6da, per the coordinator's ruling of 2026-09-21 that the resolution is neither of the two options I left open but a SPLIT: keep the hermetic fixture for what a stub can prove, move the two real-host arms to a dated smoke record. Both halves are done or owned. WHAT CHANGED HERE, all of it measurable: the verdict is renamed to ok:initialize-bare-metal-host:hermetic:3/3 so a reader cannot mistake it for the real-host arms and so a stub cannot print the string a reset-from-nothing closes on; each arm is relabelled '(checker-shape)' in the fixture's own output and arm 2's label states outright that it is NOT 1312-i6da's closure arm 2; every successful run now prints a note: line naming the two real-host arms it does not cover; arm 1 no longer echoes the checker verdict's contents, which is what produced the settling symptom - it printed lane=off while the real lane on that host was wired, so the fixture's only human-readable output described a machine that does not exist. The litmus binding openspec/litmus-tests/litmus-initialize-bare-metal-host-idempotent.yaml is updated to the new string in both its command and its expected_behavior, so the pin moves with the verdict rather than dangling. The two remaining occurrences of the old string in this repo are a deliberate historical note in the fixture's header and the immutable ledger fragments that recorded the defect; neither is a live pin. THE HALF I DID NOT DO AND DO NOT OWN: the real-host smoke (skill run twice with CreatedAt unchanged; rebuild from nothing after podman system reset --force) is pirria's, folded into their stable-channel one-shot smoke run, and 1312-i6da does not close until that record is on it. This row closes on the code; that row closes on both.

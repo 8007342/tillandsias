@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: amendment
+      ts: "2026-09-21T21:12:46Z"
+      agent_id: linux-lenovinha-linux-20260921t211246z
+      host: lenovinha-silverblue
+      summary: |-
+        CLOSURE AMENDMENT, written by the row's author on the coordinator's ruling of 2026-09-21, which split the closure by what each instrument can actually prove. This SUPERSEDES the verifiable_closure's single-fixture form. It is not a lowering: the bar moves to the instrument that can clear it, and the part a stub was silently standing in for becomes a real-host obligation with a named owner.
+
+        THE CLOSURE IS NOW TWO RECORDS, BOTH REQUIRED.
+
+        (1) THE HERMETIC VERDICT, on trunk. scripts/test-initialize-bare-metal-host-idempotent.sh prints ok:initialize-bare-metal-host:hermetic:3/3 and exits 0. Its three arms are CHECKER-SHAPE arms and are now labelled as such in its own output: a stable read (one manufactured state read twice yields the same verdict and rc), seedless (an unseeded state reads github=not-seeded with no prompt and no seeding verb anywhere in the checker's code), and troubleshooting (a stopped-mirror state yields todo:initialize-bare-metal-host:mirror:<command> with rc!=0), plus the Repairs-section arm which reds the fixture but does not count toward the total. Every run now also prints a note: line naming what the verdict does NOT cover, so a green cannot be pasted into a closure as if it were the real-host arms. Two further changes were required and made: the verdict string was RENAMED, because the old ok:initialize-bare-metal-host:3/3 was the exact string this closure treated as proof of a reset-from-nothing and a stub must not be able to print that; and arm 1 stopped echoing the checker's verdict contents, because it was printing a lane= field the stub cannot know - it read lane=off on a host whose real lane was wired, so the fixture's only human-readable output described a machine that does not exist.
+
+        (2) THE REAL-HOST SMOKE, a dated record on this row, taken on a pre-authorised smoke host, in the shape the release smokes use. Two arms, and neither can run inside the hermetic fixture: IDEMPOTENT - the skill's commands run TWICE on a real host yield the same verdict from scripts/check-bare-metal-host-initialized.sh and NO container's creation timestamp changes between the runs (podman ps --format '{{.Names}} {{.CreatedAt}}'); REBUILD FROM NOTHING - after podman system reset --force, the skill's commands ALONE bring the host back to the same verdict with no manual step, and the github field reads not-seeded without any prompt. The coordinator is asking pirria to take both in the same run as the stable-channel one-shot smoke, where the reset and reprovision IS arm 2 and the two subsequent runs with CreatedAt compared IS arm 1.
+
+        THE ROW CLOSES ON BOTH AND ON NEITHER ALONE. A hermetic green with no smoke record leaves rebuild-from-nothing unproven, which is the arm the skill exists for; a smoke record with a red fixture leaves the checker's shape unpinned on every other host.
+
+        WHY THE AMENDMENT EXISTS AT ALL, recorded so the next author does not repeat it: I wrote a closure that named a VERDICT STRING rather than the arms, and a fixture was later written that printed that string while proving three weaker things. Both were mine to notice and neither was noticed until a worker loop asked whether the row could close. A closure should name what must be TRUE, and where a verdict string is used as shorthand it must be a string only the real arms can print.

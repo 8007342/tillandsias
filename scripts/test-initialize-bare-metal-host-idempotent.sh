@@ -12,9 +12,26 @@
 # reported. A fixture that breaks the thing it tests is a fixture nobody runs
 # twice.
 #
+# WHAT THIS FIXTURE DOES NOT PROVE, and why its verdict now says so in its own
+# name (ORDER 1346-cdwt, coordinator ruling 2026-09-21). Every arm here is a
+# CHECKER-SHAPE arm: it asks what scripts/check-bare-metal-host-initialized.sh
+# SAYS in a manufactured state. None of them runs the skill's commands, and a
+# stub cannot reset a machine. 1312-i6da's closure additionally requires two
+# REAL-HOST arms — the skill's commands run twice with no container creation
+# timestamp changing, and a rebuild from nothing after `podman system reset
+# --force` — and those are a dated SMOKE RECORD on that row, taken on a
+# pre-authorised smoke host, not anything this file can print.
+#
+# The verdict used to read `ok:initialize-bare-metal-host:3/3`, which a reader
+# could mistake for those arms, and the closure treated it as proof of them.
+# It is renamed rather than merely documented because the mistake was made:
+# this fixture passed while reporting a lane state belonging to no host, on a
+# machine where it would have passed with the whole stack down. A verdict a
+# stub can print must not be a verdict a reset-from-nothing closes on.
+#
 # Verdicts:
-#   ok:initialize-bare-metal-host:3/3
-#   fail:initialize-bare-metal-host:<n> arm(s)
+#   ok:initialize-bare-metal-host:hermetic:3/3
+#   fail:initialize-bare-metal-host:hermetic:<n> arm(s)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 3
@@ -40,17 +57,23 @@ mk_podman() { # mk_podman <dir> <names-newline-separated> <token-len>
 
 ALL_UP=$'tillandsias-vault\ntillandsias-proxy\ntillandsias-git-tillandsias\ntillandsias-router\ntillandsias-inference'
 
-echo "arm 1 — IDEMPOTENT: the same host state yields the SAME verdict line twice"
+echo "arm 1 (checker-shape) — STABLE READ: one manufactured state yields the SAME verdict twice"
 mk_podman "$W/up" "$ALL_UP" "40"
 v1="$(PATH="$W/up:$PATH" bash "$CHECKER" 2>/dev/null)"; r1=$?
 v2="$(PATH="$W/up:$PATH" bash "$CHECKER" 2>/dev/null)"; r2=$?
 if [ "$v1" = "$v2" ] && [ "$r1" -eq 0 ] && [ "$r2" -eq 0 ]; then
-    ok "stable verdict across two reads (rc=$r1): $v1"
+    # 1346-cdwt: echo the STABILITY, never the verdict's contents. This line
+    # used to print the whole checker verdict, including a `lane=` field the
+    # stub cannot know — it read `lane=off` on a host whose real lane was
+    # wired, i.e. the fixture described a machine that does not exist, in its
+    # only human-readable output. What arm 1 establishes is that two reads
+    # agree; the state they agree about is synthetic and is not evidence.
+    ok "stable verdict across two reads of one manufactured state (rc=$r1, ${#v1} chars, contents synthetic — not echoed)"
 else
     bad "arm1: verdict or rc changed between two reads of an unchanged host — rc=$r1/$r2, '$v1' vs '$v2'"
 fi
 
-echo "arm 2 — SEEDLESS: an unseeded host reads not-seeded, with NO prompt and no write"
+echo "arm 2 (checker-shape) — SEEDLESS: an unseeded state reads not-seeded, with NO prompt and no write. NOTE: this is NOT 1312-i6da closure arm 2 (rebuild from nothing); a stub cannot reset a machine."
 mk_podman "$W/noseed" "$ALL_UP" "0"
 out="$(PATH="$W/noseed:$PATH" bash "$CHECKER" </dev/null 2>/dev/null)"; rc=$?
 case "$out" in
@@ -76,7 +99,7 @@ else
     bad "arm2: unseeded host must read not-seeded with rc=0 and no seeding verb (match=$_f1 rc=$rc seedy=$_seedy): $out"
 fi
 
-echo "arm 3 — TROUBLESHOOTING: a stopped mirror yields todo: naming the fix, rc=1"
+echo "arm 3 (checker-shape) — TROUBLESHOOTING: a stopped-mirror state yields todo: naming the fix, rc=1"
 mk_podman "$W/nomirror" $'tillandsias-vault\ntillandsias-proxy' "40"
 out3="$(PATH="$W/nomirror:$PATH" bash "$CHECKER" 2>/dev/null)"; rc3=$?
 case "$out3" in
@@ -103,8 +126,8 @@ if [ -f "$SKILL" ]; then
         esac
     done < <(awk '/^## Repairs/{f=1;next} /^## /{f=0} f' "$SKILL")
     if [ "$_bad_entries" -eq 0 ]; then
-        # Does NOT increment the pass count: the closure pins a 3-arm verdict
-        # (ok:initialize-bare-metal-host:3/3), and an arm that adds to the
+        # Does NOT increment the pass count: the verdict is a 3-arm one
+        # (ok:initialize-bare-metal-host:hermetic:3/3), and an arm that adds to the
         # numerator without the denominator prints 4/3, which is not a verdict.
         # A FAILURE here still reds the fixture through bad().
         echo "  PASS  every Repairs entry carries date, host, symptom, command and fix"
@@ -114,8 +137,13 @@ if [ -f "$SKILL" ]; then
 fi
 
 if [ "$fail" -eq 0 ]; then
-    echo "ok:initialize-bare-metal-host:${pass}/3"
+    echo "ok:initialize-bare-metal-host:hermetic:${pass}/3"
+    # 1346-cdwt: the verdict names what is NOT covered, every run, so a green
+    # cannot be pasted into a closure as if it were the real-host arms.
+    echo "note:initialize-bare-metal-host:hermetic-only checker-shape arms against a stub podman; \
+the real-host arms (skill run twice with CreatedAt unchanged; rebuild from nothing after \
+podman system reset --force) are a dated smoke record on 1312-i6da, not this verdict"
     exit 0
 fi
-echo "fail:initialize-bare-metal-host:${fail} arm(s)"
+echo "fail:initialize-bare-metal-host:hermetic:${fail} arm(s)"
 exit 1
