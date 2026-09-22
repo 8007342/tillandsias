@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    field: status
+    value: in_progress
+    ts: "2026-09-22T05:08:10Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    event:
+      type: note
+      ts: "2026-09-22T05:08:10Z"
+      host: macbookair-macos
+      summary: |-
+        taking item (1) first as its own PR: the test -x requirement form in exec-bits-filter.awk; (2) and (3) follow on the same ref
