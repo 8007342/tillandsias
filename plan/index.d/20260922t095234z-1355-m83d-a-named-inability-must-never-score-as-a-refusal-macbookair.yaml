@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-decider-that-names-its-own-inability-is-scored-as-a-refusal-whenever-it-spells-that-inability-with-a-word-the-runners-vocabulary-does-not-carry
+    order: 1355-m83d
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [preflight, litmus, verdict-grammar, fail-loud, fleet-wide]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/run-litmus-test.sh
+    unscoreable: |
+      whether-the-corpus-should-be-normalised-to-one-spelling: this row makes the
+      READERS accept what the corpus already says. Whether every decider should
+      then be rewritten to a single word is a separate question with a different
+      cost — it touches hundreds of files and every fixture that asserts a token
+      — and answering it here would turn a scoring fix into a corpus migration.
+      Named so a later argument about spelling is not mistaken for this defect
+      recurring.
+    verifiable_closure: |
+      THE OUTPUT: a decider that NAMES ITS OWN INABILITY is never scored as a
+      refusal, whatever word it spells that inability with. Demonstrated on the
+      spellings the corpus actually contains — at minimum `skip:`,
+      `could-not-run:` and `unsupported:` — through BOTH readers:
+      `./build.sh --preflight` and `scripts/run-litmus-test.sh`.
+
+      THE NEGATIVE CONTROL IS THE WHOLE ROW, and it must be stated first because
+      widening a non-failure vocabulary is the one change that can quietly
+      dissolve a fleet's red: a REAL refusal must still score as a failure in
+      every reader. `violation:`, `refused:` and `blocked:` keep their meaning,
+      and a decider that emits a real refusal AND a skip line in the same output
+      stays RED — run-litmus-test.sh already implements exactly that
+      short-circuit at :966 and its construction is the precedent to follow.
+
+      A fixture plants each spelling against each reader and asserts the verdict,
+      including the mixed case above. A run in which every arm passes and no arm
+      could have failed is not a closure for this row.
+    title: |
+      a decider that names its own inability is scored as a REFUSAL whenever it spells that inability with a word the runner's vocabulary does not carry — three instruments, three spellings, one day
+    context: |
+      THE RULE IS ALREADY WRITTEN AND IS ALREADY CORRECT. build.sh's preflight
+      runner carries `if grep -qE '^skip:'` under the comment "A NAMED SKIP IS
+      NOT A FAILURE, whatever it exits with (1273-4mak)", added after
+      test-uninstall-matcher-spares-bystanders printed `skip:not-darwin` and was
+      called `refused`. run-litmus-test.sh carries the same idea in
+      step_terminal_verdict, which recognises `skip:` and `advisory:` on the last
+      non-empty line and puts a failure verdict FIRST so a red cannot be erased
+      by six characters.
+
+      WHAT IS WRONG IS THE VOCABULARY, NOT THE RULE. Both readers know exactly
+      one spelling. The corpus contains at least three, and they were written by
+      authors each doing the right thing in their own file:
+
+        THREE INSTANCES, ALL 2026-09-21/22, DIFFERENT INSTRUMENTS AND HOSTS:
+        * three macOS fixtures spelled it `unsupported:` and exited 0. The litmus
+          runner scored the step a FAILURE — "Check implementation", 0% pass rate
+          — on a host whose only sin was having no app bundle. Fixed in 1330-i4hu
+          by adding a terminal `skip:` line, i.e. by teaching the FIXTURES the
+          reader's word.
+        * check-gate-memory-floor spells it `could-not-run:` and exits 3, saying
+          in as many words that "nothing is asserted about its memory". The
+          preflight scores it `failed`, so `./build.sh --preflight` cannot exit 0
+          on any host without /proc/meminfo — every Mac. 1354-apns fixes that one
+          decider the same way.
+        * lenovinha's decider needing target/debug reported `could-not-run` after
+          a build-cache sweep and was scored failed=1 in the same relay window.
+
+      THE TWO SPELLINGS ARE A CORPUS FACT, NOT A PER-DECIDER BUG. Fixing them one
+      at a time — as 1330-i4hu and 1354-apns both do — works, and does not scale:
+      each fix teaches one more author's file to speak the reader's word, while
+      the next decider written by someone reading 965-sxec's channel will spell
+      it `could-not-run:` again, correctly, and be scored red again. The reader
+      is the single place the fleet can fix it once.
+
+      WHY IT MATTERS MORE THIS WEEK THAN LAST. `./build.sh --preflight` is now a
+      MANDATORY step before every `gh pr ready`, fleet-wide, because three
+      fixture-green PRs were dropped from one relay by sub-second deciders their
+      authors never ran. A mandatory step that reports a red no author can act on
+      teaches authors to read its red as noise — and a step people learn to
+      ignore is worse than no step at all, which is the failure this milestone is
+      named for.
+    deliverable: |
+      Both readers learn the spellings the corpus uses for a named inability —
+      at minimum `could-not-run:` beside `skip:` — and score them as SKIPPED,
+      outside the rate, never as a refusal.
+
+      THE FAILURE GRAMMAR IS UNTOUCHED AND CHECKED FIRST. `violation:`,
+      `refused:`, `blocked:` and `FAIL` keep their meaning and keep their
+      precedence: an output carrying BOTH a real refusal and a named inability is
+      RED. run-litmus-test.sh:966 already short-circuits exactly this way and is
+      the construction to copy, not to re-derive.
+
+      SAY WHICH WORD WAS HONOURED, in the verdict or the step line. A reader
+      seeing a step counted as skipped must be able to tell that the decider
+      named an inability, and which one, without opening the decider.
+
+      DO NOT normalise the corpus to one spelling as part of this row — see the
+      unscoreable.
+    next_action: >
+      Read the two rules before touching either: build.sh's `grep -qE '^skip:'`
+      arm with its 1273-4mak comment, and run-litmus-test.sh:937-978, whose long
+      comment already explains why a non-failure vocabulary must never widen what
+      counts as a PASS. That comment is the design brief for this row. Then
+      inventory the spellings actually present — `grep -rn 'could-not-run:'
+      scripts/` finds the second one — before choosing the token set, so the fix
+      is measured against the corpus rather than against three remembered cases.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-22 at macuahuitl-fedora's
+      direction, split deliberately from 1354-apns so that a one-decider fix and
+      a fleet-wide scoring change are not landed as one diff. Two of the three
+      instances were measured on this host (the litmus `unsupported:` case while
+      closing 1330-i4hu, and the preflight `could-not-run:` case while closing
+      1352-vmbc); the third, lenovinha's target/debug decider, is reported by the
+      coordinator and is cited as received rather than re-measured here.

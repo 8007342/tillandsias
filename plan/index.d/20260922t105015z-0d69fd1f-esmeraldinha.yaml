@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-22T10:50:15Z"
+      agent_id: linux-esmeraldinha-opus5-20260922t105015z
+      host: esmeraldinha
+      summary: |-
+        RE-DERIVED AT THE MINGW LOCUS 2026-09-22, AND THE HEADLINE OF THIS ROW IS NOW WRONG. The title says eight fixtures red by four mechanisms. That was a true statement about 2026-09-14 and it is not a description of the corpus today. A reader who meets the headline should meet this correction with it.
+
+        THE DENOMINATOR FIRST, because zero-of-eight without it would repeat this row's original error one level up. I measured EIGHT failures across the litmus I actually ran: meta-orchestration complete, 24 of 24 bound executed; forge-environment-discoverability INCOMPLETE, 15 of 25 executed before my own 25-minute cap killed the run. TEN LITMUS IN THAT SPEC ARE UNMEASURED. And a step that dies on a budget cannot tell you what the next step would have said, so the three cargo timeouts below may be MASKING mechanism failures rather than disproving them. What follows is a statement about what was measured, not about the corpus.
+
+        THE EIGHT, BY BUCKET.
+        FLOOR-TIER BUDGET, five: build-cache-sweep-trigger killed at budget 31.8s censored; mcp-expert-health-probe-shape killed at budget 228.1s censored; plan-answer-envelope-citability STEP 20/21 the crate's own unit pins for the envelope are GREEN, TIMEOUT at 300s; citation-frame-and-caller-relation STEP 8/8 the frame unit pins are green and the DAG cases are real, TIMEOUT at 300s; methodology-path-query-citability STEP 21/21 the crate's own methodology unit pins are GREEN, TIMEOUT at 300s. These belong to 1187-iij8 and are recorded there.
+        FAILS ON EVERY LOCUS, one: salvage-net-roundtrip, filed as 1354-dw8x, confirmed on MINGW64, the WSL2 builder distro, macOS and native Linux.
+        CAPABILITY-ABSENT, one: opencode-prompt-e2e-shape, STEP 5/9 launch forge.
+        UNRESOLVED, one: e2e-eligibility-probe-shape, STEP 9/10 negative control, expected ok: unreachable-podman-still-refuses, output FAIL: verdict=eligible info-calls=1. The injected-podman form is being run on native Linux by the coordinator; until that returns, this arm is not classified and I am not guessing.
+        THE FOUR NAMED MECHANISMS, zero confirmed.
+
+        THE MECHANISM ARMS HAVE MOVED, INDIVIDUALLY VERIFIED. Mechanism 1, the PATH pin: credential-channel-check-shape PASSES here today, while the underlying fact is unchanged - env PATH=/usr/bin:/bin still cannot find git, which lives at /mingw64/bin/git. The same litmus is RED on native Linux tonight for an unrelated verdict-string change, so the count moves in both directions on the same day. Mechanism 3, the CRLF arm: this row pins plan-answer-envelope-citability at step 6 of 21; STEP 6 IS OK TODAY and the litmus dies at step 20 on a cargo budget. Mechanism 2's stated cause is wrong and the correction changes its remedy, recorded in this row's claim event: /proc/self/fd/0 is NOT absent on MSYS, it resolves for MSYS programs; jq here is a NATIVE WINDOWS binary that cannot open MSYS's virtual /proc at all, so the fix is to stop handing it an MSYS path and pipe on stdin. Mechanism 4, the curl vocabulary, reproduces exactly: rc=28 at 1369ms against a dead port, past the --max-time 1 deadline, so the product truthfully reports endpoint-timeout while the fixture pins endpoint-unreachable.
+
+        METHODOLOGICAL FINDING THAT CONSTRAINS ANYONE CONTINUING THIS ROW. A spec run in the WSL2 builder distro executes only the FIRST bound litmus and prints PASS, so it cannot be used as a cross-locus control; it agrees with everything. Filed as 1355-m9xa and scoped by a native-Linux control to that one lane. The three-way split this row needs must therefore be built FIXTURE BY FIXTURE, running the fixture script directly at each locus, which is how 1354-dw8x's cause was settled.
+
+        WHAT THE CLOSURE SHOULD BE, on today's evidence and subject to the unmeasured ten: mostly RE-ROUTE, not fix. Five to 1187-iij8, one to 1354-dw8x, one to capability, one pending. And the three cargo timeouts answer the row's own open question about needing a 314-second run: it is three arms with one cause, and none of them needs that run to investigate - they need a budget that fits the host, or a host that fits the budget. DO NOT RAISE A LITMUS TIMEOUT TO MAKE THAT NUMBER LOOK BETTER; the honest remedies are a named skip at this locus carrying its reason, or routing the arm to a host that fits it.
