@@ -60,3 +60,4 @@ STEP_DESC="Checking a structured litmus assertion makes the prose beside it iner
 STEP_SCRIPT="scripts/test-litmus-structured-assert.sh"
 STEP_ERROR="a litmus step's English sentence can still change the rule that decides its verdict (1252-znbn) — read which arm failed above; ARM 0 failing means the pre-fix control could not reach the subject and arms 1-2 prove nothing"
 STEP_OK="Structured litmus assertions decide their own verdicts"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-structured-assert:9/9"

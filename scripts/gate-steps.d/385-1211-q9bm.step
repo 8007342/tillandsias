@@ -30,3 +30,4 @@ STEP_OK="long-running view completion-time refusal check passed"
 # fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no tillandsias-plan binary resolved, so the refusal could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:long-running-completion:7"

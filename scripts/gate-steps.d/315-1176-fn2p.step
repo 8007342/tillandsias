@@ -22,3 +22,4 @@ STEP_OK="gate memory floor and OOM post-mortem check passed"
 # by name rather than passing. Exit 1 remains a real regression.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="one of the two probes is absent, so neither half could be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   NC2 structurally: the driver consults the OOM record only on the no-failing-line path"

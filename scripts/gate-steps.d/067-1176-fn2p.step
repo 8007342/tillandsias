@@ -13,3 +13,4 @@ STEP_DESC="Checking build.sh's gate-memory-floor consumer survives the probe's w
 STEP_SCRIPT="scripts/test-gate-memory-floor-consumer.sh"
 STEP_ERROR="the gate-memory-floor consumer regressed — a floor-tier warning would kill the gate again under errexit (1176-fn2p)"
 STEP_OK="gate-memory-floor consumer holds"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the pre-fix capture form dies on rc 3 (rc=3), so the arm has teeth"

@@ -13,3 +13,4 @@ STEP_DESC="Checking a surviving gate is told apart from residue and from debris 
 STEP_SCRIPT="scripts/test-no-competing-gate.sh"
 STEP_ERROR="the competing-gate classifier regressed (1141-vf9w) — idle residue or leaked test children may now read as a surviving gate, or a missing procfs may read as a clean answer; see the verdict line above"
 STEP_OK="Competing-gate classifier check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
