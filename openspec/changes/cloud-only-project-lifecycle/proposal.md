@@ -66,12 +66,19 @@ and 1340-tzsx (mirror lane and in-stack design), 1338-tkfh (mirror lag
 observable), 1337-3tk6 (host attribution). Their exit criteria are restated in
 `tasks.md` as ordered tasks; the rows remain the units of claim and closure.
 
-## Coordinator's readings the operator may veto
+## Operator decisions (2026-09-22)
 
-1. Retiring the opt-in `TILLANDSIAS_FORGE_HOST_MOUNT=1` live-edit path along
+Both readings below were put to the operator as vetoable and CONFIRMED on
+2026-09-22: *"Yes on the cloud only, remove the host checkout remainders."*
+
+1. The opt-in `TILLANDSIAS_FORGE_HOST_MOUNT=1` live-edit path is retired along
    with the project host mount — read from "every checkout goes away on
    container close" and from the answer that work/ branches through the mirror
    are the way to test a change.
-2. Retiring the mirror-to-host working-copy auto-sync and the `~/src` scanner —
-   read from "always remote": with no local list and no host checkout the tray
-   has nothing on the host to keep current.
+2. The mirror-to-host working-copy auto-sync and the `~/src` scanner are
+   retired — read from "always remote": with no local list and no host checkout
+   the tray has nothing on the host to keep current.
+
+T5 and T6 in `tasks.md` are therefore decided, not provisional; every remainder
+of the host checkout (the two mount variables, the scanner, the sync, their
+cheatsheets and staged copies) is to be removed in the ordered tasks.

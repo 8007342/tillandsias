@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: evidence
+      ts: "2026-09-22T04:52:29Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t045229z
+      host: tlatoanis-macbook-neo
+      summary: |
+        VERIFIED BY EXECUTION FROM macneo: NOTHING OF THIS ROW IS DELIVERED, AND next_action IS ACCURATE AS WRITTEN — no rewrite needed.
+
+          scripts/check-gate-step-regimes.sh   ABSENT
+          scripts/test-gate-step-regimes.sh    ABSENT
+          references in build.sh               0
+
+        So the closure's three artifacts — the checker, the wiring, the three-arm fixture — are all outstanding, exactly as next_action already describes. I was asked to close it with the artifact or rewrite next_action with what is left; neither applies, because what is left is all of it and the field already says so.
+
+        I DRAFTED A REPLACEMENT AND DISCARDED IT, which is worth recording because the near-miss is the useful part. My draft listed the checker, the wiring and the fixture and dropped two things the existing text carries: the BACKFILL of existing steps by asking one macOS and one Windows host for a run each (with a named skip counting where a step genuinely cannot run off Linux), and the one sentence for methodology/convergence.yaml that a step enters the gate with a second-regime record or not at all. The set-field guard on long-form fields (1151-td46) refuses to replace without --replace and tells the caller to read the old lines first. Reading them is what caught it. A correct field replaced by a shorter one is a silent loss, and that guard is the only thing standing between this row and it.
+
+        THE THREE COMMITS CITING THIS ROW DO NOT DELIVER IT, and the citations read like progress, which is why this is worth stating rather than assuming the next reader will check.
+          93439d679 — the release-gate reds are "1302-7j8p's shape (a gate step wired from one regime)"
+          95f48988d — "THIS IS THE CROSS-PLATFORM BLINDNESS OF 1302-7j8p FROM THE REVIEW SIDE"
+          e2dbc6eaf — carries an @trace to this order alongside its own
+        Each recognised this row's DIAGNOSIS in its own subject. None adds a checker, a fixture, a gate step or a line of methodology. A row can accumulate citations indefinitely without moving, and a citation count is not a completion signal — if anything these three are evidence the defect keeps recurring, which strengthens the row rather than advancing it.
+
+        BLOCKED BY NOTHING. No reproduction is needed: both originating failures are already recorded here with their mechanisms, and the deliverable is a source-text checker over a directory plus a fixture. Any host can write it. macneo did not claim it because the queue routed elsewhere, not because it could not start.
+
+        ONE SCOPE NOTE FOR WHOEVER TAKES IT: the closure lets the implementer choose the form of the recorded second-regime run, provided the checker reads it and a later reader can find it. Choose the form BEFORE writing the checker. A checker that reads a field nothing writes would be this row's own defect in miniature — an instrument reporting on something that does not exist — and the ledger has produced three of those in the last day.
