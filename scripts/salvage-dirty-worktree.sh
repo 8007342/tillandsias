@@ -69,6 +69,26 @@ set -uo pipefail
 # TILLANDSIAS_SALVAGE_ROOT: test seam (874-w2gc) so the fixture can salvage a
 # scratch repo instead of this checkout. Unset in production.
 ROOT="${TILLANDSIAS_SALVAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+# ORDER 1354-dw8x — WHERE THIS SCRIPT LIVES, resolved ABSOLUTELY and BEFORE the
+# cd below, and deliberately NOT derived from $ROOT.
+#
+# $ROOT is the tree being SALVAGED and is overridable by the test seam. The host
+# identity is a property of the MACHINE, not of the repo being rescued, so it
+# must not travel with the seam. When the fixture pointed $ROOT at a scratch
+# repo, `$ROOT/scripts/agent-identity.sh` did not exist, HOST resolved empty,
+# and this script refused `refused:host-unresolved` — a true statement about the
+# wrong thing: the probe had not returned nothing, it had never been FOUND.
+#
+# THIS IS NOT A REVERT OF THE 1337-3tk6 FOLLOW-UP, which moved the lookup from
+# BASH_SOURCE to $ROOT for a real reason: BASH_SOURCE[0] is the INVOCATION path,
+# so reading it AFTER `cd "$ROOT"` resolves a relative invocation against the
+# wrong directory. Both facts hold. Resolving it here — absolute, before any cd
+# — satisfies that constraint without borrowing the salvage target's root, and
+# the two concerns were only ever conflated because in production they name the
+# same directory.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 cd "$ROOT" || exit 2
 
 # USAGE GUARD (2026-09-14): the slug used to be `${1:-dirty-start}` with no
@@ -125,11 +145,20 @@ esac
 # resolves this against the wrong directory and the script refuses with
 # "agent-identity.sh node-name returned nothing" when it was never FOUND — a
 # refusal naming the wrong cause, in the rescue path.
-_ai="$ROOT/scripts/agent-identity.sh"
+_ai="$_SELF_DIR/agent-identity.sh"
 HOST="$([ -x "$_ai" ] && "$_ai" node-name 2>/dev/null || true)"
 HOST="$(printf '%s' "$HOST" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
 if [ -z "$HOST" ]; then
-    echo "refused:host-unresolved: scripts/agent-identity.sh node-name returned nothing, so this push would be attributed to no host (1337-3tk6). Nothing pushed." >&2
+    # NAME WHICH FAILURE IT WAS. The old text said "returned nothing" in both
+    # cases, so a MISSING helper reported itself as a SILENT one and sent the
+    # reader to debug a probe that was never invoked (1354-dw8x). Same
+    # could-not-run/failed line this fleet has been drawing all week, in a
+    # rescue path where the reader is already having a bad day.
+    if [ ! -x "$_ai" ]; then
+        echo "refused:host-unresolved: $_ai not found or not executable, so the host could not be named and this push would be attributed to no host (1354-dw8x). Nothing pushed." >&2
+    else
+        echo "refused:host-unresolved: scripts/agent-identity.sh node-name returned nothing, so this push would be attributed to no host (1337-3tk6). Nothing pushed." >&2
+    fi
     exit 2
 fi
 STAMP="$(date -u +%Y%m%d)"
