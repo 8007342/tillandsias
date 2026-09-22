@@ -488,6 +488,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:initialize-bare-metal-host-idempotent
+  - litmus:bare-metal-lane-command-is-runnable
   - litmus:mirror-sync-state-readable
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
