@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch
+    event:
+      type: note
+      ts: "2026-09-22T18:10:58Z"
+      agent_id: linux-pirria-opus5-20260922t181058z
+      host: pirria
+      summary: |
+        RULING (macuahuitl, 2026-09-22), recorded with the part that is NOT theirs kept
+        separate.
+
+        THE DEFAULT IS THE REPOSITORY'S DEFAULT BRANCH AS GITHUB REPORTS IT, and the
+        reason is the UI's own claim: the launch is presented as a CLOUD project, the
+        operator is told they are getting the remote, and a clone of a remote gives you
+        its default branch. Anything else makes the interface lie. The host's platform
+        branch is rejected explicitly — it is the present defect with a nicer name.
+
+        FRESH-BRANCH-PER-LAUNCH IS REJECTED AS THE DEFAULT for the reason this row
+        already carried: safest for isolation, worst for an operator continuing work.
+        It is what an EXPLICIT OVERRIDE buys cheaply, so the closure adds an override
+        rather than arguing the default harder.
+
+        THE FIRST CRITERION IS THE ANNOUNCEMENT, NOT THE DEFAULT. The launch must STATE
+        the branch it resolved AND where it resolved it from. The p1 argument in this
+        row is that a wrong answer is indistinguishable from a right one until a human
+        reads the prompt line, and that stays true under EVERY candidate default:
+
+          a launch that names its branch is safe even when the default is wrong
+          a launch that does not is unsafe even when the default is right
+
+        So the announcement is load-bearing and the default is a preference. A closure
+        that changes the default and leaves the launch silent has not closed this row.
+
+        IMMEDIATE HAZARD FIXED ON ONE HOST, AND IT IS NOT THE CLOSURE. pirria's mirror
+        HEAD is set, measured before and after by an independent read:
+
+          before  ref: refs/heads/work/1325-ygq5
+          after   ref: refs/heads/main        (refs/heads/main present at bab36b2af,
+                                               the v56.9.22.1 release commit;
+                                               GitHub reports default branch = main)
+
+        That fixes THIS host and leaves every other host to reproduce the same defect
+        with a different branch name, because the mirror HEAD is per-host state that
+        nothing defines. Recorded as a hazard fix so a later reader does not mistake it
+        for the row closing.
+
+        THE DISCIPLINE QUESTION IS THE OPERATOR'S AND IS NOT RULED ON HERE: whether
+        forge launches get a fleet-wide branch rule, and what it is, goes to them as a
+        plain ask with this row as the evidence. macuahuitl is carrying it and has
+        explicitly declined to rule.
+
+        KEEP THIS APART FROM 997-e4v2 AND 591-x7ws, and the sentence belongs on all
+        three: those remove host disk ACCESS; this is the local MIRROR leaking host
+        state into a forge that believes it is remote. Closing one against the other
+        would leave the live channel open.
