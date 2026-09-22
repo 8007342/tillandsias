@@ -41,3 +41,17 @@ STEP_DESC="Checking the credential guard still answers when its probe is killed 
 STEP_SCRIPT="scripts/test-credential-channel-survives-a-killed-probe.sh"
 STEP_ERROR="the credential guard no longer answers exactly one verdict when a probe dies or hangs (1347-r9g8) — read which arm failed above; arm 2 (a dead probe must not report the credential as MISSING) is the load-bearing one, and arm 4's injection control proves the emitter count can move"
 STEP_OK="A killed or hanging credential probe still yields exactly one bounded verdict"
+#
+# SECOND REGIME, and its BOUNDARY, because the record without the boundary would
+# overstate what was measured (macneo, 2026-09-22).
+#
+# macneo is NOT a stock Mac for this question: it carries homebrew coreutils, so
+# bare `timeout` exists there. The darwin record below is therefore a genuine
+# second REGIME — a different OS, different shell, different tool identities —
+# but it says nothing about the stock-macOS case that motivated the portable
+# bound, which is step 416's shape. macneo produced that artificially by
+# stripping /opt/homebrew from PATH and measured 6 passed with 3 named skips;
+# they reported it as a SIMULATION of a stock Mac on a non-stock host rather
+# than as a measurement of one, and it is recorded here the same way. If
+# macbookair is stock, their run is the real evidence for that path.
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:credential-channel-survives-a-killed-probe:11"

@@ -33,3 +33,9 @@ STEP_DESC="Checking the admitted-missing-evidence census counts admissions, not 
 STEP_SCRIPT="scripts/test-census-admitted-missing-evidence.sh"
 STEP_ERROR="the evidence-debt census no longer discriminates (1349-tdpg) — read which arm failed above; arm 1 (the decoy must NOT be counted) and arm 5 (a second admission must move the count) are the load-bearing ones, and arm 4 pins that it stays a report rather than a gate"
 STEP_OK="The evidence-debt census counts admissions and its count is shown to move"
+#
+# SECOND REGIME (macneo, 2026-09-22 darwin). This fixture touches no bounding
+# tool and no network: it plants a two-file scratch repo, commits with a pinned
+# author date, and reads ages back through git blame. Nothing in it is
+# platform-conditional, which is why its number is identical on both regimes.
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:census-admitted-missing-evidence-fixture:8"
