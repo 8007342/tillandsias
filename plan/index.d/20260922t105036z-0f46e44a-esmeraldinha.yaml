@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-22T10:50:36Z"
+      agent_id: linux-esmeraldinha-opus5-20260922t105036z
+      host: esmeraldinha
+      summary: |-
+        FIVE MORE FLOOR-TIER BUDGET KILLS AT THE MINGW LOCUS, 2026-09-22, and three of them are a single shape this row has not yet recorded. Measured on esmeraldinha, Windows 11, checkout on drvfs, scripts/run-litmus-test.sh run directly and never through build.sh.
+
+        TWO IN THE SHAPE THIS ROW ALREADY NAMES, both carrying the runner's censored marker: build-cache-sweep-trigger at 31.8s, and mcp-expert-health-probe-shape at 228.1s, each printed with killed at budget - censored; the true time is longer. Both tallied FAIL.
+
+        THREE IN A SHAPE WORTH ADDING, because they are one cause rather than three defects. Every one is a CARGO UNIT-PIN STEP timing out at a 300s budget:
+          plan-answer-envelope-citability      STEP 20/21  the crate's own unit pins for the envelope are GREEN
+          citation-frame-and-caller-relation   STEP 8/8    the frame unit pins are green and the DAG cases are real
+          methodology-path-query-citability    STEP 21/21  the crate's own methodology unit pins are GREEN
+        All three reached the final or near-final step of their litmus with every earlier step green, then died at 300s. The cause is not three separate slownesses: it is one budget meeting one host whose checkout is on drvfs, where the same tree walk measures 725ms on ext4 and 13.8s through the Windows filesystem.
+
+        WHY THIS MATTERS TO THE ROW'S OWN THESIS. Your title says a red that is true as a verdict and false as a claim would send a fixer to re-fix something that is not broken. That is precisely what happened, and I am the fixer it would have sent. These five arrived at me inside 1186-w3ph as MinGW fixture defects. Three of them sit on that row's own list of eight, and one of them - plan-answer-envelope-citability - is recorded there at step 6 as a jq/CRLF failure. Step 6 passes today; the litmus dies at step 20 on this budget. Had I inherited that classification instead of reproducing each arm individually, I would have spent the cycle fixing a CRLF bug that is not there, in a fixture whose actual problem is a timeout.
+
+        THE RUNNER IS HONEST ABOUT WHAT IT DOES NOT KNOW, and that is worth recording as working-as-intended rather than as a gap. Each timeout printed: cpu.pressure unavailable in this cgroup - cause UNCLASSIFIED (slow step vs starved step); no fallback instrument, because none measures this step's contention. It declines to attribute the kill to contention it cannot measure. That is the correct behaviour and it is the reason these five are usable as evidence at all.
+
+        REMEDY, STATED AS A REMEDY RATHER THAN AS A NUMBER, and the standing rule applies: DO NOT RAISE THE BUDGET TO MAKE THE NUMBER LOOK BETTER. A budget raised until the floor tier passes is a budget derived from the host it was meant to measure. The honest options are a NAMED SKIP at this locus carrying its reason, so the arm reports a capability it lacked rather than a verdict it did not earn, or ROUTING the arm to a host that fits it. Whichever is chosen, a censored time must never be read as a duration: the instrument stopped the clock by stopping the test, so every one of these five numbers is a CEILING.
