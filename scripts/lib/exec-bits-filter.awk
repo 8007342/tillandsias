@@ -129,7 +129,37 @@ NR == FNR {
         # legal, or the plain `command: "scripts/x.sh"` form — the 770-dyqr
         # breach case this line was added for — stops matching entirely.
         yamlcmd = "command:[[:space:]]*\"?" envpfx dotslash p "([[:space:]\"]|$)"
-        if (content !~ bare && content !~ subst && content !~ yamlcmd) continue
+
+        # ORDER 1321-2ixp. A `test -x <path>` ASSERTION IS A REQUIREMENT FOR THE
+        # BIT, and outranks every exclusion below.
+        #
+        # MEASURED, controlled pair, same decider and same run, both fixtures put
+        # at 100644 and restored afterwards:
+        #   test-macos-vz-orphan-diagnosis.sh   litmus invokes it BARE
+        #       -> condemned, caller named
+        #   test-windows-host-lane-refusal.sh   litmus invokes it as `bash ...`
+        #       while step 1 asserts `test -x` on it
+        #       -> selected as a candidate and CLEARED
+        # That second verdict is why ./build.sh --check passed for a day of Linux
+        # lands while the v56.9.20.1 release gate refused on the first tier that
+        # runs `test -x` (this row's filing evidence).
+        #
+        # WHY IT MUST BEAT THE INTERPRETER EXCLUSION rather than sit beside the
+        # other patterns. That exclusion is correct on its own terms — `bash
+        # foo.sh` works at any mode — but it is a blanket test over the WHOLE
+        # caller file, so one `bash scripts/x.sh` anywhere clears a candidate
+        # even when another line in the same file demands the bit. The windows
+        # litmus does exactly that: step 1 asserts `test -x`, step 2 runs it via
+        # bash. An assertion that the bit is set is not weakened by a later line
+        # that does not need it.
+        #
+        # BOTH SPELLINGS, because a corpus written by many hands carries both and
+        # a rule that catches one is a rule that reads as noise the first time it
+        # misses the other: `test -x path` and `[ -x path ]`.
+        testx = "(test[[:space:]]+-x|\\[[[:space:]]+-x)[[:space:]]+\"?" dotslash p "([[:space:]\"\\]]|$)"
+        requires_x = (content ~ testx)
+
+        if (!requires_x && content !~ bare && content !~ subst && content !~ yamlcmd) continue
 
         # Naming an interpreter works at any mode; sourcing is not execution.
         #
@@ -144,7 +174,7 @@ NR == FNR {
         # widen again. Do NOT write a fixture scenario asserting this line is
         # load-bearing: such a scenario passes whatever this line says, and a
         # control that cannot fail is worse than no control.
-        if (content ~ ("(bash|sh|source|\\.)[[:space:]]+\"?" dotslash p)) continue
+        if (!requires_x && content ~ ("(bash|sh|source|\\.)[[:space:]]+\"?" dotslash p)) continue
 
         # The script matching inside itself is not a caller.
         if (line ~ ("^" p ":")) continue
