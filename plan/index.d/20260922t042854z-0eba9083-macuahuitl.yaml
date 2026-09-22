@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-linux-smoke-has-ever-verified-a-release-signature-because-cosign-is-absent-from-the-floor-host-and-unpackaged-for-its-distro-so-every-linux-report-carries-signatures-unverified
+    event:
+      type: note
+      ts: "2026-09-22T04:28:54Z"
+      agent_id: linux-macuahuitl-fable51-20260922t042853z
+      host: macuahuitl
+      summary: |
+        OPERATOR DECISION (2026-09-22, on the coordinator's channel): the acquisition path is TOOLBOX-FIRST — cosign arrives in the builder toolbox through the same ensure-style, idempotent scripts every script already runs, so adding it is transparent to all of them and the same scripts bring every host's toolbox up to date; SIGNING STAYS IN THE CLOUD RELEASE ONLY — local builds are not durable artifacts, only the verified cloud ones are, so the local lane VERIFIES signatures and never produces them. Fallback the operator named: if the toolbox path proves infeasible, cosign is left to the GitHub release and the runbook records a floor-host skip with its reason (exit criterion 4). Implementation shape, from the row's own criteria: the ensure script pins a specific cosign release and its SHA256 in the tree as the trust anchor, checks the download against the pin, then has that cosign verify its own release signature against sigstore's published certificate and transparency log; the smoke's §1s emits cosign:verified:1/1 for the installed asset on a host whose toolbox has it, and cosign:could-not-run:<reason> with the unverified headline on a host that does not (negative control kept). First verifying host is the floor tier (pirria), where the smoke runs and the gap was measured; the toolbox lane's owner reviews the ensure script.

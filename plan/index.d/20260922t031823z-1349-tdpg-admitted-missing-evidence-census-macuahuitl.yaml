@@ -1,0 +1,54 @@
+packets:
+  - packet_id: no-instrument-can-see-a-comment-that-admits-its-own-missing-evidence-so-a-constant-with-an-honest-unverified-rationale-shaped-the-product-for-seven-weeks-while-every-wiring-check-cleared-it
+    order: 1349-tdpg
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [instrument, census, methodology, advisory]
+    estimated_hours: 3
+    owned_files:
+      - scripts/census-admitted-missing-evidence.sh
+      - cheatsheets/tooling/a-test-is-not-done-until-it-can-fail.md
+    verifiable_closure: |
+      `bash scripts/census-admitted-missing-evidence.sh` prints one line per
+      hit of a self-flagged unverified premise in the tree (patterns such as
+      "not yet measured", "nobody has measured", "assumed", "until someone
+      does", a dated TODO(@name)), each with its path, the git-blame date of
+      the line and its age in days, sorted oldest first, and ends with
+      `ok:admitted-missing-evidence:<n> hits, oldest <days>d` — a REPORT,
+      never a gate (an advisory in the 699-dycj/660-ryhn ratchet sense: it must
+      not red a host on history nobody has triaged). A positive control: a
+      fixture that plants one dated admission and one plain comment must
+      count exactly the admission. The row states its floor honestly: it
+      finds only premises somebody flagged; a premise nobody wrote down
+      passes it, and the cheatsheet says so beside the "dead reason"
+      specimen. PRE-FIX RESULT: FAILS — no such instrument exists; the tray's
+      page cap carried "Nobody has yet measured a real fleet repo count
+      against a real screen, so it stays at 10 until someone does" for seven
+      weeks while the mention-count heuristic, the suite and the reachability
+      audit all cleared the feature (pirria, 2026-09-22; the operator measured
+      the menu in a minute and the cap was wrong).
+    unscoreable: unpinnable-until-the-guard-exists — the positive-control fixture scripts/test-census-admitted-missing-evidence.sh (its step name census-admitted-missing-evidence-positive-control) is this packet's own deliverable and lands in the same commit as the census script (1136-n8sh), so a pin today would name a test nothing defines yet (885-92iu)
+    next_action: |
+      Filed by the coordinator on pirria's proposal with the decision made
+      here rather than left to the implementer: build it as a report-only
+      census beside the existing census scripts (the same family, so its
+      output lands in the coordinator's signal list next to the ready-row
+      sweep and the dead-code count), never as a gate. The actionable output
+      is the AGE, not the sentence: an admission dated by blame is a debt with
+      a due date, a sentence is not. esme's distinction goes on the row and
+      the cheatsheet: tonight's other failures were wrong claims asserted
+      confidently; this was a correct claim, correctly flagged as unverified,
+      that nobody actioned — and nothing tracked that debt. Every instrument
+      the fleet owns checks WIRING (reachable, referenced, runs); none checks
+      a PREMISE. Esme's sharper form: self-flagged evidence debt has no owner
+      by construction — the honest sentence is not a task, so nothing assigns
+      it, ages it or comes back to it; and the instrument must never gate,
+      because gating on an admission teaches people to stop writing the
+      admission, which destroys the only signal it has (the 1338-x5rq
+      reasoning over 187 suppressions). Queue it behind 1347-r9g8 arm A and 1324-ujvb on pirria, or
+      hand it to any host with cycles; it needs no build. Positive control
+      first, patterns second, the floor stated third.
