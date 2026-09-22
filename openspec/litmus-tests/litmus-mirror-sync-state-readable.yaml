@@ -20,9 +20,9 @@ description: >
   mirror already knows and never published.
 
   WHAT MUST HOLD, and the middle one is the arm that can actually fail:
-  a mirror with no tracking refs reports `unknown`, NEVER `current` — a mirror
+  a mirror with no tracking refs reports `heads-unknown`, NEVER `heads-current` — a mirror
   that has never fetched upstream is not an up-to-date one; a mirror whose
-  upstream has moved reports `behind` with the count of behind heads; an
+  upstream has moved reports `heads-behind` with the count of behind heads; an
   exported head with no tracking twin (a salvage ref upstream has never seen)
   is NOT counted as behind, or every mirror is permanently behind and the
   verdict is useless rather than wrong; publishing twice leaves exactly one
@@ -32,8 +32,8 @@ description: >
   AN ARM TAKEN ON A MIRROR THAT HAPPENS TO BE CURRENT CANNOT FAIL for this
   defect, which is why the fixture MANUFACTURES the behind and unknown states
   in scratch repositories rather than waiting for a real mirror to fall behind.
-  Falsifiability shown rather than claimed: collapsing `behind` and `unknown`
-  into `current` in the publisher reds arms 1 and 3 by name.
+  Falsifiability shown rather than claimed: collapsing `heads-behind` and `heads-unknown`
+  into `heads-current` in the publisher reds arms 1 and 3 by name.
 
   TAGS ARE DELIBERATELY OUT OF SCOPE. relay-refs.sh's pre-push refspec is
   heads-only, so no upstream tag state exists to compare against — measured on
