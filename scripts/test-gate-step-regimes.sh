@@ -33,7 +33,7 @@ d="$tmp/a1"; mk "$d" "100-probe.step"
 out="$(bash "$CHECK" "$d" 2>&1)"; arc=$?
 if [ "$arc" -eq 0 ]; then
     fail "arm1:a step with no second-regime record must not pass (rc=0)"
-elif ! printf '%s' "$out" | grep -q 'violation:gate-step-single-regime:100-probe.step'; then
+elif ! grep -q 'violation:gate-step-single-regime:100-probe.step' <<<"$out"; then
     fail "arm1:the violation must NAME the step; got: $out"
 else
     pass=$((pass + 1)); echo "ok:gate-step-regimes-fixture:arm1-unrecorded-step-is-named"
@@ -44,7 +44,7 @@ d="$tmp/a2"; mk "$d" "100-probe.step" "macneo 2026-09-22 darwin ok:probe-passed"
 out="$(bash "$CHECK" "$d" 2>&1)"; arc=$?
 if [ "$arc" -ne 0 ]; then
     fail "arm2:a step carrying a darwin record must pass (rc=$arc); got: $out"
-elif ! printf '%s' "$out" | grep -q '^ok:gate-step-regimes:1$'; then
+elif ! grep -q '^ok:gate-step-regimes:1$' <<<"$out"; then
     fail "arm2:expected ok:gate-step-regimes:1; got: $out"
 else
     pass=$((pass + 1)); echo "ok:gate-step-regimes-fixture:arm2-recorded-step-passes"
@@ -59,7 +59,7 @@ d="$tmp/a3"; mk "$d" "100-probe.step" "lenovinha 2026-09-22 linux ok:probe-passe
 out="$(bash "$CHECK" "$d" 2>&1)"; arc=$?
 if [ "$arc" -eq 0 ]; then
     fail "arm3:a linux-only record must NOT satisfy the second-regime check (rc=0)"
-elif ! printf '%s' "$out" | grep -q 'is-not-a-second-regime'; then
+elif ! grep -q 'is-not-a-second-regime' <<<"$out"; then
     fail "arm3:the refusal must say WHY the regime does not count; got: $out"
 else
     pass=$((pass + 1)); echo "ok:gate-step-regimes-fixture:arm3-linux-only-is-single-regime"
