@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: claim
+      ts: "2026-09-22T04:42:21Z"
+      agent_id: windows-yolanda-claude-20260922t044220z
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows claims 1339-r9xv on the queue owner's word and the operator's direction that tonight's local fixes be made durable. REASON THIS HOST: the row is Windows-platform and this is the host that produced its evidence -- four harness-killed gates under WSL defaults against zero on esmeraldinha's four-core N100, and the two-host config diff that found the cause. EVIDENCE ALREADY ON TRUNK: scripts/install-windows.ps1 mentions wslconfig zero times; the measured failure is 16 vCPUs inside 4.8 GiB at roughly 320 MB per vCPU; the four differences are autoMemoryReclaim absent, processors copied as a NUMBER when it is a POLICY (esme's 4 is 100 percent of a 4-core machine and gave this 16-core host 25 percent), a 4-of-4 host serialising concurrency that 16 cores parallelise, and CARGO_BUILD_JOBS not bounding test threads since 24 of 25 cargo test invocations are unpinned. INTENDED SHAPE, from next_action: inspect and REPORT the guest shape the user's wslconfig will produce, name a known-bad ratio with its numbers, and OFFER the configuration on consent rather than writing the user's file silently -- the same consent discipline the destructive reset follows. The fixture gets an arm 0 that refuses with could-not-run when it cannot read a wslconfig, written first rather than last, because a guard that reports the SUBJECT as broken when it could not MEASURE is the failure this fleet met five times tonight.

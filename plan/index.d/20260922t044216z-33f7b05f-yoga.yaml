@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    field: next_action
+    value: |-
+      BLOCKED ON A DECISION — DO NOT CLAIM THIS TO IMPLEMENT IT. What remains is not
+      coding work; it is one question nobody has answered, and a host that claims this
+      expecting to write asserts will stop where yoga stopped.
+
+      THE QUESTION: IS A PROSE `expected_behavior` MEANT TO ADJUDICATE AT ALL? Measured
+      on origin/linux-next 2026-09-21, reading rule stated with the number — a step is
+      a `- step:` block delimited by the next one at any indent; UNENFORCED means the
+      block carries neither assert_exit/assert_output_contains/assert_output_matches/
+      assert_output_nonempty NOR success_pattern:
+          2,589 step blocks, 2,323 with an expected_behavior
+          UNENFORCED, mentions "succeed"        1
+          UNENFORCED, long English sentence    43   <- carved to esme
+          UNENFORCED, anything else         2,167
+      The 2,167 is not a backlog to grind down. It is the corpus, and the three
+      answers are materially different work:
+        (a) prose is DOCUMENTATION and the runner must never read it — then the fix is
+            to stop pretending it adjudicates, and the row is small;
+        (b) prose SHOULD adjudicate and 2,167 steps want structured asserts — then it
+            is the largest mechanical task on the board and wants its own milestone;
+        (c) prose adjudicates only where a step declares it — a third grammar, and the
+            design question is which steps opt in and who decides.
+      Nobody has chosen. The operator has not been asked.
+
+      WHAT IS ALREADY DONE AND MUST NOT BE REDONE: the natural-language keyword
+      interpreter is GONE and the structured asserts exist and are adjudicated before
+      prose; the 43-long-sentence slice is esme's; the census above is on this row
+      with its reading rule so the next host measures the same population rather than
+      a new one.
+
+      AND THE CENSUS ON THIS ROW WENT STALE WHILE IT WAS OPEN — the "64 succeeds NOT
+      ENFORCED" figure in the original context no longer reproduces (20 at the same
+      commit by the rule above, 1 today). Re-run the census with its reading rule and
+      its commit BEFORE sizing any slice from it; a host that claims the 64-step slice
+      today finds ONE step and closes a row over a gap that is still there.
+
+      RELEASED BY yoga 2026-09-22 after holding the claim ~23 hours without advancing
+      it. Holding it longer would have kept it looking owned and in motion while it
+      was neither.
+    ts: "2026-09-22T04:42:16Z"
+    host: yoga
+
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: progress
+      ts: "2026-09-22T04:42:16Z"
+      host: yoga
+      summary: |-
+        status 'BLOCKED ON A DECISION — DO NOT CLAIM THIS TO IMPLEMENT IT. What remains is not
+        coding work; it is one question nobody has answered, and a host that claims this
+        expecting to write asserts will stop where yoga stopped.
+        
+        THE QUESTION: IS A PROSE `expected_behavior` MEANT TO ADJUDICATE AT ALL? Measured
+        on origin/linux-next 2026-09-21, reading rule stated with the number — a step is
+        a `- step:` block delimited by the next one at any indent; UNENFORCED means the
+        block carries neither assert_exit/assert_output_contains/assert_output_matches/
+        assert_output_nonempty NOR success_pattern:
+            2,589 step blocks, 2,323 with an expected_behavior
+            UNENFORCED, mentions "succeed"        1
+            UNENFORCED, long English sentence    43   <- carved to esme
+            UNENFORCED, anything else         2,167
+        The 2,167 is not a backlog to grind down. It is the corpus, and the three
+        answers are materially different work:
+          (a) prose is DOCUMENTATION and the runner must never read it — then the fix is
+              to stop pretending it adjudicates, and the row is small;
+          (b) prose SHOULD adjudicate and 2,167 steps want structured asserts — then it
+              is the largest mechanical task on the board and wants its own milestone;
+          (c) prose adjudicates only where a step declares it — a third grammar, and the
+              design question is which steps opt in and who decides.
+        Nobody has chosen. The operator has not been asked.
+        
+        WHAT IS ALREADY DONE AND MUST NOT BE REDONE: the natural-language keyword
+        interpreter is GONE and the structured asserts exist and are adjudicated before
+        prose; the 43-long-sentence slice is esme's; the census above is on this row
+        with its reading rule so the next host measures the same population rather than
+        a new one.
+        
+        AND THE CENSUS ON THIS ROW WENT STALE WHILE IT WAS OPEN — the "64 succeeds NOT
+        ENFORCED" figure in the original context no longer reproduces (20 at the same
+        commit by the rule above, 1 today). Re-run the census with its reading rule and
+        its commit BEFORE sizing any slice from it; a host that claims the 64-step slice
+        today finds ONE step and closes a row over a gap that is still there.
+        
+        RELEASED BY yoga 2026-09-22 after holding the claim ~23 hours without advancing
+        it. Holding it longer would have kept it looking owned and in motion while it
+        was neither.' (not terminal) with evidence_refs: 2ff7a0e2792ccdaadb1983c6fc7cee8b2a23d45b
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: note
+      ts: "2026-09-22T04:42:16Z"
+      host: yoga
+      summary: |-
+        releasing: blocked on a decision, not on effort
