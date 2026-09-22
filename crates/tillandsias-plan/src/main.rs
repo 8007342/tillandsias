@@ -1085,9 +1085,19 @@ fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<Str
              every hand-written id in the 2026-08-24 retrospective violated this)."
         )),
         None => Err(
+            // ORDER 1351-y98c. NAME THE INVOCATION, not just the file. This
+            // said "Derive the id from scripts/agent-identity.sh", and a reader
+            // who ran exactly that got `refused:agent-identity:empty-backend`,
+            // because the script's interface is `id <backend>` and a bare call
+            // refuses BY DESIGN (its own grammar, pinned by
+            // litmus:agent-identity-canonical-source-shape). A remedy that
+            // names a tool without its invocation sends the reader to a second
+            // refusal with no way forward. The Some arm above already gets this
+            // right; this arm now says what it says.
             "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
-             record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
-             756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
+             record agent_id 'unknown'. Derive it: scripts/agent-identity.sh id <backend> (order \
+             756-hn3a) — a BARE invocation refuses by grammar — then pass --agent, or export \
+             TILLANDSIAS_AGENT_ID."
                 .to_string(),
         ),
     }
@@ -4798,6 +4808,29 @@ fn main() {
                 if let Some(ram) = entry.document["host"]["system_ram_gb"].as_f64() {
                     println!("  machine_ram_gb: {ram:.2}");
                 }
+                // ORDER 1254-47xd, EXIT CRITERION 5. Say which of the two
+                // readings above is an INPUT and which is an OUTPUT, because
+                // they print together and nothing marked the difference.
+                //
+                // MEASURED COST: on 2026-09-18 one host read `derived_tier:
+                // gpu-rocm` as "a ROCm lane exists" and another read
+                // `present-unscheduled` as "no GPU lane exists", from these same
+                // two lines, and BOTH were acting reasonably. `derived_tier` is
+                // what dev-inference-ensure.sh BRANCHES ON to pass /dev/kfd and
+                // /dev/dri — it describes what the wiring was told to do.
+                // `schedulable` and `present-unscheduled` are PROBED: they
+                // describe what was found afterwards. A tier that names an
+                // accelerator is not evidence the accelerator was reached.
+                //
+                // Printed as its own line, and the existing keys and values are
+                // untouched: the fleet-heartbeat matcher reads whatever
+                // vocabulary this command publishes, so renaming a key to carry
+                // the distinction would move the defect into that reader.
+                println!(
+                    "  reading: derived_tier above is a ROUTING INPUT (what the wiring was told \
+                     to do); schedulable/present-unscheduled below are PROBED OUTPUTS (what was \
+                     found) — a tier naming an accelerator is not evidence it was reached"
+                );
                 let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
                 if triples.is_empty() {
                     println!("  schedulable: none");
@@ -9152,6 +9185,37 @@ mod tests {
             )
             .is_err(),
             "a malformed explicit --agent refuses; it does not silently fall back"
+        );
+    }
+
+    /// ORDER 1351-y98c. A REMEDY THAT NAMES A TOOL WITHOUT ITS INVOCATION SENDS
+    /// THE READER TO A SECOND REFUSAL.
+    ///
+    /// This arm said "Derive the id from scripts/agent-identity.sh". Run exactly
+    /// as written that script answers `refused:agent-identity:empty-backend`,
+    /// because its interface is `id <backend>` and a bare call refuses BY
+    /// DESIGN. The reader is then refused twice with nowhere to go, while the
+    /// sibling arm forty lines up in this same file already teaches the
+    /// invocation.
+    ///
+    /// ASSERTS THE MESSAGE AND NOTHING ELSE. agent-identity.sh's own grammar —
+    /// that a bare invocation refuses, and with what exit status — is pinned by
+    /// litmus:agent-identity-canonical-source-shape. Re-asserting it here would
+    /// give one contract two homes, which is the defect this fleet keeps paying
+    /// for elsewhere. The only claim made here is about the text a caller reads.
+    #[test]
+    fn the_missing_agent_refusal_names_the_subcommand_not_just_the_file() {
+        let err = writer_agent_from(None, None)
+            .expect_err("no --agent and no env id must refuse rather than record 'unknown'");
+
+        assert!(
+            err.contains("agent-identity.sh id <backend>"),
+            "the remedy must name the INVOCATION that produces an id; naming the file alone \
+             sends the reader to a bare call, which refuses by grammar. Got: {err}"
+        );
+        assert!(
+            err.contains("756-hn3a"),
+            "the remedy keeps its order reference so the reader can find the contract: {err}"
         );
     }
 

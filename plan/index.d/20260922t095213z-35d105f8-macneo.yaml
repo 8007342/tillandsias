@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    field: next_action
+    value: |-
+      Not claimed. Any host can write it; only a Mac (or any host without
+      setsid) can verify it, and the pre-fix control is recorded above so a
+      Linux author does not need one to start.
+      1. Probe `command -v setsid` ONCE, not per guard.
+      2. Where it is absent, decide between (a) running the guard without its
+         own session and accepting that the deadline signals only the child —
+         read build.sh:290-306 first, that comment records why the session
+         exists and what breaks without it — or (b) an equivalent that exists
+         on macOS. Note `setsid timeout ...` was already measured and rejected
+         on 2026-09-20 for breaking 124 detection, so do not re-propose it.
+      3. Whichever is chosen, the missing capability is named ONCE at the top,
+         and a guard that did not start never prints the same token as a guard
+         that refused.
+      4. Land the join-the-fleet sentence about `--preflight before gh pr ready`
+         with a note that it needs setsid, or land it after this fix.
+
+
+      [2026-09-22T09:52:13Z macneo] SCOPE CHANGED 2026-09-22 (macuahuitl-fedora): THIS ROW IS THE UMBRELLA, NOT THE
+      macOS FIX. The setsid fix is 1352-vmbc (macbookair, in the relay). Keep this row
+      open for the general principle its own litmus name already states — preflight
+      RUNS, or NAMES the capability it lacks — because four loci now share it and only
+      one of them is macOS.
+
+      THE FOUR LOCI, each measured by the host that hit it:
+        macOS (macneo)   DIES. exec: setsid: not found; ran=0 skipped=3 failed=110.
+                         110 guards booked as refusals that never started.
+        Windows (yolanda) RUNS AND REPORTS ok: WHILE UNDER-COVERING, which is the
+                         worst of the four for a reader. ok:preflight:ran=68
+                         skipped=31 wall=241s, exit 0; a second run ran=67
+                         skipped=32 wall=249s. TWENTY of those skips share one
+                         reason — outlived the 5s front-door deadline — and each
+                         reports 6s or 7s against a 5s budget, so they miss by one
+                         or two seconds rather than being slow. Named:
+                         test-scorable-closure-quoting, test-lww-channel-consumers,
+                         test-set-field-refuses-unknown-flags,
+                         test-litmus-structured-assert, test-token-instrument,
+                         test-trace-coverage, test-pre-push-honours-a-live-freeze.
+        Forge (1349-53h6) PRINTS refused: FOR GUARDS THAT NEVER EXECUTED, because
+                         preflight writes ~11 MB of scratch inside a 256 MB tmpfs
+                         checkout and drove it to 0 bytes free on both runs.
+        Linux            the locus the whole thing is calibrated on, and the only
+                         one where the verdict line means what it says.
+
+      THE DEFECT, STATED ONCE FOR ALL FOUR: the verdict line does not distinguish
+      four different things, and all four currently reach a reader as either ok: or
+      refused:.
+        ran                  the guard executed and gave a verdict
+        skipped-by-deadline  it started and was cut off — NOT run, and the gate will
+                             run it later
+        could-not-run        the runner could not start it (no setsid, no disk)
+        refused              it ran and refused the tree
+      A SUMMARY THAT HIDES NON-TRIVIAL SKIPS BEHIND ok: IS THE DEFECT, not a cosmetic
+      complaint about wording. The fleet rule this serves describes preflight as
+      "every guard that can refuse a push, in seconds, no build", and it exists
+      because three of six reviewed fixture-green PRs were dropped by sub-second
+      deciders their authors never ran. On Windows it is neither every guard nor
+      seconds, and it still says ok — so a Windows author following the rule exactly
+      can ship the red believing they checked. That is the same shape as this row's
+      macOS half and as 1352-qbrd's trailer: true about itself, false about the world.
+
+      A CONSTRAINT ON ANY FIX, measured rather than supposed: THE GUARD SET DIFFERS BY
+      CHECKOUT. macbookair counted failed=108 and macneo counted failed=110 for the
+      same defect within minutes of each other. So no assertion, litmus arm or
+      summary may hardcode a guard count; assert the CATEGORIES and their sum, never a
+      number.
+
+      ORDER OF WORK, and the first item needs no host this fleet lacks:
+        1. THE SUMMARY LINE. Make the verdict carry the four categories, e.g.
+           ok:preflight:ran=68 skipped-by-deadline=20 could-not-run=0 refused=0
+           — and make a non-zero skipped-by-deadline or could-not-run visible in the
+           verdict itself rather than in a line nobody reads. This alone fixes the
+           Windows reader without touching a single deadline, and it is the cheap
+           half.
+        2. THE DEADLINE CALIBRATION on Windows is a SEPARATE question and must not
+           be smuggled into item 1. Yolanda states the MSYS process-spawn hypothesis
+           (~155 ms per fork) EXPLICITLY AS A HYPOTHESIS and has not measured that
+           spawn count explains the 6-versus-5 gap. Do not raise the budget to make
+           the number look better; "the fix cannot be the raise".
+        3. The macOS capability probe is 1352-vmbc's, not this row's. Cite it here
+           when it lands as the first locus closed.
+        4. The forge's disk exhaustion is 1349-53h6's, likewise.
+        5. The litmus openspec/litmus-tests/litmus-preflight-runs-or-names-the-
+           capability.yaml is THIS row's, and it asserts the four-category
+           distinction — not the macOS symptom, which will already be fixed.
+    ts: "2026-09-22T09:52:13Z"
+    host: macneo
+
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T09:52:13Z"
+      host: macneo
+      summary: |-
+        scope widened to the umbrella per macuahuitl-fedora 2026-09-22; four loci, the four-category verdict, and the no-fixed-count constraint

@@ -40,6 +40,11 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/script-exec-bits-fixture.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 failures=()
+# ORDER 1321-2ixp. DERIVED, not a literal. The summary said "14/14" and its
+# scenario list was hand-maintained, so three scenarios added below ran, passed,
+# and were reported as 14 — a verdict token that cannot move cannot tell a
+# reader it measured less than it claims.
+ran=()
 
 # scenario <name> <expected-rc> <expected-stdout-substring> <caller-body> [mode] [caller-path]
 #
@@ -90,8 +95,10 @@ scenario() {
     out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
     if [ "$rc" = "$want_rc" ] && printf '%s' "$out" | grep -q "$want"; then
         echo "PASS  $name"
+        ran+=("$name")
     else
         echo "FAIL  $name: want rc=$want_rc matching [$want], got rc=$rc [$out]"
+        ran+=("$name")
         failures+=("$name")
     fi
 }
@@ -139,6 +146,33 @@ scenario "litmus-command-bare-refused" 1 "violation:script-not-executable:1" \
 scenario "litmus-command-interpreter-ok" 0 "ok:script-exec-bits:" \
     '    command: "bash scripts/target.sh 2>&1"' 100644 \
     "openspec/litmus-tests/litmus-demo.yaml"
+
+# ORDER 1321-2ixp. A `test -x <path>` ASSERTION IS A REQUIREMENT FOR THE BIT,
+# and it outranks the interpreter exclusion.
+#
+# THE LIVE CASE, and the reason this row exists: litmus-windows-host-lane-
+# refusal.yaml step 1 asserts `test -x` on its two fixtures while step 2 runs
+# them via `bash`. The interpreter exclusion is a blanket test over the caller
+# file, so the `bash` line cleared what the `test -x` line demanded, both
+# fixtures sat at 100644 since a Windows salvage relay, every ./build.sh --check
+# passed, and the v56.9.20.1 release gate refused on the first tier that runs
+# `test -x`.
+scenario "litmus-command-interpreter-but-test-x-refused" 1 "violation:script-not-executable:1" \
+    '    command: "bash -n scripts/target.sh && test -x scripts/target.sh && echo ok"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+# The `[ -x ... ]` spelling, because a corpus written by many hands carries both
+# and a rule that catches one reads as noise the first time it misses the other.
+scenario "bracket-dash-x-refused" 1 "violation:script-not-executable:1" \
+    '    command: "bash scripts/target.sh; [ -x scripts/target.sh ] || exit 1"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+# NARROWNESS CONTROL, and the one that makes the two above mean something: an
+# interpreter-prefixed caller with NO assertion must STAY SILENT at 100644. If
+# this ever reds, the requirement form has swallowed the exclusion whole and the
+# guard has started demanding the bit for every script anyone runs under bash.
+scenario "interpreter-without-assertion-still-ok" 0 "ok:script-exec-bits:" \
+    '    command: "bash scripts/target.sh && echo ok"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+
 scenario "workflow-bare-refused" 1 "violation:script-not-executable:1" \
     '          scripts/target.sh --verify' 100644 \
     ".github/workflows/release.yml"
@@ -194,9 +228,11 @@ rc=0
 out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
 if [ "$rc" = 2 ] && printf '%s' "$out" | grep -q "violation:script-not-executable:0"; then
     echo "PASS  missing-helper-refuses"
+    ran+=("missing-helper-refuses")
 else
     echo "FAIL  missing-helper-refuses: want rc=2 with a violation line, got rc=$rc [$out]"
     failures+=("missing-helper-refuses")
+    ran+=("missing-helper-refuses")
 fi
 
 # ── portable-xargs (order 851-gpb5) ──────────────────────────────────────────
@@ -208,8 +244,10 @@ fi
 if grep -q 'xargs -r' "$CHECK"; then
     echo "FAIL  portable-xargs: GNU-only 'xargs -r' reappeared in the checker"
     failures+=("portable-xargs")
+    ran+=("portable-xargs")
 else
     echo "PASS  portable-xargs"
+    ran+=("portable-xargs")
 fi
 
 if [ "${#failures[@]}" -gt 0 ]; then
@@ -225,6 +263,8 @@ fi
 #   bare-invocation-executable          -> executable-bare-ok
 #   interpreter-prefixed-non-executable -> interpreter-prefixed-ok
 #   sourced-library-non-executable      -> sourced-ok
-echo "PASS: script-exec-bits fixture 14/14 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses, litmus-command-bare-refused, litmus-command-interpreter-ok, workflow-bare-refused, portable-xargs, litmus-command-dotslash-refused, litmus-command-envprefix-refused, litmus-command-dotslash-interpreter-ok)"
-echo "ok:script-exec-bits-fixture:14"
+_eb_n="${#ran[@]}"
+_eb_list="$(printf '%s, ' "${ran[@]}")"; _eb_list="${_eb_list%, }"
+echo "PASS: script-exec-bits fixture ${_eb_n}/${_eb_n} scenarios green (${_eb_list})"
+echo "ok:script-exec-bits-fixture:${_eb_n}"
 exit 0
