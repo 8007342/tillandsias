@@ -43,21 +43,37 @@
 #      without breaking a reader that only wants the state.
 #
 # STATES, and the distinction that 1338-tkfh exists for:
-#   current                      every exported head is at or ahead of its
+#   heads-current                every exported head is at or ahead of its
 #                                tracking twin
-#   behind/<n>                   <n> exported heads are behind theirs
-#   unknown/no-tracking-data     the mirror has no tracking refs at all, so the
+#   heads-behind/<n>             <n> exported heads are behind theirs
+#   heads-unknown/no-tracking-data
+#                                the mirror has no tracking refs at all, so the
 #                                question CANNOT be answered here
-# `behind` and `unknown` are different answers and must never collapse into
-# one. A mirror that has never fetched upstream is not a current mirror, and
-# reporting it as current is the failure this row was filed about.
+# `heads-behind` and `heads-unknown` are different answers and must never
+# collapse into one. A mirror that has never fetched upstream is not a current
+# mirror, and reporting it as current is the failure this row was filed about.
 #
-# TAGS ARE OUT OF SCOPE AND SAY SO. The pre-push refspec is heads-only, so no
-# upstream tag state exists to compare against — measured on lenovinha, where
-# latest/stable/unstable survived a full container restart while upstream had
-# moved. Publishing a tag verdict from data that does not exist would be worse
-# than publishing none. Growing that refspec is a separate decision because it
-# touches the rejection path relay-refs.sh's comment warns about.
+# EVERY STATE NAMES ITS SCOPE, and that is deliberate rather than verbose
+# (coordinator's ruling, 2026-09-22). TAGS ARE OUT OF T1: the pre-push refspec
+# is heads-only, so no upstream tag state exists to compare against — measured
+# on lenovinha, where latest/stable/unstable survived a full container restart
+# while upstream had moved. Publishing a tag verdict from data that does not
+# exist would be worse than publishing none.
+#
+# So the scope lives IN THE VOCABULARY rather than in a comment nobody reads at
+# the point of use. A bare `current` would be true and would invite exactly the
+# wrong inference — a reader wants "is my mirror current" and would take it for
+# an answer about everything the mirror holds. `heads-current` cannot be
+# misread that way. This is the general lesson of 1345-8hyg turned into a
+# naming rule: a verdict should name its SCOPE, not just its outcome, because
+# the reader supplies the broader reading every time and being the author of
+# the narrower meaning is no protection.
+#
+# Tags joining this state is its own row when a consumer needs it, and the
+# justification will have to be a consumer that reads tags FROM THE MIRROR —
+# today the things that need tags read GitHub. Growing the refspec also touches
+# the rejection path relay-refs.sh's comment warns about, which deserves its own
+# review rather than a ride inside T1.
 #
 # Emits exactly one line on stdout:  sync-state:<state>:<epoch>
 
@@ -67,7 +83,7 @@ log_msg() { echo "[publish-sync-state] $*" >&2; }
 
 if [ -z "$MIRROR" ] || [ ! -d "$MIRROR" ]; then
     log_msg "usage: publish-sync-state <bare-mirror-dir>"
-    echo "sync-state:unknown:0"
+    echo "sync-state:heads-unknown:0"
     exit 2
 fi
 
@@ -98,13 +114,13 @@ for _ref in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/heads 2>/
 done
 
 if [ "$tracking_total" -eq 0 ]; then
-    STATE="unknown"
+    STATE="heads-unknown"
     DETAIL="no-tracking-data"
 elif [ "$behind_heads" -gt 0 ]; then
-    STATE="behind"
+    STATE="heads-behind"
     DETAIL="$behind_heads"
 else
-    STATE="current"
+    STATE="heads-current"
     DETAIL=""
 fi
 

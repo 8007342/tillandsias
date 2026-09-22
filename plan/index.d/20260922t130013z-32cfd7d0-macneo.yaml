@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T13:00:13Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t130013z
+      host: macneo
+      summary: |
+        THE PREFIX ALLOCATOR RUNS AT LAND, SO A HAND-RENUMBER BETWEEN RELAYS CAN COLLIDE
+        WITH THE NEXT ARRIVAL. Recorded here at macuahuitl-fedora's request; it belongs
+        on the allocator's own row, which is 1162-qbrx and is ARCHIVED, so an event there
+        would land in a fragment no reader folds. Routing note below.
+
+        THREE COLLISIONS IN ONE NIGHT, 2026-09-22:
+          1. 420-1353-ryhq.step (mine) against 420-1352-vmbc.step (macbookair's),
+             discovered when land80 refused and I checked rather than assumed.
+          2. The same pair again after I merged their ref into my rehearsal; I
+             renumbered to 421 by hand.
+          3. 421-1353-ryhq.step against 421-1321-2ixp.step, which ARRIVED WITH LAND82
+             while I was working. Moved to 422.
+
+        MECHANISM, and nobody did anything wrong at any step. scripts/gate-steps.d/README
+        says the land tool keeps the slot free: scripts/land-on-platform-branch.sh runs
+        allocate-gate-step-prefix.sh after its integrate and before the gate. That is the
+        right place for it. But a host working between relays sees only the prefixes on
+        its own tree, so every hand-chosen slot is provisional until the next integrate,
+        and renumbering by hand to fix collision N can collide with arrival N+1. I hit
+        that exactly: 421 was free when I picked it and taken by the time I merged.
+
+        WHAT I DID NOT DO, and why it is the right default: I did not run the allocator
+        myself ahead of the land tool. It refused correctly when I tried during the
+        rehearsal — "origin/linux-next is not an ancestor of HEAD — the integrate has not
+        happened, so HEAD cannot see the remote's steps; integrate first" — and taking
+        that decision away from the one tool that can see both refs would be worse than
+        the collision.
+
+        THE CHEAP OBSERVATION, offered rather than designed: the tree guard
+        (test-gate-step-append-no-conflict.sh arm 7) catches a collision only WITHIN one
+        tree. What a working host cannot see is a prefix taken on a ref that has not
+        merged yet. If that is worth closing, the shape is probably a check against
+        origin/<branch> rather than against the worktree, run at push time and advisory
+        rather than refusing — a host cannot be blocked on a slot someone else has not
+        landed. Untested; I have not written it and am not claiming it.
+
+        Routed by macuahuitl-fedora for one line on the allocator's row. 1162-qbrx being
+        archived is the second time tonight a note was directed at a completed row
+        (721-nyev was the first), which may itself be worth a coordinator rule: a routing
+        instruction naming a row should be checked against its status before it is sent.
