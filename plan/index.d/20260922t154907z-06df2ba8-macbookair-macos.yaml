@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-litmus-bindings-registry-names-spec-ids-and-resolves-none-so-a-binding-to-a-spec-that-does-not-exist-passes-every-gate
+    field: status
+    value: done
+    ts: "2026-09-22T15:49:07Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: the-litmus-bindings-registry-names-spec-ids-and-resolves-none-so-a-binding-to-a-spec-that-does-not-exist-passes-every-gate
+    event:
+      type: completed
+      ts: "2026-09-22T15:49:07Z"
+      host: macbookair-macos
+      summary: |-
+        status 'done' with evidence_refs: work/1356-vv5m is an ancestor of origin/linux-next and the checker reads ok:litmus-bindings:... spec_ids=141 resolved=141 spec-grandfathered=0 rc=0 there. Pre-fix: 141 spec_ids with 1 unresolved (expert-serve-grounded-pipeline, under which three litmus tests were bound) and every gate green. Resolves to spec.md rather than the directory, because a directory left by a deletion satisfies -d while holding nothing a reader could open. The population of the check is itself asserted: zero parsed spec_ids REFUSES rather than printing ok:0 — and case 8's scaffold deliberately has no bound file, because a first draft emptied a normal scaffold's bindings, the EARLIER check fired first, and the arm passed without reaching the population assertion. Four mutations each redding its own arm. A population guard's first customers are the fake trees: the relay's first refusal of this change was against test-bound-litmus-is-runnable's own scaffold, a true positive fixed in the scaffold rather than by weakening the checker.
+  - packet_id: the-litmus-bindings-registry-names-spec-ids-and-resolves-none-so-a-binding-to-a-spec-that-does-not-exist-passes-every-gate
+    event:
+      type: note
+      ts: "2026-09-22T15:49:07Z"
+      host: macbookair-macos
+      summary: |-
+        the bindings registry resolves the spec_ids it names; live on trunk at 141 resolved
