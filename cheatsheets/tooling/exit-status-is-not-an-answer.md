@@ -123,3 +123,55 @@ a refusal.
   came with a `skip:` line.
 - [[recursive-grep-symlinks]] is the same family with a different organ: there
   the tool exits zero over a population it never walked.
+
+## Four of them at once — a worked specimen
+
+Measured on yolanda-windows, 2026-09-22. One command, **four** distinct ways
+the status was not the answer, stacked so that each hid the next.
+
+```bash
+git add plan/index.d/*.yaml 2>/dev/null   # 1,771 files
+git commit -q -m "..."
+bash scripts/push-plan-fragments-to-trunk.sh
+# → ok:fragments-on-trunk:a76ac5de3:3
+```
+
+That success line is **true**. The commit carried nothing.
+
+1. **A hidden error.** The glob exceeded the MSYS argv limit, `git` never ran,
+   and `2>/dev/null` discarded the only evidence — `Argument list too long`.
+   See [git-bash-cannot-fork-or-enumerate](git-bash-cannot-fork-or-enumerate.md).
+2. **An exit code from the pipeline, not the command.** `$?` read 0 because the
+   status belonged to the shell's exec and the surrounding pipeline, not to
+   `git`.
+3. **A true success line beside a silent failure.** The push genuinely did push
+   three fragments. Nothing it printed was wrong. It simply was not reporting
+   on the thing that had failed.
+4. **A lane whose CORRECT behaviour made the wrong outcome look right.** The
+   plan lane carries *untracked* fragments by design — so the fragments landed
+   even though the commit was empty, and the resulting verdict looked exactly
+   like a healthy push.
+
+### The one nobody writes down
+
+**A push lane that carries untracked files makes a FAILED COMMIT INVISIBLE.**
+
+There is no defect in the lane; carrying untracked fragments is what it is for.
+The consequence is that a broken commit and a healthy one produce the same
+output, and no amount of reading the verdict separates them.
+
+**So verify the ARTEFACT, not the verdict.** The failure surfaced only on
+asking a different question — *is the report on the remote?* — rather than a
+louder version of the same one:
+
+```bash
+git ls-tree -r --name-only origin/linux-next -- plan/issues | grep -c "$NAME"
+# 0   ← the commit never carried it
+```
+
+### Why it is worth a page rather than a note
+
+The person who wrote this had relayed *"never `2>/dev/null` on a state-changing
+command"* to another host **two hours earlier**, as a trap worth recording, and
+then committed it. That is the argument for the check rather than the rule:
+**knowing a rule does not apply it, only a check does.**
