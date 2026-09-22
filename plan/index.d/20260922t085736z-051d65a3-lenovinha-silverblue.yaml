@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: measure-whether-a-shared-sccache-on-the-lan-repays-its-complexity-before-any-host-is-asked-to-depend-on-one
+    event:
+      type: note
+      ts: "2026-09-22T08:57:36Z"
+      agent_id: linux-lenovinha-linux-20260922t085736z
+      host: lenovinha-silverblue
+      summary: |
+        A SMALL INTERACTION WORTH RECORDING, found by running the preflight deciders rather than by reasoning: THE BUILD-CACHE SWEEP THIS ROW'S GUIDANCE PRESCRIBES REMOVES A BINARY A PREFLIGHT DECIDER REQUIRES.
+        WHAT HAPPENED. build_cache_hygiene's action is `cargo clean` when target/ is over 40 GiB or the marker is 14 days stale; both triggers were true on lenovinha (143 GiB, marker 20 days). I reclaimed 135 GiB by removing target/debug and target/archive-answerability while deliberately preserving target/release, because the release binaries are this host's only ledger and enclave tooling and the keyring is down. Then `./build.sh --preflight` refused:
+          refused:preflight:test-capabilities-envelope-names-its-source
+          could-not-run:capabilities-envelope-source:no-binary:<checkout>/target/debug/tillandsias
+        So the decider needs the DEBUG binary specifically. A host that follows the sweep guidance to the letter — a full `cargo clean` — lands in the same place with MORE removed, not less.
+        TWO OBSERVATIONS, neither urgent, both cheap to fix by someone who owns those files:
+          1. THE DECIDER REPORTS `could-not-run:` AND PREFLIGHT COUNTS IT AS `failed=1`. By this project's own grammar — argued at length tonight on 1324-ujvb's cosign review — could-not-run is a REPORT that the host cannot answer the question, and it is categorically not the same finding as a check that ran and failed. Preflight's roster collapses them: the run line reads `ran=95 skipped=15 failed=1`, and that 1 is a could-not-run. A host with a swept cache cannot tell, from the verdict, whether it has a real defect or a missing artefact. The skip machinery already exists in that roster (15 skips, each named), so this looks like a classification rather than a redesign.
+          2. THE SWEEP AND THE DECIDERS DISAGREE ABOUT WHAT IS DISPOSABLE. build_cache_hygiene calls target/ a disposable build cache; test-capabilities-envelope-names-its-source treats target/debug/tillandsias as an input it can require. Both are reasonable alone. Together they mean the documented END-OF-CYCLE maintenance action leaves the host unable to pass the documented PRE-PUSH check until something rebuilds the debug profile, and nothing says so.
+        NOT FILING A ROW FOR THIS TONIGHT and saying why: it is a real interaction but it costs one rebuild, it is discoverable in 136 seconds by the very decider that catches it, and the fleet has enough open p0/p1 work that a p3 about cache/decider coupling would sit unread. Recorded here so the next host that sweeps and then cannot preflight finds the explanation instead of the symptom. If someone wants it as a row, the evidence is complete as written.
