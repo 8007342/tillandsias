@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    field: status
+    value: done
+    ts: "2026-09-22T12:50:55Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    event:
+      type: completed
+      ts: "2026-09-22T12:50:55Z"
+      host: macbookair-macos
+      summary: |-
+        status 'done' with evidence_refs: Verified at a5c4c3971: note:exec-bit-restored in salvage-dirty-worktree.sh and test-salvage-preserves-exec-bits.sh present; item (1)'s requires_x filter, the test -x sweep widening and the pin at 17 landed earlier at 635649b12. Item (1) measured as a controlled pair: the bash-invoked, test-x-asserting fixture went from CLEARED to REFUSED while the bare-invoked one was refused throughout and the clean tree was unchanged at 26 checked; the SWEEP had to widen with the filter, and the decider's own comment warned about that before I hit it — the awk pattern alone left the pair reading ok. Items (2) and (3): the salvage restores the bit at snapshot time for shebang files it staged, scoped to paths_to_stage and never a repo-wide sweep, with ok:salvage-exec-bits:4/4 wired as gate step 421 and its darwin regime recorded. Mutations red their own arms at 1/4, 3/4 and 2/4. Separately disclosed and NOT caused here: test-salvage-net.sh fails 24 arms on this host identically with and without the diff, now filed by esme as 1354-dw8x with my macOS locus on it.
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    event:
+      type: note
+      ts: "2026-09-22T12:50:55Z"
+      host: macbookair-macos
+      summary: |-
+        all three items on trunk: item 1 at 635649b12, items 2 and 3 with land82 at a5c4c3971
