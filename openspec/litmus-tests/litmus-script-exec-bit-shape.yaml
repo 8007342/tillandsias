@@ -70,11 +70,21 @@ critical_path:
     # 7 -> 10 with order 770-dyqr's non-shell caller scenarios; 10 -> 11 with
     # order 851-gpb5's portable-xargs pin (no GNU-only `xargs -r`, hit by the
     # first macOS host); 11 -> 14 with order 754-kptj's ./-prefix and
-    # env-assignment-prefix scenarios plus the `bash ./` narrowness control.
+    # env-assignment-prefix scenarios plus the `bash ./` narrowness control;
+    # 14 -> 17 with order 1321-2ixp's `test -x` requirement form, its `[ -x ]`
+    # spelling, and the narrowness control that an interpreter-prefixed caller
+    # with NO assertion must stay silent.
     # The count is pinned deliberately: it is how a wholesale fixture rewrite
     # that drops coverage gets caught, which already happened once under
     # 758-jw6v.
-    expected_behavior: "ok:script-exec-bits-fixture:14"
+    #
+    # ORDER 1321-2ixp MADE THAT PIN ACTUALLY WORK. The fixture printed its count
+    # as a LITERAL "14/14", so a rewrite that dropped scenarios would have
+    # printed 14 anyway and this pin would have passed it. Three scenarios were
+    # in fact added, ran, passed, and were reported as 14. The count is now
+    # derived from the scenarios that actually ran — verified against the PASS
+    # lines the run prints — so a drop moves the token and this line catches it.
+    expected_behavior: "ok:script-exec-bits-fixture:17"
 
 observability:
   traces:

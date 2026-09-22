@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T05:35:16Z"
+      agent_id: windows-yolanda-claude-20260922t053515z
+      host: yolanda-windows
+      summary: |-
+        SECOND PLATFORM, SAME PRINCIPLE, DIFFERENT FAILURE MODE — and this one is worse for a reader because it reports ok. On macOS this row records preflight as DEAD (no setsid). ON WINDOWS IT RUNS AND SILENTLY UNDER-COVERS. Measured on yolanda-windows 2026-09-22 against a clean tree: ok:preflight:ran=68 skipped=31 wall=241s, exit 0, and a second run ran=67 skipped=32 wall=249s. TWENTY OF THOSE SKIPS ARE THE SAME REASON: outlived the 5s front-door deadline; the gate still runs it. Named ones include test-scorable-closure-quoting, test-lww-channel-consumers, test-set-field-refuses-unknown-flags, test-litmus-structured-assert, test-token-instrument, test-trace-coverage, test-pre-push-honours-a-live-freeze. Each reports 6s or 7s against a 5s budget, so they miss by ONE OR TWO SECONDS rather than being slow fixtures. WHY IT MATTERS AGAINST THE RULE THIS ORDER SERVES: the fleet rule issued tonight describes preflight as every guard that can refuse a push, in seconds, no build, and it exists because THREE OF SIX reviewed fixture-green PRs were dropped by sub-second deciders their authors never ran. On Windows it is not every guard, it is roughly two thirds of them, and it is not seconds, it is four minutes. I cannot tell from this host whether any of those three killer deciders are among my twenty skips; IF THEY ARE, A WINDOWS AUTHOR FOLLOWING THE RULE EXACTLY STILL SHIPS THE RED AND BELIEVES THEY HAVE CHECKED. HYPOTHESIS STATED AS A HYPOTHESIS: the 5s budget looks calibrated on a Linux locus and the gap is probably MSYS process-spawn cost, roughly 155ms per fork on this host, against fixtures that spawn many. I have NOT measured that the spawn count explains the 6-versus-5 gap and am not asserting it. THE CHEAP HALF IS THE SUMMARY LINE. ok:preflight:ran=68 skipped=31 reads as success; a Windows author sees ok and a green exit and reasonably concludes the guards passed. Saying (20 for deadline -- NOT run here; the gate runs them) would make the partial coverage visible without changing a single deadline. That is this row's own principle -- run, or NAME the capability you lack -- applied to a skip that currently names it in a line nobody reads rather than in the verdict.

@@ -139,7 +139,7 @@ if [ "${#candidates[@]}" -gt 0 ]; then
     # never examined — which is this guard's own failure class and the exact
     # shape of the 770-dyqr breach.
     printf '%s\n' "$caller_files" \
-        | xargs grep -nHE "((^|[;&|(])[[:space:]]*\"?(\\./)?(${alt}))|(\\\$\\([[:space:]]*\"?(\\./)?(${alt}))|(command:[[:space:]]*\"?(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*[[:space:]]+)*)(\\./)?(${alt}))" \
+        | xargs grep -nHE "((^|[;&|(])[[:space:]]*\"?(\\./)?(${alt}))|(\\\$\\([[:space:]]*\"?(\\./)?(${alt}))|(command:[[:space:]]*\"?(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*[[:space:]]+)*)(\\./)?(${alt}))|((test[[:space:]]+-x|\\[[[:space:]]+-x)[[:space:]]+\"?(\\./)?(${alt}))" \
             > "$_eb_tmp/hits" 2>/dev/null
 
     while IFS=$'\t' read -r path hit; do

@@ -702,8 +702,84 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
     // than the raw hasher: a blind probe must contribute NO identity rather than
     // a plausible-looking constant that would collide with every other blind
     // host.
+    // ORDER 1254-47xd. Derive the container lane from the container-vantage
+    // proof this document already carries, BEFORE the fingerprint is computed
+    // over it, so the identity covers the record as it will be read.
+    promote_proven_container_lanes(&mut doc);
     doc.hardware_fingerprint = hardware_fingerprint_checked(&doc).ok();
     doc
+}
+
+/// ORDER 1254-47xd. Give a device the container lane its OWN render node was
+/// proven to carry, and leave every other device's verdict alone.
+///
+/// THE DEFECT WAS A CONTRADICTION INSIDE ONE DOCUMENT. Measured on yoga: a
+/// render_nodes entry read `node renderD128, vantage container, proof placed`
+/// while the GPU at renderD128 read `lanes ["host-native"], unusable_reason
+/// container-lane-unverified`. The probe held the proof and the record did not
+/// reflect it, so capability-matrix intersected ["host-native"] with ollama's
+/// ["container"], got nothing, and printed present-unscheduled for a GPU that
+/// was serving a resident model at that moment. Every step downstream was
+/// correct; only this one was missing.
+///
+/// WHY IT LIVES HERE AND NOT IN `amd_gpu_disposition`. That function is
+/// host-vantage — rocm_gfx, kfd and a sysfs render node — and order 793-zumy
+/// REFUSED to claim the container lane from those inputs after measuring a host
+/// where all three were true and the container had neither the device nodes nor
+/// a ROCm backend. That refusal is correct and is untouched. `run_probe` is the
+/// first place the container-vantage evidence and the device records are both
+/// in scope, so the lane is derived FROM PROOF here rather than guessed there.
+///
+/// KEYED PER DEVICE ON ITS OWN NODE, never on "a GPU exists and some node was
+/// proven". A device's `device_node` is set from `drm_render_node_for(pci_addr)`
+/// — the render node of the very PCI address that named it — so matching it to
+/// `DrmRenderNode::node` is the same identity relation the record was built
+/// from. On a host with two GPUs and one proven node, the unproven one keeps its
+/// unverified reason; promoting it would route work to a device nobody reached.
+///
+/// `Reachable` IS THE BAR, NOT `Placed`, and the reason is a flap rather than a
+/// preference: on yoga the same evening the field escalated reachable -> placed
+/// between two runs with NO host change, so a rule keyed on the literal `Placed`
+/// would grant and withdraw the lane as a model happened to be resident. Both
+/// rungs are container-vantage evidence that the namespace reaches the device,
+/// which is what the lane asserts. `Enumerated` is not — it says the hardware
+/// exists and nothing about any lane — so it is excluded.
+///
+/// ABSENCE OF PROOF IS NOT PROOF OF REACH. A device with no matching
+/// container-vantage node is left exactly as the disposition functions wrote it,
+/// reason and all. This function only ever ADDS a lane; it never removes
+/// `host-native` (that question is 1254-47xd's named unscoreable) and never
+/// promotes on host-vantage evidence.
+fn promote_proven_container_lanes(doc: &mut CapabilityDocument) {
+    for device in &mut doc.devices {
+        // The record names its node as a path; the render node names itself as
+        // a basename. Compare the basename so "/dev/dri/renderD128" and
+        // "renderD128" are the same node rather than two strings.
+        let Some(node_path) = device.device_node.as_deref() else {
+            continue;
+        };
+        let node_name = node_path.rsplit('/').next().unwrap_or(node_path);
+
+        let proven_here = doc.render_nodes.iter().any(|n| {
+            n.node == node_name && n.vantage == Vantage::Container && n.proof >= Proof::Reachable
+        });
+        if !proven_here {
+            continue;
+        }
+
+        if !device.lanes.iter().any(|l| l == "container") {
+            // Ahead of host-native so the lane a container can actually use
+            // reads first; order within the vec is not semantic.
+            device.lanes.insert(0, "container".to_string());
+        }
+        // The reason named exactly this gap. Leaving it beside a container lane
+        // would be a second contradiction in the same record — and a reader who
+        // greps the reason would still find the host "unverified" after it was
+        // verified. Any OTHER reason is left alone: it is not ours to answer.
+        if device.unusable_reason.as_deref() == Some("container-lane-unverified") {
+            device.unusable_reason = None;
+        }
+    }
 }
 
 /// Order 852-dk9z. The identity of the probe CODE, not of the host.
@@ -5843,6 +5919,156 @@ mod tests {
     }
 
     /// Build a document with exactly the devices a case needs.
+    /// ORDER 1254-47xd. Build the exact contradiction yoga measured: a render
+    /// node proven from inside a container, beside the GPU whose node it is,
+    /// still recorded as having no container lane.
+    fn node(name: &str, vantage: super::Vantage, proof: super::Proof) -> super::DrmRenderNode {
+        super::DrmRenderNode {
+            node: name.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage,
+            proof,
+        }
+    }
+
+    fn gpu_at(node_path: &str) -> DeviceRecord {
+        let mut d = device(
+            "gpu",
+            "Krackan [Radeon 840M / 860M Graphics]",
+            &["host-native"],
+            Some("container-lane-unverified"),
+        );
+        d.device_node = Some(node_path.to_string());
+        d
+    }
+
+    /// EXIT CRITERION 1. Pre-fix this failed on yoga with `proof=placed`
+    /// sitting beside `lanes ["host-native"]` in the SAME document.
+    #[test]
+    fn a_proven_container_node_reaches_the_device_record() {
+        let mut doc = doc_with(vec![gpu_at("/dev/dri/renderD128")]);
+        doc.render_nodes = vec![node(
+            "renderD128",
+            super::Vantage::Container,
+            super::Proof::Placed,
+        )];
+
+        super::promote_proven_container_lanes(&mut doc);
+
+        let gpu = &doc.devices[0];
+        assert!(
+            gpu.lanes.iter().any(|l| l == "container"),
+            "a container-vantage placement on this device's own node must reach its lanes: {:?}",
+            gpu.lanes
+        );
+        assert_eq!(
+            gpu.unusable_reason, None,
+            "the reason named exactly this gap; leaving it beside a container lane is a second \
+             contradiction in the same record"
+        );
+        assert!(
+            gpu.lanes.iter().any(|l| l == "host-native"),
+            "promotion ADDS a lane and never removes host-native (this row's named unscoreable)"
+        );
+    }
+
+    /// EXIT CRITERION 3, THE NEGATIVE CONTROL. Absence of proof is not proof of
+    /// reach; promoting an unproven lane is the same defect pointed the other
+    /// way and would route work to a host that cannot run it.
+    #[test]
+    fn an_unproven_container_lane_stays_unproven() {
+        // Host vantage is the exact evidence 793-zumy refused to promote on.
+        let mut doc = doc_with(vec![gpu_at("/dev/dri/renderD128")]);
+        doc.render_nodes = vec![node(
+            "renderD128",
+            super::Vantage::Host,
+            super::Proof::Placed,
+        )];
+        super::promote_proven_container_lanes(&mut doc);
+        assert!(
+            !doc.devices[0].lanes.iter().any(|l| l == "container"),
+            "host-vantage evidence cannot support a container-lane claim"
+        );
+        assert_eq!(
+            doc.devices[0].unusable_reason.as_deref(),
+            Some("container-lane-unverified"),
+            "an unpromoted device keeps the reason the disposition wrote"
+        );
+
+        // No node at all: the same answer, for the same reason.
+        let mut doc = doc_with(vec![gpu_at("/dev/dri/renderD128")]);
+        super::promote_proven_container_lanes(&mut doc);
+        assert!(!doc.devices[0].lanes.iter().any(|l| l == "container"));
+
+        // ANOTHER DEVICE'S PROVEN NODE IS NOT THIS DEVICE'S PROOF. Keying on
+        // "a GPU exists and some node was proven" would promote this one.
+        let mut doc = doc_with(vec![gpu_at("/dev/dri/renderD129")]);
+        doc.render_nodes = vec![node(
+            "renderD128",
+            super::Vantage::Container,
+            super::Proof::Placed,
+        )];
+        super::promote_proven_container_lanes(&mut doc);
+        assert!(
+            !doc.devices[0].lanes.iter().any(|l| l == "container"),
+            "the proof belongs to renderD128; renderD129 was never reached"
+        );
+    }
+
+    /// EXIT CRITERION 6. The vocabulary is honoured rather than collapsed, and
+    /// the bar is stated: `Reachable` promotes. On yoga the field escalated
+    /// reachable -> placed between two runs with NO host change, so a rule keyed
+    /// on the literal `Placed` would grant and withdraw the lane as a model
+    /// happened to be resident.
+    #[test]
+    fn reachable_promotes_and_enumerated_does_not() {
+        for proof in [super::Proof::Reachable, super::Proof::Placed] {
+            let mut doc = doc_with(vec![gpu_at("/dev/dri/renderD128")]);
+            doc.render_nodes = vec![node("renderD128", super::Vantage::Container, proof)];
+            super::promote_proven_container_lanes(&mut doc);
+            assert!(
+                doc.devices[0].lanes.iter().any(|l| l == "container"),
+                "{proof:?} from inside a container is evidence the namespace reaches the device"
+            );
+        }
+
+        // `Enumerated` says the hardware exists and NOTHING about any lane.
+        let mut doc = doc_with(vec![gpu_at("/dev/dri/renderD128")]);
+        doc.render_nodes = vec![node(
+            "renderD128",
+            super::Vantage::Container,
+            super::Proof::Enumerated,
+        )];
+        super::promote_proven_container_lanes(&mut doc);
+        assert!(
+            !doc.devices[0].lanes.iter().any(|l| l == "container"),
+            "enumeration is not reach"
+        );
+    }
+
+    /// A DEVICE WITH A DIFFERENT COMPLAINT KEEPS IT. The promotion answers one
+    /// reason and must not clear a reason it did not address — a device that is
+    /// container-reachable and has no engine is still engine-missing.
+    #[test]
+    fn promotion_clears_only_the_reason_it_answers() {
+        let mut d = gpu_at("/dev/dri/renderD128");
+        d.unusable_reason = Some("engine-missing".to_string());
+        let mut doc = doc_with(vec![d]);
+        doc.render_nodes = vec![node(
+            "renderD128",
+            super::Vantage::Container,
+            super::Proof::Placed,
+        )];
+        super::promote_proven_container_lanes(&mut doc);
+        assert_eq!(
+            doc.devices[0].unusable_reason.as_deref(),
+            Some("engine-missing"),
+            "a reason this function did not answer is not ours to clear"
+        );
+    }
+
     fn doc_with(devices: Vec<DeviceRecord>) -> CapabilityDocument {
         CapabilityDocument {
             schema_version: SCHEMA_VERSION,
