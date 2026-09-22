@@ -638,18 +638,42 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     _pf_tmp="$(mktemp "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_tmp=""
     [ -n "$_pf_tmp" ] && trap 'rm -f "$_pf_tmp"' EXIT
     _pf_wall0=$SECONDS
-    _pf_ran=0; _pf_skipped=0; _pf_failed=0
+    # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
+    # that DECLARED its own skip with a guard the runner never got an answer
+    # from, and the summary then vouched for both with `ok:`. Measured on
+    # yolanda-windows 2026-09-22: ok:preflight:ran=68 skipped=31 wall=241s,
+    # exit 0 — and TWENTY of those 31 were guards cut off by the 5s deadline,
+    # each missing it by one or two seconds. A Windows author reading `ok:` and
+    # a zero exit reasonably concluded the guards had passed. About a third of
+    # the door had not run.
+    #
+    #   _pf_ran         executed and gave a verdict
+    #   _pf_declskip    RAN and declined, naming its own reason (skip:not-darwin,
+    #                   or a precondition this door states) — the guard's own
+    #                   considered statement, and not a gap (965-sxec)
+    #   _pf_deadline_n  started and was CUT OFF — not run; the gate runs it later
+    #   _pf_cantrun     the runner could not start it at all (no setsid, no disk,
+    #                   file absent). Nothing was learned about the tree.
+    #   _pf_failed      RAN and refused the tree
+    #
+    # The distinction that matters to a reader is the middle three: only
+    # _pf_declskip is a guard saying something. The other two are the door
+    # failing to obtain an answer, and a summary that hides them behind `ok:`
+    # is this row own defect.
+    _pf_ran=0; _pf_declskip=0; _pf_deadline_n=0; _pf_cantrun=0; _pf_failed=0
+    _pf_total=0
 
     while IFS= read -r _pf_path; do
         [ -n "$_pf_path" ] || continue
         _pf_base="${_pf_path##*/}"
+        _pf_total=$((_pf_total + 1))
 
         _pf_pre="$(_preflight_preconditions | awk -F'|' -v s="$_pf_base" '$1 == s { print $2 "|" $3; exit }')"
         if [ -n "$_pf_pre" ]; then
             _pf_kind="${_pf_pre%%|*}"; _pf_why="${_pf_pre#*|}"
             if [ "$_pf_kind" != "policy-binary" ]; then
                 echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_declskip=$((_pf_declskip + 1))
                 continue
             fi
             _pf_bin=""
@@ -659,13 +683,13 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             fi
             if [ -z "$_pf_bin" ]; then
                 echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_declskip=$((_pf_declskip + 1))
                 continue
             fi
         fi
         if [ ! -f "$SCRIPT_DIR/$_pf_path" ]; then
-            echo "skip:preflight:${_pf_base%.sh}:absent"
-            _pf_skipped=$((_pf_skipped + 1))
+            echo "could-not-run:preflight:${_pf_base%.sh}:absent — the file is not in this checkout, so nothing was learned about the tree"
+            _pf_cantrun=$((_pf_cantrun + 1))
             continue
         fi
 
@@ -702,10 +726,20 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 # prints `skip:not-darwin …` and exits non-zero, and this door
                 # called it `refused` — 1309-fhxb's shape inside the fix for 1305.
                 grep -E '^skip:' "$_pf_tmp" | head -2
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_declskip=$((_pf_declskip + 1))
             elif [ "$_pf_rc" -eq 124 ]; then
                 echo "skip:preflight:${_pf_base%.sh}:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_deadline_n=$((_pf_deadline_n + 1))
+            elif [ "$_pf_rc" -eq 127 ] || grep -qE '(^|: )(exec: )?[A-Za-z0-9_.-]+: (not found|command not found)$' "$_pf_tmp"; then
+                # THE RUNNER COULD NOT START IT. A missing interpreter or helper
+                # is not the guard refusing the tree, and booking it as a refusal
+                # is what made macOS print 110 `refused:` lines naming 110 guards
+                # when the thing that failed was one absent binary (macneo,
+                # 2026-09-22: exec: setsid: not found, ran=0, failed=110).
+                # The guard is not at fault and the tree was never examined.
+                _pf_cantrun=$((_pf_cantrun + 1))
+                sed 's/^/  /' "$_pf_tmp" >&2
+                echo "could-not-run:preflight:${_pf_base%.sh}:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
             else
                 _pf_failed=$((_pf_failed + 1))
                 cat "$_pf_tmp" >&2
@@ -716,11 +750,42 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
 $(_preflight_roster | sort -u)
 PFEOF
 
-    if [ "$_pf_failed" -gt 0 ]; then
-        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed wall=$(( SECONDS - _pf_wall0 ))s" >&2
+    # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
+    # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured
+    # the same defect as failed=108 and failed=110 within minutes of each other
+    # on 2026-09-22. So the accounting arm asserts that the categories add up to
+    # the roster, which is true on every host, rather than any number, which is
+    # true on none of them for long.
+    _pf_wall=$(( SECONDS - _pf_wall0 ))
+    _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n could-not-run=$_pf_cantrun refused=$_pf_failed"
+    _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_cantrun + _pf_failed ))
+    if [ "$_pf_sum" -ne "$_pf_total" ]; then
+        # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
+        # miscount here would hide exactly what this row exists to surface.
+        echo "refused:preflight:accounting-mismatch: $_pf_counts sum=$_pf_sum roster=$_pf_total — the door cannot account for every guard it enumerated, so no verdict it prints can be trusted" >&2
         exit 1
     fi
-    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped wall=$(( SECONDS - _pf_wall0 ))s"
+
+    # NOT VOUCHED FOR: a guard cut off by the deadline and a guard the runner
+    # could not start are both guards that did not examine this tree. A
+    # DECLARED skip is not in this number — that one ran and said so.
+    _pf_unanswered=$(( _pf_deadline_n + _pf_cantrun ))
+
+    if [ "$_pf_failed" -gt 0 ]; then
+        echo "refused:preflight:$_pf_counts sum=$_pf_sum wall=${_pf_wall}s" >&2
+        exit 1
+    fi
+    if [ "$_pf_unanswered" -gt 0 ]; then
+        # DELIBERATELY NOT `ok:`. The old line said ok: here and exited 0, and a
+        # reader who saw both concluded the guards had passed — on Windows that
+        # was 68 of 99 with twenty cut off one or two seconds past the budget.
+        # The exit stays 0 because nothing REFUSED; the token changes because
+        # nothing vouched either.
+        echo "partial:preflight:$_pf_counts sum=$_pf_sum wall=${_pf_wall}s"
+        echo "partial:preflight: ${_pf_unanswered} guard(s) did not examine this tree — this run does not vouch for them; the gate still runs them" >&2
+        exit 0
+    fi
+    echo "ok:preflight:$_pf_counts sum=$_pf_sum wall=${_pf_wall}s"
     exit 0
 fi
 
