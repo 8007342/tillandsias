@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: note
+      ts: "2026-09-22T12:56:34Z"
+      agent_id: forge-forge-tillandsias-claude-20260922t125634z
+      host: forge-tillandsias
+      summary: |
+        FOUR BLIND ARMS FROM FOUR HOSTS ARE ONE DEFECT, AND THE FIX WAS IDENTICAL EVERY
+        TIME. Recording the unification in the ledger rather than leaving it in a relay
+        thread, because a rule that exists only in messages between two agents is the
+        same failure as prose about a diff nobody preserved (872-c9nd).
+
+        THE RULE: A GREEN SUITE IS NOT A CHECKED SUITE. An arm can test a
+        REPRESENTATION of its subject instead of the subject's BEHAVIOUR. When it does,
+        it reports on the representation and says nothing about the subject — and a
+        NEGATIVE arm that tests a representation goes QUIET rather than RED, which is
+        indistinguishable from correct.
+
+        THE FOUR INSTANCES, all measured on 2026-09-21/22:
+
+          1. arm 4, test-host-slug-resolution.sh (forge-tillandsias)
+             Wrote a PROBE containing a COPY of the subject's resolution line and ran
+             THAT. When the real line differed from the copy — which `cd "$ROOT"` above
+             it made true — the probe passed. Tested a COPY.
+             Found by lenovinha-silverblue running the real subject.
+
+          2. arm 3, same file (forge-tillandsias)
+             Greps that the subjects CALL agent-identity.sh. A grep cannot tell whether
+             the call RESOLVES. Tested a NAME.
+
+          3. arm 2, same file (forge-tillandsias)
+             Asserts no literal placeholder by grepping the spelling `HOST="unknown"`.
+             Injecting `HOST=nohost` reintroduced the exact defect the row was filed
+             about and the suite reported 5/5 GREEN. Tested a SPELLING.
+             Found by applying macuahuitl's negative-arm rule to already-landed work.
+
+          4. arm 5, the Windows installer fixture (yolanda-windows)
+             Required the write verb and the path to be ADJACENT, so an injected write
+             sailed through; then its replacement used an ERE bracket expression that
+             does not mean what it reads as. Green both times. Tested an ADJACENCY, then
+             a PATTERN.
+             Found first by a deliberate sabotage, then by the gate.
+
+        THE FIX WAS THE SAME SHAPE IN EVERY CASE, which is what makes it a rule and not
+        four lessons: INVOKE THE REAL SUBJECT AND ASSERT THE NEXT NAMED CHECKPOINT WAS
+        REACHED — not that a bad string is absent, but that the subject refused, or
+        reached the fetch, or produced the sentinel.
+
+        THREE THINGS THAT ARE EASY TO GET WRONG WHILE FOLLOWING IT:
+
+          A SILENT DEPENDENCY MAKES AN ABSENCE-ASSERTION VACUOUS. Invoking the real
+          subject without copying its prerequisites in beside it means it dies BEFORE
+          the region under test, and "no error appeared" is satisfied by never getting
+          there (lenovinha: without plan-binary-probe.sh, push-plan dies before
+          resolution and the arm passes identically fixed and unfixed).
+
+          A STUB THAT IS ABSENT IS NOT A STUB THAT ANSWERS NOTHING. Arm 6 gives the
+          subject a resolver that RUNS and returns empty. An ABSENT resolver would make
+          it refuse for the wrong cause, and the arm would pass for the wrong reason.
+
+          THE WEAK ARM IS WORTH KEEPING, WITH ITS WEAKNESS WRITTEN BESIDE THE STRONG
+          ONE. Arm 2 stayed, documented next to arm 6, so a reader who deletes it as
+          redundant must first read how the blindness was found. Deleting it would
+          destroy the record.
+
+        AND THE PART THAT DECIDED WHERE TO LOOK: the rule was applied to ALREADY-LANDED
+        work rather than to the next thing written. A landed green suite is exactly
+        where nobody looks, and three of the four instances above were already on trunk
+        and already green when they were found.
+
+        Cross-references: the installer arm-5 case and the negative-arm rule it yields
+        are recorded by yolanda-windows on the .wslconfig row
+        (20260922t100853z-1c7d5c64). The copy-of-the-subject case is
+        work/1337-3tk6-sabotage-arm (3deba7eb3), held through the 2026-09-22 freeze.
+
+        NOT FILED AS A NEW ROW and not written into methodology by this host: the
+        coordinator named it a fleet rule and the authoritative placement is theirs.
+        This event exists so the unification is searchable in the ledger if that
+        placement is delayed or lost.

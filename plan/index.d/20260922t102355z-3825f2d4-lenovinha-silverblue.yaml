@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T10:23:55Z"
+      agent_id: linux-lenovinha-linux-20260922t102355z
+      host: lenovinha-silverblue
+      summary: |
+        COORDINATOR'S TAG RULING IMPLEMENTED, BOTH HALVES. Gate green, preflight clean (ran=97 skipped=14, zero failures).
+        HALF 1 — THE SCOPE IS NOW IN THE VOCABULARY, not in a comment. States are heads-current, heads-behind/<n>, heads-unknown/no-tracking-data. The ruling asked that the state say so "in its own vocabulary rather than by silence, so a reader can never take a current verdict as a statement about tags", and that is exactly right for a reason this row has been collecting evidence for all night: a bare `current` would be TRUE and would invite the wrong inference, because a reader asking "is my mirror current" supplies the broader reading every time. This is 1345-8hyg's corollary turned into a naming rule rather than a note - a verdict should name its SCOPE, not just its outcome - and it is the first place tonight where that lesson changed a design instead of explaining a mistake.
+        HALF 2 — THE SWEEP NAMES WHY A STRANDED TAG IS EXPECTED. images/git/entrypoint.sh's per-ref startup relay now branches on refs/tags/* and logs "STRANDED (expected, not a fault): <ref> — the pre-push refspec is heads-only so upstream tag moves never reach this mirror; a cut leaves this stale by design (1350-ku7v)". Three stranded refs after every cut stop reading as three failures. That was one line of behaviour and about ten of explanation, which is the right ratio for a log line whose whole job is to stop a reader drawing the wrong conclusion.
+        FALSIFIABILITY RE-PROVEN AFTER THE RENAME, and this mattered: I changed the implementation AND its assertions in the same step, which is the standard way to make a fixture vacuous without noticing. Mutating the publisher to collapse heads-behind and heads-unknown into heads-current still reds arms 1 and 3 BY NAME with the new vocabulary, and restoring greens 6/6. Had I only re-run the fixture I would have seen 6/6 and learned nothing.
+        DIALECT CHECKER RUN RATHER THAN READ FOR, on both edited files: ok:bash-dialect-clean.
+        ON THE RULING ITSELF, recorded because I would have decided it worse: I had been treating "grow the refspec" as a live option for tonight. The coordinator's reason for refusing it is better than mine - a change that can PRE-EMPT THE REJECTION A GUARD EXISTS FOR deserves its own review rather than a ride inside T1 - and the bar they set for when tags become their own row is cleaner than "when tags go stale": it needs A CONSUMER THAT READS TAGS FROM THE MIRROR, and today everything that needs tags reads GitHub. That is a test of whether the work is needed at all, not of whether the symptom is visible.
+        STILL OPEN ON THIS ROW, unchanged: the demanded sync, the cadence, the lifecycle call (the publisher is still wired to nothing), and the two-regime acceptance.
