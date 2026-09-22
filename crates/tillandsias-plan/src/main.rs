@@ -4798,6 +4798,29 @@ fn main() {
                 if let Some(ram) = entry.document["host"]["system_ram_gb"].as_f64() {
                     println!("  machine_ram_gb: {ram:.2}");
                 }
+                // ORDER 1254-47xd, EXIT CRITERION 5. Say which of the two
+                // readings above is an INPUT and which is an OUTPUT, because
+                // they print together and nothing marked the difference.
+                //
+                // MEASURED COST: on 2026-09-18 one host read `derived_tier:
+                // gpu-rocm` as "a ROCm lane exists" and another read
+                // `present-unscheduled` as "no GPU lane exists", from these same
+                // two lines, and BOTH were acting reasonably. `derived_tier` is
+                // what dev-inference-ensure.sh BRANCHES ON to pass /dev/kfd and
+                // /dev/dri — it describes what the wiring was told to do.
+                // `schedulable` and `present-unscheduled` are PROBED: they
+                // describe what was found afterwards. A tier that names an
+                // accelerator is not evidence the accelerator was reached.
+                //
+                // Printed as its own line, and the existing keys and values are
+                // untouched: the fleet-heartbeat matcher reads whatever
+                // vocabulary this command publishes, so renaming a key to carry
+                // the distinction would move the defect into that reader.
+                println!(
+                    "  reading: derived_tier above is a ROUTING INPUT (what the wiring was told \
+                     to do); schedulable/present-unscheduled below are PROBED OUTPUTS (what was \
+                     found) — a tier naming an accelerator is not evidence it was reached"
+                );
                 let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
                 if triples.is_empty() {
                     println!("  schedulable: none");
