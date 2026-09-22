@@ -92,11 +92,35 @@ trap 'rm -f "$TMP"' EXIT
 # verdict below is computed from its output.
 TILLANDSIAS_SIGPIPE_BASE="$EMPTY" bash "$DECIDER" >"$TMP" 2>&1 || true
 
-sites="$(grep -c '^REFUSED:' "$TMP" 2>/dev/null || echo 0)"
-files="$(grep '^REFUSED:' "$TMP" 2>/dev/null | awk '{print $2}' | sort -u | wc -l | tr -d ' ')"
+# ── EXCLUDE THIS CENSUS'S OWN FIXTURE. ─────────────────────────────────────
+#
+# scripts/test-census-sigpipe-verdict-pipelines.sh contains, as DATA, a
+# deliberately-bad pipeline that the decider must flag — that is the positive
+# control. The decider reads lines textually and does not know a heredoc from
+# code, so it counts the fixture's CASE 1 as a real site. Measured: the
+# unfiltered sweep answered 489 sites in 148 files, and the 148th file was this
+# census's own fixture.
+#
+# Counting your own test data as findings is the self-detection failure this
+# fleet has hit repeatedly in one day — a pgrep pattern matching its own
+# watcher, a mutation replacing the literal an assert searched for. An
+# instrument whose number includes its own probe is measuring itself.
+#
+# The census is excluded too, for the same reason its header quotes the shape it
+# looks for. Both exclusions are NAMED rather than pattern-matched away, so a
+# reader can see exactly what is not counted; a silent filter would be the
+# harder defect to find.
+_filter_self() {
+    grep '^REFUSED:' "$TMP" 2>/dev/null \
+        | grep -v 'scripts/test-census-sigpipe-verdict-pipelines\.sh' \
+        | grep -v 'scripts/census-sigpipe-verdict-pipelines\.sh'
+}
+
+sites="$(_filter_self | wc -l | tr -d ' ')"
+files="$(_filter_self | awk '{print $2}' | sort -u | wc -l | tr -d ' ')"
 
 if [ "$list" -eq 1 ] && [ "$sites" -gt 0 ]; then
-    grep '^REFUSED:' "$TMP" | awk '{print $2}' | sort | uniq -c | sort -rn
+    _filter_self | awk '{print $2}' | sort | uniq -c | sort -rn
 fi
 
 echo "ok:sigpipe-verdict-standing:$sites sites in $files files"
