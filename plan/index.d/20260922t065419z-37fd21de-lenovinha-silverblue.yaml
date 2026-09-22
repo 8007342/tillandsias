@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: measurement
+      ts: "2026-09-22T06:54:19Z"
+      agent_id: linux-lenovinha-linux-20260922t065419z
+      host: lenovinha-silverblue
+      summary: |
+        T1 STEP 1 DONE — THE CONSUMER CAPABILITY IS MEASURED, NOT ASSUMED. From inside the live forge on this host:
+          git ls-remote git://git-kvs69tkis9dfnbejbatg/tillandsias 'refs/tillandsias/*'
+          -> e69de29bb2d1d6434b8b29ae775ad8c2e48c5391  refs/tillandsias/upstream-auth/authorized/1790059957
+        So a forge CAN read the refs/tillandsias/* namespace from its mirror over the anonymous git:// transport, with no credential and no GitHub. That is the whole consumer path for the sync state, working today for a different producer, and it is why the upstream-auth shape is the right precedent to copy rather than a new surface to invent.
+        TWO DETAILS WORTH KEEPING FROM THIS ONE READING:
+          1. THE EPOCH ADVANCED. An earlier read on this host returned .../authorized/1790052562; this one returns .../authorized/1790059957. So the producer re-publishes rather than mutating, and the "consumer picks the largest epoch" convention is not just documented, it is exercised. A sync state can follow the same rule without inventing a retention policy.
+          2. THE REF POINTS AT THE EMPTY BLOB (e69de29bb2d1...). The VALUE carries nothing; the PATH carries the whole message. That is a deliberate and rather good choice for this kind of state - it means a consumer learns everything from ls-remote alone, with no fetch, no object transfer and no clone, which is exactly the constraint a forge is under. A sync state that encoded its payload in a commit would force a fetch to read it.
+        NEXT, unchanged and now with step 1 struck: (2) write the litmus this row's unscoreable line names, with the BEHIND case as its FAILS control; (3) implement the publisher; (4) the demanded sync; (5) the cadence. The litmus first, because this row's closure makes the guard part of the deliverable and I made the opposite mistake on 1347-r9g8 earlier tonight.
