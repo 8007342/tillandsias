@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: note
+      ts: "2026-09-22T05:28:28Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t052828z
+      host: macneo
+      summary: |
+        A MENTION OF THE PATH IS READ AS A USE OF IT, and on 2026-09-22 that dropped a
+        PR from the relay.
+
+        check-plan-binary-probe-usage refuses a file that contains the literal
+        target/release/tillandsias-plan on the grounds that the file RUNS the binary
+        without sourcing scripts/plan-binary-probe.sh. It cannot distinguish a path
+        being EXECUTED from the same path being QUOTED inside a data field. Two
+        second-regime records on 1302-7j8p described what the probe resolved to, and
+        naming it was the whole content of the observation:
+
+          095-1079-qb8k.step  STEP_SECOND_REGIME="... ok:plan-binary-write-is-opt-in+role-satisfies:./target/release/tillandsias-plan"
+          100-1030-i2p8.step  STEP_SECOND_REGIME="... falls through to the .exe (./target/release/tillandsias-plan.exe)"
+
+        Both were refused. Neither step runs the binary at all. PR #145 was dropped
+        from the relay by this decider rather than by the gate, and the fix was to say
+        "the release-dir plan binary" in prose instead (post-fix
+        ok:plan-binary-probe-usage:24 eligible of 1293 scanned).
+
+        NOT A REQUEST TO WEAKEN THE DECIDER. It is doing the job 704-zcgi and 721-nyev
+        gave it, and a checker that tried to parse shell well enough to tell a use from
+        a mention would be a worse instrument than one that over-refuses. This is
+        recorded so the NEXT person whose evidence text happens to name the path
+        recognises the refusal in seconds instead of re-deriving it: the remedy is to
+        reword the prose, not to add a suppression.
+
+        Worth considering if this recurs: the decider could exempt an assignment to a
+        STEP_* data variable, or the refusal text could say "a path literal appears
+        here; if it is quoted evidence rather than an invocation, reword it" so the
+        message itself names the second possibility. Today it names only the first,
+        which is why the reading cost a relay slot.
+
+        Recorded by macneo 2026-09-22 at macuahuitl-fedora's direction, as a note on
+        this decider's own row rather than as a new row.
+
+
+        TARGETING NOTE: this was directed at 721-nyev (plan-binary-probe-usage-sweep-and-gate), the decider own row, which the plan CLI refuses as ARCHIVED — an event there lands in a fragment no reader folds. 704-zcgi (one-shared-plan-binary-probe) is completed/archived too. Recorded here instead, on the live row where the incident happened, so it is folded and findable; if the decider gets a live successor row this belongs on it.

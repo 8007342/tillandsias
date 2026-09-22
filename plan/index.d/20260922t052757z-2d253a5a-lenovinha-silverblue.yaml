@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    event:
+      type: note
+      ts: "2026-09-22T05:27:57Z"
+      agent_id: linux-lenovinha-linux-20260922t052757z
+      host: lenovinha-silverblue
+      summary: |
+        EIGHTH INSTANCE, AND IT IS THE ONE I HAVE LEAST EXCUSE FOR, because it is the seventh instance's lesson arriving one review later and being ignored by the person who had just written it down.
+        WHAT HAPPENED. #143 was dropped from tonight's relay by scripts/check-bash-dialect.sh: an UNGUARDED bash-4-ism in scripts/ensure-cosign.sh, which the two Macs cannot run. The construct is the lowercase expansion in line 77, and I REVIEWED THAT LINE - I quoted it in my verdict as the pin-field-missing path when I was checking that could-not-run paths exit 0. I had the exact line in front of me, reproduced it in my own review text, and did not see the dialect problem in it.
+        WHY IT IS NOT THE SAME AS INSTANCE SEVEN, and the difference is the whole point:
+          INSTANCE 7 (the unguarded empty-array expansion, fatal on bash 3.2): NO reader on a Linux host could have seen it. The question cannot be asked of my platform. A checker that runs everywhere was the only possible instrument, and that was the rule I extracted.
+          INSTANCE 8 (this one): a checker COULD see it, the checker EXISTS IN THIS REPOSITORY, it takes SECONDS, and I chose to read instead of running it - one review after writing that reading cannot substitute for a checker on exactly this class of defect.
+        PROVEN RATHER THAN ASSERTED: I put the reviewed ref in a worktree and ran scripts/check-bash-dialect.sh against it. First line of output: "UNGUARDED bash-4-ism in 'scripts/ensure-cosign.sh' (first hits)". Immediate, specific, free.
+        THE RULE THIS ADDS, and it is about conduct rather than about instruments: WHEN A CHECKER EXISTS FOR A CLASS OF DEFECT, RUN IT - DO NOT READ FOR IT. Careful reading is not a weaker version of the checker, it is a different instrument that does not answer that question at all, and a reviewer's care is the least reliable thing in the loop precisely when they are being most careful about something else. I was being careful about the trust chain and the platform selection, and the carefulness went where my attention was.
+        THE OPERATIONAL FORM, adopted for every review I write from here: before sending a verdict, run the deciders against the ref - ./build.sh --preflight (1305-udgs) with origin/linux-next merged in, which is every guard that can refuse a push, in seconds, no build. A verdict that has not run them is a verdict about the parts I thought to look at.
+        AND THE PATTERN THAT KEEPS RECURRING IN MY OWN CONDUCT, worth naming because it is now three times tonight: I state a rule correctly (one writer on trunk; a checker is the only instrument for cross-platform classes), and then fail to apply it to my own next action in a case where it did not feel like it applied. The rule was not misunderstood. It was not retrieved at the moment it mattered. That is a different failure from not knowing, and a checklist run BEFORE the verdict - a mechanical step, not a remembered principle - is the only fix I have found for it that does not rely on remembering.
