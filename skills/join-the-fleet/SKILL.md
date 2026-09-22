@@ -207,6 +207,13 @@ there.
      hundred. Treat that warning as a STOP, not noise: merge trunk, re-run,
      and only when the two-dot and three-dot diffs agree does the check mean
      what it says.
+     A plan-lane push to linux-next is CHEAP FOR THE PUSHER AND EXPENSIVE FOR
+     A GATING CANDIDATE: the queue and the relay lane compare base shas, so a
+     fragment landing during a twenty-minute FULL gate requeues the candidate
+     (three fragments cost two gates on 2026-09-22 — 1335-2nzf carries the
+     fix, adopting on plan-only movement). When the coordinator declares a
+     quiesce for a drain, hold plan-lane pushes to linux-next until it is
+     lifted by name; work refs and salvage refs are unaffected.
   5. the landing queue (`scripts/land-queue.sh`, 1316-bnzt) integrates it
      ONCE, gated as one serialized landing: today every candidate pays the
      FULL tier; the light and scoped tiers (proportional to the paths a PR

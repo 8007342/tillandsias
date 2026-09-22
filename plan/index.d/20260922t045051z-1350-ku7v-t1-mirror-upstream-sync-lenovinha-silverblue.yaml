@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    order: 1350-ku7v
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, forge, sync, fail-loud, cloud-only]
+    estimated_hours: 8
+    owned_files:
+      - images/git/relay-refs.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The sync-state
+      surface IS part of this deliverable, so naming a litmus here would pin a
+      test nothing defines yet — the mistake this host made on 1347-r9g8 four
+      hours ago, which the gate refused as declared-closure-unresolvable.
+      THE FILE TO WRITE, in the same commit as the feature:
+      openspec/litmus-tests/litmus-mirror-sync-state-readable.yaml
+      WHAT IT MUST ASSERT: (1) with the mirror deliberately behind upstream, the
+      published sync state says BEHIND and names the upstream sha it is behind
+      — the FAILS control is today's behaviour, where nothing is published and
+      the only signal is a push that has already been refused; (2) after a
+      demanded sync, the state says CURRENT and the same push succeeds;
+      (3) ABSENT-upstream is distinguishable from BEHIND-upstream, because
+      1338-tkfh is precisely that those two produce an identical fatal;
+      (4) the state is readable from INSIDE a forge, which is the consumer that
+      cannot reach GitHub to check for itself.
+      An arm taken while the mirror happens to be current cannot fail and is
+      not one of these.
+    title: |
+      T1 — the mirror syncs from upstream on demand and on a cadence, and publishes a sync state a forge or a host can read BEFORE spending a push on a stale mirror
+    context: |
+      THE MOTIVATING MEASUREMENT, taken on lenovinha 2026-09-22 04:2x-04:3xZ and
+      the reason this row is filed with a sharper claim than the design carries:
+      A BARE-METAL HOST WITH A HEALTHY MIRROR AND A VALID CERTIFICATE CANNOT
+      LAND A ONE-LINE PLAN FRAGMENT AGAINST A FAST WRITER, AND THE FAILURE NAMES
+      STALENESS RATHER THAN CONTENTION. Three attempts, each preceded by a
+      `git fetch` and one by a rebase onto the then-current head:
+        attempt 1  trunk 95f48988d  -> landed 8bd11f6d7
+        attempt 2  REJECT: stale old object ID does not match current ref
+                   (trunk had moved to 2ff7a0e27)
+        attempt 3  rebased onto 2ff7a0e27, REJECT again
+                   (trunk moved to bcd2d06e1 while the push was in flight)
+      The mirror's pre-push fetch closes the window IT can see; it does not
+      close the window between my fetch and the relay's. So every push races
+      upstream, and against an active writer the race is lost every time. The
+      commit was parked on a work ref rather than retried.
+      WHY THE ERROR TEXT MATTERS AS MUCH AS THE RACE: "stale old object ID"
+      sends the reader to diagnose their own staleness — I fetched, I rebased,
+      I re-minted a certificate — when the actual condition is that someone else
+      is writing. A failure naming the wrong cause is this fleet's recurring
+      expense (1337-3tk6 tonight, same shape).
+      THE RELATED ROW, and why this one is broader: 1338-tkfh is that a forge
+      reads a mirror rather than GitHub, so a sha that HAS landed upstream and
+      one that does not exist produce the identical fatal. Tonight's shape is
+      that the same blindness costs a BARE-METAL host with every credential in
+      order, which is a second consumer for the same missing surface.
+      SCOPE, from openspec/changes/cloud-only-project-lifecycle/tasks.md T1:
+      sync on demand (`tillandsias --sync <project>`, a tray action) AND on a
+      cadence, with a sync state a forge can read — behind-upstream versus
+      absent-upstream distinguishable. T5 (591-x7ws) and the forge acceptance
+      T7 both wait on this.
+      REGIME, stated because this host is atypical tonight: lenovinha's mirror
+      was REBUILT at 00:13Z after 1348-gkvi removed it, so it is younger than
+      the fleet's others. yoga's install-regime mirror is the intended second
+      regime for acceptance, exactly as the mirror lane itself was accepted on
+      two regimes rather than one.
+    next_action: |
+      Held by lenovinha-silverblue, routed explicitly by the coordinator.
+      1. Read the existing relay/sync path before designing: images/git/relay-refs.sh
+         already does a pre-push fetch, so the question is what it KNOWS and does
+         not publish, not what it fails to do.
+      2. Decide the state's shape and where it lives so a forge can read it
+         without GitHub — a ref under refs/tillandsias/ is the precedent
+         (upstream-auth already publishes there).
+      3. Write the litmus named above in the same commit as the feature.
+      4. Acceptance on two regimes: this host (mirror rebuilt 00:13Z) and yoga's
+         install regime.
+      Do NOT start from the assumption that the mirror cannot sync; it fetches
+      upstream on every push already. The missing thing is a READABLE STATE and
+      a demanded sync, not the sync itself.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-22 on the coordinator's explicit
+      routing, in the shape yoga used for T4 (1350-8hmy). Cites
+      openspec/changes/cloud-only-project-lifecycle/tasks.md T1. Related:
+      1338-tkfh (the forge half of the same blindness), 1348-gkvi (why this
+      host's mirror is young), 1313-prin (the lane whose pushes this governs).

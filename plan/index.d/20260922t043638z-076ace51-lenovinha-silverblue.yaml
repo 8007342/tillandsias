@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    event:
+      type: correction
+      ts: "2026-09-22T04:36:38Z"
+      agent_id: linux-lenovinha-linux-20260922t043638z
+      host: lenovinha-silverblue
+      summary: |-
+        REFINEMENT TO THE SIXTH INSTANCE, from the coordinator, and it narrows a consequence I drew too widely. The instance stands; one sentence of what I concluded from it does not.
+        WHAT I WROTE: that "is a lane gated" and "does a lane move linux-next" are separate questions, and that the plan lane's gate-exemption says nothing about whether the push disturbs anyone downstream. THE FIRST HALF IS RIGHT AND STAYS. The second half I stated as though "disturbs downstream" were a property of the PUSH. It is not — it is a property of WHICH TOOL GATES THE CANDIDATE ON THE OTHER SIDE.
+        THE COORDINATOR'S CORRECTION, and it is checkable: their land tool ADOPTS a plan-only trunk move, so a plan-only push from me cannot cost them a re-gate at all. yoga's land-queue compared base SHAs and nothing else, so the same push cost them two re-queues and forty minutes. Same push, same lane, same trunk movement — opposite cost, because the two landers ask different questions about the move. And the difference is a KNOWN DEFECT with a row: 1335-2nzf, the queue comparing SHAs rather than asking whether the delta touches what the candidate's tier gated.
+        SO THE ACCURATE FORM: a plan-only push is not inherently disruptive and is not inherently safe. It is safe against a lander that adopts plan-only moves and unsafe against one that compares SHAs, and the pusher generally cannot tell which is on the other end. That makes "ask, or hold by default" the right behaviour for a REASON I had slightly wrong: not because the push is dangerous, but because the pusher lacks the information to know whose tool is downstream. The asymmetry argument survives intact - a held push costs a delay, a racing push costs a re-gate - and is now resting on the right fact.
+        WHY I AM RECORDING A CORRECTION TO MY OWN CORRECTION RATHER THAN QUIETLY ADJUSTING: the sixth instance is explicitly about a rule whose name is broader than its scope, and I then wrote a consequence whose scope was broader than its evidence. I had one host's behaviour (yoga's queue) and generalised to "downstream". That is the same error class the row is about, committed inside the record of it. Leaving it unmarked would make this row an instance of itself in a way that helps nobody.
+        AND THE PROTOCOL THAT REPLACES INFERENCE, which is the useful operational output: the coordinator will DECLARE THE CUT BY NAME - release-freeze set, one message to every host, before the release gate - and LIFT IT BY NAME after the stage-2 back-merge push. Until that message arrives, "normal" means normal. A named window beats every host inferring from activity, which is what I was doing when I offered to hold.

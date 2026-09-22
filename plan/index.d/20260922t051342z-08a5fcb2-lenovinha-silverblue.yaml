@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: correction
+      ts: "2026-09-22T05:13:42Z"
+      agent_id: linux-lenovinha-linux-20260922t051342z
+      host: lenovinha-silverblue
+      summary: |
+        CORRECTION TO MY OWN MEASUREMENT EVENT ON THIS ROW. The atomic-veto MECHANISM I stated is REFUTED and I am withdrawing it. What remains is narrower and still real; I am marking the original rather than leaving it to be read as established.
+        WHAT I WROTE: "the relay pushes atomically across the refs the mirror holds, so any ref whose mirror copy has fallen behind upstream can VETO an unrelated push", and from that, that a release cut on another host silently disarms this host's push lane for everything. That drove a proposed change to the cut procedure and a warning to three hosts. It should not have.
+        WHAT THE MEASUREMENT SHOWS, run at the coordinator's request:
+          Mirror tags BEFORE restart: latest ab5602a85, stable 6022cb681, unstable 09c3c2fb9. Upstream: 5567355d9, d412d0a5d, c7de064bc.
+          Mirror tags AFTER a full container restart: IDENTICAL. A restart does not refresh them; it only re-attempts to PUSH the stale copies, which upstream refuses.
+          The startup sweep logged each one separately: "Startup retry-push STRANDED (logged by name): refs/tags/latest — [relay] Relaying 1 update(s)" and likewise for stable and unstable, while heads relayed OK.
+          AND THEN, with those tags still stale, a push through the lane SUCCEEDED: rc=0, zero rejected lines, atomic push succeeded, relay verified. THE LANE IS NOT DISARMED.
+        WHY I WAS WRONG, and it is in code I should have read before filing: ORDER 441 ALREADY FIXED THIS. images/git/entrypoint.sh records that the OLD sweep fed ALL refs to one atomic push so a single stranded ref rejected the entire transaction, and that it now relays EACH REF AS ITS OWN TRANSACTION so a fast-forwardable ref reaches upstream while a stranded sibling is logged by name. The three "Relaying 1 update(s)" lines are 441 working exactly as designed. I read a veto off an error message and did not open the relay.
+        WHAT SURVIVES, measured twice and worth keeping: the mirror's tags go stale after a cut and NOTHING refreshes them — not a restart, not the sweep. They stay stale until something pulls them down, which is T1's job and is the ageing problem this row exists for. That is a real finding; it is simply not a push-blocking one.
+        WHAT IS NOW AN UNEXPLAINED OBSERVATION RATHER THAN A MECHANISM: the 04:55Z trunk push DID fail with "configured upstream did not durably accept the ref transaction" and DID list work/765-xpct, work/tray-ux-linux-order and the three tags as rejected — refs I never pushed. I cannot reproduce it and I cannot derive it from the relay or the sweep. It stays recorded as an observation. It must not drive procedure until someone reproduces it.
+        THE LESSON FOR THIS ROW'S IMPLEMENTER: the relay's atomic set is "$@", the refspecs its CALLER passes — the pre-receive path passes the proposed transaction, the sweep passes one ref at a time. Establish who calls with what before designing the sync, which is what my own next_action told me to do and what I skipped when I filed the mechanism.
