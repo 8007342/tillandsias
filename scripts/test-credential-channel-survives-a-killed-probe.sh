@@ -47,10 +47,36 @@ _verdict_lines() {
     grep -cE '^(ok|unverified|blocked|missing|unknown):[a-z0-9:-]+$' "$1" 2>/dev/null || echo 0
 }
 
+# BOUND PORTABLY OR SAY SO. `timeout` is GNU coreutils and is ABSENT on a stock
+# macOS; there it ships as `gtimeout` via brew, or not at all. A bare
+# `timeout 90` here is the exact shape 1302-7j8p's guard exists to stop: step
+# 416 pinned sha256sum under a restricted PATH, was green on its author's
+# regime, and refused a genuine artifact on macbookair. This fixture is a GATE
+# STEP, so it runs on every host, and a Linux-only bound would red the macOS
+# gate for a reason that has nothing to do with the credential guard.
+#
+# It is not caught by check-portability-idioms.sh, which scans sed -i and
+# friends but not `timeout` — verified, not assumed, so this comment is the only
+# thing standing between the next author and the same break.
+#
+# WHEN NEITHER EXISTS the arms that need a bound are SKIPPED BY NAME rather than
+# run unbounded. Arms 1 and 3 hang the probe DELIBERATELY; running them without
+# a bound does not degrade the measurement, it wedges the gate. A named skip is
+# could-not-run; an unbounded run is a hang reported as nothing.
+_BOUND=""
+if command -v timeout >/dev/null 2>&1; then _BOUND="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then _BOUND="gtimeout"
+fi
+
 _run_guard() {  # $1=bindir  -> stdout file $W/.out, rc in $W/.rc
     local bindir="$1"
-    PATH="$bindir:$PATH" \
-        timeout 90 bash "$GUARD" >"$W/.out" 2>"$W/.err"
+    if [ -n "$_BOUND" ]; then
+        PATH="$bindir:$PATH" \
+            "$_BOUND" 90 bash "$GUARD" >"$W/.out" 2>"$W/.err"
+    else
+        PATH="$bindir:$PATH" \
+            bash "$GUARD" >"$W/.out" 2>"$W/.err"
+    fi
     echo $? >"$W/.rc"
 }
 
@@ -61,6 +87,9 @@ echo "credential-channel survives a killed probe"
 # bounds this read (_ccc_timeout 5); if that bound is ever removed, this arm
 # hangs until the 90s outer timeout and fails on elapsed time.
 echo "arm 1 — a HANGING busctl must not hang the guard"
+if [ -z "$_BOUND" ]; then
+    echo "  skip:no-timeout-tool — this arm HANGS the probe on purpose and needs timeout(1)/gtimeout(1) to bound it; running it unbounded would wedge the gate, not measure it"
+else
 mkdir -p "$W/b1"
 printf '#!/usr/bin/env bash\nsleep 3600\n' > "$W/b1/busctl"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$W/b1/gh"
@@ -74,6 +103,7 @@ else
 fi
 n="$(_verdict_lines "$W/.out")"
 if [ "$n" -eq 1 ]; then ok "exactly one verdict line"; else bad "expected 1 verdict, got $n: $(cat "$W/.out")"; fi
+fi
 
 # ── ARM 2: the probe is KILLED mid-read. ────────────────────────────────────
 # Not a clean non-zero exit: killed by a signal, which is how the 1265-8qr6
@@ -106,7 +136,32 @@ if grep -qE '^missing:' "$W/.out"; then
 else
     ok "a dead probe did not report the credential as missing ($(cat "$W/.out" | tr -d '\n'))"
 fi
-if grep -qE '^unknown:secret-service-unprobed$' "$W/.out"; then
+# THE PRECISE STRING IS ASSERTED ONLY WHERE THE DISTINCTION IS OBSERVABLE, and
+# this is a real finding rather than a convenience — surfaced by running this
+# fixture on a PATH with no timeout(1)/gtimeout(1).
+#
+# The state reader classifies a probe as "never answered" from its exit status:
+# rc 124 (timeout killed it) or rc >= 128 (died on a signal). Both of those
+# require the probe to have actually RUN under a bounding tool. With no such
+# tool, `_ccc_timeout` refuses to run the probe at all (order 988: it will not
+# run one unbounded), so the SIGKILL never happens and its status never exists.
+# The reader then sees an ordinary non-zero, classifies not-serving, and answers
+# blocked:credential-unretrievable-no-keyring-service instead of
+# unknown:secret-service-unprobed.
+#
+# Both are refusals and neither evicts the fleet, so this is not a safety hole —
+# but it is the order's own distinction collapsing on a host that cannot bound a
+# probe, and it is worth stating rather than hiding behind a skip. Filed for
+# 1347-r9g8 rather than fixed here: teaching the reader to answer `unknown` when
+# it could not bound the probe is a guard change, and a guard change does not
+# belong in a fixture commit.
+#
+# So the PROPERTY is asserted everywhere (a dead probe never reports the
+# credential MISSING — the assertion above) and the exact string only where a
+# bounding tool makes the kill observable.
+if [ -z "$_BOUND" ]; then
+    echo "  skip:no-timeout-tool — a killed probe cannot be distinguished from an answered one without a bounding tool; the not-missing property above still held"
+elif grep -qE '^unknown:secret-service-unprobed$' "$W/.out"; then
     ok "it names the state precisely: unprobed, not absent"
 else
     bad "expected unknown:secret-service-unprobed, got: $(cat "$W/.out")"
@@ -116,6 +171,9 @@ fi
 # The 1189-2ra5 shape. With the store serving (busctl answers), the guard is
 # allowed to ask gh — and must still bound it.
 echo "arm 3 — a HANGING gh must not hang the guard"
+if [ -z "$_BOUND" ]; then
+    echo "  skip:no-timeout-tool — as arm 1: this arm hangs gh on purpose and needs a bounding tool"
+else
 mkdir -p "$W/b3"
 printf '#!/usr/bin/env bash\necho "NAME PID"\necho "org.freedesktop.secrets 1 gnome-keyring"\nexit 0\n' > "$W/b3/busctl"
 printf '#!/usr/bin/env bash\nsleep 3600\n' > "$W/b3/gh"
@@ -129,6 +187,7 @@ else
 fi
 n="$(_verdict_lines "$W/.out")"
 if [ "$n" -eq 1 ]; then ok "exactly one verdict line"; else bad "expected 1 verdict, got $n: $(cat "$W/.out")"; fi
+fi
 
 # ── ARM 4: THE SECOND-EMITTER CONTROL. ─────────────────────────────────────
 # Count EMITTING lines per verdict, then prove the count can move.

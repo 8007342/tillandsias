@@ -149,6 +149,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
   - litmus:added-test-is-referenced-shape
   - litmus:reset-flags-accepted
