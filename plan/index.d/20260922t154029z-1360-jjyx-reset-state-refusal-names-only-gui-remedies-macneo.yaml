@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: reset-state-refuses-correctly-when-a-tray-owns-the-vm-but-both-remedies-it-names-are-menu-bar-clicks-while-the-installer-launches-the-tray-so-an-unattended-run-meets-a-live-tray-by-construction-and-cannot-follow-either
+    order: 1360-jjyx
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [macos, fail-loud, agent-safety, smoke, diagnosis]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-macos-tray/src/reset_state.rs
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The assertion is
+      an arm on an existing fixture rather than a new file, and naming it before
+      it is written would declare a test nothing defines.
+      THE ARM TO ADD, in the same commit as the fix, to
+      scripts/test-reset-state-contract.sh:
+      the live-tray refusal text must name a NON-INTERACTIVE way to quit the
+      tray. Match the remedy, not the mention: assert the message carries an
+      executable-name matcher a script can run, and that ARM2's
+      composed-at-runtime technique is used so the arm cannot pass on the
+      doctrine forbidding something rather than on the thing itself.
+    verifiable_closure: |
+      THE GUARD IS CORRECT AND MUST NOT BE WEAKENED. Every property it has today
+      is required and is asserted by the existing contract fixture: it refuses
+      BEFORE announcing and before destroying anything, it exits 3 which is
+      distinct from 2 (unknown flag), and it refuses in under a second. A patch
+      that lets --reset-state proceed against a live tray FAILS this closure.
+
+      WHAT MUST CHANGE IS ONE SENTENCE. With a tray running, the refusal names a
+      remedy an UNATTENDED run can perform. Measured pre-fix on macneo
+      2026-09-22 against the published v56.9.22.1 artifact, verbatim:
+        Error: --reset-state needs to boot the VM, but a running Tillandsias tray owns it.
+        Use the tray menu instead, or quit the tray (menu bar → ❌ Quit Tillandsias) and re-run.
+        reset_exit=3  secs=0
+      Both remedies are menu-bar clicks. Post-fix the message must additionally
+      name the non-interactive path, using the exact-name matcher the tree
+      already uses for this — scripts/e2e-step2-macos.sh's `pkill -x` on an
+      executable name, narrow by construction rather than by hope (1231-cbie).
+    title: |
+      --reset-state refuses correctly when a tray owns the VM, but both remedies it names are menu-bar clicks — and the installer launches the tray, so an unattended run meets a live tray by construction and can follow neither
+    context: |
+      MEASURED ON THE PUBLISHED ARTIFACT, macneo, macOS 27.0 arm64, during the
+      v56.9.22.1 smoke, 2026-09-22.
+
+      THE COMPOSITION. §1 of the smoke runbook curl-installs, and the installer
+      ends by launching the tray — its own last line says so ("Launching
+      Tillandsias… Tray started."). §2 then runs --reset-state. So the second
+      step meets a live tray ON EVERY RUN, not occasionally: the first step
+      guarantees it.
+
+      THE REFUSAL IS RIGHT. It fired in 0 seconds, before the announcement block
+      and before touching anything, and exited 3 rather than 2. Order
+      1286-4437's ordering contract — refusal precedes announcement precedes
+      destruction — held exactly. This row does not touch any of that.
+
+      WHAT IS MISSING IS A PATH FOR A CALLER WITH NO HANDS. "Use the tray menu
+      instead" and "quit the tray (menu bar → Quit Tillandsias)" are both GUI
+      actions. Every smoke on this fleet is unattended, and the runbook
+      instructs the operator to run --reset-state at exactly this point, so the
+      documented procedure terminates in a message whose every remedy the
+      procedure's own reader cannot perform.
+
+      WHAT I DID, recorded because it is the evidence this row rests on rather
+      than an aside: I left the paths the message names. I killed the tray with
+      `pkill -x tillandsias-tray` — the same exact-name matcher
+      scripts/e2e-step2-macos.sh already uses for this purpose, chosen because
+      -x matches an executable name exactly and so matches nothing on a host
+      where no such process runs. The reset then succeeded: reset_exit=0, 426s,
+      rootfs.img destroyed and rebuilt (inode 13949625 → 13949914) with
+      nvram.bin preserved (inode 12877026 unchanged) as the control. So the
+      remedy exists, is already written down in this repository, and is simply
+      not in the message.
+
+      WHY A SENTENCE AND NOT A FLAG. A --force would invite exactly the race the
+      guard exists to prevent, and the repository already contains the correct
+      incantation; the defect is that the refusal does not point at it. This is
+      the same family as 1351-y98c — a remedy that names a tool without its
+      invocation sends the reader nowhere — one level over onto a message whose
+      remedy is a gesture rather than a command.
+    next_action: |
+      Not claimed. One sentence and one fixture arm; any host can write it, and
+      only macOS can verify it because the guard is macOS-only.
+      1. Add the non-interactive remedy to the refusal in
+         crates/tillandsias-macos-tray/src/reset_state.rs, naming the exact-name
+         matcher rather than a bare `pkill tillandsias` — the narrow form is the
+         point (1231-cbie).
+      2. Add the arm to scripts/test-reset-state-contract.sh described in
+         `unscoreable`, matching the remedy rather than a mention.
+      3. DO NOT add a --force or an override flag, and do not let the reset
+         proceed against a live tray. The closure refuses that patch.
+      4. Consider whether the same message should say what the tray menu path
+         does that the kill does not — if they are equivalent, say so; if the
+         menu quit is cleaner, say why, so an unattended caller knows what it is
+         giving up.
+    provenance: |
+      Found by macneo 2026-09-22 running the v56.9.22.1 macOS curl-install smoke
+      under the operator's standing pre-authorisation for destructive
+      reprovisioning, on the published artifact rather than a local build.
+      Scoped at macuahuitl-fedora's direction so the guard cannot be weakened by
+      a reader who sees only the complaint. Related: 1286-4437 (the reset
+      contract and its ordering, which holds), 1231-cbie (narrow-by-construction
+      matchers), 1351-y98c (a remedy that names a tool without its invocation),
+      803-49re (one destroy path, not a second copy).
