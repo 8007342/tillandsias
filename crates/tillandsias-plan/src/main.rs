@@ -1085,9 +1085,19 @@ fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<Str
              every hand-written id in the 2026-08-24 retrospective violated this)."
         )),
         None => Err(
+            // ORDER 1351-y98c. NAME THE INVOCATION, not just the file. This
+            // said "Derive the id from scripts/agent-identity.sh", and a reader
+            // who ran exactly that got `refused:agent-identity:empty-backend`,
+            // because the script's interface is `id <backend>` and a bare call
+            // refuses BY DESIGN (its own grammar, pinned by
+            // litmus:agent-identity-canonical-source-shape). A remedy that
+            // names a tool without its invocation sends the reader to a second
+            // refusal with no way forward. The Some arm above already gets this
+            // right; this arm now says what it says.
             "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
-             record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
-             756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
+             record agent_id 'unknown'. Derive it: scripts/agent-identity.sh id <backend> (order \
+             756-hn3a) — a BARE invocation refuses by grammar — then pass --agent, or export \
+             TILLANDSIAS_AGENT_ID."
                 .to_string(),
         ),
     }
@@ -9152,6 +9162,37 @@ mod tests {
             )
             .is_err(),
             "a malformed explicit --agent refuses; it does not silently fall back"
+        );
+    }
+
+    /// ORDER 1351-y98c. A REMEDY THAT NAMES A TOOL WITHOUT ITS INVOCATION SENDS
+    /// THE READER TO A SECOND REFUSAL.
+    ///
+    /// This arm said "Derive the id from scripts/agent-identity.sh". Run exactly
+    /// as written that script answers `refused:agent-identity:empty-backend`,
+    /// because its interface is `id <backend>` and a bare call refuses BY
+    /// DESIGN. The reader is then refused twice with nowhere to go, while the
+    /// sibling arm forty lines up in this same file already teaches the
+    /// invocation.
+    ///
+    /// ASSERTS THE MESSAGE AND NOTHING ELSE. agent-identity.sh's own grammar —
+    /// that a bare invocation refuses, and with what exit status — is pinned by
+    /// litmus:agent-identity-canonical-source-shape. Re-asserting it here would
+    /// give one contract two homes, which is the defect this fleet keeps paying
+    /// for elsewhere. The only claim made here is about the text a caller reads.
+    #[test]
+    fn the_missing_agent_refusal_names_the_subcommand_not_just_the_file() {
+        let err = writer_agent_from(None, None)
+            .expect_err("no --agent and no env id must refuse rather than record 'unknown'");
+
+        assert!(
+            err.contains("agent-identity.sh id <backend>"),
+            "the remedy must name the INVOCATION that produces an id; naming the file alone \
+             sends the reader to a bare call, which refuses by grammar. Got: {err}"
+        );
+        assert!(
+            err.contains("756-hn3a"),
+            "the remedy keeps its order reference so the reader can find the contract: {err}"
         );
     }
 
