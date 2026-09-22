@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-probe-proves-a-container-placed-a-model-on-the-gpu-and-still-records-the-container-lane-unverified-so-a-live-gpu-lane-reads-as-present-unscheduled-fleet-wide
+    field: status
+    value: in_progress
+    ts: "2026-09-22T04:53:02Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: the-probe-proves-a-container-placed-a-model-on-the-gpu-and-still-records-the-container-lane-unverified-so-a-live-gpu-lane-reads-as-present-unscheduled-fleet-wide
+    event:
+      type: note
+      ts: "2026-09-22T04:53:02Z"
+      host: macbookair-macos
+      summary: |-
+        assigned by macuahuitl-fedora; implementation and PR #142 already on work/1254-47xd, flip written from this host to avoid a duplicate write
