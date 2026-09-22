@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-landing-queue-requeues-a-green-candidate-when-trunk-moved-by-plan-fragments-only-during-its-gate-so-during-busy-hours-it-lands-nothing-while-the-land-tool-adopts-the-same-stamp
+    event:
+      type: evidence
+      ts: "2026-09-22T03:22:00Z"
+      agent_id: linux-yoga-opus5-20260922t032200z
+      host: yoga
+      summary: |
+        SECOND MEASUREMENT, from the landing queue rather than from the land tool, and
+        it cost two FULL gates tonight. Adding to this row rather than filing anew: the
+        coordinator pointed out this was already filed at 17:10Z after PR #127 was
+        requeued the same way, which is correct and I had not found it.
+
+        MEASURED, yoga, 2026-09-22, draining PRs #136 and #139 with --limit 3:
+          requeue:land-queue:136:target-moved:gated-on=c3c65a7cb now=f6dcfc796
+          requeue:land-queue:139:target-moved:gated-on=f6dcfc796 now=373309789
+          ok:land-queue:2 landed=0 evicted=0 requeued=2 skipped=0
+        The three commits that moved trunk in that window were ALL PLAN-LANE:
+          f6dcfc796 plan(1312-i6da)   c4f92dd1f plan(1287-w9s4)   373309789 plan(1324-ujvb)
+        Three fragments in plan/index.d cost two ~20-minute FULL gates. Nothing in those
+        commits can affect a Rust build, a litmus run, or any check a FULL gate performs
+        on a code candidate — the queue simply compares base SHAs and knows nothing else.
+
+        THE FIX IS REUSE, NOT A NEW CLASSIFIER, AND THERE ARE ALREADY THREE SOURCES THAT
+        MUST AGREE. Confirmed in the tree tonight rather than assumed:
+          1. scripts/gate-stamp.sh keeps a SEPARATE PLAN DIGEST and answers
+             `ok:gate-fresh-except-plan <stamped>` when only that digest differs
+             (gate-stamp.sh:1023-1025). build.sh consumes it at 1916/1929. This is the
+             land tool's behaviour the coordinator names: it has adopted on plan-only
+             movement all night and landed on attempt 2 every time.
+          2. scripts/hooks/pre-push-local-gate.sh's plan-only lane predicate matches
+             `plan/index.d/?*.yaml` and `plan/loop_status.d/?*.md`, explicitly EXCLUDING
+             nested paths ("nested below plan/index.d/ — full gate required") and
+             non-NEW files ("fragments are immutable, only NEW fragment files qualify").
+          3. gate_stamp_classify_path's nine classes (765-dt8h) and change-class.sh's
+             tiers built on them (765-xpct, approved by the operator 2026-09-20).
+        A fourth copy inside the queue is a fourth thing to drift. The re-queue test
+        should ask an EXISTING predicate about the DELTA between gated-on and now, and
+        re-queue only when that delta contains a path the predicate rejects.
+
+        TWO CAUTIONS FROM lenovinha, who supplied the pointer and whose pushes produced
+        the measurement:
+          - REUSE THE PREDICATE, NOT A COPY. Arm 4 of the host-resolver fixture went
+            green while the real line was broken, because it tested a COPY of the
+            resolution line rather than the line. If the hook does not expose its
+            predicate as something callable, extracting it is part of the work.
+          - THE ARM MUST BE THE DIVERGENCE CASE: a plan-only delta that does NOT
+            re-queue a FULL candidate, AND a crates/ delta in the same window that DOES.
+            An arm where nothing moved between gate and push cannot fail, and that is
+            the arm one writes first because it is the easiest to scaffold.
+
+        THE COUNTERWEIGHT, recorded so this row is not read as an argument for loosening
+        the check: the 40 minutes bought a real guarantee. Those three pushes could not
+        have made #136's gate wrong — but the queue could not KNOW that, and a queue
+        that guesses "probably fine" is the one that eventually ships a gate result
+        about a tree that no longer exists. The fix is to make the queue able to know,
+        not to make it guess.
+
+        AND THE COORDINATION HALF, which is not this row's but was its proximate cause:
+        a one-writer quiesce was arranged between two hosts and never broadcast to the
+        third, so it was a private agreement rather than a discipline. lenovinha's own
+        account is the generalisable part — "I had the principle, stated it in my own
+        words, and did not apply it to the one lane where it was invisible", because the
+        plan lane FEELS exempt: it IS exempt from the GATE, and that says nothing about
+        whether it disturbs anyone downstream. Two different questions wearing one word.

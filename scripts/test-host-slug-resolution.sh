@@ -107,5 +107,53 @@ case "$probe_rc:$probe_out" in
     *)   fail "host-slug:arm4:unexpected rc=$probe_rc out=[$probe_out]" ;;
 esac
 
-if [ $rc -eq 0 ]; then note "ok:host-slug-resolution:4/4 arms"; else note "violation:host-slug-resolution"; fi
+# ── ARM 5 — RESOLUTION SURVIVES A SUBDIRECTORY-RELATIVE INVOCATION ──────────
+#
+# WHY ARMS 1-4 COULD NOT SEE THE DEFECT THIS CLOSES. Arm 3 greps that both
+# subjects CALL agent-identity.sh; a grep cannot tell whether the call RESOLVES.
+# Arm 4 is worse and is the sharper instance: it writes a PROBE containing a
+# COPY of the resolution line into $tmp/scripts/probe.sh and runs THAT — a
+# synthetic reproduction of the subject living inside the subject's own test
+# suite. When the real line differed from the probe's, which is exactly what the
+# `cd "$ROOT"` above it made true, the probe still passed. A ref whose entire
+# subject is host resolution shipped a resolution path that breaks on a relative
+# invocation, with its own 4/4 green.
+#
+# THE PATH THAT MAKES IT WORTH AN ARM (lenovinha-silverblue): someone in
+# scripts/ pastes the hook's documented advice `scripts/salvage-dirty-worktree.sh
+# <slug>`, gets a clear "No such file or directory", corrects it the obvious way
+# to `./salvage-dirty-worktree.sh <slug>` — and lands on the wrong-cause refusal.
+# Following the documentation is step one of the path to the broken form.
+#
+# IT INVOKES THE REAL SUBJECTS. Prerequisites are copied in beside them: without
+# plan-binary-probe.sh, push-plan dies at line 132 — BEFORE resolution — and an
+# absence-assertion passes identically fixed and unfixed. Measured.
+# The assertions are POSITIVE, per lenovinha's rule: assert the NEXT NAMED
+# CHECKPOINT was reached, not that the failure was absent.
+for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
+    _r="$(mktemp -d)"; mkdir -p "$_r/scripts"
+    git -C "$_r" init -q
+    git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
+    printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
+    cp "$ROOT/scripts/$_subj" "$_r/scripts/"
+    for _dep in plan-binary-probe.sh; do
+        [ -f "$ROOT/scripts/$_dep" ] && cp "$ROOT/scripts/$_dep" "$_r/scripts/"
+    done
+    printf '%s\n' '#!/usr/bin/env bash' 'echo armsentinel' > "$_r/scripts/agent-identity.sh"
+    chmod +x "$_r/scripts/agent-identity.sh" "$_r/scripts/$_subj"
+    _o="$(cd "$_r/scripts" && ./"$_subj" probe-slug 2>&1)"; _arc=$?
+    case "$_subj:$_o" in
+        *:*refused:host-unresolved*)
+            fail "host-slug:arm5:$_subj refused host resolution when invoked as ./$_subj from inside scripts/ — the resolver was never FOUND and the refusal names the wrong cause (rc=$_arc)" ;;
+        salvage-dirty-worktree.sh:*armsentinel*)
+            note "ok:host-slug:arm5-relative:$_subj resolved its host from a subdirectory-relative call — the sentinel appears in the verdict, so resolution RAN and produced the right value" ;;
+        push-plan-fragments-to-trunk.sh:*refused:fragments-to-trunk:fetch*)
+            note "ok:host-slug:arm5-relative:$_subj passed the resolution gate and reached the fetch checkpoint (rc=$_arc)" ;;
+        *)
+            fail "host-slug:arm5:$_subj reached neither its checkpoint nor a resolution refusal (rc=$_arc) — the arm cannot see the region it tests; first line: $(printf '%s' "$_o" | head -1)" ;;
+    esac
+    rm -rf "$_r"
+done
+
+if [ $rc -eq 0 ]; then note "ok:host-slug-resolution:5/5 arms"; else note "violation:host-slug-resolution"; fi
 exit $rc

@@ -119,7 +119,13 @@ esac
 # one that cannot name its origin host is half a recovery. Refusing loudly at
 # the moment of creation, while the operator is present, beats discovering it
 # when someone needs the ref.
-_ai="$(dirname "${BASH_SOURCE[0]}")/agent-identity.sh"
+# $ROOT, NOT BASH_SOURCE (1337-3tk6 follow-up; found by lenovinha-silverblue).
+# Both scripts `cd "$ROOT"` above this line and BASH_SOURCE[0] is the INVOCATION
+# path, so after the cd a relative invocation from anywhere but the repo root
+# resolves this against the wrong directory and the script refuses with
+# "agent-identity.sh node-name returned nothing" when it was never FOUND — a
+# refusal naming the wrong cause, in the rescue path.
+_ai="$ROOT/scripts/agent-identity.sh"
 HOST="$([ -x "$_ai" ] && "$_ai" node-name 2>/dev/null || true)"
 HOST="$(printf '%s' "$HOST" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
 if [ -z "$HOST" ]; then
