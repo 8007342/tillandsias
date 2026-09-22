@@ -135,6 +135,135 @@ else
     bad "arm6: ls-remote returned '$ls6'; target '$sha6' is not the empty blob '$empty'"
 fi
 
+# ════════════════════════════════════════════════════════════════════════════
+# ARMS 7-9 — THE LIFECYCLE. Order 1350-ku7v, second half.
+#
+# Arms 1-6 prove the publisher computes and publishes the right verdict. They
+# would all have passed while the script was shipped nowhere and called by
+# nothing, which is exactly what it was: a working script wired to nothing.
+# A verdict no lifecycle produces is not a surface a consumer can read, and
+# the acceptance this row owes is about the SURFACE.
+#
+# So these arms ask the second question: does anything actually run it?
+# ════════════════════════════════════════════════════════════════════════════
+
+CF="$ROOT/images/git/Containerfile"
+EP="$ROOT/images/git/entrypoint.sh"
+RR="$ROOT/images/git/relay-refs.sh"
+
+# ── ARM 7 — the image ships it, executable. ─────────────────────────────────
+# Read on the Containerfile directly: a COPY that never happened is invisible
+# from inside every other arm, and this was the actual gap.
+echo "arm 7 — the mirror image ships the publisher and marks it executable"
+c7="$(grep -c 'COPY publish-sync-state.sh /usr/local/share/git-service/publish-sync-state' "$CF" || true)"
+x7="$(grep -c '/usr/local/share/git-service/publish-sync-state' "$CF" || true)"
+if [ "$c7" -eq 1 ] && [ "$x7" -ge 2 ]; then
+    ok "Containerfile copies the publisher and chmods it (copy=$c7 mentions=$x7)"
+else
+    bad "arm7: the publisher is not shipped in the mirror image (copy=$c7 mentions=$x7) — it would be absent at every call site below"
+fi
+
+# ── ARM 8 — the entrypoint calls it at startup AND on the cadence. ───────────
+# BOTH call sites are required and they answer different halves of the row:
+# startup is what a forge launching beside the mirror reads, the reconciler
+# tick is what bounds the verdict's staleness afterwards. One without the
+# other leaves a consumer reading an absent or an arbitrarily old state.
+echo "arm 8 — the entrypoint publishes at startup and on every reconciler tick"
+o8="$(grep -c 'SYNC_STATE="\${SYNC_STATE:-/usr/local/share/git-service/publish-sync-state}"' "$EP" || true)"
+n8="$(grep -c 'run_sync_state "' "$EP" || true)"
+if [ "$o8" -eq 1 ] && [ "$n8" -ge 2 ]; then
+    ok "entrypoint has an overridable SYNC_STATE and $n8 call sites"
+else
+    bad "arm8: entrypoint wiring incomplete (override=$o8 call-sites=$n8); startup and the reconciler tick must both publish"
+fi
+
+# ── ARM 9 — BEHAVIOURAL: a real relay run publishes a real verdict. ──────────
+# The arm that cannot be satisfied by a comment. It drives the ACTUAL
+# relay-refs.sh against a local bare upstream, with SYNC_STATE pointed at the
+# actual publisher, and asks the mirror afterwards whether a verdict exists.
+# Nothing here is mocked except the upstream URL, which is a path.
+echo "arm 9 — a live relay run leaves a sync-state verdict in the mirror"
+m9="$W/m9"; mk_mirror "$m9" 0 >/dev/null
+up9="$W/up9.git"; git init -q --bare "$up9"
+git -C "$m9" remote add origin "$up9" 2>/dev/null || git -C "$m9" remote set-url origin "$up9"
+git -C "$m9" for-each-ref --format='%(refname)' refs/tillandsias/sync-state 2>/dev/null \
+  | while read -r r; do git -C "$m9" update-ref -d "$r"; done
+sha9="$(git -C "$m9" rev-parse refs/heads/linux-next)"
+( cd "$m9" && printf '%s %s %s\n' "$sha9" "$sha9" refs/heads/linux-next \
+    | SYNC_STATE="$PUB" sh "$RR" ) >/dev/null 2>&1 || true
+ref9="$(git -C "$m9" for-each-ref --format='%(refname)' refs/tillandsias/sync-state 2>/dev/null | head -1)"
+case "$ref9" in
+    refs/tillandsias/sync-state/*)
+        ok "relay published $ref9" ;;
+    *)
+        bad "arm9: a full relay run published NO sync-state verdict — the publisher is shipped and called by nothing that runs" ;;
+esac
+
+# ── ARM 10 — the relay's exit status is not hostage to the publisher. ────────
+# A relay that refused a legitimate push because a verdict could not be written
+# would be a worse defect than the blindness this row fixes. Point SYNC_STATE
+# at something that always fails and require the relay to behave as before.
+echo "arm 10 — a failing publisher never changes the relay's verdict"
+m10="$W/m10"; mk_mirror "$m10" 0 >/dev/null
+up10="$W/up10.git"; git init -q --bare "$up10"
+git -C "$m10" remote add origin "$up10" 2>/dev/null || git -C "$m10" remote set-url origin "$up10"
+boom="$W/boom.sh"; printf '#!/bin/sh\nexit 9\n' > "$boom"; chmod +x "$boom"
+sha10="$(git -C "$m10" rev-parse refs/heads/linux-next)"
+( cd "$m10" && printf '%s %s %s\n' "$sha10" "$sha10" refs/heads/linux-next \
+    | SYNC_STATE="$boom" sh "$RR" ) >/dev/null 2>&1
+rc10=$?
+if [ "$rc10" -eq 0 ] && [ -n "$(git -C "$up10" rev-parse --verify --quiet refs/heads/linux-next || true)" ]; then
+    ok "publisher exit 9 ignored; the push still landed and the relay still exited 0"
+else
+    bad "arm10: a failing publisher changed the relay's outcome (rc=$rc10) — the verdict must never gate the push"
+fi
+
+# ── ARM 11 — the --sync flag is ACCEPTED AT RUNTIME, not just written. ──────
+# THE --reset-state LESSON, applied before it could cost anything (see the
+# known_flags comment in crates/tillandsias-headless/src/main.rs). The first
+# draft of --sync was parsed, dispatched, helped and documented, and the binary
+# still answered `Unsupported option: --sync` and exited 2, because the runtime
+# allow-list is a separate list. A source scan sees the flag everywhere and
+# misses that. So this arm RUNS the binary.
+#
+# It asserts only that the flag is RECOGNISED: the outcome depends on whether
+# this host has a mirror, which is not this fixture's business.
+echo "arm 11 — the --sync flag is recognised by the built binary"
+BIN="${TILLANDSIAS_BIN:-$ROOT/target/release/tillandsias}"
+if [ ! -x "$BIN" ]; then
+    echo "  SKIP  no built binary at $BIN"
+else
+    out11="$("$BIN" --sync tillandsias 2>&1 | head -40)"
+    case "$out11" in
+        *"Unsupported option: --sync"*)
+            bad "arm11: the binary refuses --sync at runtime although it is parsed, dispatched and documented — the known_flags allow-list is a separate list" ;;
+        *)
+            ok "--sync is recognised (not in the unsupported-option path)" ;;
+    esac
+fi
+
+# ── ARM 12 — the image ships what the command invokes, at that exact path. ───
+# The contract between run_sync_project and the mirror image is two absolute
+# paths. If they drift the command fails at runtime with a crun "executable
+# not found", which is what happened the first time it ran here — and which
+# reads as a broken container runtime rather than an old image.
+echo "arm 12 — the mirror image ships both scripts at the paths --sync invokes"
+if ! command -v podman >/dev/null 2>&1; then
+    echo "  SKIP  no podman on this host"
+else
+    img12="$(podman image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^localhost/tillandsias-git:' | head -1)"
+    if [ -z "$img12" ]; then
+        echo "  SKIP  no localhost/tillandsias-git image built on this host"
+    else
+        if podman run --rm --entrypoint sh "$img12" -c \
+            'test -x /usr/local/share/git-service/publish-sync-state && test -x /usr/local/share/git-service/reconcile-exported-heads' >/dev/null 2>&1; then
+            ok "$img12 ships publish-sync-state and reconcile-exported-heads, both executable"
+        else
+            bad "arm12: $img12 does not ship both scripts at the paths --sync execs; the command would fail with a crun not-found that reads as a runtime fault"
+        fi
+    fi
+fi
+
 echo "mirror-sync-state: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || { echo "fail:mirror-sync-state:$fail arm(s)"; exit 1; }
 echo "ok:mirror-sync-state:$pass/$pass arms"
