@@ -33,3 +33,4 @@ STEP_SKIP_EXIT=2
 # wording at face value would conclude macOS pins nothing here, which is
 # exactly the conclusion 1145-iigx's note tells the claimer not to draw.
 STEP_SKIP_DESC="the 2 substrate-refusal arms RAN and passed; the 9 reaper arms could not run — no /proc and/or no setsid on this host (1141-vf9w)"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin skip:dispatch-reap:no-proc-no-setsid"

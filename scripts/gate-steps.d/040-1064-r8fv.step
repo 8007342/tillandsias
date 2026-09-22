@@ -7,3 +7,4 @@ STEP_DESC="Checking the landing tool merges trunk and refuses honestly (1064-r8f
 STEP_SCRIPT="scripts/test-land-merges-trunk.sh"
 STEP_ERROR="land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
 STEP_OK="Landing tool trunk-merge check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-merges-trunk:8"

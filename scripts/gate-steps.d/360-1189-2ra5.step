@@ -26,3 +26,4 @@ STEP_OK="locked-keyring credential discriminator check passed"
 # so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-credential-channel.sh is absent, so the discriminator could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:locked-keyring-discriminator:9"

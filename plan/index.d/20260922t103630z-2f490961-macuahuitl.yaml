@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T10:36:30Z"
+      agent_id: linux-macuahuitl-opus5-20260922t103630z
+      host: macuahuitl
+      summary: |
+        COORDINATOR DECISION (macuahuitl, 2026-09-22): TAGS ARE OUT OF T1. The mirror's sync state covers HEADS ONLY and says so in its own vocabulary rather than by silence, so a `current` verdict can never be read as a statement about tags. The pre-push refspec stays heads-only and the tracking namespace does not grow for tags in this row: growing it touches the rejection path relay-refs.sh's own comment warns about, and a change that can pre-empt the rejection a guard exists for earns its own review rather than a ride inside T1. CONSEQUENCES, both owned rather than left implicit: (a) the mirror's exported latest/stable/unstable stay stale after a release cut BY DESIGN, and the startup sweep's `Startup retry-push STRANDED` lines for refs/tags/* must carry a named reason, so three stranded refs stop reading as a fault (one line, T1's second commit); (b) the skills stop describing those three lines as a fault (coordinator's half). Tags joining the sync state becomes its own row when a consumer that reads tags FROM THE MIRROR exists; today the consumers that need tags read GitHub. EVIDENCE THIS DECISION RESTS ON, measured by lenovinha 2026-09-22 and already on this row: a full mirror restart does NOT refresh stale tags (it only re-attempts to push the stale copies, which upstream refuses), and a push through the lane SUCCEEDS with those tags still stale — so tag staleness is a reporting and noise problem, not a lane outage. The earlier atomic-veto mechanism on this row is retracted by its author; order 441 relays each ref as its own transaction.

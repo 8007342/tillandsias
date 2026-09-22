@@ -14,3 +14,4 @@ STEP_DESC="Checking the competing-gate consumer tells a call-site bug apart from
 STEP_SCRIPT="scripts/test-competing-gate-consumer.sh"
 STEP_ERROR="the competing-gate consumer regressed (1150-q462) — exit 2 and exit 3 may now produce the same response, which makes a wiring bug read as 'this host cannot answer' and get written off; or an unknown code is being swallowed"
 STEP_OK="Competing-gate consumer check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   no verdict stops the build — the consumer stays advisory"

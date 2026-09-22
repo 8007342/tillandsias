@@ -1,0 +1,20 @@
+# Gate step 1302-7j8p — data, not code.
+#
+# Binds the checker that keeps a gate step from entering --check on one
+# regime's word. Source-text only: it reads STEP_SECOND_REGIME out of every
+# .step file and never runs a step, so it needs no toolbox, no ruby and no
+# guest, and it costs milliseconds.
+#
+# THIS STEP RECORDS ITS OWN SECOND-REGIME RUN, which is the point rather than a
+# formality: a rule whose own enforcer is exempt teaches that the rule is for
+# other people. The record below is the fixture's verdict on macneo, not the
+# checker's verdict on the live tree — the fixture is what the regime needs
+# (the checker's own output depends on how far the fleet's backfill has got,
+# and would go stale the moment another step is recorded).
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking every gate step carries a recorded second-regime run (1302-7j8p)"
+STEP_SCRIPT="scripts/check-gate-step-regimes.sh"
+STEP_ERROR="a gate step carries no recorded second-regime run (1302-7j8p) — it would enter the gate on one regime's word, which reddened both macOS gates twice in one day on 2026-09-20; add STEP_SECOND_REGIME to the named step, and a named skip counts"
+STEP_OK="every gate step carries a second-regime record"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-step-regimes-fixture:4/4"
