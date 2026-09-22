@@ -66,7 +66,21 @@ packets:
       values removes the guess.
     verifiable_closure: |
       THE PRINTED COMMAND NAMES AN EXISTING CHECKOUT, AND ITS PROJECT ROOT IS
-      THAT CHECKOUT'S PARENT. Pinned by scripts/test-bare-metal-lane-command-is-runnable.sh,
+      THAT CHECKOUT'S PARENT.
+
+      litmus:bare-metal-lane-command-is-runnable
+      (openspec/litmus-tests/litmus-bare-metal-lane-command-is-runnable.yaml,
+      spec git-mirror-service, phase pre-build, size instant), three arms:
+      the fixture parses and is executable; the printed lane command names
+      an existing checkout whose parent is the project root; and a SOURCE
+      PIN read on the checker directly, requiring LANE_CMD to derive from
+      $ROOT and to contain no bare ${PROJECT} after --bash, so a fixture
+      that stopped looking cannot hide the regression.
+
+      The litmus is written in the same commit as the fix it tests
+      (1136-n8sh) and bound in openspec/litmus-bindings.yaml under
+      git-mirror-service. It is driven by
+      scripts/test-bare-metal-lane-command-is-runnable.sh,
       which forces the mirror probe to miss with an unserved TILLANDSIAS_PROJECT,
       parses the token after `--bash`, and requires it to be an absolute path to
       a directory that exists, with TILLANDSIAS_HOST_PROJECT_ROOT equal to its
