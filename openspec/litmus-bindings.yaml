@@ -183,6 +183,7 @@ specs:
   - litmus:validator-surface-currency
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
+  - litmus:preflight-runs-or-names-the-capability
   - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
