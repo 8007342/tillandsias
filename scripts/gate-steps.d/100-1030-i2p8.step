@@ -17,4 +17,4 @@ STEP_DESC="Checking the plan-binary probe resolves the locus-native artefact (10
 STEP_SCRIPT="scripts/test-plan-binary-locus-native.sh"
 STEP_ERROR="the plan-binary probe resolves a foreign artefact, or the refresh touches something it did not resolve (1030-i2p8) — see the verdict line above"
 STEP_OK="Plan-binary locus-native check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: when the ELF cannot execute, the probe falls through to the .exe (./target/release/tillandsias-plan.exe)"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: when the ELF cannot execute, the probe falls through to its .exe candidate in the release dir"

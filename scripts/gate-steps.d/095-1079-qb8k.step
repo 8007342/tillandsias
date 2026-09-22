@@ -26,4 +26,4 @@ STEP_DESC="Checking this host's plan binary refuses to write when asked to read 
 STEP_SCRIPT="scripts/check-plan-binary-current.sh"
 STEP_ERROR="this host's plan binary WRITES on a read-only invocation — see the remedy above (1079-qb8k)"
 STEP_OK="Plan-binary write-is-opt-in check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:plan-binary-write-is-opt-in+role-satisfies:./target/release/tillandsias-plan"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:plan-binary-write-is-opt-in+role-satisfies (the probe resolved to the release-dir plan binary)"
