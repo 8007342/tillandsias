@@ -1,0 +1,93 @@
+trace: spec:methodology-accountability, order:1331-884p, order:1337-3tk6, order:1339-had5
+
+arm_blindness:
+  version: v0.1
+  purpose: >
+    A green suite is not a checked suite. An arm can test a REPRESENTATION of
+    its subject instead of the subject's BEHAVIOUR; it then reports on the
+    representation and says nothing about the subject. This page states the
+    rule, the single fix, and the traps that catch someone applying it
+    correctly.
+  authority:
+    - Subordinate to methodology/litmus.yaml; foldable into it as a section.
+    - Citable by plan/steps, plan/issues, openspec/changes, and any fixture.
+
+  where_to_look:
+    rule: >
+      Point this rule at suites that ALREADY PASS, not only at new work. A
+      landed green suite is where nobody looks.
+    evidence: >
+      Of the four instances that produced this rule, THREE WERE ON TRUNK AND
+      GREEN when they were found. None came from careful new authoring; all
+      came from running a real subject against an arm that had already shipped.
+    consequence: >
+      Read as advice for writing tests, this rule is comfortable and useless.
+      The instruction is to go back and re-check the suites nobody is worried
+      about.
+
+  the_rule:
+    statement: >
+      An arm must assert the subject's BEHAVIOUR. An arm that asserts a
+      representation of the subject — a copy of its logic, the presence of a
+      name, a literal spelling, an adjacency, a regex pattern — passes or fails
+      on the representation.
+    asymmetry: >
+      A POSITIVE arm fails loudly when its subject regresses. A NEGATIVE arm
+      goes QUIET when its own pattern stops matching, and quiet is
+      indistinguishable from correct. Negative arms therefore carry the extra
+      obligation below.
+    negative_arms:
+      rule: >
+        An arm asserting a negative needs a SABOTAGE THAT FIRES IT, re-run every
+        time the arm changes. The sabotage is part of the arm, not a one-time
+        proof of it; editing the pattern without re-running it is editing an
+        assertion nobody is checking.
+
+  the_fix:
+    rule: >
+      Invoke the REAL subject and assert the NEXT NAMED CHECKPOINT was reached —
+      that it refused, reached the fetch, produced the sentinel. Do not assert
+      that a bad string is absent.
+    why: >
+      "No error appeared" is satisfied by never reaching the code under test.
+      A named checkpoint is not.
+
+  traps:
+    silent_dependency:
+      rule: >
+        Invoking the real subject without copying its PREREQUISITES in beside it
+        means it dies BEFORE the region under test, and an absence-assertion
+        passes identically fixed and unfixed. Copy them, and assert the
+        checkpoint.
+    absent_is_not_silent:
+      rule: >
+        A stub that is ABSENT is not a stub that ANSWERS NOTHING. An absent
+        dependency makes the subject fail for the WRONG CAUSE, so the arm passes
+        for the wrong reason. Give it a stub that RUNS and returns empty.
+    keep_the_weak_arm:
+      rule: >
+        When a strong arm replaces a blind one, KEEP THE BLIND ONE and document
+        its weakness beside the strong one. It is cheap, it still catches the
+        exact prior case, and a reader who deletes it as redundant must first
+        read how the blindness was found. A tidy suite destroys that record.
+
+  instances:
+    note: >
+      Four arms, four hosts, one defect; the fix was identical in every case.
+      Named by WHAT EACH TESTED instead of behaviour.
+    cases:
+      - tested_a_copy: >
+          An arm ran a PROBE containing a copy of the subject's resolution line.
+          When the real line differed from the copy, the probe passed (1337-3tk6).
+      - tested_a_name: >
+          An arm grepped that the subject CALLS a resolver. A grep cannot tell
+          whether the call RESOLVES (1337-3tk6).
+      - tested_a_spelling: >
+          An arm asserted "no literal placeholder" by grepping one spelling. A
+          placeholder spelled otherwise reintroduced the defect the row was
+          filed about, and the suite reported all arms green (1337-3tk6).
+      - tested_an_adjacency_then_a_pattern: >
+          An arm forbidding a write required the verb and the path to be
+          ADJACENT, so an injected write passed; its replacement used an ERE
+          bracket expression that does not mean what it reads as. Green both
+          times (1339-had5 family).
