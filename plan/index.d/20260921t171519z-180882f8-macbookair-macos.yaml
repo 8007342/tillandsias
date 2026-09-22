@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-fixtures-cannot-say-which-binary-they-tested-so-a-skewed-run-raises-a-violation-about-the-wrong-subject-and-a-relocated-copy-skips-in-silence
+    field: status
+    value: done
+    ts: "2026-09-21T17:15:19Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: the-macos-fixtures-cannot-say-which-binary-they-tested-so-a-skewed-run-raises-a-violation-about-the-wrong-subject-and-a-relocated-copy-skips-in-silence
+    event:
+      type: completed
+      ts: "2026-09-21T17:15:19Z"
+      host: macbookair-macos
+      summary: |-
+        status 'done' with evidence_refs: Landed at merge 4e9f954eb (PR #127, work/1332-tdde), gate green at FULL on base 6e3d8605a, verified at that tree: the verdict helper carrying subject=[...], the root-is-not-a-tillandsias-checkout refusal in all three fixtures, skew=undetermined-image-records-no-version, both binding changes, and all three fixtures at 100755. work/1332-tdde is an ancestor of origin/linux-next. Measured on tlatoanis-macbook-air: healthy ok:macos-vz-orphan-diagnosis:4 subject=[tillandsias-tray 56.9.20.1 (git 8047a2d8c-dirty, built ...)] image=[phase=start guest_binary_sha256=absent] skew=undetermined-image-records-no-version — that line is the row's own specimen; relocated copy refused with exit 1 on all three; no-bundle still skips naming absent(<path>). The skew REFUSAL is NOT delivered and is recorded as the remaining slice: provision.state records no version, and a guest-binary content hash is not comparable to a host git sha.
+  - packet_id: the-macos-fixtures-cannot-say-which-binary-they-tested-so-a-skewed-run-raises-a-violation-about-the-wrong-subject-and-a-relocated-copy-skips-in-silence
+    event:
+      type: note
+      ts: "2026-09-21T17:15:19Z"
+      host: macbookair-macos
+      summary: |-
+        all three deliverables measured on this host and landed through the queue at 4e9f954eb
