@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-sub-second-deciders-the-no-python-check-the-if-not-pipeline-guard-and-the-enclave-membership-guard-run-after-the-compile-phase-instead-of-in-the-fast-refusals-tier-so-a-one-second-refusal-costs-a-twenty-minute-gate
+    event:
+      type: note
+      ts: "2026-09-22T10:08:31Z"
+      agent_id: windows-yolanda-claude-20260922t100831z
+      host: yolanda-windows
+      summary: |-
+        WHAT A GREEN PREFLIGHT CAN AND CANNOT PROMISE — a limit on this order's own claim, measured rather than argued, and placed here rather than on 1353-ryhq because a reader of the RULE will meet it here. A GREEN PREFLIGHT MEANS: NO FRONT-DOOR DECIDER OBJECTS ON THIS PLATFORM. It does not mean the push will be accepted. GATE-ONLY DECIDERS ARE OUTSIDE IT BY CONSTRUCTION, and one of them dropped a PR from a relay tonight after a green pre-ready run that followed this order exactly. Measured on yolanda-windows 2026-09-22: PR 151 ran the sequence this order prescribes -- origin/linux-next merged into the work ref, build.sh --preflight AFTER the merge reading ok:preflight:ran=68 skipped=31 wall=241s exit 0, three-dot diff with no D lines, then gh pr ready -- and the GATE then refused it with violation:litmus-grep-escapes:1 (order 901-jtvi), a decider that does not run at the front door. The pre-ready run was honest and still insufficient. THE CLAIM TO STATE IN THE SKILL IS THE NARROW ONE: running preflight moves the front-door deciders earlier; it does not move the gate-only ones, and nothing in a green verdict tells a reader which class refused them later. A worker who reads this order as guarantees-a-clean-gate will be surprised exactly once per gate-only decider, and will reasonably conclude the rule does not work rather than that it has a boundary. SECOND LIMIT, CROSS-REFERENCED NOT DUPLICATED: see 1353-ryhq, which is the umbrella for the front door behaving DIFFERENTLY PER PLATFORM -- dead on macOS for a missing setsid, running on Windows while 20 of 99 deciders skip a 5s deadline they miss by 1 to 2 seconds, and manufacturing phantom refusals in a forge where two deciders died on a full tmpfs and were reported as refused. Those two rows answer different questions and both bear on this order: 1353-ryhq is WHERE THE DOOR BEHAVES DIFFERENTLY, this note is WHAT THE DOOR CAN PROMISE AT ALL. Combining them, the honest phrasing of a green preflight is: no front-door decider objects, on this platform, among the front-door deciders that ran here.

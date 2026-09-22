@@ -505,6 +505,78 @@ $(printf '%s' "$out9" | tail -3)" ;;
 esac
 fi
 
+# ─────────────────────────────────────────────────────────── ARM 10
+# A PLAN-ONLY TRUNK MOVE IS ADOPTED; ANY OTHER MOVE STILL RE-QUEUES.
+#
+# THE PAIR IS THE ARM. A lone adopt-case passes against "never re-queue", which
+# would ship a gate verdict about a tree nobody is pushing — the exact thing
+# arm 5 exists to prevent. A lone re-queue case passes against "never adopt",
+# which is today's behaviour and the defect. Only both together distinguish a
+# CLASSIFIER from a policy, and that is lenovinha's divergence rule applied to
+# this row: the arm must contain the case that separates the two answers.
+#
+# The mover pushes from a second clone during the gate, as arm 5 does — the only
+# window where the defect lives.
+
+# 10a — the move is plan/ only: ADOPT and LAND.
+scaffold adopt
+candidate adopt 1001-plan a.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1001-plan","isDraft":false}]
+JSON
+OTHER="$TMP/adopt/other"; git clone -q "$REMOTE_DIR" "$OTHER"
+git -C "$OTHER" config user.email o@o; git -C "$OTHER" config user.name o
+git -C "$OTHER" config commit.gpgsign false
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+mkdir -p "$OTHER/plan/index.d"
+printf 'packets: []\n' > "$OTHER/plan/index.d/20260922t000000z-probe-yoga.yaml"
+git -C "$OTHER" add -A
+git -C "$OTHER" commit -q -m "plan(probe): a fragment lands mid-gate"
+git -C "$OTHER" push -q origin HEAD:linux-next
+exit 0
+GATE
+out10a="$(run_queue)"
+case "$out10a" in
+    *"adopt:land-queue:1:plan-only-move"*)
+        case "$out10a" in
+            *"land:1 "*) ok "ARM 10a: a PLAN-ONLY trunk move mid-gate is ADOPTED and the candidate lands — the gate's verdict still describes the code, and the fleet's ledger traffic stops costing a gate each" ;;
+            *) bad "ARM 10a: it adopted but did not land: $(printf '%s' "$out10a" | tail -2)" ;;
+        esac ;;
+    *"requeue:land-queue:1:target-moved"*)
+        bad "ARM 10a: a plan-only move still RE-QUEUED — this is the 1335-2nzf defect, and with six hosts appending fragments it means the queue lands nothing during busy hours" ;;
+    *)  bad "ARM 10a: neither adopted nor re-queued (did the mover run?): $(printf '%s' "$out10a" | tail -2)" ;;
+esac
+
+# 10b — the move touches a NON-plan path: still RE-QUEUE. Same scaffold, same
+# mover, one different file. If 10a passes and this fails, the change is not a
+# classifier, it is "stop checking".
+scaffold noadopt
+candidate noadopt 1002-code b.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":2,"headRefName":"work/1002-code","isDraft":false}]
+JSON
+OTHER2="$TMP/noadopt/other"; git clone -q "$REMOTE_DIR" "$OTHER2"
+git -C "$OTHER2" config user.email o@o; git -C "$OTHER2" config user.name o
+git -C "$OTHER2" config commit.gpgsign false
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+mkdir -p "$OTHER2/crates/x/src"
+printf 'fn main() {}\n' > "$OTHER2/crates/x/src/main.rs"
+git -C "$OTHER2" add -A
+git -C "$OTHER2" commit -q -m "fix(probe): a CRATE lands mid-gate"
+git -C "$OTHER2" push -q origin HEAD:linux-next
+exit 0
+GATE
+out10b="$(run_queue)"
+case "$out10b" in
+    *"requeue:land-queue:2:target-moved"*)
+        ok "ARM 10b: a move touching crates/ still RE-QUEUES — the change is a CLASSIFIER, not a decision to stop checking" ;;
+    *"adopt:land-queue:2"*)
+        bad "ARM 10b: a crates/ move was ADOPTED — the gate's verdict does NOT describe that tree, and this would ship a green about code the gate never saw" ;;
+    *)  bad "ARM 10b: neither adopted nor re-queued (did the mover run?): $(printf '%s' "$out10b" | tail -2)" ;;
+esac
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

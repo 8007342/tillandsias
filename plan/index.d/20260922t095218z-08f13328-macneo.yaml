@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    field: verifiable_closure
+    value: |-
+      A push on a work ref whose stamp is STALE must not end in a line claiming
+      ./build.sh --check is current. Two arms, and the pre-fix state fails both.
+
+      ARM A, THE OUTPUT. With the tree deliberately staled (touch any tracked
+      file the stamp covers, or simply push a tree that has not been gated),
+      push a work/<order> ref and capture the hook's stderr. The LAST line must
+      either (i) state the decider tally and the stamp verdict it actually saw,
+      e.g. `work-ref lane: 1 decider warned, gate-stamp
+      stale:tree-changed-since-gate — the landing queue gates this on arrival`,
+      or (ii) not be printed at all on a lane where refuse() returned. What it
+      must NOT do is assert `./build.sh --check current for this tree`.
+      MEASURED PRE-FIX (macneo, 2026-09-22, push of work/1302-7j8p at
+      4eec70dec): line 5 of the log read
+        warn:pre-push:pre-push: the tree changed since ./build.sh --check last passed
+      and the LAST line read
+        local gate: preflight clean, ./build.sh --check current for this tree
+      in the same push.
+
+      ARM B, THE INSTRUMENT AGREES. In that same state
+      `bash scripts/gate-stamp.sh` prints `stale:tree-changed-since-gate`. The
+      hook's trailer and the stamp tool must not contradict each other; the
+      test asserts they agree, so the fix cannot be to soften the stamp.
+
+
+      [2026-09-22T09:52:18Z macneo] ARM C, ADDED 2026-09-22: THE WARNING VOCABULARY CARRIES THE VERDICT CLASS.
+      Scope widened from the trailer to the warning text at macuahuitl-fedora's
+      direction, on two instances measured by pirria-silverblue (below). The trailer
+      and the per-decider warnings are one defect seen twice: both drop the class of
+      what happened on the way to the reader.
+
+      On a work ref, a decider that WILL refuse the relay and a decider that is
+      merely advisory must not produce the same line. Assert, on a work-ref push
+      carrying one of each:
+        (i)  the fatal one names the decider AND says it will refuse the relay;
+        (ii) the advisory one is distinguishable from it in its first line, not only
+             in detail lines a reader may not reach;
+        (iii) the push STILL EXITS 0. The fix is the text, never the lane — a work
+             ref is deliberately ungated (1315-4a7j), and making it refuse would
+             push hosts toward salvage refs for ordinary work. A patch that closes
+             the lane fails this arm.
+      The data already exists: the verdict prefix carries the distinction
+      (`blocked:` versus a note), so only the presentation loses it.
+    ts: "2026-09-22T09:52:18Z"
+    host: macneo
+
+events:
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    event:
+      type: note
+      ts: "2026-09-22T09:52:18Z"
+      host: macneo
+      summary: |-
+        widened to the warning vocabulary per macuahuitl-fedora, on pirria-silverblue's two measured instances

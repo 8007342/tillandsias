@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes
+    event:
+      type: note
+      ts: "2026-09-22T05:13:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |
+        TWO FILES TOUCHED BEYOND THIS ROW'S owned_files, recorded as an event because
+        owned_files is a list and set-field writes scalars only (1184-tj2q).
+
+        owned_files names scripts/salvage-dirty-worktree.sh,
+        scripts/check-script-exec-bits.sh and scripts/test-salvage-preserves-exec-bits.sh
+        (which does not exist yet). PR #147 also changes:
+
+          scripts/test-script-exec-bits.sh              the decider's EXISTING hermetic
+                                                        fixture, where the other
+                                                        fourteen scenarios live. The
+                                                        three new ones belong beside
+                                                        them, not in a new file — a
+                                                        second fixture for the same
+                                                        checker would be a second home
+                                                        for one contract.
+          openspec/litmus-tests/litmus-script-exec-bit-shape.yaml
+                                                        the pinned scenario count, which
+                                                        MUST move with the fixture or the
+                                                        pin refuses the tree it is meant
+                                                        to protect.
+
+        scripts/lib/exec-bits-filter.awk is the decider's own filter, split out of it by
+        758-jw6v for speed; it is the named file in substance if not in spelling.
+
+        Neither addition changes what the decider decides beyond the row's subject: the
+        clean tree still reads ok:script-exec-bits:26 checked.

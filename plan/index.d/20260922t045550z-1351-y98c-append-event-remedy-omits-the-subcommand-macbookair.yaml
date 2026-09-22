@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: append-events-agent-id-refusal-names-the-identity-script-without-its-subcommand-so-a-reader-who-runs-it-as-written-is-refused-again
+    order: 1351-y98c
+    status: in_progress
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, fail-loud, plan-cli, papercut]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    unscoreable: ""
+    verifiable_closure: |
+      THE OUTPUT, not the mechanism: the message a caller sees when append-event
+      refuses for a missing agent id names the INVOCATION that produces one —
+      `scripts/agent-identity.sh id <backend>` — not merely the file. A reader
+      who types what the message says gets an id.
+
+      A fixture asserts that the refusal text contains the subcommand form. It
+      asserts NOTHING about agent-identity.sh's own behaviour: that script's
+      grammar is already pinned by litmus:agent-identity-canonical-source-shape
+      and re-asserting it here would be a second home for one contract.
+    title: |
+      append-event's missing-agent refusal says "derive the id from scripts/agent-identity.sh" without naming the `id <backend>` subcommand, so a reader who runs it exactly as written is refused again — while the sibling message forty lines away in the same file gets it right
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-22 while recording an event on
+      1254-47xd.
+
+      append-event refused, correctly, with:
+
+        error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset —
+        refusing to record agent_id 'unknown'. Derive the id from
+        scripts/agent-identity.sh (order 756-hn3a) and pass --agent, or export
+        TILLANDSIAS_AGENT_ID.
+
+      Run exactly as written, that script refuses:
+
+        $ bash scripts/agent-identity.sh
+        refused:agent-identity:empty-backend        # exit 1
+
+      because its interface is `agent-identity.sh id <backend>`, and a bare
+      invocation refusing is DESIGNED — the file's own freshness line says
+      "bare invocation refuses empty-backend per grammar". Give it the
+      subcommand and it answers:
+
+        $ bash scripts/agent-identity.sh id claude  # exit 0
+        macos-tlatoanis-macbook-air-claude-20260922t045523z
+
+      THE SIBLING MESSAGE IN THE SAME FILE ALREADY DOES IT RIGHT, forty lines
+      up, which is what makes this a slip rather than a missing decision:
+      "Derive it: scripts/agent-identity.sh id <backend> (order 756-hn3a;
+      enforcement 874-idnt …)". One arm of the same refusal path teaches the
+      invocation and the other names only the file.
+
+      SCOPE, STATED BECAUSE THIS ROW WAS ALMOST FILED AS SOMETHING LARGER: the
+      script's exit status is CORRECT and nothing about it needs changing. See
+      provenance.
+    deliverable: |
+      Make the `None` arm of append-event's agent-id refusal say what the `Some`
+      arm already says: name `scripts/agent-identity.sh id <backend>`, with the
+      order reference. One string.
+
+      A fixture asserts the refusal text names the subcommand form. Keep it to
+      that. DO NOT add an assertion about agent-identity.sh's exit status or its
+      bare-invocation grammar — that contract is pinned by
+      litmus:agent-identity-canonical-source-shape, and a second copy here would
+      be one contract with two homes, which is the defect this fleet keeps
+      paying for elsewhere.
+    next_action: >
+      Read both arms together at crates/tillandsias-plan/src/main.rs around 1082
+      and 1089; the fix is to make the second read like the first. Then assert
+      the OUTPUT — the refusal text — rather than the code path that produces it.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-22, at macuahuitl-fedora's
+      direction, AFTER A RETRACTION — and the retraction is the part worth
+      reading.
+
+      THE FILER FIRST REPORTED SOMETHING FALSE: that agent-identity.sh "prints a
+      named refusal and exits 0", a refusal scoring as success. It exits 1. The
+      error was reading `$?` after a pipe —
+      `bash scripts/agent-identity.sh 2>&1 | head -5; echo "rc=$?"` reports
+      HEAD's status, not the script's. AN EXIT STATUS READ AFTER A PIPE IS THE
+      LAST STAGE'S STATUS. That is the transferable part, and it is the same
+      mistake the filer had already made twice that day and had written a traps
+      line about: the lesson did not survive contact with the next command.
+
+      THE SECOND ERROR COMPOUNDED IT: the filer ran the script with no
+      subcommand, got its correct refusal of a malformed call, and reported the
+      tool as broken without asking why it refused. A defect inferred from a
+      property nobody asked the reason for is a guess wearing a measurement's
+      clothes.
+
+      The coordinator recorded that the same shape was theirs too: the false
+      finding was turned into a work order before anyone asked the reason for
+      the refusal. The retraction arrived before any of that work was spent,
+      which is the cheap outcome and the reason this row is p3 and one string
+      wide instead of the exit-status-and-fixture row that was nearly opened.
