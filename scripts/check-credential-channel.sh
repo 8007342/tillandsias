@@ -348,6 +348,57 @@ forge_upstream_auth_verdict() {
   esac
 }
 
+# ORDER 1347-r9g8, ARM A — ASK THE STORE BEFORE ASKING THE CLIENT.
+#
+# THE INVERSION THIS FUNCTION EXISTS TO MAKE. Until now the guard ran
+# `gh auth status` FIRST (the arm below) and only reached `busctl --user list`
+# hundreds of lines later, inside a fallback the common path never enters. So
+# the guard started a credential probe against a store it had not asked about.
+# When that store is not serving, `gh` is the process that discovers it — by
+# blocking, or by driving the D-Bus client into the state 1265-8qr6 measured,
+# where gnome-keyring-daemon aborts inside its own GetProperty handler and D-Bus
+# re-activates it LOCKED. The probe manufactures the state it reports.
+#
+# `busctl --user list` is a NAME LISTING answered by the bus daemon itself. It
+# never enters gnome-keyring's property handlers, so it cannot abort them — the
+# same property 1265-8qr6 relied on when it removed the `Locked` read, and the
+# reason this is the one call that can be shown harmless on a serving keyring.
+# The D-Bus client timeout is a SEPARATE question and is deliberately NOT
+# answered here: it is arm B's, it is unproven, and it needs a host whose
+# collection is serving plus an operator present to consent to killing it.
+#
+# FOUR ANSWERS, NOT TWO, and the distinction is the whole point:
+#   serving          the collection answers on the bus; gh may be asked
+#   not-serving      it does not; gh must NOT be started (this is the arm that
+#                    carries the order's weight)
+#   not-applicable   no busctl(1): a platform with no org.freedesktop.secrets
+#                    BY DESIGN (macOS keeps credentials in the Keychain).
+#                    Blocking gh here would break every Mac in the fleet.
+#   unknown          busctl exists and could not be bounded or did not answer.
+#
+# `not-applicable` and `unknown` both permit the gh probe, because this guard
+# must never convert "I could not ask" into "you have no credential" — the
+# conflation 1189-2ra5 exists to forbid, whose remedy is `gh auth login`, which
+# evicts the fleet (1025-a896).
+_ccc_secret_service_state() {
+  if ! command -v busctl >/dev/null 2>&1; then
+    printf 'not-applicable'
+    return 0
+  fi
+  local _names _rc=0
+  # Bounded like every other probe in this guard (988-7kxf). A bus that cannot
+  # answer a name listing in five seconds is not a bus this guard will wait on.
+  _names="$(_ccc_timeout 5 busctl --user list --no-pager 2>/dev/null)" || _rc=$?
+  if [ "$_rc" -ne 0 ] && [ -z "$_names" ]; then
+    printf 'unknown'
+    return 0
+  fi
+  case "$_names" in
+    *org.freedesktop.secrets*) printf 'serving' ;;
+    *)                         printf 'not-serving' ;;
+  esac
+}
+
 credential_channel_verdict() {
   local git_dir cred_file
   if git_dir="$(git rev-parse --git-dir 2>/dev/null)"; then
@@ -432,6 +483,53 @@ credential_channel_verdict() {
     echo "  REMEDY (macOS): brew install coreutils   # provides gtimeout(1)" >&2
     GH_PROMPT_DISABLED=1 gh auth status >/dev/null 2>&1
   }
+  # ORDER 1347-r9g8, ARM A — THE GATE THAT CARRIES THE ORDER'S WEIGHT.
+  #
+  # Read the store's state BEFORE starting gh, and refuse to start gh at all
+  # when the collection is not serving. Every other change in this arm is
+  # bookkeeping; this is the one that stops the guard from being the thing that
+  # breaks the host it is inspecting.
+  #
+  # `not-serving` is answered HERE and never falls through to the arms below,
+  # because those arms ask gh first and would re-enter the probe this line
+  # exists to prevent. The verdict is `unknown:`, not `missing:`: a collection
+  # that is not serving is a channel this guard could not OPEN, and reporting it
+  # as absent invites `gh auth login`, which evicts the fleet (1025-a896). That
+  # conflation is 1189-2ra5's whole subject and it is reproduced here rather
+  # than cited, because the tempting edit is to call this state "missing" — it
+  # reads like absence and it is not.
+  local _ccc_ss_state
+  _ccc_ss_state="$(_ccc_secret_service_state)"
+  if [ "$_ccc_ss_state" = "not-serving" ]; then
+    # THE VERDICT IS THE EXISTING, MORE SPECIFIC ONE — and the fixture is why.
+    #
+    # This arm first answered `unknown:secret-service-unprobed`, which is true
+    # but coarser than what the guard already knew how to say. The suite caught
+    # it immediately (arm 15, "no-service direction returned:
+    # unknown:secret-service-unprobed"), because reaching the gh probe EARLIER
+    # was the only way the old code got to this richer verdict — so moving the
+    # check before gh silently downgraded the diagnosis.
+    #
+    # That is the trade this order has to not make. The ordering fix is about
+    # not STARTING gh; it is not a licence to know less. The state is identical
+    # to the `unretrievable-no-service` layer below and gets the identical
+    # wording, so a reader cannot tell which path produced it — which is the
+    # property that matters, since the two paths now answer the same question at
+    # different times.
+    echo "[check-credential-channel] THE CREDENTIAL COULD NOT BE RETRIEVED — org.freedesktop.secrets is not on the session bus." >&2
+    echo "  This is a LOCAL retrieval failure, not an account problem. gh cannot reach" >&2
+    echo "  the secret store at all, so nothing has been presented to GitHub yet." >&2
+    echo "  Common in a headless/cron/ssh session with no session keyring." >&2
+    echo "  ORDER 1347-r9g8: gh was NOT started against this collection. On a" >&2
+    echo "  non-serving store that probe is what discovers the state — by blocking," >&2
+    echo "  or by aborting gnome-keyring-daemon inside its own property handler" >&2
+    echo "  (1265-8qr6), after which D-Bus re-activates it LOCKED. The probe would" >&2
+    echo "  manufacture the state it reports." >&2
+    echo "  REMEDY: run inside a session with a keyring, or inject GH_TOKEN for this run." >&2
+    echo "blocked:credential-unretrievable-no-keyring-service"
+    return 1
+  fi
+
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
      && command -v gh >/dev/null 2>&1 \
      && _ccc_gh_auth_ok; then
