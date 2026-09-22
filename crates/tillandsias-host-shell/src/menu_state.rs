@@ -679,38 +679,42 @@ pub fn build(state: &MenuState) -> MenuStructure {
     items.push(MenuItem::disabled(ids::VERSION, ver_str, "informational"));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
-    // (5) LINUX ONLY: the project list goes LAST, below the footer.
+    // (5) THE LINUX-ONLY REORDER IS REVERTED. It made the menu WORSE, and the
+    // measurement that proves it is worth more than the change was.
     //
-    // OPERATOR REPORT 2026-09-22: "clicking on a project expands the options
-    // within the same space, so it goes under the existing menus."
+    // WHAT IT DID. Operator, 2026-09-22: "clicking on a project expands the
+    // options within the same space, so it goes under the existing menus." So
+    // the cloud list was moved below the footer, on the reasoning that an
+    // inline expansion would then grow into the scroll region instead of
+    // displacing anything.
     //
-    // WHY THIS IS A LINUX-ONLY REORDER AND NOT A PARITY BREAK WORTH AVOIDING.
-    // gnome-shell renders a nested DBusMenu submenu INLINE — measured in the
-    // extension's own source, `dbusMenu.js:590`, where `children-display ==
-    // 'submenu'` maps unconditionally to `PopupMenu.PopupSubMenuMenuItem`, an
-    // expanding section. There is no branch that produces a flyout, so the
-    // shape is the shell's choice and no property we can set changes it.
-    // Expanding a project therefore INSERTS its seven harness rows into the
-    // list, pushing everything below it down and off the fold.
+    // WHAT ACTUALLY HAPPENED. Operator, same day, after: "it correctly lists
+    // all projects with a vertical scroll bar, but I can't launch any project,
+    // when clicking on a project the agent selector isn't visible." An
+    // expansion that opens at the BOTTOM of an already-scrolling list has
+    // nothing below it to scroll into, and gnome-shell does not scroll a
+    // freshly-opened PopupSubMenu into view. Before the reorder the selector
+    // was visible and merely displaced the footer; after it, the selector could
+    // not be reached at all. A cosmetic complaint was traded for a functional
+    // one.
     //
-    // NSMenu and Win32 HMENU both open a real flyout over the parent, which
-    // displaces nothing — so on those two surfaces the footer-last convention
-    // is right and there is nothing to fix. Reordering them to match Linux
-    // would move `Quit` out of its conventional last slot on two platforms to
-    // solve a problem neither of them has.
+    // THE MENU WAS NEVER WRONG, WHICH IS THE PART TO KEEP. Read off the live
+    // tray's own DBusMenu rather than inferred from the symptom:
+    //     id 22   "Cloud"                children-display submenu, 25 children
+    //     id …975 "8007342/tillandsias"  children-display submenu,  7 children
+    //                                    Claude/Codex/OpenCode… enabled: true
+    // Every agent leaf was emitted, enabled and carried. So this was a
+    // RENDERING reach, not a construction defect, and no amount of reading
+    // build() would have found it — the same distinction as "could not ask"
+    // versus "answered no", one layer up in the UI.
     //
-    // So the ID SET stays identical on all three (the parity that 628-p5tj
-    // bought and the tests still assert); only the Linux ORDER differs, and it
-    // differs for a measured rendering difference rather than for drift. With
-    // the list last, an expansion grows into the scroll region the operator
-    // already confirmed works instead of displacing the footer.
-    if state.target == TargetSurface::LinuxTray
-        && let Some(pos) = items.iter().position(|i| i.id == ids::CLOUD_PROJECTS)
-    {
-        let cloud = items.remove(pos);
-        items.push(MenuItem::separator());
-        items.push(cloud);
-    }
+    // ORDER IS NOT THE LEVER. Both placements are reachable failures of the
+    // same thing: gnome-shell expands a submenu INLINE, and an inline expansion
+    // inside a scrolling popup is displaced-or-invisible depending only on
+    // where it sits. The lever is DEPTH — a project row that launches without
+    // needing a second level does not expand at all. That is the operator's
+    // option 2 from 2026-09-22 and it is the follow-up; it is not made here,
+    // because restoring the ability to launch comes before improving it.
 
     MenuStructure::Ready { items }
 }
@@ -1112,9 +1116,23 @@ mod tests {
                 Some(ids::STATUS),
                 "{target:?}: status line is not first: {seq:?}"
             );
+            // REVERTED 2026-09-22: `quit` is last on ALL THREE again. The
+            // Linux-only reorder that made the cloud list last was withdrawn
+            // when the operator measured its effect — an inline expansion at
+            // the bottom of a scrolling popup is not reachable at all, which is
+            // worse than one that displaces the footer.
+            //
+            // THE SWEEP STAYS, and it is the part that was worth having. This
+            // arm exists because the test above it only ever built the WINDOWS
+            // menu while claiming all three; that defect is independent of
+            // which order is correct, and reverting the order must not revert
+            // the coverage. Written as a positive expectation per surface
+            // rather than a single constant, so a future divergence is
+            // expressed here rather than discovered by an operator.
             let expected_last = match target {
-                TargetSurface::LinuxTray => ids::CLOUD_PROJECTS,
-                _ => ids::QUIT,
+                TargetSurface::LinuxTray | TargetSurface::WindowsTray | TargetSurface::MacosTray => {
+                    ids::QUIT
+                }
             };
             assert_eq!(
                 seq.last().map(String::as_str),
