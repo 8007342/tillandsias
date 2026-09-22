@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-credential-channel-guards-advisory-block-prints-unconditionally-before-the-state-branch-so-on-a-platform-with-no-busctl-it-asserts-a-locked-keyring-as-the-cause-and-an-unlock-as-the-remedy-for-a-question-the-guard-never-asked
+    field: context
+    value: |-
+      MECHANISM, read in the source rather than inferred from the output.
+      scripts/check-credential-channel.sh: the advisory `echo`s begin at :1011
+      and are UNCONDITIONAL; the state reader `_ccc_ss_late` is not consulted
+      until :1067. A host with no busctl gets `not-applicable` from
+      `_ccc_secret_service_state` (:383-386), the not-serving gate at :563 never
+      fires, and execution falls through the advisory on its way to
+      `missing:no-credential-channel`.
+
+      THE KNOWLEDGE WAS ALREADY IN THE FILE, SIX LINES ABOVE THE DEFECT. The
+      comment at :1002-1005 reads: "a host with no busctl or no secret service —
+      every macOS host, the forge, a headless server — falls straight through to
+      missing: exactly as before. Absence of the probe is never evidence of a
+      lock." The line immediately below it then tells that operator the keyring
+      may be locked and to go unlock it. The author knew the path and the text
+      under it was never revisited.
+
+      WHY IT IS THE SAME DEFECT AS 1347-r9g8 RATHER THAN A TYPO, and pirria's
+      own framing when shown it: that order exists to stop the guard asserting
+      what it could not ask. The VERDICT was swept and corrected; the SENTENCE
+      UNDER THE VERDICT asserts a cause and a remedy on a platform where the
+      guard never reached the question. A verdict string is an interface, and so
+      is the advisory beneath it. Only the first was grepped.
+
+      WHO PAYS. A Mac operator whose credential channel is genuinely absent is
+      sent to unlock a keyring that does not exist, chasing gnome-keyring-daemon
+      on a machine with no gnome-keyring. The correct next step on macOS is
+      something else entirely, and nothing in the output points at it. The one
+      protection that does survive is the DO NOT re-auth clause (1025-a896),
+      which is platform-independent and correct everywhere — so the text is not
+      uniformly wrong, which is precisely why nobody caught it.
+
+      NOT A REGRESSION. Present identically in 04a5ea471 and 31ffeaaba: the
+      742-byte stderr is byte-identical between the two trees and in the
+      PRE+stub run as well. pirria's 1347-r9g8 change does not touch it.
+
+
+      [2026-09-22T10:50:29Z macneo] THE TRANSFERABLE SHAPE, pirria-silverblue 2026-09-22, and the reason this row is
+      worth more than its two-hour fix. There are three forms of the same failure and
+      this is the third:
+
+        1. A VERDICT STRING IS AN INTERFACE. Change one and every consumer must be
+           grepped, not just the fixtures you own (1347-r9g8's generalisation).
+        2. A COMMENT IS NOT EVIDENCE. What a file says about itself is not a
+           measurement of what it does (801-g9nn).
+        3. THIS ONE: A COMMENT THAT IS RIGHT, LOAD-BEARING FOR A READER, AND SITTING
+           DIRECTLY ABOVE PROSE THAT CONTRADICTS IT.
+
+      Nobody was wrong. :1002-1005 states the macOS case correctly and was written by
+      someone who understood it. :1011 onward tells that same operator to unlock a
+      keyring. THE TWO HALVES WERE EDITED AT DIFFERENT TIMES AND NOTHING COMPARES
+      THEM. There is no gate for "the sentence you print disagrees with the comment
+      four lines up", and a reader who checks either half in isolation finds it
+      correct.
+
+      WHY ARM 2 IS THE ARM THAT MATTERS, in the words of the person who would have got
+      it wrong: given "the macOS advisory is false", the instinct is to delete the
+      paragraph — and that text is CORRECT on the platform it was written for. A Linux
+      host with a locked collection genuinely should unlock the keyring and genuinely
+      must not re-auth. An arm that refuses the deletion is the difference between
+      fixing the defect and trading it for a worse one. The same shape as a cap
+      removed because the cap was the only thing anyone was looking at.
+
+      AND THE next_action IS THE could-not-run/failed DISTINCTION APPLIED TO THE
+      SENTENCE INSTEAD OF THE VERDICT (1353-ryhq). The guard on this path did not
+      fail to find a channel; it never asked. Saying so, and saying plainly that it
+      does not know the macOS next step if it does not, is the same honesty the
+      verdict line already practises one layer up.
+
+      CLAIMING NOTE, recorded because the reasoning generalises: pirria has declined
+      to claim this, and not for want of time. Only a host WITHOUT busctl can verify
+      arm 1, and a fix verified by its author on the one platform where the bug cannot
+      appear is exactly how this family reproduces. If nobody takes it, they will
+      write the fix and hand it to macneo for arm 1 rather than claim it green from a
+      host that cannot see the subject — 1302-7j8p's rule, applied voluntarily before
+      any checker asks.
+    ts: "2026-09-22T10:50:29Z"
+    host: macneo
+
+events:
+  - packet_id: the-credential-channel-guards-advisory-block-prints-unconditionally-before-the-state-branch-so-on-a-platform-with-no-busctl-it-asserts-a-locked-keyring-as-the-cause-and-an-unlock-as-the-remedy-for-a-question-the-guard-never-asked
+    event:
+      type: note
+      ts: "2026-09-22T10:50:29Z"
+      host: macneo
+      summary: |-
+        pirria-silverblue's third-form framing, the arm-2 rationale, and the claiming note
