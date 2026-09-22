@@ -218,6 +218,52 @@ else
     bad "arm10: a failing publisher changed the relay's outcome (rc=$rc10) — the verdict must never gate the push"
 fi
 
+# ── ARM 11 — the --sync flag is ACCEPTED AT RUNTIME, not just written. ──────
+# THE --reset-state LESSON, applied before it could cost anything (see the
+# known_flags comment in crates/tillandsias-headless/src/main.rs). The first
+# draft of --sync was parsed, dispatched, helped and documented, and the binary
+# still answered `Unsupported option: --sync` and exited 2, because the runtime
+# allow-list is a separate list. A source scan sees the flag everywhere and
+# misses that. So this arm RUNS the binary.
+#
+# It asserts only that the flag is RECOGNISED: the outcome depends on whether
+# this host has a mirror, which is not this fixture's business.
+echo "arm 11 — the --sync flag is recognised by the built binary"
+BIN="${TILLANDSIAS_BIN:-$ROOT/target/release/tillandsias}"
+if [ ! -x "$BIN" ]; then
+    echo "  SKIP  no built binary at $BIN"
+else
+    out11="$("$BIN" --sync tillandsias 2>&1 | head -40)"
+    case "$out11" in
+        *"Unsupported option: --sync"*)
+            bad "arm11: the binary refuses --sync at runtime although it is parsed, dispatched and documented — the known_flags allow-list is a separate list" ;;
+        *)
+            ok "--sync is recognised (not in the unsupported-option path)" ;;
+    esac
+fi
+
+# ── ARM 12 — the image ships what the command invokes, at that exact path. ───
+# The contract between run_sync_project and the mirror image is two absolute
+# paths. If they drift the command fails at runtime with a crun "executable
+# not found", which is what happened the first time it ran here — and which
+# reads as a broken container runtime rather than an old image.
+echo "arm 12 — the mirror image ships both scripts at the paths --sync invokes"
+if ! command -v podman >/dev/null 2>&1; then
+    echo "  SKIP  no podman on this host"
+else
+    img12="$(podman image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^localhost/tillandsias-git:' | head -1)"
+    if [ -z "$img12" ]; then
+        echo "  SKIP  no localhost/tillandsias-git image built on this host"
+    else
+        if podman run --rm --entrypoint sh "$img12" -c \
+            'test -x /usr/local/share/git-service/publish-sync-state && test -x /usr/local/share/git-service/reconcile-exported-heads' >/dev/null 2>&1; then
+            ok "$img12 ships publish-sync-state and reconcile-exported-heads, both executable"
+        else
+            bad "arm12: $img12 does not ship both scripts at the paths --sync execs; the command would fail with a crun not-found that reads as a runtime fault"
+        fi
+    fi
+fi
+
 echo "mirror-sync-state: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || { echo "fail:mirror-sync-state:$fail arm(s)"; exit 1; }
 echo "ok:mirror-sync-state:$pass/$pass arms"

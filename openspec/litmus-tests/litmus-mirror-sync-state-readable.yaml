@@ -50,6 +50,19 @@ description: >
   publish calls removed it reports "a full relay run published NO sync-state
   verdict".
 
+  THE ON-DEMAND HALF (arms 11-12). `tillandsias --sync <project>` fetches
+  upstream into this host's mirror and reports the state, exiting non-zero
+  unless the answer is `heads-current` — `heads-behind` and `heads-unknown`
+  both mean "do not spend a push yet", and an unreadable verdict is never a
+  pass. Arm 11 RUNS THE BINARY rather than reading it: the first draft of the
+  flag was parsed, dispatched, helped and documented and the binary still
+  answered `Unsupported option: --sync`, because the runtime allow-list is a
+  separate list (the lesson the `--reset-state` comment in known_flags
+  records). Arm 12 pins the contract between the command and the image — two
+  absolute paths that, when they drift, surface as a crun "executable not
+  found" that reads as a broken container runtime rather than an old image.
+  Both arms skip by name where the binary or podman is absent.
+
   TAGS ARE DELIBERATELY OUT OF SCOPE. relay-refs.sh's pre-push refspec is
   heads-only, so no upstream tag state exists to compare against — measured on
   lenovinha, where latest/stable/unstable survived a full container restart
@@ -63,8 +76,8 @@ preconditions:
 critical_path:
   - step: "every arm holds: the manufactured behind and unknown states, and the lifecycle that publishes them"
     command: "bash scripts/test-mirror-sync-state.sh 2>&1"
-    expected_behavior: "ok:mirror-sync-state:10/10 arms"
+    expected_behavior: "ok:mirror-sync-state:12/12 arms"
     assert_exit: 0
-    assert_output_contains: "ok:mirror-sync-state:10/10 arms"
+    assert_output_contains: "ok:mirror-sync-state:12/12 arms"
     assert_output_nonempty: true
     timeout_ms: 120000

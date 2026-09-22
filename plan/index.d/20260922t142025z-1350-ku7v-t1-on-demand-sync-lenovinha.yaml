@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Events go to the OVERLAY, never to plan/index.yaml (699-usxc, 966-7umc).
+# The `event:` block is mandatory: an events: entry carrying definition fields
+# at the top level is a packet DEFINITION under the wrong key and the fold
+# drops it (812-d45t) — measured on this row four hours ago, when it wedged
+# the whole ledger as incomplete and the capability guard refused with a
+# precondition rather than a verdict.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T14:20:25Z"
+      agent_id: linux-lenovinha-claude-20260922t125444z
+      host: lenovinha
+      summary: |
+        T1 ON-DEMAND HALF — `tillandsias --sync <project>`.
+
+        The cadence half publishes the state at startup, on every reconciler
+        tick and around every relay push, with staleness bounded by
+        MIRROR_RECONCILE_INTERVAL. This is the other half: the answer NOW, for
+        a host or a tray action about to spend a push.
+
+        IT FETCHES BEFORE IT REPORTS, and that is the design decision worth
+        recording. Reading the published ref alone would answer a question
+        about the last tick, and the caller asking on demand is exactly the
+        caller for whom a tick-old answer is not good enough — this row's
+        motivating measurement is a host that fetched, rebased, and still lost
+        the race three times running. So the command runs the SAME reconcile
+        pass the periodic loop runs, republishes through the SAME publisher,
+        and reports. Nothing re-implements the verdict, so the on-demand and
+        cadence answers cannot drift apart.
+
+        IT FAILS CLOSED. Exit is non-zero unless the answer is heads-current:
+        heads-behind and heads-unknown both mean "do not spend a push yet",
+        and an unreadable verdict is never a pass. A mirror that has never
+        fetched upstream is not a current mirror — collapsing "behind" and
+        "absent" into one answer is 1338-tkfh itself.
+
+        TWO FAILURES FOUND BY RUNNING IT, NOT BY READING IT:
+
+        1. THE FLAG WAS REFUSED AT RUNTIME WHILE BEING FULLY WIRED. Parsed,
+           dispatched, helped and documented, and the binary still answered
+           `Unsupported option: --sync` with rc=2, because known_flags is a
+           separate allow-list. This is precisely the shape the --reset-state
+           comment at the head of that list records: "a binary that mentions
+           the flag everywhere a reader or a source scan would look while
+           refusing it at runtime". The comment was right and the list still
+           caught me. Arm 11 now RUNS the binary.
+
+        2. AN OLD MIRROR IMAGE REPORTED AS A BROKEN CONTAINER RUNTIME. The
+           first live run against this host's mirror answered
+           `crun: executable file /usr/local/share/git-service/publish-sync-state
+           not found`, which sends a reader to debug podman. The condition is
+           an image built before the publisher shipped and the remedy is a
+           rebuild, so the command now names that state:
+           `blocked:sync:mirror-image-predates-publisher:<container>` with the
+           rebuild as the remedy. A failure naming the wrong cause is this
+           fleet's recurring expense, and this row was filed about an instance
+           of it.
+
+        The verdict parse is extracted as sync_state_of() and unit-tested over
+        every way the answer could be misread as current: the three states,
+        trailing whitespace from a command substitution, an empty string, a
+        bare state with no prefix, and the publisher's own stderr shape.
+      evidence: |
+        ok:mirror-sync-state:12/12 arms (was 10/10; arms 11-12 are the
+        on-demand half).
+
+        Arm 11 runs the built binary and fails if it answers
+        `Unsupported option: --sync`. Arm 12 pins the contract between the
+        command and the image — the two absolute paths run_sync_project execs
+        — and both skip by name where the binary or podman is absent.
+
+        cargo test -p tillandsias-headless the_sync_verdict:
+          test tests::the_sync_verdict_parse_never_reads_a_stale_mirror_as_current ... ok
+          test result: ok. 1 passed; 0 failed
+
+        THE SHIPPED PUBLISHER PROVED INSIDE THE REBUILT IMAGE, on a scratch
+        bare repo manufactured behind its upstream:
+          sync-state:heads-behind:1790086797
+          ref=refs/tillandsias/sync-state/heads-behind/1/1790086797
+
+        LIVE RUN AGAINST THIS HOST'S MIRROR, honestly reported: the reconcile
+        half works end to end (it fetched bab36b2af..d1dbe6a60 into the
+        mirror's tracking namespace), and the publish half is blocked because
+        the RUNNING container predates the COPY:
+          blocked:sync:mirror-image-predates-publisher:tillandsias-git-tillandsias
+        The image was rebuilt and ships both scripts, but the container was
+        NOT recreated: a forge sibling (tillandsias-tillandsias-forge-maintenance)
+        is running, and order 443 forbids destroying a mirror out from under
+        one. So the on-demand HAPPY PATH IS NOT YET VERIFIED ON A LIVE MIRROR
+        ON THIS HOST, and this row does not claim it is.
+      next_action: |
+        REMAINING FOR T1:
+        1. The happy path on a live mirror here, once no forge sibling is
+           running and the mirror container can be recreated on the rebuilt
+           image.
+        2. The tray action, which the scope names alongside the CLI flag.
+        3. Acceptance on the second regime — yoga's install regime — which the
+           coordinator routes after PR #163 is on trunk, since acceptance
+           needs something deployed to accept.
+      provenance: |
+        lenovinha-silverblue, on work/1350-ku7v, after the 2026-09-22 freeze
+        was lifted by name. The coordinator directed the --sync half to start
+        immediately rather than wait for #162/#163 to land, because the
+        on-demand half is what a tray action needs and does not depend on the
+        landing.
