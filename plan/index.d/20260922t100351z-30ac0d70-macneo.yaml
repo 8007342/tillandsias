@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    field: context
+    value: |-
+      build.sh:316, inside _pf_run_guard:
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+      `setsid` is util-linux. macOS does not ship it. The exec fails, the
+      subshell dies, and the runner books the guard as a refusal.
+
+      MEASURED, macneo, 2026-09-22: ran=0 skipped=3 failed=110, wall 27s. Not
+      one guard executed. The output is 110 lines of
+      `refused:preflight:<guard>` interleaved with 110 lines of
+      `exec: setsid: not found`.
+
+      WHY THIS IS URGENT RATHER THAN MERELY BROKEN. macuahuitl-fedora is
+      putting a rule into the join-the-fleet skill, on the strength of tonight's
+      three relaunches, that every PR author run `./build.sh --preflight` on the
+      work ref before `gh pr ready` — because a work-ref push only WARNS on a
+      red decider (1315-4a7j) and so nothing before that step refuses for you.
+      That rule is correct and it is exactly what this fleet needs. It is also
+      unrunnable on every Mac in the fleet, and a Mac author who follows it gets
+      110 red lines naming guards rather than one line naming `setsid`. The
+      rule and the blocker should land together or the rule teaches a false
+      mechanism to the half of the fleet that cannot run it.
+
+      THE FAILURE FAMILY, again: the output is TRUE ABOUT ITSELF — the runner
+      really did fail to complete 110 guards — and FALSE ABOUT THE WORLD, since
+      it names 110 guards as the thing that refused when the thing that refused
+      is one absent binary. Cf. 1352-qbrd, filed minutes earlier from the same
+      push.
+
+      THE REPO ALREADY KNOWS HOW. scripts/test-dispatch-reap.sh:99 probes
+      `command -v setsid` and emits a NAMED SKIP —
+      `skip:dispatch-reap:no-proc-no-setsid ... which is NOT the same as
+      passing (1141-vf9w)`. The pattern is established and 965-sxec's named-skip
+      discipline covers it; build.sh:316 simply does not use it.
+
+
+      [2026-09-22T10:03:51Z macneo] THE FRAMING THAT SHOULD BE READ FIRST, pirria-silverblue 2026-09-22, kept in
+      their words: ran=68 skipped=31 exit 0 IS NOT A DEGRADED PASS, IT IS A
+      PASS-SHAPED OBJECT.
+
+      That is why the Windows locus is worse than the macOS one even though macOS
+      fails harder. A macOS run that fails 110 guards ANNOUNCES ITSELF: nobody cites
+      it as evidence a ref is safe. A Windows run that books twenty guards as deadline
+      skips and still prints ok: is INDISTINGUISHABLE FROM A CLEAN ONE AT THE CALL
+      SITE, and it is the one that will be cited. Loud about the wrong thing versus
+      silent about the right one, and only the silent one gets believed.
+
+      THE PROVENANCE OF THE RULE THIS ROW SERVES, recorded because it is the same
+      defect one level up. The fleet rule "run ./build.sh --preflight before every
+      PR ready" was adopted on three green runs, all on Linux, all on ONE host, where
+      it reports ran=96-97 skipped=14-15. It was then issued to a fleet on which it
+      DIES on two Macs and UNDER-COVERS by a third on Windows. pirria, who made the
+      measurement and generalised it, named it themselves: a single-platform
+      measurement turned into a fleet rule, in the same session spent arguing against
+      exactly that. The rule now stands SCOPED TO LINUX, with macuahuitl's fallback
+      (run the deciders directly on the merged work ref) as the honest instrument off
+      it until the capability probe lands.
+
+      THE ARM PIRRIA ASKED FOR ALREADY EXISTS, and is here rather than on 1352-vmbc:
+      "a preflight which could not RUN a guard must not be spelled the same as one
+      that ran it — at the level of the runner instead of a single decider." That is
+      arm 5 of scripts/test-preflight-verdict-categories.sh
+      (could-not-run:preflight: with its own counter, PR #153), and placing it at the
+      runner is deliberate: 1352-vmbc fixes setsid on macOS, and a per-decider fix
+      would have to be repeated for the forge's full tmpfs and for whatever absent
+      binary comes third.
+    ts: "2026-09-22T10:03:51Z"
+    host: macneo
+
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T10:03:51Z"
+      host: macneo
+      summary: |-
+        pirria-silverblue's pass-shaped-object framing and the rule's single-platform provenance
