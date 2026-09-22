@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host
+    event:
+      type: note
+      ts: "2026-09-22T00:40:31Z"
+      agent_id: linux-yoga-opus5-20260922t004031z
+      host: yoga
+      summary: |
+        SECOND FIELD REGRESSION OF THE NIGHT, found the same way as the first: by
+        running the queue on other hosts' work rather than by testing it.
+
+        WHAT HAPPENED. PR #136 was evicted with evict:land-queue:136:gate-failed:rc=1,
+        and the queue posted a comment on the PR reading "Fix and the queue will pick it
+        up again" — an assertion about the AUTHOR'S change. Measured afterwards, three
+        ways, all green: the base alone (3e800f7cf) 6/6; the base with the candidate
+        698cc7858 merged in, reproducing the queue's exact merge, 6/6; trunk today 6/6.
+        The two commits the queue combined produce a PASSING tree when combined by hand.
+
+        THE DEFECT, in the coordinator's framing which is better than mine: THE QUEUE
+        RUNS A TWO-OUTCOME COMPARE OVER A THREE-OUTCOME WORLD. It gates once, on
+        base+candidate, and maps every failure onto "the candidate is broken". The world
+        has at least three states — candidate-broken, base-already-broken, and transient
+        — and the queue cannot distinguish them because it never measures the base.
+
+        AND THE FIXTURE COULD NOT SEE IT. Every eviction arm uses a stub gate that fails
+        FOR THE CANDIDATE (arm 2 keys its red on the file the merge brings in). So the
+        fixture models exactly one of the three states, passes, and the queue ships
+        believing eviction is tested. Same shape as the stdin defect found hours
+        earlier: thirteen green arms over ground the arms could not reach.
+
+        THE FIX, which is the rule this host has been applying to everyone else's work
+        all night and had not applied to its own:
+          - before evicting, RE-RUN THE GATE ON THE BASE ALONE
+          - if the base ALSO fails -> `requeue:<n>:base-failed` and BLAME NOBODY; the
+            candidate is untouched and the trunk is what needs attention
+          - if the base PASSES -> evict, and attach the candidate's own gate log so the
+            author has the evidence rather than an assertion
+          - the comment wording changes either way: an eviction means "the gate failed
+            with this merged", never "your change is broken"
+        That is a control asserting its premise before reading its verdict.
+
+        THE CIRCUMSTANTIAL READING, recorded so a recurrence is testable rather than
+        suggestive. The failing guard refuses on a PRECONDITION — it will not run if the
+        tree is already blocked:plan-ledger-incomplete, which is a property of the FOLD
+        and not of any diff. pirria supplied the timeline afterwards, in UTC:
+            21:48:30Z  698cc7858  the candidate
+            21:50:39Z  9e79783fa  plan(yolanda): 2 fragments
+            21:54:18Z  66c94e723  plan(unknown): 2 fragments
+            21:59:49Z  ce20ab5e7  plan(unknown): 1 fragment
+            22:02:43Z  3e800f7cf  the BASE — itself a fragment merge
+        FOUR FRAGMENT LANDINGS IN FOURTEEN MINUTES, and the base minted in the middle of
+        them. A transient fold state during the gate would produce exactly this failure
+        and would not reproduce afterwards. NOT PROVEN. If it recurs during another
+        fragment burst the correlation becomes testable, and the next occurrence must
+        CAPTURE THE FAILING TREE before it is destroyed rather than read a log tail.
+
+        RETRACTED ON THE PR ITSELF, not only by message, at pirria's prompting: a PR
+        comment asserting a cause is the artefact someone reads three weeks later
+        without the retraction attached. Same failure mode as the stale skill caution
+        corrected earlier tonight — a durable artifact carrying a claim since disproven.
