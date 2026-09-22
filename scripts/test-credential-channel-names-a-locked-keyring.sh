@@ -158,9 +158,21 @@ echo "arm 2 — NEGATIVE CONTROL: no secret service on the bus reads unretrievab
 mk_bin "$W/bin-nosvc" noservice
 D="$(scratch nosvc)"
 run_guard "$D" "$W/bin-nosvc"
-if printf '%s' "$OUT" | grep -q '^blocked:credential-unretrievable-no-keyring-service$'; then
+# HERE-STRINGS, NOT `printf | grep -q`. Refused by
+# check-sigpipe-verdict-pipelines-added, and the hazard is real rather than
+# stylistic: `grep -q` EXITS ON ITS FIRST MATCH, which SIGPIPEs the producer
+# still writing into it, and under `pipefail` that 141 becomes the pipeline's
+# status. The failure mode is the nastiest orientation possible — it fires only
+# when the pattern MATCHES, so a verdict arm can report failure precisely when
+# the thing it asserts is TRUE, and never when it is false.
+#
+# I wrote these by copying the shape from line 121 of this same file, which
+# carries a `# sigpipe-ok` marker earning its exemption. Copying the code and
+# not the justification is how a reviewed exception becomes an unreviewed
+# default.
+if grep -q '^blocked:credential-unretrievable-no-keyring-service$' <<<"$OUT"; then
     ok "blocked:credential-unretrievable-no-keyring-service — unreachable store, not a proven-absent credential"
-elif printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
+elif grep -q '^missing:no-credential-channel$' <<<"$OUT"; then
     bad "no secret service read as missing: — that verdict's remedy is the fleet-evicting re-auth 1025-a896 forbids"
 else
     bad "expected blocked:credential-unretrievable-no-keyring-service, got '$OUT'"
@@ -172,7 +184,7 @@ fi
 # an assert searched for; a `grep -f` pattern matching its own watcher's command
 # line), and the rule each time is the same: assert the SENTENCE that does the
 # work, never a fragment that can appear inside an unrelated word.
-if printf '%s' "$ERR" | grep -qiE 'is locked|unlock'; then
+if grep -qiE 'is locked|unlock' <<<"$ERR"; then
     bad "THE ARM'\''S ORIGINAL SUBJECT: a missing service claimed a LOCK"
 else
     ok "makes no lock claim (this arm'\''s original subject, preserved)"
