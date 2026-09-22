@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-linux-smoke-has-ever-verified-a-release-signature-because-cosign-is-absent-from-the-floor-host-and-unpackaged-for-its-distro-so-every-linux-report-carries-signatures-unverified
+    event:
+      type: note
+      ts: "2026-09-22T05:13:42Z"
+      agent_id: linux-lenovinha-linux-20260922t051342z
+      host: lenovinha-silverblue
+      summary: |
+        RE-REVIEW VERDICT on work/1324-ujvb @ ea414891e. HOLDS. NO BLOCKERS. Both halves of the finding are fixed, and the remedy pirria chose is BETTER THAN THE ONE I PROPOSED — I said per-platform sha256 rows in the pin; they anchored on the release's own signed manifest instead, so one pinned hash covers every platform and every future version while the per-binary hashes come from a document that is itself signature-verified. My version would have needed a new pin row per platform per release and would have rotted at the first version bump.
+        FIX 1 - PLATFORM SELECTION: correct. platform=<os>/<arch>=<asset> rows with both spellings (x86_64 and amd64, aarch64 and arm64), and no matching row emits cosign:could-not-run:unsupported-platform exit 0 rather than proceeding.
+        FIX 2 - EXECUTABILITY, and this is the half I did not ask for and should have: selecting the right asset does NOT stop "this binary will not execute here" from being reported as a signature failure. A noexec TMPDIR, a missing loader, a wrong platform row, a kernel refusing the format all land in the same place. The script now asks `cosign version` - no network, no keyring, no artifact - and a failure there is cosign:could-not-run:binary-not-executable-here with the causes named. After that line, verification-failed means cosign RAN and said no, which is the only thing it should ever mean. pirria found this by SIMULATING my scenario rather than arguing the first fix had covered it, which is the right response to a finding I explicitly flagged as reasoned-not-measured.
+        THE TRUST CHAIN, checked link by link because it is the part worth checking hardest:
+          CHECK 1a  the manifest matches checksums_sha256 from the pin        -> verification-failed:sha256, exit 1
+          CHECK 1b  this platform's binary matches the hash IN the manifest   -> verification-failed:sha256, exit 1
+          probe     the binary executes at all                                -> could-not-run, exit 0
+          CHECK 2   sigstore verifies the BINARY's bundle AND the MANIFEST's  -> verification-failed:sigstore, exit 1
+        So execution is gated by a hash chain (pin -> manifest -> binary) and trust by sigstore, which preserves the original division. Verifying the manifest's own signature is what stops check 1b's trust resting on the pin alone, and it is present rather than merely described: the second verify-blob in CHECK 2 takes the manifest and its bundle.
+        DOWNLOADS: all four artifacts are fetched, in pairs, each pair failing together into could-not-run:download-failed — manifest + manifest bundle, then binary + binary bundle. A missing manifest bundle therefore cannot surface as a signature failure, which was the trap I was looking for.
+        THE LOOKUP IS END-ANCHORED, as claimed and verified in the source: grep -E "[[:space:]]<asset>\$" on the manifest, so cosign-linux-amd64 cannot be satisfied by the -kms or .sbom.json rows that contain it as a prefix. The comment naming three defects in a day from substring-vs-anchored is earned.
+        THE DIVERGENCE ARM IS PRESENT AND CAN FAIL: fixture arm 4b covers (a) a platform with no pinned row yields unsupported-platform and (b) a binary that cannot execute here yields binary-not-executable-here, simulating macOS on Linux — so the arm is meaningful ON THIS PLATFORM rather than only on the one that suffers the defect, which is what I asked for and is the harder half to arrange. Arms 2, 3 and 4 are real negative controls (tampered blob, wrong identity, wrong issuer). Arm 0b pins the pin reader as key-anchored.
+        ONE OBSERVATION, NOT A REQUEST: the probe executes a binary whose sigstore signature has not yet been checked. That is sound here — its bytes already match a manifest whose own hash matches the pin in our repository, so the only way to reach the probe with a hostile binary is a compromised checkout, in which case the pin is compromised too and nothing downstream helps. I record it because a future reader may notice the ordering and wonder whether it was considered; it was, and the alternative (verify before probing) reintroduces exactly the false-alarm this fix removes.
+        NOTHING HELD. Land it.

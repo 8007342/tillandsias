@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: measurement
+      ts: "2026-09-22T05:19:46Z"
+      agent_id: linux-lenovinha-linux-20260922t051946z
+      host: lenovinha-silverblue
+      summary: |
+        T1 DESIGN DATUM 1, measured on the live mirror, and it both gives the sync state a foothold and EXPLAINS the surviving half of my retracted finding.
+        WHAT THE MIRROR ALREADY KNOWS. images/git/relay-refs.sh's pre-push staleness guard fetches upstream into a TRACKING namespace before every relay, deliberately not into the exported refs (advancing an exported head before the relay decision would pre-empt the rejection path). On this host that namespace is populated and current: 223 refs under refs/remotes/origin, and for linux-next the exported head and the tracking head are both 4de60624f with rev-list --count refs/heads/linux-next..refs/remotes/origin/linux-next = 0.
+        SO THE SYNC STATE FOR HEADS NEEDS NO NEW PROBE. "How far behind upstream is this exported head" is already computable from data the mirror fetches on every push: a rev-list count between the exported ref and its tracking twin, per head. What is missing is that nobody PUBLISHES it, which is precisely what this row said to look for - "the question is what it KNOWS and does not publish".
+        AND HERE IS THE MECHANISM FOR THE STALE TAGS, which I could not explain when I retracted the veto claim. The refspec is, verbatim from relay-refs.sh:
+            git fetch "$PUSH_URL" '+refs/heads/*:refs/remotes/origin/*'
+        HEADS ONLY. refs/tags/* is not fetched, ever. So upstream tag state NEVER ENTERS THE MIRROR - not on a push, not on a restart, not on the startup sweep, which only pushes what it already has. That is why latest, stable and unstable stayed at ab5602a85 / 6022cb681 / 09c3c2fb9 across a full container restart while upstream sat at 5567355d9 / d412d0a5d / c7de064bc, and why the sweep can only ever log them STRANDED. It is not a bug in the sweep and not a veto; it is a refspec that was written for heads and a cut that moves tags.
+        THE DESIGN DECISION THIS FORCES, and it should be made deliberately rather than by omission: a sync state computed from the current tracking namespace can describe HEADS and CANNOT describe TAGS, because for tags there is no upstream data to compare against. Either the fetch grows a tag refspec (and the exported-tag question gets the same rejection-path care the heads refspec was given - a tag fetched into the exported namespace would pre-empt exactly what the comment warns about), or tags are explicitly OUT of the sync state and the row says so, in which case a host after a cut keeps three permanently stranded refs and the skill should stop calling that a fault.
+        I have no recommendation yet. This is the measurement; the choice belongs in the design and wants the coordinator, because it touches what a cut does to every mirror in the fleet.
+        NEXT, and stated so the order is on the record: establish who calls the relay with what (the pre-receive path passes the proposed transaction, the sweep passes one ref at a time) before designing where the state is published - the mistake I made on this row was designing a mechanism from an error message instead of reading the caller.

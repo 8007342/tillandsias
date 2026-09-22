@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    order: 1353-ryhq
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, portability, macos, gating, multi-host]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The instrument
+      this row needs is a portability assertion that does not yet exist, and
+      naming it as a pin would declare a test nothing defines.
+      THE FILE TO WRITE, in the same commit as the fix:
+      openspec/litmus-tests/litmus-preflight-runs-or-names-the-capability.yaml
+      WHAT IT MUST ASSERT, measured on this row already:
+        1. ON A HOST WITHOUT setsid, ./build.sh --preflight either RUNS the
+           guards or emits ONE line naming the missing capability. What it must
+           not do is emit a per-guard `refused:preflight:<guard>` for guards it
+           never started. The pre-fix control is on this row: ran=0 skipped=3
+           failed=110, 110 of those carrying `exec: setsid: not found`.
+        2. A REFUSAL AND A NON-START ARE DISTINGUISHABLE IN THE OUTPUT. This is
+           the assertion that matters and the reason arm 1 is not enough: a
+           reader must be able to tell "this guard ran and refused the tree"
+           from "this guard never ran". Today both print the same token.
+        3. THE POSITIVE CONTROL, without which arm 1 passes vacuously on any
+           Linux host: on a host WITH setsid the suite still reports ran>0, so
+           the fix cannot be to make --preflight skip everything everywhere.
+    verifiable_closure: |
+      ON A MAC, `./build.sh --preflight` on a clean checkout either reports
+      ran>0, or exits naming the missing capability ONCE rather than as 110
+      per-guard refusals. MEASURED PRE-FIX on macneo 2026-09-22, macOS 27.0
+      arm64, at work/1302-7j8p 4eec70dec:
+        refused:preflight:ran=0 skipped=3 failed=110 wall=27s
+        111 lines matching ^refused:preflight:
+        110 lines of `./build.sh: line 316: exec: setsid: not found`
+      Every one of those 110 names a guard that never started. Re-running the
+      same command after the fix is the whole test; the pre-fix numbers above
+      are the control.
+    title: |
+      ./build.sh --preflight runs every guard through an unguarded `exec setsid`, which macOS does not have, so all 110 guards report as refusals rather than as one missing capability — and the lane the fleet is about to mandate before `gh pr ready` is dead on every Mac
+    context: |
+      build.sh:316, inside _pf_run_guard:
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+      `setsid` is util-linux. macOS does not ship it. The exec fails, the
+      subshell dies, and the runner books the guard as a refusal.
+
+      MEASURED, macneo, 2026-09-22: ran=0 skipped=3 failed=110, wall 27s. Not
+      one guard executed. The output is 110 lines of
+      `refused:preflight:<guard>` interleaved with 110 lines of
+      `exec: setsid: not found`.
+
+      WHY THIS IS URGENT RATHER THAN MERELY BROKEN. macuahuitl-fedora is
+      putting a rule into the join-the-fleet skill, on the strength of tonight's
+      three relaunches, that every PR author run `./build.sh --preflight` on the
+      work ref before `gh pr ready` — because a work-ref push only WARNS on a
+      red decider (1315-4a7j) and so nothing before that step refuses for you.
+      That rule is correct and it is exactly what this fleet needs. It is also
+      unrunnable on every Mac in the fleet, and a Mac author who follows it gets
+      110 red lines naming guards rather than one line naming `setsid`. The
+      rule and the blocker should land together or the rule teaches a false
+      mechanism to the half of the fleet that cannot run it.
+
+      THE FAILURE FAMILY, again: the output is TRUE ABOUT ITSELF — the runner
+      really did fail to complete 110 guards — and FALSE ABOUT THE WORLD, since
+      it names 110 guards as the thing that refused when the thing that refused
+      is one absent binary. Cf. 1352-qbrd, filed minutes earlier from the same
+      push.
+
+      THE REPO ALREADY KNOWS HOW. scripts/test-dispatch-reap.sh:99 probes
+      `command -v setsid` and emits a NAMED SKIP —
+      `skip:dispatch-reap:no-proc-no-setsid ... which is NOT the same as
+      passing (1141-vf9w)`. The pattern is established and 965-sxec's named-skip
+      discipline covers it; build.sh:316 simply does not use it.
+    next_action: |
+      Not claimed. Any host can write it; only a Mac (or any host without
+      setsid) can verify it, and the pre-fix control is recorded above so a
+      Linux author does not need one to start.
+      1. Probe `command -v setsid` ONCE, not per guard.
+      2. Where it is absent, decide between (a) running the guard without its
+         own session and accepting that the deadline signals only the child —
+         read build.sh:290-306 first, that comment records why the session
+         exists and what breaks without it — or (b) an equivalent that exists
+         on macOS. Note `setsid timeout ...` was already measured and rejected
+         on 2026-09-20 for breaking 124 detection, so do not re-propose it.
+      3. Whichever is chosen, the missing capability is named ONCE at the top,
+         and a guard that did not start never prints the same token as a guard
+         that refused.
+      4. Land the join-the-fleet sentence about `--preflight before gh pr ready`
+         with a note that it needs setsid, or land it after this fix.
+    provenance: |
+      Measured on macneo (Tlatoanis-MacBook-Neo, macOS 27.0, arm64) 2026-09-22
+      on the FIRST attempt to follow macuahuitl-fedora's new pre-`gh pr ready`
+      rule, at work/1302-7j8p 4eec70dec. Related: 1315-4a7j (the work-ref lane
+      that warns instead of refusing, which is why a pre-ready preflight is
+      needed at all), 1305-udgs (the preflight lane itself), 1141-vf9w and
+      965-sxec (named skips), 1352-qbrd (the sibling finding from the same
+      push), and the 2026-09-20 measurement at build.sh:297 that already ruled
+      out `setsid timeout`.
