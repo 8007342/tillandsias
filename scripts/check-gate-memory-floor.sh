@@ -28,6 +28,31 @@
 # and two kills on the same day. What moved was what was free.
 set -uo pipefail
 
+# ORDER 1354-apns. EACH could-not-run ALSO ENDS ON A `skip:` LINE, because the
+# readers that score this decider know exactly one word for "nothing was
+# asserted" and it is not this one.
+#
+# THE RULE IS ALREADY RIGHT IN BOTH READERS AND CANNOT HEAR THIS SPELLING.
+# build.sh's preflight matches `^skip:` under the comment "A NAMED SKIP IS NOT A
+# FAILURE, whatever it exits with (1273-4mak)"; run-litmus-test.sh recognises
+# `skip:` on the LAST non-empty line. MEASURED on macOS 2026-09-22: this
+# decider's honest `could-not-run:...no-meminfo` was scored
+# `refused:preflight:check-gate-memory-floor`, and `./build.sh --preflight`
+# therefore exited 1 on a Mac regardless of the tree — with the preflight now
+# mandatory before every `gh pr ready`, that is a step no macOS author can
+# satisfy.
+#
+# THE could-not-run LINE STAYS, and the exit status stays. A reader must still
+# see WHICH instrument could not answer and why — that is 965-sxec's channel and
+# the reason this decider refuses to answer "fine" from a file it never read. A
+# terminal `skip:` satisfies both readers at once: the preflight matches it
+# anywhere, the litmus runner reads the last line.
+#
+# WHAT IS NOT TOUCHED: the below-floor path still emits
+# `refused:gate:insufficient-memory` and is still scored a FAILURE. Turning that
+# into a skip would make this guard decoration, which is the direction 1176-fn2p
+# exists to prevent.
+
 FLOOR_MB="${TILLANDSIAS_GATE_MEMORY_FLOOR_MB:-1024}"
 MEMINFO=/proc/meminfo
 
@@ -42,6 +67,7 @@ done
 case "$FLOOR_MB" in
     ''|*[!0-9]*)
         echo "could-not-run:gate-memory:bad-floor:$FLOOR_MB (TILLANDSIAS_GATE_MEMORY_FLOOR_MB must be an integer in MB)"
+        echo "skip:gate-memory:bad-floor"
         exit 3 ;;
 esac
 
@@ -51,6 +77,7 @@ esac
 # an instrument that never read anything.
 if [ ! -r "$MEMINFO" ]; then
     echo "could-not-run:gate-memory:no-meminfo:$MEMINFO (this host exposes no readable MemAvailable; nothing is asserted about its memory)"
+    echo "skip:gate-memory:no-meminfo"
     exit 3
 fi
 
@@ -61,6 +88,7 @@ case "$avail_kb" in
         # only MemFree, which systematically UNDER-reports by the reclaimable
         # page cache and would refuse healthy hosts. Refusing to guess is right.
         echo "could-not-run:gate-memory:no-memavailable (read $MEMINFO but it carries no MemAvailable line; MemFree is not a substitute and would under-report)"
+        echo "skip:gate-memory:no-memavailable"
         exit 3 ;;
 esac
 
