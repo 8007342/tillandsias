@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-lane-that-brings-the-mirror-up-also-owns-it-so-when-that-lane-ends-the-host-s-push-lane-is-removed-while-the-skill-says-the-stack-keeps-running
+    order: 1348-gkvi
+    status: pending
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, containers, skills, agent-safety, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - skills/initialize-bare-metal-host/SKILL.md
+    verifiable_closure: |
+      litmus:initialize-bare-metal-host-idempotent is NOT the pin — it runs
+      against a stub podman and cannot observe a container's lifetime at all
+      (1346-cdwt). The pin is a REAL-HOST observation recorded on this row, in
+      the smoke shape 1312-i6da now uses: bring the stack up by the skill's §1,
+      end the launching lane, and record what `podman ps` holds afterwards.
+      The row closes when EITHER the skill's sentence matches what was measured,
+      OR the lifetime is changed so the sentence becomes true — and the closure
+      must say WHICH, because they are different fixes with different costs.
+      An arm that only checks the containers are up WHILE the lane runs proves
+      nothing: that is the state both the true and false versions of the
+      sentence predict.
+    title: |
+      the lane that brings the per-project mirror up also owns it, so when that lane ends the host's push lane is removed — while the skill says exiting leaves the stack running
+    context: |
+      MEASURED ON lenovinha 2026-09-22T00:03Z, in the middle of live work, and
+      it took this host's only credential-free push path away without warning.
+
+      THE SKILL SAYS, at skills/initialize-bare-metal-host/SKILL.md:33:
+        "It opens an interactive shell; exiting it leaves the stack running."
+      WHAT ACTUALLY HAPPENED, from the journal:
+        00:03:50  container remove  tillandsias-ssh-sidecar-tillandsias
+        00:03:51  container remove  tillandsias-git-tillandsias
+        00:03:53  container remove  tillandsias-tillandsias-forge-maintenance
+      and tillandsias-vault and tillandsias-proxy were left Stopping/Exited(0).
+      The removals were podman cleanup processes; the forge's was reaped by the
+      same podman process that had held it since the lane launched (m=+11342,
+      i.e. about 3h09m of lifetime, matching a launch at ~20:54Z). So the stack
+      did not keep running: the mirror, the sidecar and the forge were REMOVED
+      when the launching lane ended.
+
+      WHY IT MATTERS MORE THAN A DOC NIT. The per-project mirror IS the
+      credential-free push lane (1313-prin). This host's keyring had already
+      crashed (1347-r9g8), so the lane was the ONLY way it could reach GitHub.
+      When the lane ended, the host silently lost its last push path, and the
+      failure surfaced as `fatal: Could not read from remote repository` on the
+      next push — an error that names neither the mirror nor the lane, and that
+      I first misdiagnosed as an expired certificate and re-minted against.
+
+      WHAT I DO NOT KNOW AND AM NOT GUESSING: what ended the lane at 00:03. It
+      had run about three hours with stdin at /dev/null, so it did not exit
+      immediately on an empty stdin as the skill's model suggests. Whoever takes
+      this row should establish the lifetime rule before changing either the
+      sentence or the behaviour, because "exiting the shell" and "the lane
+      process ending some hours later" are different events and the skill only
+      describes the first.
+
+      THE SENTENCE ALSO CONFLATES TWO LIFETIMES, which may be the real defect:
+      `--ensure-enclave` brings up application-lifetime services (vault, proxy)
+      while the second command brings up a PER-PROJECT mirror owned by the lane.
+      One sentence covers both, and on this host both went away — so either the
+      sentence is wrong about the enclave too, or the enclave stopped for a
+      second reason nobody has named.
+    next_action: |
+      Unclaimed. FIRST establish the lifetime rule by measurement (what ends the
+      lane; what it takes with it; whether --ensure-enclave services are in the
+      same lifetime), THEN decide between: (a) correct the sentence to say the
+      mirror lives with the launching lane and name the command that outlives
+      it, or (b) give the mirror an enclave lifetime so the sentence is true.
+      (b) is the better host experience and the bigger change; (a) is honest
+      today. Do not do both halves in one commit without saying which is the
+      fix and which is the documentation.
+      A host whose keyring is down has NO remaining push path when this fires,
+      so whichever is chosen, the skill should say plainly that ending the lane
+      ends the lane's pushes.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-22 after it removed this host's push
+      lane mid-session. Related: 1313-prin (the lane this takes away),
+      1347-r9g8 (the keyring crash that made it the only path), 1312-i6da (the
+      skill), 1346-cdwt (why the existing fixture cannot see this).
