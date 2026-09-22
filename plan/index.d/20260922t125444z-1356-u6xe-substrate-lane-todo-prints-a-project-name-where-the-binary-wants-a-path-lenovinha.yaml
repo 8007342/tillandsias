@@ -65,12 +65,11 @@ packets:
       parent of the checkout is knowable and was being guessed. Deriving both
       values removes the guess.
     verifiable_closure: |
-      THE PRINTED COMMAND NAMES AN EXISTING CHECKOUT, AND ITS PROJECT ROOT IS
-      THAT CHECKOUT'S PARENT.
+      litmus:bare-metal-lane-command-is-runnable — THE PRINTED COMMAND NAMES
+      AN EXISTING CHECKOUT, AND ITS PROJECT ROOT IS THAT CHECKOUT'S PARENT.
 
-      litmus:bare-metal-lane-command-is-runnable
-      (openspec/litmus-tests/litmus-bare-metal-lane-command-is-runnable.yaml,
-      spec git-mirror-service, phase pre-build, size instant), three arms:
+      Defined in openspec/litmus-tests/litmus-bare-metal-lane-command-is-runnable.yaml
+      (spec git-mirror-service, phase pre-build, size instant), three arms:
       the fixture parses and is executable; the printed lane command names
       an existing checkout whose parent is the project root; and a SOURCE
       PIN read on the checker directly, requiring LANE_CMD to derive from
