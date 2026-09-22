@@ -68,20 +68,20 @@ m1="$W/m1"; mk_mirror "$m1" 0 >/dev/null
 git -C "$m1" for-each-ref --format='%(refname)' refs/remotes/origin 2>/dev/null \
   | while read -r r; do git -C "$m1" update-ref -d "$r"; done
 out1="$(sh "$PUB" "$m1" 2>/dev/null)"
-if [ "$(state_of "$out1")" = "unknown" ]; then
+if [ "$(state_of "$out1")" = "heads-unknown" ]; then
     ok "no tracking data -> unknown ($out1)"
 else
-    bad "arm1: expected unknown, got '$out1' — a mirror that has never fetched upstream is not current"
+    bad "arm1: expected heads-unknown, got '$out1' — a mirror that has never fetched upstream is not current"
 fi
 
 # ── ARM 2 — CURRENT: tracking twin equal to the exported head. ───────────────
 echo "arm 2 — an up-to-date mirror reports current"
 m2="$W/m2"; mk_mirror "$m2" 0 >/dev/null
 out2="$(sh "$PUB" "$m2" 2>/dev/null)"
-if [ "$(state_of "$out2")" = "current" ]; then
+if [ "$(state_of "$out2")" = "heads-current" ]; then
     ok "tracking twin equal -> current ($out2)"
 else
-    bad "arm2: expected current, got '$out2'"
+    bad "arm2: expected heads-current, got '$out2'"
 fi
 
 # ── ARM 3 — BEHIND: the arm this fixture exists for. ─────────────────────────
@@ -92,10 +92,10 @@ echo "arm 3 — a mirror whose upstream moved reports behind, with the head coun
 m3="$W/m3"; mk_mirror "$m3" 3 >/dev/null
 out3="$(sh "$PUB" "$m3" 2>/dev/null)"
 ref3="$(git -C "$m3" for-each-ref --format='%(refname)' refs/tillandsias/sync-state 2>/dev/null | head -1)"
-if [ "$(state_of "$out3")" = "behind" ] && [ "${ref3#refs/tillandsias/sync-state/behind/1/}" != "$ref3" ]; then
+if [ "$(state_of "$out3")" = "heads-behind" ] && [ "${ref3#refs/tillandsias/sync-state/heads-behind/1/}" != "$ref3" ]; then
     ok "upstream ahead -> behind, one head behind ($out3, $ref3)"
 else
-    bad "arm3: expected behind with a head count of 1, got '$out3' ref '$ref3'"
+    bad "arm3: expected heads-behind with a head count of 1, got '$out3' ref '$ref3'"
 fi
 
 # ── ARM 4 — an untracked local head must NOT read as behind. ─────────────────
@@ -105,7 +105,7 @@ echo "arm 4 — a head with no tracking twin is not counted as behind"
 m4="$W/m4"; mk_mirror "$m4" 0 >/dev/null
 git -C "$m4" update-ref refs/heads/salvage/local-only "$(git -C "$m4" rev-parse refs/heads/linux-next)"
 out4="$(sh "$PUB" "$m4" 2>/dev/null)"
-if [ "$(state_of "$out4")" = "current" ]; then
+if [ "$(state_of "$out4")" = "heads-current" ]; then
     ok "untracked local head ignored -> current ($out4)"
 else
     bad "arm4: an untracked head made the mirror read '$out4'; every mirror would be permanently behind"

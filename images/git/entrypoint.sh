@@ -629,7 +629,24 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
         if OUTPUT="$(printf '%s\n' "$RECORD" | (cd "$mirror" && "${RELAY_REF}") 2>&1)"; then
             retry_msg "[git-mirror] Startup retry-push OK: $ref"
         else
-            retry_msg "[git-mirror] Startup retry-push STRANDED (logged by name): $ref — $OUTPUT"
+            # ORDER 1350-ku7v. A STRANDED TAG IS EXPECTED, NOT A FAULT, and the
+            # line has to say so or three of them after every cut read as three
+            # failures. The pre-push refspec is heads-only
+            # (`+refs/heads/*:refs/remotes/origin/*` in relay-refs.sh), so an
+            # upstream tag move NEVER reaches this mirror; the sweep then offers
+            # its own older tag, upstream refuses to clobber, and the ref is
+            # stranded by design. Measured on lenovinha 2026-09-22:
+            # latest/stable/unstable survived a full container restart while
+            # upstream had moved. Tags are deliberately outside the sync state
+            # (coordinator's ruling) until a consumer needs them from the mirror.
+            case "$ref" in
+                refs/tags/*)
+                    retry_msg "[git-mirror] Startup retry-push STRANDED (expected, not a fault): $ref — the pre-push refspec is heads-only so upstream tag moves never reach this mirror; a cut leaves this stale by design (1350-ku7v) — $OUTPUT"
+                    ;;
+                *)
+                    retry_msg "[git-mirror] Startup retry-push STRANDED (logged by name): $ref — $OUTPUT"
+                    ;;
+            esac
             stranded="${stranded:+$stranded }$ref"
         fi
     done

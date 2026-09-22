@@ -311,9 +311,39 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     # here, that floor alone took the run from 148s to 196s — the deadline
     # machinery costing more than the guards it bounds. `sleep 0.1` is not POSIX,
     # so it is probed once and falls back to whole seconds where it is refused.
+    # ORDER 1352-vmbc. PROBE FOR setsid, the way the `sleep 0.1` line above
+    # probes for a non-POSIX feature, and for the same reason: this function
+    # must not assume a util-linux tool exists.
+    #
+    # MEASURED on macOS 2026-09-22, before this probe: `setsid` is absent, the
+    # exec below died in every guard, and `./build.sh --preflight` reported
+    # `refused:preflight:ran=0 skipped=3 failed=108`. Not "some deciders red" —
+    # NONE launched, and 108 identical launch failures are indistinguishable
+    # from 108 real refusals to anyone reading the summary.
+    #
+    # THE TREE ALREADY KNEW: scripts/test-dispatch-reap.sh:99 probes
+    # `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same
+    # as passing"). One caller asked and one did not.
+    #
+    # WITHOUT setsid THE GUARD STILL RUNS, deliberately degraded rather than
+    # skipped: the deadline, the poll and the 124 convention are unchanged, and
+    # only the process-GROUP signalling is lost. The kill lines below already
+    # fall back from `-$_pid` to `$_pid`, so a guard that leaves background
+    # children can outlive its deadline on such a host — which is exactly what
+    # setsid buys and why the summary SAYS the isolation was absent instead of
+    # letting a degraded run read as an isolated one.
+    if [ -z "${_PF_SETSID_PROBED:-}" ]; then
+        _PF_SETSID_PROBED=1
+        if command -v setsid >/dev/null 2>&1; then _PF_SETSID=setsid; else _PF_SETSID=""; fi
+    fi
+
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
-    ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    if [ -n "$_PF_SETSID" ]; then
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    else
+        ( cd "$SCRIPT_DIR" && exec bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
         if [ "$_d" -gt 0 ] && [ "$_ticks" -ge "$_max" ]; then break; fi
@@ -716,11 +746,19 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
 $(_preflight_roster | sort -u)
 PFEOF
 
+    # ORDER 1352-vmbc. NAME THE ISOLATION MODE IN THE VERDICT. A run without
+    # setsid keeps every deadline and every convention but loses process-GROUP
+    # signalling, so a guard that leaves background children can outlive its
+    # deadline. That is a real difference in what the run PROVED, and a reader
+    # must see it without opening build.sh.
+    _pf_iso="isolation=session"
+    command -v setsid >/dev/null 2>&1 || _pf_iso="isolation=none-no-setsid"
+
     if [ "$_pf_failed" -gt 0 ]; then
-        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed wall=$(( SECONDS - _pf_wall0 ))s" >&2
+        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed $_pf_iso wall=$(( SECONDS - _pf_wall0 ))s" >&2
         exit 1
     fi
-    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped wall=$(( SECONDS - _pf_wall0 ))s"
+    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped $_pf_iso wall=$(( SECONDS - _pf_wall0 ))s"
     exit 0
 fi
 

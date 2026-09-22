@@ -592,6 +592,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:init-log-cleanup
+  - litmus:installer-reports-wsl-guest-shape
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
