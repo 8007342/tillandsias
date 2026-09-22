@@ -27,3 +27,4 @@ STEP_SKIP_EXIT=2
 STEP_SKIP_DESC="skipped: not Darwin, or a live tray is present (the matcher was NOT exercised)"
 STEP_ERROR="the uninstaller's tray stop killed a process that merely MENTIONED the literal, or stopped stopping the tray (1231-cbie) — see which arm failed above"
 STEP_OK="Uninstaller tray-matcher bystander safety passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:uninstall-matcher-spares-bystanders"

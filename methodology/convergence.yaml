@@ -99,6 +99,41 @@ drift_control:
           hosts, and a 1269-gfdi slice whose own fixture would have first
           executed at release time had a gate step not been added for it.
 
+    - a_gate_step_MUST_carry_a_recorded_second_regime_run_before_it_enters_check:
+        reason: >
+          A step enters the gate with a second-regime record or not at all. The
+          measurement that matters for a step running on every host is not the
+          author's host. Measured 2026-09-20: steps 414 (1269-gfdi) and 416
+          (1273-4mak) both entered --check green on Linux and reddened BOTH
+          macOS gates within hours — 414 demanded a line that cannot print
+          where the subject skips its toolbox arms (1300-q7eq), and 416 digested
+          with sha256sum under a PATH pinned to /usr/bin:/bin, so it refused a
+          genuine artifact on one Mac while passing vacuously on another. The
+          record is a STEP_SECOND_REGIME variable in the .step file itself
+          ("<host> <YYYY-MM-DD> <darwin|msys> <verdict>"), kept beside the step
+          rather than in a sidecar so it cannot drift from its subject, and
+          enforced by scripts/check-gate-step-regimes.sh. A step that genuinely
+          cannot run off Linux records a NAMED SKIP as its verdict and that
+          COUNTS (965-sxec): what is required is an observation from the other
+          regime, not a green one. Recording a Linux host in that field does not
+          satisfy it, which the checker's third arm asserts.
+          AND THE RULE IS STRONGER THAN "THE OTHER REGIME MIGHT DIFFER", which
+          is the argument above and is weakest exactly where it matters most.
+          macbookair, 2026-09-22, verbatim: the row's usual argument is that the
+          second regime MIGHT differ, but on a step guarding a defect that
+          exists only where setsid is absent, the second regime is the only one
+          that can see the subject at all, so a Linux-only attestation there
+          would come from the regime that cannot reproduce the bug. For a step
+          whose SUBJECT is a platform-specific absence the second regime is not
+          a second opinion; it is the only place the phenomenon exists, and a
+          Linux record there is not weak evidence but evidence about a different
+          question. THE LIVE INSTANCE, caught by construction rather than by
+          anyone remembering: land80 refused with
+          violation:gate-step-single-regime:420-1352-vmbc.step, exactly one of
+          92 steps — the gate step for the setsid capability probe, authored
+          before this checker existed, guarding a defect that cannot occur on
+          Linux and about to enter the gate on a Linux attestation.
+
   detection:
     - compare_previous_and_current_spec: "Diff old and new spec versions"
     - flag_if_uncertainty_increases: "Fail if ambiguity_score rises"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-push-lane-answers-nothing-new-and-exits-zero-when-a-commits-plan-changes-are-all-outside-the-paths-it-carries-so-a-report-that-will-never-land-is-indistinguishable-from-one-that-just-did
+    event:
+      type: note
+      ts: "2026-09-22T04:37:33Z"
+      agent_id: linux-esmeraldinha-opus5-20260922t043733z
+      host: esmeraldinha
+      summary: |-
+        ANCESTRY IS THE WRONG QUESTION FOR A PLAN REF, AND THE SAME WORD MEANS OPPOSITE THINGS IN THE TWO LANES. This row is about a lane verdict that cannot be distinguished from a land; here is the mirror of it on the reader's side. THE FACT. scripts/push-plan-fragments-to-trunk.sh builds its commit with read-tree and commit-tree directly onto the CURRENT tip of origin/linux-next, deliberately, so that the worktree, the real index and the current branch are never touched. A consequence nobody had written down: the commit that lands is NOT the commit on your work ref, and the two share no ancestry. So a work ref carrying plan fragments is NEVER an ancestor of trunk, no matter how completely every one of its fragments has landed. MEASURED ON ESMERALDINHA 2026-09-21. Checking three of my own refs with git merge-base --is-ancestor reported all three NOT-LANDED, while a per-path comparison showed all SEVEN fragments across them byte-identical on trunk. I nearly reported three phantom outstanding items to the coordinator on the strength of the cheaper check. THE RULE, and it is the part worth carrying: integrated-is-proven-by-ancestry holds for CODE refs, which the land tool MERGES, and is false for PLAN refs, which the lane RE-EMITS. Same verb in two lanes, opposite truth, and nothing in either tool says so at the point where a reader reaches for the wrong one. THE CORRECT CHECKS, cheapest first. Existence: git cat-file -e origin/linux-next:<path> - adequate for plan fragments precisely BECAUSE they are append-only and immutable, so a path that exists is the same bytes by construction, and the lane already refuses the divergent case by name as refused:fragments-to-trunk:exists. Identity: compare git rev-parse <ref>:<path> against git rev-parse origin/linux-next:<path> - the strict form, worth it when the immutability assumption is the thing in question. A CORRECTION TO MY OWN SPECULATION, recorded so it does not propagate as a finding. Having been caught by the ancestry check myself, I suggested to the coordinator that their staging list might be derived from ref ancestry and would therefore re-offer landed rows indefinitely. IT WAS NOT - their staging has always been per path, using the existence form above, which is the cheap correct answer and one step cheaper than the blob compare I proposed. A plausible mechanism for a real symptom, asserted at someone else's system without checking it: the exact shape this fleet spent the day correcting, produced by me while writing about it. The symptom I saw was real and the cause I offered was invented.

@@ -311,9 +311,39 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     # here, that floor alone took the run from 148s to 196s — the deadline
     # machinery costing more than the guards it bounds. `sleep 0.1` is not POSIX,
     # so it is probed once and falls back to whole seconds where it is refused.
+    # ORDER 1352-vmbc. PROBE FOR setsid, the way the `sleep 0.1` line above
+    # probes for a non-POSIX feature, and for the same reason: this function
+    # must not assume a util-linux tool exists.
+    #
+    # MEASURED on macOS 2026-09-22, before this probe: `setsid` is absent, the
+    # exec below died in every guard, and `./build.sh --preflight` reported
+    # `refused:preflight:ran=0 skipped=3 failed=108`. Not "some deciders red" —
+    # NONE launched, and 108 identical launch failures are indistinguishable
+    # from 108 real refusals to anyone reading the summary.
+    #
+    # THE TREE ALREADY KNEW: scripts/test-dispatch-reap.sh:99 probes
+    # `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same
+    # as passing"). One caller asked and one did not.
+    #
+    # WITHOUT setsid THE GUARD STILL RUNS, deliberately degraded rather than
+    # skipped: the deadline, the poll and the 124 convention are unchanged, and
+    # only the process-GROUP signalling is lost. The kill lines below already
+    # fall back from `-$_pid` to `$_pid`, so a guard that leaves background
+    # children can outlive its deadline on such a host — which is exactly what
+    # setsid buys and why the summary SAYS the isolation was absent instead of
+    # letting a degraded run read as an isolated one.
+    if [ -z "${_PF_SETSID_PROBED:-}" ]; then
+        _PF_SETSID_PROBED=1
+        if command -v setsid >/dev/null 2>&1; then _PF_SETSID=setsid; else _PF_SETSID=""; fi
+    fi
+
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
-    ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    if [ -n "$_PF_SETSID" ]; then
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    else
+        ( cd "$SCRIPT_DIR" && exec bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
         if [ "$_d" -gt 0 ] && [ "$_ticks" -ge "$_max" ]; then break; fi
@@ -727,6 +757,30 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 # called it `refused` — 1309-fhxb's shape inside the fix for 1305.
                 grep -E '^skip:' "$_pf_tmp" | head -2
                 _pf_declskip=$((_pf_declskip + 1))
+            elif grep -qE '^could-not-run:' "$_pf_tmp"; then
+                # SECOND, DELIBERATELY — the `^skip:` arm above wins a tie.
+                # MEASURED 2026-09-22: after 1354-apns, check-gate-memory-floor
+                # prints BOTH `could-not-run:gate-memory:no-meminfo:...` and
+                # `skip:gate-memory:no-meminfo`, and it RAN. A guard that ran
+                # and named its own reason is a DECLARED SKIP (965-sxec), not a
+                # gap; scoring it could-not-run would put it in `unanswered`
+                # and make the door report partial: for a guard that gave its
+                # considered statement. With the arms in the other order this
+                # change quietly demoted a properly-named skip, which is arm 4's
+                # own principle broken by the fix for arm 5.
+                # THIS ARM IS FOR A GUARD THAT SAYS ONLY `could-not-run:`.
+                # THE GUARD RAN AND SAID IT COULD NOT ASK. Distinct from the
+                # launch failure below, which is the RUNNER failing to start it,
+                # and distinct from a refusal: nothing was learned about the
+                # tree either way, so it belongs in could-not-run rather than in
+                # refused. FOUND BY RUNNING THIS DOOR ON macOS, 2026-09-22:
+                # check-gate-memory-floor prints
+                # `could-not-run:gate-memory:no-meminfo` and exits 3 on a host
+                # with no /proc/meminfo, and this runner booked it as a REFUSAL
+                # — the exact conflation this order exists to remove, in the
+                # order's own runner, one branch below the one it fixed.
+                grep -E '^could-not-run:' "$_pf_tmp" | head -2
+                _pf_cantrun=$((_pf_cantrun + 1))
             elif [ "$_pf_rc" -eq 124 ]; then
                 echo "skip:preflight:${_pf_base%.sh}:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
                 _pf_deadline_n=$((_pf_deadline_n + 1))
@@ -750,6 +804,25 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
 $(_preflight_roster | sort -u)
 PFEOF
 
+    # ORDER 1352-vmbc. NAME THE ISOLATION MODE IN THE VERDICT. A run without
+    # setsid keeps every deadline and every convention but loses process-GROUP
+    # signalling, so a guard that leaves background children can outlive its
+    # deadline. That is a real difference in what the run PROVED, and a reader
+    # must see it without opening build.sh.
+    #
+    # MERGE NOTE (1353-ryhq x 1352-vmbc, 2026-09-22): both orders rewrote these
+    # summary lines in the same week and the conflict was real rather than
+    # textual. The resolution keeps BOTH facts because they answer different
+    # questions about the same run: `isolation=` says what the runner could
+    # GUARANTEE about a guard it started, and the categories below say whether a
+    # guard was started and answered at all. Dropping either one restores a
+    # summary that reads as coverage it does not have. isolation= is carried on
+    # EVERY verdict line, including the two this order added, for 1352-vmbc's
+    # own reason: pinning it only to the refusal would let a green run hide a
+    # degraded one.
+    _pf_iso="isolation=session"
+    command -v setsid >/dev/null 2>&1 || _pf_iso="isolation=none-no-setsid"
+
     # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
     # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured
     # the same defect as failed=108 and failed=110 within minutes of each other
@@ -762,7 +835,7 @@ PFEOF
     if [ "$_pf_sum" -ne "$_pf_total" ]; then
         # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
         # miscount here would hide exactly what this row exists to surface.
-        echo "refused:preflight:accounting-mismatch: $_pf_counts sum=$_pf_sum roster=$_pf_total — the door cannot account for every guard it enumerated, so no verdict it prints can be trusted" >&2
+        echo "refused:preflight:accounting-mismatch: $_pf_counts sum=$_pf_sum roster=$_pf_total $_pf_iso — the door cannot account for every guard it enumerated, so no verdict it prints can be trusted" >&2
         exit 1
     fi
 
@@ -772,7 +845,7 @@ PFEOF
     _pf_unanswered=$(( _pf_deadline_n + _pf_cantrun ))
 
     if [ "$_pf_failed" -gt 0 ]; then
-        echo "refused:preflight:$_pf_counts sum=$_pf_sum wall=${_pf_wall}s" >&2
+        echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
         exit 1
     fi
     if [ "$_pf_unanswered" -gt 0 ]; then
@@ -781,11 +854,11 @@ PFEOF
         # was 68 of 99 with twenty cut off one or two seconds past the budget.
         # The exit stays 0 because nothing REFUSED; the token changes because
         # nothing vouched either.
-        echo "partial:preflight:$_pf_counts sum=$_pf_sum wall=${_pf_wall}s"
+        echo "partial:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
         echo "partial:preflight: ${_pf_unanswered} guard(s) did not examine this tree — this run does not vouch for them; the gate still runs them" >&2
         exit 0
     fi
-    echo "ok:preflight:$_pf_counts sum=$_pf_sum wall=${_pf_wall}s"
+    echo "ok:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
     exit 0
 fi
 

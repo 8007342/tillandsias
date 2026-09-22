@@ -11,3 +11,4 @@ STEP_DESC="Checking a could-not-run gate step skips instead of asserting a verdi
 STEP_SCRIPT="scripts/test-gate-step-skip-exit.sh"
 STEP_ERROR="the could-not-run/content-failure distinction has regressed: a tooling gap may now read as a content verdict, or a real failure as a skip (1137-dzzu) — see the verdict line above"
 STEP_OK="Gate-step skip-exit contract passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

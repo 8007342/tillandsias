@@ -92,20 +92,88 @@ else
     ok "arm6:no arm or branch asserts a fixed guard count"
 fi
 
-# ── ARM 7 (LIVE) — the door's own verdict adds up when it can be run ────────
+# ── ARM 7 — 1352-vmbc's isolation= field survives on EVERY verdict line ────
+# THIS ARM PROTECTS ANOTHER ORDER'S EVIDENCE. 1352-vmbc added isolation=session
+# / isolation=none-no-setsid because a run without setsid keeps every deadline
+# but loses process-GROUP signalling, so a guard leaving background children can
+# outlive its deadline — a real difference in what the run PROVED. Their reason
+# for pinning it on BOTH lines applies to the two lines this order added: a
+# green run must not be able to hide a degraded one. These two orders rewrote
+# the same summary in the same week and the merge could have dropped the field
+# silently, which is why it is asserted here rather than trusted.
+# SUMMARY lines only, identified by the counts they carry — NOT every line
+# matching the token. The per-guard `refused:preflight:<name>` and the partial
+# detail line are not summaries and correctly carry no isolation; a first draft
+# of this arm flagged both. And the count is asserted, so the arm cannot pass
+# by matching nothing: a selector that stops matching is a guard that stops
+# guarding, silently.
+_iso_missing=""
+_iso_seen=0
+while IFS= read -r _line; do
+    [ -n "$_line" ] || continue
+    _iso_seen=$((_iso_seen + 1))
+    grep -q '_pf_iso' <<<"$_line" || _iso_missing="$_iso_missing ${_line%%:*}"
+done <<<"$(grep -nE 'echo "(ok|partial|refused):preflight[^"]*\$_pf_counts' <<<"$src")"
+if [ "$_iso_seen" -lt 3 ]; then
+    bad "arm7:found $_iso_seen summary verdict line(s), expected at least 3 (ok/partial/refused) — the selector has gone stale"
+elif [ -n "$_iso_missing" ]; then
+    bad "arm7:a summary verdict line does not carry isolation= (build.sh line(s):$_iso_missing) — 1352-vmbc's evidence"
+else
+    ok "arm7:all $_iso_seen summary verdict lines carry 1352-vmbc's isolation= field"
+fi
+
+# ── ARM 8 — AN OUTPUT CARRYING BOTH TOKENS IS A DECLARED SKIP ──────────────
+# THE ARM THAT WAS MISSING, and its absence is the finding. When could-not-run
+# was first added to this runner it was placed BEFORE the ^skip: arm, which
+# demoted a properly named skip into the unanswered bucket — and every other arm
+# here stayed green, because none of them asserted the PRECEDENCE. The fix and
+# its exact inverse both passed.
+#
+# MEASURED 2026-09-22 on the merged tree: after 1354-apns,
+# check-gate-memory-floor prints BOTH `could-not-run:gate-memory:no-meminfo:...`
+# and `skip:gate-memory:no-meminfo`, and it RAN. Same host, same tree, only the
+# arm order differing:
+#   could-not-run first  declared-skip=4 could-not-run=1  -> 14 unvouched
+#   ^skip: first         declared-skip=5 could-not-run=0  -> 13 unvouched
+# A guard that ran and gave its considered statement has not left a gap
+# (965-sxec), so the named skip wins and could-not-run is for a guard that says
+# ONLY that. Without this arm a later reorder silently demotes every honest skip
+# in the corpus and nothing goes red.
+# THE SELECTORS DO NOT KEY ON if/elif, and that is not cosmetic. The first form
+# required `if` on the skip arm and `elif` on the could-not-run arm — exactly
+# the incidental detail the mutation changes — so inverting the order made BOTH
+# selectors match nothing and the arm red with "the selector has gone stale"
+# instead of naming the wrong order. It red, but for the wrong reason, which is
+# the defect macbookair recorded in their own needle hours earlier. Keyed on the
+# grep pattern alone, the mutation now names what it actually did.
+_skip_ln="$(grep -nE "^[[:space:]]*(el)?if grep -qE '\^skip:'" <<<"$src" | head -1 | cut -d: -f1)"
+_cnr_ln="$(grep -nE "^[[:space:]]*(el)?if grep -qE '\^could-not-run:'" <<<"$src" | head -1 | cut -d: -f1)"
+if [ -z "$_skip_ln" ] || [ -z "$_cnr_ln" ]; then
+    bad "arm8:could not find both arms to compare (skip=${_skip_ln:-none} could-not-run=${_cnr_ln:-none}) — the selector has gone stale, which is not the same as the order being right"
+elif [ "$_skip_ln" -ge "$_cnr_ln" ]; then
+    bad "arm8:the could-not-run arm (line $_cnr_ln) precedes or replaces the named-skip arm (line $_skip_ln); a guard printing BOTH tokens would be scored a gap when it ran and said so (965-sxec)"
+else
+    ok "arm8:a guard printing both tokens scores as a declared skip — the named-skip arm (line $_skip_ln) wins over could-not-run (line $_cnr_ln)"
+fi
+
+# ── ARM 9 (LIVE) — the door's own verdict adds up when it can be run ────────
 # EVERY ARM ABOVE READS SOURCE. This one runs the thing, and is the only arm
 # that can catch a counter incremented in the wrong branch. It is a NAMED SKIP
 # where the door cannot run, because a host that cannot open the door learns
 # nothing by pretending it did (965-sxec) — which is this order's own subject.
-if ! command -v setsid >/dev/null 2>&1; then
-    echo "  [SKIP] arm7:live-run:no-setsid — this platform cannot start the door (1352-vmbc); the source arms above still hold"
-elif [ "${TILLANDSIAS_PREFLIGHT_LIVE:-0}" != "1" ]; then
-    echo "  [SKIP] arm7:live-run:not-requested — set TILLANDSIAS_PREFLIGHT_LIVE=1 to run the real door (minutes, not seconds)"
+# THE setsid SKIP IS GONE, DELIBERATELY. Before 1352-vmbc this arm skipped where
+# setsid was absent, because the door could not start a single guard there. That
+# order makes the door run WITHOUT setsid and say so, so the old skip condition
+# describes a state that no longer exists — and a skip that outlives its reason
+# is a guard quietly not running (885-92iu). Gated only on the opt-in now,
+# because the real door takes minutes and this fixture is size: instant.
+if [ "${TILLANDSIAS_PREFLIGHT_LIVE:-0}" != "1" ]; then
+    echo "  [SKIP] arm9:live-run:not-requested — set TILLANDSIAS_PREFLIGHT_LIVE=1 to run the real door (minutes, not seconds)"
 else
     out="$(cd "$ROOT" && ./build.sh --preflight 2>&1)"
     verdict="$(grep -aoE '^(ok|partial|refused):preflight:ran=.*' <<<"$out" | tail -1)"
     if [ -z "$verdict" ]; then
-        bad "arm7:the door printed no category verdict"
+        bad "arm9:the door printed no category verdict"
     else
         _get() { grep -oE "$1=[0-9]+" <<<"$verdict" | head -1 | tr -cd '0-9'; }
         _s=0
@@ -114,11 +182,13 @@ else
         done
         _stated="$(_get sum)"
         if [ -z "$_stated" ]; then
-            bad "arm7:the verdict states no sum: $verdict"
+            bad "arm9:the verdict states no sum: $verdict"
         elif [ "$_s" -ne "$_stated" ]; then
-            bad "arm7:the categories do not add up to the stated sum ($_s vs $_stated): $verdict"
+            bad "arm9:the categories do not add up to the stated sum ($_s vs $_stated): $verdict"
+        elif ! grep -q 'isolation=' <<<"$verdict"; then
+            bad "arm9:the live verdict carries no isolation= field: $verdict"
         else
-            ok "arm7:the live door's categories add up to its own stated sum ($_stated)"
+            ok "arm9:the live door's categories add up to its own stated sum ($_stated), isolation present"
         fi
     fi
 fi

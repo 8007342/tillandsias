@@ -1,0 +1,45 @@
+# Gate step 1321-2ixp — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A Windows checkout cannot express the executable bit:
+# core.filemode is false there and a NEW file stages as 100644 whatever it is.
+# scripts/salvage-dirty-worktree.sh is how work leaves such a host, and by the
+# time a relaying host sees the ref the mode is just what the tree says —
+# nothing distinguishes "100644 on purpose" from "the substrate could not say
+# otherwise". Snapshot time is the LAST moment anyone knows the bit was meant.
+#
+# MEASURED: scripts/test-windows-host-lane-refusal.sh and its controls arrived
+# through a salvage relay at 100644. Every ./build.sh --check passed for a day
+# of Linux lands, and the v56.9.20.1 release gate refused
+# litmus:windows-host-lane-refusal step 1 (`test -x`) 45 minutes in, on a defect
+# a one-second decider could have named.
+#
+# WHY NOT THE RELAY SIDE. Restoring there fixes the file in front of you and
+# leaves the NEXT Windows salvage carrying the same defect — ff82d1001 did
+# exactly that for one file, which is why this row stayed open after it. This
+# row's own next_action says so in as many words.
+#
+# THE NEGATIVE CONTROL IS THE ARM THAT MATTERS. Shebang is the signal, so a file
+# WITHOUT one must keep 100644 and must not be named as restored. Without that
+# arm the tool could flip every file it stages and arm 1 would still pass — a
+# salvage that silently makes data files executable inside a recovery copy is
+# editing the worktree it exists to preserve. Mutation-proven: dropping the
+# shebang test reds it, naming data.yaml.
+#
+# AND ARM 3 EXISTS BECAUSE ARMS 1 AND 2 RUN A BLOCK EXTRACTED FROM THE TOOL. A
+# tool that lost the block would make them VACUOUS rather than red; arm 3 fails
+# when the extraction finds nothing, which is the only way the first two can
+# stop testing the product without saying so. Mutation-proven: deleting the
+# block scores 1/4, not 4/4.
+#
+# NEEDS NO WINDOWS HOST. `git update-index --chmod=-x` reproduces exactly what a
+# core.filemode=false checkout produces, which is how this row's controlled
+# pairs were measured throughout.
+#
+# STEP_SECOND_REGIME (1302-7j8p): RUN, not inferred — the four arms were
+# executed on darwin on the host that carries this change.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-22 darwin ok:salvage-exec-bits:4/4"
+
+STEP_DESC="Checking a salvage snapshot restores the exec bit for shebang files (1321-2ixp)"
+STEP_SCRIPT="scripts/test-salvage-preserves-exec-bits.sh"
+STEP_ERROR="the salvage no longer restores the executable bit at snapshot time, or restores it for files that never had a shebang (1321-2ixp) — a 1/4 means the restore block is GONE and the first two arms tested nothing; a 3/4 with data.yaml named means the shebang test was dropped and the tool is now editing the copy it exists to preserve"
+STEP_OK="Work leaving a Windows host keeps the executable bit it was meant to have"

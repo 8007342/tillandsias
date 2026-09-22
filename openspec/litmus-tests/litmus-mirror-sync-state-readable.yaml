@@ -1,0 +1,53 @@
+# @trace spec:git-mirror-service
+name: litmus:mirror-sync-state-readable
+spec: git-mirror-service
+phase: pre-build
+size: quick
+inputs:
+  - images/git/publish-sync-state.sh
+  - scripts/test-mirror-sync-state.sh
+severity: critical
+description: >
+  Order 1350-ku7v (T1 of openspec/changes/cloud-only-project-lifecycle): the
+  mirror publishes a sync state that a forge or a host can READ BEFORE spending
+  a push on a stale mirror.
+
+  THE DEFECT IT GUARDS. A forge reads its mirror and cannot reach GitHub; a
+  bare-metal host learns its mirror was stale only from a push that has already
+  been refused, with an error naming staleness rather than the condition. And
+  1338-tkfh is that a sha which HAS landed upstream and one that does not exist
+  produce an identical fatal from inside a forge. All three need one thing the
+  mirror already knows and never published.
+
+  WHAT MUST HOLD, and the middle one is the arm that can actually fail:
+  a mirror with no tracking refs reports `heads-unknown`, NEVER `heads-current` — a mirror
+  that has never fetched upstream is not an up-to-date one; a mirror whose
+  upstream has moved reports `heads-behind` with the count of behind heads; an
+  exported head with no tracking twin (a salvage ref upstream has never seen)
+  is NOT counted as behind, or every mirror is permanently behind and the
+  verdict is useless rather than wrong; publishing twice leaves exactly one
+  verdict; and the verdict is readable by `git ls-remote` and points at the
+  EMPTY BLOB, so a forge needs no fetch to read it.
+
+  AN ARM TAKEN ON A MIRROR THAT HAPPENS TO BE CURRENT CANNOT FAIL for this
+  defect, which is why the fixture MANUFACTURES the behind and unknown states
+  in scratch repositories rather than waiting for a real mirror to fall behind.
+  Falsifiability shown rather than claimed: collapsing `heads-behind` and `heads-unknown`
+  into `heads-current` in the publisher reds arms 1 and 3 by name.
+
+  TAGS ARE DELIBERATELY OUT OF SCOPE. relay-refs.sh's pre-push refspec is
+  heads-only, so no upstream tag state exists to compare against — measured on
+  lenovinha, where latest/stable/unstable survived a full container restart
+  while upstream had moved. Publishing a tag verdict from data that does not
+  exist would be worse than publishing none.
+preconditions:
+  - workspace contains images/git/publish-sync-state.sh
+  - workspace contains scripts/test-mirror-sync-state.sh
+critical_path:
+  - step: "every arm holds, including the manufactured behind and unknown states"
+    command: "bash scripts/test-mirror-sync-state.sh 2>&1"
+    expected_behavior: "ok:mirror-sync-state:6/6 arms"
+    assert_exit: 0
+    assert_output_contains: "ok:mirror-sync-state:6/6 arms"
+    assert_output_nonempty: true
+    timeout_ms: 120000
