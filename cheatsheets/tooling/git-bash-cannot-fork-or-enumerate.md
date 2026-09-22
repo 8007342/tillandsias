@@ -183,3 +183,68 @@ the cosmetic cost of the WSL-side push route this sheet recommends). The
 fork-depth trap cost roughly an hour and was misdiagnosed as a credential
 problem three times before the depth was identified. Written at the
 coordinator's request.
+
+## Trap 3 — a glob that works until the corpus grows
+
+Same locus, same class as trap 2: **an enumeration that is correct today and
+fails silently later**, because the thing being enumerated got bigger.
+
+### Minimal reproduction
+
+```bash
+$ ls plan/index.d/*.yaml | wc -l
+1771
+
+$ git add plan/index.d/*.yaml 2>/dev/null   # the redirect is the whole defect
+$ echo $?
+0                                            # and it reports SUCCESS
+```
+
+With stderr visible:
+
+```
+/usr/bin/bash: line 1: /mingw64/bin/git: Argument list too long
+```
+
+### What is actually happening
+
+The shell expands the glob to 1,771 absolute paths before `git` is called, and
+the resulting command line exceeds what MSYS can pass to a process. **`git`
+never runs.** Nothing is staged, a following `git commit` carries nothing, and
+a following push may still succeed at something unrelated.
+
+### Why it resists diagnosis
+
+- **It worked yesterday.** Nothing changed in the command; the ledger grew. Any
+  script carrying this shape has a shelf life measured in fragments, and it
+  gets shorter every day.
+- **`$?` is 0.** The failure belongs to the shell's exec, and if the command is
+  part of a pipeline the status you read is the pipeline's. See
+  [exit-status-is-not-an-answer](exit-status-is-not-an-answer.md).
+- **`2>/dev/null` is common on `git add`** precisely because it is noisy about
+  paths that do not match — so the one message that mattered is the one people
+  routinely discard.
+
+### The fix
+
+Never glob a corpus directory onto a command line. Name the paths you mean:
+
+```bash
+# RIGHT — explicit paths, stderr visible
+git add plan/index.d/20260922t161411z-18e359a0-yolanda-windows.yaml \
+        plan/issues/smoke-e2e-findings-v56.9.22.1-2026-09-22-windows-yolanda.md
+
+# ALSO RIGHT — let git do the matching, not the shell
+git add -- 'plan/index.d/*.yaml'     # quoted: a git PATHSPEC, not a shell glob
+```
+
+**Never `2>/dev/null` on a command that CHANGES STATE.** A silenced write tells
+you nothing afterwards: you cannot distinguish "it did nothing" from "it did
+what I asked".
+
+### Measured
+
+yolanda-windows, 2026-09-22, 1,771 files in `plan/index.d`. **This will bite
+every Windows host on this fleet and the threshold moves closer with every
+fragment written.** It cost a commit that silently carried nothing while its
+push printed a true success line.
