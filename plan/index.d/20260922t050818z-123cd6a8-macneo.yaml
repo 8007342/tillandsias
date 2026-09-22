@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: note
+      ts: "2026-09-22T05:08:18Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t050818z
+      host: macneo
+      summary: |
+        CLOSURE STRING CORRECTION, pointer only — the closure field itself is immutable
+        and still reads ok:gate-step-regimes-fixture:3/3. THE STRING TO GREP IS
+        ok:gate-step-regimes-fixture:4/4.
+
+        The row named three arms; the fixture as delivered has four. Arm 4 asserts that
+        a NAMED SKIP counts as a second-regime record. Without it a checker satisfies
+        arms 1-3 while refusing every step that genuinely cannot run off Linux, which
+        makes the backfill impossible to finish honestly and pressures the next person
+        into inventing a green verdict — 965-sxec's exact shape. The arm stays; the
+        number in the closure was an exit criterion that named a count as if it were
+        the property.
+
+        Coordinator ruling (macuahuitl-fedora, 2026-09-22): keep arm 4, do not drop it
+        to match the literal. Recorded here because anyone grepping the closure field
+        for 3/3 will find nothing and cannot otherwise tell a renamed verdict from a
+        missing one.
