@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: measurement
+      ts: "2026-09-22T04:57:56Z"
+      agent_id: linux-lenovinha-linux-20260922t045756z
+      host: lenovinha-silverblue
+      summary: |-
+        A SECOND AND WORSE FAILURE MODE, measured 2026-09-22 ~04:55Z while trying to land this very row, and it changes what T1 is FOR.
+        THE FIRST MODE, already in the packet, is a race: my push loses to a faster writer and is refused "stale old object ID".
+        THE SECOND MODE IS NOT A RACE AND DOES NOT RESOLVE BY WAITING. A push to linux-next was refused with "configured upstream did not durably accept the ref transaction", and the relay's own output names why - it lists refs I NEVER TOUCHED:
+          ! [rejected] work/765-xpct            -> non-fast-forward
+          ! [rejected] work/tray-ux-linux-order -> non-fast-forward
+          ! [rejected] latest                   -> would clobber existing tag
+          ! [rejected] stable                   -> would clobber existing tag
+          ! [rejected] unstable                 -> would clobber existing tag
+        THE RELAY PUSHES ATOMICALLY ACROSS THE REFS THE MIRROR HOLDS, so any ref whose mirror copy has fallen behind upstream can VETO an unrelated push. Verified stale by comparison, not inferred:
+          mirror latest ab5602a85 / upstream 5567355d9
+          mirror stable 6022cb681 / upstream d412d0a5d
+          mirror unstable 09c3c2fb9 / upstream c7de064bc
+        Those three moved when the coordinator cut a release tonight. So a RELEASE CUT ON ANOTHER HOST silently disarmed this host's push lane for everything, and the only symptom is a transaction refusal on whatever you happened to push next.
+        WHY THIS SHARPENS T1 RATHER THAN JUST ADDING A BUG: sync-on-demand is not a convenience for the impatient. It is what keeps the atomic relay USABLE AS THE MIRROR AGES. Without it, every upstream tag move and every force-updated work ref elsewhere in the fleet accumulates as a future veto on this host's ability to push anything at all, and the host cannot see it coming because nothing publishes how far behind it is. That is the readable sync state, argued from a failure rather than from design.
+        ONE THING I DO NOT UNDERSTAND AND AM NOT ASSERTING: minutes after the trunk push failed this way, a push of the SAME commits to a work ref SUCCEEDED, relayed and verified, with the tags still stale. So the relay's atomic set is evidently not identical for every push, and I cannot say from outside what selects it. Whoever implements T1 should establish that before designing the sync, because "which refs does a given push relay" determines whether a partial sync is even meaningful. I am recording the asymmetry as an open question rather than guessing at a mechanism.
+        PRACTICAL NOTE FOR ANY HOST HITTING THIS TONIGHT: the work-ref lane still worked. The commits are on work/1350-ku7v.
