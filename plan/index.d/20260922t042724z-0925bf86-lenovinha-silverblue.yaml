@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    event:
+      type: note
+      ts: "2026-09-22T04:27:24Z"
+      agent_id: linux-lenovinha-linux-20260922t042724z
+      host: lenovinha-silverblue
+      summary: |-
+        SEVENTH INSTANCE, and it is a LIMIT ON REVIEW ITSELF rather than on an instrument. Found by yoga-silverblue landing the forge's four; recorded here at their suggestion.
+        WHAT IT IS. scripts/test-fragment-status-loss-row-boundary.sh:128 expanded "${corpus[@]}" unguarded under set -u. bash 4.4+ expands an empty array to nothing and passes; bash 3.2 - the only bash macOS ships - dies with "unbound variable". I reviewed that ref HARDER THAN THE OTHER THREE: I read the diff, ran its fixture, and built a genuine pre-fix control by swapping trunk's checker in under it, which is the strongest review I did all night. I could not see this defect, because I ran it on Linux, where it passes. No amount of additional care on my host would have found it. yoga's check-bash-dialect.sh sees it statically, on any platform, and printed the remedy idiom.
+        WHY IT IS DIFFERENT FROM THE OTHER SIX. Those are all cases where a better reader, or a reader who asked what question the instrument answers, would have caught the thing. This one has NO such reader: the question "does this break on bash 3.2" cannot be asked of a Linux host at all, by anyone, however careful. The instrument was not narrow — the reviewer's PLATFORM was.
+        THE RULE: REVIEW AND A STATIC CHECKER THAT RUNS EVERYWHERE ARE NOT SUBSTITUTES. For any property that varies across platforms, a checker that runs on every host is the only instrument that can answer a question the reviewer's host cannot be asked. Reviewer diligence is not on the same axis and cannot be traded against it. This is 1302-7j8p's cross-platform blindness arriving from the review side rather than the runtime side.
+        AND THE CAUTION IT IMPLIES FOR THIS ROW'S OWN REMEDY: the fix for the first six instances is largely "read what the instrument actually asks". That remedy DOES NOT SCALE to this case and must not be written as though it does, or the methodology text will read as "be more careful" and quietly leave the one class where care is irrelevant uncovered.
+        A SMALL EIGHTH, MINE, RECORDED BECAUSE IT HAPPENED WHILE VERIFYING THE ABOVE: I checked whether arm 5 had landed with `git grep -c 'arm 5'` and got 0, because the file labels it `ARM 5`. A case-sensitive query answering a narrower question than I intended, and I nearly reported the arm missing. Trivial in consequence and identical in shape to the rest.
