@@ -49,3 +49,4 @@ STEP_DESC="Checking the uninstaller's tray stop cannot fire off-Darwin (1231-cbi
 STEP_SCRIPT="scripts/test-uninstall-tray-stop-is-macos-only.sh"
 STEP_ERROR="a Linux uninstall killed a process that merely MENTIONED the tray literal (1231-cbie) — uninstall.sh is a shipped artifact; see which arm failed above"
 STEP_OK="Uninstaller tray-stop platform confinement passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:uninstall-tray-stop-is-macos-only"

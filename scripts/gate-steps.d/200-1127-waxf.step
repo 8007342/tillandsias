@@ -20,3 +20,4 @@ STEP_DESC="Checking the gate memo cannot skip the guards that read the plan ledg
 STEP_SCRIPT="scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh"
 STEP_ERROR="a plan-only change can memoize away the fragment guards again, or the partial-memo verdict lost its wiring (1127-waxf) — see the arm above"
 STEP_OK="Gate-memo plan-ledger coverage check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm5b: the partial-memo arm also runs the issue guard, whose subject joined the lane"

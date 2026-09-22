@@ -63,3 +63,4 @@ STEP_DESC="Checking set-field refuses an unknown flag instead of absorbing it an
 STEP_SCRIPT="scripts/test-set-field-refuses-unknown-flags.sh"
 STEP_ERROR="tillandsias-plan set-field can again absorb an unknown flag, consume the next option's value as the field value, WRITE it to the ledger and print success (1285-vz27) — read which arm failed above; ARM 1 failing means the ledger-corrupting path is open"
 STEP_OK="set-field refuses unknown flags before writing"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:set-field-unknown-flags:6/6"

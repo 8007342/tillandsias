@@ -16,3 +16,4 @@ STEP_DESC="Checking the claim-expiry sweep ages and attributes from the status w
 STEP_SCRIPT="scripts/test-expire-claims-reads-the-status-write.sh"
 STEP_ERROR="the claim-expiry sweep is reading the event channel again — it would return live claims to ready and name the wrong host (1198-7q95)"
 STEP_OK="claim-expiry sweep reads the status write"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:expire-claims-reads-the-status-write"

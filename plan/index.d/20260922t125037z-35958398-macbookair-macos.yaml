@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-sh-preflight-execs-setsid-unconditionally-so-on-a-host-without-it-all-108-deciders-fail-to-launch-and-the-step-refuses-without-measuring-anything
+    field: status
+    value: done
+    ts: "2026-09-22T12:50:37Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: build-sh-preflight-execs-setsid-unconditionally-so-on-a-host-without-it-all-108-deciders-fail-to-launch-and-the-step-refuses-without-measuring-anything
+    event:
+      type: completed
+      ts: "2026-09-22T12:50:37Z"
+      host: macbookair-macos
+      summary: |-
+        status 'done' with evidence_refs: Landed with land82 at a5c4c3971, verified at that tree: _PF_SETSID present in build.sh and the fixture present with its arms. BEFORE refused:preflight:ran=0 skipped=3 failed=108 (none of the 108 launched; setsid is util-linux and build.sh exec'd it unconditionally). AFTER refused:preflight:ran=94 skipped=16 failed=1 isolation=none-no-setsid. The Linux negative control is MEASURED, not read: trunk ran=99 skipped=12, patched ran=100 skipped=12 isolation=session, same wall, the extra guard being this row's own fixture. Four mutations each redding its own arm; arm 1's first draft could NOT have failed for the right reason, because its needle matched the command -v setsid this same change added to the summary line, and it now keys on the assignment only the probe produces. The tree already knew this platform lacks setsid — test-dispatch-reap.sh:99 probes for it and emits a named skip under 1141-vf9w — which is what made this a defect rather than a platform limit.
+  - packet_id: build-sh-preflight-execs-setsid-unconditionally-so-on-a-host-without-it-all-108-deciders-fail-to-launch-and-the-step-refuses-without-measuring-anything
+    event:
+      type: note
+      ts: "2026-09-22T12:50:37Z"
+      host: macbookair-macos
+      summary: |-
+        landed at a5c4c3971; the preflight runs on a host without setsid and names the mode it ran in

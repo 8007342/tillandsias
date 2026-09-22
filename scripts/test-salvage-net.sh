@@ -351,10 +351,31 @@ if want usage; then
     [ "$refs_before" = "$refs_after" ] \
         && ok "no salvage ref was minted by any refused argument (origin unchanged: $refs_after)" \
         || bad "a refused argument minted a ref: before=$refs_before after=$refs_after"
-    outd="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" 2>/dev/null | tail -1)"
+    # ORDER 1354-dw8x — THE FIXTURE FIRST, AND THIS IS WHY.
+    #
+    # This capture was `2>/dev/null | tail -1`. The script refuses
+    # `refused:host-unresolved` on STDERR with exit 2, so the discard ate the
+    # entire diagnosis and left `$outd` EMPTY — and the arm reported
+    # "empty-argument verdict: " with nothing after the colon. A reader saw a
+    # failure that named no cause, on a step whose own purpose is to prove the
+    # script names its cause.
+    #
+    # WORSE THAN LOSING THE MESSAGE: while this arm swallows stderr, ANY
+    # correction to the script's wording is invisible to it. A fix could land,
+    # be verified by its author reading the source, and this arm would keep
+    # reporting the same empty string. That is why the row orders the fixture
+    # before the script — an arm that cannot see the thing it tests makes every
+    # later fix unfalsifiable.
+    #
+    # Stderr is now CAPTURED, not discarded, and reported when the arm fails.
+    # The verdict is still read from stdout alone, because the script's grammar
+    # lives there and a diagnosis on stderr must never be mistaken for one.
+    _errd="$(mktemp)"
+    outd="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" 2>"$_errd" | tail -1)"
+    _rcd=$?
     case "$outd" in
         ok:salvaged:refs/heads/salvage/*/*-dirty-start:*) ok "an empty argument keeps the documented default slug and salvages" ;;
-        *) bad "empty-argument verdict: $outd" ;;
+        *) bad "empty-argument verdict: '$outd' (rc=$_rcd); stderr: $(tr '\n' ' ' < "$_errd" | cut -c1-300)" ;;
     esac
     rm -rf "$D"
 fi

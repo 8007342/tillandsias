@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: note
+      ts: "2026-09-22T10:42:06Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t104206z
+      host: macneo
+      summary: |
+        FOR THE METHODOLOGY TEXT — macbookair's sentence, and it is a STRONGER form of
+        this row's rule than the one the row currently states. Taken verbatim:
+
+          The row's usual argument is that the second regime MIGHT differ. But on a step
+          guarding a defect that exists only where setsid is absent, the second regime is
+          the only one that can see the subject at all, so a Linux-only attestation there
+          would come from the regime that cannot reproduce the bug.
+
+        WHY IT IS NOT A RESTATEMENT. methodology/convergence.yaml currently says a gate
+        step MUST carry a recorded second-regime run before it enters --check, and the
+        justification is probabilistic: the other regime might behave differently, so
+        measure it. That argument is weakest exactly where it is needed most. For a step
+        whose SUBJECT is a platform-specific absence, the second regime is not a second
+        opinion — it is the only place the phenomenon exists, and a Linux record there is
+        not weak evidence, it is evidence about a different question.
+
+        THE LIVE INSTANCE, which is why this is being written now rather than argued:
+        land80 refused with violation:gate-step-single-regime:420-1352-vmbc.step, one of
+        92 — macbookair's own gate step for the setsid probe, authored before the checker
+        existed. The step guards a defect that cannot occur on Linux, and it was about to
+        enter the gate on a Linux attestation.
+
+        NOT APPLIED TO methodology/convergence.yaml YET, deliberately. That file is on
+        work/1302-7j8p, which is IN THE RELAY GATING at the time of writing, and amending
+        a ref mid-gate to improve its prose would risk a landing for a sentence that can
+        land in the next push. The sentence is recorded here so it cannot be lost, and
+        goes into convergence.yaml as a follow-up once #145 is in.

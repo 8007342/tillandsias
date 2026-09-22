@@ -20,3 +20,4 @@ STEP_OK="salvage-refs ledger trunk fallback check passed"
 # says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-salvage-refs-ledger.sh is absent, so the fallback could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   sweep-salvage-refs.sh states the one-pass-after-the-marker deletion rule"

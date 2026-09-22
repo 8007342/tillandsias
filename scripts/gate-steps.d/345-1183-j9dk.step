@@ -36,3 +36,4 @@ STEP_OK="Inference models-mkdir fail-loud check passed"
 # not its behaviour.
 STEP_SKIP_EXIT=2
 STEP_SKIP_DESC="the 4 static arms RAN and pinned the shipped guard text; the behavioural arms could not run — mode 0555 does not exclude uid 0 on this host (1183-j9dk)"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   mutation control: the old swallowing form exits 0, so arm 5 has teeth"

@@ -25,3 +25,4 @@ STEP_OK="fleet-heartbeat ledger-blocker classification check passed"
 # says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/fleet-heartbeat.sh is absent, so the classification could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:fleet-heartbeat-ledger-blocker:11"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-gate-memory-floor-names-its-own-inability-as-could-not-run-which-the-preflight-scores-as-a-refusal-so-the-mandatory-step-can-never-exit-zero-on-a-mac
+    field: status
+    value: done
+    ts: "2026-09-22T10:48:26Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: check-gate-memory-floor-names-its-own-inability-as-could-not-run-which-the-preflight-scores-as-a-refusal-so-the-mandatory-step-can-never-exit-zero-on-a-mac
+    event:
+      type: completed
+      ts: "2026-09-22T10:48:26Z"
+      host: macbookair-macos
+      summary: |-
+        status 'done' with evidence_refs: Landed: 6af5d56c6 is an ancestor of origin/linux-next, verified at the tree — all three could-not-run exits carry their terminal skip: line, and the negative-control arm is present in the fixture. Measured before landing, with 1352-vmbc's build.sh in the worktree so the preflight could run at all: before refused:preflight:ran=94 skipped=16 failed=1; after ok:preflight:ran=93 skipped=18 isolation=none-no-setsid, EXIT 0 — the first time the mandatory step exited 0 on a Mac. The negative control is pinned and mutation-verified in both directions: removing the terminal skip reds the new arm, and adding a skip line to the REAL below-floor refusal reds the control, which is the only arm that would catch this fix being widened into decoration later. The general vocabulary defect is filed separately as 1355-m83d and deliberately not fixed here.
+  - packet_id: check-gate-memory-floor-names-its-own-inability-as-could-not-run-which-the-preflight-scores-as-a-refusal-so-the-mandatory-step-can-never-exit-zero-on-a-mac
+    event:
+      type: note
+      ts: "2026-09-22T10:48:26Z"
+      host: macbookair-macos
+      summary: |-
+        landed with land81 at 6af5d56c6; the mandatory preflight step is satisfiable on a Mac

@@ -10,3 +10,4 @@ STEP_DESC="Checking the token instrument records a cycle and ranks repeated spen
 STEP_SCRIPT="scripts/test-token-instrument.sh"
 STEP_ERROR="the token instrument stopped recording, stopped ranking repeated labels, or began ranking one-offs / flagging solo cycles (1119-6wn6) — see the verdict line above"
 STEP_OK="Token instrument passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin skip:timed-out-150s-on-this-regime"

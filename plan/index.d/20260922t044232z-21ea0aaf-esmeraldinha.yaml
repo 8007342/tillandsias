@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    field: status
+    value: in_progress
+    ts: "2026-09-22T04:42:32Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-22T04:42:32Z"
+      host: esmeraldinha
+      summary: |-
+        Claimed by esmeraldinha (Windows 11, MINGW64_NT-10.0-26200), the locus this row is about, at the coordinator's offer. Re-measuring before fixing, because the row's figures are eight days old and a stale headline is the defect the 1329-m8dk family exists for. FIRST PROBES ALREADY DIVERGE FROM THE ROW'S OWN TEXT, which is why the re-measure comes first. Mechanism 1 CONFIRMED verbatim: git is unreachable on a pinned PATH of /usr/bin:/bin and lives at /mingw64/bin/git. Mechanism 2 IS REAL BUT ITS STATED CAUSE IS WRONG, and the correction changes the fix: the row says jq fails because /proc/self/fd/0 is absent on MSYS. It is NOT absent - it exists for MSYS programs, and bash resolves it. What fails is that jq on this host is a NATIVE WINDOWS binary (WinGet package, not the MSYS one), MSYS translates the argument to a concrete /proc/<pid>/fd/0, and a Windows executable cannot open MSYS's virtual /proc at all. Verbatim: jq: error: Could not open file /proc/77/fd/0: No such file or directory. So the remedy is not to substitute a different path for a missing one - it is to stop handing an MSYS virtual path to a native Windows binary, and pipe on stdin, which jq reads by default. The row's own caution that mechanism 2 was counted on shared error text and never individually reproduced is the reason this surfaced; that caution was mine on 2026-09-14 and it was right. Constraints stated to the coordinator and accepted: diagnosis and bounded runs only while the operator is away from this workstation, the open cargo arm's needs named before any saturating build, and any arm requiring a click named rather than worked around, because this host has no GUI input.

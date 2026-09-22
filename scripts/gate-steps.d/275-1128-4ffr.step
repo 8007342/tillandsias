@@ -10,3 +10,4 @@ STEP_DESC="Checking a pending capability row does not wedge the host that publis
 STEP_SCRIPT="scripts/test-pending-capability-row-does-not-wedge.sh"
 STEP_ERROR="publishing the capability row the guard asks for wedges that host's pushes again, or the pending-row allowance widened and now launders a malformed fragment (1128-4ffr) — see the verdict line above"
 STEP_OK="Pending capability row check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the tree is restored to ok:release-preflight"

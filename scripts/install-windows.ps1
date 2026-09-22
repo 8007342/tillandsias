@@ -252,6 +252,93 @@ if ($NoLaunchReason -and -not $NoLaunch) {
     SayWn "Auto-launch disabled for this install ($WslState): the tray's first VM create cannot succeed yet."
 }
 
+# -- WSL2 guest shape report (order 1339-r9xv) -------------------------------
+# THE PLATFORM PREFLIGHT ABOVE ANSWERS "CAN WSL RUN AT ALL". This answers a
+# different question it never asked: WHAT SHAPE OF GUEST will .wslconfig give
+# the user, and is that shape one that can build.
+#
+# MEASURED, not theorised (yolanda-windows 2026-09-21). On a 16-logical-CPU
+# host with 15.16 GiB, WSL defaults produced a guest holding ALL 16 vCPUs
+# inside a 4.8 GiB balloon -- roughly 320 MB per vCPU -- and FOUR consecutive
+# builds were killed for host memory. The same gates on a FOUR-core machine
+# with `processors=4` (100% of that host) and `autoMemoryReclaim=gradual` were
+# never killed once. The more capable machine was the unreliable one, and the
+# difference was entirely configuration.
+#
+# THIS BLOCK REPORTS AND OFFERS. IT NEVER WRITES .wslconfig SILENTLY. That
+# file is the user's and may carry settings for work that has nothing to do
+# with us; writing it behind their back would be a worse defect than the one
+# being fixed. Same consent discipline the destructive reset already follows.
+$WslCfgPath = Join-Path $env:USERPROFILE '.wslconfig'
+$HostLogicalCpus = 0
+$HostMemGiB = 0
+try {
+    $HostLogicalCpus = [int](Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).NumberOfLogicalProcessors
+    $HostMemGiB = [math]::Round((Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).TotalVisibleMemorySize / 1MB, 2)
+} catch {}
+
+if ($HostLogicalCpus -le 0) {
+    # COULD-NOT-MEASURE IS NOT A VERDICT. Say so rather than reporting a shape
+    # derived from a host reading we do not have.
+    SayWn "  wsl-shape: could not read this host's CPU/memory; no guest-shape advice given."
+} else {
+    $CfgProcessors = ''
+    $CfgMemory = ''
+    $CfgReclaim = ''
+    if (Test-Path $WslCfgPath) {
+        foreach ($line in (Get-Content $WslCfgPath -ErrorAction SilentlyContinue)) {
+            $t = $line.Trim()
+            if ($t -match '^processors\s*=\s*(\S+)')       { $CfgProcessors = $Matches[1] }
+            elseif ($t -match '^memory\s*=\s*(\S+)')        { $CfgMemory = $Matches[1] }
+            elseif ($t -match '^autoMemoryReclaim\s*=\s*(\S+)') { $CfgReclaim = $Matches[1] }
+        }
+    }
+    # WSL defaults when a key is absent: all logical CPUs, and (modern WSL2)
+    # 50% of host RAM. State the DERIVED shape, not the file's contents --
+    # the user cannot compute this and it is the whole point of the report.
+    $EffCpus = if ($CfgProcessors -match '^\d+$') { [int]$CfgProcessors } else { $HostLogicalCpus }
+    $EffMemGiB = 0.0
+    if ($CfgMemory -match '^(\d+(?:\.\d+)?)\s*GB$') { $EffMemGiB = [double]$Matches[1] }
+    elseif ($CfgMemory -match '^(\d+)\s*MB$')         { $EffMemGiB = [math]::Round([double]$Matches[1] / 1024, 2) }
+    else { $EffMemGiB = [math]::Round($HostMemGiB / 2, 2) }
+
+    Say "  wsl-shape: guest will take $EffCpus vCPU(s) of $HostLogicalCpus and about $EffMemGiB GiB of $HostMemGiB GiB."
+    if (-not (Test-Path $WslCfgPath)) { Say "  wsl-shape: no .wslconfig found; these are WSL defaults." }
+
+    # THE KNOWN-BAD RATIO, NAMED WITH ITS NUMBERS. A generality here would be
+    # useless: the user needs to see their own figures next to the measured
+    # failure to know whether it applies to them.
+    $MbPerCpu = 0
+    if ($EffCpus -gt 0) { $MbPerCpu = [int](($EffMemGiB * 1024) / $EffCpus) }
+    $RatioBad = ($EffCpus -ge 8 -and $MbPerCpu -gt 0 -and $MbPerCpu -lt 700)
+    $ReclaimOff = ($CfgReclaim -eq '')
+
+    if ($RatioBad -or $ReclaimOff) {
+        Write-Host ""
+        SayWn "  Your WSL2 guest is shaped in a way that has killed builds on a host like this."
+        if ($RatioBad) {
+            SayWn "    $EffCpus vCPUs sharing $EffMemGiB GiB is about $MbPerCpu MB per vCPU."
+            SayWn "    Measured: ~320 MB per vCPU killed four consecutive builds on a 16-core host."
+        }
+        if ($ReclaimOff) {
+            SayWn "    autoMemoryReclaim is not set, so the guest never returns memory to Windows."
+        }
+        SayWn "  Recommended .wslconfig for this host (processors = ALL of them, not a copied number):"
+        Write-Host ""
+        Say "    [wsl2]"
+        Say "    memory=8GB"
+        Say "    processors=$HostLogicalCpus"
+        Say ""
+        Say "    [experimental]"
+        Say "    autoMemoryReclaim=gradual"
+        Write-Host ""
+        SayWn "  autoMemoryReclaim lives under [experimental]; appending it to [wsl2] does nothing."
+        SayWn "  Edit $WslCfgPath yourself, then run: wsl --shutdown"
+        SayWn "  This installer does not modify that file -- it is yours and may hold other settings."
+        Write-Host ""
+    }
+}
+
 # -- Hyper-V Administrators membership (order 312) ---------------------------
 # The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
 # Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) --

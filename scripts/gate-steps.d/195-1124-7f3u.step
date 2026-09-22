@@ -21,3 +21,4 @@ STEP_DESC="Checking the plan-only push lane fails closed without a fold validato
 STEP_SCRIPT="scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh"
 STEP_ERROR="the plan-only lane admitted a fragment-bearing push it could not fold, or the fast lane stopped accepting a valid one (1124-7f3u) — see the arm above"
 STEP_OK="Plan-lane fail-closed check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm3: an issues-only push is still accepted with no plan binary (refusal stays scoped)"

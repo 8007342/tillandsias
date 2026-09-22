@@ -10,3 +10,4 @@ STEP_DESC="Checking a present-but-unusable host tool is not resolved as availabl
 STEP_SCRIPT="scripts/test-tool-dispatch-rejects-unusable-host-tool.sh"
 STEP_ERROR="resolve_tool accepts a present-but-unusable host tool again, so a guard can pass having examined nothing (1138-bb5r) — see the verdict line above"
 STEP_OK="Unusable-host-tool rejection passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

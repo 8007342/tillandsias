@@ -22,3 +22,4 @@ STEP_DESC="Checking the smoke runbook's credential predicate can be false (1004-
 STEP_SCRIPT="scripts/test-cmdkey-predicate-discriminates.sh"
 STEP_ERROR="the smoke runbook's credential-presence predicate cannot be false, or the helper is gone (1004-vsh2) — see the verdict line above"
 STEP_OK="Credential predicate check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:cmdkey-predicate:2"
