@@ -73,8 +73,22 @@ CHECKSUMS_SHA256="$(_pin checksums_sha256)"
 CERT_ID="$(_pin certificate_identity)"
 CERT_ISSUER="$(_pin certificate_oidc_issuer)"
 
+# BASH 3.2 CLEAN, and the defect this replaces is worth one line of shame: the
+# verdict here used `${v,,}` — a bash-4 expansion — inside the script whose
+# entire purpose tonight was to behave correctly ON A MAC, where bash is 3.2.
+# Refused by check-bash-dialect (blocked:bash4-unguarded), and rightly: the
+# fleet's rule is a 3.2-clean script or an explicit BASH_VERSINFO refusal guard,
+# and a script fixed for macOS that cannot PARSE on macOS is the same
+# could-not-run/failed confusion one layer down.
 for v in VERSION CHECKSUMS CHECKSUMS_SHA256 CERT_ID CERT_ISSUER; do
-    [ -n "${!v}" ] || { _emit "cosign:could-not-run:pin-field-missing:${v,,}"; exit 0; }
+    # `${!v}` (indirect expansion) is bash 2.0+ and stays; only `${v,,}` was the
+    # bash-4 construct. Reaching for eval here would have traded a parse error
+    # on 3.2 for a quoting hazard on every platform.
+    if [ -z "${!v}" ]; then
+        _field="$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')"
+        _emit "cosign:could-not-run:pin-field-missing:$_field"
+        exit 0
+    fi
 done
 
 # ── WHICH ASSET IS THIS HOST'S? ────────────────────────────────────────────
