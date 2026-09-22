@@ -389,7 +389,21 @@ _ccc_secret_service_state() {
   # Bounded like every other probe in this guard (988-7kxf). A bus that cannot
   # answer a name listing in five seconds is not a bus this guard will wait on.
   _names="$(_ccc_timeout 5 busctl --user list --no-pager 2>/dev/null)" || _rc=$?
-  if [ "$_rc" -ne 0 ] && [ -z "$_names" ]; then
+  # "COULD NOT ASK" IS NOT EVERY FAILURE -- only the ones where the probe did
+  # not get to answer. Caught by the locked-keyring fixture, which stubs a
+  # busctl exiting 1 with "no such service": that is busctl RUNNING and
+  # ANSWERING that nothing is there (the macOS / forge / headless-server shape),
+  # and its documented contract is `missing:`. Collapsing it into `unknown`
+  # alongside a SIGKILLed probe erased the very distinction this order is about,
+  # in the direction of knowing less.
+  #
+  #   rc 124            timeout(1) killed it  -> the probe never answered
+  #   rc >= 128         died on a signal      -> the probe never answered
+  #   any other nonzero busctl answered "no"  -> not-serving, as before
+  #
+  # 128+ is the shape 1265-8qr6 actually produces: gnome-keyring-daemon
+  # aborting (SIGABRT, rc 134) inside its own D-Bus property handler.
+  if [ "$_rc" -eq 124 ] || [ "$_rc" -ge 128 ]; then
     printf 'unknown'
     return 0
   fi
@@ -1030,9 +1044,38 @@ credential_channel_verdict() {
   # org.freedesktop.secrets the absence of the service says nothing, and
   # `unknown` falls through too rather than claiming a channel exists that this
   # guard could not see.
-  if [ "$(_ccc_secret_service_state)" = "serving" ]; then
+  #
+  # ORDER 1347-r9g8, FOUND BY ITS OWN KILLED-PROBE FIXTURE. This branch used to
+  # be `= "serving"` only, so `unknown` -- busctl present, probe DIED or timed
+  # out -- fell through to `missing:no-credential-channel`. That is the
+  # 1189-2ra5 conflation reproduced at the one site the order exists to fix:
+  # the probe died, so the guard could NOT ASK whether the store is serving, and
+  # it answered by asserting the credential is ABSENT. The remedy that verdict
+  # invites is `gh auth login`, which evicts the fleet (1025-a896).
+  #
+  # Measured: with busctl killed by SIGKILL mid-read and gh failing, the guard
+  # answered `missing:no-credential-channel`. The earlier comment here claimed
+  # `unknown` should fall through "rather than claiming a channel exists that
+  # this guard could not see" -- which weighed the wrong risk. Refusing to claim
+  # the channel EXISTS does not license claiming it is ABSENT; the honest answer
+  # to a dead probe is that it was not probed.
+  #
+  # `not-applicable` (no busctl at all) deliberately still falls through, and
+  # that is NOT the same case: a platform with no org.freedesktop.secrets by
+  # design was never going to answer, so its absence is not evidence of a dead
+  # probe. macOS's own indeterminate path is handled in the layer discriminator.
+  _ccc_ss_late="$(_ccc_secret_service_state)"
+  if [ "$_ccc_ss_late" = "serving" ]; then
     echo "  The secret service IS on the session bus, so the channel EXISTS and" >&2
     echo "  could not be opened — this is NOT an absent credential." >&2
+    _ccc_emit_unprobed
+    return 1
+  fi
+  if [ "$_ccc_ss_late" = "unknown" ]; then
+    echo "  The secret-service probe did not complete (it died or timed out), so" >&2
+    echo "  this guard COULD NOT ASK whether the store is serving. That is not a" >&2
+    echo "  finding about your credential: do NOT run 'gh auth login' (1025-a896)." >&2
+    echo "  REMEDY: re-run this guard once the session bus is answering." >&2
     _ccc_emit_unprobed
     return 1
   fi

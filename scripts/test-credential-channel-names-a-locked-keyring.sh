@@ -124,14 +124,70 @@ else
     bad "expected unknown:secret-service-unprobed, got rc=$RC out='$OUT'"
 fi
 
-echo "arm 2 — NEGATIVE CONTROL: no secret service on the bus still reads missing:"
+echo "arm 2 — NEGATIVE CONTROL: no secret service on the bus reads unretrievable, never locked"
+#
+# EXPECTATION CHANGED 2026-09-22 (1347-r9g8), DELIBERATELY, AND IT WANTS A
+# SECOND OPINION -- flagged in the PR rather than slipped in, because changing a
+# fixture to match behaviour is the move that hides regressions.
+#
+# This arm asserted `missing:no-credential-channel`. The repo asserted BOTH
+# answers for this one bus state: test-check-credential-channel.sh arm 15 pins
+# `blocked:credential-unretrievable-no-keyring-service` for "no secret-service
+# on the bus", and this arm pinned `missing:`. The contradiction was invisible
+# because this arm never reached the not-serving path: its stub exits 1, the
+# state reader called EVERY failure `unknown`, and `unknown` bypassed the gate
+# to land on the terminal `missing:`. It passed for the wrong reason.
+#
+# `missing:no-credential-channel` means "there is no credential here", and its
+# remedy is `gh auth login` -- the re-auth 1025-a896 forbids because it evicts
+# the fleet. A host whose bus carries no secret service has an UNREACHABLE
+# store, not a proven-absent credential, and the honest remedy is the one
+# arm 15's verdict already carries: run inside a session with a keyring, or
+# inject GH_TOKEN. So the two fixtures are reconciled toward the SAFER verdict
+# rather than toward the one that happened to be here.
+#
+# THIS ARM'S ORIGINAL INTENT IS PRESERVED IN FULL: its subject is that a missing
+# service must never read as a LOCKED one, and `blocked:credential-
+# unretrievable-no-keyring-service` makes no lock claim. That assertion is kept
+# explicit below so the arm still fails if a lock claim reappears.
+#
+# arm 2b (no busctl AT ALL -- macOS, forge) still expects `missing:` and is
+# untouched: a platform with no org.freedesktop.secrets by design was never
+# going to answer, which is a different fact from a bus that answered "nothing
+# here".
 mk_bin "$W/bin-nosvc" noservice
 D="$(scratch nosvc)"
 run_guard "$D" "$W/bin-nosvc"
-if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
-    ok "missing:no-credential-channel — absence of a probe is not evidence of a lock"
+# HERE-STRINGS, NOT `printf | grep -q`. Refused by
+# check-sigpipe-verdict-pipelines-added, and the hazard is real rather than
+# stylistic: `grep -q` EXITS ON ITS FIRST MATCH, which SIGPIPEs the producer
+# still writing into it, and under `pipefail` that 141 becomes the pipeline's
+# status. The failure mode is the nastiest orientation possible — it fires only
+# when the pattern MATCHES, so a verdict arm can report failure precisely when
+# the thing it asserts is TRUE, and never when it is false.
+#
+# I wrote these by copying the shape from line 121 of this same file, which
+# carries a `# sigpipe-ok` marker earning its exemption. Copying the code and
+# not the justification is how a reviewed exception becomes an unreviewed
+# default.
+if grep -q '^blocked:credential-unretrievable-no-keyring-service$' <<<"$OUT"; then
+    ok "blocked:credential-unretrievable-no-keyring-service — unreachable store, not a proven-absent credential"
+elif grep -q '^missing:no-credential-channel$' <<<"$OUT"; then
+    bad "no secret service read as missing: — that verdict's remedy is the fleet-evicting re-auth 1025-a896 forbids"
 else
-    bad "a host with no secret service must read missing:, got '$OUT'"
+    bad "expected blocked:credential-unretrievable-no-keyring-service, got '$OUT'"
+fi
+# MATCH A LOCK CLAIM, NOT THE SUBSTRING "lock" -- which is inside "bLOCKed",
+# the very verdict this arm now asserts is correct. The first version of this
+# assertion used `grep -qi lock` and failed on its own expected output. Third
+# instance of this exact mistake in one session (a marker prepended to a literal
+# an assert searched for; a `grep -f` pattern matching its own watcher's command
+# line), and the rule each time is the same: assert the SENTENCE that does the
+# work, never a fragment that can appear inside an unrelated word.
+if grep -qiE 'is locked|unlock' <<<"$ERR"; then
+    bad "THE ARM'\''S ORIGINAL SUBJECT: a missing service claimed a LOCK"
+else
+    ok "makes no lock claim (this arm'\''s original subject, preserved)"
 fi
 
 echo "arm 2b — NEGATIVE CONTROL: no busctl at all (macOS, forge) still reads missing:"
