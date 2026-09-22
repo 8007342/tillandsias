@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-install-entry-point-verifies-everything-it-downloads-and-nothing-verifies-the-entry-point
+    event:
+      type: note
+      ts: "2026-09-22T15:40:26Z"
+      agent_id: linux-pirria-opus5-20260922t154026z
+      host: pirria
+      summary: |
+        SECOND-LANE EVIDENCE, AND IT IS HARDER THAN THE MANIFEST GAP. macneo's macOS
+        smoke of the published v56.9.22.1 passed, and cosign is ABSENT on that host: the
+        installer made NO verification attempt at all, with no cosign hits anywhere in
+        the install log.
+
+        So the claim in this row is stronger than first filed. It is not only that the
+        entry point does not verify ITSELF — on two platforms now measured, the entry
+        point attempts NO verification of anything, and the "anchored below the entry
+        point" half is real only for the artifacts the installer downloads once it is
+        already running. An installer that never invokes a verifier anchors nothing by
+        being able to.
+
+        THE PART WORTH STATING PLAINLY, because it is the difference between a feature
+        and a claim: the fleet has now shipped TWO releases in which the cosign work is
+        present in the tree and UNEXERCISED END TO END ON ANY LANE. 1324-ujvb's
+        two-separate-refusals design — the pinned hash gating execution, the executed
+        binary then verifying its own release against sigstore — is proven by its own
+        fixture and by hand on pirria, and has never run inside a published install on
+        any platform. A fixture proving a mechanism and a release exercising it are
+        different evidence, and only the second says the mechanism is reachable from
+        where operators stand.
+
+        That also means the absence is SILENT rather than loud, which is this row's
+        subject one level up: a host without cosign does not report could-not-run from
+        the install path, because the install path never asks. 1324-ujvb's grammar
+        distinguishes could-not-run from failed carefully — and the lane that would emit
+        either is not wired to the installer at all, so neither token can appear.
+
+        NOT A CHANGE TO THE SCOPING. macneo's refusal to call the entry point a defect
+        stands, and the stated-decision closure stays a legitimate answer: a release may
+        decide transport trust is the anchor and cosign is an operator-side affordance.
+        What this evidence removes is the option of assuming the verification happens
+        because the code exists.
+
+        The macOS manifest omission is the sibling row 1360-34uw and is not restated
+        here.

@@ -1,0 +1,130 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-preflight-roster-enumerates-guards-by-three-rules-and-never-asserts-its-population-so-a-guard-outside-all-three-is-invisible-rather-than-reported-missing
+    order: 1359-qf3p
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [build, preflight, population, fail-loud, guard]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    unscoreable: |
+      whether-every-inline-guard-belongs-in-the-preflight: some guards are
+      deliberately gate-only because they are slow or need a built tree, and the
+      roster already carries a named-exclusion channel for exactly that ("a
+      guard is NEVER silently dropped: it is run, or it is named"). This row is
+      not an argument that the preflight should run everything. It is an
+      argument that a guard outside the roster must be NAMED rather than
+      invisible. Deciding which of the gap belongs in the preflight is the
+      taker's judgement per guard, and a guard correctly excluded should be
+      recorded as excluded with the reason.
+    verifiable_closure: |
+      THE OUTPUT: `./build.sh --preflight` can account for every guard the gate
+      runs — each one is either executed, or named as excluded with a reason.
+      A guard invoked by build.sh that the roster's rules cannot see is REPORTED,
+      not silently absent.
+
+      THE CONTROL, and it is the row's own subject turned on the fix: add a
+      guard to build.sh that none of the three enumeration rules match, and the
+      preflight must SAY SO. If it prints a clean verdict, the roster still does
+      not assert its population and the fix is cosmetic.
+
+      SIZE IS NOT A CLOSURE CRITERION. Do not close this on a count; close it on
+      the accounting existing. The count is a thing the fix makes computable,
+      not a thing it must match.
+    title: |
+      the preflight roster enumerates guards by three rules, two of which match `check-*.sh` by PATTERN, so a `test-*.sh` guard invoked inline is invisible to the step every author is now required to run
+    context: |
+      MECHANISM CONFIRMED; SIZE UNKNOWN. Both halves are stated deliberately,
+      and the second is not a gap in effort — see provenance.
+
+      CONFIRMED, measured on macbookair 2026-09-22:
+      scripts/test-bound-litmus-is-runnable.sh — the guard whose refusal dropped
+      PR #158 from a relay — is invoked INLINE at build.sh:4364 as
+      `_run bash "$SCRIPT_DIR/scripts/test-bound-litmus-is-runnable.sh"`. It is
+      NOT a STEP_SCRIPT in any scripts/gate-steps.d/*.step (0 matches) and NOT in
+      the preflight roster (0 matches).
+
+      _preflight_roster() enumerates exactly three sources:
+        1. the FAST REFUSALS block's literal invocations, matched as
+           `scripts/check-[a-z0-9-]+\.sh`
+        2. `STEP_SCRIPT=` lines from scripts/gate-steps.d/*.step
+        3. `scripts/check-[a-z0-9-]+\.sh` in scripts/hooks/*.sh
+      An inline `_run bash` outside the fast-refusal block is in none of them —
+      AND TIERS 1 AND 3 MATCH `check-*.sh` BY PATTERN, so a `test-*.sh` guard
+      cannot be picked up by them even if it sat in the right block. Being
+      outside all three is not reported as a gap; it produces no output at all.
+
+      THIS IS 1255-rvr7's FAMILY FOR THE THIRD TIME TONIGHT, and now inside the
+      instrument the fleet has just made mandatory before every `gh pr ready`:
+        skills guard       iterates runtimes, skips the absent, reports survivors
+        litmus bindings    names spec_ids, resolves none, reports nothing
+        preflight roster   enumerates guards by three rules, asserts no population
+      A guard over a population must assert the POPULATION, not only the shape of
+      what it finds. The roster's own comment already holds the right principle —
+      "a guard is NEVER silently dropped: it is run, or it is named" — and that
+      promise is kept for the exclusions it KNOWS about and cannot be kept for a
+      guard its rules never saw.
+
+      THE COST IS CONCRETE AND ALREADY PAID. The guard that refused #158 sits
+      outside the step every author now runs, so the author's pre-ready sweep
+      cannot see it and the refusal arrives from the relay instead. That is
+      precisely the failure the mandatory-preflight rule was introduced to stop —
+      three fixture-green PRs dropped by sub-second deciders their authors never
+      ran — reappearing one level up, in the roster rather than in the authors.
+
+      THE FILER'S OWN ERROR IS THE SAME MISTAKE MADE BY HAND, and it belongs
+      here because it is the clearest statement of the shape: while trying to
+      SIZE this gap the filer sampled the population with the wrong rule twice —
+      first parsing the preflight's summary lines as if they were per-guard lines
+      (yielding 3), then comparing a re-implementation of the roster rather than
+      the roster itself (yielding 141, with check-bash-dialect.sh landing in the
+      gap, which may be correct or may be an artefact). A POPULATION SAMPLED
+      WITH THE WRONG RULE AND REPORTED WITH THE RIGHT CONFIDENCE. The roster is
+      that same mistake made by a program, and made every time it runs.
+    deliverable: |
+      The preflight accounts for every guard the gate invokes: executed, or named
+      as excluded with a reason. A guard the enumeration rules cannot see must
+      surface as an unaccounted guard rather than as silence.
+
+      DO NOT simply widen the three patterns to include `test-*.sh`. That fixes
+      today's misses and leaves the same shape: the next guard invoked in a form
+      no rule matches is invisible again. The property is accounting, not a
+      broader grep.
+
+      KEEP THE NAMED-EXCLUSION CHANNEL. The roster already refuses to drop a
+      guard silently for the exclusions it knows about; extend that promise to
+      cover the ones it does not, rather than replacing it.
+
+      THE CHEAP FIX FOR THE SPECIFIC CASE, named here and deliberately left for
+      whoever next touches the gate: give scripts/test-bound-litmus-is-runnable.sh
+      a scripts/gate-steps.d/*.step entry, which is the same data-not-code move
+      1072-b7eq already made for the others and makes the roster see it through
+      tier 2. That is one guard, not the property, and it does not close this row.
+    next_action: >
+      DO NOT START BY SIZING THE GAP, and if you do, compute the roster by
+      CALLING _preflight_roster from build.sh rather than re-implementing its
+      three rules — the filer re-implemented them and produced a number they
+      would not stand behind. The method: source or invoke the function, diff its
+      output against every `_run bash "$SCRIPT_DIR/scripts/*.sh"` in build.sh,
+      and read the result before quoting it. Then read the roster's own comment
+      ("a guard is NEVER silently dropped: it is run, or it is named") — the fix
+      is making that promise true for guards the rules never saw.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-22 at macuahuitl-fedora's
+      direction, from the investigation of PR #158's relay refusal. The
+      mechanism was measured on this host: the inline call site, the two zero
+      matches, and the roster's three rules were each read from build.sh rather
+      than inferred.
+
+      THE SIZE IS DELIBERATELY ABSENT. The filer produced a figure of 141 and
+      REFUSED TO REPORT IT, because it rested on a re-implementation of the
+      roster rather than on the roster, and a number of that magnitude moves
+      decisions. The coordinator's ruling: refusing to hand over 141 was worth
+      more than the number would have been, since a retraction afterwards costs
+      more than the delay. Recorded so the next reader knows the absence is a
+      judgement, not an omission.

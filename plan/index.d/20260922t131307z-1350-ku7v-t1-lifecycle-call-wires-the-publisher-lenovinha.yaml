@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Events go to the OVERLAY, never to plan/index.yaml (699-usxc, 966-7umc).
+# The `event:` block is mandatory: an events: entry carrying definition
+# fields at the top level is a packet DEFINITION under the wrong key and
+# the fold drops it (812-d45t).
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T13:13:07Z"
+      agent_id: linux-lenovinha-claude-20260922t125444z
+      host: lenovinha
+      summary: |
+        T1 SECOND HALF — THE LIFECYCLE CALL. The publisher was a working script
+        wired to nothing: images/git/publish-sync-state.sh computed the right
+        verdict, arms 1-6 of scripts/test-mirror-sync-state.sh all passed, and
+        NOTHING RAN IT. It was not COPYed into images/git/Containerfile, so it
+        was not even present in the mirror image, and no call site existed in
+        entrypoint.sh or relay-refs.sh.
+
+        THAT GAP WAS INVISIBLE FROM INSIDE THE FIXTURE, which is the lesson
+        worth carrying. Six green arms measured the computation and said nothing
+        about whether the computation ever happens. A verdict no lifecycle
+        produces is not a surface a consumer can read, and the acceptance this
+        row owes is about the SURFACE — a forge or a host asking the mirror a
+        question before spending a push on the answer.
+
+        WIRED AT FOUR MOMENTS, each chosen for what it makes readable:
+          1. images/git/Containerfile — COPY + chmod, beside probe-upstream-auth,
+             whose ref grammar this shares.
+          2. entrypoint.sh, after the startup sweep, for EVERY mirror including
+             local-only ones — so a forge launching beside the mirror does not
+             read an absent (= not-current) state for a whole reconcile interval.
+             This mirrors 756-2jnj's first-verdict publish exactly.
+          3. entrypoint.sh, on every reconciler tick — the cadence T1 asks for.
+             The tick is chosen because it is the moment the tracking refs the
+             state is computed FROM have just been refreshed; any other schedule
+             reports a distance measured against data of unrelated age, and
+             "behind by 0" computed against an hour-old fetch is precisely the
+             false comfort this row was filed about. Staleness is bounded by
+             MIRROR_RECONCILE_INTERVAL, the same bound 756-2jnj relies on.
+          4. relay-refs.sh, after the pre-push fetch AND after the post-failure
+             reconcile fetch. The pre-push moment is the freshest the mirror's
+             knowledge of upstream ever gets, and it is the moment a consumer is
+             most likely to read the state — the push about to happen is the
+             event this row was filed about. The post-failure moment matters
+             more: the push has just been REFUSED and the reconcile has changed
+             the mirror, so leaving the pre-push verdict standing would publish
+             the state of a mirror that no longer exists, to the one reader
+             deciding whether to retry.
+
+        SYNC_STATE is overridable at every call site (the RELAY_REF/AUTH_PROBE
+        pattern), so fixtures drive the real implementation offline.
+
+        THE PUBLISHER NEVER GATES A PUSH. A relay that refused a legitimate push
+        because a verdict could not be written would be a worse defect than the
+        blindness being fixed, so both relay call sites are `|| true` with the
+        publisher's own failure path loud on stderr. Arm 10 enforces it against
+        a publisher that always exits 9.
+
+        ── EVIDENCE ──
+
+        scripts/test-mirror-sync-state.sh grew arms 7-10 and reports
+        ok:mirror-sync-state:10/10 arms. Arms 7 and 8 are source pins on the
+        Containerfile and entrypoint (a COPY that never happened is invisible
+        from every other arm — that was the actual gap). Arms 9 and 10 are
+        BEHAVIOURAL: they drive the real relay-refs.sh against a local bare
+        upstream with the real publisher, and nothing is mocked but the upstream
+        URL, which is a path.
+
+        FALSIFIABILITY SHOWN, NOT CLAIMED. With the relay's two publish calls
+        stripped out, arm 9 reds by name:
+          FAIL: arm9: a full relay run published NO sync-state verdict — the
+          publisher is shipped and called by nothing that runs
+          fail:mirror-sync-state:1 arm(s)
+        and returns to 10/10 when they are restored.
+
+        litmus:mirror-sync-state-readable updated to 10/10 and green in its
+        spec's pre-build/instant suite:
+          Test Verdicts: passed=23 advisory=0 skipped=0 not-run=10 failed=0
+
+        ── NEXT ──
+
+        REMAINING FOR T1, and it is the on-demand half, not the cadence:
+        `tillandsias --sync <project>` as a demanded sync plus the tray action.
+        That is a crates/ change; it is prepared on the work ref like the rest
+        and lands with it.
+
+        ACCEPTANCE IS STILL OWED ON TWO REGIMES (this row's own criterion): this
+        host, whose mirror was rebuilt 00:13Z and is younger than the fleet's
+        others, and yoga's install regime. Arms 9 and 10 run anywhere and are
+        not a substitute for that — they prove the wiring, not the behaviour of
+        two real mirrors.
+
+        ── PROVENANCE ──
+
+        lenovinha-silverblue, on work/1350-ku7v. Prepared under the 2026-09-22
+        freeze declared for this host by macuahuitl (crates/ and scripts/ held
+        off linux-next until the lift); the coordinator's direction was to stay
+        on T1 and land after the lift. The row stays in_progress until the merge
+        is on origin/linux-next, and the closing event's evidence SHA will be
+        that landed commit, never this work ref's own head.

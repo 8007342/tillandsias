@@ -184,6 +184,7 @@ specs:
   - litmus:validator-surface-currency
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
+  - litmus:preflight-runs-or-names-the-capability
   - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
@@ -488,6 +489,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:initialize-bare-metal-host-idempotent
+  - litmus:bare-metal-lane-command-is-runnable
   - litmus:mirror-sync-state-readable
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity

@@ -1,0 +1,49 @@
+# @trace spec:ci-release, order:1353-ryhq
+name: litmus:preflight-runs-or-names-the-capability
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1353-ryhq. `./build.sh --preflight` either RUNS a guard or NAMES what it
+  could not do — and its summary never vouches for a guard that did not examine
+  the tree.
+
+  MEASURED ON THREE HOSTS IN ONE NIGHT, 2026-09-22, each finding a different
+  symptom of the same defect. yolanda-windows: ok:preflight:ran=68 skipped=31
+  wall=241s, exit 0, where twenty of those thirty-one were guards cut off by the
+  5s deadline, each missing it by one or two seconds — `ok:` for a door that
+  covered about two thirds. macneo: ran=0 skipped=3 failed=110, every guard
+  booked as a REFUSAL because one binary was absent (exec: setsid: not found);
+  the guards were blameless and the tree was never examined. forge: refused:
+  printed for guards that never executed, because the checkout tmpfs filled
+  (1349-53h6).
+
+  THE DEFECT IS THE VOCABULARY, NOT THE DEADLINE. Four outcomes reached a reader
+  as two tokens: a guard that ran and gave a verdict, a guard that declared its
+  own skip, a guard the runner could not start, and a guard cut off mid-run. The
+  fix is the scoring and the summary; raising the 5s budget is explicitly out of
+  scope, and yolanda's MSYS spawn-cost explanation for the one-to-two-second
+  overrun is recorded as a HYPOTHESIS that nobody has measured.
+
+  THE SUM IS THE LOAD-BEARING ASSERTION. Categories a reader cannot check are a
+  vocabulary and not an accounting, so the door refuses when its categories do
+  not add up to the roster it enumerated. And no arm anywhere asserts a guard
+  COUNT: two Macs measured the same defect as failed=108 and failed=110 minutes
+  apart, so the roster differs by checkout and a fixed number would be red on
+  one host and green on another.
+preconditions:
+  - workspace contains scripts/test-preflight-verdict-categories.sh
+  - build.sh accepts --preflight
+
+critical_path:
+  - step: "the verdict names its categories, sums them, and reports partial: rather than ok: when a guard did not answer"
+    command: "bash scripts/test-preflight-verdict-categories.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:preflight-verdict-categories"
+    # size: instant because six of the seven arms read build.sh's scoring
+    # rather than running the door. The seventh runs the real door and is a
+    # NAMED SKIP where it cannot run (no setsid) or where it was not asked for
+    # (TILLANDSIAS_PREFLIGHT_LIVE=1) — a door that takes minutes does not belong
+    # in an instant tier, and a host that cannot open it learns nothing by
+    # pretending it did (965-sxec).

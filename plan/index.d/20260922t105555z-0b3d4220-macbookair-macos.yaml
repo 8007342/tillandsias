@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-skills-single-source-guard-asserts-link-shape-over-a-population-that-can-silently-shrink-so-a-runtime-that-does-not-exist-passes-and-deleting-the-tree-it-protects-reads-as-green
+    event:
+      type: note
+      ts: "2026-09-22T10:55:55Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |
+
+        THE GENERAL CLOSURE, AND A SECOND INSTRUMENT WITH THE SAME SHAPE.
+
+        THE SENTENCE: A GUARD OVER A POPULATION MUST ASSERT THE POPULATION, NOT ONLY THE
+        SHAPE OF WHAT IT FINDS. Every member it finds can be perfectly well-formed while
+        the set it examined has silently become empty, and a verdict that REPORTS a count
+        instead of PINNING it cannot tell those apart. ok:5:18 and ok:0:18 are the same
+        line to a reader and the same exit code to a gate.
+
+        SECOND INSTRUMENT, measured on macbookair 2026-09-22 while closing 920-pxg6, and
+        it is why the coordinator routed this row here. openspec/litmus-bindings.yaml
+        bound THREE litmus tests under `spec_id: expert-serve-grounded-pipeline` while
+        openspec/specs/expert-serve-grounded-pipeline/ DID NOT EXIST. Every gate passed.
+        The binding asserts the SHAPE of a binding — a spec_id, a list of litmus names —
+        and never asks whether the spec_id resolves to anything, so a binding to a spec
+        that is not in the tree is indistinguishable from a binding to one that is.
+
+        THE TWO ARE THE SAME DEFECT AT DIFFERENT ADDRESSES:
+          skills guard      iterates runtimes, skips the absent, reports the survivors
+          litmus bindings   names spec_ids, resolves none, reports nothing
+        Neither is a weak check. Both are checks of the wrong thing: they verify that
+        what they FOUND is well-formed, and the failure mode is that they find less.
+
+        WHAT DISTINGUISHES THIS FAMILY from ordinary under-coverage is the DIRECTION of
+        the silence. A guard that misses a case is quiet about that case. A guard whose
+        population can shrink is quiet about EVERYTHING, and gets quieter as the tree
+        gets worse — the emptier the set, the greener the verdict. That is why "deleting
+        .gemini/skills would have made the tree green" is the row's sharpest line: the
+        guard would have applauded the deletion of the thing it exists to protect.
+
+        THE TEST FOR THIS SHAPE, usable on any guard: ask what it prints when it finds
+        NOTHING. If the answer is ok:, the population is unasserted. Applied to the two
+        above, both answer ok:, and both answered it before anyone looked.
+
+        NOT FIXED HERE: the litmus-binding instance. It is a different file and a
+        different owner, and folding it into a skills-guard change would make one diff
+        carry two arguments. Recorded so whoever takes it has the shape and the
+        measurement rather than the symptom.
