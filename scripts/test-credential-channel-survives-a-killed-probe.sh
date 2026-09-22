@@ -161,6 +161,22 @@ fi
 # bounding tool makes the kill observable.
 if [ -z "$_BOUND" ]; then
     echo "  skip:no-timeout-tool — a killed probe cannot be distinguished from an answered one without a bounding tool; the not-missing property above still held"
+elif grep -qE '^(ok|unverified):(gh-credentials-store|gh-token-env|github-token-env)$' "$W/.out"; then
+    # THE ARM'S SECOND UNASSERTED PREMISE, measured on yoga 2026-09-22.
+    # <git-dir>/.gh-credentials is the guard's HIGHEST-precedence channel, so on
+    # a checkout that has one the guard answers about the store and never
+    # reaches the secret-service probe -- the kill is real and simply not
+    # observable in the verdict. This arm read that correct answer as a failure:
+    # 10/11 on the main checkout, 11/11 in a linked worktree of the SAME commit
+    # minutes apart, because a worktree's git-dir is .git/worktrees/<name> and
+    # carries no store file. Same host, same fixture, same subject, opposite
+    # verdicts -- which is the shape that gets read as flake.
+    #
+    # Skipped BY NAME rather than made to pass, for the same reason the _BOUND
+    # branch above is: teaching the guard to ignore a channel it legitimately
+    # found would be a guard change, and the not-missing property above -- the
+    # load-bearing one -- still holds here and is still asserted.
+    echo "  skip:higher-precedence-channel:$(tr -d '\n' < "$W/.out") — a credential channel outranking the secret-service probe answered first, so a killed probe cannot change this verdict; the not-missing property above still held"
 elif grep -qE '^unknown:secret-service-unprobed$' "$W/.out"; then
     ok "it names the state precisely: unprobed, not absent"
 else
