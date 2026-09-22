@@ -53,12 +53,36 @@ arm_blindness:
       A named checkpoint is not.
 
   traps:
-    silent_dependency:
+    unrun_is_not_unbroken:
       rule: >
-        Invoking the real subject without copying its PREREQUISITES in beside it
-        means it dies BEFORE the region under test, and an absence-assertion
-        passes identically fixed and unfixed. Copy them, and assert the
-        checkpoint.
+        An arm that did not RUN reports nothing, and an absence-assertion reads
+        that silence as success. This is one trap seen from either side: the
+        SUBJECT missing a prerequisite dies before the region under test, and
+        the ARM missing one of its own never reaches the property — both produce
+        a verdict about something other than the property.
+      remedy: >
+        A POSITIVE CONTROL ON THE INSTRUMENT BEFORE ITS NEGATIVE IS TRUSTED. Any
+        arm that can fail to run needs something that proves it ran before its
+        silence means anything: copy the subject's prerequisites in beside it
+        and assert the NEXT NAMED CHECKPOINT; have the arm assert it could
+        measure at all before it judges.
+      illustration: >
+        Two hosts checked the same two YAML files on 2026-09-22. One used a
+        python one-liner importing yaml; PyYAML was absent on that host, the
+        import threw, and the checker reported PARSE FAILED for both — a false
+        finding against files the repo's own validator answers
+        `ok:yaml-loads` for. The other host ran the identical one-liner and it
+        passed, because PyYAML happened to be installed there. Same instrument,
+        two substrates, opposite verdicts, and the correct instrument was in the
+        repo the whole time.
+      how_it_was_caught_is_a_weakness_not_a_method: >
+        It surfaced because the answer disagreed with a claim the checker's
+        author had reason to trust, so they checked the checker instead of the
+        files. THAT IS LUCK PLUS A PRIOR. It does not generalise, and a reader
+        whose takeaway is "be suspicious when something looks wrong" has learned
+        nothing — suspicion arrived only because the disputed claim came from a
+        trusted source. This is why the rule says to point it at suites that
+        already pass rather than to read arms harder.
     absent_is_not_silent:
       rule: >
         A stub that is ABSENT is not a stub that ANSWERS NOTHING. An absent
