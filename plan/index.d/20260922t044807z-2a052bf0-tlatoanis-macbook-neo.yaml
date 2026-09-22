@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-22T04:48:07Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t044807z
+      host: tlatoanis-macbook-neo
+      summary: |
+        WHAT IS LEFT ON THIS ROW, FIRST, because the immutable headline still reads "reproduce and name the cause" and nothing else corrects it for the next reader.
+
+        REMAINING AND TRACTABLE:
+          (b) the criterion-4 fixture for the headless_service_state `activating` arm — platform-independent, zero tests today, and it is what stops a SLOW BOOT being misreported as this defect. Taken first.
+          (a) the variant-preserving handshake error — the poll line must distinguish Input from Decrypt instead of collapsing both into `noise: input error`. Taken second.
+
+        REMAINING AND OUT OF REACH FROM HERE:
+          (c) the cold-provision reproduction. BLOCKED BY A CAPABILITY, NOT BY A HOST — what is needed is a host whose guest NEVER REACHES READY, and macneo is no longer one. The row already says so in its own words at the 2026-09-12 event: the guest has REACHED READY, the premise (phase=Ready count 0, crashloop.state never written) does not hold, and a cold provision here may now simply succeed and prove nothing. Confirmed again tonight, independently: macneo cold-provisioned from a fully wiped substrate during the v56.9.21.1 smoke, the guest reached ready, and a standalone exec returned alive with exit_code 0. Criterion 1 is recorded MET and version skew REFUTED, so (c) is a demonstration this host can no longer stage rather than work anyone is neglecting.
+
+        TWO RECORDS ABOUT THE EVIDENCE BASE, both measured rather than recalled.
+
+        FIRST — THE TWO PRESERVED GUEST IMAGES ARE GONE, AND WERE GONE BEFORE TONIGHT. The closure names them twice as the alternative route to the hash question via a Linux mount. They are not on macneo. Searched the image root, HOME to depth four, /tmp and /Volumes; the only guest images present are the live rootfs.img and rootfs.qcow2 provisioned tonight.
+
+        I checked whether I destroyed them, because I wiped that directory twice during the two smokes, and the answer is no. My own pre-state captures bracket it. The image root at the first smoke's run_start held console.log, nvram.bin, provision, rootfs.img and rootfs.qcow2 — no preserved copies. So they were already absent before anything I ran tonight.
+
+        That makes this the SECOND unexplained removal on this host, and it belongs beside 1327-r4zb as the same shape rather than as a separate curiosity: there, an installed application bundle disappeared from /Applications between runs with the VM state intact, twice, mechanism never identified, and an instrument is now collecting once-a-minute stamps against the next occurrence. Here, two checksum-verified images a row depended on are absent with no record of their removal. I am NOT claiming one cause for both — nobody has measured either — only that a host quietly losing artefacts that rows cite is a property worth tracking in one place.
+
+        SECOND — crashloop.state WAS DESTROYED TONIGHT, BY ME, and its contents survive. It was present at the second smoke's run_start and the §2 substrate step (scripts/e2e-step2-macos.sh) removes the image root unconditionally, which is its documented job. The row quotes the file verbatim in the 2026-09-12 event — ever_ready 1, last_phase ready, written_at 1789178574 — so the measurement is preserved in the ledger and only the artefact is gone. Recorded because the row treats that file as evidence, and the next reader should not go looking for it.
