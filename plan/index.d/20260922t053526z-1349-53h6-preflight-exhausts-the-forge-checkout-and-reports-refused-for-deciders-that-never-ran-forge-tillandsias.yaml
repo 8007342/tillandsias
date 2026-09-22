@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: build-sh-preflight-writes-its-scratch-and-sidecar-output-inside-the-checkout-so-on-a-forge-whose-checkout-is-a-256mb-tmpfs-it-exhausts-the-filesystem-and-then-reports-refused-for-deciders-that-never-ran
+    order: 1349-53h6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, forge, instrument, fail-loud, tooling]
+    estimated_hours: 3
+    owned_files: [scripts/push-plan-fragments-to-trunk.sh, scripts/build-sidecar.sh]
+    title: |
+      scripts that write build scratch INSIDE the checkout exhaust a forge's 256 MB tmpfs, and
+      `./build.sh --preflight` then prints `refused:preflight:<decider>` for deciders that NEVER RAN —
+      a report indistinguishable from "these deciders refused your tree"
+    context: |
+      MEASURED ON forge-tillandsias 2026-09-22, and REPRODUCED — two consecutive
+      preflight runs drove /home/forge/src to 0 bytes free both times.
+
+      THE SUBSTRATE. A forge's checkout is a 256 MB tmpfs (`/home/forge/src`),
+      which is pinned guest RAM, while CARGO_TARGET_DIR is redirected to real
+      disk with 946 GB free. Any script that writes build output to a path
+      INSIDE the checkout picks the smallest filesystem on the host while the
+      large one sits unused. That is order 721-nyev's family, in scripts that
+      WRITE rather than read.
+
+      TWO SITES MEASURED:
+
+        scripts/push-plan-fragments-to-trunk.sh:115
+          _tmpbase="$ROOT/target/plan-scratch"
+          mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
+        Its own comment says it is avoiding a quota'd tmpfs — and on a forge
+        $ROOT/target IS the quota'd tmpfs while CARGO_TARGET_DIR is the disk. The
+        fallback is UNREACHABLE BY CONSTRUCTION: it fires only when `mkdir -p`
+        FAILS, and mkdir succeeds with 17 MB free. Then tar fills the tmpfs and
+        dies naming a LEDGER FRAGMENT:
+          tar: plan/index.d/…-1335-2nzf-….yaml: Cannot write: No space left on device
+        A host that does not know about the tmpfs reads that as ledger
+        corruption and investigates the wrong thing. That masquerade is the
+        expensive part.
+
+        scripts/build-sidecar.sh:84
+          SIDECAR_TARGET_DIR="$ROOT/target-musl"
+        11 MB of release output inside a 256 MB tmpfs, on every preflight.
+
+      THE CONSEQUENCE THAT MATTERS, and it is the reason this is a gate row and
+      not a disk row. With the checkout exhausted, `./build.sh --preflight`
+      reports:
+
+        refused:preflight:ran=92 skipped=15 failed=4 wall=137s
+
+      and among those four:
+
+        FAIL could not create a throwaway worktree: fatal: could not write to
+          '.git/worktrees/wt/locked': No space left on device
+        refused:preflight:test-scorable-closure-quoting
+
+        awk: cmd. line:1: fatal: print to "standard output" failed:
+          No space left on device
+        refused:preflight:test-sigpipe-verdict-measured
+
+      BOTH OF THOSE DECIDERS PASS WHEN RUN WITH DISK AVAILABLE — measured
+      immediately afterwards on the same tree:
+        scorable-closure-quoting: 5 passed, 0 failed
+        sigpipe-verdict-measured: 5 passed, 0 failed
+
+      So the front door said `refused:` about two guards that NEVER EXECUTED,
+      in a report whose shape is identical to "these guards refused your tree".
+      A reader sees failed=4 and concludes their branch is red. Two of the four
+      are the instrument out of disk. THE VOCABULARY FOR THE HONEST ANSWER IS
+      MISSING AT EXACTLY THE POINT IT IS NEEDED: `refused:` conflates "the
+      subject is wrong" with "I could not run", and the door already
+      distinguishes `skip:` with a named reason for its deadline cases — it has
+      the register and does not use it here.
+
+      WHY IT BITES THE FRONT DOOR SPECIFICALLY. 1305-udgs makes preflight the
+      thing a worker runs before `gh pr ready`, precisely because a work-ref
+      push only WARNS. A forge worker following that instruction gets four
+      failures, two of them phantom, and cannot tell which without knowing about
+      the tmpfs. The guard meant to stop a red travelling produces a red of its
+      own making.
+
+      NOT A FORGE-ONLY FUTURE PROBLEM: any host whose checkout is small or
+      memory-backed reaches the same end, and the trend in container images is
+      smaller rather than larger.
+
+      FILED LATE, AND THAT IS ON THIS HOST. yolanda-windows directed this row
+      hours earlier, when only the push-plan-fragments site and its masquerade
+      were known; it was dropped when the 1331-884p work took over and never
+      written. The delay produced better evidence — the second site, the
+      reproduction, and the phantom refusals — but the row should have existed
+      before any of that.
+    verifiable_closure: |
+      bash scripts/test-preflight-scratch-is-off-checkout.sh (new) — on a host whose checkout is a
+      small or memory-backed filesystem and whose CARGO_TARGET_DIR is disk-backed, `./build.sh
+      --preflight` completes without exhausting the checkout, and NO decider is reported as
+      `refused:` for a reason that is the runner's own resource exhaustion. A decider that cannot
+      execute is reported with a distinct verdict naming the cause — `could-not-run:<decider>:<reason>`
+      — never with the verdict used for a decider that refused the tree.
+      PRE-FIX RESULT, so the closure is falsifiable — FAILS today: two consecutive preflight runs on
+      forge-tillandsias drive /home/forge/src to 0 bytes and report
+      refused:preflight:test-scorable-closure-quoting and
+      refused:preflight:test-sigpipe-verdict-measured, while both of those fixtures pass 5/5 when run
+      individually with disk available.
+    next_action: |
+      Resolve scratch and build-output roots on AVAILABLE SPACE or on CARGO_TARGET_DIR, not on a
+      literal path under $ROOT, and do not condition the fallback on `mkdir` succeeding — mkdir
+      proves nothing about capacity, which is why the existing fallback has never fired.
+      SEPARATELY and more important than the paths: give the front door a verdict for "this decider
+      could not execute". It already emits `skip:` with a named reason for its deadline cases; the
+      resource-exhaustion case needs the same treatment. Conflating it with `refused:` is what turns a
+      full disk into four phantom red guards, and no path fix removes that conflation — a decider can
+      fail to execute for reasons other than disk.
+    trace: [order:721-nyev, order:1305-udgs, order:1337-3tk6]
