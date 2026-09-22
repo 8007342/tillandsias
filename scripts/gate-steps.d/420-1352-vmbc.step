@@ -1,0 +1,52 @@
+# Gate step 1352-vmbc — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. `./build.sh --preflight` is the front door: the step every PR
+# runs before `gh pr ready`, and the one that catches a sub-second decider an
+# author never ran. It launched every guard under `setsid` unconditionally, and
+# `setsid` is util-linux.
+#
+# MEASURED ON macOS BEFORE THE FIX:
+#     ./build.sh: line 316: exec: setsid: not found
+#     refused:preflight:ran=0 skipped=3 failed=108 wall=26s
+# ran=0. Not "some deciders red" — NONE of the 108 launched, and 108 identical
+# launch failures are indistinguishable, in the summary line, from 108 real
+# refusals about the tree. AFTER: ran=94 skipped=16 failed=1
+# isolation=none-no-setsid.
+#
+# IT FAILED LOUD RATHER THAN GREEN, which bounded the damage — a mac got
+# `refused`, never a false pass — and is why this was a blocked host rather than
+# a fleet of quietly unverified pushes. What it could not do was say anything
+# about the tree.
+#
+# THE TREE ALREADY KNEW THIS PLATFORM LACKS setsid, which is what made it a
+# defect rather than a platform limit: scripts/test-dispatch-reap.sh:99 probes
+# `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same as
+# passing"). One caller asked and one did not.
+#
+# THE FIX IS THE PROBE, NEVER THE DROP. build.sh's own comment above
+# _pf_run_guard records what was measured without setsid: `timeout N cmd` does
+# not reliably reach cmd's children, one door run left NINE survivors including
+# the timeout processes themselves, and setsid's exit propagation broke the 124
+# detection so two timed-out guards were reported as refusals rather than skips.
+# Arm 4 of the fixture pins that comment for the next reader who is tempted.
+#
+# WHY THE VERDICT NAMES THE MODE. A run without setsid keeps every deadline and
+# the 124 convention and loses only process-GROUP signalling, so a guard that
+# leaves background children can outlive its deadline. That is a real difference
+# in what the run PROVED. A degraded run that reads like an isolated one is
+# worse than a refusal, so both summary lines carry `isolation=`, and the
+# fixture's arm 3 requires BOTH — pinning only the refusal line would let a
+# green run hide a degraded one, which is the direction that costs something.
+#
+# WHAT THIS STEP RUNS is a source-shape fixture, and that is a deliberate
+# limitation rather than a shortcut: the behavioural proof is a 150s preflight
+# run, which is the one thing a front-door step cannot be. The before/after pair
+# above is recorded on the row as the measurement; this step pins that the three
+# pieces producing it cannot be removed silently.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan (1063-nraf).
+STEP_DESC="Checking the preflight probes for setsid and names its isolation mode (1352-vmbc)"
+STEP_SCRIPT="scripts/test-preflight-setsid-probe.sh"
+STEP_ERROR="the preflight's setsid probe or its isolation-mode verdict was removed (1352-vmbc) — without the probe, every guard on a host with no setsid dies in its exec and the step reports ran=0; without the verdict token, a degraded run reads as an isolated one. Do NOT 'fix' by deleting setsid: build.sh's own comment records nine survivors and broken 124 detection from the run that tried"
+STEP_OK="The preflight runs its guards on a host without setsid, and says so"
