@@ -1,0 +1,129 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    field: context
+    value: |-
+      scripts/hooks/pre-push-local-gate.sh:2030 is an UNCONDITIONAL echo at the
+      end of the decider chain:
+        echo "local gate: preflight clean, ./build.sh --check current for this tree"
+
+      On a work/<order> ref, order 1315-4a7j (phase 1: migration, not
+      enforcement) makes refuse() print one `warn:pre-push:<decider>:` line and
+      RETURN 0 rather than exit 1. That is the intended lane behaviour and is
+      not in question. The consequence is: execution falls through EVERY red
+      decider, including the stale-stamp branch at :1808/:1826, and reaches the
+      green trailer. The trailer is reached in exactly the state it denies.
+
+      WHY THIS IS MORE THAN AN UGLY LINE. The natural way to read a long push
+      log is its tail, and the tail is where a summary line lives — so the one
+      line most likely to be unconditional is the one line most likely to be
+      read alone. On this host the sequence was: `git push`, `tail -6`, green,
+      and a report to the coordinator was one step from going out saying the
+      push was clean. The verdict was recovered only because the stamp was
+      checked separately, and it said stale:tree-changed-since-gate against a
+      stamp dated 2026-09-21T01:53:36Z.
+
+      The failure family is the one this milestone exists for: the trailer is
+      TRUE ABOUT ITSELF — the chain did finish — and FALSE ABOUT THE WORLD —
+      no check established that --check is current. Same shape as 795-imz3's
+      inverted pipeline status and as the hook's own comment at :1994 about a
+      warn rendering as a pass because two streams were captured into one blob.
+      That comment is eleven lines above a line with the same defect.
+
+      A HUMAN AND AN AGENT FAIL DIFFERENTLY HERE, and both fail. A human
+      scrolls and may catch the warn. An agent capturing `tail -N` cannot: the
+      warn is outside the window by construction.
+
+
+      [2026-09-22T09:52:24Z macneo] TWO MEASURED INSTANCES OF THE SAME DEFECT AT A DIFFERENT SITE, contributed by
+      pirria-silverblue 2026-09-22 and folded into this row rather than opened as a
+      third, at macuahuitl-fedora's direction.
+
+      A work-ref push warns IDENTICALLY for a decider that will refuse the relay and
+      for a decider that is a note. Both of these were visible at push time; neither
+      said it was fatal downstream; both PRs were dropped by the relay's preflight,
+      each costing a relaunch:
+
+        #143 (work/1324-ujvb)  check-bash-dialect
+              blocked:bash4-unguarded:1 — a ${v,,} in scripts/ensure-cosign.sh.
+              Refused the whole land.
+        #146 (work/1347-r9g8)  check-sigpipe-verdict-pipelines-added
+              two ADDED `printf '%s' "$OUT" | grep -q '^verdict$'` pipelines.
+              Refused the whole land.
+
+      THE COST RATIO, which is the argument for fixing the text rather than adding
+      process: on both occasions the remedy was ONE LINE and took under a minute once
+      named. The cost was never the fix; it was the round trip — push, relay,
+      refusal, relaunch. The fix is cheap exactly when it is known early, which is
+      precisely when the current text withholds the one bit that would name it.
+
+      FROM THE AUTHOR'S SEAT the warning that precedes a relay refusal and the
+      warning that precedes nothing are the same event, so the information needed to
+      act is exactly the information missing. That is this row's trailer defect one
+      layer down: the trailer loses the tally, the warning loses the class.
+
+      A THIRD INSTANCE, ON THIS HOST, SAME NIGHT, SAME SHAPE: macneo pushed
+      work/1302-7j8p at 4eec70dec carrying violation:sigpipe-verdict-added:3 in its
+      own fixture — the identical decider that caught #146 — and the push warned
+      without saying it was fatal. It was caught only by running the decider list by
+      hand afterwards. Three PRs, three hosts, one missing bit.
+
+      WHAT MUST NOT BE THE FIX, recorded because it is the obvious one: making the
+      work-ref push refuse. The lane is deliberately ungated (1315-4a7j phase 1), and
+      closing it would send hosts to salvage refs for ordinary work — the exact
+      unreachable-escape-hatch failure 1177-k4jq documents.
+
+      [2026-09-22T10:02:05Z macneo] THE CONTRAST CASE, added 2026-09-22 at macuahuitl-fedora's direction, because a
+      row about a message that lies is not actionable without an example of one that
+      does not. Two refusals on this host the same night, both costing about 37
+      seconds, both of which a reader could act on WITHOUT asking anyone:
+
+        plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+          resolved: ./target/release/tillandsias-plan
+          via:      embedded validator-surface hash — built-from=b1d6bcc42be30c85
+                    checkout=39b557241006c99f (1287-h6qn); a rebase that rewrote a
+                    file without changing it would NOT have triggered this
+          newer:    crates/tillandsias-plan/src/main.rs
+          This lane validates the bytes you are pushing with the resolved binary, so a
+          stale one can accept a fragment shape the current rules refuse (1129-4su6).
+          REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh
+
+      WHAT MAKES IT GOOD, itemised, because these are the properties the trailer and
+      the work-ref warnings lack rather than a matter of tone:
+        1. IT NAMES THE DECIDER. "plan-only lane", not a generic failure.
+        2. IT NAMES THE EVIDENCE AND THE AXIS. Two hashes and the file that moved, so
+           the reader can check the claim instead of believing it.
+        3. IT PRE-EMPTS THE WRONG THEORY. The parenthetical rules out a rebase before
+           anyone spends time on it — the same service 970-7fqk's "CONTENT DIFFERS"
+           text performs for the stale-stamp branch.
+        4. IT SAYS WHY THE RULE EXISTS, in one clause with an order to follow.
+        5. IT NAMES THE REMEDY AS A RUNNABLE COMMAND, not as a direction to go.
+        6. IT REFUSES. Nothing landed, so the reader cannot mistake it for advice.
+
+      COST: 37 seconds, twice, and no question asked of another host. Set that against
+      the three PRs this row records — #143, #146 and macneo's 4eec70dec — where the
+      information needed to act existed at push time, was not fatal-looking, and cost
+      a relay relaunch each. The difference is not severity and not the lane; both
+      messages had the same facts available. One spent a line on them.
+
+      SO THE FIX IS NOT "WARN HARDER". It is that a message which precedes a downstream
+      refusal must carry, at minimum, properties 1 and 5 — the decider's name and the
+      runnable remedy — and must say which of the two it is. The trailer at
+      pre-push-local-gate.sh:2030 has none of the six, and asserts a check nobody ran
+      on top of that.
+    ts: "2026-09-22T10:02:05Z"
+    host: macneo
+
+events:
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    event:
+      type: note
+      ts: "2026-09-22T10:02:05Z"
+      host: macneo
+      summary: |-
+        contrast case per macuahuitl-fedora: the stale-plan-binary refusal that names its own remedy, itemised against the trailer

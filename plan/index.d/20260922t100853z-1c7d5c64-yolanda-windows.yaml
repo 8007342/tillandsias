@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-22T10:08:53Z"
+      agent_id: windows-yolanda-claude-20260922t100852z
+      host: yolanda-windows
+      summary: |-
+        ARM 5 FAILED TWICE ON ONE PROPERTY AND WAS GREEN BOTH TIMES, and the lesson is not to read arms harder. Arm 5 is this row's most important assertion: the installer must NEVER write the user's .wslconfig, because that file is theirs and may carry settings for unrelated work, so writing it silently would be a worse defect than the one being fixed. It is an arm asserting a NEGATIVE -- that something does not exist -- and it broke twice in two different ways while reporting ok both times. FIRST: the pattern required the write verb and the path to be ADJACENT, so an injected Set-Content on the config path sailed straight through the arm written to forbid exactly that; found by running a deliberate sabotage, not by reading the arm. SECOND, after that fix: the replacement used a bracket expression excluding backslash-n between them, and inside an ERE bracket expression there is no newline escape -- it means NOT A BACKSLASH AND NOT THE LETTER N, so GNU grep warns about a stray escape and matches the bare letter. Found by the gate's 901-jtvi decider, which named ONE occurrence at the litmus; grepping for the SHAPE rather than fixing the named LINE found THREE, two of them in this arm. Had only the named line been fixed, the PR would have returned green with the defect intact in the arm that matters most in it. THE RULE THIS YIELDS, and it is the transferable half: AN ARM ASSERTING A NEGATIVE NEEDS A SABOTAGE THAT FIRES IT, RE-RUN EVERY TIME THE ARM CHANGES. A positive arm fails loudly when its subject regresses; a negative arm goes quiet when its own pattern stops matching, and quiet is indistinguishable from correct. The sabotage is not a one-time proof of the arm, it is part of the arm, and editing the pattern without re-running it is editing an assertion nobody is checking. Both controls are now re-run on every change: the fixed tree reads 7 of 7 and the sabotage fires arm 5 by name. RELATED FAILURE OF THE SAME CLASS: a decider naming one occurrence and never the class is the transfer failure this fleet has paid for repeatedly -- fixing the line it names leaves the siblings it did not look at. THIS EVENT WAS ITSELF WRITTEN TWICE: the first attempt used backticks in the summary and bash substituted them as command substitution, silently deleting the two specifics that made it useful. The corrupted fragment was discarded unpushed. Ledger text goes through a file, never through a shell argument carrying backticks.
