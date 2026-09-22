@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: measure-whether-a-shared-sccache-on-the-lan-repays-its-complexity-before-any-host-is-asked-to-depend-on-one
+    event:
+      type: note
+      ts: "2026-09-22T02:58:17Z"
+      agent_id: linux-lenovinha-linux-20260922t025817z
+      host: lenovinha-silverblue
+      summary: |-
+        PRECONDITIONS AND A DENOMINATOR, recorded WITHOUT claiming the row, because this host cannot complete it alone tonight and the next person should not discover that after starting.
+        WHY IT CANNOT START SOLO: sccache is ABSENT on lenovinha and ABSENT in the tillandsias-builder toolbox. So cold-vs-warm wall clock needs an install first, and the row's decisive number - the CROSS-HOST hit rate read on a host that did NOT populate the cache - needs it on a SECOND host too, plus a shared endpoint between them. That makes this coordination work, not solo work, and it is the reason the row has sat ready: the measuring host cannot unilaterally produce the only figure that argues for a SHARED cache over a local one.
+        THE DENOMINATOR, measured on this host tonight and therefore fleet-sourced as the closure requires ("no number in the closure may originate outside this fleet"). Two full `./build.sh --check` runs:
+          Gate phases totalled 1380s
+          Gate phases totalled 1658s
+        alongside the 1165s already cited in the row's context. So a gate here is roughly 1200-1700 s, and the row's instruction to express any win as a FRACTION OF GATE TIME rather than of compile time has a real range to divide into now. Whoever takes this should note the spread itself: the same tree, same host, same night, 1380 vs 1658 is a 20% swing, so a compile-time saving smaller than that swing cannot be distinguished from gate noise without repeated runs.
+        TWO FACTS FOR THE KEYSPACE QUESTION, since the row warns that flag or toolchain divergence partitions the cache and collapses the effective cross-host rate: this host is rustc 1.98.1 (48a229cea 2026-09-01), and it builds inside the tillandsias-builder toolbox rather than on the host, so what must match across hosts is the TOOLBOX's toolchain, not the hosts' - which is a narrower and more achievable condition than the row's framing assumes, and worth checking before anyone concludes the keyspace is hopeless.
+        ONE MEASUREMENT THIS HOST CAN OFFER WITHOUT sccache, if it is wanted: tonight's build cache was 143 GiB of which 127 GiB was target/debug, reclaimed to 8.8 GiB. That is the size of the thing a compilation cache would be competing with locally, and a local disk cache that large is exactly the incumbent the row suspects a LAN round trip may lose to on small units.
+        NOT CLAIMING THE ROW. This host's credential channel is down (1347-r9g8) and the worker loop's rule is stop-and-report rather than start new committable work; I can still land through the mirror lane, so the constraint here is the missing sccache and the second host, not the credential.

@@ -1,0 +1,158 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    order: 1347-r9g8
+    status: in_progress
+    kind: fix
+    priority: p0
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [credentials, agent-safety, fail-loud, multi-host, upstream]
+    estimated_hours: 6
+    owned_files:
+      - scripts/check-credential-channel.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). THE GUARD IS
+      THIS PACKET'S OWN DELIVERABLE, so naming it as a pin declares a test
+      nothing defines yet — which is what the first draft of this row did, and
+      the gate refused it as declared-closure-unresolvable. The pin is not
+      deleted (977-448j would then refuse the row for carrying no obligation)
+      and not left dangling (1068-cxmf); it is stated here as a future
+      filename with what it must assert.
+      THE FILE TO WRITE, in the same commit as the fix:
+      openspec/litmus-tests/litmus-credential-channel-survives-a-killed-probe.yaml
+      WHAT IT MUST ASSERT, and each of these is measured on this row already so
+      none of it is invented at writing time:
+        1. DETERMINISM, the arm the pre-fix state fails. N consecutive runs of
+           scripts/check-credential-channel.sh against an UNCHANGED host emit
+           the SAME verdict. The FAILS control is on this row: three runs
+           seconds apart gave unknown:secret-service-unprobed, then
+           missing:no-credential-channel twice, while busctl saw
+           org.freedesktop.secrets 3/3 — so the flip is in the guard, not the
+           host.
+        2. ONE EMITTER PER VERDICT STRING. missing:no-credential-channel is
+           emitted at three sites today (774, 810, 877) and
+           unknown:secret-service-unprobed at two (723, 874); which arm is
+           reached depends on how the capped probes terminate. The assertion is
+           a count over the guard's source, and it is the structural reason
+           arm 1 can flip at all.
+        3. NO gh CALL IS KILLED MID-FLIGHT against a serving keyring — the
+           whole point of the row. Either no capped `gh` invocation remains, or
+           the surviving probe is shown not to hold a Secret Service call open.
+           988-7kxf bounds this: the caps cannot simply be deleted, because an
+           unbounded probe hung and removing `timeout` flips the verdict to
+           blocked:gh-cli-only. So this is a probe REDESIGN and the litmus must
+           pass with the probe still bounded.
+        4. A HUMAN-SAFE LOCK READING EXISTS, or the guard says plainly that it
+           does not. Every probe that asks the daemon is by construction a
+           Secret Service client and every bounded one can be killed, so the
+           answer may be to observe from outside (the daemon's pid and
+           coredumpctl) rather than to ask. If that is the answer the litmus
+           must also assert what that reading CANNOT tell you: it distinguishes
+           "has crashed" from "has not", never "is locked" from "is unlocked".
+      WHAT THE LITMUS CANNOT COVER, so nobody reads a green as more: arm B of
+      the closure below needs a host with a SERVING collection and its owner's
+      per-run consent, and no fixture may take it (see the consent amendment on
+      this row).
+    verifiable_closure: |
+      TWO ARMS, and the second is the one that matters. The guard named in
+      `unscoreable` above is the instrument for arm A; it does not exist yet.
+      ARM A, OURS, and the only half we own: no fleet tool kills a `gh` call
+      mid-flight against a SERVING keyring. Either every capped `gh` invocation
+      is removed or replaced by a probe that does not hold a Secret Service call
+      open, or the caps are shown not to fire under a gate's load, MEASURED
+      under that load rather than argued from the cap's size.
+      ARM B, THE MECHANISM, and it CANNOT BE CLOSED FROM A HOST WHOSE COLLECTION
+      IS ALREADY LOCKED — that state is where this row was filed and where a
+      first attempt at it returned a false negative. On a host with the
+      collection UNLOCKED and serving: N killed `gh` calls, and the daemon's pid
+      unchanged across all N with no new coredump. If the daemon does abort, the
+      row's disposition changes from "our tooling kills it" to "upstream aborts
+      on a client that vanishes", and the remedy moves accordingly.
+      A run on a locked collection satisfies neither arm and must be refused in
+      review: it is the exact shape of evidence that misled the filing.
+    title: |
+      gnome-keyring-daemon SIGABRTs on a Secret Service GetProperty whose D-Bus client vanished, on TWO fleet hosts, taking the credential channel down mid-gate
+    context: |
+      TWO HOSTS, THREE CRASHES, ONE STACK. Not a local accident and no longer
+      explainable as one, which is why this is filed now rather than after a
+      third host.
+
+      MACUAHUITL (coordinator's report): SIGABRT 2026-09-20 17:37:30 PDT and
+      2026-09-21 14:48:03 PDT, both mid-gate.
+      LENOVINHA (measured here from coredumpctl and the journal): SIGABRT
+      2026-09-21 14:42:03 PDT, pid 3600, exactly six minutes before the
+      coordinator's second. The journal at that instant, verbatim:
+        gnome-keyring-daemon[3600]: gkd_secret_service_get_pkcs11_session: assertion 'client' failed
+        gnome-keyring-daemon[3600]: secret_objects_lookup_gck_object_for_path: assertion 'session' failed
+        audit[3600]: ANOM_ABEND ... comm="gnome-keyring-d" sig=6 res=1
+        GLib-GIO:ERROR:../gio/gdbusconnection.c:4765:invoke_get_property_in_idle_cb: assertion failed: (error != NULL)
+      Frames: g_assertion_message_expr <- invoke_get_property_in_idle_cb
+      (libgio-2.0.so.0). Module gnome-keyring-daemon from rpm
+      gnome-keyring-50.0-1.fc44.x86_64. The two hosts' text matches line for
+      line.
+
+      WHAT IT MEANS. A Secret Service GetProperty is answered in an idle
+      callback; by the time it runs, the D-Bus client is gone, so the session
+      lookup asserts and GLib's property path then asserts on a NULL error and
+      calls abort(). The trigger is a client that disappears mid-read.
+
+      THE SUSPECT ON OUR SIDE, because the kill is ours even if the assert is
+      not. scripts/check-credential-channel.sh bounds two probes with
+      `timeout`, which sends SIGTERM: `_ccc_timeout 15 gh auth status` and
+      `_ccc_timeout 20 gh api user`. Under a gate's load a cap can expire and
+      TERM `gh` while it is mid-keyring-read. On macuahuitl the analogous
+      client was their own PR watch (`timeout 30 gh pr list` every 120 s), now
+      unauthenticated curl.
+
+      A NEGATIVE RESULT, MEASURED, THAT THE NEXT PERSON MUST NOT MISREAD. I
+      tried to reproduce it here: four `gh` calls killed by `timeout 1`
+      (`gh api user` x3, `gh auth status` x1), each returning rc=124, and the
+      daemon's pid was UNCHANGED across all four with no new coredump. So the
+      kill ALONE is not sufficient. BUT THIS HOST'S COLLECTION WAS ALREADY
+      LOCKED when I ran it: `gh` was hanging on a locked collection rather than
+      reading a serving one, which is very likely why nothing asserted — the
+      code path that aborts needs a live client session to lose. The honest
+      reading is that the mechanism is UNREFUTED and untested, not that it is
+      disproven, and that the reproduction needs an unlocked host. It does,
+      however, argue against the self-perpetuating loop that was proposed
+      (locked collection -> gh hangs -> cap kills it -> daemon aborts again):
+      four attempts in exactly that state produced no abort.
+
+      THE COST, so the priority is not mistaken for alarm. When it fires, the
+      host's credential channel drops to missing:no-credential-channel mid-gate,
+      `git push` to the https remote fails outright and `gh` returns HTTP 401,
+      and the fleet loses a lander. The rule that makes it expensive rather than
+      merely annoying is 1025-a896: no agent may re-auth, because a re-auth on
+      one host evicts the operator's token on every other host. So a crashed
+      keyring is unrecoverable by any agent and waits for the operator.
+
+      WHAT KEPT THIS HOST WORKING, and why this is p0 rather than p0-blocking:
+      the mirror push lane (1313-prin) carried a work ref to GitHub during the
+      outage, credential-free. Pushes survive; the GitHub API does not, so a
+      host in this state can push refs but cannot open or land pull requests.
+    next_action: |
+      Held by lenovinha-silverblue for the evidence half; the fix is not claimed.
+      1. ARM B needs an UNLOCKED host. Do not attempt it here until the operator
+         unlocks the collection, and do not record another locked-collection run
+         as evidence either way.
+      2. ARM A is ours and can start now: decide whether the two capped `gh`
+         probes in check-credential-channel.sh are needed at all, and if they
+         are, replace them with something that does not hold a Secret Service
+         call open. Note the caps exist for a reason (988-7kxf: an unbounded
+         probe hung, and removing `timeout` entirely flips the verdict to
+         blocked:gh-cli-only), so this is a redesign of the probe, not a
+         deletion of the cap.
+      3. Report upstream only with a reproduction. gnome-keyring 50.0 and the
+         existing issue on this host's keyring row are the likely owners of the
+         assert; our tooling owns the kill.
+    provenance: |
+      Filed by lenovinha-silverblue 2026-09-21 on the coordinator's request,
+      with both hosts' evidence, after the coordinator's analysis established
+      the stack was identical across hosts. The earlier single-host record is
+      plan/issues/gnome-keyring-50-aborts-on-a-secret-service-property-get-2026-09-19.md,
+      which documented the upstream bug and the decision to wait; this row is
+      the fleet-level consequence and the half we own. Related: 1313-prin (the
+      lane that kept this host pushing through the outage), 1025-a896 (why no
+      agent may re-auth), 988-7kxf (why the caps exist).

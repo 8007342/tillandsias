@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: completed
+      ts: "2026-09-22T00:39:46Z"
+      agent_id: linux-yoga-opus5-20260922t003946z
+      host: yoga
+      summary: |
+        CLOSED OBSOLETED, not fixed. The defect never existed; nothing was repaired.
+
+        THE CORRECTION LANDED AT 66dfa91bf (merge of PR #137, second parent 59bf7d8dd,
+        verified here by ancestry against a freshly fetched origin/linux-next and by
+        artifact — the corrected paragraph is present in
+        skills/initialize-bare-metal-host/SKILL.md on trunk).
+
+        WHY OBSOLETED RATHER THAN FIXED. `tillandsias --bash <name> --debug` on an
+        unresolvable project exits 1 and always did. Three hosts, one answer: yoga
+        directly on v56.9.21.2 three consecutive runs, pirria on a build from
+        320c66ad3, lenovinha on their checkout build. The candidate fixing commit
+        4878066bd is DROPPED rather than credited — crediting a fix for a defect that
+        never existed would put a false repair in the history.
+
+        WHAT I ACTUALLY MEASURED WHEN I FILED IT. A COMPOUND command run in the
+        background: `… tillandsias … > log 2>&1 ; echo "RC=$?" ; tail -5 log`. I never
+        read the RC line — it is not in the log, which only captured the binary's
+        stdout and stderr. What I read was the harness's "[exited with code 0]" for the
+        whole task, and that compound ENDS IN `tail`, whose status is 0 whatever the
+        binary did. I attributed tail's exit status to the subject.
+
+        So I filed a row about a binary decorating a failure with a success, using a
+        measurement that was itself a failure decorated with a success — and the row's
+        own context paragraph cited the pipeline-status family as its precedent. I was
+        standing inside the family while writing it down.
+
+        THE HARM WAS NOT THE WRONG ROW. My report put a warning into a fleet skill
+        saying that status was untrustworthy. Lenovinha had recorded RC=1 hours earlier
+        while relaunching their lane AND READ PAST IT, because the page told them the
+        clean status was the suspect one. A stale caution does not merely fail to help:
+        it spends a reader's attention teaching them to discard a correct signal they
+        already hold. That is why the paragraph was corrected IN PLACE with its reason
+        rather than deleted — a silent removal leaves the next reader unable to tell
+        whether it was true and retired or wrong and erased.
+
+        WHAT SURVIVES, and it is the only durable thing here: a compound command's
+        status belongs to its LAST element, and a harness reporting "exited with code N"
+        is reporting that, never your subject's. Measure a status directly — the
+        command alone, its own $?, nothing after it. One layer down it is the same rule
+        that makes a pipeline's status its last stage's (1076-kft9).
+
+        AND THE TELL I MISSED: I wrote `echo "RC=$?"` and then reported an exit code
+        WITHOUT EVER HAVING SEEN AN `RC=` LINE. If you instrument for a value, read that
+        value; a different number that happens to be nearby is not it.
+
+        WHAT CAUGHT IT IN THE END was not me: §6.1 of the bring-up procedure carries
+        THREE done-when checks that fail independently, all three contradicted the exit
+        code, and the state was right while my diagnosis of the cause was wrong. Keep
+        such checks even when they look redundant with a status.

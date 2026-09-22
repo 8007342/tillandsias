@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: note
+      ts: "2026-09-21T21:13:34Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        BOTH ARMS PROVEN ON A REAL HOST, 2026-09-21, inside the stable-channel one-shot
+        smoke — the regime the fixture (1346-cdwt) could only stub.
+
+        REGIME: pirria, Linux floor host, pre-authorised for destructive reprovisioning.
+        Substrate from zero: podman system reset --force emptied all four surfaces
+        (0 containers, 0 volumes, 0 images, vault-data absent) before the reprovision.
+        Binary under test: the promoted stable release v56.9.21.1, curl-installed from
+        /releases/latest, over a trunk build the smoke replaced. cosign absent.
+
+        ARM 2 — rebuild from nothing after podman system reset --force. The smoke's §2
+        and §3 are that arm end to end. Reset exit 0, clear exit 0, then
+        `tillandsias --debug --init` returned init_exit=0, rebuilt 15 images and brought
+        tillandsias-vault up healthy. The 23 failure-class lines in the init log were
+        read rather than counted: 22 are "Failed to connect to audit log, ignoring" and
+        1 is "Failed to preset unit: systemd-tmpfiles-clear.service does not exist",
+        both benign container-build noise from build-chromium-core, neither a product
+        failure.
+
+        ARM 1 — the commands run twice with no container creation timestamp changing.
+        `tillandsias --ensure-enclave` twice, both exit 0, comparing
+        `podman inspect --format '{{.Created}}'`:
+
+          RUN 1   tillandsias-proxy   2026-09-21 14:12:48.927367772 -0700 PDT
+                  tillandsias-vault   2026-09-21 14:12:30.842546313 -0700 PDT
+          RUN 2   tillandsias-proxy   2026-09-21 14:12:48.927367772 -0700 PDT
+                  tillandsias-vault   2026-09-21 14:12:30.842546313 -0700 PDT
+
+        Byte-identical to the nanosecond. Nothing was torn down and recreated.
+
+        WHY THE REAL HOST MATTERS HERE, stated because it is the whole reason these two
+        arms were held back for one: a stub can report that a command was a NO-OP, but
+        only a live container runtime can show that the thing which already existed was
+        LEFT ALONE. Those are different facts. An idempotent-looking implementation that
+        destroys and recreates a container in under a second satisfies the first and
+        fails the second, and only the creation timestamp distinguishes them.
+
+        THE BARE-METAL VERDICT LINE DOES NOT CARRY lane=, AND THAT IS STRUCTURAL rather
+        than a defect. scripts/check-bare-metal-host-initialized.sh answered
+        `todo:initialize-bare-metal-host:mirror:...` with exit 1, correctly: the mirror
+        is PER-PROJECT and comes up at lane launch, which this smoke does not perform.
+        The lane field exists in the script and resolves off / unwired:sshd-not-running /
+        wired:<principal>, but it is emitted only on the ok: line, so it is unreachable
+        from a todo: verdict. A host that has not launched a lane cannot report its lane
+        state through this instrument — worth knowing before anyone asks a cold host for
+        that field.
+
+        ONE INSTRUMENT NOTE from the same run, because it bit me: the first reading of
+        that verdict recorded exit 0. That was tee's exit through a pipe, not the
+        script's. Measured directly, it is 1 as the grammar requires.

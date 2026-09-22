@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T21:35:46Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        PIRRIA ACCEPTANCE — BLOCKED AT THE UPSTREAM HOP, WITH THE LANE ITSELF PROVEN.
+        Regime: INSTALL route (v56.9.21.2 from ./build.sh --install), floor host, cosign
+        absent, strings absent, ssh half genuinely from zero.
+
+        WHAT THE LANE PROVED, and it is the half this row is about — the host side of
+        the hop:
+
+          Authenticated to 127.0.0.1 ([127.0.0.1]:2223) using "publickey".
+
+          client cert   ED25519-CERT SHA256:79zMPFVKDDK9IPllCfWvTA4ghKucdGg/KG5QQA0g+aQ
+          principal     til:host-push:pirria   (exactly one line on the cert)
+          force-command /usr/local/bin/tillandsias-receive, Extensions: none
+          validity      30 minutes
+
+          NO TOFU, and this is the line that proves it rather than an absence:
+          "Host 'git-9rpkfjch64oierj965o0' is known and matches the ED25519-CERT host
+          certificate." The alias matched a host CERTIFICATE; nothing was trusted on
+          first sight. ~/.ssh/known_hosts does not exist on this host at all, so TOFU
+          was not merely avoided, it was unavailable.
+
+          ISOLATION ARM for criterion 2, in the form this host can supply: ~/.ssh/ holds
+          NO key material. Everything the lane uses lives in
+          ~/.config/tillandsias/host-push/ — pirria.ed25519, its .pub, the cert, the
+          lane's own known_hosts, pirria.approle.json at 0600. That is the complete list
+          of key material on this host after the run, which is what the restated
+          criterion asks a from-zero host for.
+
+          The fetch immediately before the push: 0 credential-helper mentions across 15
+          GIT_TRACE lines, with the line count as the positive control so a 0 could not
+          mean "read nothing".
+
+        WHY THE LEGS CANNOT COMPLETE HERE, and it is not the lane:
+
+          remote: [relay] HTTPS upstream credential is unavailable; run GitHub Login before pushing
+          remote: [pre-receive] Push rejected: configured upstream did not durably accept the ref transaction
+
+        The host->mirror hop is credential-free and works. The MIRROR->GITHUB hop has no
+        credential, because this mirror was created minutes earlier on a substrate the
+        stable smoke had wiped to zero. The mirror holds vault-approle and
+        vault-approle-signer and no GitHub credential.
+
+        THE REFUSAL IS CORRECT BEHAVIOUR and worth stating plainly: the relay refused
+        rather than stranding the ref. A push that cannot reach upstream did not leave a
+        half-landed transaction behind.
+
+        THIS IS AN OPERATOR ACT, NOT AN AGENT ONE. The skill's own first rule:
+        "This skill never seeds, prompts for, or copies a GitHub token. Seeding is the
+        operator's own act." So the three legs are blocked on a seeding step that this
+        agent must not perform, and no amount of retrying changes that.
+
+        WHAT IT MEANS FOR THE ACCEPTANCE, stated as a gap rather than a failure: a host
+        whose mirror is FROM ZERO cannot complete the three legs without the operator
+        first performing GitHub Login inside the enclave. lenovinha's host presumably
+        carried an already-seeded mirror, so their legs never met this. The procedure
+        should say so before §6.3 — a from-zero host reaches an authenticated,
+        certificate-verified, credential-free lane and then stops at a wall only the
+        operator can open.

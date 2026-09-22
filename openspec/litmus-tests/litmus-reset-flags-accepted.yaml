@@ -22,8 +22,9 @@ preconditions:
   - workspace contains crates/tillandsias-headless/src/main.rs
 critical_path:
   - step: "the fixture runs the built binary and every arm holds (7/7)"
-    command: "bash scripts/test-reset-flags-are-accepted.sh 2>&1 | tail -1"
+    command: "bash scripts/test-reset-flags-are-accepted.sh 2>&1"
     expected_behavior: "reset-flags-accepted 7/7"
     assert_exit: 0
+    assert_output_matches: "^(ok:reset-flags-accepted:|skip:reset-flags-accepted:)"
     assert_output_nonempty: true
     timeout_ms: 60000

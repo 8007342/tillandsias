@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    order: 1338-2sae
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, tooling, docs, fail-loud]
+    estimated_hours: 1
+    owned_files: [skills/join-the-fleet/SKILL.md]
+    title: |
+      join-the-fleet §3 states that merging trunk "brings checker scripts that are part of the plan
+      binary's validator surface" — checker shell scripts are NOT members, so the merge→rebuild→push
+      rule is written unconditionally when it is conditional, and its named discriminator returns a
+      non-verdict in a forge
+    context: |
+      MEASURED ON forge-tillandsias 2026-09-21, while landing the reporting half
+      of 1331-884p. The text is CURRENT, not historical — it was landed hours
+      earlier by land65 (5d178a844).
+
+      WHAT THE PAGE SAYS, skills/join-the-fleet/SKILL.md:155-162:
+
+        "MERGE, THEN REBUILD, THEN PUSH: merging trunk brings checker scripts
+         that are part of the plan binary's validator surface, so a binary
+         rebuilt BEFORE the merge reads stale AFTER it although its file is
+         newer than its sources; `tillandsias-plan validator-surface-hash
+         --check` is the discriminator…"
+
+      WHAT THE SURFACE ACTUALLY IS, read from the implementation at
+      scripts/check-plan-binary-current.sh:107 (`_vs_surface_files`):
+
+        crates/tillandsias-plan/src/*.rs matching
+          validate-yaml|strict-fragments|declared-closures-check|closure-evidence-check
+          → today main.rs and validator_surface.rs
+        crates/tillandsias-plan/Cargo.toml
+        selected Cargo.lock stanzas (serde, serde_yaml, serde_json,
+          tillandsias-podman, mlua, tokio, chrono)
+
+      RUST SOURCES AND A MANIFEST. NO SHELL SCRIPT IS A MEMBER — not
+      scripts/check-*.sh, not scripts/test-*.sh.
+
+      DEMONSTRATED ON THIS VERY LANDING, which is the cleanest possible control
+      because it merged a checker change and a new test script:
+
+        land65 (5d178a844) touched openspec/litmus-bindings.yaml, a litmus test,
+          plan/issues/…, scripts/test-scorable-obligation-splitter.sh and
+          skills/join-the-fleet/SKILL.md — ZERO validator-surface files
+        the row splitter fix (68f99c548) touched
+          scripts/check-scorable-obligation-added.sh — a shell script, not a member
+        surface hash computed by hand from _vs_surface_files:
+          at 4ec6f3caa  d5bcff7f83874c69a612275f6412c1c2a1fd471d0866902d19af3b0ce128381c
+          at ad7386102  d5bcff7f83874c69a612275f6412c1c2a1fd471d0866902d19af3b0ce128381c
+          the stamp file beside the binary: identical to both
+
+      So a merge that brought BOTH a checker and a new test script moved the
+      surface hash by nothing at all, exactly as the implementation requires and
+      contrary to what the page says.
+
+      WHY THIS IS NOT PEDANTRY — THE FALSE DIAGNOSIS IT PRODUCES. A worker
+      following the page rebuilds after the merge and asserts the hash moved. It
+      has not. The available readings are all wrong: "my rebuild did not take",
+      "the stamp is broken", "the binary is stale". The correct reading — nothing
+      in the surface changed, because I changed shell — is the one the page has
+      talked them out of. A worker who instead asserts the hash is UNCHANGED
+      after a genuine Rust change gets the mirror-image error. Directionally
+      wrong guidance is worse than none, because it produces confident wrong
+      conclusions rather than uncertainty.
+
+      SECOND DEFECT IN THE SAME SENTENCE: the named discriminator,
+      `tillandsias-plan validator-surface-hash --check`, cannot answer in a
+      forge. With CARGO_TARGET_DIR redirected out of the checkout it returns
+      `unknown:validator-surface — … This is NOT a freshness verdict` — a refusal
+      shaped like a pass. The instrument that DOES answer there is
+      `scripts/check-plan-binary-current.sh`, which emits the
+      `stamped:plan-binary-validator-surface:` line the same paragraph relies on.
+      Filed as evidence on 1287-h6qn; named here because the page sends every
+      forge worker to the subcommand.
+
+      THIRD, SMALLER, SAME PARAGRAPH FAMILY: §1.4 says
+      check-plan-binary-current.sh "must answer with the literal
+      `ok:validator-surface:<hash>` lane". On this host it answers
+      `stamped:plan-binary-validator-surface:…` plus
+      `ok:plan-binary-write-is-opt-in+role-satisfies:…` and the fleet checker
+      accepts it. A worker comparing the page to the output sees a mismatch the
+      page does not explain.
+
+      NOT THE AUTHOR'S ERROR TO CARRY. The unconditional form was stated in good
+      faith from a real incident — a stale binary after a merge is a genuine
+      failure and the ordering advice is sound for the case it came from. What
+      is missing is the CONDITION under which it applies.
+    verifiable_closure: |
+      bash scripts/check-plan-binary-current.sh — and join-the-fleet §3 states the rebuild rule
+      CONDITIONALLY: a change touching the validator surface (crates/tillandsias-plan Rust sources,
+      its Cargo.toml, or the named Cargo.lock stanzas) requires merge→rebuild→push and the surface hash
+      MUST move; a shell-only change to a checker or a test does not, and the hash MUST be unchanged.
+      The page names scripts/check-plan-binary-current.sh as the instrument, since the subcommand
+      returns a non-verdict wherever CARGO_TARGET_DIR is redirected out of the checkout.
+      PRE-FIX RESULT, so the closure is falsifiable — FAILS today: the page at lines 155-162 asserts
+      checker scripts are surface members, while `_vs_surface_files` at
+      scripts/check-plan-binary-current.sh:107 lists only Rust sources, Cargo.toml and lock stanzas,
+      and a merge carrying both a checker and a new test script left the hash byte-identical.
+    next_action: |
+      Correct the sentence rather than deleting the rule — the ordering advice is right for surface
+      changes and only the unconditional framing is wrong. State the membership explicitly so a reader
+      can decide which case they are in without reading the implementation, name
+      check-plan-binary-current.sh as the instrument, and say in both directions what the hash must do.
+      Per CLAUDE.md authority, if this rule also lives in methodology/ it changes there first and the
+      skill page second; `methodology_ask` routes this prose to `unsupported`, so confirm whether the
+      canonical statement exists before editing the page alone.
+    trace: [order:1287-h6qn, order:1331-884p]

@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: note
+      ts: "2026-09-21T17:39:24Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t173924z
+      host: forge-tillandsias
+      summary: |
+        THE REGRESSION CORPUS THIS ROW NAMES DOES NOT EXIST ON TODAY'S TRUNK. Declaring
+        the replacement arm BEFORE building against it, so the change is on the record
+        rather than assumed by the claimer.
+
+        WHAT THE ROW ASKS FOR: "REGRESSION CORPUS — the 142 fragments above must each
+        yield a NON-EMPTY closure field after the fix", with context instructing the
+        claimer to "Re-derive it with the script's own _BLOCK_AWK block over the
+        fragment directory, counting records whose third field is empty; nothing else is
+        needed and the list should be regenerated rather than trusted from here."
+
+        I RE-DERIVED IT AS INSTRUCTED, using _BLOCK_AWK extracted verbatim from
+        scripts/check-scorable-obligation-added.sh:189-272 at ff6fc4fdd:
+
+          fragment files in plan/index.d                            1,532
+          packet records parsed from them                             266
+          records with unscoreable=no AND an empty closure field         0
+          fragments holding a nested list item at indent 2 or 4
+          that is not a row start (the TRIGGER itself)                   9
+
+        Zero, against the 142 the row states. The trigger population is 9 files.
+
+        WHY, AND IT IS NOT THAT THE ROW WAS WRONG WHEN WRITTEN. The evidence fragments
+        were repaired out from under it. macuahuitl published an interim fleet rule —
+        "until 1331-884p lands: nested lists in fragments at indent 6 or flow sequences"
+        — and new and edited fragments have followed it. The proof is this row's own
+        worked example: plan/index.d/20260921t055918z-1330-j5is-…-macneo.yaml carries
+        capability_tags items at INDENT 6 on trunk today, and this row's context says
+        re-indenting that row's list items from 4 to 6 "made it pass with NO other
+        change". Corroborated independently by yolanda-windows, who confirms the indent-6
+        shape on trunk (explicitly NOT a second count — their grep cannot separate row
+        starts from nested items; the count above is mine, from the checker's own awk).
+
+        So the row's next_action ("DO NOT HAND-EDIT ANY FRAGMENT IN THE MEANTIME") and
+        the interim rule met in the middle, and the interim rule won.
+
+        WHY THIS MATTERS RATHER THAN BEING A FOOTNOTE: as written, the regression arm is
+        now satisfiable BY DOING NOTHING. There are no such fragments, so "each of them
+        yields a non-empty closure" is vacuously true of an unmodified script. That is
+        precisely the non-falsifiable shape this row exists to refuse, so leaving it
+        would let the fix land green against a criterion that cannot fail.
+
+        REPLACEMENT ARM, PROPOSED AND BEING BUILT:
+
+        (a) REGRESSION becomes a DIFF against a PINNED reference, not a count of a
+            decaying population. Parse plan/index.yaml and plan/index.d with the
+            PRE-FIX splitter and with the fixed one. The regression set is every record
+            the fixed splitter reads a closure for that the pre-fix splitter did not.
+            The pre-fix splitter is taken VERBATIM from git (the _BLOCK_AWK block as of
+            the claim SHA), never re-implemented or paraphrased, so the arm tests the
+            real prior behaviour and not the claimer's restatement of it.
+
+        (b) CARDINALITY IS ASSERTED, not merely non-emptiness. The recovered set must be
+            non-empty AND its size checked against the trigger population measured in
+            the SAME run, so a partial fix that recovers one record of twenty-one fails
+            instead of reading identical to a complete one.
+
+        (c) THE BASE INDEX IS THE LIVE CORPUS. plan/index.yaml holds 900 packet records
+            and 21 list items at indent 2 or 4 that are not row starts. The trigger is
+            still present there and has not been hand-repaired, so the arm has real
+            history to read rather than a fixture only.
+
+        (d) MUTATION arm unchanged in intent, strengthened in method: revert the
+            splitter and the fixture must fail, naming the nested item it mistook for a
+            row — AND the arm asserts the reverted source actually differs from the
+            fixed source before reading any result. A no-op mutation is indistinguishable
+            from a passing test otherwise.
+
+        PRE-FIX EVIDENCE, hermetic, two fragments differing in ONE thing:
+
+          indent 4 (yaml.safe_dump shape)   → unscoreable=no  closure=[]
+          indent 6 (the interim workaround) → unscoreable=no  closure=[litmus:fixture-closure-is-read]
+
+        Same closure text, same file otherwise. That is the mechanism isolated and it is
+        the pre-fix FAIL the closure requires.
+
+        A TRAP FOR WHOEVER VERIFIES THIS BY COUNTING, and it is the defect restated at
+        the level of its own measurement: counting records with an empty closure does
+        NOT measure this bug. plan/index.yaml returns 527 empty closures out of 900
+        records, and most of those packets simply never carried one. EMPTY-BECAUSE-
+        UNPARSED AND EMPTY-BECAUSE-ABSENT ARE INDISTINGUISHABLE FROM THE OUTSIDE — which
+        is exactly what the row says about deferral versus satisfaction, reappearing in
+        the instrument used to size the problem. Only a diff against a correct parser
+        separates them. Anyone who re-derives a bare count here will conclude either that
+        the bug is enormous (527) or that it is gone (0), and both readings are artefacts.
+
+        Claimed by forge-tillandsias; this event declares a criteria change by the
+        claimer, which is a thing to be recorded rather than done quietly. Whether the
+        row's criteria are formally amended is the queue owner's call.

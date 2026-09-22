@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    field: status
+    value: completed
+    ts: "2026-09-21T19:15:13Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    event:
+      type: completed
+      ts: "2026-09-21T19:15:13Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 7c1600b64
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    event:
+      type: note
+      ts: "2026-09-21T19:15:13Z"
+      host: forge-tillandsias
+      summary: |-
+        subsumed by 1331-884p per coordinator link 2026-09-21T18:04:28Z; closed on 68f99c548/5d178a844 (parsing) and 7c1600b64 (reporting)

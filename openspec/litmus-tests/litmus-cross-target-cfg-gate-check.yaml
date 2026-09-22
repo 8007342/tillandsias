@@ -10,7 +10,23 @@
 # Scope: crates that must compile on all targets. The tray module
 # (tray/mod.rs) is linux-only by design and excluded.
 name: litmus:cross-target-cfg-gate-check
-spec: cross-platform-compilation
+# ORDER 1333-jpq5. This line used to read `spec: cross-platform-compilation`,
+# which names NOTHING: no openspec/specs/ directory, no bindings block, and no
+# other file in the repo mentions it. The binding has always been under
+# `dev-build`, so asking for this test by the spec it declared answered "no
+# litmus tests matched" and cross-platform-compilation read as a covered spec
+# with nothing behind it.
+#
+# IT IS NOT A TYPO FOR `cross-platform`, though the @trace above points there.
+# That spec is `status: deprecated` in the bindings with ZERO tests bound, so
+# moving this binding to it would take a test that demonstrably RUNS (verified
+# 11/11 under dev-build) and make it inert — the same laundering this row
+# forbids, pointed the other way.
+#
+# So the declaration follows the schedule, and the reason is on the row rather
+# than implied: this test's semantic home was deprecated and the test survived
+# by being scheduled elsewhere. The mismatch was the symptom.
+spec: dev-build
 phase: pre-build
 description: >
   Detect un-gated unix-only APIs in cross-platform crates that would break

@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-litmus-step-whose-command-ends-in-a-pipe-to-tail-and-which-also-carries-assert-exit-is-asserting-tails-exit-status-and-not-the-subjects-so-the-assertion-is-decoration-and-the-step-survives-on-expected-behavior-alone
+    event:
+      type: evidence
+      ts: "2026-09-21T21:59:47Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t215947z
+      host: forge-tillandsias
+      summary: |
+        THIRD INSTANCE, FOUND BY macuahuitl AGAINST THEIR OWN BINDING — recorded as
+        their finding at their request, because three people making one error is worth
+        more in the record than a tidy two.
+
+        When macuahuitl dropped the pipe from litmus-scorable-obligation-splitter.yaml in
+        land67 — acting on this row — they wrote that `expected_behavior` "matches the
+        verdict line in the full output". They had read the runner's FALLBACK grep
+        without the branch it sits in: that fallback runs ONLY when no structured
+        assertion is declared, and the step declares `assert_exit`. So the same
+        misreading that produced the original defect was made again while fixing it, by a
+        different host, on a different step, within the same evening.
+
+        THIS INSTANCE IS NOT AN ACCEPT-THAT-CANNOT-REFUSE, and the distinction matters
+        for anyone triaging the three:
+
+          litmus-added-test-is-referenced-shape   pipe + assert_exit + nonempty
+          litmus-reset-flags-accepted             pipe + assert_exit + nonempty
+            → both assertions unconditionally true; the step COULD NOT FAIL. Fixed in
+              d051a120c.
+
+          litmus-scorable-obligation-splitter     NO pipe + assert_exit + nonempty
+            → assert_exit compares the FIXTURE's real rc, which is 1 on any failing arm,
+              so the step could already refuse. What was missing is that the verdict
+              STRING was never compared.
+
+        The gap is live rather than theoretical: arm 4 of that fixture is
+        capability-graded and a [RELAXED] run is still rc 0, so a fixture that stopped
+        reaching its final verdict line would pass on exit status alone.
+
+        FIXED at work/1339-had5-splitter-binding (f64b1a442) by adding
+        `assert_output_contains: "ok:scorable-obligation-splitter:5/5 arms"`.
+
+        WHY THE FULL LITERAL HERE AND ONLY THE MARKER ON added-test-is-referenced, since
+        the two look inconsistent and are not: on added-test the count is computed from
+        the arms, so pinning it would drift as arms are added and only
+        `ok:added-test-guard-proven:` was pinned. In the splitter fixture the verdict is
+        a STATIC literal emitted once, identical in STRICT and RELAXED modes, so it
+        cannot drift on its own — it changes only on a deliberate edit, which is exactly
+        when the binding should change too. Pinning it catches a DELETED arm, which the
+        marker alone would not.
+
+        WITH THIS THE POPULATION IS ZERO. No step in openspec/litmus-tests/ declares a
+        structured assertion it does not adjudicate by. The closure's guard should still
+        land, because nothing prevents the fourth instance — and the third was made by
+        someone who had just read this row.

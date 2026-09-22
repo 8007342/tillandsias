@@ -216,7 +216,23 @@ fi
 git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
 
 _n=0
-while IFS=$'\t' read -r num head; do
+# THE CANDIDATE LIST IS READ ON FD 3, NOT STDIN, AND THAT IS NOT STYLE.
+#
+# MEASURED IN THE FIELD ON THIS SCRIPT'S SECOND REAL USE, 2026-09-21: invoked
+# with `--limit 2` over two ready PRs it processed ONE and reported
+# `ok:land-queue:1`. The loop body runs the real gate, `./build.sh --check`,
+# which READS STDIN — and the loop was reading its candidates from a here-string
+# on stdin, so the gate swallowed the remaining candidates and the loop ended
+# after one iteration.
+#
+# THE FIXTURE COULD NOT SEE IT. Its stub gate is `exit 0`, which consumes
+# nothing, so arms 1 and 3 land three candidates each and pass while the real
+# queue drains one per run. A fixture only tests the world it builds, and the
+# world it built had a gate that does not read.
+#
+# fd 3 makes the body's stdin habits irrelevant instead of forbidding them: any
+# future step may read stdin freely and the candidate list is untouchable.
+while IFS=$'\t' read -r num head <&3; do
     [ -n "$num" ] || continue
     if [ "$LIMIT" -gt 0 ] && [ "$_n" -ge "$LIMIT" ]; then break; fi
     _n=$((_n + 1))
@@ -276,7 +292,7 @@ Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. T
     _glog="$(mktemp)"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
-    ( eval "$GATE" ) > "$_glog" 2>&1
+    ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
     if [ "$_grc" -ne 0 ]; then
         _tail="$(tail -5 "$_glog")"
@@ -318,7 +334,7 @@ The queue continued with the next candidate. Fix and the queue will pick it up a
     fi
     say "requeue:land-queue:$num:push-did-not-land:rc=$_prc — the remote does not have ${merge_sha:0:9}"
     requeued=$((requeued + 1))
-done <<< "$_cands"
+done 3<<< "$_cands"
 
 say "ok:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped"
 exit 0

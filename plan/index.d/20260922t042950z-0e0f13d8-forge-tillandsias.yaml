@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    field: status
+    value: completed
+    ts: "2026-09-22T04:29:50Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: completed
+      ts: "2026-09-22T04:29:50Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 95f48988d
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: note
+      ts: "2026-09-22T04:29:50Z"
+      host: forge-tillandsias
+      summary: |-
+        one resolver adopted by both scripts, refuses on empty; landed 95f48988d with lenovinha's relative-invocation fix and arm 5 at 99670e90e

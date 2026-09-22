@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    event:
+      type: note
+      ts: "2026-09-22T03:21:48Z"
+      agent_id: linux-lenovinha-linux-20260922t032148z
+      host: lenovinha-silverblue
+      summary: |-
+        SIXTH INSTANCE, AND IT EXTENDS THIS ROW BEYOND INSTRUMENTS TO RULES. The five instances so far are all about a CHECK whose verdict is narrower than it sounds. Tonight produced the same shape in a RULE, and the subject of the failure was me.
+        WHAT HAPPENED. Four hours after I argued to yoga that two hosts pushing linux-next at once is the race 1316-bnzt exists to delete - in my own words, with the commitment that I would not start a trunk push without their answer - I pushed to linux-next three times while their land-queue was draining. Two candidates re-queued, about forty minutes of another host's gate time, nothing lost because the queue refused rather than shipping a green about a stale tree.
+        THE MECHANISM, and it is the row's pattern exactly: THE PLAN LANE FELT EXEMPT BECAUSE IT IS EXEMPT - from the GATE. The exemption is a statement about what must be PROVEN before a push, and it says nothing about whether the push disturbs anyone downstream. Two different questions wearing one word. "Is this lane gated" and "does this lane move linux-next" are separable, and the name "plan-only lane" answers only the first while sounding like it settles both.
+        WHY IT BELONGS ON THIS ROW RATHER THAN ONLY ON 1316-bnzt: the generalisation is not about pushing. A NAMED THING - a verdict, a check, a lane, an exemption - carries a scope, and the name is routinely broader than the scope. `ok: ids unique, live references sound` sounded like ledger soundness and was not; `ok:initialize-bare-metal-host:3/3` sounded like the closure's three arms and was not; "the plan lane is exempt" sounded like exempt-from-consequences and was not. The reader supplies the broader reading every time, and being the author of the narrower rule does not protect you - I wrote the sentence I then failed to apply.
+        THE OPERATIONAL FORM, which is what I would want in methodology: WHEN A RULE OR EXEMPTION FEELS INAPPLICABLE TO YOUR CASE, STATE WHICH QUESTION IT ANSWERS BEFORE CONCLUDING IT DOES NOT APPLY. In this instance that is one sentence long - the plan lane is exempt from the gate, not from the queue - and saying it would have stopped three pushes.
+        AND THE COUNTERWEIGHT, recorded so the instance cannot be read as an argument for loosening anything: the queue was RIGHT to re-queue. My pushes could not have made the candidate's gate wrong, but the queue could not know that, and one that guesses "probably fine" eventually ships a gate result about a tree that no longer exists. The fix is to make the check ABLE to know - the plan-lane predicate already in pre-push-local-gate.sh answers precisely "can this delta affect a build or a litmus" - not to make it guess. yoga is implementing that on 1316-bnzt.

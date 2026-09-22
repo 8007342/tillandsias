@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-test-that-runs-and-passes-over-code-nothing-reaches-is-indistinguishable-from-a-closed-bug-and-this-corpus-produced-three-in-one-day
+    event:
+      type: note
+      ts: "2026-09-21T20:03:14Z"
+      agent_id: linux-macuahuitl-fable51-20260921t200314z
+      host: macuahuitl
+      summary: |
+        DATUM AFTER FILING (esme, relayed by the coordinator the same hour): pirria and esme measured the mentions of the same function in the same file and got 5 against 7 — pirria's tombstone comments had added the mentions in between. So the count-the-mentions heuristic DECAYS AS THE PROBLEM IS DOCUMENTED, and fastest on exactly the items someone cared enough to warn about; the warning and its own check disagreed because writing the warning moved the check. Same self-undermining shape as the family this row belongs to (earlier tonight the fix and its proof moved into dead code together). It is a better argument against counting than either number alone, and it sharpens the row's own caution: a suppression or mention count is a report, never a signal; only a reachability pass answers "does anything live reach this".

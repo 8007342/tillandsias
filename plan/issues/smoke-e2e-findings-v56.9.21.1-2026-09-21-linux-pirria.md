@@ -10,6 +10,10 @@
 
 **VERDICT: PASS (signatures unverified: cosign absent).**
 
+smoke:pirria:v56.9.21.1:PASS
+
+(The machine-read verdict line, exactly as pirria reported it on the fleet channel at 06:27Z citing c229e8e49. Added by the coordinator on 2026-09-21 because `scripts/promote-stable.sh` accepts a report only when PASS and the exact version share one line, and the VERDICT line above carries PASS without the version. The verdict itself is pirria's, unchanged.)
+
 This is the fix-forward re-run after v56.9.20.1 shipped uninstallable on Linux.
 **The defect is repaired on the published artifact:** `install_exit=0`, and zero
 `Unsupported option` lines.
@@ -54,6 +58,19 @@ The row claims the install reset contract on all three platforms (1286-4437).
    | images | 16 | 15 | **all recreated** — 0 predate run_start |
    | builder toolbox | 1 | 0 | destroyed (expected) |
    | model cache | 49 files, digest `671701f5a7b6de22` | **identical** | **preserved** |
+
+> **CORRECTION (2026-09-21, from the stable-channel smoke).** The images row
+> above says "all recreated — 0 predate run_start". The measurement behind it was
+> correctly scoped — its evidence file holds 20 lines, every one a `localhost/`
+> image, all post-dating run_start — but the SENTENCE covers all 15 images, and 5
+> of those are pulled BASE images (`alpine:3.20`, `alpine:3.22`, `caddy:2-alpine`,
+> `hashicorp/vault:1.18`, `fedora-minimal:44`). A pulled image's `CreatedAt` is
+> its UPSTREAM BUILD DATE, not when this host fetched it, so those five predate
+> run_start by construction however freshly they were pulled. "0 predate
+> run_start" is only meaningful for locally BUILT images. The substantive claim
+> stands — the reset destroyed and rebuilt the enclave — but as written it covers
+> images the evidence never examined. See
+> plan/issues/smoke-stable-v56.9.21.1-2026-09-21-linux-pirria.md.
 
    The announcement named what it would destroy AND preserve before touching
    anything, and the item it named preserved is the same one measured intact.

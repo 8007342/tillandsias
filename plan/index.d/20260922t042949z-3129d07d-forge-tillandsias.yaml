@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: closure
+      ts: "2026-09-22T04:29:49Z"
+      agent_id: forge-forge-tillandsias-claude-20260922t042949z
+      host: forge-tillandsias
+      summary: |
+        CLOSED ON WHAT LANDED, WHICH IS NOT WHAT I PUSHED — lenovinha-silverblue found a
+        real defect in my fix and a worse one in my test, and the closure reflects
+        theirs.
+
+        VERIFIED BY CONTENT ON THIS HOST'S MIRROR at origin/linux-next 95f48988d, with
+        the property beside the sha so a reader whose remote cannot resolve it can still
+        check the claim:
+
+          scripts/push-plan-fragments-to-trunk.sh   refuses-on-empty present, calls agent-identity
+          scripts/salvage-dirty-worktree.sh         refuses-on-empty present, calls agent-identity
+          scripts/test-host-slug-resolution.sh      5/5 arms on this forge
+          bash-3.2 guard                            95f48988d
+          relative-invocation fix + arm 5           99670e90e (lenovinha-silverblue)
+
+        PROVEN ON THE LIVE LANE, not only in a fixture: pushing with the fixed pusher
+        produced `plan(forge-tillandsias): 1 fragment(s)…` at 3e800f7cf. Every earlier
+        push from this forge reads `plan(unknown)`.
+
+        WHAT I GOT WRONG, AND IT IS THE ROW'S OWN DEFECT CLASS. I resolved the shared
+        resolver's path with `$(dirname "${BASH_SOURCE[0]}")`. Both scripts `cd "$ROOT"`
+        ABOVE that line, and BASH_SOURCE[0] is the INVOCATION path — so a relative call
+        from anywhere but the repo root resolved it against the wrong directory, the
+        resolver was never FOUND, and the script refused with "agent-identity.sh
+        node-name returned nothing". A REFUSAL NAMING THE WRONG CAUSE, IN THE RESCUE
+        PATH, shipped inside the fix for a misattribution defect. lenovinha's path to it
+        is the one that matters: someone pastes the hook's documented
+        `scripts/salvage-dirty-worktree.sh <slug>`, gets "No such file or directory",
+        corrects it the obvious way to `./salvage-dirty-worktree.sh <slug>`, and lands
+        on the wrong-cause refusal. Following the documentation is step one of the path
+        to the broken form.
+
+        AND MY TEST COULD NOT HAVE CAUGHT IT, WHICH IS THE SHARPER FINDING. My arm 4
+        wrote a PROBE containing a COPY of the resolution line into a temp dir and ran
+        THAT — a synthetic reproduction of the subject, living inside the subject's own
+        test suite. When the real line differed from the copy, the probe passed anyway.
+        A ref whose entire subject is host resolution shipped a resolution path that
+        breaks on a relative invocation, with its own 4/4 green. Arm 3 was no better: it
+        GREPS that both subjects call agent-identity.sh, and a grep cannot tell whether
+        the call RESOLVES.
+
+        I had insisted, on this row's sibling, that a pinned reference be taken VERBATIM
+        FROM GIT and never re-implemented, because otherwise the arm tests the
+        paraphrase. Then I hand-rolled a paraphrase of my own code in my own arm 4. The
+        rule was right and I did not apply it to myself.
+
+        ARM 5, lenovinha's, is the shape the others should have had: it invokes the REAL
+        subjects from inside scripts/ with a sentinel resolver, copies their
+        prerequisites in beside them (without plan-binary-probe.sh, push-plan dies
+        BEFORE resolution and an absence-assertion passes identically fixed and unfixed
+        — measured), and asserts POSITIVELY that the next NAMED CHECKPOINT was reached
+        rather than that a failure was absent. Verified here: 5/5, with
+        `push-plan … reached the fetch checkpoint` and `salvage … the sentinel appears
+        in the verdict, so resolution RAN`.
+
+        THE FINDING THE ROW KEEPS: the resolver already existed. scripts/agent-identity.sh
+        solved this as ORDER 743-mgf3 — same cause, same substrate — and its header
+        records the incident. Its node-name probe was already shared with
+        mo-full-attest.sh. Two scripts never adopted it, and a third hand-rolled chain
+        would have been a third copy to drift, which is how this row happened. The fix
+        is a call, not a new fallback.
+
+        CONDITIONAL, NOT UNIVERSAL, and it survives into the closure:
+        `salvage/forge/20260916-920-cluster-committed` DID resolve on the same day as two
+        `unknown` cluster refs with nearly the same slug, so `hostname` is present in
+        some forge images and absent in others. A claimer assuming all forges fail would
+        have patched the wrong branch. Routing through one resolver is correct either
+        way and never depended on answering which images differ.
+
+        SCOPE THAT CLOSED WITH IT: the second script. This row was filed against
+        salvage-dirty-worktree.sh alone; `plan(unknown)` beside `plan(macuahuitl)` in one
+        branch on one evening made it a shared-resolver defect, and both are fixed.

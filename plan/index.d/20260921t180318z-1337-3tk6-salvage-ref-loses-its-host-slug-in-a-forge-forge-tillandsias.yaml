@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    order: 1337-3tk6
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, forge, instrument, fail-loud]
+    estimated_hours: 1
+    owned_files: [scripts/salvage-dirty-worktree.sh]
+    title: |
+      salvage-dirty-worktree.sh resolves its host ONLY through the `hostname` binary, which the forge
+      image does not ship — so every salvage ref the script pushes from a forge lands under
+      `salvage/unknown/`, while three working resolvers sit unused in the same container
+    context: |
+      MEASURED ON forge-tillandsias 2026-09-21, and the discriminator is the
+      day's own salvage refs. Six refs, five hosts, exactly one `unknown` — AND
+      IT IS THE ONE THE SCRIPT PRODUCED:
+
+        salvage/forge-tillandsias/20260921-1331-884p-splitter-alt   hand-pushed, correct slug
+        salvage/lenovinha-silverblue/20260921-1313-prin-acceptance
+        salvage/lenovinha-silverblue/20260921-1313-prin-sshv
+        salvage/pirria/20260921-1286-reset-state-allowlist
+        salvage/unknown/20260921-opsx-1.13.1-regen                  SCRIPT-produced
+        salvage/yolanda/20260921-smoke-v56-9-20-1
+
+      Both refs from this container were pushed minutes apart. The hand push
+      resolved the host correctly; the script's did not. So the defect is in the
+      script's resolution, not in the environment.
+
+      MECHANISM, isolated to two lines. scripts/salvage-dirty-worktree.sh:99-100:
+
+        HOST="$(hostname -s 2>/dev/null | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
+        [ -n "$HOST" ] || HOST="unknown"
+
+      `hostname` IS NOT INSTALLED in the forge image (Fedora 44 container image)
+      — `hostname -s` answers `command not found`, stderr is discarded by
+      2>/dev/null, HOST comes back empty, and line 100 substitutes the literal
+      string `unknown`. Reproduced by running those two lines verbatim in this
+      container: HOST resolves to `unknown`.
+
+      THE FALLBACK IS A PLACEHOLDER, NOT A SECOND RESOLVER, and that is the
+      shape worth naming. Line 100 does not try another source or refuse; it
+      invents an answer that looks like a host name and pushes a ref under it.
+      Three working resolvers are present in the very same container:
+
+        $HOSTNAME        forge-tillandsias
+        uname -n         forge-tillandsias
+        /etc/hostname    forge-tillandsias
+
+      and scripts/agent-identity.sh answers too (forge-forge-tillandsias-claude-
+      <stamp>), as does the fleet checker, which prints
+      note:join-the-fleet:session-name:forge-tillandsias-tillandsias-forge. The
+      information was never missing. Only the one lookup the script uses was.
+
+      WHY IT IS p3 AND NOT HIGHER: RECOVERY STILL WORKS. The ref exists, it
+      carries the date and the slug, and its content is intact — the 22-file
+      opsx regeneration salvaged under `salvage/unknown/` on this host was
+      retrieved and read back without difficulty. This is an ATTRIBUTION defect,
+      not data loss. But a salvage ref exists to be found BY SOMEONE ELSE, and
+      one that cannot name its origin host is half a recovery: with several
+      forges running, `salvage/unknown/<date>-<slug>` cannot tell two of them
+      apart, and 874-w2gc's collision handling keys on host and day.
+
+      NOT A FORGE-ONLY FUTURE PROBLEM. Any minimal image without `hostname`
+      reaches the same end, and container images trending smaller makes that
+      more likely rather than less.
+    verifiable_closure: |
+      bash scripts/salvage-dirty-worktree.sh <slug>, run IN A FORGE (no `hostname` binary on PATH),
+      pushes a ref under `salvage/<the host's own name>/…` and never under `salvage/unknown/`.
+      PRE-FIX RESULT, so the closure is falsifiable — FAILS today: the six-ref table above, in which the
+      only `unknown` is the script-produced ref from a container where a hand push resolved the host
+      correctly, and the two-line reproduction at scripts/salvage-dirty-worktree.sh:99-100 returning
+      `unknown` when run verbatim there.
+    next_action: |
+      Resolve the host through a CHAIN that ends in a refusal rather than a placeholder: try
+      `hostname -s`, then `uname -n`, then `$HOSTNAME`, then /etc/hostname — and if every one is empty,
+      REFUSE the salvage with a named verdict instead of pushing under an invented slug. A salvage that
+      cannot say where it came from is worth refusing loudly at the moment it is created, when the
+      operator is present, rather than discovering it when someone needs the ref.
+      Do not simply swap `hostname` for `uname -n`: that repeats the single-source assumption with a
+      different binary. The bug is that ONE lookup decides, and its failure mints a plausible answer.
+    trace: [order:872-c9nd, order:874-w2gc]

@@ -238,6 +238,11 @@ fi
 
 # ── Linux desktop cleanup ─────────────────────────────────────
 rm -f "$HOME/.local/share/applications/tillandsias.desktop"
+# ORDER 591-icon: the SCALABLE svg is what the tray now writes (the three
+# png paths below were removed here for months while nothing created them —
+# the remove side existed and the install side did not). Keep all four: the
+# pngs are harmless no-ops on a fresh install and matter on an upgraded one.
+rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/tillandsias.svg"
 rm -f "$HOME/.local/share/icons/hicolor/32x32/apps/tillandsias.png"
 rm -f "$HOME/.local/share/icons/hicolor/128x128/apps/tillandsias.png"
 rm -f "$HOME/.local/share/icons/hicolor/256x256/apps/tillandsias.png"

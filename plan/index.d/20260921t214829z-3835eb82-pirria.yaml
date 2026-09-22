@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    event:
+      type: note
+      ts: "2026-09-21T21:48:29Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        FIRST RESOLUTION, AND A STRUCTURAL MEASUREMENT THAT CHANGES HOW THE OTHER 23
+        SHOULD BE READ. 24 -> 23.
+
+        litmus-cross-target-cfg-gate-check, the specimen this row was filed on, is
+        resolved — and it was NOT the clerical error it looked like.
+
+          declared  cross-platform-compilation   NO spec dir, NO bindings block, and no
+                                                 other file in the repo mentions it. It
+                                                 names nothing at all.
+          traced    @trace spec:cross-platform   a REAL spec — and `status: deprecated`
+                                                 in the bindings, with ZERO tests bound.
+          bound     dev-build                    active, and the test demonstrably RUNS
+                                                 there (11/11, re-verified after the fix).
+
+        So the obvious repair — point the binding at the spec the test is semantically
+        about — would have taken a working test and made it inert, which is this row's
+        own forbidden move aimed the other way. The declaration now follows the
+        schedule, with the reason written at the line rather than implied: this test's
+        semantic home was DEPRECATED and the test survived by being scheduled elsewhere.
+        The mismatch was the symptom of that, not a typo.
+
+        Re-verified after the change: still executing under dev-build, 3/3 steps green.
+        An edit that "fixes" a mismatch by making the test stop running would look
+        identical in the census.
+
+        THE OTHER 23 ARE NOT THIS SHAPE, measured rather than assumed:
+
+          declared specs that exist AND are active   23
+          declared specs that name nothing            1   (the one above)
+
+        So every remaining mismatch is a test declaring a REAL, ACTIVE spec while bound
+        under a different one. Neither side is obviously wrong from the metadata, which
+        is precisely why the row forbids a mechanical sweep.
+
+        AND THERE IS NO BULK CAUSE. Grouped by the spec they are bound under, the
+        remainder scatters: 3 under security-privacy-isolation, 3 under
+        macos-native-tray, 2 under dev-build, and the rest one apiece across eleven
+        specs. A single bad binding event would have clustered. These are individual
+        decisions, so they need individual readings — 23 of them, and the estimate on
+        this row should be read against that rather than against a script.
+
+        WHAT THE NEXT CLAIMANT SHOULD CARRY FORWARD: check the declared spec's STATUS,
+        not just its existence, before moving a binding. A deprecated spec with no tests
+        is a place where bindings go to die quietly, and the census cannot tell that
+        from a healthy move.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-s-known-hosts-writer-emits-a-bare-cert-authority-line-while-the-lane-pushes-to-port-2222-so-openssh-looks-up-a-bracketed-name-that-never-matches
+    field: status
+    value: obsoleted
+    ts: "2026-09-21T19:57:40Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: the-forge-s-known-hosts-writer-emits-a-bare-cert-authority-line-while-the-lane-pushes-to-port-2222-so-openssh-looks-up-a-bracketed-name-that-never-matches
+    event:
+      type: completed
+      ts: "2026-09-21T19:57:40Z"
+      host: lenovinha-silverblue
+      summary: |-
+        status 'obsoleted' with evidence_refs: MEASURED ON A LIVE FORGE, which is what this row demanded before any fix: container tillandsias-tillandsias-forge-maintenance, mid kvs69tkis9dfnbejbatg, OpenSSH_10.2p1, lane on, against the writer's own unmodified bare line. `ssh -v -o UserKnownHostsFile=/run/tillandsias/ssh-known_hosts -o StrictHostKeyChecking=yes -p 2222 git@git-kvs69tkis9dfnbejbatg true` prints: 'debug1: Host `git-kvs69tkis9dfnbejbatg` is known and matches the ED25519-CERT host certificate.' and 'debug1: Found CA key in /run/tillandsias/ssh-known_hosts:1'. Host key verification SUCCEEDS at port 2222 against the bare line. The predicted 'Host key verification failed' does not occur.
+  - packet_id: the-forge-s-known-hosts-writer-emits-a-bare-cert-authority-line-while-the-lane-pushes-to-port-2222-so-openssh-looks-up-a-bracketed-name-that-never-matches
+    event:
+      type: note
+      ts: "2026-09-21T19:57:40Z"
+      host: lenovinha-silverblue
+      summary: |-
+        FALSIFIED BY ITS OWN FIRST ARM, and closed without writing the fix it proposed, exactly as its next_action instructed: 'If it does NOT fail, the defect is not what this row says - amend the row and do not fix anything.' THE INSTRUMENT WAS WRONG, and it was wrong in the same way for both people who used it. The coordinator measured A1 with `ssh-keygen -F`, I re-measured it independently with `ssh-keygen -F`, we agreed, and the agreement of two independent measurements taken WITH THE SAME WRONG INSTRUMENT is worth nothing. `ssh-keygen -F` performs ONE literal lookup of the name it is handed, so the bare line misses a '[host]:2222' query; the real ssh client does not stop there, and accepts the bare line at a non-default port. My 're-measured independently rather than accepted on report' claim on 1340-tzsx was true about the data and false about the confidence it bought - independence of the observer does not buy independence of the instrument. This is the same family as 1287-myx8 (instruments that match themselves): the check must be the client, not a model of it. NO WRITER CHANGE IS TO BE MADE. crates/tillandsias-headless/src/main.rs's bare '@cert-authority git-<mid>' line is CORRECT as it stands, and a future reader tempted by the design's A1 amendment should read this row first. WHAT THE RUN FOUND INSTEAD, which is why this closure is not a dead end: the same transcript continues past the host key and dies on 'Too many authentication failures' because the sidecar has added 16 certificates to the agent and removed none. Filed as 1342-r4pv, p0, and it blocks the T11 flip on its own. The intent of this row - that the forge's first authenticated push works - is served there.
