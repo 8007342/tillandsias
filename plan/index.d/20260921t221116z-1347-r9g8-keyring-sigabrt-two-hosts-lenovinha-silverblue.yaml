@@ -12,9 +12,52 @@ packets:
     estimated_hours: 6
     owned_files:
       - scripts/check-credential-channel.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). THE GUARD IS
+      THIS PACKET'S OWN DELIVERABLE, so naming it as a pin declares a test
+      nothing defines yet — which is what the first draft of this row did, and
+      the gate refused it as declared-closure-unresolvable. The pin is not
+      deleted (977-448j would then refuse the row for carrying no obligation)
+      and not left dangling (1068-cxmf); it is stated here as a future
+      filename with what it must assert.
+      THE FILE TO WRITE, in the same commit as the fix:
+      openspec/litmus-tests/litmus-credential-channel-survives-a-killed-probe.yaml
+      WHAT IT MUST ASSERT, and each of these is measured on this row already so
+      none of it is invented at writing time:
+        1. DETERMINISM, the arm the pre-fix state fails. N consecutive runs of
+           scripts/check-credential-channel.sh against an UNCHANGED host emit
+           the SAME verdict. The FAILS control is on this row: three runs
+           seconds apart gave unknown:secret-service-unprobed, then
+           missing:no-credential-channel twice, while busctl saw
+           org.freedesktop.secrets 3/3 — so the flip is in the guard, not the
+           host.
+        2. ONE EMITTER PER VERDICT STRING. missing:no-credential-channel is
+           emitted at three sites today (774, 810, 877) and
+           unknown:secret-service-unprobed at two (723, 874); which arm is
+           reached depends on how the capped probes terminate. The assertion is
+           a count over the guard's source, and it is the structural reason
+           arm 1 can flip at all.
+        3. NO gh CALL IS KILLED MID-FLIGHT against a serving keyring — the
+           whole point of the row. Either no capped `gh` invocation remains, or
+           the surviving probe is shown not to hold a Secret Service call open.
+           988-7kxf bounds this: the caps cannot simply be deleted, because an
+           unbounded probe hung and removing `timeout` flips the verdict to
+           blocked:gh-cli-only. So this is a probe REDESIGN and the litmus must
+           pass with the probe still bounded.
+        4. A HUMAN-SAFE LOCK READING EXISTS, or the guard says plainly that it
+           does not. Every probe that asks the daemon is by construction a
+           Secret Service client and every bounded one can be killed, so the
+           answer may be to observe from outside (the daemon's pid and
+           coredumpctl) rather than to ask. If that is the answer the litmus
+           must also assert what that reading CANNOT tell you: it distinguishes
+           "has crashed" from "has not", never "is locked" from "is unlocked".
+      WHAT THE LITMUS CANNOT COVER, so nobody reads a green as more: arm B of
+      the closure below needs a host with a SERVING collection and its owner's
+      per-run consent, and no fixture may take it (see the consent amendment on
+      this row).
     verifiable_closure: |
-      litmus:credential-channel-survives-a-killed-probe (new, written with the
-      change it checks). TWO ARMS, and the second is the one that matters.
+      TWO ARMS, and the second is the one that matters. The guard named in
+      `unscoreable` above is the instrument for arm A; it does not exist yet.
       ARM A, OURS, and the only half we own: no fleet tool kills a `gh` call
       mid-flight against a SERVING keyring. Either every capped `gh` invocation
       is removed or replaced by a probe that does not hold a Secret Service call
