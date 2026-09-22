@@ -125,7 +125,7 @@ if [ "${#corpus[@]}" -eq 0 ]; then
 else
     for a in "$tmp/old.awk" "$tmp/new.awk"; do
         out="$a.pairs"; : > "$out"
-        for f in "${corpus[@]}"; do awk -f "$a" "$f" 2>/dev/null | sed "s|^|$f\t|"; done | sort > "$out"
+        for f in ${corpus[@]+"${corpus[@]}"}; do awk -f "$a" "$f" 2>/dev/null | sed "s|^|$f\t|"; done | sort > "$out"
     done
     lost=$(comm -23 "$tmp/old.awk.pairs" "$tmp/new.awk.pairs" | wc -l)
     gained=$(comm -13 "$tmp/old.awk.pairs" "$tmp/new.awk.pairs" | wc -l)
