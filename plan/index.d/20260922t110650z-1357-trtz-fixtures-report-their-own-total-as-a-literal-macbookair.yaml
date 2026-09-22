@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fixtures-print-their-own-scenario-total-as-a-literal-so-an-arm-that-stops-running-is-reported-as-the-old-count
+    order: 1357-trtz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fixtures, population, fail-loud, sweep]
+    estimated_hours: 3
+    owned_files: []
+    unscoreable: |
+      whether-every-literal-total-is-a-defect: a literal is only WRONG where the
+      count can drift from what ran. A fixture with a fixed arm count that is
+      pinned elsewhere — by a litmus expected_behavior, say — may be fine, and
+      this row must not convert a survey into fifteen mechanical edits. The
+      population below is the SEARCH SPACE, not the finding. Each file needs the
+      one question asked of it before it is changed, and a file that answers
+      honestly should be left alone and recorded as examined.
+    verifiable_closure: |
+      THE OUTPUT: for every fixture that prints a self-reported total, either the
+      total is DERIVED from what actually ran, or the file is recorded as
+      examined-and-correct with the reason. A reader can tell which without
+      re-deriving it.
+
+      THE CONTROL, and it is the same one the family always needs: for at least
+      one fixture changed, show that REMOVING an arm moves the printed total.
+      A derived count nobody has seen move is a literal that has not been caught
+      yet.
+
+      DO NOT close this by editing fifteen files. The unscoreable is the point:
+      the finding is per-file and some files are fine.
+    title: |
+      fixtures print their own scenario total as a literal, so an arm that is added, removed or silently skipped is still reported as the old count — three instruments in one day, all three wrong
+    context: |
+      THREE INSTRUMENTS IN ONE DAY, all found while working other rows on
+      macbookair 2026-09-22, and ALL THREE WERE WRONG:
+
+        scripts/test-script-exec-bits.sh        printed 14/14 while SEVENTEEN
+                                                scenarios ran (1321-2ixp)
+        scripts/test-skills-single-source.sh    printed  7/7  while THIRTEEN
+                                                cases ran (1255-rvr7)
+        scripts/test-litmus-bindings.sh         printed  5/5  while NINE
+                                                cases ran (1356-vv5m)
+
+      In each case arms had been ADDED, run, passed, and been reported as the old
+      number. The failure is symmetric and the other direction is worse: an arm
+      that stops running — skipped, guarded out, or lost in a rewrite — is
+      reported as present.
+
+      IT DEFEATS THE PIN THAT EXISTS TO CATCH IT. openspec/litmus-tests/
+      litmus-script-exec-bit-shape.yaml pins `ok:script-exec-bits-fixture:14`
+      DELIBERATELY, with a comment saying the count is pinned "to catch a
+      wholesale fixture rewrite that drops coverage, which already happened once
+      under 758-jw6v". Against a hardcoded string that pin CANNOT FIRE: the
+      fixture prints 14 whatever it ran. The guard and the guarded were agreeing
+      on a constant.
+
+      THIS IS 1255-rvr7's FAMILY ONE LEVEL UP. A guard over a population must
+      assert the population, not only the shape of what it finds — and a fixture
+      is a guard whose population is its own arms. The usable test transfers:
+      ASK WHAT A FIXTURE PRINTS WHEN AN ARM SILENTLY STOPS RUNNING. If the answer
+      is the same number, the total is a claim rather than a measurement.
+
+      THE SEARCH SPACE, MEASURED, NOT THE FINDING: 15 files under scripts/
+      matching a literal `(N/N)` in their own PASS/ok line on
+      origin/linux-next today —
+        test-all-fragments-intact.sh          test-litmus-tracked-file-kill-safety.sh
+        test-capability-routing.sh            test-podman-sync-budgets.sh
+        test-capability-manifest-guard.sh     test-pre-push-version-guard.sh
+        test-gate-stamp-scope.sh              test-reclaim-stranded-claims.sh
+        test-gate-stamp.sh                    test-resumable-claim-dirt.sh
+        test-litmus-bindings.sh               test-summarize-pubspec.sh
+        test-skills-single-source.sh          test-windows-tray-diagnose-surface.sh
+                                              test-windows-only-sources-verified.sh
+      THREE OF THOSE ARE THE THREE ABOVE and are already derived on work refs
+      (#147 landed, #157 and #158 open). THE OTHER TWELVE ARE UNEXAMINED — that
+      is a population to ask the question of, NOT twelve defects. Three for three
+      is why the row is worth filing; it is not evidence about the twelve.
+    deliverable: |
+      Ask the one question of each of the twelve unexamined files: what does it
+      print when an arm stops running? Where the total can drift from what ran,
+      derive it from the arms that actually ran — counted at runtime, not grepped
+      from the source, where the difference matters.
+
+      RECORD THE FILES THAT ARE FINE, with the reason. A survey that only reports
+      what it changed leaves the next person to re-derive the same twelve.
+
+      WHERE A LITMUS PINS THE COUNT, move the pin with the fixture in the same
+      edit — the pin is what makes a drop visible, and a pin against a literal is
+      a pin that cannot fire.
+    next_action: >
+      Start with the three already-derived files as worked examples
+      (test-script-exec-bits.sh on trunk, and test-skills-single-source.sh /
+      test-litmus-bindings.sh once #157 and #158 land) — each shows the shape and
+      the arm that proves it. Then take the twelve one at a time. Cheapest first
+      check per file: delete or comment one arm and see whether the printed total
+      moves.
+    provenance: |
+      Filed by macbookair-macos (macos) 2026-09-22 at macuahuitl-fedora's
+      direction, from three instances measured while working 1321-2ixp,
+      1255-rvr7 and 1356-vv5m on the same day. The 15-file population was
+      measured on this host; the three instances were each found by adding arms
+      and noticing the total did not move. Filed UNCLAIMED for whoever is free —
+      the coordinator said not tonight, which this filer read as applying to
+      taking it rather than to recording it while the evidence is fresh.

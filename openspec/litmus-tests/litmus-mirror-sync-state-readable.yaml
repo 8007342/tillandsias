@@ -20,9 +20,9 @@ description: >
   mirror already knows and never published.
 
   WHAT MUST HOLD, and the middle one is the arm that can actually fail:
-  a mirror with no tracking refs reports `unknown`, NEVER `current` — a mirror
+  a mirror with no tracking refs reports `heads-unknown`, NEVER `heads-current` — a mirror
   that has never fetched upstream is not an up-to-date one; a mirror whose
-  upstream has moved reports `behind` with the count of behind heads; an
+  upstream has moved reports `heads-behind` with the count of behind heads; an
   exported head with no tracking twin (a salvage ref upstream has never seen)
   is NOT counted as behind, or every mirror is permanently behind and the
   verdict is useless rather than wrong; publishing twice leaves exactly one
@@ -32,8 +32,36 @@ description: >
   AN ARM TAKEN ON A MIRROR THAT HAPPENS TO BE CURRENT CANNOT FAIL for this
   defect, which is why the fixture MANUFACTURES the behind and unknown states
   in scratch repositories rather than waiting for a real mirror to fall behind.
-  Falsifiability shown rather than claimed: collapsing `behind` and `unknown`
-  into `current` in the publisher reds arms 1 and 3 by name.
+  Falsifiability shown rather than claimed: collapsing `heads-behind` and `heads-unknown`
+  into `heads-current` in the publisher reds arms 1 and 3 by name.
+
+  THE LIFECYCLE IS PART OF THE PROPERTY, NOT A SEPARATE CONCERN (arms 7-10,
+  added with T1's second half). Arms 1-6 would all have passed while the
+  publisher was shipped nowhere and called by nothing — which is what it was
+  when they were written. A verdict no lifecycle produces is not a surface a
+  consumer can read, so the fixture now also asks whether anything RUNS it:
+  the mirror image ships it executable; the entrypoint publishes once after
+  the startup sweep and again on every reconciler tick, which is what bounds
+  the verdict's staleness; a LIVE relay run against a local bare upstream
+  leaves a real verdict in the mirror; and a publisher that always fails never
+  changes the relay's exit status, because a relay that refused a legitimate
+  push over an unwritable verdict would be a worse defect than the blindness
+  being fixed. Arm 9 is falsifiable and was shown red: with the relay's two
+  publish calls removed it reports "a full relay run published NO sync-state
+  verdict".
+
+  THE ON-DEMAND HALF (arms 11-12). `tillandsias --sync <project>` fetches
+  upstream into this host's mirror and reports the state, exiting non-zero
+  unless the answer is `heads-current` — `heads-behind` and `heads-unknown`
+  both mean "do not spend a push yet", and an unreadable verdict is never a
+  pass. Arm 11 RUNS THE BINARY rather than reading it: the first draft of the
+  flag was parsed, dispatched, helped and documented and the binary still
+  answered `Unsupported option: --sync`, because the runtime allow-list is a
+  separate list (the lesson the `--reset-state` comment in known_flags
+  records). Arm 12 pins the contract between the command and the image — two
+  absolute paths that, when they drift, surface as a crun "executable not
+  found" that reads as a broken container runtime rather than an old image.
+  Both arms skip by name where the binary or podman is absent.
 
   TAGS ARE DELIBERATELY OUT OF SCOPE. relay-refs.sh's pre-push refspec is
   heads-only, so no upstream tag state exists to compare against — measured on
@@ -43,11 +71,13 @@ description: >
 preconditions:
   - workspace contains images/git/publish-sync-state.sh
   - workspace contains scripts/test-mirror-sync-state.sh
+  - workspace contains images/git/entrypoint.sh, images/git/relay-refs.sh and
+    images/git/Containerfile, which arms 7-10 read and drive
 critical_path:
-  - step: "every arm holds, including the manufactured behind and unknown states"
+  - step: "every arm holds: the manufactured behind and unknown states, and the lifecycle that publishes them"
     command: "bash scripts/test-mirror-sync-state.sh 2>&1"
-    expected_behavior: "ok:mirror-sync-state:6/6 arms"
+    expected_behavior: "ok:mirror-sync-state:12/12 arms"
     assert_exit: 0
-    assert_output_contains: "ok:mirror-sync-state:6/6 arms"
+    assert_output_contains: "ok:mirror-sync-state:12/12 arms"
     assert_output_nonempty: true
     timeout_ms: 120000

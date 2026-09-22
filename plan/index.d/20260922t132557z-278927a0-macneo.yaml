@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T13:25:57Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t132557z
+      host: macneo
+      summary: |
+        THE ROW'S ARGUMENT, MEASURED IN THE WILD, ON A HOST THAT HAD JUST READ THE ROW.
+        pirria-silverblue, 2026-09-22, work/1325-ygq5-bind, reported by them and recorded
+        here with their account in their words.
+
+        They cited `ok:preflight:ran=101 skipped=16 wall=150s` as evidence that a newly
+        added gate step was sound. Then they read what the sixteen skips actually were:
+
+          skip:preflight:test-credential-channel-survives-a-killed-probe:deadline:7s
+
+        THAT IS THE STEP THEY HAD JUST ADDED. Its fixture takes about 30s against the
+        front door's 5s deadline, so preflight never executed it. The ok: they named as
+        evidence came from a run that did not examine the thing it was cited for.
+
+        AND THE SECOND SKIP IS SHARPER THAN THE FIRST: check-portability-idioms, at 6s.
+        That is the guard they had ALREADY established by hand does not scan `timeout` —
+        the guard adjacent to the very defect that put them in this fixture. So the one
+        check most likely to have something to say about their change was among the ones
+        not consulted, and the summary said ok.
+
+        NOTHING WAS BROKEN AND THAT IS THE POINT. The skip line is honest on its own
+        terms and says the gate still runs it; the step's real evidence exists (the
+        fixture run directly, 11/11 there and 11/11 on darwin here). What failed is that
+        the TWO-CATEGORY SUMMARY let a correct claim be supported by the wrong artifact,
+        without anything in front of the reader saying so. Under this order's summary the
+        same run prints
+          partial:preflight: 16 guard(s) did not examine this tree — this run does not
+          vouch for them; the gate still runs them
+        at the moment they were about to call the branch ready.
+
+        WHY IT BELONGS ON THIS ROW RATHER THAN THEIRS. Every earlier datapoint here was a
+        platform failing to run guards — macOS dying, Windows under-covering, the forge
+        out of disk. This one is a host on the FAST regime, with the door working exactly
+        as designed, and the reader still misattributing. So the defect is not a
+        portability problem with a reporting symptom; it is a reporting problem that the
+        portability failures made visible. That is the strongest argument the row has for
+        fixing the summary rather than the deadlines, and it arrived unprompted from a
+        host reading the row.
+
+        A DEADLINE SKIP IS NOT RANDOM, which is the part worth carrying into item 2: the
+        guards that outlive a 5s budget are the slow, thorough ones, so the skipped set
+        is biased towards the checks most likely to find something. "About a third were
+        skipped" understates it if that third is not a random third.

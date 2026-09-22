@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-22T10:52:25Z"
+      agent_id: linux-esmeraldinha-opus5-20260922t105225z
+      host: esmeraldinha
+      summary: |-
+        THE FIFTH MECHANISM, AND IT IS THE ONE THIS ROW WAS NAMED FOR. A NEGATIVE CONTROL THAT PINS A VERDICT THE PLATFORM NEVER PRODUCES. Settled 2026-09-22 with a native-Linux control from the coordinator and a read of the branch here; ratified by coordinator ruling.
+
+        THE ARM. litmus:e2e-eligibility-probe-shape STEP 9/10, NEGATIVE CONTROL (1202-jpzy): a podman whose info FAILS still yields skip:podman-not-functional. On MINGW it reports FAIL: verdict=eligible info-calls=1. On native Linux the identical command reports verdict=[skip:podman-not-functional] info-calls=1, ok: unreachable-podman-still-refuses. So 1202-jpzy's guard is SOUND and this is not a guard-that-cannot-refuse in shared code.
+
+        WHAT IS ACTUALLY HAPPENING, read rather than inferred. scripts/e2e-preflight.sh's eligibility verdict has a MINGW*|MSYS*|CYGWIN* branch whose entire body is: check XDG_RUNTIME_DIR, check the smoke lock, check command -v wsl.exe, check live_runtime_is_present, then echo eligible. THERE IS NO PODMAN INFO GATE IN THAT BRANCH. Measured, not skimmed: awk over the branch piped to grep -c 'podman-not-functional' returns 0. The verdict the step pins is UNREACHABLE ON THIS LOCUS BY DESIGN.
+
+        BY DESIGN, AND THE DESIGN IS RIGHT. The branch's own comment records why: on Windows the local-build e2e substrate is the WSL2 distro and PODMAN LIVES INSIDE IT, so probing for a HOST podman binary is meaningless - it made every Windows host emit skip:no-podman-binary and unconditionally skip an eligible gate, per plan/issues/build-install-smoke-e2e-findings-2026-07-09-windows.md. The branch probes wsl.exe instead. That is a July fix and it must not be undone.
+
+        WHERE THE ONE INFO CALL CAME FROM, which is what makes the two obvious hypotheses wrong. The stub WAS executed - live_runtime_is_present does its own 723-fndi reachability check and calls podman - so info-calls=1 is real, and its exit 1 was NOT misread. It was simply IRRELEVANT to the branch being exercised. The coordinator offered two candidates, the stub never being invoked and its non-zero exit being read as success; BOTH predicted a defect in READING the stub, and the answer is that nothing on that path was asking. Reading the branch cost less than either hypothesis.
+
+        THE FIX IS THE STEP, NEVER THE PROBE, and this is a coordinator ruling rather than a preference. Whoever takes this arm must not touch scripts/e2e-preflight.sh: refusing on a failed host-podman probe IS the July defect. The honest remedies are the same pair the budget bucket gets - the step SKIPS at the MINGW locus with a named reason saying the verdict it pins is unreachable there, or it asserts the Windows-appropriate verdict instead.
+
+        WHY THIS IS THE ROW'S CENTRAL MECHANISM RATHER THAN A SEVENTH TABLE LINE. This row's title says fixtures assert about a world they never built. Four mechanisms were named for it in 2026-09-14 and none of them is confirmed in today's measurement. This one IS that sentence, exactly: a control asserting a verdict that the platform's code path cannot emit, green everywhere the path exists and red on the one locus where it does not, forever, with nothing in the failure text to say so. Seven of eight arms are now classified and zero of the four originally named mechanisms survive; the mechanism the row was named for turns out to be one nobody had written down.

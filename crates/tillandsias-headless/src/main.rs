@@ -329,6 +329,13 @@ fn main() {
     let status_check = user_args.iter().any(|a| a == "--status-check");
     // Order 1004-xw3q: the restore path the health guard's remedy names.
     let ensure_enclave = user_args.iter().any(|a| a == "--ensure-enclave");
+    // Order 1350-ku7v (T1): the on-demand half of the mirror's sync state.
+    // Takes the project as the NEXT argument, so a missing value is a named
+    // block rather than a silent sync of something else.
+    let sync_project: Option<String> = user_args
+        .iter()
+        .position(|a| a == "--sync")
+        .map(|i| user_args.get(i + 1).cloned().unwrap_or_default());
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -642,6 +649,13 @@ fn main() {
         "--record-measurement",
         "--status-check",
         "--ensure-enclave",
+        // Order 1350-ku7v (T1). Listed HERE as well as parsed above, because
+        // this allow-list is what decides at runtime: the first draft of this
+        // flag was dispatched, helped and documented, and still answered
+        // `Unsupported option: --sync` — the exact shape the --reset-state
+        // comment at the top of this list records. A source scan would have
+        // seen the flag everywhere and missed it.
+        "--sync",
         "--github-login",
         "--with-token",
         "--claude-login",
@@ -714,6 +728,7 @@ fn main() {
         || init
         || status_check
         || ensure_enclave
+        || sync_project.is_some()
         || inference_tier
         || capabilities
         || github_login
@@ -971,6 +986,19 @@ fn main() {
     if ensure_enclave {
         if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug)) {
             eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Order 1350-ku7v: top-level and returning, for the same reason
+    // --ensure-enclave is (1004-xw3q) — a CLI query nested under `if init`
+    // falls through into the app's service path and sits idle.
+    if let Some(project) = sync_project.as_deref() {
+        if let Err(e) =
+            run_cli_with_vault_credential_cleanup(debug, || run_sync_project(project, debug))
+        {
+            eprintln!("{}", e);
             std::process::exit(1);
         }
         return;
@@ -1519,6 +1547,9 @@ fn print_usage(version: &str) {
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!(
         "  --ensure-enclave Bring the application-lifetime enclave services (network, Vault, egress proxy) up idempotently without launching a lane — the restore path after a reboot or a stopped proxy; --init only builds images"
+    );
+    println!(
+        "  --sync <project> Fetch upstream into this host's mirror for <project> and print the mirror's sync state — the on-demand half of the state the mirror also publishes on a cadence; ask this BEFORE spending a push on a stale mirror. Exits non-zero unless the answer is heads-current"
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
@@ -10050,6 +10081,145 @@ fn run_ensure_enclave(debug: bool) -> Result<(), String> {
     };
     println!("ok:enclave-ensured:proxy={proxy}");
     Ok(())
+}
+
+/// The STATE token out of the publisher's `sync-state:<state>:<epoch>` line.
+///
+/// ORDER 1350-ku7v. Parsed rather than string-matched, so a detail segment, a
+/// new epoch format or trailing noise cannot silently turn a behind mirror
+/// into a pass. Anything that does not carry the prefix returns "", which the
+/// caller treats as unreadable — never as current. An answer that cannot be
+/// read is not a current mirror.
+///
+/// @trace order:1350-ku7v
+fn sync_state_of(verdict: &str) -> &str {
+    verdict
+        .trim()
+        .strip_prefix("sync-state:")
+        .and_then(|rest| rest.split(':').next())
+        .unwrap_or("")
+}
+
+/// `--sync <project>`: the DEMANDED half of T1's sync state.
+///
+/// ORDER 1350-ku7v. The mirror publishes
+/// `refs/tillandsias/sync-state/<state>[/<detail>]/<epoch>` at startup, on
+/// every reconciler tick and around every relay push. That is the CADENCE
+/// half, and its staleness is bounded by `MIRROR_RECONCILE_INTERVAL`. This is
+/// the other half: a host or a tray action that wants the answer NOW, before
+/// spending a push on it.
+///
+/// WHY IT FETCHES FIRST RATHER THAN ONLY READING. Reading the published ref
+/// alone would answer a question about the last tick, not about now, and the
+/// caller asking on demand is precisely the caller for whom a tick-old answer
+/// is not good enough — the motivating measurement on this row is a host that
+/// fetched, rebased and still lost the race three times in a row. So this
+/// runs the same reconcile pass the periodic loop runs, then republishes, then
+/// reports. It goes through the SAME two scripts the lifecycle uses; nothing
+/// here re-implements the verdict, so the on-demand and cadence answers cannot
+/// drift apart.
+///
+/// IT EXITS NON-ZERO UNLESS THE ANSWER IS `heads-current`, and that is the
+/// whole point of the command. `heads-behind` and `heads-unknown` are both
+/// "do not spend a push yet" — and `heads-unknown` must never be reported as
+/// current: a mirror that has never fetched upstream is not a current mirror
+/// (1338-tkfh is exactly the cost of collapsing "behind" and "absent" into one
+/// answer). Fail closed, the same way an absent verdict reads to a forge.
+///
+/// A STOPPED MIRROR IS A NAMED BLOCK, NOT A CRASH. The remedy is the lane
+/// command, and it is printed rather than described, because a remedy a reader
+/// cannot paste spends the cycle it was written to save (1356-u6xe, measured
+/// on this host the same night).
+///
+/// @trace spec:git-mirror-service
+/// @trace order:1350-ku7v
+fn run_sync_project(project: &str, debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --sync")?;
+    report_runtime_lane("--sync", debug);
+
+    if project.is_empty() || project.starts_with("--") {
+        return Err("blocked:sync:no-project (usage: tillandsias --sync <project>)".to_string());
+    }
+
+    let container = format!("tillandsias-git-{project}");
+    if !crate::vault_bootstrap::container_running(&container) {
+        return Err(format!(
+            "blocked:sync:mirror-not-running:{container}\n  \
+             bring this host's mirror up, then re-run:\n    \
+             TILLANDSIAS_HOST_PROJECT_ROOT=$(dirname \"$PWD\") tillandsias --bash \"$PWD\""
+        ));
+    }
+
+    let mirror = format!("/srv/git/{project}");
+
+    // The reconcile pass first: it is what actually refreshes the tracking
+    // refs the verdict is computed from. Non-fatal — an offline upstream still
+    // deserves an honest verdict about what the mirror last knew, rather than
+    // no verdict at all.
+    let mut reconcile = podman_command();
+    reconcile.args([
+        "exec",
+        &container,
+        "/usr/local/share/git-service/reconcile-exported-heads",
+        &mirror,
+    ]);
+    match podman_command_output(reconcile, debug) {
+        Ok(out) => {
+            let out = out.trim();
+            if !out.is_empty() {
+                println!("sync:reconcile:{out}");
+            }
+        }
+        Err(e) => {
+            // Loud, and it does not stop the report. A caller who cannot reach
+            // upstream still needs to know how far behind the mirror is.
+            eprintln!("warn:sync:reconcile-failed (reporting last-known state anyway): {e}");
+        }
+    }
+
+    let mut publish = podman_command();
+    publish.args([
+        "exec",
+        &container,
+        "/usr/local/share/git-service/publish-sync-state",
+        &mirror,
+    ]);
+    let verdict = podman_command_output(publish, debug).map_err(|e| {
+        // A MIRROR IMAGE THAT PREDATES THE PUBLISHER IS A NAMED STATE, not a
+        // crun stack trace. Measured on lenovinha 2026-09-22, the first time
+        // this command ran against a live mirror: the running container was
+        // built before publish-sync-state was shipped, and the raw error was
+        // `crun: executable file ... not found`, which sends the reader to
+        // debug their container runtime. The condition is an old image and the
+        // remedy is a rebuild, so say that.
+        if e.contains("not found") || e.contains("no such file") || e.contains("No such file") {
+            format!(
+                "blocked:sync:mirror-image-predates-publisher:{container}\n                   this mirror was built before the sync-state publisher shipped, so it cannot \n                   answer the question yet. Rebuild the mirror image and relaunch the lane, then \n                   re-run this command."
+            )
+        } else {
+            format!("blocked:sync:publisher-failed:{container}: {e}")
+        }
+    })?;
+    let verdict = verdict.trim();
+
+    let state = sync_state_of(verdict);
+
+    println!("{verdict}");
+
+    match state {
+        "heads-current" => {
+            println!("ok:sync:{project}:heads-current");
+            Ok(())
+        }
+        "heads-behind" | "heads-unknown" => Err(format!(
+            "blocked:sync:{project}:{state} — this mirror is not current with upstream; \
+             a push spent now is the race this state exists to warn about"
+        )),
+        _ => Err(format!(
+            "blocked:sync:{project}:unparseable-verdict:{verdict} — an answer that cannot be \
+             read is not a current mirror"
+        )),
+    }
 }
 
 fn run_status_check(debug: bool) -> Result<(), String> {
@@ -18622,6 +18792,44 @@ fn test_cache_root() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
 
+    /// ORDER 1350-ku7v. The --sync verdict parse, which decides whether a host
+    /// spends a push. Every arm here is a way the answer could be misread as
+    /// "current" when it is not — the failure mode this row exists to stop.
+    #[test]
+    fn the_sync_verdict_parse_never_reads_a_stale_mirror_as_current() {
+        assert_eq!(
+            super::sync_state_of("sync-state:heads-current:1790082119"),
+            "heads-current"
+        );
+        assert_eq!(
+            super::sync_state_of("sync-state:heads-behind:1790082119"),
+            "heads-behind"
+        );
+        assert_eq!(
+            super::sync_state_of("sync-state:heads-unknown:0"),
+            "heads-unknown",
+            "a mirror that never fetched upstream is not current (1338-tkfh)"
+        );
+        // Trailing whitespace is what a command substitution leaves behind.
+        assert_eq!(
+            super::sync_state_of("sync-state:heads-behind:17900\n"),
+            "heads-behind"
+        );
+        // Anything unreadable must NOT parse as a state. "" is what the caller
+        // turns into a block; a lenient parse here would invent a pass.
+        assert_eq!(super::sync_state_of(""), "");
+        assert_eq!(
+            super::sync_state_of("heads-current"),
+            "",
+            "the prefix is load-bearing"
+        );
+        assert_eq!(
+            super::sync_state_of("[publish-sync-state] WARNING: could not publish"),
+            "",
+            "the publisher's own stderr shape must not parse as a verdict"
+        );
+    }
+
     /// ORDER 1277-g5k9, ARM 1. A spawn failure names the program and where it
     /// looked, and the two other arms pin the parts that must NOT change.
     ///
@@ -20240,12 +20448,13 @@ mod tests {
             main_window
                 .matches("run_cli_with_vault_credential_cleanup(debug")
                 .count(),
-            6,
-            "both status dispatches, OpenCode, forge-agent, provider-login and \
-             --ensure-enclave CLI dispatches must clean up (6 as of the \
-             --ensure-enclave dispatch, 998-3z6g; a new dispatch that wraps \
-             itself in the cleanup is compliance, not drift — bump this count \
-             and name the dispatch, as 1003-444f's class requires)"
+            7,
+            "both status dispatches, OpenCode, forge-agent, provider-login, \
+             --ensure-enclave and --sync CLI dispatches must clean up (7 as of \
+             the --sync dispatch, 1350-ku7v; was 6 at --ensure-enclave, \
+             998-3z6g; a new dispatch that wraps itself in the cleanup is \
+             compliance, not drift — bump this count and name the dispatch, as \
+             1003-444f's class requires)"
         );
         assert!(
             !main_window

@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-kill-time-adjudicator-turns-a-low-cpu-pressure-reading-into-a-claim-that-the-step-was-not-contended-and-is-genuinely-too-slow
+    order: 1358-9wzz
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, runner, diagnosis, fail-loud, adjudication]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/test-litmus-kill-adjudicator.sh
+    unscoreable: ""
+    verifiable_closure: |
+      THE OUTPUT: when a step is killed at its budget and cpu.pressure shows LOW
+      stall, the runner never says the step was "NOT contended" and never says it
+      is "genuinely too slow for its budget". It reports what it measured — CPU
+      stall was low, which rules out CPU STARVATION and nothing else — and leaves
+      the cause UNCLASSIFIED for every form of contention it did not measure.
+
+      THE MODEL TO COPY IS ALREADY IN THE FILE. The unavailable path says "cause
+      UNCLASSIFIED (slow step vs starved step); no fallback instrument, because
+      none measures this step's contention". The low-stall path must be at least
+      that honest. Closure is the wording a reader sees, not the branch shape.
+
+      ARMS, in the existing hermetic fixture, which already injects counters
+      through LITMUS_PSI_FILE:
+        * LOW stall -> the verdict must NOT contain "NOT contended" and must NOT
+          contain "genuinely too slow"; it must name CPU starvation as the only
+          thing excluded.
+        * HIGH stall -> unchanged; that branch was right and stays right.
+        * UNAVAILABLE -> unchanged; it is the model.
+      The low arm must fail against today's wording, or it is not testing this.
+    title: |
+      the kill-time adjudicator reads a CPU-only instrument and concludes "step NOT contended at kill time; genuinely too slow for its budget" — a claim its own module comment forbids, and one that was false on the step that produced it
+    context: |
+      MEASURED ACROSS TWO HOSTS, and the pair is what makes it a defect rather
+      than an opinion.
+
+      litmus:proxy-crash-supervision-shape step 3 reddened the pre-build suite on
+      macuahuitl at its 60s budget, and the runner printed:
+
+        cpu.pressure some-stall 9159us over 60s (0%) in this cgroup — step NOT
+        contended at kill time; genuinely too slow for its 60s budget
+
+      BOTH HALVES OF THAT SENTENCE ARE FALSE ABOUT THAT STEP:
+        macbookair (darwin)  the fixture runs bare in 4.98s / 4.97s / 4.98s over
+                             three runs, rc=0, every scenario passing
+        macuahuitl (linux)   the same fixture runs bare in 5s, and the whole
+                             proxy-container spec through the RUNNER alone is
+                             Status PASS with the step at 6.5s
+      A step that takes 6.5 seconds alone is not "genuinely too slow for its 60s
+      budget". It reds only inside the FULL pre-build suite, so the cause is
+      INTERFERENCE — and interference is precisely what the runner declared
+      absent.
+
+      THE FIXTURE CANNOT TAKE 60s BY CONSTRUCTION, which is how the false claim
+      was caught rather than believed: every wait in scripts/test-squid-supervisor.sh
+      is a bounded poll followed by a kill, and the caps sum to about 20 seconds.
+      Hitting a bound makes it FAIL, not hang — the scenario-5 comment says an
+      unbounded wait "would hang the fixture instead of failing it, so the
+      deadline is part of the assertion".
+
+      A LOW CPU-STALL READING IS NOT EVIDENCE OF NO CONTENTION. cpu.pressure
+      `some` measures time runnable tasks waited FOR A CPU. It says nothing about
+      I/O, locks, process-table pressure, or pkill-by-pattern effects from
+      concurrent fixtures — the candidates for this interference. The instrument
+      is sound; the inference drawn from it is not.
+
+      THE MODULE'S OWN CONTRACT FORBIDS THIS, which is the sharpest part. The
+      comment above _lt_cpu_stall_us at scripts/run-litmus-test.sh:338 says the
+      counter prints "nothing when the kernel/cgroup does not expose it — THE
+      CALLER MUST THEN SAY UNCLASSIFIED, NEVER FALL BACK TO A NUMBER THAT
+      MEASURES SOMETHING ELSE." The low-stall branch at :1747 does exactly that:
+      it takes a CPU number and speaks about contention in general.
+
+      AND THE DECLINE PATH IS ALREADY RIGHT, so this is not a design gap but an
+      asymmetry. When the counter is UNAVAILABLE (:1738) the runner says "cause
+      UNCLASSIFIED (slow step vs starved step); no fallback instrument, because
+      none measures this step's contention" — measured on esmeraldinha. The path
+      that has no data is honest; the path that has SOME data over-claims. A
+      partial instrument produced more confidence than no instrument.
+    deliverable: |
+      The low-stall branch reports what was measured and stops there: CPU stall
+      was low, so CPU STARVATION is excluded; every other form of contention is
+      unmeasured and the cause stays UNCLASSIFIED. Name the forms it cannot see —
+      I/O, locks, process-table, pattern-kill effects from concurrent steps — so
+      a reader knows what to look at next instead of being told to look at the
+      step.
+
+      COPY THE UNAVAILABLE PATH'S WORDING as the model; it is in the same file
+      and already says the honest thing.
+
+      THE HIGH-STALL BRANCH IS CORRECT AND STAYS. It claims contention on
+      evidence of contention, and it already tells the reader to re-run before
+      treating it as a regression. Do not widen this row into it.
+
+      DO NOT touch the 60s budget or the fixture. The coordinator holds that rule
+      and 1353-ryhq carries it: a budget a fast step misses is evidence about the
+      host or the harness, never about the budget.
+    next_action: >
+      Read scripts/run-litmus-test.sh:330-345 first — the module comment states
+      the contract the branch at :1747 breaks — then the three branches at
+      :1738-:1748. The fixture scripts/test-litmus-kill-adjudicator.sh already
+      injects counters through LITMUS_PSI_FILE and passes 5/5, so the low-stall
+      arm goes there. Write that arm FIRST and watch it fail against today's
+      wording.
+    provenance: |
+      Filed and claimed by macbookair-macos (macos) 2026-09-22 at
+      macuahuitl-fedora's direction. The darwin timings, the fixture's bounded
+      construction and the two source paths were measured or read on this host;
+      the failing-host timings (bare 5s, spec-alone PASS at 6.5s) and the
+      esmeraldinha unavailable-path wording are the coordinator's, cited as
+      received. The row exists because a control on a host that could not
+      reproduce the red is what showed the diagnostic was false.

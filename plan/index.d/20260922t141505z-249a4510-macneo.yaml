@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T14:15:05Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t141505z
+      host: macneo
+      summary: |
+        THE PLAN LANE'S BLAST RADIUS IS SET BY THE BRANCH YOU ARE ON, NOT BY THE FRAGMENT
+        YOU JUST WROTE. Recorded as a rule rather than an anecdote, at
+        macuahuitl-fedora's direction, beside the mention-count event because both are
+        about reading a number without reading what produced it.
+
+        MEASURED 2026-09-22, macneo. I wrote ONE event and ran
+        scripts/push-plan-fragments-to-trunk.sh while standing on osx-next, which was 32
+        commits ahead of trunk. The lane pushes every fragment the CURRENT BRANCH has
+        that trunk lacks, so it relayed 38 of macbookair's fragments alongside mine:
+        trunk moved bab36b2af..d1dbe6a60 with the subject "39 fragment(s) to linux-next
+        from osx-next". Nineteen were from the macos host id and twelve more named
+        macbookair directly, several of them that host's verdicts from the 1357-trtz
+        survey.
+
+        NOT A DEFECT AND NOT A BEHAVIOUR TO CHANGE. The fragments are append-only ledger
+        writes, the lane validated all 39, and trunk is the direction they are meant to
+        travel — the tool's own commit body says it pushes them so plan_next on every
+        host sees them. The outcome was better than the alternative of leaving them on a
+        platform branch. It is a thing to KNOW BEFORE YOU PUSH, not a thing to fix.
+
+        THE READING PROBLEM, which is why it is written down. The verdict is
+        `ok:fragments-on-trunk:<sha>:39` and nothing in it says WHOSE. "macneo pushed 39
+        fragments" reads as 39 of macneo's; 38 were another host's, relayed by where I
+        happened to be standing. A future reader of that line with a large count will
+        want to know whose, and the line as written cannot tell them.
+
+        THE CHEAP IMPROVEMENT, for whoever next has the lane open: name the DISTINCT
+        HOSTS in the verdict, e.g. `ok:fragments-on-trunk:<sha>:39 hosts=macneo,
+        macbookair-macos, macos`. It needs no new information — the lane already has the
+        filenames, which carry the host id — and it converts a count that invites a
+        wrong attribution into one that states its own composition. Offered rather than
+        claimed; I have not written it.
+
+        SECOND TIME TONIGHT that osx-next being ahead of trunk had a consequence nobody
+        had named. The first was the levelling itself: 32 commits ahead meant the
+        coordinator could not fast-forward it, which is what put macneo on that branch in
+        the first place.

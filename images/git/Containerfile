@@ -90,9 +90,21 @@ COPY reconcile-exported-heads.sh /usr/local/share/git-service/reconcile-exported
 # reconcile tick, so the forge credential guard can require BOTH mirror
 # reachability AND current upstream push authorization before worker drain.
 COPY probe-upstream-auth.sh /usr/local/share/git-service/probe-upstream-auth
+
+# @trace spec:git-mirror-service
+# Order 1350-ku7v (T1): the sync-state publisher. It reads the tracking refs
+# the relay's pre-push fetch already maintains and publishes
+# refs/tillandsias/sync-state/<state>[/<detail>]/<epoch>, so a forge (which
+# cannot reach GitHub) and a bare-metal host (which otherwise learns of
+# staleness from a push that has already been refused) can both ask the
+# question BEFORE spending anything on the answer. It ships beside
+# probe-upstream-auth because it answers the second half of the same question
+# and shares that probe's ref grammar exactly.
+COPY publish-sync-state.sh /usr/local/share/git-service/publish-sync-state
 RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
     /usr/local/share/git-service/reconcile-exported-heads \
-    /usr/local/share/git-service/probe-upstream-auth
+    /usr/local/share/git-service/probe-upstream-auth \
+    /usr/local/share/git-service/publish-sync-state
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli

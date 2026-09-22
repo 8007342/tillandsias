@@ -1,0 +1,50 @@
+# Gate step 1353-ryhq — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. `./build.sh --preflight` is the front door the fleet is being
+# told to run before marking any PR ready, because a work-ref push only WARNS on
+# a red decider (1315-4a7j) and three of six reviewed fixture-green PRs were
+# dropped by sub-second deciders their authors never ran. A door that reports
+# `ok:` for a run in which a third of the guards never examined the tree sends
+# those authors away believing they checked.
+#
+# THREE HOSTS, ONE NIGHT, THREE SYMPTOMS OF ONE DEFECT (2026-09-22):
+#   yolanda-windows  ok:preflight:ran=68 skipped=31 wall=241s, exit 0 — TWENTY
+#                    of those 31 cut off by the 5s deadline, each missing it by
+#                    one or two seconds. Green, and two thirds covered.
+#   macneo           ran=0 skipped=3 failed=110 — 110 guards booked as REFUSALS
+#                    when one binary was absent (exec: setsid: not found). The
+#                    guards were blameless; the tree was never examined.
+#   forge            refused: printed for guards that never executed, because
+#                    the checkout tmpfs filled (1349-53h6).
+# The verdict could not say whether a guard had ANSWERED, so every host read its
+# own symptom as something else.
+#
+# THE FIX THIS STEP GUARDS IS THE SCORING, NOT THE DEADLINE. Raising the 5s
+# budget is explicitly out of scope and forbidden by this order's own
+# next_action: yolanda's MSYS spawn-cost explanation is stated as a hypothesis
+# and has not been measured. The summary change fixes the Windows reader without
+# touching a single deadline.
+#
+# WHY THE SUM ARM IS THE LOAD-BEARING ONE. Categories a reader cannot check are
+# a vocabulary, not an accounting. A guard dropped between two branches would be
+# invisible in exactly the way this order exists to stop, so the door refuses
+# outright when its categories do not add up to the roster it enumerated.
+#
+# NO ARM ASSERTS A GUARD COUNT, and that is a measurement rather than a
+# preference: two Macs counted the same defect as failed=108 and failed=110
+# within minutes of each other, so the roster differs by checkout and any fixed
+# number would be red on one host and green on another.
+#
+# ARM 7 IS A NAMED SKIP ON A HOST THAT CANNOT OPEN THE DOOR (965-sxec), which is
+# this order's own subject turned on its own fixture: six source arms hold
+# everywhere, and the one arm that runs the real door says plainly where it did
+# not run rather than reporting a pass it did not earn.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the preflight verdict distinguishes what ran from what did not (1353-ryhq)"
+STEP_SCRIPT="scripts/test-preflight-verdict-categories.sh"
+STEP_ERROR="the preflight door can again report ok: for a run that left guards unanswered, or book a guard it could not start as a refusal (1353-ryhq) — read which arm failed above; arm 2 (the categories sum to the roster) and arm 3 (unanswered means partial:, never ok:) are the load-bearing ones"
+STEP_OK="The preflight verdict states its categories and their sum, and never vouches for a guard that did not examine the tree"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:preflight-verdict-categories:6/6 (arm7 named-skipped: no setsid on this regime)"

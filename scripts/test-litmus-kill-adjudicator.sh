@@ -122,14 +122,38 @@ else
 fi
 check "$(retired_instrument_absent "$out" && echo ok || echo FAIL)" "retired load1-vs-ncpus instrument absent (arm 1)"
 
-# --- Arm 2: counter flat -> 0% -> NOT contended
+# --- Arm 2: counter flat -> 0% -> CPU starvation excluded, cause UNCLASSIFIED
+# ORDER 1358-9wzz. This arm used to pin "step NOT contended at kill time", and
+# that string was FALSE about the step that produced it in the field:
+# litmus:proxy-crash-supervision-shape step 3 runs bare in 5s on two hosts and
+# passes through the runner alone at 6.5s against a 60s budget, reddening only
+# inside the full suite — i.e. interference, which the sentence declared absent.
+# A low cpu.pressure reading excludes CPU STARVATION and nothing else.
 printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=5000000\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "$psi"
 write_probe "sleep 30"
 out="$(LITMUS_PSI_FILE="$psi" run_probe)"
-if reached_timeout "$out" && grep -q 'cpu.pressure some-stall 0us over [0-9]*s (0%) in this cgroup — step NOT contended at kill time' <<<"$out"; then
-    check ok "flat counter -> NOT contended"
+if reached_timeout "$out" \
+   && grep -q 'cpu.pressure some-stall 0us over [0-9]*s (0%) in this cgroup — CPU starvation EXCLUDED; cause otherwise UNCLASSIFIED' <<<"$out"; then
+    check ok "flat counter -> CPU starvation excluded, cause otherwise UNCLASSIFIED"
 else
-    check FAIL "flat counter -> NOT contended"; printf '%s\n' "$out" | grep -E 'TIMEOUT|cpu.pressure|load1|SKIP|Error|error' | head -5 | sed 's/^/     /'
+    check FAIL "flat counter -> CPU starvation excluded, cause otherwise UNCLASSIFIED"; printf '%s\n' "$out" | grep -E 'TIMEOUT|cpu.pressure|load1|SKIP|Error|error' | head -5 | sed 's/^/     /'
+fi
+# THE ABSENCE IS THE ASSERTION, not a stylistic preference: either phrase is a
+# conclusion this instrument cannot support, and re-introducing either one is
+# the defect coming back. Pinned separately from the positive match above so a
+# reworded-but-still-over-claiming verdict cannot pass by accident.
+if grep -q 'NOT contended at kill time' <<<"$out" || grep -q 'genuinely too slow' <<<"$out"; then
+    check FAIL "low stall must NOT claim 'NOT contended' or 'genuinely too slow'"
+    printf '%s\n' "$out" | grep -E 'cpu.pressure' | head -2 | sed 's/^/     /'
+else
+    check ok "low stall claims neither 'NOT contended' nor 'genuinely too slow'"
+fi
+# And it must tell the reader what to do next — re-running the step alone is
+# exactly the measurement that exposed the false verdict.
+if grep -q 'Re-run this step ALONE' <<<"$out"; then
+    check ok "low stall names the next measurement: re-run the step alone"
+else
+    check FAIL "low stall names the next measurement: re-run the step alone"
 fi
 # 956-llei second rung: a killed test's row in the slowest-tests table is
 # marked censored — its elapsed time is the budget, a lower bound, not a

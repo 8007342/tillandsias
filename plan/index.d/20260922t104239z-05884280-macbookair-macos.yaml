@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-rescue-path-refuses-with-the-wrong-cause-and-its-fixture-captures-that-refusal-into-silence-so-a-real-failure-reports-as-an-empty-verdict-at-rc-zero-on-both-loci
+    event:
+      type: note
+      ts: "2026-09-22T10:42:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |
+        macOS LOCUS — and esme's reading from the code reproduces here exactly, which is
+        the part worth having: the tool is fine and the SCAFFOLD cannot answer.
+
+        MEASURED on tlatoanis-macbook-air 2026-09-22 (darwin, bash 3.2):
+
+          scripts/test-salvage-net.sh -> fail:salvage-net-fixture, 24 arms FAILED.
+          First failure `FAIL: salvage verdict: ` with an EMPTY verdict; the arms after
+          it fail as consequences of that emptiness rather than independently.
+
+        PRE-EXISTING, measured both ways rather than inferred from one run: 24 arms
+        failed WITH 1321-2ixp items (2) and (3) applied and 24 failed WITHOUT them,
+        by stashing in both directions. Nothing in that change touches this.
+
+        THE MECHANISM, REPRODUCED DIRECTLY — a scratch repo built like the fixture's:
+
+          $ out="$(TILLANDSIAS_SALVAGE_ROOT=$D/work bash scripts/salvage-dirty-worktree.sh probe 2>/dev/null | tail -1)"
+          verdict=[]                                    <- what the fixture sees
+          $ ...the same call with stderr shown:
+          refused:host-unresolved: scripts/agent-identity.sh node-name returned nothing,
+          so this push would be attributed to no host (1337-3tk6). Nothing pushed.
+          exit=2
+
+        SEPARATING THE TOOL FROM THE SCAFFOLD, which is why this is not a platform
+        story: salvage-dirty-worktree.sh:128 resolves
+        `_ai="$ROOT/scripts/agent-identity.sh"` — under the SALVAGE ROOT, which the
+        fixture points at a scratch repo that has no such file — so HOST resolves empty
+        and :132 refuses, correctly. In the REAL checkout on this host the same call
+        answers `tlatoanis-macbook-air` at exit 0. The tool is behaving exactly as
+        1337-3tk6 designed it; the scaffold is what cannot answer.
+
+        THE ROW'S SUBJECT, stated as the shape rather than the incident: THE FIXTURE
+        CAPTURES A REFUSAL THAT NAMES ITS OWN CAUSE AND TURNS IT INTO AN EMPTY STRING.
+        The call at test-salvage-net.sh:55 (and the same shape at :82 and :84) takes
+        stdout with `2>/dev/null`, so a verdict line that says precisely what is wrong
+        arrives as "", and the arm reports an empty verdict with no cause — sending every
+        later reader to the tool, which is the one component that is working.
+
+        SAME FAMILY AS 1355-m83d, DIFFERENT MECHANISM, and both are worth saying: there,
+        a reader's vocabulary is narrower than the corpus, so a named inability spelled
+        with an unknown word scores as a refusal. Here, the channel carrying the name is
+        discarded before anyone reads it. One instrument is not listening for the right
+        word; the other is not listening at all.

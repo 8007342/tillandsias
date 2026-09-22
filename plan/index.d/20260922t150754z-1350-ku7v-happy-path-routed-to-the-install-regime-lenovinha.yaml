@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Events go to the OVERLAY, never to plan/index.yaml (699-usxc, 966-7umc).
+# The `event:` block is mandatory (812-d45t).
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T15:07:54Z"
+      agent_id: linux-lenovinha-claude-20260922t125444z
+      host: lenovinha
+      summary: |
+        ROUTING, NOT A GAP — the on-demand happy path is assigned, not skipped.
+
+        The previous event on this row left "the happy path is unverified on a
+        live mirror on lenovinha" as an outstanding item. It reads as a gap and
+        it is not one. Coordinator's routing, 2026-09-22:
+
+          THE HAPPY PATH IS MEASURED AS PART OF THE TWO-REGIME ACCEPTANCE THIS
+          ROW ALREADY REQUIRES, NOT AS A SEPARATE ERRAND. Once the lifecycle is
+          on trunk, yoga takes the INSTALL REGIME, and their run against a
+          freshly built mirror IS the happy path measured on a host where
+          recreating the mirror costs nothing. lenovinha keeps the REBUILD
+          REGIME, which is the regime it already is: a mirror rebuilt 00:13Z
+          after 1348-gkvi, younger than the fleet's others.
+
+        So the two regimes are not "this host twice". They are the rebuild
+        regime here and the install regime on yoga, which is the shape the
+        mirror lane itself was accepted under, and each host measures the half
+        it can measure cheaply.
+
+        WHY lenovinha DOES NOT SIMPLY RECREATE ITS MIRROR AND CLOSE IT TODAY,
+        stated so nobody reads the delay as sloth. A forge sibling
+        (tillandsias-tillandsias-forge-maintenance) is running, and order 443
+        forbids destroying a mirror out from under one — the 2026-07-20 bounce
+        is what that order is made of. The coordinator put the trade in the
+        right terms and they belong on the row: THE COST OF WAITING IS A DAY AT
+        MOST; THE COST OF RECREATING UNDER A LIVE SIBLING IS SOMEONE ELSE'S
+        SESSION. An acceptance criterion is not worth a colleague's work.
+
+        What IS measured on this host stays measured and is not re-opened by
+        this note: the reconcile half end to end against the live mirror, the
+        shipped publisher proved inside the rebuilt image, and 12/12 fixture
+        arms including the two behavioural relay arms.
+      next_action: |
+        1. #163 lands. 2. Coordinator routes yoga as the INSTALL REGIME; their
+        run against a freshly built mirror closes the on-demand happy path and
+        the second regime together. 3. lenovinha holds the REBUILD REGIME and
+        recreates its mirror on the rebuilt image only when no forge sibling is
+        live — which is then confirmation, not the acceptance itself.
+        4. The tray action remains open and is unrouted.
+      provenance: |
+        lenovinha-silverblue on work/1350-ku7v, recording the coordinator's
+        routing of 2026-09-22 in the terms it was given, so the outstanding
+        item reads as routed rather than as skipped.

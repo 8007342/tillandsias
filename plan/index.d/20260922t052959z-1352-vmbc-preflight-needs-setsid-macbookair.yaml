@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-sh-preflight-execs-setsid-unconditionally-so-on-a-host-without-it-all-108-deciders-fail-to-launch-and-the-step-refuses-without-measuring-anything
+    order: 1352-vmbc
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [build, preflight, macos, portability, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    unscoreable: ""
+    verifiable_closure: |
+      THE OUTPUT, on a host with NO setsid: `./build.sh --preflight` RUNS the
+      deciders and reports a verdict about the tree. Not ran=0.
+
+      Either shape is acceptable and the row does not prejudge which:
+        * the guard runs without session isolation and the verdict SAYS SO, so
+          no reader mistakes a degraded run for the isolated one; or
+        * each guard that genuinely needs isolation refuses BY NAME, and the
+          rest run.
+      What is NOT acceptable is 108 identical launch failures reported as one
+      refusal, which says nothing about the tree and cannot be told apart from a
+      tree that is actually broken.
+
+      NEGATIVE CONTROL: on a host WITH setsid the run is unchanged — same guards,
+      same isolation, same verdicts. A fix that degrades the Linux path to make
+      the macOS path work would trade a loud refusal for a quiet weakening of the
+      property the comment at build.sh:295-306 was written to protect.
+    title: |
+      build.sh's preflight runner execs `setsid` unconditionally, so on macOS every one of the 108 deciders fails to launch and the step reports refused:preflight:ran=0 — while a sibling in the same tree probes for setsid and reports a named skip
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-22, on osx-next with
+      origin/linux-next merged:
+
+        $ ./build.sh --preflight
+        ./build.sh: line 316: exec: setsid: not found
+        refused:preflight:verify-version-monotonic
+        refused:preflight:ran=0 skipped=3 failed=108 wall=26s
+
+      ran=0. Not "some deciders red" — NONE of the 108 launched. `setsid` is
+      util-linux; `command -v setsid` finds nothing on macOS. build.sh:316 is
+
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+
+      with no probe, so every guard dies in its exec and is counted as a failure.
+
+      THE TREE ALREADY KNOWS THIS PLATFORM LACKS setsid, which is what makes this
+      a defect rather than a platform limit. scripts/test-dispatch-reap.sh:99
+      probes `command -v setsid` and emits a NAMED skip — "no /proc and/or no
+      setsid; the reaper is unsupported here, which is NOT the same as passing
+      (1141-vf9w)" — and scripts/gate-steps.d/230-1141-vf9w.step carries the same
+      distinction in its skip description. One caller of setsid asks whether it
+      exists and reports honestly; the preflight runner does not ask.
+
+      IT FAILS LOUD, NOT GREEN, and that is worth stating because it bounds the
+      damage: a macOS host gets `refused`, never a false pass. The cost is that
+      the step cannot answer anything about the tree, and 108 identical launch
+      failures are indistinguishable from 108 real refusals to anyone reading the
+      summary line.
+
+      WHY THIS SURFACED NOW: the coordinator made `./build.sh --preflight` a
+      mandatory step before `gh pr ready` for every PR from every host, after
+      three fixture-green PRs were dropped from one relay by sub-second deciders
+      their authors never ran. The rule is right; it has no macOS implementation.
+      The coordinator has since put the regime on the skill line rather than
+      leaving the rule stated as fleet-wide.
+
+      DO NOT FIX BY DROPPING setsid. The comment at build.sh:295-306 records why
+      it is there, measured: `timeout N cmd` does not reliably reach cmd's
+      children, a door run left NINE survivors including the timeout processes
+      themselves, and setsid's exit propagation broke the 124 detection so two
+      timed-out guards were reported as refusals rather than skips. The fix is
+      the probe, not the removal.
+    deliverable: |
+      _pf_run_guard probes for setsid once, the way scripts/test-dispatch-reap.sh
+      already does, and on a host without it EITHER runs the guard without
+      session isolation and says so in the verdict, OR refuses per guard by name.
+      Never 108 identical failures.
+
+      Keep the Linux path byte-for-byte in behaviour: same isolation, same group
+      signalling, same 124-on-expiry convention. The negative control in the
+      closure exists for that.
+
+      Say in the verdict which mode the run used. A reader on a mac must be able
+      to tell a degraded run from an isolated one without reading build.sh.
+    next_action: >
+      Read build.sh:295-320 first — the comment above _pf_run_guard explains what
+      setsid is buying and what was measured when it was absent, and the fix must
+      not spend that. Then read scripts/test-dispatch-reap.sh:99 for the probe
+      shape this tree already uses. Reproduce with `./build.sh --preflight` on a
+      host without setsid before changing anything; the ran=0 line is the pre-fix
+      evidence.
+    provenance: |
+      Filed and claimed by macbookair-macos (macos) 2026-09-22 at
+      macuahuitl-fedora's direction, within minutes of the preflight step being
+      made mandatory for every PR. The command output, the absence of setsid on
+      this host, build.sh:316 and the two 1141-vf9w call sites were all read or
+      run here. The coordinator recorded that their rule had been measured on one
+      regime and broadcast as fleet-wide, and narrowed the skill line to name the
+      regime rather than leaving the claim unqualified.

@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T16:33:15Z"
+      agent_id: windows-yolanda-claude-20260922t163314z
+      host: yolanda-windows
+      summary: |-
+        NEVER DIFFERENCE A PREFLIGHT COUNT ACROSS THE GRAMMAR CHANGE. The populations are sliced differently, so a comparison across it measures THE GRAMMAR rather than the host, and this host holds the only before-and-after figures anyone has on Windows.
+
+        THE DEMONSTRATION, all from yolanda-windows on 2026-09-22, same host, same day, no configuration change between them:
+
+          OLD GRAMMAR   ok:preflight:ran=68 skipped=31 wall=241s
+          OLD GRAMMAR   ok:preflight:ran=67 skipped=32 wall=249s
+          NEW GRAMMAR   partial:preflight:ran=73 declared-skip=4 skipped-by-deadline=27 could-not-run=0 refused=0 sum=104 wall=239s
+
+        Read naively that is a host whose ran count rose by five or six and whose skipped count fell by four. NEITHER IS TRUE. The old skipped=31 was a single bucket; the new grammar splits the same territory into declared-skip, skipped-by-deadline, could-not-run and refused, and reclassifies what counts as RAN. A trend quoted from those two numbers is an artefact of the vocabulary.
+
+        THE SECOND REASON IS INDEPENDENT OF THE FIRST AND WOULD BREAK THE COMPARISON BY ITSELF: THE DECIDER SET GREW. Sum moved from 99 under the old grammar to 104 under the new. So even a reader who correctly mapped the old buckets onto the new ones would be differencing two different populations of deciders.
+
+        PRECEDENT, so this reads as a known class rather than a new worry: 1309-fhxb did exactly this to the LITMUS runner's verdicts, and the standing instruction there is the same one -- a rate that drops is a fixture finding, never compare a pre-change rate with a post-change one as one measurement, and attach the regime. The same rule now applies to preflight counts. Two verdict grammars changed within days of each other and the hazard is identical: the number keeps its name and changes its meaning.
+
+        AND THE CHANGE ITSELF IS GOOD AND LANDED BETTER THAN IT WAS ASKED FOR. The cheap half proposed from this host one release earlier was only that the summary line should SAY the partial coverage, because ok:preflight:ran=68 skipped=31 reads as success to a Windows author who then reasonably concludes the guards passed. What shipped does more: the verdict token itself is PARTIAL rather than ok, skipped-by-deadline is named IN THE VERDICT rather than buried in skip lines nobody reads, and COULD-NOT-RUN IS SEPARATED FROM REFUSED -- which means the forge's phantom-refusal case, where two deciders died on a full tmpfs and were reported as refusals of the tree, is now distinguishable from a decider that genuinely refused. That distinction was the whole of 1349-53h6's complaint and it is answered by the grammar rather than by a path fix.
+
+        WHAT A READER SHOULD DO INSTEAD OF DIFFERENCING: quote a single run with its grammar named, or re-run the old and new forms on the same tree and state both. A preflight count without its grammar is the same shape as a memory figure without its uptime -- a number that looks portable and is not.
