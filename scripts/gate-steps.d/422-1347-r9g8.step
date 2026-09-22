@@ -1,0 +1,43 @@
+# Gate step 1347-r9g8 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The credential guard's verdict is a PRECONDITION for
+# committable work across the fleet, and every probe it makes reaches something
+# that can die while being read: gnome-keyring-daemon aborts inside its own
+# D-Bus property handler (1265-8qr6, five SIGABRTs on lenovinha in one day), a
+# session bus goes away with the session, `gh` blocks on a locked keyring until
+# something kills it. The question is not whether a probe can die — it can —
+# but whether the guard still ANSWERS when it does.
+#
+# WHY A SILENT GUARD IS WORSE THAN A WRONG ONE. Consumers grep the verdict
+# string and the dispatch preflight triggers on `blocked:*`. A guard that hangs
+# emits no string; one that dies mid-write emits a partial one; one that emits
+# two is ambiguous. All three read downstream as "not blocked", so a probe death
+# becomes a silent green on a host with no credential channel.
+#
+# WHY THIS FIXTURE AND NOT THE GUARD. The arms that matter are the ones where
+# the probe DIES. Arm 2 caught a real defect on its first run, in code this same
+# order had shipped hours earlier: a SIGKILLed probe answered
+# `missing:no-credential-channel`, which asserts the credential is ABSENT and
+# invites the `gh auth login` that evicts the fleet (1025-a896). The probe had
+# died, so the guard could not ASK — and it answered anyway.
+#
+# ARM 4 IS A CONTROL ON THE SUITE, not on the guard: it counts the emitting
+# lines per verdict, then INJECTS a second emitter into a copy and requires the
+# count to move 1 -> 2. Without that half, "the count is 1" is a number that
+# cannot be shown to respond to anything — and this fleet read 11 for a verdict
+# that had 3, by counting comments, the same week.
+#
+# WHY IT IS HERE AT ALL (885-92iu). This fixture ran green in its author's hand
+# and in NO SUITE for the length of one night. check-added-test-is-referenced
+# named it the same night it was written — the instrument worked — and the warn
+# was pushed past, because on a work ref a fatal decider and an advisory one
+# print the same shape (1352-qbrd). The guard did its job; the channel it
+# reported through could not distinguish itself from a note.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the credential guard still answers when its probe is killed (1347-r9g8)"
+STEP_SCRIPT="scripts/test-credential-channel-survives-a-killed-probe.sh"
+STEP_ERROR="the credential guard no longer answers exactly one verdict when a probe dies or hangs (1347-r9g8) — read which arm failed above; arm 2 (a dead probe must not report the credential as MISSING) is the load-bearing one, and arm 4's injection control proves the emitter count can move"
+STEP_OK="A killed or hanging credential probe still yields exactly one bounded verdict"
