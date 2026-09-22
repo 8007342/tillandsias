@@ -16,3 +16,4 @@ STEP_DESC="Checking the Silverblue update-skew probe reports skew only when all 
 STEP_SCRIPT="scripts/test-silverblue-update-skew-probe.sh"
 STEP_ERROR="the Silverblue update-skew probe regressed (1165-g6wx) — it may now report skew for any akmods host with a pending update (pending is not blocked), read an unreadable journal as no-skew, or contain a call that can mutate a deployment; see the verdict line above"
 STEP_OK="Silverblue update-skew probe check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the probe contains no deployment-mutating rpm-ostree call"

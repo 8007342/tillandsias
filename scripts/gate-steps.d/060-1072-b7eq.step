@@ -10,3 +10,4 @@ STEP_DESC="Checking two hosts can add a gate step without conflicting (1072-b7eq
 STEP_SCRIPT="scripts/test-gate-step-append-no-conflict.sh"
 STEP_ERROR="adding a gate step conflicts again, or a .step names a non-literal or missing script (1072-b7eq) — see the verdict line above"
 STEP_OK="Gate-step append check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: no two .step files share a numeric prefix — the ordering gap survives"

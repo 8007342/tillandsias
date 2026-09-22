@@ -22,3 +22,4 @@ STEP_OK="SIGPIPE verdict guard path/continuation check passed"
 # Exit 3 means the guard itself is absent — nothing was examined.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-sigpipe-verdict-pipelines-added.sh is absent, so neither escape could be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   C2 (negative control): a pipeline with no branch on its status is NOT flagged — the guard tests for a ve"

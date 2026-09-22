@@ -31,3 +31,4 @@ STEP_OK="gate-step metrics isolation check passed"
 # fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:step-metrics-isolation:4"

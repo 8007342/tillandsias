@@ -20,3 +20,4 @@ STEP_OK="release-tier freshness writer/reader contract check passed"
 # and the fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-release-tier-freshness.sh, scripts/record-ci-phase-result.sh or jq is absent, so the contract could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:release-tier-ci-full:8"

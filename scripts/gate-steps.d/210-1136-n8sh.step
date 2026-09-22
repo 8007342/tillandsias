@@ -12,3 +12,4 @@ STEP_DESC="Checking both closure guards name the way out and each other (1136-n8
 STEP_SCRIPT="scripts/test-closure-guards-name-the-way-out.sh"
 STEP_ERROR="a closure guard no longer names the sanctioned exit or its counterpart, so a new-test packet is refused from both sides with no way out stated (1136-n8sh) — see the verdict line above"
 STEP_OK="Closure-guard way-out messages passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

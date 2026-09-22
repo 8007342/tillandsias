@@ -37,3 +37,4 @@ STEP_OK="competing-gate cause and consumer check passed"
 # fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-no-competing-gate.sh is absent, so the no-answer path could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:no-dispatch-cause:11"

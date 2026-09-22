@@ -11,3 +11,4 @@ STEP_DESC="Checking the push token is GitHub-https-only and the permissive proxy
 STEP_SCRIPT="scripts/test-credential-and-proxy-confinement.sh"
 STEP_ERROR="a GitHub token can reach a non-GitHub host or travel over http, or the permissive proxy port is reachable from the enclave again (1118-bscs) — see the verdict line above"
 STEP_OK="Credential and proxy confinement passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the strict port 3128 still binds for the enclave (confinement did not break the allowlisted pat"

@@ -33,3 +33,4 @@ STEP_DESC="Checking a claim names a workstation, not the compiled platform (1201
 STEP_SCRIPT="scripts/test-a-claim-names-a-workstation.sh"
 STEP_ERROR="the claim-names-a-workstation refusal regressed (1201-hsf9) — either a claim with no --host is being written again as the compiled platform (so two hosts on one platform are indistinguishable exactly when a sweep must name one, and the coordinator asks the wrong host), or the refusal has widened and is now catching an explicit --host or a non-claim write, or it prints an objection while still writing the fragment; see the failing arm above"
 STEP_OK="claim-names-a-workstation refusal check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:a-claim-names-a-workstation"

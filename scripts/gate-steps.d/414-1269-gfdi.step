@@ -65,3 +65,4 @@ STEP_DESC="Checking a tool-materialization red names its arm and a bad regime sk
 STEP_SCRIPT="scripts/test-tool-materialize-litmus-surfaces-arm.sh"
 STEP_ERROR="a litmus red can again print one contentless line, or the margin arm reds on a loaded host instead of skipping (1269-gfdi) — read which arm failed above; ARM 0 failing means the regime probe's real reading path is broken and arms 1-2 prove nothing"
 STEP_OK="Tool-materialization reds name their arm; bad regimes skip"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:tool-materialize-litmus:arm-surfaced:3/3"
