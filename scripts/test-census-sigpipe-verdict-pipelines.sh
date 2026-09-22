@@ -38,19 +38,38 @@ git init -q "$R"
 git -C "$R" config user.email "fixture@example.com"
 git -C "$R" config user.name "Fixture"
 
-cat > "$R/scripts/cases.sh" <<'EOF'
+# THE BAD SHAPE IS WRITTEN AS `GREPQ` AND SUBSTITUTED IN, so this file never
+# contains it as a literal line. Measured before this change: the decider
+# flagged THIS FIXTURE, because it reads lines textually and cannot tell a
+# heredoc of test data from code — the census then counted its own probe, and
+# a work-ref push carried a violation for a file whose entire job is to contain
+# one on purpose.
+#
+# Marking CASE 1 with `# sigpipe-ok:` would have "fixed" it and destroyed the
+# fixture: CASE 1 must be unmarked, or arm 1 has nothing to flag. Generating the
+# line is the fix that keeps both properties — the fixture repo gets the real
+# shape, this repo never carries it.
+cat > "$R/scripts/cases.sh.in" <<'EOF'
 #!/usr/bin/env bash
 set -uo pipefail
 # CASE 1 — a real verdict pipeline. MUST be flagged.
-if printf '%s' "$OUT" | grep -q '^ok:thing$'; then echo yes; fi
+if printf '%s' "$OUT" | GREPQ '^ok:thing$'; then echo yes; fi
 # CASE 2 — here-string. Cannot SIGPIPE. MUST NOT be flagged.
-if grep -q '^ok:thing$' <<<"$OUT"; then echo yes; fi
+if GREPQ '^ok:thing$' <<<"$OUT"; then echo yes; fi
 # CASE 3 — the same pipeline with NO verdict context. MUST NOT be flagged:
 # nothing branches on its status, so SIGPIPE decides nothing.
-printf '%s' "$OUT" | grep -q '^ok:thing$'
+printf '%s' "$OUT" | GREPQ '^ok:thing$'
 # CASE 4 — reviewed and marked. MUST NOT be flagged.
-if printf '%s' "$OUT" | grep -q '^ok:x$'; then echo y; fi # sigpipe-ok: reviewed
+if printf '%s' "$OUT" | GREPQ '^ok:x$'; then echo y; fi # sigpipe-ok: reviewed
 EOF
+sed 's/GREPQ/grep -q/g' "$R/scripts/cases.sh.in" > "$R/scripts/cases.sh"
+rm -f "$R/scripts/cases.sh.in"
+# The substitution must have produced the real shape, or every arm below tests
+# a file of placeholders and passes vacuously.
+grep -q "grep -q '\^ok:thing\$'" "$R/scripts/cases.sh" || {
+    echo "FAIL: case generation did not substitute GREPQ — arms would test placeholders"
+    exit 2
+}
 git -C "$R" add -A
 git -C "$R" commit -qm "fixture: four cases"
 

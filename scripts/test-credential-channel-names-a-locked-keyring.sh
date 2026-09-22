@@ -118,7 +118,7 @@ run_guard "$D" "$W/bin-locked"
 # on the bus means the channel EXISTS, so the verdict must not be missing:.
 if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
     ok "unknown:secret-service-unprobed at rc=$RC — present, unopenable, not absent"
-elif grep -q '^missing:no-credential-channel$' <<<"$OUT"; then # sigpipe-ok: safe pipeline
+elif grep -q '^missing:no-credential-channel$' <<<"$OUT"; then
     bad "REGRESSION 1189-2ra5: a service ON THE BUS read as missing: — that verdict invites the fleet-evicting re-auth that 1025-a896 forbids"
 else
     bad "expected unknown:secret-service-unprobed, got rc=$RC out='$OUT'"
@@ -128,7 +128,7 @@ echo "arm 2 — NEGATIVE CONTROL: no secret service on the bus still reads missi
 mk_bin "$W/bin-nosvc" noservice
 D="$(scratch nosvc)"
 run_guard "$D" "$W/bin-nosvc"
-if printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then
+if grep -q '^missing:no-credential-channel$' <<<"$OUT"; then
     ok "missing:no-credential-channel — absence of a probe is not evidence of a lock"
 else
     bad "a host with no secret service must read missing:, got '$OUT'"
