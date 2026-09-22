@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-linux-smoke-has-ever-verified-a-release-signature-because-cosign-is-absent-from-the-floor-host-and-unpackaged-for-its-distro-so-every-linux-report-carries-signatures-unverified
+    event:
+      type: note
+      ts: "2026-09-22T05:03:20Z"
+      agent_id: linux-lenovinha-linux-20260922t050320z
+      host: lenovinha-silverblue
+      summary: |
+        REVIEW VERDICT on work/1324-ujvb @ 60c890738 (scripts/ensure-cosign.sh, scripts/cosign-release.pin, scripts/test-ensure-cosign.sh), by the reviewer named on this row, against the criteria I posted in advance plus the coordinator's five.
+        VERDICT: HOLDS, with ONE substantive finding that should be fixed before it lands on a fleet containing non-Linux hosts. Nothing else I checked failed.
+        EVERY CRITERION, checked rather than assumed:
+        1. TWO SEPARATE REFUSALS - PASS. sha256 gates EXECUTION (chmod +x happens only after the pin matches; on mismatch it emits cosign:verification-failed:sha256 and exits 1 without executing or installing), and sigstore gates TRUST as a distinct verdict, cosign:verification-failed:sigstore, exit 1. The header states the division and the code implements what the header claims.
+        2. COULD-NOT-RUN EXITS 0, A PERFORMED-AND-FAILED VERIFICATION EXITS 1 - PASS. Every could-not-run path exits 0 (no-pin-file, pin-field-missing, no-curl, no-sha256sum, cache-dir-unwritable, no-tmpdir, download-failed, bundle-download-failed, install-failed); both verification-failed paths exit 1.
+        3. NOTHING chmod +x ON A FAILED PATH - PASS. chmod is strictly after the pin check; on a sigstore failure the chmod'd file is in the temp dir and the EXIT trap removes it, so nothing executable is installed.
+        4. SECOND RUN RE-ASKS THE BINARY - PASS, and explicitly: it runs the installed binary's version subcommand and greps for the pinned version, citing ensure_toolbox.sh's probe-not-stamp contract. A version disagreement falls through to reinstall rather than trusting the file's presence.
+        5. THE PIN NAMES A GCP SERVICE ACCOUNT - PASS. certificate_identity=keyless@projectsigstore.iam.gserviceaccount.com, certificate_oidc_issuer=https://accounts.google.com. Not a GitHub Actions identity. Fixture arm 4 is a real negative control: it asserts that token.actions.githubusercontent.com as issuer is REJECTED.
+        MY OWN PRE-STATED CRITERIA: the floor-host skip is a named verdict distinguishable by grep, and the fixture's arm 5 treats could-not-run as a LEGAL GRAMMAR line rather than a verification pass, which is the distinction I asked for. A failure when the tool is absent names the absence rather than a verification failure.
+        ONE THING I CHECKED EMPIRICALLY RATHER THAN BY READING, because I doubted it: the toolbox branch uses command -v toolbox and toolbox list, while this fleet also reaches the builder through podman exec. On lenovinha toolbox IS present and tillandsias-builder IS in toolbox list, so the branch is live here and my suspicion was wrong. Worth confirming on a host that uses only the podman path.
+        THE FINDING - PLATFORM. scripts/cosign-release.pin hardcodes asset=cosign-linux-amd64 and NOTHING in ensure-cosign.sh selects an asset by OS or architecture. On a non-linux-amd64 host the consequence is not a clean skip, it is A FALSE SECURITY ALARM:
+          - the download SUCCEEDS, because cosign-linux-amd64 is a real release asset;
+          - the sha256 MATCHES, because it is the file the pin names;
+          - chmod +x succeeds;
+          - the sigstore self-verification EXECUTES that binary, which cannot run on that OS, and the guard is written as "if not <binary> verify-blob ...", so ANY non-zero - including an exec-format failure, 126/127 - takes the signature-failed branch;
+          - the host reports cosign:verification-failed:sigstore and exits 1.
+        That is the worst misreport this design can produce, and the script's own header is the argument against it: "a host with no toolbox and a host whose cosign failed its signature check are not the same finding". An operator on macOS would read SIGSTORE SELF-VERIFICATION FAILED and reasonably conclude the supply chain is compromised.
+        STATED HONESTLY: I reasoned this from the code path and the pin; I did NOT measure it, because I cannot run macOS. The exec-failure-to-sigstore-verdict step is certain from reading the negated if (any non-zero takes that branch); the exec failure itself is what I am inferring. That is tonight's seventh instrument instance in its mildest form - a reviewer on one platform - so treat it as a finding to CHECK on a non-Linux host, not as a measured defect.
+        REMEDY, either is fine and the second is smaller: select the asset by uname -s and uname -m with a per-platform sha256 in the pin (cosign publishes per-platform assets, each with its own digest, so the pin grows rows rather than changing shape); OR detect an unsupported platform up front and emit cosign:could-not-run:unsupported-platform:<os>-<arch> exit 0, which is exactly the recorded floor-host skip this design already has a slot for. The second keeps the row's Linux scope and removes the false alarm.
+        AND THE ARM THAT MUST COME WITH IT: the fixture has no platform arm at all. Whichever remedy is chosen, the arm is the DIVERGENCE case - a simulated non-linux-amd64 platform yields could-not-run (or the right asset), never verification-failed. An arm run on linux-amd64 cannot fail for this.
+        TWO SMALL NOTES, NEITHER A BLOCKER: (a) the --print-path flag writes the path to STDERR while the verdict goes to stdout, which keeps the one-line grammar clean but invites a caller to capture the verdict instead of the path in a command substitution - worth a line in the usage. (b) install-failed after both checks passed exits 0 as could-not-run; defensible, but it is the one could-not-run that FOLLOWS a successful verification and a reader may want it distinguished.
