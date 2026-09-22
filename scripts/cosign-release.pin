@@ -1,6 +1,6 @@
 # @trace spec:ci-release, plan 1324-ujvb
 #
-# THE TRUST ANCHOR for cosign itself. One record, four fields, no logic.
+# THE TRUST ANCHOR for cosign itself. One record, no logic.
 #
 # WHY A PIN AND NOT "download the latest release". A provenance tool installed
 # without provenance is this row's defect one level up: a cosign fetched from
@@ -8,13 +8,28 @@
 # be, itself, unverified. The pin is what makes the FIRST link checkable — the
 # only link that cannot be checked by the tool it is bootstrapping.
 #
-# WHY THE SHA256 IS NOT ENOUGH ON ITS OWN, and this is the part that is easy to
+# ONE HASH, EVERY PLATFORM. The anchor is `cosign_checksums.txt`, the release's
+# own manifest, and the per-binary hashes are read OUT of it once it has been
+# checked against `checksums_sha256` below. The first version of this file
+# pinned a single binary's hash and hardcoded `asset=cosign-linux-amd64` —
+# lenovinha's review found that on a Mac the download succeeded, the hash
+# matched, chmod succeeded, and the self-verification then EXECUTED A LINUX
+# BINARY, reporting `cosign:verification-failed:sigstore`. A host that cannot
+# run the file would have reported a SIGNATURE FAILURE: the could-not-run /
+# failed conflation this script polices everywhere else, committed inside it.
+#
+# Pinning four hashes would have fixed the platform bug and created a rot
+# surface — four values to re-derive per release, any one of which can be
+# quietly stale. One manifest hash covers every platform and every future one,
+# and the manifest is itself signed.
+#
+# WHY THE SHA256 IS NOT ENOUGH ON ITS OWN, and this is the part easy to
 # implement past. A hash proves the bytes match what whoever wrote this line
-# saw. It says nothing about whether those bytes are the release sigstore
-# published — if the pin was copied from a compromised page, the hash check
-# passes and looks like diligence. So the hash gates EXECUTION, and then the
-# executed cosign verifies its OWN release signature against sigstore's
-# certificate and transparency log. Two different questions:
+# saw. It says nothing about whether those bytes are what sigstore published —
+# if the pin was copied from a compromised page, the hash check passes and looks
+# like diligence. So the hash gates EXECUTION, and the executed cosign then
+# verifies the manifest's OWN signature against sigstore's certificate and
+# transparency log. Two different questions:
 #
 #   sha256   "are these the bytes the pin names?"     -> may I run this at all
 #   sigstore "did sigstore publish these bytes?"      -> is the pin itself honest
@@ -27,22 +42,40 @@
 # NOT signed by a GitHub Actions workflow identity, which is the plausible guess
 # and is wrong — they are signed by a GCP service account through Google's OIDC
 # issuer. Pinning the guess would fail verification for the wrong reason and
-# read as a broken download. Verified on 2026-09-22 by decoding the bundle's
+# read as a broken download. Verified 2026-09-22 by decoding the bundle's
 # certificate:
 #     X509v3 Subject Alternative Name: critical
 #         email:keyless@projectsigstore.iam.gserviceaccount.com
 #     1.3.6.1.4.1.57264.1.1: https://accounts.google.com
 #
-# TO ROLL THIS FORWARD: change the version, download the new asset and its
-# .sigstore.json, re-read the certificate identity (do not carry these two lines
-# over on faith — an upstream signing-identity change is exactly the event this
-# file exists to notice), recompute the hash, and re-run
-# scripts/test-ensure-cosign.sh, whose negative controls must still reject.
+# TO ROLL THIS FORWARD: change the version, download the new
+# cosign_checksums.txt and its .sigstore.json, re-read the certificate identity
+# (do not carry those two lines over on faith — an upstream signing-identity
+# change is exactly the event this file exists to notice), recompute
+# checksums_sha256, and re-run scripts/test-ensure-cosign.sh, whose negative
+# controls must still reject and whose platform arm must still refuse an
+# unsupported host rather than failing verification on it.
+#
+# A PLATFORM NOT LISTED IN `platforms` IS A could-not-run, NEVER A FAILURE.
+# That is the whole point of the list: an unknown host must say it cannot do
+# this, not that cosign's signature is bad.
 #
 # Fields are `key=value`, one per line, `#` comments ignored.
 
 version=v3.1.3
-asset=cosign-linux-amd64
-sha256=4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71
+checksums=cosign_checksums.txt
+checksums_sha256=aec2a6f68d307b09ae196e388dc691a146fa8bdba7fcce9ca4ca41b918adfa63
 certificate_identity=keyless@projectsigstore.iam.gserviceaccount.com
 certificate_oidc_issuer=https://accounts.google.com
+
+# `<uname -s>/<uname -m> = <release asset>`, lowercased. Hosts outside this list
+# report could-not-run. x86_64 and amd64, aarch64 and arm64, are the same
+# machines under different names and both spellings are listed rather than
+# normalised in code — the mapping is data, and a reader can check it.
+platform=linux/x86_64=cosign-linux-amd64
+platform=linux/amd64=cosign-linux-amd64
+platform=linux/aarch64=cosign-linux-arm64
+platform=linux/arm64=cosign-linux-arm64
+platform=darwin/x86_64=cosign-darwin-amd64
+platform=darwin/amd64=cosign-darwin-amd64
+platform=darwin/arm64=cosign-darwin-arm64

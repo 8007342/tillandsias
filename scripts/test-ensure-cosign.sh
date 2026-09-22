@@ -34,18 +34,18 @@ bad() { echo "  FAIL  $*"; fail=$((fail + 1)); }
 _pin() { grep -E "^$1=" "$PIN" 2>/dev/null | head -1 | sed "s/^$1=//"; }
 
 VERSION="$(_pin version)"
-ASSET="$(_pin asset)"
-SHA256="$(_pin sha256)"
+CHECKSUMS="$(_pin checksums)"
+CHECKSUMS_SHA256="$(_pin checksums_sha256)"
 CERT_ID="$(_pin certificate_identity)"
 CERT_ISSUER="$(_pin certificate_oidc_issuer)"
 
-echo "ensure-cosign fixture — pin $VERSION / $ASSET"
+echo "ensure-cosign fixture — pin $VERSION / manifest $CHECKSUMS"
 
 # arm 0: the pin parses and every field is non-empty. A pin with a missing
 # field would make every later arm test nothing while looking busy.
 echo "arm 0 — the pin is complete"
 missing=""
-for v in VERSION ASSET SHA256 CERT_ID CERT_ISSUER; do
+for v in VERSION CHECKSUMS CHECKSUMS_SHA256 CERT_ID CERT_ISSUER; do
     [ -n "${!v}" ] || missing="$missing $v"
 done
 if [ -z "$missing" ]; then ok "all five pin fields present"; else bad "pin fields empty:$missing"; fi
@@ -54,10 +54,10 @@ if [ -z "$missing" ]; then ok "all five pin fields present"; else bad "pin field
 # header discusses `sha256=` in prose; if the reader matched anywhere on the
 # line it would pick up a comment and compare against nonsense.
 echo "arm 0b — pin reader is key-anchored"
-if [ "${#SHA256}" -eq 64 ] && [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+if [ "${#CHECKSUMS_SHA256}" -eq 64 ] && [[ "$CHECKSUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
     ok "sha256 parsed as a 64-hex digest, not a comment"
 else
-    bad "sha256 did not parse as a digest: '$SHA256'"
+    bad "checksums_sha256 did not parse as a digest: '$CHECKSUMS_SHA256'"
 fi
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/test-ensure-cosign.XXXXXX")" || exit 2
@@ -65,6 +65,13 @@ trap 'rm -rf "$TMP"' EXIT
 BASE="https://github.com/sigstore/cosign/releases/download/$VERSION"
 
 echo "arm 1 — POSITIVE CONTROL: the real thing verifies"
+_os="$(uname -s | tr '[:upper:]' '[:lower:]')"; _arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+ASSET="$(grep -E "^platform=${_os}/${_arch}=" "$PIN" | head -1 | sed 's/^platform=[^=]*=//')"
+if [ -z "$ASSET" ]; then
+    echo "skip:unsupported-platform:${_os}/${_arch}"
+    echo "  (this host has no pinned asset; verification was NOT exercised)"
+    exit 0
+fi
 if ! curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$ASSET" -o "$TMP/c" 2>/dev/null \
    || ! curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$ASSET.sigstore.json" -o "$TMP/c.json" 2>/dev/null; then
     echo "skip:no-network"
@@ -73,11 +80,23 @@ if ! curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$ASSET" -o "$TMP/c" 2>/dev/nul
     exit 0
 fi
 
-got="$(sha256sum "$TMP/c" | awk '{print $1}')"
-if [ "$got" = "$SHA256" ]; then
-    ok "downloaded asset matches the pinned sha256"
+curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$CHECKSUMS" -o "$TMP/sums" 2>/dev/null
+sums_got="$(sha256sum "$TMP/sums" | awk '{print $1}')"
+if [ "$sums_got" = "$CHECKSUMS_SHA256" ]; then
+    ok "signed manifest matches the pinned checksums_sha256"
 else
-    bad "pin is stale or the download is wrong: expected $SHA256, got $got"
+    bad "pin is stale or the manifest is wrong: expected $CHECKSUMS_SHA256, got $sums_got"
+    echo "ensure-cosign fixture: $pass passed, $fail failed"
+    exit 1
+fi
+# Anchored at end-of-line: `cosign-linux-amd64` must not be satisfied by the
+# `-kms` or `.sbom.json` row that contains it as a prefix.
+want="$(grep -E "[[:space:]]${ASSET}\$" "$TMP/sums" | head -1 | awk '{print $1}')"
+got="$(sha256sum "$TMP/c" | awk '{print $1}')"
+if [ -n "$want" ] && [ "$got" = "$want" ]; then
+    ok "$ASSET matches the hash the signed manifest gives it"
+else
+    bad "manifest/download disagree for $ASSET: manifest='$want' got='$got'"
     echo "ensure-cosign fixture: $pass passed, $fail failed"
     exit 1
 fi
@@ -125,6 +144,54 @@ fi
 
 # arm 5: the script's own grammar. A caller greps these strings; a typo makes
 # every consumer silently take the wrong branch.
+# ── ARM 4b: THE DIVERGENCE ARM lenovinha asked for. ────────────────────────
+# A host that is not this one must report could-not-run, NEVER
+# verification-failed. Both halves are exercised, because fixing only the first
+# leaves the original complaint intact:
+#
+#   (a) a platform with NO pinned row               -> unsupported-platform
+#   (b) a platform WITH a row whose binary will not
+#       execute here (simulating macOS on Linux)    -> binary-not-executable-here
+#
+# (b) is the one that matters and is the one that survived the first fix. The
+# original defect was never "we pick the wrong asset" -- it was "a host that
+# cannot RUN cosign reports that cosign's SIGNATURE is bad", and asset selection
+# alone does not close that. Reproduced by simulation rather than argued closed.
+echo "arm 4b — a non-native host reports could-not-run, never verification-failed"
+mkdir -p "$TMP/shim"
+printf '#!/usr/bin/env bash\ncase "${1:-}" in -s) echo SunOS ;; -m) echo sparc64 ;; *) echo SunOS ;; esac\n' > "$TMP/shim/uname"
+chmod +x "$TMP/shim/uname"
+out="$(PATH="$TMP/shim:$PATH" TILLANDSIAS_COSIGN_CACHE="$TMP/ca" bash scripts/ensure-cosign.sh 2>/dev/null)"
+rc=$?
+case "$out" in
+    cosign:could-not-run:unsupported-platform:*)
+        ok "unpinned platform -> $out (rc=$rc)" ;;
+    cosign:verification-failed:*)
+        bad "AN UNPINNED PLATFORM REPORTED A VERIFICATION FAILURE: $out" ;;
+    *)  bad "unexpected verdict for an unpinned platform: '$out'" ;;
+esac
+[ "$rc" -eq 0 ] && ok "could-not-run exits 0 (it is not a failure)" || bad "could-not-run exited $rc"
+
+printf '#!/usr/bin/env bash\ncase "${1:-}" in -s) echo Darwin ;; -m) echo arm64 ;; *) echo Darwin ;; esac\n' > "$TMP/shim/uname"
+out="$(PATH="$TMP/shim:$PATH" TILLANDSIAS_COSIGN_CACHE="$TMP/cb" bash scripts/ensure-cosign.sh 2>/dev/null)"
+rc=$?
+if [ "$_os" = "darwin" ]; then
+    # On a real Mac this shim describes the truth, so the run should SUCCEED.
+    case "$out" in
+        cosign:verified:1/1|cosign:already-verified:1/1) ok "native darwin verifies ($out)" ;;
+        *) bad "darwin host did not verify: '$out'" ;;
+    esac
+else
+    case "$out" in
+        cosign:could-not-run:binary-not-executable-here)
+            ok "a darwin binary on a non-darwin host -> could-not-run, not verification-failed" ;;
+        cosign:verification-failed:*)
+            bad "THE ORIGINAL DEFECT: a host that cannot RUN cosign reported a signature failure ($out)" ;;
+        *)  bad "unexpected verdict for a cross-platform binary: '$out'" ;;
+    esac
+    [ "$rc" -eq 0 ] && ok "could-not-run exits 0" || bad "could-not-run exited $rc"
+fi
+
 echo "arm 5 — ensure-cosign.sh emits exactly one grammar line"
 out="$(TILLANDSIAS_COSIGN_CACHE="$TMP/cache" bash scripts/ensure-cosign.sh 2>/dev/null)"
 lines="$(printf '%s\n' "$out" | grep -c .)"

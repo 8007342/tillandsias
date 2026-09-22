@@ -68,14 +68,39 @@ _pin() {
 [ -f "$PIN" ] || { _emit "cosign:could-not-run:no-pin-file"; exit 0; }
 
 VERSION="$(_pin version)"
-ASSET="$(_pin asset)"
-SHA256="$(_pin sha256)"
+CHECKSUMS="$(_pin checksums)"
+CHECKSUMS_SHA256="$(_pin checksums_sha256)"
 CERT_ID="$(_pin certificate_identity)"
 CERT_ISSUER="$(_pin certificate_oidc_issuer)"
 
-for v in VERSION ASSET SHA256 CERT_ID CERT_ISSUER; do
+for v in VERSION CHECKSUMS CHECKSUMS_SHA256 CERT_ID CERT_ISSUER; do
     [ -n "${!v}" ] || { _emit "cosign:could-not-run:pin-field-missing:${v,,}"; exit 0; }
 done
+
+# ── WHICH ASSET IS THIS HOST'S? ────────────────────────────────────────────
+# ORDER 1324-ujvb, lenovinha's review. This script used to hardcode
+# cosign-linux-amd64 and select nothing. On a Mac the download succeeded, the
+# hash matched, chmod succeeded, and the self-verification EXECUTED A LINUX
+# BINARY -- so the host reported `cosign:verification-failed:sigstore`, exit 1.
+# A host that cannot RUN the file reported that its SIGNATURE was bad: the worst
+# misreport the design can produce, and the exact could-not-run/failed
+# conflation this script polices everywhere else. Reasoned from the code path by
+# a reviewer who could not run macOS, and right.
+#
+# An unsupported platform is a could-not-run and exits 0. Nothing was
+# downloaded, run or checked, so there is no verification result to report.
+_os="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+_arch="$(uname -m 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+ASSET="$(grep -E "^platform=${_os}/${_arch}=" "$PIN" 2>/dev/null | head -1 | sed 's/^platform=[^=]*=//')"
+if [ -z "$ASSET" ]; then
+    echo "[ensure-cosign] no pinned cosign asset for ${_os}/${_arch}." >&2
+    echo "  This is NOT a verification failure -- nothing was downloaded, run or" >&2
+    echo "  checked. The host simply has no entry in scripts/cosign-release.pin." >&2
+    echo "  REMEDY: add a 'platform=${_os}/${_arch}=<asset>' line to the pin if" >&2
+    echo "  sigstore publishes a build for it, and re-run." >&2
+    _emit "cosign:could-not-run:unsupported-platform:${_os}/${_arch}"
+    exit 0
+fi
 
 INSTALLED="$CACHE_DIR/cosign-$VERSION"
 
@@ -105,40 +130,101 @@ trap 'rm -rf "$TMP"' EXIT
 
 BASE="https://github.com/sigstore/cosign/releases/download/$VERSION"
 
-# Download the binary AND its sigstore bundle. Both or neither: verifying a
-# binary against a bundle fetched in a different run is a state nobody reasons
-# about correctly.
-if ! curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$ASSET" -o "$TMP/$ASSET" 2>"$TMP/.err"; then
-    _emit "cosign:could-not-run:download-failed"
-    sed 's/^/  /' "$TMP/.err" >&2 2>/dev/null
-    exit 0
-fi
-if ! curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$ASSET.sigstore.json" -o "$TMP/$ASSET.sigstore.json" 2>"$TMP/.err"; then
-    _emit "cosign:could-not-run:bundle-download-failed"
+_fetch() { curl --proto '=https' --tlsv1.2 -sSfL "$BASE/$1" -o "$TMP/$1" 2>"$TMP/.err"; }
+
+# THE MANIFEST IS THE ANCHOR, and it is why there is one pinned hash instead of
+# one per platform. `cosign_checksums.txt` names every binary's hash; pinning
+# four binary hashes would fix the platform bug and create a rot surface, four
+# values to re-derive per release, any of which can go quietly stale. One
+# manifest hash covers every platform and every future one -- and the manifest
+# is itself signed, so it is verified below rather than merely trusted.
+if ! _fetch "$CHECKSUMS" || ! _fetch "$CHECKSUMS.sigstore.json"; then
+    _emit "cosign:could-not-run:download-failed:$CHECKSUMS"
     sed 's/^/  /' "$TMP/.err" >&2 2>/dev/null
     exit 0
 fi
 
-# ── CHECK 1: the pin, BEFORE the binary is ever executable. ──────────────────
-got="$(sha256sum "$TMP/$ASSET" | awk '{print $1}')"
-if [ "$got" != "$SHA256" ]; then
-    echo "[ensure-cosign] SHA256 MISMATCH against scripts/cosign-release.pin" >&2
-    echo "  expected: $SHA256" >&2
+# ── CHECK 1a: the manifest is the one the pin names. ────────────────────────
+got="$(sha256sum "$TMP/$CHECKSUMS" | awk '{print $1}')"
+if [ "$got" != "$CHECKSUMS_SHA256" ]; then
+    echo "[ensure-cosign] SHA256 MISMATCH on $CHECKSUMS against scripts/cosign-release.pin" >&2
+    echo "  expected: $CHECKSUMS_SHA256" >&2
     echo "  got:      $got" >&2
-    echo "  The binary was NOT executed and NOT installed. Either the pin is" >&2
-    echo "  stale (roll it forward deliberately, re-reading the certificate" >&2
-    echo "  identity) or this download is not the release the pin names." >&2
+    echo "  Nothing was executed. Either the pin is stale (roll it forward" >&2
+    echo "  deliberately, re-reading the certificate identity) or this is not" >&2
+    echo "  the release the pin names." >&2
+    _emit "cosign:verification-failed:sha256"
+    exit 1
+fi
+
+# ── CHECK 1b: this platform's binary matches the hash the manifest gives. ───
+# Anchored on the asset name at END OF LINE, so `cosign-linux-amd64` cannot be
+# satisfied by the `cosign-linux-amd64-kms` or `.sbom.json` rows that contain it
+# as a prefix. The substring-vs-anchored mistake has cost this fleet three
+# separate defects in a day.
+want="$(grep -E "[[:space:]]${ASSET}\$" "$TMP/$CHECKSUMS" | head -1 | awk '{print $1}')"
+if [ -z "$want" ]; then
+    _emit "cosign:could-not-run:asset-not-in-manifest:$ASSET"
+    exit 0
+fi
+
+if ! _fetch "$ASSET" || ! _fetch "$ASSET.sigstore.json"; then
+    _emit "cosign:could-not-run:download-failed:$ASSET"
+    sed 's/^/  /' "$TMP/.err" >&2 2>/dev/null
+    exit 0
+fi
+
+got="$(sha256sum "$TMP/$ASSET" | awk '{print $1}')"
+if [ "$got" != "$want" ]; then
+    echo "[ensure-cosign] SHA256 MISMATCH on $ASSET against the SIGNED manifest" >&2
+    echo "  expected: $want" >&2
+    echo "  got:      $got" >&2
+    echo "  The manifest matched its pin, so the release index is trusted and" >&2
+    echo "  THIS DOWNLOAD disagrees with it. The binary was NOT executed." >&2
     _emit "cosign:verification-failed:sha256"
     exit 1
 fi
 
 chmod +x "$TMP/$ASSET"
 
+# ── CAN THIS HOST EVEN RUN IT? ─────────────────────────────────────────────
+# ORDER 1324-ujvb, second half of lenovinha's finding -- surfaced by simulating
+# their scenario rather than arguing it was fixed. Selecting the asset by uname
+# stops us downloading the WRONG binary; it does NOT stop "this binary will not
+# execute here" from being reported as a SIGNATURE failure, which was the whole
+# complaint. Every remaining way execution can fail lands in the same place:
+# a pin whose platform row points at the wrong asset, a $TMPDIR mounted noexec,
+# a missing dynamic loader, a kernel that refuses the format.
+#
+# So ask the cheapest possible question first -- `cosign version` touches no
+# network, no keyring and no artifact -- and let a failure here be a
+# could-not-run. After this line, a verify-blob failure means cosign RAN and
+# said no, which is the only thing `verification-failed` should ever mean.
+if ! "$TMP/$ASSET" version >/dev/null 2>&1; then
+    echo "[ensure-cosign] the downloaded cosign does not execute on this host." >&2
+    echo "  asset: $ASSET  (selected for ${_os}/${_arch})" >&2
+    echo "  Its SHA256 matched the signed manifest, so the download is intact --" >&2
+    echo "  this host cannot RUN it. That is NOT a verification failure and must" >&2
+    echo "  never be reported as one." >&2
+    echo "  LIKELY CAUSES: a wrong platform row in scripts/cosign-release.pin," >&2
+    echo "  a noexec \$TMPDIR, or a missing loader." >&2
+    _emit "cosign:could-not-run:binary-not-executable-here"
+    exit 0
+fi
+
 # ── CHECK 2: does sigstore say it published these bytes? ─────────────────────
+# Verify BOTH the binary's own bundle AND the manifest that named its hash.
+# Check 1b trusted the manifest; leaving the manifest unverified would rest that
+# trust on the pin alone, which is the single-source failure this design exists
+# to avoid.
 if ! "$TMP/$ASSET" verify-blob "$TMP/$ASSET" \
         --bundle "$TMP/$ASSET.sigstore.json" \
         --certificate-identity "$CERT_ID" \
-        --certificate-oidc-issuer "$CERT_ISSUER" >"$TMP/.verify" 2>&1; then
+        --certificate-oidc-issuer "$CERT_ISSUER" >"$TMP/.verify" 2>&1 \
+   || ! "$TMP/$ASSET" verify-blob "$TMP/$CHECKSUMS" \
+        --bundle "$TMP/$CHECKSUMS.sigstore.json" \
+        --certificate-identity "$CERT_ID" \
+        --certificate-oidc-issuer "$CERT_ISSUER" >>"$TMP/.verify" 2>&1; then
     echo "[ensure-cosign] SIGSTORE SELF-VERIFICATION FAILED" >&2
     echo "  The bytes matched the pin, so the pin and the download agree — and" >&2
     echo "  sigstore does not confirm them. That is the case the hash alone" >&2
