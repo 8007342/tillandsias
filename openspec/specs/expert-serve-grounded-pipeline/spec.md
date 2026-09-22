@@ -24,6 +24,7 @@ readable without being mistaken for live spec.
 ## Requirements
 
 ### Requirement: R1 — one pipeline, two front-ends
+<!-- req-id: 44d714f9 -->
 The grounded expert pipeline SHALL exist as exactly one function
 (`tillandsias_plan::pipeline::run_grounded`), and both the `expert-serve`
 HTTP endpoint and the `pipeline` CLI arm SHALL obtain their answers by
@@ -44,6 +45,7 @@ or refusal logic.
   plus model prose into an answer envelope for these front-ends
 
 ### Requirement: R2 — retrieval only from the published index
+<!-- req-id: d1c502db -->
 The pipeline SHALL retrieve exclusively from a published content-addressed
 spec-index entry resolved through the 879-gidx ladder
 (`spec_index::SpecIndexEntry`), and SHALL refuse — typed, before any model
@@ -69,6 +71,7 @@ the requested domain.
   a shifted pairing
 
 ### Requirement: R3 — answer or typed refusal, no third state
+<!-- req-id: c2f96e3f -->
 Every pipeline outcome SHALL be either an envelope whose citations
 verifiably support it, or `Envelope::unsupported` with the pinned
 `unsupported: <reason>` answer, `confidence=unsupported`, and
@@ -91,6 +94,7 @@ without citations — no raw-model fallback under any failure.
   `unsupported: ` and `citations` is empty
 
 ### Requirement: R4 — citations survive only if used
+<!-- req-id: 3cea9203 -->
 Per-variant envelopes SHALL be built through the `spec::build_envelope`
 family, which keeps a retrieved chunk's citation ONLY when the answer prose
 actually contains its key; an answer that used no retrieved key SHALL NOT
@@ -107,6 +111,7 @@ ship those citations as decoration.
   keys are present by construction) is served instead
 
 ### Requirement: R5 — freshness from the entry's own frame
+<!-- req-id: 22172e43 -->
 The envelope's freshness SHALL be built from the resolved index entry: the
 `.commit` marker (801-g9nn, hex-validated; the literal `unknown` when the
 entry is frameless) as `source_commit`, and the entry's `chunks.jsonl`
@@ -126,6 +131,7 @@ used on this path.
   fabricated sha, never this process's HEAD
 
 ### Requirement: R6 — OpenAI-compatible loopback endpoint
+<!-- req-id: dd00413b -->
 `tillandsias-plan expert-serve` SHALL serve an OpenAI-compatible surface on
 127.0.0.1 (default port 11436): `POST /v1/chat/completions` accepting the
 model id as the domain selector (all|spec|code|methodology|cheatsheet), in

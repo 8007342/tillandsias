@@ -332,6 +332,7 @@ citation that no commit substantiates.
 
 
 ### Requirement: local-experts agent is grounded-endpoint only
+<!-- req-id: 566a2ebe -->
 The `local-experts` OpenCode agent (dev `opencode.json` and the forge
 overlay config) SHALL point at the grounded `expert-serve` loopback endpoint
 (`tillandsias-experts` provider, baseURL `http://127.0.0.1:11436/v1`) and
