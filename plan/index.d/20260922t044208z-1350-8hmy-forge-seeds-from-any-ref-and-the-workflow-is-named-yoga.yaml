@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-salvage-or-work-ref-to-sync-to-seed-sequence-is-documented-where-a-worker-looks-and-a-litmus-seeds-a-forge-from-a-salvage-ref-so-the-uncommitted-edit-workflow-exists-before-the-host-mount-is-removed
+    order: 1350-8hmy
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [skills, forge, docs, litmus, git-mirror]
+    estimated_hours: 5
+    owned_files:
+      - skills/join-the-fleet/SKILL.md
+      - skills/initialize-bare-metal-host/SKILL.md
+      - openspec/litmus-tests/
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The deliverable
+      IS the litmus, so naming one here pins a test nothing defines yet and
+      885-92iu refuses it; deleting the pin instead trades straight into
+      977-448j, no scorable obligation — the two refusals are a CONJUNCTION and
+      satisfying one by breaking the other is the trap the checker's own message
+      names. Measured tonight on 1347-r9g8, where both had to go green together.
+      The guard to write, in the same commit as the documentation it proves:
+      openspec/litmus-tests/litmus-forge-seeds-from-a-salvage-ref.yaml, which
+      must seed a forge from a `salvage/*` ref and assert the seeded tree
+      CONTAINS the ref's content — not merely that the seed command exited 0.
+    verifiable_closure: |
+      T4 of openspec/changes/cloud-only-project-lifecycle/tasks.md. Closed when
+      BOTH halves hold, and the second is the one that makes the first
+      checkable:
+
+      (1) THE SEQUENCE IS DOCUMENTED WHERE A WORKER LOOKS — salvage-or-work-ref
+      then sync then seed — in skills/join-the-fleet and
+      skills/initialize-bare-metal-host, naming the commands verbatim rather
+      than describing them, because a worker meets this procedure while their
+      host is already broken.
+
+      (2) A LITMUS SEEDS A FORGE FROM A `salvage/*` REF and asserts the seeded
+      tree CONTAINS that ref's content. The assertion must be the NEXT NAMED
+      CHECKPOINT past the seed, or a sentinel file placed on the ref and found
+      inside the forge — NOT the absence of an error. An absence passes when the
+      seed dies early, and dying early is the common case for a procedure with
+      prerequisites (measured 2026-09-22 on the host-resolver arm, which could
+      not reach the code it tested because a prerequisite script was missing).
+
+      PRE-FIX RESULT: FAILS — no such litmus exists, and the sequence is
+      documented nowhere a worker looks. Measured: `TILLANDSIAS_FORGE_HOST_MOUNT`
+      is documented in crates/tillandsias-headless/src/main.rs:6938 as "the solo
+      live-edit workflow" with a loud isolation warning (order 465), and that
+      code comment is currently the ONLY written answer to "how do I test an
+      uncommitted local edit" — which is not where a worker looks and is the
+      thing T5 removes.
+    title: |
+      the salvage-or-work-ref → sync → seed sequence is documented where a worker looks, and a litmus seeds a forge from a salvage/* ref, so the uncommitted-edit workflow exists BEFORE the host mount is removed
+    context: |
+      T4 OF cloud-only-project-lifecycle, AND THE PRECONDITION FOR T5/591-x7ws
+      RATHER THAN A PARALLEL TASK. The operator ruled the local checkouts go and
+      every checkout dies on container close; the coordinator is holding T5
+      until a written, working answer to "how do I test an uncommitted local
+      edit in a forge" exists. This row IS that answer.
+
+      WHY THE SAME HOST TAKES BOTH. Whoever removes the mount should write the
+      workflow that replaces it: a workflow written by someone who will never
+      use it reads as complete and cannot be followed, which is the prose form
+      of an arm that cannot fail. This host will do T5.
+
+      WHAT IS ALREADY MEASURED AND SHOULD NOT BE RE-DERIVED. The removal surface
+      for T5 is 28 files — two Rust (headless main.rs, podman client.rs),
+      images/default/lib-common.sh, and the rest cheatsheets and docs INCLUDING
+      the staged image copies, which must move in the same commit or the
+      derived-tree check refuses the push (that shape cost a land on 2026-09-20).
+      And `TILLANDSIAS_PROJECT_HOST_MOUNT` and `TILLANDSIAS_FORGE_HOST_MOUNT`
+      are DIFFERENT VARIABLES: the second is the opt-in, loudly-warned solo
+      live-edit path, and the proposal retires both.
+
+      ONE LIVE PATTERN THE DOCUMENTATION MUST NOT CONTRADICT: this host ran five
+      rows and nine gates on 2026-09-20 testing uncommitted edits ON THE HOST —
+      edit, ./build.sh --check, push — and never needed a project mount into a
+      forge at all. That pattern is unaffected by T5 and the sequence documented
+      here must say so, or a reader concludes the only supported workflow is the
+      one being removed.
+    next_action: >
+      Read the forge-welcome seeding path and the mirror's sync surface FIRST and
+      record which commands actually exist today, because T1 (the on-demand
+      sync) is not landed and the sequence cannot be documented as working
+      before the middle step of it does. If T1 is still open when the
+      documentation is drafted, write the sequence with the sync step named and
+      marked as landing under T1 rather than describing a command that does not
+      answer yet — and say so in the skill rather than silently omitting it.
+    provenance: |
+      Filed by yoga (linux-yoga-opus5) 2026-09-22 on the coordinator's routing,
+      as its own claim rather than a hand-off, so the fold shows the owner before
+      any work starts. T4 text quoted from
+      openspec/changes/cloud-only-project-lifecycle/tasks.md at 2ff7a0e27.

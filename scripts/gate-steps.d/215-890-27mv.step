@@ -13,3 +13,4 @@ STEP_DESC="Checking a host reports when the release tier last ran, and never cla
 STEP_SCRIPT="scripts/test-release-tier-freshness.sh"
 STEP_ERROR="the release-tier freshness guard regressed (890-27mv) — a non-green outcome may have started reading as pass; see the verdict line above"
 STEP_OK="Release-tier freshness check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

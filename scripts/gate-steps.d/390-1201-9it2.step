@@ -29,3 +29,4 @@ STEP_OK="land-time litmus notice check passed"
 # exercised, and the fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/land-on-platform-branch.sh or scripts/litmus-covering-specs.sh is absent, so the notice could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-notice:5"

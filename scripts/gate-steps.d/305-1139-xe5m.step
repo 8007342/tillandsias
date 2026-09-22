@@ -24,3 +24,4 @@ STEP_OK="capability envelope source check passed"
 # fixture can produce 3, only the binary's absence can.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="target/debug/tillandsias is not built on this host, so the probe could not be asked"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --fresh reports measured even with a warm cache"

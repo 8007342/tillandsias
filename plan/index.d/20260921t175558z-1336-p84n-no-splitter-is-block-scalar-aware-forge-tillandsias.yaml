@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: no-splitter-in-the-scorable-obligation-checker-tracks-block-scalar-state-so-example-yaml-written-inside-a-context-or-closure-is-parsed-as-ledger-structure-and-can-flush-the-row-that-contains-it
+    order: 1336-p84n
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, tooling, instrument, fail-loud]
+    estimated_hours: 3
+    owned_files: [scripts/check-scorable-obligation-added.sh]
+    title: |
+      no splitter in this checker is block-scalar aware, so EXAMPLE YAML written inside a `context:` or
+      `verifiable_closure:` is parsed as ledger structure — a documented `- packet_id:` line can flush the
+      real row, and the real closure below it is then never read
+    context: |
+      MEASURED ON forge-tillandsias, 2026-09-21, while adversarially checking the
+      1331-884p candidate fixes.
+
+      THE FINDING: NO SPLITTER HERE IS BLOCK-SCALAR AWARE; THE DIFFERENCE
+      BETWEEN THEM IS REACH, NOT CORRECTNESS. The row splitter matches on line
+      shape alone. It has no notion that a `|` or `>` key opens a scalar whose
+      body is TEXT, so example YAML inside that text is read as structure.
+
+      PRE-FIX EVIDENCE, and it indicts every implementation rather than one. A
+      fragment whose `context:` block scalar contains a row-shaped line at
+      INDENT 2, with the real closure below it:
+
+        pre-fix splitter            closure=[]
+        the 1331-884p candidate     closure=[]
+        the forge-tillandsias fix   closure=[]
+
+      Identical. All three lose the closure, and all three additionally emit a
+      PHANTOM record for the documented example — a packet that does not exist.
+      This row exists because of that shared result, not because any one fix
+      regressed.
+
+      WHY IT IS NOT ACADEMIC. This ledger's tooling rows document row shapes
+      constantly — that is what they are about. plan/index.yaml ALREADY carries
+      one, inside a block scalar at indent 14:
+
+        - packet_id: the-packet-being-repaired   # same id; that is what folds them
+
+      Read as structure, that line mints a phantom packet whose id is `them` —
+      the last word of the trailing COMMENT, because the id rule takes $NF.
+
+      REACH IS THE WHOLE PRACTICAL DIFFERENCE. A marker anchored to the row
+      depths (indent 0, 2 or 4) can only be fooled by prose indented 4 or less,
+      which is rare because example YAML inside a block scalar is normally
+      indented further — the live instance above sits at 14 and is out of its
+      reach. A marker written `^[ \t]*-` is fooled at ANY depth, which is the
+      common case. THE DEPTH ANCHOR APPLIED UNDER 1331-884p IS THE BOUND, NOT
+      THE FIX, and this row exists because the bound is not the fix. Anyone
+      reading that anchor as a repair of this defect has misread it.
+
+      NOT A YAML DEFECT AND NOT AN AUTHORING MISTAKE. A block scalar may legally
+      contain anything; documenting a row inside one is correct and useful
+      writing. The reader is narrower than the format it reads, and nothing
+      documents that — the same sentence 1331-884p wrote about indentation,
+      one level up.
+    verifiable_closure: |
+      bash scripts/test-scorable-obligation-splitter.sh — a fragment whose block scalar contains a
+      row-shaped `- packet_id:` line at ANY indent, INCLUDING 2, yields EXACTLY ONE record: the real
+      row, with its verifiable_closure read. No phantom record is emitted for the documented example.
+      PRE-FIX RESULT, so the closure is falsifiable — FAILS today on all three implementations at
+      indent 2 (pre-fix, the 1331-884p candidate, and the forge-tillandsias fix all return an empty
+      closure and both emit a phantom), and arm 5 of that test passes only at depths the row-depth
+      anchor already bounds.
+    next_action: |
+      Track scalar state in the splitter rather than widening or narrowing the marker again: a `|` or
+      `>` on a key opens a scalar, and the scalar ends at the first line indented at or BELOW that
+      key's indent. Lines inside it are text and match nothing. This is a DIFFERENT RISK PROFILE from a
+      marker change — it adds state to a parser that currently has almost none, and it can silently
+      swallow real rows if the end-of-scalar rule is wrong — which is exactly why it was kept out of
+      the 1331-884p landing rather than folded in.
+      Pin it with the indent-2 case above, and keep the existing arm 5 baseline guard: whatever lands
+      must not un-read a closure the pre-fix splitter could read.
+    trace: [order:1331-884p, order:1319-vd5h]

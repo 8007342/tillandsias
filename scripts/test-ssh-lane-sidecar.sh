@@ -14,7 +14,10 @@
 #      wrong-principal cert are each REFUSED with a named cause (the
 #      single-principal claim stays falsifiable in the sidecar itself);
 #   3. the renewal loop is exercised (interval shrunk from the 20m default),
-#      re-issuing and re-adding while the agent keeps serving;
+#      re-issuing and re-adding while the agent keeps serving, PAST the
+#      server's MaxAuthTries, with the agent's identity count BOUNDED (1342-r4pv
+#      — an unbounded agent offers stale certs oldest-first until the server
+#      gives up, with a valid one still on disk);
 #   4. §4a M2 against a REAL Vault (in-container `vault server -dev`): a
 #      token holding exactly the minted lane policy signs via its OWN
 #      `ssh-client-signer/sign/<mid>` path and receives HTTP 403 from any
@@ -112,17 +115,31 @@ FIXTURE_WRONG_PRINCIPAL=1 /usr/local/bin/ssh-lane-sidecar request-cert > /tmp/fx
 grep -q "fail:ssh-lane-sidecar:cert-invalid-principal-mismatch" /tmp/fx/n3 || { echo "inner:wrong-principal-not-refused"; cat /tmp/fx/n3 >&2; exit 92; }
 echo inner:negatives-refused'
 
+# ORDER 1342-r4pv: this scenario must run PAST the server'"'"'s MaxAuthTries (6,
+# the default), not merely prove that renewal happens. The leak that killed the
+# lane on a real forge renewed correctly every single time — issuance was never
+# the broken part — and it added one identity per renewal without removing any.
+# At three renewals the BROKEN code still authenticates, so the old budget
+# (RENEW_SECONDS=2, sleep 6) could not have failed on it whatever it asserted.
+# The interval is shrunk to 1 s and the wait taken past ten renewals so the
+# count assertion below sits on the far side of the cliff.
 INNER_RENEWAL='
-export TILLANDSIAS_CLIENT_CERT_RENEW_SECONDS=2
+export TILLANDSIAS_CLIENT_CERT_RENEW_SECONDS=1
 /usr/local/bin/ssh-lane-sidecar ensure > /tmp/fx/out 2>/tmp/fx/err &
 SIDEPID=$!
 for i in $(seq 1 20); do grep -q "ok:ssh-lane-sidecar:ready" /tmp/fx/out 2>/dev/null && break; sleep 0.5; done
-sleep 6
+sleep 12
 COUNT=$(cat /tmp/tillandsias-ssh-lane/cert-issuance-count 2>/dev/null || echo 0)
 [ "$COUNT" -ge 2 ] || { echo "inner:renewal-count:$COUNT"; cat /tmp/fx/out /tmp/fx/err >&2; exit 90; }
 SSH_AUTH_SOCK=$SOCK ssh-add -l >/dev/null 2>&1 || { echo "inner:agent-died-after-renew"; exit 91; }
+# Past the cliff by construction, or the assertion that follows is vacuous.
+[ "$COUNT" -gt 6 ] || { echo "inner:renewals-did-not-pass-maxauthtries:$COUNT"; cat /tmp/fx/out /tmp/fx/err >&2; exit 93; }
+# THE BOUND. Expected is 2: the bare key and exactly ONE certificate. The
+# broken code reaches COUNT+1 here and the lane is already dead at 7.
+IDS=$(SSH_AUTH_SOCK=$SOCK ssh-add -l 2>/dev/null | grep -c .)
+[ "$IDS" -le 3 ] || { echo "inner:agent-identity-leak:$IDS after $COUNT renewals"; SSH_AUTH_SOCK=$SOCK ssh-add -l >&2; exit 92; }
 kill $SIDEPID 2>/dev/null
-echo "inner:renewed:$COUNT"'
+echo "inner:renewed:$COUNT:ids:$IDS"'
 
 # §4a M2 with a REAL Vault: the minted-shape policy signs ONLY its own path.
 INNER_M2='
@@ -176,9 +193,16 @@ scenario_negatives() {
 
 scenario_renewal() {
     out="$(run_inner "$INNER_RENEWAL")"
-    echo "$out" | grep -q '^inner:renewed:' \
-        && echo "ok:lane-fixture:renewal-exercised-and-agent-alive" \
-        || { echo "fail:lane-fixture:renewal ($out)"; return 1; }
+    # The verdict names the identity count, because "renewal happened" was the
+    # green that shipped 1342-r4pv's leak to a real forge.
+    # 792-ksr8: here-strings, not `echo |`. An unbounded producer feeding an
+    # early-exiting `grep -q` under pipefail can surface a MATCH as a failure.
+    if grep -q '^inner:renewed:' <<<"$out"; then
+        echo "ok:lane-fixture:renewal-exercised-agent-alive-and-identities-bounded ($(grep -o 'inner:renewed:.*' <<<"$out"))"
+    else
+        echo "fail:lane-fixture:renewal ($out)"
+        return 1
+    fi
 }
 
 scenario_m2() {

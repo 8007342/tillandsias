@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    event:
+      type: note
+      ts: "2026-09-21T22:05:00Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        THE HEADLINE NUMBER ON THIS ROW IS WRONG. It is not 24. It is 2.
+
+        I filed this row, built its instrument, ran two controls on that instrument
+        before filing, and the number was still wrong — by an order of magnitude.
+
+        THE DEFECT: the census resolved each test's binding with
+        `grep -n "^  - ${nm}$" "$BINDINGS" | head -1`. A test bound under SEVERAL specs
+        was therefore judged on whichever binding appeared EARLIEST IN THE FILE. If the
+        matching one appeared later, the test was reported as a mismatch it is not.
+
+        THE SPECIMEN THAT EXPOSED IT: litmus:cross-platform-tray declares `tray-app`,
+        and is bound under BOTH `no-terminal-flicker` (line 768) and `tray-app` (line
+        979). It is correctly bound. `head -1` saw only line 768 and called it a
+        mismatch. I found this only because I tried to "fix" it by moving the binding —
+        and discovered the destination already contained it.
+
+        CORRECTED, AND CONTROLLED THREE WAYS:
+          spec-binding-mismatch = 2
+          A  break one declaration                          2 -> 3
+          B  multi-spec declaration including the binding    back to 2
+          C  multi-BINDING where one matches                 not counted (0), and
+             removing that matching binding brings it back   (1)
+        Control C is the new one and is the case that was wrong. B was already there,
+        from the earlier correction where this same script read 31 because it compared a
+        comma-list against a single value. Same script, same class of error, second
+        occurrence: it counted a thing on one side while the other side was plural.
+
+        THE TWO GENUINE CASES, and they are worth a row rather than a sweep:
+          litmus:codex-e2e-launch-parity   declares ci-release     bound meta-orchestration
+          litmus:spawn-failure-names-program declares init-command bound ci-release
+
+        WHAT ELSE THIS INVALIDATES, said plainly. The structural measurement I recorded
+        earlier on this row — "23 declared specs exist and are active, exactly one names
+        nothing, no bulk cause, they scatter 3/3/2 across eleven specs" — was computed
+        over the WRONG POPULATION. Twenty-two of those were not mismatches. The scatter
+        was an artefact of a defective filter, and the off-by-one shift hypothesis I
+        tested and refuted was refuted against the same bad list, so that refutation
+        carries no weight either. Disregard all of it.
+
+        STILL VALID: the first resolution. litmus-cross-target-cfg-gate-check declared
+        `cross-platform-compilation`, which names nothing at all, so NO binding could
+        have matched and it was a genuine case under either reading. Its fix stands, as
+        does its finding that the test's semantic spec is deprecated with zero tests.
+
+        RECOMMENDATION: re-scope this row to the two named cases, or close it and file
+        them individually. A row titled "twenty-four bound litmus tests" is now a false
+        premise, and the title is the thing most readers will carry away.

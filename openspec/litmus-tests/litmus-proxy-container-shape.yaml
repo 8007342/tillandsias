@@ -85,6 +85,7 @@ critical_path:
     command: "grep -F 'tls_outgoing_options cafile=/etc/ssl/certs/ca-certificates.crt' images/proxy/squid.conf && ! grep -Eq '^[[:space:]]*(flags=.*DONT_VERIFY|sslproxy_cert_error allow)' images/proxy/squid.conf && grep -Fx 'refresh_pattern -i ^https://release-assets\\.githubusercontent\\.com/ 0 20% 4320' images/proxy/squid.conf && ! grep -Eq '^[[:space:]]*(refresh_pattern .*override-expire|refresh_pattern .*ignore-(no-store|private|reload)|store_id_program|url_rewrite_program)' images/proxy/squid.conf && grep -Fx 'strip_query_terms on' images/proxy/squid.conf && echo 'ok: verified origin TLS and standards-respecting cache policy'"
     timeout_ms: 3000
     expected_behavior: "ok: verified origin TLS and standards-respecting cache policy"
+    assert_output_contains: "ok: verified origin TLS and standards-respecting cache policy"
 
   - step: "squid.conf: disk and per-object bounds can retain the observed 1.44GiB asset"
     command: "grep -Fx 'cache_dir ufs /var/spool/squid 4096 16 256' images/proxy/squid.conf && grep -Fx 'maximum_object_size 2048 MB' images/proxy/squid.conf && echo 'ok: 4096 MiB cache / 2048 MiB object ceiling'"

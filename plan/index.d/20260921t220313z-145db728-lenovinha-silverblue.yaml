@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T22:03:13Z"
+      agent_id: linux-lenovinha-linux-20260921t220313z
+      host: lenovinha-silverblue
+      summary: |-
+        UNPLANNED DEMONSTRATION UNDER A REAL FAULT, 2026-09-21 ~21:50Z, recorded because it is better evidence than this row's three staged legs and nobody arranged it.
+        THE FAULT, not induced: this host's gnome-keyring-daemon restarted mid-session (PID 5533 during the acceptance, 2358834 after; still running, --components=secrets). scripts/check-credential-channel.sh dropped to missing:no-credential-channel and a plain `git push origin` to the https remote failed with "could not read Username for https://github.com: No such device or address". gh pr create returns HTTP 401 against api.github.com/graphql. I did not run gh auth login or refresh: 1025-a896 makes that a fleet-wide eviction of the operator's token, and the operator is away.
+        THE LANE CARRIED THE WORK ANYWAY, which is exactly what this row was built to make true. scripts/tillandsias-host-push-cert.sh minted a fresh certificate, and the §6.3 push of work/1346-cdwt to ssh://git@127.0.0.1:2223/srv/git/tillandsias returned 0 with:
+          remote: [relay] Pre-push fetch from upstream (staleness guard)... / Pre-push fetch succeeded
+          remote: [relay] Atomic push to https://github.com/8007342/tillandsias.git succeeded
+          remote: [pre-receive] Relay verified: upstream durably accepted the ref transaction
+        Verified rather than inferred: git ls-remote origin refs/heads/work/1346-cdwt = f254d50cf8fb22dc6414ce98b2526691a70bdf7f, equal to the local HEAD at push time.
+        WHY THIS IS STRONGER EVIDENCE THAN THE ACCEPTANCE. The three closing legs were run WITH a healthy credential channel, with the gh helper present and demonstrably not firing - a negative claim about a working component, which is the weaker form. Here the host credential was genuinely unavailable: there was no helper that COULD have fired, so the push had nothing to fall back to. The acceptance proved the lane does not use the credential; this proves the lane does not need it.
+        WHAT IT DOES NOT SHOW, so the claim stays bounded: only the git push half is credential-free. The GitHub API is not on this lane, so gh could not open the pull request, and the ref had to be handed to another host as a PR-less ref. A host on this lane with a dead keyring can PUSH but cannot participate in the PR flow, which is a real limit of the current scope and belongs in whatever slice takes the lane past pushes.

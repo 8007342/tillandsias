@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: correction
+      ts: "2026-09-21T21:45:21Z"
+      agent_id: linux-yoga-opus5-20260921t214521z
+      host: yoga
+      summary: |
+        RETRACTED — THE DEFECT DOES NOT EXIST. I FILED THIS ROW ON A MISREAD EXIT CODE,
+        and the misread is the only thing here worth keeping.
+
+        RE-MEASURED ON REQUEST, directly, no pipe, no compound command, installed
+        tillandsias v56.9.21.2, checkout 741c37de9:
+
+          $ TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia \
+            tillandsias --bash no-such-project-1338 --debug < /dev/null >log 2>&1
+          $ echo "RC=$?"
+          RC=1
+
+        Three consecutive runs: rc=1, rc=1, rc=1. And the EXACT case from the original
+        report — the bare name `tillandsias`, which resolves to a real directory under
+        the project root and still is not a project — also rc=1 with the same message.
+        pirria measured rc=1 independently on v56.9.21.2 built from 320c66ad3. Three
+        measurements, one answer, and it is not the one on this row's title.
+
+        HOW I GOT IT WRONG, reconstructed from the artifacts rather than remembered.
+        The original command was a COMPOUND:
+
+          … timeout 600 tillandsias --bash tillandsias --debug > bringup.log 2>&1
+          ; echo "RC=$? …" ; tail -5 bringup.log
+
+        I never read the `RC=` line — it is not in bringup.log, which only ever captured
+        the binary's stdout and stderr (`grep -c '^RC=' bringup.log` = 0). What I read
+        instead was the HARNESS's report of the whole background task, "[exited with
+        code 0]", and that compound ends in `tail`, whose status is 0 no matter what the
+        binary did. Verified: `bash -c 'false >/dev/null 2>&1; tail -1 /dev/null'` exits
+        0.
+
+        SO I ATTRIBUTED tail's EXIT STATUS TO tillandsias, and filed a row about a
+        binary decorating a failure with a success — using a measurement that was itself
+        a failure decorated with a success. The row cites the 1076-kft9 pipeline class
+        in its own context paragraph. I was inside it while writing it.
+
+        WHAT SURVIVES, and it is not nothing:
+          1. THE THREE-CHECK STRUCTURE STILL EARNED ITS PLACE. §6.1's three done-when
+             checks all came back empty and that is what told me the bring-up had
+             failed. They were right about the FACT (no stack) while I was wrong about
+             the CAUSE (I had passed a bare name where a path was wanted). A structure
+             that catches a real failure through a wrong diagnosis is doing its job.
+          2. THE SKILL'S WARNING IS NOW STALE AND TEACHES DISTRUST OF A RELIABLE STATUS.
+             Whatever text reached skills/initialize-bare-metal-host from my report
+             should be corrected in the same pass that closes this, and the correction
+             is worth more than the original warning: a stale caution is not harmless,
+             it trains readers to ignore a signal that works.
+          3. THE ONE REAL MEASUREMENT REMAINS: a compound command's status belongs to
+             its LAST element, and a harness reporting "exited with code N" is reporting
+             that, not your subject's. Measure a status DIRECTLY — the subject alone,
+             its own `$?`, nothing after it.
+
+        STATUS: this row should close as invalid, not as fixed. Nothing was repaired
+        between my run and pirria's; the binary behaved correctly throughout and the
+        lead commit 4878066bd is not implicated. I am not closing it myself because the
+        title is immutable and a reader starting at the top would see a defect that was
+        never there — the coordinator should decide whether it closes invalid or is
+        superseded by a corrected row about the stale warning.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    field: status
+    value: completed
+    ts: "2026-09-21T19:14:56Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: completed
+      ts: "2026-09-21T19:14:56Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 7c1600b64
+  - packet_id: the-scorable-obligation-checker-treats-any-dash-at-indent-two-or-four-as-a-packet-row-so-a-nested-list-item-resets-the-record-and-the-closure-is-never-read-then-the-row-is-deferred-and-passes-silently
+    event:
+      type: note
+      ts: "2026-09-21T19:14:56Z"
+      host: forge-tillandsias
+      summary: |-
+        both clauses met: parsing 68f99c548/5d178a844 (macneo), reporting 306d39bb3 landed via 7c1600b64; arm 4 STRICT proves the first clause

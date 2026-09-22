@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-in-stack-forge-push-lane-design-audited-before-any-implementation-because-the-forge-client-has-never-been-exercised
+    event:
+      type: note
+      ts: "2026-09-21T19:34:05Z"
+      agent_id: linux-macuahuitl-fable51-20260921t193404z
+      host: macuahuitl
+      summary: |
+        AUDIT EVENT (macuahuitl-fedora, 2026-09-21, the operator's ordered gate). OUTCOME: ACCEPTED WITH AMENDMENTS — implementation packets derived from this design may now be claimed on the AMENDED shape, by the author or anyone; the T11 default flip (749-y8xx) still waits on a forge acceptance. The audit section is appended to plan/issues/in-stack-forge-push-lane-design-2026-09-21.md (landing right after this event). Verified against code: TILLANDSIAS_PUSH_* exported at images/git/tillandsias-receive.sh:81-85 and read only by scripts/test-mirror-receive-wrapper.sh; relay-refs.sh:23 and pre-receive-hook.sh:40 already log per transaction; the sidecar renews at 1200 s against a 30 m TTL. Amendments, in the order they change the plan: A1 — unknown 2 is a PROBABLE DEFECT: the forge's writer emits `@cert-authority git-<mid>` while pushing to port 2222 with no HostKeyAlias; OpenSSH looks a non-22 port up as `[host]:port`, measured here with ssh-keygen -F on OpenSSH 10.2 (a bare line matches the bare name and not `[name]:2222`); bare metal works because it passes HostKeyAlias; expected symptom on the first forge push is "Host key verification failed"; measure with `ssh -v -p 2222 git@git-<mid> true` from a forge, then fix the writer (`[git-<mid>]:2222` in the line, or `-o HostKeyAlias=git-<mid>` in core.sshCommand), strict checking kept. A2 — arm 3 (ls-remote against GitHub) cannot run inside a forge (no DNS for github.com, lib-common.sh:563): a bare-metal peer or the coordinator verifies on GitHub by the forge's pushed sha handed as a condition. A3 — the forge's race window is the mirror's upstream-sync lag: the relay REJECTs stale old-ids against upstream and a forge cannot refetch GitHub; the dogfood must run three plan-only pushes at a measured trunk cadence and count REJECTs, and the sync cadence must be observable from inside a forge (1338-tkfh) before any default flip. A4 — unknown 3 becomes an arm: a second push after ≥30 min of sidecar uptime with a different serial in the relay's pusher line. A5 — the pusher line goes in relay-refs.sh's log function per ref transaction and includes KEY_ID (the mint-time identity) with principal and serial; tonight's plan(unknown) and salvage/unknown are the attribution gap it also serves (1337-3tk6). A6 — state the forge regime (a Linux forge in a Silverblue enclave first; the WSL2 forge in yolanda's enclave second). A7 — say the lane pushes work refs and does not land them; forges cannot open PRs by design. Not found: no defect in the principal finding, in the authorisation division, or in what the design declines to claim.

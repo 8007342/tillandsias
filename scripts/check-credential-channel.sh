@@ -348,6 +348,96 @@ forge_upstream_auth_verdict() {
   esac
 }
 
+# ORDER 1347-r9g8, ARM A — ASK THE STORE BEFORE ASKING THE CLIENT.
+#
+# THE INVERSION THIS FUNCTION EXISTS TO MAKE. Until now the guard ran
+# `gh auth status` FIRST (the arm below) and only reached `busctl --user list`
+# hundreds of lines later, inside a fallback the common path never enters. So
+# the guard started a credential probe against a store it had not asked about.
+# When that store is not serving, `gh` is the process that discovers it — by
+# blocking, or by driving the D-Bus client into the state 1265-8qr6 measured,
+# where gnome-keyring-daemon aborts inside its own GetProperty handler and D-Bus
+# re-activates it LOCKED. The probe manufactures the state it reports.
+#
+# `busctl --user list` is a NAME LISTING answered by the bus daemon itself. It
+# never enters gnome-keyring's property handlers, so it cannot abort them — the
+# same property 1265-8qr6 relied on when it removed the `Locked` read, and the
+# reason this is the one call that can be shown harmless on a serving keyring.
+# The D-Bus client timeout is a SEPARATE question and is deliberately NOT
+# answered here: it is arm B's, it is unproven, and it needs a host whose
+# collection is serving plus an operator present to consent to killing it.
+#
+# FOUR ANSWERS, NOT TWO, and the distinction is the whole point:
+#   serving          the collection answers on the bus; gh may be asked
+#   not-serving      it does not; gh must NOT be started (this is the arm that
+#                    carries the order's weight)
+#   not-applicable   no busctl(1): a platform with no org.freedesktop.secrets
+#                    BY DESIGN (macOS keeps credentials in the Keychain).
+#                    Blocking gh here would break every Mac in the fleet.
+#   unknown          busctl exists and could not be bounded or did not answer.
+#
+# `not-applicable` and `unknown` both permit the gh probe, because this guard
+# must never convert "I could not ask" into "you have no credential" — the
+# conflation 1189-2ra5 exists to forbid, whose remedy is `gh auth login`, which
+# evicts the fleet (1025-a896).
+_ccc_secret_service_state() {
+  if ! command -v busctl >/dev/null 2>&1; then
+    printf 'not-applicable'
+    return 0
+  fi
+  local _names _rc=0
+  # Bounded like every other probe in this guard (988-7kxf). A bus that cannot
+  # answer a name listing in five seconds is not a bus this guard will wait on.
+  _names="$(_ccc_timeout 5 busctl --user list --no-pager 2>/dev/null)" || _rc=$?
+  # "COULD NOT ASK" IS NOT EVERY FAILURE -- only the ones where the probe did
+  # not get to answer. Caught by the locked-keyring fixture, which stubs a
+  # busctl exiting 1 with "no such service": that is busctl RUNNING and
+  # ANSWERING that nothing is there (the macOS / forge / headless-server shape),
+  # and its documented contract is `missing:`. Collapsing it into `unknown`
+  # alongside a SIGKILLed probe erased the very distinction this order is about,
+  # in the direction of knowing less.
+  #
+  #   rc 124            timeout(1) killed it  -> the probe never answered
+  #   rc >= 128         died on a signal      -> the probe never answered
+  #   any other nonzero busctl answered "no"  -> not-serving, as before
+  #
+  # 128+ is the shape 1265-8qr6 actually produces: gnome-keyring-daemon
+  # aborting (SIGABRT, rc 134) inside its own D-Bus property handler.
+  if [ "$_rc" -eq 124 ] || [ "$_rc" -ge 128 ]; then
+    printf 'unknown'
+    return 0
+  fi
+  case "$_names" in
+    *org.freedesktop.secrets*) printf 'serving' ;;
+    *)                         printf 'not-serving' ;;
+  esac
+}
+
+# ORDER 1347-r9g8, ARM A — ONE EMITTING LINE PER VERDICT.
+#
+# `missing:no-credential-channel` was echoed from THREE places and
+# `unknown:secret-service-unprobed` from TWO. Every consumer greps for the
+# verdict string, so "how many places can produce this answer?" was a question
+# nobody could answer by grep -c: the count mixed emitters with the comments
+# discussing them (I read 11 for a verdict that had 3, earlier today, by
+# counting prose).
+#
+# COLLAPSING THE EMITTER IS NOT COLLAPSING THE DIAGNOSIS, and the distinction is
+# the one the fixture enforced on the gate above. Each call site still writes
+# its OWN stderr explaining which way it got here -- a forge whose origin is not
+# the mirror is not the same situation as a host with nothing configured, and
+# the reader needs that sentence. What is centralised is the single line the
+# machines read.
+_ccc_emit_missing() {
+  echo "missing:no-credential-channel"
+  return 1
+}
+
+_ccc_emit_unprobed() {
+  echo "unknown:secret-service-unprobed"
+  return 1
+}
+
 credential_channel_verdict() {
   local git_dir cred_file
   if git_dir="$(git rev-parse --git-dir 2>/dev/null)"; then
@@ -425,6 +515,27 @@ credential_channel_verdict() {
     fi
     # No bounding tool. Say so once, loudly, and fall back to the pre-1189-2ra5
     # call rather than inventing a verdict from the absence of coreutils.
+    #
+    # ORDER 1347-r9g8 ARM A CONSIDERED DELETING THIS AND DID NOT. The order says
+    # "remove the unbounded path", and taken literally that breaks arm 9 of the
+    # locked-keyring fixture, which exists to enforce 1193-yw6u: the absence of
+    # coreutils must not become an answer about the credential. Deleting the
+    # fallback would make a missing `timeout(1)` read as a missing channel --
+    # reintroducing the exact conflation that cost both macOS hosts a day.
+    #
+    # WHAT ACTUALLY CHANGED IS THE REACHABILITY, which is the better fix. The
+    # hazard 1189-2ra5 named is `gh auth status` BLOCKING on a locked or
+    # non-serving keyring. This call is now downstream of the serving gate at
+    # the top of `credential_channel_verdict`, so it can only run when the store
+    # is `serving` or when the platform has no secret service at all
+    # (`not-applicable` -- macOS, where this fallback is the one that matters and
+    # where there is no org.freedesktop.secrets to block on). The unbounded call
+    # against a non-serving collection is now unreachable by construction rather
+    # than by anyone remembering to bound it.
+    #
+    # So the path stays, the bound stays best-effort, and the dangerous INPUT is
+    # gone. If a future edit moves this above the gate, the hazard returns with
+    # no test to catch it -- which is why this paragraph names the dependency.
     echo "[check-credential-channel] no timeout(1)/gtimeout(1): running 'gh auth status' UNBOUNDED." >&2
     echo "  If this host's keyring is LOCKED this call can block (1189-2ra5). It is" >&2
     echo "  still the pre-1189-2ra5 behaviour, and the missing tool is reported by" >&2
@@ -432,6 +543,53 @@ credential_channel_verdict() {
     echo "  REMEDY (macOS): brew install coreutils   # provides gtimeout(1)" >&2
     GH_PROMPT_DISABLED=1 gh auth status >/dev/null 2>&1
   }
+  # ORDER 1347-r9g8, ARM A — THE GATE THAT CARRIES THE ORDER'S WEIGHT.
+  #
+  # Read the store's state BEFORE starting gh, and refuse to start gh at all
+  # when the collection is not serving. Every other change in this arm is
+  # bookkeeping; this is the one that stops the guard from being the thing that
+  # breaks the host it is inspecting.
+  #
+  # `not-serving` is answered HERE and never falls through to the arms below,
+  # because those arms ask gh first and would re-enter the probe this line
+  # exists to prevent. The verdict is `unknown:`, not `missing:`: a collection
+  # that is not serving is a channel this guard could not OPEN, and reporting it
+  # as absent invites `gh auth login`, which evicts the fleet (1025-a896). That
+  # conflation is 1189-2ra5's whole subject and it is reproduced here rather
+  # than cited, because the tempting edit is to call this state "missing" — it
+  # reads like absence and it is not.
+  local _ccc_ss_state
+  _ccc_ss_state="$(_ccc_secret_service_state)"
+  if [ "$_ccc_ss_state" = "not-serving" ]; then
+    # THE VERDICT IS THE EXISTING, MORE SPECIFIC ONE — and the fixture is why.
+    #
+    # This arm first answered `unknown:secret-service-unprobed`, which is true
+    # but coarser than what the guard already knew how to say. The suite caught
+    # it immediately (arm 15, "no-service direction returned:
+    # unknown:secret-service-unprobed"), because reaching the gh probe EARLIER
+    # was the only way the old code got to this richer verdict — so moving the
+    # check before gh silently downgraded the diagnosis.
+    #
+    # That is the trade this order has to not make. The ordering fix is about
+    # not STARTING gh; it is not a licence to know less. The state is identical
+    # to the `unretrievable-no-service` layer below and gets the identical
+    # wording, so a reader cannot tell which path produced it — which is the
+    # property that matters, since the two paths now answer the same question at
+    # different times.
+    echo "[check-credential-channel] THE CREDENTIAL COULD NOT BE RETRIEVED — org.freedesktop.secrets is not on the session bus." >&2
+    echo "  This is a LOCAL retrieval failure, not an account problem. gh cannot reach" >&2
+    echo "  the secret store at all, so nothing has been presented to GitHub yet." >&2
+    echo "  Common in a headless/cron/ssh session with no session keyring." >&2
+    echo "  ORDER 1347-r9g8: gh was NOT started against this collection. On a" >&2
+    echo "  non-serving store that probe is what discovers the state — by blocking," >&2
+    echo "  or by aborting gnome-keyring-daemon inside its own property handler" >&2
+    echo "  (1265-8qr6), after which D-Bus re-activates it LOCKED. The probe would" >&2
+    echo "  manufacture the state it reports." >&2
+    echo "  REMEDY: run inside a session with a keyring, or inject GH_TOKEN for this run." >&2
+    echo "blocked:credential-unretrievable-no-keyring-service"
+    return 1
+  fi
+
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
      && command -v gh >/dev/null 2>&1 \
      && _ccc_gh_auth_ok; then
@@ -643,7 +801,13 @@ credential_channel_verdict() {
         printf 'indeterminate'
         return 0
       fi
-      if ! busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then # sigpipe-ok: safe pipeline
+      # ORDER 1347-r9g8: the third copy of this question, and the second
+      # unbounded one. Routed through the single reader. `not-applicable` cannot
+      # reach here -- the `command -v busctl` arm above already returned
+      # `indeterminate` -- so the states left are serving / not-serving /
+      # unknown, and anything but `serving` answers no-service exactly as the
+      # bare grep did (it also failed open on an empty listing).
+      if [ "$(_ccc_secret_service_state)" != "serving" ]; then
         printf 'unretrievable-no-service'
         return 0
       fi
@@ -720,7 +884,7 @@ credential_channel_verdict() {
         echo "  (1265-8qr6; five cores on lenovinha, one on macuahuitl)." >&2
         echo "  REMEDY: unlock the login keyring on this host and re-run." >&2
         echo "  DO NOT run 'gh auth login' or 'gh auth refresh' (order 1025-a896)." >&2
-        echo "unknown:secret-service-unprobed"
+        _ccc_emit_unprobed
         return 1 ;;
       plaintext)
         echo "[check-credential-channel] gh is using a PLAINTEXT token in ~/.config/gh/hosts.yml, not the keyring." >&2
@@ -771,7 +935,7 @@ credential_channel_verdict() {
       git://git-*/*|git://tillandsias-git/*) ;;
       *)
         echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but origin does not resolve to the enclave git mirror (effective origin: ${effective_origin:-<missing>}): no usable push channel. Fix the forge gitconfig injection or provide a forge credential channel; do NOT import host credentials." >&2
-        echo "missing:no-credential-channel"
+        _ccc_emit_missing
         return 1
         ;;
     esac
@@ -807,7 +971,7 @@ credential_channel_verdict() {
       return $?
     fi
     echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but the git mirror is unreachable for this checkout (git ls-remote origin failed): no usable push channel. Fix the mirror export/DNS or provide a forge credential channel; do NOT import host credentials." >&2
-    echo "missing:no-credential-channel"
+    _ccc_emit_missing
     return 1
   fi
   # ORDER 1189-2ra5 — A LOCKED KEYRING IS NOT A MISSING ONE, AND THE
@@ -867,14 +1031,55 @@ credential_channel_verdict() {
   # abort it. That is strictly less information than Locked — present-and-locked
   # and present-and-unlocked-but-broken are now one verdict — but it is the half
   # that decides the REMEDY, which is all this site needed.
-  if command -v busctl >/dev/null 2>&1 &&
-     busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then # sigpipe-ok: safe pipeline
+  # ORDER 1347-r9g8, ARM A. This asked the same question as the gate at the top
+  # of the function, with a SECOND implementation that was also UNBOUNDED -- a
+  # bare `busctl --user list` with no `_ccc_timeout`, in a guard whose every
+  # other probe is bounded (988-7kxf). Two implementations of one question drift
+  # by construction, and the one nobody was looking at is the one that kept the
+  # unbounded call.
+  #
+  # Routed through the single reader. Note it deliberately treats `serving` as
+  # the only affirmative: `not-applicable` (no busctl) falls through to
+  # `missing:` exactly as it did before, because on a platform with no
+  # org.freedesktop.secrets the absence of the service says nothing, and
+  # `unknown` falls through too rather than claiming a channel exists that this
+  # guard could not see.
+  #
+  # ORDER 1347-r9g8, FOUND BY ITS OWN KILLED-PROBE FIXTURE. This branch used to
+  # be `= "serving"` only, so `unknown` -- busctl present, probe DIED or timed
+  # out -- fell through to `missing:no-credential-channel`. That is the
+  # 1189-2ra5 conflation reproduced at the one site the order exists to fix:
+  # the probe died, so the guard could NOT ASK whether the store is serving, and
+  # it answered by asserting the credential is ABSENT. The remedy that verdict
+  # invites is `gh auth login`, which evicts the fleet (1025-a896).
+  #
+  # Measured: with busctl killed by SIGKILL mid-read and gh failing, the guard
+  # answered `missing:no-credential-channel`. The earlier comment here claimed
+  # `unknown` should fall through "rather than claiming a channel exists that
+  # this guard could not see" -- which weighed the wrong risk. Refusing to claim
+  # the channel EXISTS does not license claiming it is ABSENT; the honest answer
+  # to a dead probe is that it was not probed.
+  #
+  # `not-applicable` (no busctl at all) deliberately still falls through, and
+  # that is NOT the same case: a platform with no org.freedesktop.secrets by
+  # design was never going to answer, so its absence is not evidence of a dead
+  # probe. macOS's own indeterminate path is handled in the layer discriminator.
+  _ccc_ss_late="$(_ccc_secret_service_state)"
+  if [ "$_ccc_ss_late" = "serving" ]; then
     echo "  The secret service IS on the session bus, so the channel EXISTS and" >&2
     echo "  could not be opened — this is NOT an absent credential." >&2
-    echo "unknown:secret-service-unprobed"
+    _ccc_emit_unprobed
     return 1
   fi
-  echo "missing:no-credential-channel"
+  if [ "$_ccc_ss_late" = "unknown" ]; then
+    echo "  The secret-service probe did not complete (it died or timed out), so" >&2
+    echo "  this guard COULD NOT ASK whether the store is serving. That is not a" >&2
+    echo "  finding about your credential: do NOT run 'gh auth login' (1025-a896)." >&2
+    echo "  REMEDY: re-run this guard once the session bus is answering." >&2
+    _ccc_emit_unprobed
+    return 1
+  fi
+  _ccc_emit_missing
   return 1
 }
 

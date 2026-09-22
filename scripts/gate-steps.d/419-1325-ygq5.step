@@ -1,0 +1,68 @@
+# Gate step 1325-ygq5 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A test added in either organ can be referenced by nothing, and
+# nothing said so at push time — so a fixture that CANNOT FAIL A GATE read
+# identically to one that guards something.
+#
+# THE RULE IS ONE SENTENCE AND IT IS ORGAN-INDEPENDENT: A TEST IS NOT DONE UNTIL
+# SOMETHING THAT RUNS ON ITS OWN CAN FAIL BECAUSE OF IT.
+#
+# TWO SPECIMENS, SAME HOST, SAME DAY (2026-09-20/21, pirria). A litmus yaml
+# written into openspec/litmus-tests/ and never added to the bindings: a
+# ci-release suite ran to completion reporting 37 PASS / 3 FAIL with that test
+# in NEITHER number, and it was reported to the coordinator as verified. Then,
+# hours later, a shell test committed with no step, no build.sh line and no
+# binding — written to REPLACE an arm that counted MENTIONS of a flag instead of
+# running the binary. It replaced a test that could not fail for the reason it
+# named with one that could not fail at all.
+#
+# WHY THE LESSON DID NOT FIRE THE SECOND TIME. The first was filed against the
+# ORGAN — a litmus yaml needs a bindings entry — rather than against the SHAPE,
+# so nothing in the author's head matched when the artifact was a shell script.
+# This step is filed against the shape, and the guard treats both organs as one
+# question with two needles.
+#
+# WHY THE AUTHOR IS THE ONE PERSON WHO CANNOT SEE IT, and why a checklist is the
+# weak form. Both organs' artifacts run green when invoked by hand, which is how
+# an author checks; the file states its own spec and phase, or prints its own
+# ok: line, so everything the author looks at says the test is real. Only the
+# thing that never ran knows, and it reports the absence as a SMALLER TOTAL
+# rather than as an error. A checklist at authoring time is read by the same
+# person who has just finished the file and believes it is done.
+#
+# WHAT THIS STEP RUNS is the guard's FIXTURE, not the guard: the arms that
+# matter are the refusals, and a guard for "this test cannot fail a gate" that
+# has only ever been observed passing is this packet's own defect one level up.
+# Mutation-proven — blanking the counter reds 3 arms, dropping the grandfather
+# affordance reds 1, a silent green on a missing manifest reds 1.
+#
+# MIGRATION PHASE. The guard WARNS rather than refuses and carries the standing
+# count (40 unreferenced shell tests on trunk, 2026-09-21) so the flip is a
+# decision made AGAINST A NUMBER rather than on a date. Diff-scoped either way:
+# it fires on what a push ADDS, never on the standing corpus, because a guard
+# that refuses all forty turns one host's mistake into every host's red — the
+# construction check-added-fragments-parse.sh uses for the same reason
+# (698-7n6q). This step's fixture is hermetic and does not depend on the count.
+#
+# THE REFERENCE SURFACE IS DECLARED, not inline:
+# scripts/test-reference-surfaces.manifest is the one definition both the guard
+# and a reader use, and the verdict line carries its size. The packet's own
+# unscoreable named this as the choice to make — 'referenced by' was four places
+# and declared in none, so a fifth caller added tomorrow would have made
+# referenced tests look unreferenced and started naming innocent files.
+#
+# THE NEGATIVE CONTROL IS THE POINT OF THE GRANDFATHER LIST. A deliberately
+# unreferenced artifact must stay possible, or the guard converts a real
+# practice into a lie. scripts/unreferenced-grandfathered.txt is the shell
+# organ's sibling of the litmus organ's unbound-grandfathered.txt (660-ryhn),
+# and it starts EMPTY: diff-scoping already covers the standing corpus, so a
+# name written there is a live declaration someone should read and question.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# is invisible to every name-based scan, including the bound-or-retired guard
+# (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking an added test is referenced by something that runs on its own (1325-ygq5)"
+STEP_SCRIPT="scripts/test-added-test-is-referenced.sh"
+STEP_ERROR="the guard that names an unreferenced added test no longer refuses (1325-ygq5) — read which arm failed above; the ENFORCE=1, missing-manifest and grandfather arms are the load-bearing ones, and a failure in the clean-pass arm alone is the least of them"
+STEP_OK="An added test that nothing can fail because of is named at push time"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:added-test-guard-proven:10"

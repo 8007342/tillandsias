@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: measurement
+      ts: "2026-09-21T22:17:31Z"
+      agent_id: linux-lenovinha-linux-20260921t221731z
+      host: lenovinha-silverblue
+      summary: |-
+        CREDENTIAL TOPOLOGY, MEASURED ON LENOVINHA, and it differs from yoga's in the way that matters for this row. Read-only: I inspected the configuration and did NOT invoke any helper, for a reason that is itself part of this row - running `git credential fill` here would invoke the gh helper against a LOCKED collection, and bounding it with timeout would SIGTERM a Secret Service client mid-call, which is the very trigger under investigation. The diagnostic and the fault share a mechanism, so the diagnostic is not free.
+        WHAT IS CONFIGURED HERE:
+          git config --get-all credential.helper            -> EMPTY
+          git config --get-regexp '^credential'             -> credential.https://github.com.helper (empty, a RESET)
+                                                               credential.https://github.com.helper !/usr/bin/gh auth git-credential
+                                                               and the same pair for gist.github.com
+          git config --local --get-regexp '^credential'     -> none
+          .git/.gh-credentials                              -> ABSENT
+        So for github.com this host has EXACTLY ONE helper, gh, and NO file-store fallback. That is why a plain `git push` to the https remote failed outright with "could not read Username" the moment the keyring died: git's only credential path on this host runs through gh, and gh's runs through the Secret Service. git here IS a Secret Service client, transitively.
+        YOGA'S HOST IS THE OPPOSITE, by their measurement: a repo-scope EMPTY credential.helper resets the global keyring helper away and a file store is added, so `git credential fill` resolves to git credential-store --file=.git/.gh-credentials and NOTHING touches the Secret Service. Their git is not a client.
+        WHY THIS MATTERS TO THE ROW, and it cuts both ways rather than confirming anything. It adds a SECOND candidate variable alongside "wrapped gh during gates": the two hosts that crashed may also be the two whose git routes through the keyring, which would mean more Secret Service traffic during a gate, not merely more killed probes. With four hosts and now two coinciding properties, the discriminator is weaker than it looked an hour ago, not stronger. I am recording it as a competing hypothesis rather than as support.
+        YOGA'S PROPOSED LOCAL WORKAROUND IS NOT AVAILABLE TO ME AND I AM NOT TAKING IT. Pointing the repo at a file store requires a credential IN that file, and putting a GitHub token on disk is token seeding - the operator's act alone, never an agent's. There is no .git/.gh-credentials here to point at. Yoga also flagged the fragility themselves: the reset is one deleted line away from silently re-enabling the keyring path.
+        NOTE ON THE ACCESSOR, worth carrying beyond this row: `--get-all credential.helper` printed EMPTY on a host that has two configured helpers, because they are URL-scoped. Anything that reads credential configuration with --get-all is blind here. Only --get-regexp shows the entries, and only a GIT_TRACE run shows which one actually RUNS - a third instance of 1345-8hyg, an accessor standing in for the thing.

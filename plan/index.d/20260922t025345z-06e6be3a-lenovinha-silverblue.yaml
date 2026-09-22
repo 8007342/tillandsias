@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    field: status
+    value: verified
+    ts: "2026-09-22T02:53:45Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: completed
+      ts: "2026-09-22T02:53:45Z"
+      host: lenovinha-silverblue
+      summary: |-
+        status 'verified' with evidence_refs: Both halves on origin/linux-next at c3c65a7cb. HERMETIC: scripts/test-initialize-bare-metal-host-idempotent.sh re-run on a clean trunk checkout prints ok:initialize-bare-metal-host:hermetic:3/3 exit 0 plus its note: line; litmus-initialize-bare-metal-host-idempotent.yaml carries the renamed string in both command and expected_behavior. SMOKE: pirria's record at plan/index.d/20260921t211334z-09e358cf-pirria.yaml — arm 2 podman system reset --force then --init exit 0 rebuilding 15 images; arm 1 --ensure-enclave twice with creation timestamps byte-identical to the nanosecond (measured via podman inspect {{.Created}}, a higher-resolution accessor than the closure's {{.CreatedAt}}, same fact).
+  - packet_id: a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it
+    event:
+      type: note
+      ts: "2026-09-22T02:53:45Z"
+      host: lenovinha-silverblue
+      summary: |-
+        CLOSED ON BOTH HALVES OF THE AMENDED CLOSURE, each verified on trunk rather than reported. HALF 1, THE HERMETIC VERDICT, on origin/linux-next and re-run here on a clean checkout at c3c65a7cb: scripts/test-initialize-bare-metal-host-idempotent.sh prints ok:initialize-bare-metal-host:hermetic:3/3 and exits 0, followed by its own note: line naming the two real-host arms it does NOT cover. The litmus binding carries the same renamed string in both command and expected_behavior, so the pin moved with the verdict rather than dangling. The rename was the point: the old ok:initialize-bare-metal-host:3/3 was the exact string this row's original closure treated as proof of a reset-from-nothing, and a stub must not be able to print it. HALF 2, THE REAL-HOST SMOKE, pirria's record on trunk at plan/index.d/20260921t211334z-09e358cf-pirria.yaml, read rather than accepted: arm 2, podman system reset --force emptying all four surfaces (0 containers, 0 volumes, 0 images, vault-data absent) then --init exit 0 rebuilding 15 images with vault healthy, and the 23 failure-class lines in the init log READ rather than counted (22 audit-log warnings, 1 systemd preset, none a product failure). Arm 1, tillandsias --ensure-enclave twice, both exit 0, container creation timestamps byte-identical to the nanosecond. ONE PRECISION NOTE CARRIED FORWARD so a later reader does not find the mismatch and doubt a good arm: the amended closure names `podman ps --format '{{.Names}} {{.CreatedAt}}'` and pirria measured with `podman inspect --format '{{.Created}}'`. Same fact through a different accessor at higher resolution - nanoseconds where ps gives seconds - so the evidence exceeds what was asked. The closure should be read as naming the FACT (no container was recreated) rather than the command. WHY THE SPLIT WAS RIGHT, recorded because the original closure was mine and wrong: I wrote a closure naming a VERDICT STRING, and a fixture was later written that printed that string while proving three weaker things against a stub. Neither was noticed until a worker loop asked whether the row could close. pirria's own sentence is the clearest statement of what the split bought: a stub can report that a command was a NO-OP, but only a live container runtime can show that the thing which already existed was LEFT ALONE - and an implementation that destroys and recreates a container in under a second satisfies the first while failing the second. NOT CLOSED BY THIS: 1346-cdwt's follow-through is done and landed, but 1348-gkvi is open and TOUCHES THIS SKILL - the claim at SKILL.md:33 that exiting the lane leaves the stack running is contradicted on this host and NOT contradicted on yoga's, so the page still carries a sentence that is at best host-dependent. That is a defect in the skill this row delivered, filed separately rather than silently folded into a closure.

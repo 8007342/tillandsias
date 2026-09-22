@@ -17,6 +17,7 @@ critical_path:
     command: "scripts/test-forge-standard-gitconfig-path.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: forge uses the standard read-only global gitconfig path"
+    assert_output_contains: "PASS: forge uses the standard read-only global gitconfig path"
 
   - step: "typed forge launcher uses the standard path without an override"
     command: "cargo test -p tillandsias-headless forge_credential_quarantine_mounts_present"

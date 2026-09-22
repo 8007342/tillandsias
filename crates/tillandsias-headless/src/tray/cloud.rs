@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use crate::remote_projects;
 use tracing::warn;
 
-use super::{ProjectEntry, TrayUiState, resolved_max_cloud_projects_in_menu};
+use super::{ProjectEntry, TrayUiState};
+use tillandsias_host_shell::menu_state as host_shell_menu;
 
 /// How long a successful fetch stays fresh before the next AboutToShow is
 /// allowed to refetch.
@@ -52,10 +53,17 @@ pub(super) fn cloud_refresh_due(state: &TrayUiState, force: bool) -> bool {
 
 fn github_projects_to_entries(projects: Vec<remote_projects::GitHubProject>) -> Vec<ProjectEntry> {
     // IMPORTANT: do NOT sort alphabetically here. `gh api user/repos?sort=pushed`
-    // returns the user's repos newest-activity first, and the tray cap (see
-    // `MAX_CLOUD_PROJECTS_IN_MENU` in `tray::mod`) trims the *tail* of this
-    // list. Re-sorting alphabetically would surface stale archived repos at
-    // the top and bury the user's active work behind the overflow item.
+    // returns the user's repos newest-activity first, which puts the user's
+    // active work at the top of the menu. Re-sorting alphabetically would
+    // surface stale archived repos there instead.
+    //
+    // The reason used to be a truncation — "the tray cap trims the *tail* of
+    // this list" — and that is no longer why (2026-09-21: the menu shows every
+    // project). The ORDER still matters for two reasons that survive: it decides
+    // what the user reads first in a long scrolling list, and it decides what
+    // lands on page one if `TILLANDSIAS_MAX_CLOUD_MENU_ITEMS` is ever set. Left
+    // explicit because a rule whose stated reason expires is a rule someone
+    // deletes as obsolete — correctly, by the comment, and wrongly, in fact.
     // @trace spec:tray-ux, spec:remote-projects
     projects
         .into_iter()
@@ -163,17 +171,35 @@ pub(super) fn refresh_cloud_projects_if_stale(
         "[tillandsias] cloud refresh: loaded {} repos from gh",
         entries.len()
     );
-    // Surface the menu cap so the behaviour is observable from logs even when
-    // the user has no GUI session. The tray itself caps the visible list in
-    // `build_cloud_projects_submenu`; this line just makes the trim auditable.
+    // Surface the menu page size so the behaviour is observable from logs even
+    // when the user has no GUI session.
+    //
+    // THIS LINE USED TO LIE, TWICE (operator measurement 2026-09-21). It read
+    // "showing {cap} of {n} cloud projects (rest behind overflow item)" and was
+    // printed whenever `n > 10`. Both halves were false on the shipping build:
+    // the live builder is `host_shell::menu_state::build`, which since 591-33s6
+    // fans the remainder out into further pages rather than putting it "behind"
+    // anything, and since the flat default it shows ALL of them — while the cap
+    // this line read comes from `resolved_max_cloud_projects_in_menu`, whose only
+    // caller is the builder 628-p5tj retired. So the log described a truncation
+    // that was not happening, using a number the menu did not consult.
+    //
+    // A log line is an instrument. This one would have reported "showing 10 of
+    // 22" on the very run the operator used to discover the menu shows 22, and
+    // anyone trusting it would have gone looking for a trim that does not exist.
     // @trace spec:tray-ux
-    let cap = resolved_max_cloud_projects_in_menu();
-    if entries.len() > cap {
-        eprintln!(
-            "[tillandsias] tray: showing {} of {} cloud projects (rest behind overflow item)",
-            cap,
+    match host_shell_menu::resolved_cloud_page_size() {
+        Some(page) if entries.len() > page => eprintln!(
+            "[tillandsias] tray: paging {} cloud projects {} per level \
+             (TILLANDSIAS_MAX_CLOUD_MENU_ITEMS={})",
+            entries.len(),
+            page,
+            page
+        ),
+        _ => eprintln!(
+            "[tillandsias] tray: showing all {} cloud projects at one level",
             entries.len()
-        );
+        ),
     }
     if debug {
         warn!("cloud refresh: parsed {} repos", entries.len());

@@ -20,3 +20,4 @@ STEP_OK="Cheatsheet references passed"
 # reference and still refuses.
 STEP_SKIP_EXIT=2
 STEP_SKIP_DESC="ripgrep absent on this host and in the tillandsias-builder toolbox"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

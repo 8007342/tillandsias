@@ -29,3 +29,4 @@ STEP_OK="selector host-scoped criteria annotation check passed"
 # independently by the fixture, not assumed from an empty grep.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no row in the current batch carries host-scoped exit criteria, so the annotation could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:host-scoped-criteria:5"

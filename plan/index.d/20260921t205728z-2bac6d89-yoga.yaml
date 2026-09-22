@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: evidence
+      ts: "2026-09-21T20:57:28Z"
+      agent_id: linux-yoga-opus5-20260921t205728z
+      host: yoga
+      summary: |
+        THE PILOT MEASUREMENT, WHICH THE OPERATOR IS OWED FOR APPROVING THIS. PR #135
+        from work/765-xpct at c26bdcbe7, draft, for the landing queue to gate at FULL.
+
+        IT STARTED BY DISPROVING MY OWN SLICE. Slice 2 as first built saved NOTHING on
+        the cycle type this row's criterion names. Measured: a code-only change yields
+        classes=rust, and both pilot guards RAN. The feature was wired, tested 26/26,
+        and measurably inert.
+
+        THE CAUSE WAS A COLLAPSE I MADE, AND THE ROW HAD ALREADY SAID IT CORRECTLY.
+        Both pilots read the plan ledger and the PLAN CRATE. In gate-stamp's classes
+        alone the nearest truth is `rust`, which covers every crate — so a change to
+        tillandsias-podman, which cannot affect the plan fold, forced both to run. This
+        row's own deliverable text reads "key: plan-ledger ∪ plan-core incl.
+        crates/tillandsias-plan". I collapsed plan-core to `rust` when wiring it. That
+        collapse was the entire saving, and the row was right before I was.
+
+        THE FIX IS A NARROWING, NOT A SECOND TAXONOMY: a declared input may be
+        `path:<glob>` as well as a class. gate_stamp_classify_path is untouched — its
+        nine classes stay as 765-dt8h defined them — and a path glob can only ever make
+        a guard run MORE often than its class would. An unmatched glob leaves the class
+        test to decide, and every uncertainty still answers "run it".
+
+        THE NUMBER, three samples, yoga, timed directly:
+          check-fragment-status-loss              1712 / 1601 / 1486 ms
+          check-groundtruth-mutable-status-pins   3335 / 3240 / 3256 ms
+          SAVING ≈ 4.8-5.0 s per code-only ./build.sh --check
+        The velocity audit estimated ~3.5 s; that was measured on another host, and the
+        two numbers should not be quoted as one measurement.
+
+        VERIFIED IN ALL THREE DIRECTIONS, not only the flattering one:
+          another crate changed            -> both SKIP   (the saving)
+          crates/tillandsias-plan changed  -> both RUN
+          the plan ledger changed          -> both RUN
+
+        WHAT THE SAVING IS AND IS NOT. It is two guards out of the whole gate, chosen
+        because the velocity audit had already measured them as pure functions of narrow
+        path families. It is not a claim about the gate's total. Two pilots is a FLOOR:
+        the mechanism now exists and each further guard costs one line of declared
+        inputs plus a measurement. Anyone extending it should report the new number the
+        same way rather than inferring it from this one.
+
+        ARMS N1/N2 ARE A PAIR ON PURPOSE. A skip alone passes against "the narrowing is
+        ignored"; a run alone passes against "path globs always match". Only the pair
+        distinguishes a narrowing from a blindfold. Fixture 28/28.

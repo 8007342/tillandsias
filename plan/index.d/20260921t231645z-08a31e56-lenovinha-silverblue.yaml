@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ssh-lane-sidecar-adds-a-cert-to-the-agent-on-every-renewal-and-never-removes-the-expired-one-so-the-forge-push-lane-dies-of-maxauthtries-about-two-hours-after-boot
+    field: status
+    value: verified
+    ts: "2026-09-21T23:16:45Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: the-ssh-lane-sidecar-adds-a-cert-to-the-agent-on-every-renewal-and-never-removes-the-expired-one-so-the-forge-push-lane-dies-of-maxauthtries-about-two-hours-after-boot
+    event:
+      type: completed
+      ts: "2026-09-21T23:16:45Z"
+      host: lenovinha-silverblue
+      summary: |-
+        status 'verified' with evidence_refs: Real forge, 2026-09-21T23:16Z, sidecar up since 20:54:43Z at the unshrunk 1200s cadence, 7 renewals (past MaxAuthTries=6). ssh-add -l in the forge = 2 identities (bare key + exactly one ED25519-CERT, fingerprint SHA256:mBy8jViqx+fp...). ssh -p 2222 reaches the force-command and is refused by it (fail:tillandsias-receive:not-receive-pack) where pre-fix it died at authentication with EXIT=255. Bound shown as a bound: agent_identities=2 at renewal n=3 and again at n=8. Zero agent-identity-leak verdicts emitted. Fix half landed dfa35c605 (land71); litmus:ssh-lane-sidecar-shape green with the renewal scenario running past the cliff.
+  - packet_id: the-ssh-lane-sidecar-adds-a-cert-to-the-agent-on-every-renewal-and-never-removes-the-expired-one-so-the-forge-push-lane-dies-of-maxauthtries-about-two-hours-after-boot
+    event:
+      type: note
+      ts: "2026-09-21T23:16:45Z"
+      host: lenovinha-silverblue
+      summary: |-
+        ARMS 2 AND 3 TAKEN ON A REAL FORGE, PAST THE CLIFF, AT THE TRUE CADENCE. The row closes. THE READING, 2026-09-21T23:16Z. Sidecar tillandsias-ssh-sidecar-tillandsias started 20:54:43Z, RENEW_SECONDS at its 1200 s default - DELIBERATELY UNSHRUNK on the coordinator's ruling, so the arm cannot be accused of manufacturing its own cliff. Seven renewals completed, which is past the server's MaxAuthTries of 6.   ARM 2, identity bound and the lane alive: `ssh-add -l` inside the forge lists exactly 2 identities - one ED25519 and one ED25519-CERT, both on fingerprint SHA256:mBy8jViqx+fp..., i.e. the bare key and exactly ONE certificate. `ssh -p 2222 git@git-kvs69tkis9dfnbejbatg` reaches the forced command and is refused BY IT with `fail:tillandsias-receive:not-receive-pack`. That is an AUTHORISATION refusal, which is the lane working; pre-fix the same command died at AUTHENTICATION with "Too many authentication failures" and EXIT=255, never reaching any command.   ARM 3, the bound is a bound and not a small number: `renewed n=3 agent_identities=2` and `renewed n=8 agent_identities=2` - the same count at renewal n and n+5, which is what the closure asked for rather than a single low reading.   And zero `agent-identity-leak` verdicts have ever been emitted by this sidecar, against a guard that fires above 3. WHAT THE PRE-FIX CODE WOULD HAVE READ AT THIS EXACT POINT, stated so the numbers are comparable rather than merely green: 7 renewals means 8 certificates plus the bare key, 9 identities, offered oldest-first against a MaxAuthTries of 6. The lane would have been dead for roughly five hours by now. It first became unauthenticable at about two hours of uptime. THE CLOSURE'S OWN WARNING WAS HONOURED: "an arm that runs on a freshly started sidecar proves nothing here - the first six renewals of the BROKEN code also pass". This reading is at seven, and I retracted an earlier reading of my own that reported 2 identities on a sidecar that was freshly started AND UNFIXED, where 2 is simply what any sidecar shows before its first renewal. ALL THREE ARMS ARE NOW ON THIS ROW: arm 1 (FAILS-NOW, the 17-identity forge and the sshd log refusing every offer as expired while a valid cert sat on disk), and arms 2 and 3 above. The fix half landed at dfa35c605 in land71. WHAT THIS DOES NOT CLOSE: the T11 default flip (749-y8xx) still waits on a forge acceptance carrying A2-A4's arms, which is a different artifact. This row blocked that flip and no longer does; it was never the only thing blocking it.

@@ -71,11 +71,38 @@ else
 fi
 
 # ── 4. could-not-run is NOT a refusal and NOT a pass ────────────────────────
+#
+# ORDER 1354-apns. BOTH LINES ARE REQUIRED, and the second is the one a scorer
+# reads. The `could-not-run:` line says WHICH instrument could not answer and
+# why — 965-sxec's channel, and the reason this decider refuses to answer "fine"
+# from a file it never read. The terminal `skip:` line is the word both readers
+# actually recognise: build.sh's preflight matches `^skip:` anywhere
+# (1273-4mak), run-litmus-test.sh reads the LAST non-empty line. Without it this
+# decider's honest inability was scored `refused:preflight:check-gate-memory-
+# floor` and --preflight could not exit 0 on any host with no /proc/meminfo.
 out="$("$FLOOR" --meminfo-from "$W/no-memavailable" 2>/dev/null)"; rc=$?
 if [ "$rc" = "3" ] && case "$out" in *could-not-run:gate-memory:no-memavailable*) true ;; *) false ;; esac; then
     ok "a meminfo without MemAvailable is could-not-run, not a verdict (MemFree would under-report)"
 else
     bad "a meminfo without MemAvailable did not route to could-not-run (rc=$rc): $out"
+fi
+if case "$out" in *"skip:gate-memory:no-memavailable"*) true ;; *) false ;; esac; then
+    ok "and it ends on the word a scorer knows, so the inability is skipped rather than scored a refusal (1354-apns)"
+else
+    bad "the could-not-run has no terminal skip: line — a scorer will call this a refusal (1354-apns): $out"
+fi
+
+# NEGATIVE CONTROL FOR THE LINE ABOVE, and the arm that keeps this guard from
+# becoming decoration: a REAL below-floor refusal must carry NO skip line and
+# must still exit non-zero. Widening what counts as a non-failure is the one
+# change that can quietly dissolve a red, so it is pinned here rather than
+# assumed.
+out="$("$FLOOR" --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
+if [ "$rc" != "0" ] && case "$out" in *refused:gate:insufficient-memory*) true ;; *) false ;; esac \
+   && ! case "$out" in *"skip:"*) true ;; *) false ;; esac; then
+    ok "a real below-floor refusal stays a refusal, carries no skip line, and exits non-zero (1354-apns)"
+else
+    bad "the below-floor refusal was weakened by the skip widening (rc=$rc): $out"
 fi
 
 # ── 5. the OOM post-mortem reports a kill the kernel recorded ──────────────

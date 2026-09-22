@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T06:54:03Z"
+      agent_id: linux-lenovinha-linux-20260922t065403z
+      host: lenovinha-silverblue
+      summary: |
+        T1 DESIGN DATUM 2 — WHERE THE SYNC STATE LIVES, and it is not a new invention. The precedent already exists in this image and answers every hard part of the question.
+        THE PRECEDENT: images/git/probe-upstream-auth.sh publishes to refs/tillandsias/upstream-auth/<state>/<epoch> inside the mirror, and its header states the consumer contract: "a forge reads it via git ls-remote origin 'refs/tillandsias/upstream-auth/*'". That is exactly T1's consumer problem — a forge that cannot reach GitHub needs to learn something about upstream from the mirror it CAN reach. This host publishes one today: refs/tillandsias/upstream-auth/authorized/1790052562.
+        THREE THINGS THAT SHAPE SOLVES WHICH I WOULD HAVE HAD TO REDISCOVER:
+          1. IT IS READABLE WITHOUT A CLONE, WITHOUT GITHUB, AND WITHOUT A NEW SERVICE. ls-remote against the mirror is a capability the forge already has and already uses.
+          2. THE EPOCH IN THE PATH BOUNDS STALENESS. The header's reason is better than mine would have been: "yesterday's verdict is from yesterday's token epoch". A sync state that does not say WHEN it was computed is unusable for the question being asked, because "behind by 0" from an hour ago and "behind by 0" from a second ago are different facts and the consumer cannot tell them apart. The convention is that the consumer picks the LARGEST epoch, which also makes publication append-only rather than mutating.
+          3. IT DISTINGUISHES STATES IN THE PATH, including a denied/<reason>/<epoch> form. T1 needs exactly that discrimination and 1338-tkfh is the reason: behind-upstream and absent-upstream produce an identical fatal today, so the state must name which it is rather than encode a number a consumer has to interpret.
+        SO THE PROPOSED SHAPE, for the coordinator to accept or amend:
+          refs/tillandsias/sync-state/<state>/<epoch>   with <state> in {current, behind, unknown}
+          and for the behind case a form carrying the head and the distance, e.g.
+          refs/tillandsias/sync-state/behind/<head>/<n>/<epoch>
+        computed per exported head from data the mirror ALREADY fetches - rev-list --count refs/heads/X..refs/remotes/origin/X - so the on-demand sync is a fetch plus a recompute, and the cadence is the same recompute on a timer. Nothing here needs a new probe or a new credential.
+        WHAT I AM NOT DECIDING ALONE, restated because it is the one open question and it touches every mirror: TAGS. The pre-push fetch refspec is heads-only, so there is no upstream tag data to compare and no honest tag state can be published without growing that refspec. Growing it needs the same care the heads refspec was given - the comment in relay-refs.sh warns that fetching into the exported namespace would pre-empt the rejection path - so a tag fetch must land in the tracking namespace too, and the exported tags stay stale until something deliberately advances them. The alternative is to declare tags out of T1's scope and have the skill stop calling three stranded refs a fault. Coordinator's call; I will implement either.
+        NEXT STEP, in order, and I am naming it so the sequence is checkable rather than remembered: (1) confirm a forge can ls-remote refs/tillandsias/* against its mirror on this host - the consumer capability, measured not assumed; (2) write the litmus named in this row's unscoreable line, with the BEHIND case as its FAILS control; (3) implement the publisher; (4) the demanded sync; (5) the cadence. The litmus before the implementation, because this row's own closure says the guard is part of the deliverable and I have already made the opposite mistake once tonight on 1347-r9g8.

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    field: next_action
+    value: |-
+      Make the not-found path exit non-zero in crates/tillandsias/src/main.rs and add a fixture asserting the STATUS and the MESSAGE as separate arms, with a control that a resolvable project still exits 0 on its own path - otherwise "always exit 1" passes the new arm. Then audit the sibling launchers (--opencode, --claude, --codex, --observatorium) for the same shape rather than fixing only the one that was measured, and say on this row which of them were checked and which were not.
+
+
+      [2026-09-21T21:48:36Z yoga] RETRACTED 2026-09-21 by yoga: the defect does not exist. Re-measured directly on v56.9.21.2 (checkout 741c37de9), rc=1 on three consecutive runs and on the exact original case; pirria measured rc=1 independently. The original rc=0 was the HARNESS reporting a compound command whose last element was `tail`, not the binary's status. This row should close INVALID, not fixed — nothing was repaired. See the correction event of 2026-09-21T21:45Z for the full reconstruction and for the stale-warning follow-up the skill now needs.
+    ts: "2026-09-21T21:48:36Z"
+    host: yoga
+
+events:
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: progress
+      ts: "2026-09-21T21:48:36Z"
+      host: yoga
+      summary: |-
+        status 'Make the not-found path exit non-zero in crates/tillandsias/src/main.rs and add a fixture asserting the STATUS and the MESSAGE as separate arms, with a control that a resolvable project still exits 0 on its own path - otherwise "always exit 1" passes the new arm. Then audit the sibling launchers (--opencode, --claude, --codex, --observatorium) for the same shape rather than fixing only the one that was measured, and say on this row which of them were checked and which were not.
+        
+        
+        [2026-09-21T21:48:36Z yoga] RETRACTED 2026-09-21 by yoga: the defect does not exist. Re-measured directly on v56.9.21.2 (checkout 741c37de9), rc=1 on three consecutive runs and on the exact original case; pirria measured rc=1 independently. The original rc=0 was the HARNESS reporting a compound command whose last element was `tail`, not the binary's status. This row should close INVALID, not fixed — nothing was repaired. See the correction event of 2026-09-21T21:45Z for the full reconstruction and for the stale-warning follow-up the skill now needs.' (not terminal) with evidence_refs: 741c37de9 + three direct runs rc=1
+  - packet_id: tillandsias-bash-with-an-unresolvable-project-prints-error-project-not-found-and-exits-0-so-a-caller-that-checks-the-status-proceeds-against-a-stack-that-was-never-brought-up
+    event:
+      type: note
+      ts: "2026-09-21T21:48:36Z"
+      host: yoga
+      summary: |-
+        retraction: the measurement was wrong, not the binary

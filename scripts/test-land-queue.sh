@@ -437,6 +437,146 @@ else
     bad "ARM 8b: the caller started detached at ${det_before:0:9} and was left at ${det_after:0:9} — the restore recorded the literal 'HEAD' instead of a commit"
 fi
 
+# ──────────────────────────────────────────────────────────── ARM 9
+# A GATE THAT READS STDIN MUST NOT EAT THE CANDIDATE LIST.
+#
+# THIS ARM EXISTS BECAUSE THE FIXTURE MISSED THE DEFECT IN THE FIELD. Every stub
+# gate above is `exit 0`, which consumes nothing, so arms 1 and 3 land three
+# candidates each and passed while the REAL queue — whose gate is
+# `./build.sh --check`, and which reads stdin — drained exactly one per run and
+# reported ok:land-queue:1 with --limit 2. Measured 2026-09-21 on this host,
+# landing another host's PRs.
+#
+# The world the fixture built had a gate that does not read. The subject's
+# world has one that does. So the stub here CONSUMES STDIN on purpose, and the
+# assertion is that all three candidates are still processed.
+scaffold arm9
+candidate arm9 9001-aaaa a.txt A
+candidate arm9 9002-bbbb b.txt B
+candidate arm9 9003-cccc c.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/9001-aaaa","isDraft":false},
+ {"number":2,"headRefName":"work/9002-bbbb","isDraft":false},
+ {"number":3,"headRefName":"work/9003-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+# A gate that drains stdin, exactly as ./build.sh --check does.
+cat >/dev/null 2>&1 || true
+exit 0
+GATE
+# AND THE FAKE gh DRAINS STDIN TOO, which is what makes this arm discriminate.
+# The gate alone does not: the queue redirects it from /dev/null, so an arm
+# built only on a hungry GATE passes even with the fd-3 read reverted — measured
+# when this arm was written. gh is invoked inside the loop with no such
+# redirect, so a hungry gh tests the fd the LIST is read on rather than one
+# subprocess's plumbing. Two guards, and the arm must fail if EITHER is removed.
+sed -i '2i cat >/dev/null 2>&1 || true' "$GH_BIN"
+
+# BOUNDED, BECAUSE THE DEFECT'S FAILURE MODE IS A HANG AND NOT A WRONG ANSWER.
+# Measured 2026-09-21: with the fd-3 read reverted and a stdin-hungry gh, this
+# arm did not print a wrong verdict — it BLOCKED, and the whole fixture died at
+# its own 600 s bound with rc=124 and no ARM 9 line at all. A silent hang is the
+# worst failure an arm can have: it is indistinguishable from a slow host, it
+# produces no verdict to read, and whoever meets it goes looking for an
+# infrastructure problem instead of the assertion that fired. So the subject is
+# bounded HERE and a timeout is reported as this arm's own named failure.
+out9="$(timeout 120 env \
+    TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
+    TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
+    TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
+    TILLANDSIAS_TRUNK_BRANCH=linux-next \
+    bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" 2>&1)"
+_rc9=$?
+if [ "$_rc9" -eq 124 ]; then
+    bad "ARM 9: the queue BLOCKED (timeout 120s) with a stdin-consuming gate and gh — the candidate list is being read on stdin and a reader in the loop is waiting on it. This is the field defect of 2026-09-21, and its shape is a hang rather than a wrong answer."
+else
+n9="$(printf '%s' "$out9" | sed -n 's/^land:\([0-9]*\) .*/\1/p' | tr '\n' ',')"
+case "$out9" in
+    *"ok:land-queue:3 "*)
+        if [ "$n9" = "1,2,3," ]; then
+            ok "ARM 9: a STDIN-CONSUMING gate still lets all three candidates be processed — the list is read on fd 3, not stdin"
+        else
+            bad "ARM 9: the queue reported 3 examined but landed '$n9'"
+        fi ;;
+    *)
+        bad "ARM 9: a stdin-consuming gate cut the drain short (landed '$n9') — the candidate list is being eaten by the loop body, which is the field defect of 2026-09-21
+$(printf '%s' "$out9" | tail -3)" ;;
+esac
+fi
+
+# ─────────────────────────────────────────────────────────── ARM 10
+# A PLAN-ONLY TRUNK MOVE IS ADOPTED; ANY OTHER MOVE STILL RE-QUEUES.
+#
+# THE PAIR IS THE ARM. A lone adopt-case passes against "never re-queue", which
+# would ship a gate verdict about a tree nobody is pushing — the exact thing
+# arm 5 exists to prevent. A lone re-queue case passes against "never adopt",
+# which is today's behaviour and the defect. Only both together distinguish a
+# CLASSIFIER from a policy, and that is lenovinha's divergence rule applied to
+# this row: the arm must contain the case that separates the two answers.
+#
+# The mover pushes from a second clone during the gate, as arm 5 does — the only
+# window where the defect lives.
+
+# 10a — the move is plan/ only: ADOPT and LAND.
+scaffold adopt
+candidate adopt 1001-plan a.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1001-plan","isDraft":false}]
+JSON
+OTHER="$TMP/adopt/other"; git clone -q "$REMOTE_DIR" "$OTHER"
+git -C "$OTHER" config user.email o@o; git -C "$OTHER" config user.name o
+git -C "$OTHER" config commit.gpgsign false
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+mkdir -p "$OTHER/plan/index.d"
+printf 'packets: []\n' > "$OTHER/plan/index.d/20260922t000000z-probe-yoga.yaml"
+git -C "$OTHER" add -A
+git -C "$OTHER" commit -q -m "plan(probe): a fragment lands mid-gate"
+git -C "$OTHER" push -q origin HEAD:linux-next
+exit 0
+GATE
+out10a="$(run_queue)"
+case "$out10a" in
+    *"adopt:land-queue:1:plan-only-move"*)
+        case "$out10a" in
+            *"land:1 "*) ok "ARM 10a: a PLAN-ONLY trunk move mid-gate is ADOPTED and the candidate lands — the gate's verdict still describes the code, and the fleet's ledger traffic stops costing a gate each" ;;
+            *) bad "ARM 10a: it adopted but did not land: $(printf '%s' "$out10a" | tail -2)" ;;
+        esac ;;
+    *"requeue:land-queue:1:target-moved"*)
+        bad "ARM 10a: a plan-only move still RE-QUEUED — this is the 1335-2nzf defect, and with six hosts appending fragments it means the queue lands nothing during busy hours" ;;
+    *)  bad "ARM 10a: neither adopted nor re-queued (did the mover run?): $(printf '%s' "$out10a" | tail -2)" ;;
+esac
+
+# 10b — the move touches a NON-plan path: still RE-QUEUE. Same scaffold, same
+# mover, one different file. If 10a passes and this fails, the change is not a
+# classifier, it is "stop checking".
+scaffold noadopt
+candidate noadopt 1002-code b.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":2,"headRefName":"work/1002-code","isDraft":false}]
+JSON
+OTHER2="$TMP/noadopt/other"; git clone -q "$REMOTE_DIR" "$OTHER2"
+git -C "$OTHER2" config user.email o@o; git -C "$OTHER2" config user.name o
+git -C "$OTHER2" config commit.gpgsign false
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+mkdir -p "$OTHER2/crates/x/src"
+printf 'fn main() {}\n' > "$OTHER2/crates/x/src/main.rs"
+git -C "$OTHER2" add -A
+git -C "$OTHER2" commit -q -m "fix(probe): a CRATE lands mid-gate"
+git -C "$OTHER2" push -q origin HEAD:linux-next
+exit 0
+GATE
+out10b="$(run_queue)"
+case "$out10b" in
+    *"requeue:land-queue:2:target-moved"*)
+        ok "ARM 10b: a move touching crates/ still RE-QUEUES — the change is a CLASSIFIER, not a decision to stop checking" ;;
+    *"adopt:land-queue:2"*)
+        bad "ARM 10b: a crates/ move was ADOPTED — the gate's verdict does NOT describe that tree, and this would ship a green about code the gate never saw" ;;
+    *)  bad "ARM 10b: neither adopted nor re-queued (did the mover run?): $(printf '%s' "$out10b" | tail -2)" ;;
+esac
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: note
+      ts: "2026-09-21T19:50:33Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        CORRECTION to the evidence I filed on this row an hour ago. I wrote that
+        discover_projects() is "live at THREE call sites, not one". That is wrong, and
+        esme-windows caught it.
+
+          1336  start_mcp_socket_server()        LIVE
+          4611  run_tray_mode_with_debug()       LIVE  (tray startup)
+          1882  refresh_local_projects()         NOT LIVE — the enclosing method has no
+                                                 production caller. Its only other
+                                                 references are its own doc comment at
+                                                 7988 and the test
+                                                 refresh_local_projects_picks_up_new_checkout
+                                                 at 7998.
+
+        So the correct claim is TWO live call sites and a third inside dead code. The
+        operative fact is unchanged — the tray still reads the host src directory on
+        every start, at 4611 — but the count was overstated and the row should not carry
+        a number that does not survive checking.
+
+        WORTH NOTING WHAT THE THIRD ONE IS, because it is this family again: a test named
+        refresh_local_projects_picks_up_new_checkout passes, and the function it exercises
+        is reached by nothing else. The test is green, the behaviour is unreachable, and
+        the greenness is what makes the scaffolding look load-bearing. That is the third
+        instance on this fleet today of a test guarding code nothing runs.
+
+        ALSO SWEPT, in the shared builder, while the file was open: the per-project label
+        carried a `scope == "local"` branch that appended a READY tick. build_project_submenu
+        has exactly one call site and it always passes "cloud", so that tick has not
+        rendered since this row removed the local list. Deleted.
+
+        The `scope` PARAMETER stays despite the single caller, and deliberately: it is
+        part of the id grammar `project.<scope>.<name>` that menu_action::resolve_project
+        parses back out. Removing it would change every project id and resolve them all
+        to Inert — a tidy-looking removal that would have turned the whole menu into
+        inert rows, which is precisely the failure this evening's other row was about.

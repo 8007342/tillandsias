@@ -47,3 +47,4 @@ STEP_DESC="Checking the loop-status audit can still read what cycle-metrics emit
 STEP_SCRIPT="scripts/test-loop-status-audit-reads-current-emitter.sh"
 STEP_ERROR="the loop-status audit and cycle-metrics.sh have drifted apart again (1243-yiyq) — the audit will report every host NOT-PASTING while parsing nothing; read which arm failed above"
 STEP_OK="Loop-status audit parses the current emitter"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:loop-status-audit-reads-current-emitter:6"

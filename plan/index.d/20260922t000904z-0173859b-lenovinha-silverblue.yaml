@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    event:
+      type: note
+      ts: "2026-09-22T00:09:04Z"
+      agent_id: linux-lenovinha-linux-20260922t000904z
+      host: lenovinha-silverblue
+      summary: |-
+        TWO ADDITIONS FROM THE FORGE REVIEW, both produced by real work tonight and both belonging in the rule this row will write. They are not restatements of the three instances already on the row; one is a COROLLARY with an operational test attached, and the other is a NEW WORST CASE that beats A1.
+
+        ADDITION 1 - THE CHECKPOINT RULE, which is the operational form of this row's principle and the part a reader can actually apply:
+          ASSERT THAT THE NEXT NAMED CHECKPOINT WAS REACHED, NOT THAT THE FAILURE WAS ABSENT.
+        An absence-assertion ("the output does not contain refused:host-unresolved") passes whenever the subject DIES BEFORE REACHING THE CODE UNDER TEST, and dying early is the common case for any script with prerequisites. Measured tonight, reviewing work/1337-3tk6-host-resolver: the proposed arm ran two real subjects in a scratch repo and asserted the absence of a refusal. For salvage-dirty-worktree.sh it worked. For push-plan-fragments-to-trunk.sh the subject died at line 132 on a missing scripts/plan-binary-probe.sh - BEFORE host resolution at line 165 - so it never reached the code under test, emitted no refusal, and the arm passed IDENTICALLY against the fixed and unfixed trees. An arm that cannot reach the failing region, about to ship inside the commit that fixed an arm-coverage defect.
+        THE REPLACEMENTS, both positive and both measured: for salvage, a SENTINEL resolver whose string appears in the verdict line itself (ok:salvaged-local:refs/heads/salvage/armsentinel/...), which asserts that resolution RAN and produced the RIGHT VALUE - a subject that skipped resolution entirely would also not refuse, and an absence-check cannot tell those apart. For push-plan, the next named checkpoint past the gate (refused:fragments-to-trunk:fetch), which proves progress but not value, and the arm should say which of the two it has.
+        WHY IT BELONGS HERE AND NOT ONLY ON 1337-3tk6: "the instrument did not report the failure" and "the instrument never got to look" are indistinguishable from the verdict line, which is this row's whole subject in a new place. yoga's formulation of what it corrects, worth keeping verbatim: they had been applying "assert what the change made true", and it did not cover the case where the subject never runs at all.
+
+        ADDITION 2 - THE WORST INSTANCE YET, and it displaces A1 as this row's headline example. In that same fixture, arm 4 does not run the subject: it WRITES A COPY of the subject's resolution line into a temporary probe script and runs the copy. So a synthetic reproduction of the subject was living inside the subject's own test suite, and it went green while the real line was broken - because the real script does `cd "$ROOT"` before resolving a BASH_SOURCE-relative path and the probe does not have the cd. The model and the thing were IN THE SAME FILE, maintained by the same author, and still diverged.
+        That is sharper than A1 (ssh-keygen -F faithfully answering a question the real client never asks) because A1 at least used a different tool for a different purpose; here the copy existed solely to stand in for the original, and the standing-in is what made it wrong. Whoever writes the methodology text should lead with this one: it needs no domain knowledge to understand and it cannot be dismissed as "well, they used the wrong tool".
+        Found by yoga-silverblue while reviewing at my request; I had only got as far as noting that arm 3 greps that the scripts CALL the resolver and cannot tell whether the call RESOLVES.

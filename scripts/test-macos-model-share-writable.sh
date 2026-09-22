@@ -50,10 +50,66 @@
 # packet's own reproduce command was single-level and produced a false
 # retraction that propagated. USE THE PRODUCT'S SHAPE, NOT A PARAPHRASE.
 #
-# GRAMMAR — exactly one line:
-#   ^(ok:macos-model-share-writable:[0-9]+|violation:macos-model-share-writable:.*|unsupported:macos-model-share-writable:.*)$
+# GRAMMAR — one line, or two on a could-not-run (see below):
+#   ^(ok:macos-model-share-writable:[0-9]+|violation:macos-model-share-writable:.*|unsupported:macos-model-share-writable:.*|skip:macos-model-share-writable:.*|refused:macos-model-share-writable:.*)$
+#
+# EVERY verdict line ends with a subject clause naming the binary that answered
+# (1332-tdde). The runner's patterns match by substring, so appending it does
+# not disturb them; a reader of any past run can now say WHAT was tested.
+#
+# A COULD-NOT-RUN PRINTS TWO LINES: the `unsupported:` detail, then the `skip:`
+# line the runner scores (1330-i4hu). Order is load-bearing.
 set -uo pipefail
+
+# WHICH BINARY ANSWERED (order 1332-tdde). Every verdict carries it, so a reader
+# of any past run can say what was tested instead of inferring it from a path.
+#
+# THE WHOLE `--version` LINE, sha and build stamp included, never a parsed
+# field of it. MEASURED: a pre-fix binary at git 2f5f2a90a and a post-fix binary
+# at git 65994e1e5 BOTH report "56.9.21.1", so a version comparison reads two
+# different subjects as one. A path is not an identity either — the default
+# target is a path in the checkout, and what sits there may be ten days old.
+SUBJECT="unresolved"
+subject_of() {
+    [ -x "$1" ] || { printf 'absent(%s)' "$1"; return 0; }
+    local line
+    line="$("$1" --version 2>/dev/null | head -1)"
+    [ -n "$line" ] && printf '%s' "$line" || printf 'unreadable(%s)' "$1"
+}
+verdict() { echo "$1 subject=[$SUBJECT]"; }
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ROOT MUST BE A CHECKOUT BEFORE ANYTHING DERIVED FROM IT IS TRUSTED (1332-tdde).
+#
+# A COPY of this script run from outside the tree resolves ROOT to the parent of
+# wherever it sits — `/` for a copy in /tmp — and every path built from it then
+# describes that place instead of the product. MEASURED: such a copy found no
+# app bundle under `/` and said so, which is TRUE about `/` and a FALSE
+# description of what happened.
+#
+# THIS IS A REFUSAL, NOT A COULD-NOT-RUN, and the distinction is deliberate.
+# `cannot_run` means "the HOST cannot answer this question" and its terminal
+# `skip:` leaves the step out of the rate — correct for a host without a
+# bundle, and catastrophic here, because a script that does not know where it
+# is cannot be trusted about anything else it reports. Routing this through
+# `cannot_run` would turn a red into a silent skip. `refused:` is in the
+# runner's failure set (run-litmus-test.sh:966), checked FIRST and
+# short-circuiting, so it stays red whatever follows it.
+[ -f "$ROOT/build.sh" ] && [ -d "$ROOT/crates" ] || {
+    verdict "refused:macos-model-share-writable:root-is-not-a-tillandsias-checkout-$ROOT"
+    exit 1
+}
+
+# A precondition this fixture cannot satisfy: say what was not tested, then end
+# on the line the runner scores (1330-i4hu). scripts/run-litmus-test.sh
+# step_terminal_verdict (:960) consults ONLY the last non-empty line and
+# recognises only `skip:`/`advisory:`; with the detail line last the step falls
+# through to check_signal and :992 returns FAILURE. Never used for a red.
+cannot_run() {
+    verdict "unsupported:macos-model-share-writable:$1"
+    verdict "skip:macos-model-share-writable:$1"
+    exit 0
+}
 
 # --- Arm 0: the source-level guard, which needs no VM and no macOS ----------
 # If the load-bearing flag leaves the run-args, say so on every host, not only
@@ -61,31 +117,25 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HEADLESS="$ROOT/crates/tillandsias-headless/src/main.rs"
 if [ -f "$HEADLESS" ]; then
     if ! grep -q '"--security-opt=label=disable".into()' "$HEADLESS"; then
-        echo "violation:macos-model-share-writable:inference-run-args-lost-label-disable"
+        verdict "violation:macos-model-share-writable:inference-run-args-lost-label-disable"
         exit 1
     fi
 fi
 
-[ "$(uname -s)" = "Darwin" ] || {
-    # The source guard above still ran, and that is the half a Linux CI lane
-    # can honestly answer. Say which half was skipped rather than report green.
-    echo "unsupported:macos-model-share-writable:not-darwin-source-arm-only"
-    exit 0
-}
+# The source guard above still ran, and that is the half a Linux CI lane can
+# honestly answer. Say which half was skipped rather than report green.
+[ "$(uname -s)" = "Darwin" ] || cannot_run "not-darwin-source-arm-only"
 
 TRAY="${TILLANDSIAS_TRAY_BIN:-$ROOT/dist/Tillandsias.app/Contents/MacOS/tillandsias-tray}"
-[ -x "$TRAY" ] || {
-    # A bare target/release binary has no com.apple.security.virtualization
-    # entitlement and cannot start a VM at all — name that, rather than let the
-    # caller meet it as a confusing "boot loader is invalid".
-    echo "unsupported:macos-model-share-writable:no-app-bundle-run-scripts/build-macos-tray.sh"
-    exit 0
-}
+SUBJECT="$(subject_of "$TRAY")"
+# A bare target/release binary has no com.apple.security.virtualization
+# entitlement and cannot start a VM at all — name that, rather than let the
+# caller meet it as a confusing "boot loader is invalid".
+[ -x "$TRAY" ] || cannot_run "no-app-bundle-run-scripts/build-macos-tray.sh"
 
 HOST_CACHE="$HOME/Library/Caches/tillandsias/models"
 if [ -d "$HOST_CACHE" ] && [ -n "$(ls -A "$HOST_CACHE" 2>/dev/null)" ]; then
-    echo "unsupported:macos-model-share-writable:cache-not-empty-precondition-unmet"
-    exit 0
+    cannot_run "cache-not-empty-precondition-unmet"
 fi
 
 OUT="$(mktemp -t macos-model-share-writable)"
@@ -128,21 +178,20 @@ arm1="$(sed -n 's/^ARM1://p' "$OUT" | tr -d '\r')"
 arm2="$(sed -n 's/^ARM2://p' "$OUT" | tr -d '\r')"
 
 if [ -n "$arm0" ]; then
-    echo "unsupported:macos-model-share-writable:$arm0"
-    exit 0
+    cannot_run "$arm0"
 fi
 if [ -z "$arm1" ] || [ -z "$arm2" ]; then
-    echo "violation:macos-model-share-writable:no-arm-output-guest-unreachable"
+    verdict "violation:macos-model-share-writable:no-arm-output-guest-unreachable"
     exit 1
 fi
 if [ "$arm1" != "pass" ]; then
-    echo "violation:macos-model-share-writable:product-flags-cannot-create-the-engine-payload-dir"
+    verdict "violation:macos-model-share-writable:product-flags-cannot-create-the-engine-payload-dir"
     exit 1
 fi
 if [ "$arm2" != "fail" ]; then
     # The control did not red. Either the mechanism moved or the probe stopped
     # measuring it — either way arm 1's green means nothing on its own.
-    echo "violation:macos-model-share-writable:mutation-arm-passed-fixture-does-not-discriminate"
+    verdict "violation:macos-model-share-writable:mutation-arm-passed-fixture-does-not-discriminate"
     exit 1
 fi
-echo "ok:macos-model-share-writable:3"
+verdict "ok:macos-model-share-writable:3"

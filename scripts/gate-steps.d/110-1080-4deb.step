@@ -20,3 +20,5 @@ STEP_DESC="Checking every packet that carries a claim or landed fix is visible t
 STEP_SCRIPT="scripts/test-ledger-write-reaches-its-reader.sh"
 STEP_ERROR="a write still lands where no reader consults it — see the verdict line above (1080-4deb)"
 STEP_OK="Ledger-write-reaches-its-reader check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:ledger-write-reaches-its-reader:19"
+

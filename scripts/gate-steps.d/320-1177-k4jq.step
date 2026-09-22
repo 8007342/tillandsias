@@ -20,3 +20,4 @@ STEP_OK="pre-push refusal names the ungated lane"
 # and the fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="the pre-push hook or salvage script is absent, so the refusal could not be read"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the meta-orchestration skill carries the same rule, so the refusal is not the only place it lives"

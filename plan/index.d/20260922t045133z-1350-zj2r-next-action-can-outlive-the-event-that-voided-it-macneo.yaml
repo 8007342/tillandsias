@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: next-action-can-outlive-the-event-that-voided-it-so-the-router-hands-out-work-that-no-longer-exists-and-nothing-shows-the-newest-event-beside-it
+    order: 1350-zj2r
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, tooling, instrument, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      next_action can outlive the event that voided it, so the router hands out work that no longer
+      exists — and nothing shows the newest event beside the line it selects on
+    context: |
+      TWO INSTANCES IN ONE SESSION, both routed to macneo, both blocked before
+      they could start, and in both cases the row itself already said so in an
+      event nobody read.
+
+      INSTANCE ONE, order 1084-x8ya. next_action described three parts. Parts (a)
+      and (b) had already landed — the criterion-4 fixture on trunk with its test
+      passing, and the variant-preserving handshake classification as live code in
+      the secure channel. The row's own cycle-end event of 2026-09-15 says exactly
+      that: "(a) confirmed already landed, (b) landed and falsified, (c) stays
+      macneo's and needs the Linux-mount route routed rather than claimed."
+      next_action was never rewritten, so it still advertised work that was done.
+
+      INSTANCE TWO, order 1132-r4mt. The newest event on the row is macneo's own
+      claim release of 2026-09-20, which states the blocking condition in terms
+      that cannot be misread: the pickup trigger is a log from any host that
+      actually shows the refusal, and until one exists the remaining criterion
+      cannot be started — a fact about the evidence, not a shortage of effort. No
+      such log has appeared since. next_action still described the work.
+
+      THE SELECTOR IS NOT AT FAULT AND THAT IS THE POINT. plan_next reads the
+      fold's next_action, which is the right field to read. The defect is that a
+      claim release or a partial landing can leave that field pointing at work
+      that no longer exists, and nothing refuses it, flags it, or shows the newest
+      event beside it. So a correct selector reading a correct field routes work
+      that is already done or already known blocked, and the cost lands on the
+      host that takes it.
+
+      WHY IT IS INVISIBLE FROM EITHER END. The person releasing a claim writes an
+      event, because that is what the ledger is for and events are append-only.
+      Rewriting next_action is a separate edit that nothing requires and nothing
+      checks. The person routing reads next_action and has no signal that a later
+      event contradicts it. Both behave correctly and the gap is between them.
+    unscoreable: unpinnable-until-the-guard-exists — the deliverable IS the output; the intended fixture is scripts/test-next-action-freshness-is-visible.sh, written and bound in the SAME commit as the change it tests (1136-n8sh), asserting the printed block contains the newest event date and its first line for a row whose next_action predates that event, with a mutation arm removing the print and a negative control on a row whose next_action is the newest thing in it
+    verifiable_closure: |
+      AN OUTPUT, NOT A MECHANISM. plan_next prints, beside the next line it
+      selects on, the DATE AND FIRST LINE of the row's newest event. A router
+      reading that output can see at a glance that the row has moved since
+      next_action was written, without opening the row.
+
+      THE REFUSAL FORM IS DELIBERATELY NOT THE CLOSURE, and the reason should
+      survive: "set-field status ready refuses when next_action predates the
+      newest event" would fire on nearly every active row, because ANY event
+      appended after the last next_action edit satisfies that condition, and that
+      is the normal state of a row being worked. It would manufacture a mass
+      false-refusal class to catch a case that a printed line makes visible for
+      free. The same trade was measured on 1331-884p earlier in this session,
+      where a parse-failure verdict was built, measured and REMOVED because the
+      only rows reaching it were six legitimately-empty closures.
+
+      PRE-FIX RESULT, so the closure is falsifiable: FAILS today. plan_next prints
+      next_action with no indication of the row's newest event, which is how both
+      instances above were routed.
+    next_action: |
+      Print the newest event date and first line beside next: in plan_next, and
+      bind the fixture in the same commit. Do NOT add a refusal — see the closure
+      for why that form was rejected and what it would cost.
+      This row is BLOCKED BY NOTHING; the two instances are already recorded above
+      as its evidence and need no reproduction.

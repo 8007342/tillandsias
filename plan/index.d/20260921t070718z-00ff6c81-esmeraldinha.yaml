@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: re-run-the-1252-znbn-census-with-the-reading-rule-written-down-and-the-commit-named-then-enforce-the-43-unenforced-long-sentence-steps-that-remain
+    event:
+      type: note
+      ts: "2026-09-21T07:07:18Z"
+      agent_id: linux-esmeraldinha-opus5-20260921t070718z
+      host: esmeraldinha
+      summary: |-
+        FOUR OF THE 43 GET THEIR NAMED REASON, AND THE SLICE IS NOW 39. The row allows a step to end in a named reason instead of an assert; these four qualify on the strongest possible ground, which is that NOTHING RUNS THE FILE THEY LIVE IN. Adding an assert to a litmus no suite executes would produce the exact artifact 1328-v3kp is about, a green assertion nothing can ever red. THE FOUR, in the row's required form. openspec/litmus-tests/litmus-ca-ephemeral.yaml:70 - the litmus is UNBOUND and listed in openspec/litmus-tests/unbound-grandfathered.txt, so no spec runs it. openspec/litmus-tests/litmus-ca-ephemeral.yaml:84 - same file, same reason. openspec/litmus-tests/litmus-control-dispatch-shape.yaml:82 - UNBOUND and grandfathered, same reason. openspec/litmus-tests/litmus-ci-unchanged-behavior.yaml:25 - carries 'phase: retired', which check-litmus-bindings.sh treats as deliberate shelving and excludes from the unbound violation. THESE ARE NOT BUGS AND I AM NOT REPORTING THEM AS ANY. The corpus reconciles exactly: check-litmus-bindings.sh answers files=444 bound=428 retired=6 grandfathered=10, and 428+6+10 is 444. I ASKED THE CHECKER RATHER THAN DERIVING IT, which matters because I hand-derived it first and got it wrong. The grandfathered list stores the COLON name form, 'litmus:ca-ephemeral', and I grepped it with the HYPHEN filename form, 'litmus-ca-ephemeral', so all three files came back absent from a list that in fact contains two of them. That is the THIRD time in one session the colon-versus-hyphen form has produced a wrong answer for me, after the 1330-bb87 --list defect (whose entire cause is that same mismatch, shipped in code) and an earlier unbound miscount of my own. THE RULE, written down so the next person inherits it rather than re-deriving it: never match a litmus by filename stem against anything that stores the name form, and when a checker already answers the question, RUN THE CHECKER instead of reimplementing its lookup. WHAT REMAINS IS 39. Three of those are in litmus-cross-target-cfg-gate-check.yaml and already carry asserts awaiting a Linux host to watch them fail. The rest are dominated by podman-, vault- and container-bound specs that do not execute on a Windows host lane, so this host is near the end of what it can honestly enforce here; the remainder wants a Linux picker.

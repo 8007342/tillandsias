@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: note
+      ts: "2026-09-21T18:12:08Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        EVIDENCE FROM THE TRAY-MENU WORK, 2026-09-21, filed here rather than as a new row
+        because this row already names the condition exactly:
+        cloud-only-migration-interrupted-local-src-still-load-bearing.
+
+        THE OPERATOR RAISED IT INDEPENDENTLY TONIGHT, without knowing the row existed:
+        "There should be no local listing, we removed that listing entirely... if there
+        is still any straggler code it should be tombstoned... No access to the hosts src
+        folder at all should remain."
+
+        WHAT IS ACTUALLY TRUE TODAY, measured while fixing 591-33s6:
+
+          the MENU no longer lists local projects — correct, this row did that half.
+            menu_state.rs has no local_projects reference and no LOCAL_* id constant.
+
+          the TRAY STILL SCANS THE HOST src DIRECTORY ON EVERY START.
+            crates/tillandsias-headless/src/tray/mod.rs
+              2080  fn discover_projects() -> Vec<ProjectEntry>
+              2081  reads $HOME, returns early if unset
+              2085  discover_projects_in(&home.join("src"))    <- read_dir on ~/src
+            and it is live at THREE call sites, not one:
+              1336  let projects = discover_projects();
+              1882  let projects = discover_projects();
+              4611  TrayUiState::new_with_debug(root, version, discover_projects(), debug)
+
+        So the display was removed and the ACCESS was not. From outside, the migration
+        looks finished: the menu shows only Cloud. The scan is invisible precisely
+        because its result no longer renders anywhere — which is why this survived, and
+        it is the same shape as the overflow bug two rows over: the thing that would
+        reveal it is the thing that was deleted.
+
+        STALE PROSE, now corrected in menu_state.rs, that made the migration look
+        complete to a reader: the module header, the emission-rule comment, the numbered
+        structure list and a test doc all still described a live `~/src` submenu. Every
+        one of them is now a tombstone naming this order. The ProjectEntry field doc
+        also still defined its display name as a ~/src basename.
+
+        WHAT THIS ROW STILL OWNS, and why the tray-menu work did not simply take it:
+        removing the scan is not a comment change. discover_projects feeds TrayUiState,
+        and the doc on discover_projects_in says it backs "the post-clone local refresh",
+        so at least one live behaviour depends on it. Deleting it needs that path
+        understood first, and the operator instruction is explicit that NO access should
+        remain — which makes this a behaviour change with a blast radius, not cleanup.

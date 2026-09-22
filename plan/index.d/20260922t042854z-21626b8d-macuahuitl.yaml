@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: truly-ephemeral-project-checkout-drop-the-host-mount
+    event:
+      type: note
+      ts: "2026-09-22T04:28:54Z"
+      agent_id: linux-macuahuitl-fable51-20260922t042853z
+      host: macuahuitl
+      summary: |
+        OPERATOR DECISION (2026-09-22, on the coordinator's channel): "Yes on the cloud only, remove the host checkout remainders." Both readings in openspec/changes/cloud-only-project-lifecycle's proposal are confirmed: the opt-in TILLANDSIAS_FORGE_HOST_MOUNT=1 live-edit path is retired together with TILLANDSIAS_PROJECT_HOST_MOUNT, and the mirror-to-host working-copy sync and the ~/src scanner are retired. This row is the change's task T5 and is ordered after T1 (the mirror's exported heads fast-forward from upstream on demand and on a cadence, with a readable sync state) and T4 (the salvage-or-work-ref → sync → seed workflow named where a worker looks), so the replacement affordance exists before the mount goes; its own precondition — a written, working answer to "how do I test an uncommitted local edit in a forge" — is answered by the change's design.md and by the operator's own sentence that work/ branches through the mirror are the way. Surface measured by yoga on 2026-09-21: 28 files name TILLANDSIAS_PROJECT_HOST_MOUNT (two Rust, images/default/lib-common.sh, the rest cheatsheets and their staged image copies, which must move in the same commit); TILLANDSIAS_FORGE_HOST_MOUNT=1 survives as an opt-in path in headless main.rs. Claimable by a Linux host once T1 and T4 are on trunk.

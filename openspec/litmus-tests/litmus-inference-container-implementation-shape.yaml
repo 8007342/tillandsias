@@ -169,6 +169,7 @@ critical_path:
     command: "ACTIVE=$(grep -vE '^[[:space:]]*#' images/inference/entrypoint.sh); printf '%s' \"$ACTIVE\" | grep -qF 'update-ca-trust' && printf '%s' \"$ACTIVE\" | grep -qF '/etc/pki/ca-trust/source/anchors' && ! printf '%s' \"$ACTIVE\" | grep -qF 'update-ca-certificates' && ! printf '%s' \"$ACTIVE\" | grep -qF '/usr/local/share/ca-certificates' && echo 'ok: Fedora CA path active, Debian CA path absent from active code'"
     timeout_ms: 3000
     expected_behavior: "ok: Fedora CA path active, Debian CA path absent from active code"
+    assert_output_contains: "ok: Fedora CA path active, Debian CA path absent from active code"
 
   - step: "Req OLLAMA_BINDIR nesting pin (order 313 residual): .tools nests inside the mounted OLLAMA_MODELS volume, not a sibling"
     # order 313's ledger outcome (plan/index.yaml) claims OLLAMA_BINDIR
@@ -189,6 +190,7 @@ critical_path:
     command: "grep -qF 'OLLAMA_MODELS=/home/ollama/.ollama/models/' images/inference/entrypoint.sh && grep -qF 'OLLAMA_BINDIR=\"${OLLAMA_MODELS}.tools/ollama\"' images/inference/entrypoint.sh && echo 'ok: OLLAMA_BINDIR nests inside the mounted OLLAMA_MODELS volume'"
     timeout_ms: 3000
     expected_behavior: "ok: OLLAMA_BINDIR nests inside the mounted OLLAMA_MODELS volume"
+    assert_output_contains: "ok: OLLAMA_BINDIR nests inside the mounted OLLAMA_MODELS volume"
 
 observability:
   traces:

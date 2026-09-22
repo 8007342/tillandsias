@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T16:52:37Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        HOST STATE CHANGED, recorded now rather than at acceptance time because it
+        outlives this session and the next reader of this host needs it.
+
+        REGIME LINE: trunk build v56.9.21.2, from merged checkout 84e7f5272, installed
+        over v56.9.21.1. Mirror image localhost/tillandsias-git:v56.9.21.2 rebuilt from
+        that binary EMBEDDED assets.
+
+        WHY THE INSTALL WAS NECESSARY, and it applies to every dogfooding host. The
+        mirror image is not built from the checkout: the binary embeds images/git/ at
+        COMPILE time and materializes it unconditionally. So a host running an installed
+        RELEASE rebuilds the mirror from the release assets no matter how current its
+        checkout is. v56.9.21.1 was cut 2026-09-20 21:04 -0700; the mirror lane second-
+        pass fix 88b0679d9 was authored 2026-09-21 07:53 -0700 and is NOT an ancestor of
+        that tag. Rebuilding with the release binary would have produced a mirror whose
+        relay has no EGRESS environment, on a host whose mirror reaches GitHub only
+        through the proxy — and it would have presented as a network fault on a floor
+        host with a from-zero substrate, not as a stale asset.
+
+        HOW THE FIX WAS VERIFIED PRESENT, since the obvious check does not exist: the
+        headless binary --version prints no git sha, so an ancestry check against it is
+        not performable. A CONTENT probe answers the question actually being asked —
+        does this binary carry the fix — rather than which commit built it:
+          the marker is absent in 88b0679d9^ and present in 88b0679d9, so it is that
+          commit text; 88b0679d9 is not an ancestor of the release tag, so the release
+          binary cannot hold it; and `grep -a -c` finds it in the installed binary.
+        A positive-control string that must always be present is part of the probe, so a
+        zero cannot silently mean unreadable.
+
+        TWO NEAR-MISSES INSIDE THAT VERIFICATION, both recorded because both would have
+        produced a confident wrong answer. The first probe returned 0 for the fix marker
+        AND 0 for its bogus control: a control that reads 0 in both worlds distinguishes
+        nothing, and the cause was grep -c without -a on a binary. Then a phrase read 0
+        and nearly became a report that the fix was missing; the phrase was not in the
+        checkout asset either, because it had been reconstructed from a WRAPPED DIFF
+        VIEW rather than from the file. Grep the source you diffed, not the rendering.
+
+        AND A WRITE-BY-DEFAULT TRIPPED WHILE PROBING: `tillandsias version`, with no
+        dashes, is not a subcommand. It took `version` as a PROJECT NAME and began
+        bringing the stack up — vault bootstrapped, git image ensure started. Killed at
+        the enclave stage before any per-project mirror existed; verified afterwards that
+        no container, volume or project directory named `version` was created. This
+        repo own traps page has the sentence: a tool that writes by default cannot be
+        used to ask whether a flag exists.
+
+        The VERSION bump the install produced is deliberately NOT committed (702-eusw: a
+        bump is its own commit with the Cargo files and belongs to a cut). The working
+        copy is reverted; the installed binary keeps 56.9.21.2.

@@ -252,6 +252,93 @@ if ($NoLaunchReason -and -not $NoLaunch) {
     SayWn "Auto-launch disabled for this install ($WslState): the tray's first VM create cannot succeed yet."
 }
 
+# -- WSL2 guest shape report (order 1339-r9xv) -------------------------------
+# THE PLATFORM PREFLIGHT ABOVE ANSWERS "CAN WSL RUN AT ALL". This answers a
+# different question it never asked: WHAT SHAPE OF GUEST will .wslconfig give
+# the user, and is that shape one that can build.
+#
+# MEASURED, not theorised (yolanda-windows 2026-09-21). On a 16-logical-CPU
+# host with 15.16 GiB, WSL defaults produced a guest holding ALL 16 vCPUs
+# inside a 4.8 GiB balloon -- roughly 320 MB per vCPU -- and FOUR consecutive
+# builds were killed for host memory. The same gates on a FOUR-core machine
+# with `processors=4` (100% of that host) and `autoMemoryReclaim=gradual` were
+# never killed once. The more capable machine was the unreliable one, and the
+# difference was entirely configuration.
+#
+# THIS BLOCK REPORTS AND OFFERS. IT NEVER WRITES .wslconfig SILENTLY. That
+# file is the user's and may carry settings for work that has nothing to do
+# with us; writing it behind their back would be a worse defect than the one
+# being fixed. Same consent discipline the destructive reset already follows.
+$WslCfgPath = Join-Path $env:USERPROFILE '.wslconfig'
+$HostLogicalCpus = 0
+$HostMemGiB = 0
+try {
+    $HostLogicalCpus = [int](Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).NumberOfLogicalProcessors
+    $HostMemGiB = [math]::Round((Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).TotalVisibleMemorySize / 1MB, 2)
+} catch {}
+
+if ($HostLogicalCpus -le 0) {
+    # COULD-NOT-MEASURE IS NOT A VERDICT. Say so rather than reporting a shape
+    # derived from a host reading we do not have.
+    SayWn "  wsl-shape: could not read this host's CPU/memory; no guest-shape advice given."
+} else {
+    $CfgProcessors = ''
+    $CfgMemory = ''
+    $CfgReclaim = ''
+    if (Test-Path $WslCfgPath) {
+        foreach ($line in (Get-Content $WslCfgPath -ErrorAction SilentlyContinue)) {
+            $t = $line.Trim()
+            if ($t -match '^processors\s*=\s*(\S+)')       { $CfgProcessors = $Matches[1] }
+            elseif ($t -match '^memory\s*=\s*(\S+)')        { $CfgMemory = $Matches[1] }
+            elseif ($t -match '^autoMemoryReclaim\s*=\s*(\S+)') { $CfgReclaim = $Matches[1] }
+        }
+    }
+    # WSL defaults when a key is absent: all logical CPUs, and (modern WSL2)
+    # 50% of host RAM. State the DERIVED shape, not the file's contents --
+    # the user cannot compute this and it is the whole point of the report.
+    $EffCpus = if ($CfgProcessors -match '^\d+$') { [int]$CfgProcessors } else { $HostLogicalCpus }
+    $EffMemGiB = 0.0
+    if ($CfgMemory -match '^(\d+(?:\.\d+)?)\s*GB$') { $EffMemGiB = [double]$Matches[1] }
+    elseif ($CfgMemory -match '^(\d+)\s*MB$')         { $EffMemGiB = [math]::Round([double]$Matches[1] / 1024, 2) }
+    else { $EffMemGiB = [math]::Round($HostMemGiB / 2, 2) }
+
+    Say "  wsl-shape: guest will take $EffCpus vCPU(s) of $HostLogicalCpus and about $EffMemGiB GiB of $HostMemGiB GiB."
+    if (-not (Test-Path $WslCfgPath)) { Say "  wsl-shape: no .wslconfig found; these are WSL defaults." }
+
+    # THE KNOWN-BAD RATIO, NAMED WITH ITS NUMBERS. A generality here would be
+    # useless: the user needs to see their own figures next to the measured
+    # failure to know whether it applies to them.
+    $MbPerCpu = 0
+    if ($EffCpus -gt 0) { $MbPerCpu = [int](($EffMemGiB * 1024) / $EffCpus) }
+    $RatioBad = ($EffCpus -ge 8 -and $MbPerCpu -gt 0 -and $MbPerCpu -lt 700)
+    $ReclaimOff = ($CfgReclaim -eq '')
+
+    if ($RatioBad -or $ReclaimOff) {
+        Write-Host ""
+        SayWn "  Your WSL2 guest is shaped in a way that has killed builds on a host like this."
+        if ($RatioBad) {
+            SayWn "    $EffCpus vCPUs sharing $EffMemGiB GiB is about $MbPerCpu MB per vCPU."
+            SayWn "    Measured: ~320 MB per vCPU killed four consecutive builds on a 16-core host."
+        }
+        if ($ReclaimOff) {
+            SayWn "    autoMemoryReclaim is not set, so the guest never returns memory to Windows."
+        }
+        SayWn "  Recommended .wslconfig for this host (processors = ALL of them, not a copied number):"
+        Write-Host ""
+        Say "    [wsl2]"
+        Say "    memory=8GB"
+        Say "    processors=$HostLogicalCpus"
+        Say ""
+        Say "    [experimental]"
+        Say "    autoMemoryReclaim=gradual"
+        Write-Host ""
+        SayWn "  autoMemoryReclaim lives under [experimental]; appending it to [wsl2] does nothing."
+        SayWn "  Edit $WslCfgPath yourself, then run: wsl --shutdown"
+        SayWn "  This installer does not modify that file -- it is yours and may hold other settings."
+        Write-Host ""
+    }
+}
+
 # -- Hyper-V Administrators membership (order 312) ---------------------------
 # The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
 # Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) --
@@ -546,12 +633,41 @@ try {
     # install into a hard failure at a step that did not exist when that tag
     # shipped.
     #
-    # PROBE BY CONTENT, not by version arithmetic: ask the binary what it
-    # supports and read the answer. A version comparison would have to know
-    # which tag first carried the flag, and would be wrong for any build that
-    # is not on that line.
-    $ResetHelp = & cmd.exe /c "`"$InstalledExe`" --help 2>&1"
-    $HasResetState = ($ResetHelp -join "`n") -match '--reset-state'
+    # PROBE BY ATTEMPT, NOT BY ADVERTISEMENT (order 1323-5taw). This asked
+    # `--help` whether the flag existed, which is defeated by exactly the
+    # defect it was written to survive: a binary whose --help MENTIONS a flag
+    # its parser REJECTS. That binary is not hypothetical -- v56.9.20.1's
+    # published Linux headless does precisely this (its allow-list at
+    # crates/tillandsias-headless/src/main.rs:612-651 carries no entry, and
+    # pirria's install died on `Unsupported option: --reset-state`,
+    # install_exit=2). Against such a tray the --help probe answers YES, the
+    # installer proceeds, and it Dies on the exit 2 the probe existed to avoid.
+    #
+    # So attempt the flag and read the OUTCOME. The attempt is non-destructive
+    # BY CONSTRUCTION: TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the flag's own
+    # documented opt-out, honoured inside the binary, so a supporting tray
+    # announces the skip and provisions the existing state (exit 0) while a
+    # tray that does not know the flag refuses with "unknown flag" (exit 2).
+    # That distinguishes a parser that honours the flag from a --help that
+    # merely mentions it, which is the fleet's standing rule for stale
+    # binaries: probe a refusal by asking for the refusal.
+    #
+    # NOT a version comparison: that would have to know which tag first
+    # carried the flag and would be wrong for any build off that line.
+    $ProbeLog = Join-Path $env:TEMP "tillandsias-reset-probe.log"
+    & cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& `"$InstalledExe`" --reset-state > `"$ProbeLog`" 2>&1"
+    $ProbeExit = $LASTEXITCODE
+    $ProbeOut = if (Test-Path $ProbeLog) { (Get-Content $ProbeLog -Raw) } else { "" }
+    Remove-Item $ProbeLog -Force -ErrorAction SilentlyContinue
+    # Exit 0 means the parser accepted it. An unknown-flag refusal is exit 2
+    # and names itself; anything else is treated as unsupported too, because a
+    # probe that cannot get a clean acceptance must not authorise a
+    # destructive call.
+    $HasResetState = ($ProbeExit -eq 0)
+    if (-not $HasResetState) {
+        SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
+        if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
+    }
     if (-not $HasResetState) {
         SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
         SayWn "  the install is complete, but a broken local state was NOT repaired."

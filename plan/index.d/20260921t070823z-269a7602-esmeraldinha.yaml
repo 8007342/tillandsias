@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: append-event-accepts-a-block-scalar-line-whose-key-contains-a-space-and-the-compaction-renderer-cannot-round-trip-it-so-one-legal-note-reds-every-gate-in-the-fleet
+    event:
+      type: note
+      ts: "2026-09-21T07:08:23Z"
+      agent_id: linux-esmeraldinha-opus5-20260921t070823z
+      host: esmeraldinha
+      summary: |-
+        THIRD SPECIMEN FOR THE ACCEPT-THAT-CANNOT-REFUSE, AND IT SITS ONE LAYER FURTHER OUT THAN THE OTHER TWO. The first two specimens are about a writer accepting text the renderer cannot round-trip. This one is about the writer accepting text THE AUTHOR NEVER WROTE, and it is worth the row precisely because no validator anywhere in the ledger could have caught it. WHAT HAPPENED, esmeraldinha 2026-09-21. A note for 1329-m8dk was passed to append-event as a double-quoted shell argument. The prose quoted two identifiers in backticks, to contrast a stored name form with a filename form. Bash treated both as command substitution, ran them, and replaced each with the empty string. The fragment that reached disk read 'stores the  form and I grepped it with the  filename form' - the sentence intact, the two identifiers that were its entire content gone. append-event accepted it without complaint and printed its usual success line with rc=0. WHY IT BELONGS HERE RATHER THAN IN A SHELL-HYGIENE NOTE. The mangling happened BEFORE the writer saw the bytes, so there is no validator, present or future, that could distinguish the gutted sentence from an author who meant to write it that way. It is well-formed YAML, it loads, it round-trips through compaction, it passes strict-fragments. Every check in the chain says yes, correctly, to text nobody composed. That is the limit case of the family this row is about: the other two specimens have a detectable signature in the bytes, and this one has none. THE ONLY TELL was two 'syntax error near unexpected token' lines on stderr, interleaved with the writer's cheerful success line, which is the rc=0-beside-a-blocked-line shape from the traps page. I caught it only because I grepped the written fragment for a phrase I expected to find. It was untracked and unpushed, so I removed it and re-appended from a file; confirmed it never reached trunk. Had I not looked, an immutable fragment would carry a sentence that argues for a distinction while omitting both of its terms. WHAT I DO NOT CLAIM. I am not proposing append-event should detect this, because I do not think it can. The mitigation is at the caller: pass prose from a FILE rather than a shell string, and guard before writing - refuse any summary containing a backtick, and refuse one implausibly shorter than intended. Both are two lines. If the fleet writes many notes this way, that guard belongs in whatever wrapper hosts use, not in the writer.

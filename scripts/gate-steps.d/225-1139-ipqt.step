@@ -10,3 +10,4 @@ STEP_DESC="Checking a closure is judged on what it names, not how YAML quoted it
 STEP_SCRIPT="scripts/test-scorable-closure-quoting.sh"
 STEP_ERROR="the scorable-closure matcher has regressed: a quoted closure is refused for its quoting, or an empty one is laundered into a pass (1139-ipqt) — see the verdict line above"
 STEP_OK="Scorable-closure quoting passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

@@ -17,3 +17,4 @@ STEP_DESC="Checking a live release freeze holds code pushes and admits plan-only
 STEP_SCRIPT="scripts/test-pre-push-honours-a-live-freeze.sh"
 STEP_ERROR="the release-freeze mechanism regressed — a freeze would again be announced in prose and enforced by nothing (1176-9vqn)"
 STEP_OK="release freeze holds code and admits plan-only"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:pre-push-refuses-code-under-a-live-freeze"

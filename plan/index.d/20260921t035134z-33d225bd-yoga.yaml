@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: replace-the-natural-language-keyword-interpreter-that-adjudicates-litmus-steps-with-a-structured-assert-so-rewording-a-sentence-can-no-longer-change-the-rule-that-decides-the-verdict
+    event:
+      type: evidence
+      ts: "2026-09-21T03:51:34Z"
+      agent_id: linux-yoga-opus5-20260921t035134z
+      host: yoga
+      summary: |
+        THIS ROW'S OWN CENSUS NO LONGER REPRODUCES, AND THE SLICE IT SIZES IS EMPTY.
+        Recorded here rather than left in a message thread, because the next host to
+        read this row will read the census and not the thread.
+
+        READING RULE, published before the numbers. A step is a `- step:` block
+        delimited by the next `- step:` at any indent — LINE-BLOCK attribution, not a
+        text split. UNENFORCED means the block contains neither assert_exit,
+        assert_output_contains, assert_output_matches, assert_output_nonempty NOR
+        success_pattern. Measured on yoga, 2026-09-21, against origin/linux-next.
+
+        ON TRUNK TODAY: 444 files, 2,589 step blocks, 2,323 with an expected_behavior.
+          UNENFORCED, expected_behavior mentions "succeed"       1
+            (openspec/litmus-tests/litmus-podman-mock-refuses-unknown-invocations.yaml:61)
+          UNENFORCED, long English sentence >60 chars           43
+          UNENFORCED, anything else                          2,167
+
+        IT MOVED WHILE THIS ROW WAS OPEN. The same script against the last commit
+        before 2026-09-19 (139e7027b): 66 succeed-steps, 20 unenforced. Today: 66
+        succeed-steps, 1 unenforced. Nineteen were enforced between the claim and now,
+        by this host and by whoever else touched the corpus, and nobody updated the
+        census — which is how a row comes to size a slice that no longer exists.
+
+        I CANNOT RECONCILE THIS WITH THE ROW'S OWN 64 AND AM NOT PRETENDING TO. The
+        census's buckets read as mutually exclusive across all steps (85 success_pattern
+        ENFORCED / 180 exit-code-only / 64 succeeds-prose NOT ENFORCED / 10 long
+        sentence NOT ENFORCED), which implies a step WITH a success_pattern is never in
+        the 64 — the reading I used. At the same commit that definition gives 20, not
+        64. Three possibilities and I have eliminated none: the census was taken against
+        a different commit, it used a different step delimiter, or "ENFORCED" there
+        means something narrower than "has an assert or a pattern".
+
+        CONSEQUENCE FOR ANYONE CARVING A SLICE FROM THIS ROW: re-run the census with its
+        reading rule and its commit written down FIRST. A host claiming the 64-step
+        slice today finds ONE step, closes the row as a no-op, and the real gap — 43
+        long-sentence steps, and 2,167 steps whose prose enforces nothing at all — stays
+        invisible behind a closed row. That is the failure mode this milestone exists
+        for, arriving through a stale census rather than through a bad check.
+
+        CARVED, with the coordinator, 2026-09-21: the 43 long-sentence steps go to esme
+        as their own row, preceded by the census re-run. The 2,167 is NOT a slice — it
+        is the corpus, and whether a prose expected_behavior is meant to adjudicate at
+        all is THIS row's question and stays here.
+
+        CAVEAT ON MY OWN NUMBERS, stated because the row will outlive the session: one
+        host, one commit, one reading rule, one night. My FIRST measurement of this said
+        65 of 66 were enforced; a second method contradicted it; I discarded the first
+        rather than report it. The number above is the third attempt and the only one
+        whose attribution I can defend.

@@ -71,6 +71,7 @@ critical_path:
     command: "t=$(mktemp -d); grep -Eq 'resolve_target_binary tillandsias-policy|target/debug/tillandsias-policy' scripts/distill-forge-diagnostics.sh && grep -Fq 'distill-forge-diagnostics --repo-root' scripts/distill-forge-diagnostics.sh || { rm -rf $t; echo FAIL-real-wrapper-does-not-delegate; exit 1; }; sed -e s/resolve_target_binary/:/ -e s/--repo-root/:/ scripts/distill-forge-diagnostics.sh > $t/stripped.sh; if grep -Eq 'resolve_target_binary tillandsias-policy|target/debug/tillandsias-policy' $t/stripped.sh; then rm -rf $t; echo FAIL-negative-control-did-not-fail; exit 1; fi; rm -rf $t; echo 'ok: delegates to the Rust packager (negative control red on a stripped copy)'"
     timeout_ms: 5000
     expected_behavior: "ok: delegates to the Rust packager (negative control red on a stripped copy)"
+    assert_output_contains: "ok: delegates to the Rust packager (negative control red on a stripped copy)"
 
   - step: "bash distill consumer: extracts all four envelope fields"
     command: "grep -F 'rfind(|l| l.starts_with(\"event:diagnostics_envelope \"))?' crates/tillandsias-policy/src/main.rs && grep -F 'event:diagnostics_envelope ' crates/tillandsias-headless/src/main.rs"

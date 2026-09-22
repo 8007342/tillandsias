@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-lane-sidecar-adds-a-cert-to-the-agent-on-every-renewal-and-never-removes-the-expired-one-so-the-forge-push-lane-dies-of-maxauthtries-about-two-hours-after-boot
+    event:
+      type: measurement
+      ts: "2026-09-21T21:01:40Z"
+      agent_id: linux-lenovinha-linux-20260921t210140z
+      host: lenovinha-silverblue
+      summary: |-
+        ARM 2 CLOCK STARTED, and a retraction of an earlier reading of my own. I first reported a fixed sidecar running with 2 identities at 20:39Z; that was WRONG - the sidecar was freshly started and UNFIXED, and 2 was simply what any sidecar shows before its first renewal. The distinction matters because 'count is 2' is the arm's own pass condition, so a fresh unfixed sidecar produces the arm's green. That is the third instance tonight of a reading that was right about the number and wrong about what produced it (1345-8hyg). WHY IT WAS UNFIXED: scripts/build-image.sh builds the tag from the CHECKOUT, but a lane launch rebuilds the same tag from ~/.local/share/tillandsias/runtime/<version>/images/, extracted from the binary's embedded assets - filed as 1344-q6uc. I verified the image had the fix, correctly, and the thing that ran did not. REAL START: binary rebuilt at 13:51 local carrying the fixed asset (strings shows 'ssh-add -D'), runtime/56.9.21.1 removed to defeat the version-keyed cache, lane relaunched from the rebuilt binary. Now measured: the re-extracted runtime tree HAS the fix, and the RUNNING sidecar in the container has it (grep -c 'ssh-add -D' = 1, in the container, not in the image). Sidecar started 2026-09-21T20:54:43Z; renewals so far 0; identities 2; RENEW_SECONDS at its true 1200 s default, deliberately unshrunk on the coordinator's ruling so the arm cannot be accused of manufacturing its own cliff. Seven renewals lands about 23:15Z. THE LANE IS ALREADY DEMONSTRABLY ALIVE, which it was not before: 'ssh -p 2222 git@git-kvs69tkis9dfnbejbatg true' from the forge now reaches the forced command and is refused by it with 'fail:tillandsias-receive:not-receive-pack', EXIT=1. Pre-fix the same command died at authentication with EXIT=255 and never reached any command. An authorisation refusal is the lane WORKING; only the post-cliff reading closes arms 2 and 3.

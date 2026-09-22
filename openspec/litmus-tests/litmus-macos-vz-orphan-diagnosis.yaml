@@ -1,0 +1,54 @@
+# @trace spec:vm-provisioning-lifecycle
+name: litmus:macos-vz-orphan-diagnosis
+spec: vm-provisioning-lifecycle
+description: >
+  Order 1253-gina. A Virtualization.framework XPC child holds the image
+  directory's nvram.bin while a guest runs, and every start attempted against a
+  held image dies as "The boot loader is invalid" — a string that describes a
+  corrupt EFI store and sends the reader at --reset-guest, which DESTROYS the
+  guest disk and the in-VM vault to repair what one `kill` clears. This binds
+  scripts/test-macos-vz-orphan-diagnosis.sh, which asserts the enriched text
+  names the holding pid and steers away from --reset-guest, and that a
+  SIGKILLed tray leaves no helper behind.
+severity: critical
+size: medium
+# NEVER `check`. The fixture boots a guest twice; ~30s on a warm host but it
+# needs the app bundle and a provisioned image, neither of which a gate has.
+phase: post-build
+
+preconditions:
+  - macOS host with Virtualization.framework (the fixture refuses by name elsewhere; its source arm still runs anywhere)
+  - a BUILT tray bundle at dist/Tillandsias.app — a bare target/release binary has no com.apple.security.virtualization entitlement and cannot start a VM at all
+  - a provisioned image directory (nvram.bin present) with NO VM currently running against it
+
+caveats:
+  - refuses_rather_than_guesses: "Off-platform, without the bundle, without an image, or with the image already held, the fixture prints unsupported:* and exits 0 — a skip naming what was not tested"
+  - the_mutation_arm_is_the_test: "Arm 1 alone ('SIGKILL, then a second run works') is green on any quiet host that never orphaned anything. Arm 2 leaves a live VM holding nvram and requires the same assertion to RED. Weaken arm 2 and this file measures nothing."
+  - leaves_no_residue: "The fixture kills the guest it started, and any holder it finds, on every exit path"
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-macos-vz-orphan-diagnosis.sh && test -x scripts/test-macos-vz-orphan-diagnosis.sh && echo PARSE-OK"
+    timeout_ms: 10000
+    success_pattern: "PARSE-OK"
+    failure_pattern: "syntax error|No such file"
+
+  - step: "the diagnosis names the holder, refuses --reset-guest, and the mutation arm reds"
+    command: "scripts/test-macos-vz-orphan-diagnosis.sh 2>&1 | grep -E '^(ok|violation|unsupported|skip|refused):macos-vz-orphan-diagnosis:'"
+    timeout_ms: 600000
+    # ASSERT THE OUTPUT, not the source: the fixture's arms carry the meaning,
+    # and re-implementing them here would pass the moment one was weakened.
+    success_pattern: "ok:macos-vz-orphan-diagnosis:4"
+    failure_pattern: "(violation|refused):macos-vz-orphan-diagnosis"
+
+observability:
+  traces:
+    - "@trace spec:vm-provisioning-lifecycle"
+  expected_log: "With a VM holding nvram.bin, a second start fails naming the holding pid and telling the reader NOT to --reset-guest; after the owning tray is SIGKILLed no helper holds the image and the identical start succeeds"
+  log_fields:
+    spec: "vm-provisioning-lifecycle"
+    test: "macos-vz-orphan-diagnosis"
+
+rollback:
+  on_failure: "a violation naming 'second-start-succeeded-with-the-orphan-alive' means the discriminating arm stopped discriminating — fix that before trusting the subject arm; a violation naming 'helper-...-outlived-a-sigkilled-tray' is the leak half of 1253-gina reappearing"
+  command: "grep -n 'explain_start_failure' crates/tillandsias-vm-layer/src/vz.rs"

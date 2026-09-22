@@ -328,6 +328,20 @@ still holds (§2 destroys, §1 provisions), but on an operator's workstation say
 what §1 actually does before running it; consent to a download check is not
 consent to a Vault bootstrap (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
 
+**SINCE 1286-4437, `install.sh` CALLS `--reset-state` ITSELF, so on a release
+carrying that change §1 IS A DESTRUCTIVE STEP.** Bank the pre-state BEFORE §1,
+not before §2, or the reset contract has nothing to be measured against — and
+on an operator's workstation get consent for §1 on those grounds, not §2's.
+
+**AFTER A SUCCESSFUL §1 THE ENCLAVE SHOWS ZERO RUNNING CONTAINERS, AND THAT IS
+CORRECT.** The reprovision rebuilds IMAGES synchronously; the install log ends
+`SUCCESS web`, "Reset and reprovision complete", exit 0, and directs the
+operator to launch the tray. Containers arrive at tray or lane launch, not at
+install. A reader who checks `podman ps` here and finds it empty will file a
+failed provision against a release that installed perfectly — measured on
+pirria during the v56.9.21.1 run. Check the IMAGE count against `run_start`
+instead: on a real reprovision every image post-dates it.
+
 Linux:
 
 The installer honors `TILLANDSIAS_RELEASE_BASE` so the smoke pins the exact
@@ -652,6 +666,33 @@ VAULT_DATA_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/vault-data"
 { echo "[vault-data-dir]"; ls -la "$VAULT_DATA_DIR" 2>&1; } | tee target/smoke-e2e/02-vault-data-dir.txt
 test ! -e "$VAULT_DATA_DIR"
 ```
+
+**AFTER THE REPROVISION, CHECK THAT THE IMAGES WERE REBUILT — AND SCOPE IT TO
+`localhost/`.** An empty store proves the reset destroyed; it does not prove the
+reprovision rebuilt. The natural check is "no image predates `run_start`", and
+written without a scope it is WRONG in a way that reads as a failure:
+
+```bash
+# CORRECT: locally BUILT images only.
+podman images --format '{{.CreatedAt}}\t{{.Repository}}' \
+  | grep 'localhost/' | awk -F'\t' -v rs="$RUN_START_LOCAL" '$1 < rs' \
+  | tee target/smoke-e2e/01-images-predating.txt
+test ! -s target/smoke-e2e/01-images-predating.txt
+```
+
+A PULLED BASE IMAGE'S `CreatedAt` IS ITS UPSTREAM BUILD DATE, not the moment
+this host fetched it. `alpine:3.20` reports its upstream build — months old —
+however freshly it was pulled a minute ago, and so do `caddy`, `hashicorp/vault`
+and `fedora-minimal`. Unscoped, the check reports those as "images predating
+run_start" on a perfectly healthy reprovision.
+
+MEASURED on pirria 2026-09-21: 30 `localhost/` tag-rows, none predating
+run_start, beside 5 base images every one of which predates it by construction.
+The stable-channel report claimed "all recreated — 0 predate run_start" over all
+15 images while its evidence file held only the 20 `localhost/` lines it had
+actually examined — a true measurement described with a scope it did not have.
+Either error is available to the next reader: count the base images and report a
+false failure, or omit them and claim more than you measured.
 
 `scripts/clear-vault-host-credentials.sh` removes it but only best-effort —
 it is written from inside a container under a subuid, so a rootless `rm -rf`

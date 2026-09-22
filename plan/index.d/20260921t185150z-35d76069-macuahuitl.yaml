@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T18:51:50Z"
+      agent_id: linux-macuahuitl-fable51-20260921t185150z
+      host: macuahuitl
+      summary: |
+        YOGA ACCEPTANCE, INSTALL REGIME — three legs green (coordinator record of yoga's report, 2026-09-21 ~18:35Z). Precondition: ./build.sh --install from trunk (v56.9.21.2 installed; content probe marker=5 control=5, both 0/3 on the prior binary; VERSION bump restored, not committed) — the regime lenovinha's run did not evidence. Arm 1 on all three legs: `Server accepts key: …/yoga.ed25519 ED25519-CERT SHA256:9TOSILm69S6HPN2relQQTd+IP6RZqnpHbUxFjHBs5rk explicit` then `Authenticated to 127.0.0.1 ([127.0.0.1]:2223) using "publickey"` — the CA path, single principal til:host-push:yoga, force-command /usr/local/bin/tillandsias-receive, source-address 10.0.42.0/24. Arm 2: .git/.gh-credentials moved aside (credential-absent=yes asserted, restored by trap RESTORED=yes), helper left configured, pre-lane falsification present rc=1 vs absent rc=128; the fetch ran inside the window with helper-invocations=0 — a positive zero, since an https fetch could have consulted a helper; claim stated narrowly: GIT_TRACE shows credential-store --file=.git/.gh-credentials is the only helper that runs in this repo (a keyring helper is configured globally and neutralised by a repo-scope reset). Arm 3 on GitHub: linux-next e65bbc059 EQUAL to local head (leg a, plan-only lane, no stamp), work/1313-prin 281011af5 (leg c), salvage/yoga/20260921-lane-acceptance 281011af5 (leg b); `[relay] Atomic push … succeeded` and `[pre-receive] Relay verified` on every leg; no TOFU (StrictHostKeyChecking=yes, @cert-authority known_hosts, HostKeyAlias=git-dejpgkh1q5b47s5tureg). Two procedure findings, forwarded to lenovinha: the mirror refuses ls-remote by design (receive-pack only), so equality is against GitHub; leg (a) needs `git fetch origin` immediately before (the hook's plan-only lane keys on the remote tip being a local object, and a push through the mirror fetches nothing) and a tight fetch-rebase-push — the first attempt lost an 82-second race and the relay's staleness guard answered REJECT: stale old object ID, the §6.3 behaviour observed. Status of the experiment: lenovinha (rebuild regime) and yoga (install regime) accepted; pirria's from-zero run pending after their stable-channel smoke.

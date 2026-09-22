@@ -95,6 +95,22 @@ set -uo pipefail
 # first run: every arm ran against the live tillandsias checkout and was saved
 # only by an unrelated dirty-tree refusal. A clean tree would have had it
 # merging scaffold branches into the real trunk.
+# THE SCRIPT'S OWN DIRECTORY, CAPTURED BEFORE ANY cd, AND IT IS NOT $ROOT.
+#
+# TWO DIFFERENT QUESTIONS THAT BOTH LOOK LIKE "WHERE AM I":
+#   $ROOT      the repository being LANDED INTO — the checkout you invoked from
+#   $_SELF_DIR where THIS SCRIPT'S SIBLINGS live — gate-stamp.sh and friends
+# They are the same path in production and different in every fixture, which is
+# why the fixture caught it: the scaffold repo has no scripts/ directory, so
+# `$ROOT/scripts/gate-stamp.sh` did not exist, the classifier returned nothing,
+# and the 1335-2nzf adopt path re-queued every time while reporting no error.
+#
+# AND IT IS CAPTURED BEFORE THE cd DELIBERATELY. BASH_SOURCE[0] is the
+# INVOCATION path; reading it after `cd "$ROOT"` resolves it against the wrong
+# directory for any relative invocation — the exact defect landed tonight as
+# 1337-3tk6's follow-up, arriving here from the opposite direction.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "fail:land-queue:not-a-git-repo — run this from the checkout you are landing into" >&2
     exit 1
@@ -216,7 +232,23 @@ fi
 git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
 
 _n=0
-while IFS=$'\t' read -r num head; do
+# THE CANDIDATE LIST IS READ ON FD 3, NOT STDIN, AND THAT IS NOT STYLE.
+#
+# MEASURED IN THE FIELD ON THIS SCRIPT'S SECOND REAL USE, 2026-09-21: invoked
+# with `--limit 2` over two ready PRs it processed ONE and reported
+# `ok:land-queue:1`. The loop body runs the real gate, `./build.sh --check`,
+# which READS STDIN — and the loop was reading its candidates from a here-string
+# on stdin, so the gate swallowed the remaining candidates and the loop ended
+# after one iteration.
+#
+# THE FIXTURE COULD NOT SEE IT. Its stub gate is `exit 0`, which consumes
+# nothing, so arms 1 and 3 land three candidates each and pass while the real
+# queue drains one per run. A fixture only tests the world it builds, and the
+# world it built had a gate that does not read.
+#
+# fd 3 makes the body's stdin habits irrelevant instead of forbidding them: any
+# future step may read stdin freely and the candidate list is untouchable.
+while IFS=$'\t' read -r num head <&3; do
     [ -n "$num" ] || continue
     if [ "$LIMIT" -gt 0 ] && [ "$_n" -ge "$LIMIT" ]; then break; fi
     _n=$((_n + 1))
@@ -276,7 +308,7 @@ Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. T
     _glog="$(mktemp)"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
-    ( eval "$GATE" ) > "$_glog" 2>&1
+    ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
     if [ "$_grc" -ne 0 ]; then
         _tail="$(tail -5 "$_glog")"
@@ -300,10 +332,61 @@ The queue continued with the next candidate. Fix and the queue will pick it up a
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
     base_now="$(git rev-parse "$REMOTE/$TRUNK")"
     if [ "$base_now" != "$base_sha" ]; then
-        say "requeue:land-queue:$num:target-moved:gated-on=${base_sha:0:9} now=${base_now:0:9}"
-        pr_comment "$num" "Re-queued, not landed: \`$TRUNK\` moved from \`${base_sha:0:9}\` to \`${base_now:0:9}\` while this candidate was gating, so the green verdict describes a tree nobody is pushing. Nothing was pushed. The queue will re-gate against the new target."
-        requeued=$((requeued + 1))
-        continue
+        # ── ORDER 1335-2nzf: A PLAN-ONLY MOVE DOES NOT INVALIDATE THIS GATE ──
+        #
+        # "The SHA moved" and "the gate's verdict is now wrong" are different
+        # questions, and comparing SHAs answers only the first. MEASURED, twice:
+        # on 2026-09-22 three plan-lane pushes re-queued both candidates in a
+        # drain, costing two ~20-minute FULL gates; the same night the LAND TOOL
+        # adopted its stamp across two plan-only moves and landed on attempt 2.
+        # With six hosts pushing fragments, every queue gate is a gate the fleet
+        # is likely to lose, and nobody can be asked to stop appending to the
+        # ledger for twenty minutes at a time.
+        #
+        # THE CLASSIFIER IS NOT NEW AND MUST NOT BE. `gate-stamp.sh classify`
+        # takes paths on stdin and returns the sorted class set (765-dt8h), the
+        # same taxonomy the stamp's scope, the pre-push lane and change-class.sh
+        # already use. A fourth copy would be a fourth thing to drift — which is
+        # why this asks the existing subcommand rather than matching paths here.
+        #
+        # ADOPT ONLY WHEN EVERY CLASS IN THE DELTA IS plan-ledger. Anything else
+        # — a script, a spec, a crate, an unreadable answer — re-queues. The
+        # failure direction is the same one the whole row family uses: an
+        # uncertainty runs the gate again rather than skipping it.
+        _delta_classes="$(git diff --name-only "$base_sha" "$base_now" 2>/dev/null \
+                          | bash "$_SELF_DIR/gate-stamp.sh" classify 2>/dev/null)"
+        _adoptable=1
+        if [ -z "$_delta_classes" ]; then
+            _adoptable=0          # empty answer is not "no classes"; re-queue
+        else
+            while IFS= read -r _c; do
+                [ -n "$_c" ] || continue
+                [ "$_c" = "plan-ledger" ] || { _adoptable=0; break; }
+            done <<< "$_delta_classes"
+        fi
+
+        if [ "$_adoptable" -eq 1 ]; then
+            # Re-merge onto the moved target. The gate's verdict still describes
+            # the code, because nothing the gate compiles, lints or runs changed
+            # — only ledger fragments did. A conflict here is a real answer and
+            # falls through to the re-queue below.
+            if git merge --no-ff -q -m "land($num): $head into $TRUNK (adopted over a plan-only move)" \
+                 "$base_now" >/dev/null 2>&1; then
+                merge_sha="$(git rev-parse HEAD)"
+                base_sha="$base_now"
+                say "adopt:land-queue:$num:plan-only-move:gated-on=${base_sha:0:9} classes=plan-ledger — the gate's verdict still describes this code"
+            else
+                git merge --abort 2>/dev/null || true
+                say "requeue:land-queue:$num:plan-only-move-conflicts:${base_now:0:9}"
+                requeued=$((requeued + 1))
+                continue
+            fi
+        else
+            say "requeue:land-queue:$num:target-moved:gated-on=${base_sha:0:9} now=${base_now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//')"
+            pr_comment "$num" "Re-queued, not landed: \`$TRUNK\` moved from \`${base_sha:0:9}\` to \`${base_now:0:9}\` while this candidate was gating, and the move touched classes \`$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//')\` — not ledger fragments alone, so the green verdict no longer describes the tree being pushed. Nothing was pushed. The queue will re-gate against the new target."
+            requeued=$((requeued + 1))
+            continue
+        fi
     fi
 
     # ── PUSH, AND PROVE IT LANDED BY ASKING THE REMOTE ───────────────────────
@@ -318,7 +401,7 @@ The queue continued with the next candidate. Fix and the queue will pick it up a
     fi
     say "requeue:land-queue:$num:push-did-not-land:rc=$_prc — the remote does not have ${merge_sha:0:9}"
     requeued=$((requeued + 1))
-done <<< "$_cands"
+done 3<<< "$_cands"
 
 say "ok:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped"
 exit 0

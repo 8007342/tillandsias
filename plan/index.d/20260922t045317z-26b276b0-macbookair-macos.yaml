@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-probe-proves-a-container-placed-a-model-on-the-gpu-and-still-records-the-container-lane-unverified-so-a-live-gpu-lane-reads-as-present-unscheduled-fleet-wide
+    event:
+      type: note
+      ts: "2026-09-22T04:53:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |
+        A SECOND FILE IS TOUCHED BEYOND THIS ROW'S owned_files, recorded as an event
+        because owned_files is a LIST and set-field writes scalars only (1184-tj2q), so
+        the field itself cannot carry this.
+
+        owned_files names crates/tillandsias-headless/src/accel_probe.rs. PR #142 also
+        changes crates/tillandsias-plan/src/main.rs, for EXIT CRITERION 5 only — the
+        criterion asking that the matrix line distinguish a routing INPUT from a PROBED
+        OUTPUT. That criterion cannot be met inside accel_probe.rs: the two readings it
+        is about are printed by capability-matrix.
+
+        WHAT THE CHANGE IS, and deliberately all it is: one `reading:` line printed
+        between derived_tier and the schedulable/present-unscheduled lines, naming which
+        is which. NO key is added, NO existing key or value is changed.
+
+        WHY IT IS SHAPED THAT WAY RATHER THAN AS A CLEARER RENAME. The obvious fix is to
+        rename the key so it carries the distinction — `derived_tier` to something
+        marked as an input. scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
+        matches whatever vocabulary that command publishes, and its own assertion says
+        so in as many words, so a rename would move this defect into that reader and the
+        next person would find it there instead. The presentation line leaves every
+        consumer reading exactly what it read before.
+
+        CRITERION 2's ban is untouched by this: it forbids changing the MATRIX to
+        achieve the schedulable line, meaning its intersection. The intersection is not
+        touched; this is presentation beside it.

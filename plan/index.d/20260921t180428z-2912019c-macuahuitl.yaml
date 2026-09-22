@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-scorable-obligation-checkers-packet-row-marker-treats-any-two-space-list-item-as-a-new-row-so-a-yaml-dumpers-indentless-sequences-flush-the-row-and-every-field-after-the-first-exit-criterion-is-invisible
+    event:
+      type: note
+      ts: "2026-09-21T18:04:28Z"
+      agent_id: linux-macuahuitl-fable51-20260921t180428z
+      host: macuahuitl
+      summary: |
+        COORDINATOR LINK (2026-09-21): this row is SUBSUMED BY 1331-884p — the same row-splitter defect in scripts/check-scorable-obligation-added.sh (a dash at indent 2 or 4 flushes the packet record), seen from the false-refusal end here and from the false-silent-pass end there (142 of 1,450 fragments never parsed). The fix 1331-884p states (identify a row by its sibling keys, never by dash depth) resolves this row entirely; do not claim this row on its own — claim 1331-884p and close both. This row's lead survives on 1331-884p's record: scripts/check-fragment-status-loss.sh shares the idiom at three sites and the closure must name whether they were fixed or left. Found by yolanda-tillandsias-forge while reading the ready queue; neither row was claimed on any branch at the time.

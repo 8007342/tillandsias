@@ -61,3 +61,4 @@ STEP_DESC="Checking a litmus critical_path item cannot merge into its predecesso
 STEP_SCRIPT="scripts/test-litmus-item-opener-refused.sh"
 STEP_ERROR="a critical_path item opened by a key other than 'step:' merges backwards into the previous step and the file silently loses a step (1252-znbn) — read which arm failed above; arm 3 failing means the guard itself is no longer exercised"
 STEP_OK="Litmus critical_path items cannot merge silently"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-item-opener-refused:4/4"

@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-enforcement-census-counts-an-assert-in-a-litmus-nothing-runs-beside-one-that-can-actually-go-red-so-a-closure-expressed-as-an-enforced-count-overstates-by-a-quarter
+    packet_kind: improvement
+    order: 1334-57at
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, census, fail-loud, no-build]
+    estimated_hours: 3
+    owned_files:
+      - scripts/census-litmus-step-enforcement.sh
+      - scripts/test-census-enforced-reachability-split.sh
+    unscoreable: ""
+    verifiable_closure: |
+      scripts/census-litmus-step-enforcement.sh prints ENFORCED-REACHABLE and
+      ENFORCED-INERT as separate lines; the closure figure names the REACHABLE
+      count; and scripts/test-census-enforced-reachability-split.sh pins by
+      MUTATION that a step in a grandfathered-unbound file counts INERT while
+      the SAME step in a bound file counts REACHABLE.
+
+      PRE-FIX RESULT, required as evidence and not as a claim — against the
+      unmodified census the fixture scores 0 passed, 6 failed.
+    title: |
+      the enforcement census must say whether an ENFORCED step can actually run, because an assert in a litmus nothing executes can never go red
+    context: |
+      AN ASSERT IN A FILE NOTHING RUNS IS, IN 1333-jpq5's WORDS, "CORRECT AND
+      INERT". It cannot go red. Counting it beside a real one overstates
+      enforcement, and any closure expressed as a count of enforced steps
+      inherits the overstatement — 1329-m8dk's closure did.
+
+      MEASURED ON THE REAL CORPUS at trunk bbab64bf6, after the fix:
+        ENFORCED 247 = REACHABLE 181 + INERT 66, so 26.7 percent inert.
+
+      REACHABLE is 1333-jpq5's definition and not a new one: BOUND in
+      litmus-bindings.yaml AND not 'phase: retired'. Grandfathered-unbound is
+      NOT reachable — the grandfather list exempts a file from the binding
+      violation, it does not cause anything to run it.
+
+      THIS IS NOT AN ACCUSATION AND MUST NOT BE READ AS ONE. Most of those
+      assertions are historical strays whose files were grandfathered with the
+      asserts already in place. Nobody laundered anything. The census should
+      simply say which of the two kinds it is counting.
+
+      I ALSO REPORTED THE FIGURE WRONG THE FIRST TIME and the correction is
+      part of the record. I told the fleet 53 of 244, 21.7 percent. That was an
+      undercount: I used "not bound" where 1333-jpq5 uses "bound AND not
+      retired", and four bound-but-retired files carry 13 enforced steps
+      between them — build-trace-index-dispatch-coverage 6,
+      nix-cache-size-signal 4, socket-cleanup 2, init-log-cleanup 1.
+      53 + 13 = 66, reconciled exactly. A weaker definition of reachable
+      produced a smaller number, which is the direction nobody audits.
+
+      THE FIXTURE IS WIRED, NOT ORPHANED. litmus:census-enforced-reachability-split
+      is bound under ci-release — the spec the file itself declares, so it does
+      not reproduce the mismatch 1333-jpq5 counts — and a real
+      'run-litmus-test.sh ci-release' run prints
+      'Executing litmus:census-enforced-reachability-split'. ARM 4 is the
+      mutation: the stray's bytes do not change, only its presence in the
+      bindings, and it must move INERT to REACHABLE. ARM 5 and ARM 7 require
+      the two halves to sum to the single ENFORCED total, hermetically and on
+      the real corpus, because a split that does not reconcile is how a third
+      bucket hides.
+    next_action: >
+      Delivered on work/1334-57at as draft PR #128. Review wants two things.
+      First, confirm check-litmus-bindings.sh is GREEN on the landing host: it
+      reds on esmeraldinha for an unrelated reason filed as 1334-vcf5, and that
+      refusal is a false one caused by an absolute path, not by this change.
+      Second, decide whether the INERT figure should ever gate anything; this
+      row deliberately only REPORTS it, because 66 inert steps are pre-existing
+      and turning them into a refusal would red every host for history.
+    provenance: |
+      esmeraldinha 2026-09-21, at the coordinator's request, from a finding
+      made while checking whether the census row needed a PR at all — it did
+      not, its script was already published, and checking first is what turned
+      this up. Cites 1333-jpq5 (the same question at TEST level) and 1329-m8dk
+      (whose closure inherits the overstatement).

@@ -11,3 +11,4 @@ STEP_DESC="Checking the inference engine is version-pinned and digest-verified, 
 STEP_SCRIPT="scripts/test-inference-engine-pinned-and-npu-honest.sh"
 STEP_ERROR="the inference engine can be fetched unpinned or unverified, or the NPU banner went silent again while the spec still claims NPU rows (1118-d3b6) — see the verdict line above"
 STEP_OK="Inference engine pinning and NPU telemetry passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the spec still specifies NPU rows, so reporting NPU state is still the reconciliation"

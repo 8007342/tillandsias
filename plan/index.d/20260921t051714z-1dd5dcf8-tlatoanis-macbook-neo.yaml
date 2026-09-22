@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-platforms-state-root-falls-back-to-a-silent-default-when-its-home-variable-is-unset-and-since-reset-state-those-roots-are-destructive-so-a-scrubbed-environment-turns-a-repair-into-a-no-op-that-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-21T05:17:14Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260921t051714z
+      host: tlatoanis-macbook-neo
+      summary: |
+        TWO OBSERVATIONS FROM THE v56.9.21.1 macOS SMOKE (macneo, 2026-09-21), one confirming this row's F3 across a second release, one recording that half of this row's remedy is now in a shipped artifact.
+
+        G2 — F3 REPRODUCES ACROSS RELEASES, so it is not an artefact of one install.
+        After installing v56.9.21.1:
+          /Applications/Tillandsias.app                tillandsias-tray 56.9.21.1 (git 2f5f2a90a)
+          /Users/tlatoani/Applications/Tillandsias.app tillandsias-tray 56.9.11.1 (git df944af67, built 2026-09-12)
+        The stale copy survived the v56.9.20.1 install and now the v56.9.21.1 install. install-macos.sh writes /Applications and never reads ~/Applications, so a second location is never upgraded, never removed and never mentioned — across releases, indefinitely. Two apps of one bundle id, nine versions apart, and only one of them is ever touched.
+
+        This is the row's hardcoded-path family from the other end: reset_state.rs derives its reprovision path as the literal /Applications/... An operator whose real install is the ~/Applications one is refused by a guard that is correct about the path it was told to check and wrong about the host — the fail-CLOSED mirror of the HOME case's fail-OPEN.
+
+        G3 — image_root_source IS IN THE SHIPPED ARTIFACT. `--diagnose --json` from the installed v56.9.21.1 tray now carries:
+          image_root_source = home
+        In the v56.9.20.1 run that field was ABSENT, which is why that report had to state as a limit that every rootfs_present reading was unattributable to a root: with HOME unset the same diagnostic would have reported on /tmp with nothing saying so. That gap is closed in the release, not merely in the tree.
+
+        WHAT THIS DOES NOT CLOSE, kept explicit so the row is not read as narrower than it is. The LABEL shipped; the RESOLUTION did not change. image_root() still falls back to /tmp silently for readers — a reader can now SEE which root answered, which is the difference between a false verdict and a labelled one, but it is not the difference between a false verdict and a correct one. The destructive caller's refusal (image_root_for_destruction) remains the only hard stop, the reprovision path is still a literal, and both siblings are untouched: the shared cache_root -> std::env::temp_dir (which the macOS body itself calls for the fallback_* copies and vault-data) and the Windows LOCALAPPDATA -> C:\Users\Public\AppData\Local, a real shared multi-user path whose child is passed to remove_dir_all.
+
+        ALSO UNMEASURED AND UNCHANGED: which real contexts have HOME unset. The LaunchServices regime (980-xcaf) remains the one candidate that would put a shipped path on this row, and its HOME behaviour has still not been measured by anyone.

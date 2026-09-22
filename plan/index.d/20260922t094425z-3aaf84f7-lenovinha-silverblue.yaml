@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-22T09:44:25Z"
+      agent_id: linux-lenovinha-linux-20260922t094425z
+      host: lenovinha-silverblue
+      summary: |
+        T1 HALF DELIVERED: THE READABLE SYNC STATE. Gate green (./build.sh --check, 2615s) and preflight clean (ran=96 skipped=15, zero failures) before it. THE ROW STAYS in_progress AND HERE IS EXACTLY WHY, so a reader does not take a green fixture for a finished deliverable.
+        WHAT LANDS:
+          images/git/publish-sync-state.sh — computes the state from data the mirror ALREADY holds (the tracking namespace relay-refs.sh fetches before every relay) and publishes refs/tillandsias/sync-state/<state>[/<detail>]/<epoch> against the empty blob, so a forge reads it by ls-remote with no fetch, no credential and no GitHub.
+          scripts/test-mirror-sync-state.sh — six arms, hermetic, manufacturing the BEHIND and UNKNOWN states in scratch repositories.
+          openspec/litmus-tests/litmus-mirror-sync-state-readable.yaml + its binding under git-mirror-service.
+        THE THREE STATES KEEP THE DISTINCTION 1338-tkfh EXISTS FOR: current; behind/<n>; unknown/no-tracking-data. A mirror that has never fetched upstream is NOT a current mirror, and collapsing those two is the defect — not a nicety. An exported head with no tracking twin (a salvage ref upstream has never seen) is NOT counted as behind, or every mirror is permanently behind and the verdict is useless rather than wrong.
+        FALSIFIABILITY SHOWN, NOT CLAIMED, because I have spent tonight requiring it of others: collapsing `behind` and `unknown` into `current` in the publisher reds arms 1 and 3 BY NAME (`expected unknown, got current`; `expected behind with a head count of 1, got current`), and restoring greens 6/6. An arm run against a mirror that happens to be current cannot fail for this defect, which is why the fixture manufactures the failing states instead of waiting for a real mirror to fall behind.
+        AND I RAN THE DIALECT CHECKER RATHER THAN READING FOR IT — ok:bash-dialect-clean — because four hours ago I missed a bash-4-ism in a line I had quoted in my own review, and the rule I adopted from that is that a checker is not a thing to read for.
+        WHAT IS NOT DONE, and the row is open on all of it: the DEMANDED sync (`tillandsias --sync <project>` and the tray action), the CADENCE, the publisher being CALLED from the mirror's own lifecycle (nothing invokes it yet — it is a script that works and is wired to nothing), and the acceptance on two regimes (this host, whose mirror was rebuilt 00:13Z after 1348-gkvi, plus yoga's install regime). The litmus covers the readable-state half only; it says so in its own description.
+        THE ONE OPEN DECISION IS STILL NOT MINE: tags. The pre-push refspec is heads-only, so no upstream tag data exists to compare against, and publishing a tag verdict from data that does not exist would be worse than publishing none. The publisher says that in its header rather than quietly reporting on tags. Growing the refspec needs the same rejection-path care the heads one was given.

@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: evidence
+      ts: "2026-09-21T18:13:41Z"
+      agent_id: forge-forge-tillandsias-claude-20260921t181341z
+      host: forge-tillandsias
+      summary: |
+        NOT A ONE-OFF — NINETEEN DAYS OF UNATTRIBUTED SALVAGE REFS, and the population
+        says the same thing the single instance did. Enumerated from the remote with
+        `git ls-remote origin 'refs/heads/salvage/*'`, not from a local fetch.
+
+        SIX refs carry no host, and every slug is forge-shaped:
+
+          salvage/unknown/20260902-opsx-claude-lane-dirt
+          salvage/unknown/20260902-opsx-claude-locus-generated
+          salvage/unknown/20260910-1080-4deb-arm1
+          salvage/unknown/20260916-920-cluster-forge-20260916
+          salvage/unknown/20260916-920-cluster-forge-20260916-232039
+          salvage/unknown/20260921-opsx-1.13.1-regen            (this row's instance)
+
+        Against roughly a hundred host-attributed refs from bare-metal hosts — esme,
+        esmeraldinha, lenovinha, lenovinha-silverblue, macuahuitl, pirria, yoga,
+        yolanda, yolanda-windows, tlatoanis-macbook-air, tlatoanis-macbook-neo, mac.
+        Not one of those is `unknown`, and not one of the `unknown` ones is from a
+        bare-metal host. The split is clean along the substrate boundary, which is the
+        same discriminator the six-ref table gave, now with 19 days of history behind
+        it rather than one afternoon.
+
+        SO THE DEFECT HAS BEEN SILENT SINCE AT LEAST 2026-09-02. Every forge that
+        salvaged in that window pushed work it could not sign. Nobody noticed, because
+        salvage refs are written by hosts in trouble and read by someone else later, so
+        the person who could see the wrong name is never the person who needed it.
+
+        ONE REF COMPLICATES IT AND IS WORTH THE CLAIMER'S ATTENTION RATHER THAN BEING
+        SMOOTHED OVER: `salvage/forge/20260916-920-cluster-committed` resolves to the
+        host `forge`. Same day as two `unknown` cluster refs with almost the same slug.
+        So on 2026-09-16 something in a forge context DID resolve a name — meaning the
+        `hostname` binary is present in some forge images or some entry paths and absent
+        in others, and the failure is conditional on the image rather than universal to
+        the regime. Do not assume all forges fail; measure which do. The fix in
+        next_action (a resolver chain ending in a refusal) is correct either way and
+        does not depend on answering that.
+
+        FOR THE CLAIMER, so this is not re-derived: on forge-tillandsias today
+        `hostname` is absent from PATH entirely — `hostname -s` answers `command not
+        found`, which 2>/dev/null discards — while $HOSTNAME, `uname -n` and
+        /etc/hostname all answer `forge-tillandsias`. That is the shape to look for in
+        the images that produced the six refs above.

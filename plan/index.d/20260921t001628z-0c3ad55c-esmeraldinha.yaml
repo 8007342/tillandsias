@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lane-reports-the-resolved-plan-binary-is-stale-and-prints-a-rebuild-remedy-when-the-validator-surface-stamp-file-does-not-exist-beside-a-fresh-binary-so-the-remedy-rebuilds-nothing-and-the-lane-stays-shut
+    event:
+      type: note
+      ts: "2026-09-21T00:16:28Z"
+      agent_id: windows-esme-claude-20260919t193000z
+      host: esmeraldinha
+      summary: |
+        READING THE OUTPUT ON A HOST THAT HAS NOT REBUILT SINCE LAND 35c: ABSENCE OF BOTH VERDICTS MEANS "PRE-FIX BINARY", NOT "THE CHECK DID NOT RUN". Measured on esmeraldinha 2026-09-20.
+
+        THE ASYMMETRY. This order's fix asks the binary first, because a binary built after it carries the validator surface's CONTENT hash and can answer for itself (check-plan-binary-current.sh:150, and the lane's own path at pre-push-local-gate.sh:478). A binary built BEFORE it carries no embedded hash, so there is nothing to ask: the "ask the binary" path finds no answer and falls through silently. On such a host `bash scripts/check-plan-binary-current.sh` prints only its role line —
+
+            ok:plan-binary-write-is-opt-in+role-satisfies:<path> arms=16/0 copies=1 path=<...>
+
+        — and NEITHER `ok:validator-surface:content-verified` NOR `stale:validator-surface …`. A reader who expects one of those two and sees neither will reasonably conclude the check did not run. It ran; the binary simply predates the thing it would have been asked about. One line so the next reader does not spend a cycle on it.
+
+        HOW THIS CAME UP, and it is a near-miss worth recording with it. The coordinator asked for a specific test against this fix: if the plan-only lane still demands a re-stamp after a TRUNK MOVE WITH NO SOURCE CHANGE, that is a finding against the landed fix. esmeraldinha had apparently exactly that — trunk moved, no edits from this host, and the lane refused twice with `plan-only lane: REFUSED — the resolved plan binary is STALE`, costing two full rebuild-and-restamp cycles on a host where a push round is 200-900s.
+
+        IT WAS NOT A FINDING, and the difference was one diff. Between this host's build point (89159db4f) and the trunk it was tested against, TWO VALIDATOR SOURCES HAD CHANGED:
+
+            crates/tillandsias-plan/src/main.rs
+            crates/tillandsias-plan/src/validator_surface.rs
+
+        So the re-stamp was CORRECT and the refusal was the lane working exactly as designed. And the second of those files is NEW in that range — it is this order's own fix. THE BINARY PREDATED THE FIX IT WAS BEING USED TO TEST. Every re-stamp-tax number this host reported earlier tonight therefore describes the OLD lane, not the one that landed, and is retracted as a claim about current trunk while standing as history.
+
+        THE REAL TEST, NOT YET RUN, stated so nobody mistakes the above for it: rebuild the plan binary AT a post-35c trunk, let trunk move WITHOUT touching crates/tillandsias-plan/src or the fragment checkers, then ask the binary. `ok:validator-surface:content-verified` means the fix holds; a demand to mint is the finding, with the two SHAs and the empty source diff as its evidence. esmeraldinha runs that on its next rebuild and reports either way.
+
+        THE METHOD POINT, since this row is in the fail-loud family: a verdict read without the diff that produced it would have filed a false finding against a correct fix. The refusal and the "no source change" premise were both plausible; only `git diff --name-only <build-point> <trunk> -- <validator sources>` distinguished a working guard from a broken one.

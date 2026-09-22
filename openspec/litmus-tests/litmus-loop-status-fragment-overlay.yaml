@@ -71,6 +71,7 @@ critical_path:
     command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); d1=$(sed -n '/^## Direction/,$p' \"$W/plan/loop_status.md\"); cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-compact; n=$(ls \"$W/plan/loop_status.d\"/*.md 2>/dev/null | wc -l); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status); printf '%s' \"$V\" | grep -q 'host-A narrative'; printf '%s' \"$V\" | grep -q 'host-B narrative'; printf '%s' \"$V\" | grep -q '**base theme**'; d2=$(sed -n '/^## Direction/,$p' \"$W/plan/loop_status.md\"); test \"$d1\" = \"$d2\" && test $n = 0 && echo 'ok: compacted-exactly-consumed-narratives-and-operator-intact'"
     timeout_ms: 300000
     expected_behavior: "ok: compacted-exactly-consumed-narratives-and-operator-intact"
+    assert_output_contains: "ok: compacted-exactly-consumed-narratives-and-operator-intact"
 
   - step: "BEHAVIOURAL: a SECOND compaction is a no-op (a crash between fold and delete is safe to re-run)"
     command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); m1=$(md5sum \"$W/plan/loop_status.md\" | cut -d' ' -f1); out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-compact 2>&1); m2=$(md5sum \"$W/plan/loop_status.md\" | cut -d' ' -f1); test \"$m1\" = \"$m2\" && printf '%s' \"$out\" | grep -q 'nothing to compact' && echo 'ok: second-compaction-no-op'"
@@ -92,6 +93,7 @@ critical_path:
     command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/loop_status.d\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Cycle 2026-08-02T00:00Z (fixture — base entry)' '' '- base body' > \"$W/plan/loop_status.md\"; printf '%s\\n' '# Loop-status fragments (`plan/loop_status.d/`)' '' 'Documentation, not a fragment.' > \"$W/plan/loop_status.d/README.md\"; printf '%s\\n' '## Cycle 2026-08-03T01:00Z (h — fine)' '' '- ok' > \"$W/plan/loop_status.d/20260803t010000z-ok-h.md\"; printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' > \"$W/plan/loop_status.d/20260803t020000z-bad-h.md\"; R=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-fragments 2>&1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status 2>&1); ! printf '%s' \"$R\" | grep -q 'README.md'; printf '%s' \"$R\" | grep -q -- '-bad-h.md'; printf '%s' \"$R\" | grep -q 'malformed=1'; printf '%s' \"$V\" | grep -q 'base body'; ! printf '%s' \"$V\" | grep -q 'clobber'; cd /; rm -rf \"$W\"; echo 'ok: store-readme-not-a-fragment-real-malformed-still-surfaces'"
     timeout_ms: 300000
     expected_behavior: "ok: store-readme-not-a-fragment-real-malformed-still-surfaces"
+    assert_output_contains: "ok: store-readme-not-a-fragment-real-malformed-still-surfaces"
 
   # ── ORDER 719-kgr5: the stamp that NAMES the fragment must be measured ────
   # Fragments fold in name order and the name carries this timestamp, so an

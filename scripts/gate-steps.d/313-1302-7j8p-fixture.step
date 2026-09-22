@@ -1,0 +1,18 @@
+# Gate step 1302-7j8p (fixture) — data, not code.
+#
+# Runs the fixture that guards the checker bound by 312. Separate step on
+# purpose: 312 asks the LIVE TREE whether every step carries a record, and this
+# one asks whether the CHECKER can still tell a good record from a bad one.
+# They fail for different reasons and a reader should not have to guess which.
+#
+# WITHOUT THIS STEP THE FIXTURE IS INERT. check-added-test-is-referenced.sh
+# warned `added-test-unreferenced:1` on the push that added it, because a test
+# named in no .step, no hook and no litmus binding runs in no suite and is as
+# inert as a missing one (885-92iu). The guard caught it on this very packet.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the second-regime checker can still discriminate (1302-7j8p fixture)"
+STEP_SCRIPT="scripts/test-gate-step-regimes.sh"
+STEP_ERROR="the second-regime checker no longer discriminates (1302-7j8p) — arm 1 unrecorded-is-named, arm 2 recorded-passes, arm 3 linux-only-is-refused, arm 4 named-skip-counts; read which arm failed rather than assuming the records are at fault"
+STEP_OK="second-regime checker discriminates (4/4)"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-step-regimes-fixture:4/4"

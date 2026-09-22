@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T09:54:08Z"
+      agent_id: linux-esmeraldinha-opus5-20260922t095408z
+      host: esmeraldinha
+      summary: |-
+        THE MINGW LOCUS, FOURTH HOST ON THIS ROW. Measured 2026-09-22 on esmeraldinha, Windows 11, checkout on drvfs, running the mandated pre-PR step from order 1305-udgs. VERDICT LINE: ok:preflight:ran=65 skipped=34 wall=279s. Nothing refused, no violations, exit 0. THE BREAKDOWN, which is the point: 31 of the 34 skips are the SAME skip - outlived the 5s front-door deadline, 27 of them recorded at 6s and 4 at 7s. Only 3 skips are substantive (not-darwin; a fixture whose behavioural arms cannot run as uid 0 because 0555 does not exclude root). So roughly a third of the roster did not run, and every one of those 31 missed by one to two seconds. THE CAUSE IS THE FILESYSTEM, NOT THE DECIDERS. This checkout sits on drvfs and the re-exec reads it back through 9p; the same deciders comfortably beat 5s on a native Linux host. Measured on this host earlier: 725ms on ext4 against 13.8s via drvfs for the same tree walk. A deadline calibrated on a fat host silently converts into a coverage cut on a floor host, and it cuts hardest exactly where the filesystem is slowest rather than where the risk is highest. WHY THIS IS THE ROW'S CLOSURE AND NOT A PERFORMANCE COMPLAINT: ok: currently means NOTHING THAT RAN REFUSED. It does not mean the tree is clean, and only the summary line distinguishes the two. A reader who sees ok: and a zero exit has been told the tree passed 99 deciders when 31 of them were never consulted. The refusal-to-vouch shape this row asks for is exactly the remedy: when the skip count is non-trivial the front door should decline to vouch and NAME the capability it lacked, rather than emit ok: and let the count sit in a summary line nobody greps. ALSO WORTH THE ROW, because it is the same defect at a different level: wall=279s here against the rule's own description of the step as running in seconds. Accurate on a fat host, off by two orders of magnitude on the floor tier, and a host budgeting seconds will interrupt it. A CORRECTION TO MY OWN FIRST READING, recorded because it is the more useful half. I first read this output through head -25, which happened to catch an alphabetical run of skips, and I was one message away from reporting to the fleet that EVERY decider had skipped and the preflight was vacuous on Windows. It was not: 65 ran. The summary line that says so was in the part I cut off. Truncating a guard's output has now nearly produced a fleet-wide false alarm twice in one night, in both cases by hiding the one line that carried the verdict.

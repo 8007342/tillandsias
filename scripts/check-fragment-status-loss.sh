@@ -112,9 +112,27 @@ declared="$(awk '
     FNR == 1                                                 { flush(); sect = "" }
     /^packets:[[:space:]]*$/                                 { flush(); sect = "packets"; next }
     /^[a-z_]+:[[:space:]]*$/                                 { flush(); sect = "";        next }
-    sect == "packets" && /^  - /                             { flush() }
-    sect == "packets" && /^(  - |    )packet_id:[[:space:]]/ { pid = $NF }
-    sect == "packets" && /^(  - |    )status:[[:space:]]/    { st  = $NF }
+    # A ROW IS A LIST ITEM WHOSE OWN KEY IS packet_id OR order, AT ANY OF THE
+    # THREE ROW DEPTHS (1331-884p, carried from 1319-vd5h). Two faults lived in
+    # the three lines this replaces, and each hid the other.
+    #
+    # THE FLUSH was anchored to a BARE dash at indent 2. That matches every
+    # NESTED sequence entry written at the indent of the parent key — the shape
+    # a YAML dumper emits — so a nested list BETWEEN packet_id and status
+    # flushed the record and dropped the pair. A status-loss detector losing a
+    # status is the failure this pass exists to refuse.
+    #
+    # THE CAPTURE required indent 2 or 4. A fragment written FLAT puts its row
+    # marker at indent 0 (`- packet_id:` under `packets:`) with fields at 2, so
+    # `packet_id` was never captured at all and the whole packet was INVISIBLE
+    # to this pass — not a lost pair, an unread row.
+    #
+    # Measured on the live ledger: five packets were unread, and they are
+    # exactly the union of the two shapes — 1315-d4qd, 1323-pc8k and 1327-r4zb
+    # (flat), 1313-w78k and 1314-2mdv (yaml.safe_dump indentless).
+    sect == "packets" && /^( {0,4})- (packet_id|order):[[:space:]]/ { flush() }
+    sect == "packets" && /^[ ]*-?[ ]*packet_id:[[:space:]]/  { if (pid == "") pid = $NF }
+    sect == "packets" && /^[ ]*status:[[:space:]]/           { if (st  == "") st  = $NF }
     END { flush() }
 ' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
 

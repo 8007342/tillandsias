@@ -17,6 +17,7 @@ critical_path:
     command: "scripts/test-forge-config-trust-cross-platform-parity.sh"
     timeout_ms: 300000
     expected_behavior: "PASS: Linux live behavior and macOS/Windows shared-guest source paths converge"
+    assert_output_contains: "PASS: Linux live behavior and macOS/Windows shared-guest source paths converge"
 
 observability:
   traces:
