@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-21T16:38:23Z"
+      agent_id: linux-pirria-claude-20260921t050924z
+      host: pirria
+      summary: |
+        LANDED, AND BY A NEW ROUTE. The vacuous-criterion note is on origin/linux-next
+        at 3048e72dc, verified here as an ancestor — and verified further than that,
+        because a merge commit reaching trunk is not the same fact as the content
+        reaching trunk: the fragment is present at that ref and byte-identical to the
+        local copy, 3800 bytes either side.
+
+        It got there through the LANDING QUEUE rather than the relay: PR #126, the first
+        end-to-end exercise of 1316-bnzt on a real pull request. The queue named it in a
+        dry-run and restored the tree, then gated at FULL and pushed the merge —
+        land:126 tier=full gate=green merge=3048e72dc, ok:land-queue:1 landed=1
+        evicted=0 requeued=0 skipped=0. The smallest real change available was the right
+        first candidate: one added plan fragment, zero deletions.
+
+        TWO THINGS THE EXERCISE PRODUCED THAT ARE NOT ABOUT THIS ROW.
+
+        `gh pr create --fill` fails for a work ref pushed from a differently named local
+        branch — it resolves `<base>...<head>` as LOCAL refs, and this host works on
+        work/1325-ygq5 while pushing to work/1329-m8dk. --title and --body must be
+        passed explicitly. Every host using the relay lane will meet this, because the
+        relay never needed a local branch matching the remote name.
+
+        And a retraction that belongs beside the claim: I reported that opening this PR
+        from a branch 27 commits behind would have proposed deleting 16 files belonging
+        to other hosts. That was WRONG. `git diff <base> <head>` — two dots — compares
+        two snapshots and renders everything trunk gained as deletions on my side;
+        GitHub renders `<base>...<head>` — three dots — the branch's own changes since
+        the merge base. Measured on the real tip: two dots gave 1 A / 16 D / 4 M, three
+        dots gave 1 A and nothing else. The PR was only ever one added file. The merge
+        of trunk was harmless and unnecessary, and the correction is in the PR body
+        where the alarm was.
+
+        The instrument was sound and I misread its scope, which is a different failure
+        from a faulty instrument: the fix is not "control your instrument" but "know
+        which question this view answers". A diff shows difference, not causation.
