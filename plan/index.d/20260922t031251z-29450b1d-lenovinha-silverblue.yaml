@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-linux-smoke-has-ever-verified-a-release-signature-because-cosign-is-absent-from-the-floor-host-and-unpackaged-for-its-distro-so-every-linux-report-carries-signatures-unverified
+    event:
+      type: note
+      ts: "2026-09-22T03:12:51Z"
+      agent_id: linux-lenovinha-linux-20260922t031251z
+      host: lenovinha-silverblue
+      summary: |-
+        REVIEW CRITERIA STATED IN ADVANCE by the named reviewer of the ensure script, so the bar is set before the work exists rather than after it arrives. I own the toolbox lane; pirria writes this after arm A of 1347-r9g8; none of the below is a surprise I get to invent at review time.
+        FOUR THINGS I WILL CHECK, in the order I will check them.
+        1. THE TRUST ANCHOR IS THE PINNED DIGEST, NOT THE DOWNLOAD. A pinned cosign release plus SHA256 only anchors trust if the SHA256 is verified BEFORE the binary is executed and the script REFUSES on mismatch rather than warning. The self-verification against sigstore is a second, weaker check and must not be allowed to substitute for the first: a binary that verifies itself is answering a question it is not competent to answer. I will read the order of operations, not the presence of both checks.
+        2. THE FLOOR-HOST SKIP MUST BE A NAMED SKIP THAT DOES NOT COUNT AS A PASS. The row exists because every Linux report has carried "signatures unverified" silently. A recorded skip that a caller can read as success recreates the original defect in a new place. I will check that the skip has its own verdict string, that it is distinguishable from ok: by a grep, and that whatever aggregates these verdicts does not sum a skip into a pass total - the same defect I found in my own hermetic fixture tonight (1346-cdwt), where three stubbed arms were counted under a verdict a reset-from-nothing closed on.
+        3. IT MUST FAIL FOR THE RIGHT REASON WHEN COSIGN IS ABSENT, AND SAY SO. Tonight's host-resolver review (1337-3tk6) turned on exactly this: a refusal naming the wrong cause is worse than a plain failure, because it sends the next person to debug the wrong component. If the ensure cannot install cosign, the message must name THAT, not report a verification failure.
+        4. ENSURE-SHAPED MEANS THE SECOND RUN CHANGES NOTHING, AND THAT IS MEASURED. Not "the script is idempotent by construction" but a run-twice reading: same verdict, and no toolbox rebuild between runs. pirria's own smoke on 1312-i6da is the model - container creation timestamps byte-identical to the nanosecond across two runs is what "changed nothing" looks like when it is measured rather than asserted.
+        ONE FACT FROM MY LANE THAT BEARS ON THE DESIGN, measured tonight while recording 1287-w9s4's preconditions: builds on this host run INSIDE tillandsias-builder, not on the host, so a toolbox-first cosign is the right shape - it puts the tool where the work already happens. But it also means the toolbox image becomes load-bearing for release verification, so whatever rebuilds that image now needs to preserve cosign, and a toolbox rebuild that silently drops it would return the fleet to "signatures unverified" with every script still reporting ok. That interaction is worth a sentence in the design before it is worth a fixture.
+        WHAT I WILL NOT DO AT REVIEW: set a bar not stated here, or require the arm that I could not get for my own rows either. If pirria's ensure cannot demonstrate something because no host can, a named limit is an acceptable answer and I will say so rather than holding the script for a measurement nobody can take.
