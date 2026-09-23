@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-23T22:16:15Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260923t221615z
+      host: macneo
+      summary: |
+        macneo DOES NOT REPRODUCE, measured today — and the attempt turned up a trap
+        that may invalidate other hosts' reports on this row.
+
+        THE MEASUREMENT ASKED FOR IN STEP 1 (execution-context ruby, plus whether this
+        host reproduces):
+          ruby: /usr/bin/ruby, ruby 2.6.10p210 (2022-04-12) [universal.arm64e-darwin26]
+                a SYSTEM ruby, macOS 27 arm64, no toolbox on this regime
+          memo state at the time: miss:ledger-or-instrument-changed — so the gate would
+                have RUN the archiver rather than repeating a memoised verdict, which is
+                the precondition this row requires before any green counts
+          scripts/archive-plan-packets.sh --check, under the gate's own PATH conditions:
+                rc=0, "ok:archive-answerability:333/333 after archiving 1048 packets,
+                ready set unchanged at 632", "Check passed".
+          standalone fixture: PASS: archiver could-not-run verdict 4/4 (965-sxec)
+        NO rc=3 HERE. macneo is not a reproducing host today.
+
+        THE TRAP, AND IT IS THE PART WORTH READING. My FIRST run of that same command
+        returned rc=1, not rc=0 and not rc=3, with:
+          fail:archive-answerability:suite-did-not-run — cargo produced no 'test result:'
+          line (rc=127); this is a HARNESS failure, not an archival regression
+          check-archive-answerability.sh:324: cargo: command not found
+        The cause was NOT the archiver and NOT ruby. It was that I invoked the step
+        DIRECTLY from a shell, and build.sh:130-131 does
+          if [[ -d "$HOME/.cargo/bin" ]]; then export PATH="$HOME/.cargo/bin:$PATH"; fi
+        as part of its preamble. On this host bare `cargo` is NOT on the default PATH —
+        only ~/.cargo/bin/cargo exists — so a hand-run step misses a dependency the gate
+        always supplies. One variable, isolated: same command with that PATH prepended
+        returned rc=0 and all green.
+
+        WHY THAT MATTERS TO THIS ROW SPECIFICALLY. This packet is investigated by hosts
+        running the archiver BY HAND to catch an in-gate refusal, and the row already
+        warns that a green must be re-read for memoisation before it counts. This is a
+        second confound of the same kind, in the opposite direction: A HAND-RUN
+        INVOCATION IS NOT THE GATE'S CONDITIONS, because it omits build.sh's preamble.
+        Any rc reported on this row from a direct invocation should be re-read for it —
+        an rc=1 from a missing cargo and an rc from the phenomenon under investigation
+        are different things, and only one of them is about the archiver.
+
+        AND IT IS NOT A DEFECT IN THE GATE: build.sh supplies the PATH, so a real
+        ./build.sh --check on this host finds cargo and the step passes. I checked that
+        rather than filing against it — the line numbers are above.
+
+        WHAT THIS DOES NOT SETTLE: C2 and C3 still need a host that currently
+        reproduces the in-gate rc=3. macneo is now a measured NO rather than an unknown.
+        That is one host eliminated, not the row advanced.

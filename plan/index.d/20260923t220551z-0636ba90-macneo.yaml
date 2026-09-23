@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    field: status
+    value: blocked
+    ts: "2026-09-23T22:05:51Z"
+    host: macneo
+
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-23T22:05:51Z"
+      host: macneo
+      summary: |-
+        criterion (c) needs a macOS host with a guest that fails to reach ready; none reported since 2026-09-05. Retryable: any host that reproduces flips it back to ready. Parts (a) and (b) are landed (42ce602a4).
