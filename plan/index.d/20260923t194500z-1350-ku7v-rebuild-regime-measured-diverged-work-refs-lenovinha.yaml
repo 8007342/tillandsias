@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr).
+status:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    field: status
+    value: implemented
+    ts: "2026-09-23T19:45:00Z"
+    host: lenovinha
+
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-23T19:45:00Z"
+      agent_id: linux-lenovinha-claude-20260923
+      host: lenovinha
+      summary: |
+        REBUILD REGIME MEASURED ON lenovinha. The happy path runs end to end,
+        and the run found a defect that blocks acceptance on EVERY host.
+
+        No forge sibling was live, so the mirror container was recreated on
+        the rebuilt image (localhost/tillandsias-git:v56.9.23.1, binary
+        v56.9.23.1 built from origin/linux-next 78e527d36). The
+        tillandsias --sync tillandsias command then ran reconcile, published,
+        and answered. The earlier blocked:sync:mirror-image-predates-publisher
+        state is gone.
+
+        THE ANSWER WAS heads-behind, AND IT WAS WRONG FOR THE CALLER. The
+        trunk heads were current: the mirror's main matched upstream, and its
+        linux-next was newer than this host's own fetch. The four heads that
+        counted as behind were work refs that upstream had force-pushed
+        (work/1324-ujvb, work/1338-i23k, work/765-xpct,
+        work/tray-ux-linux-order). The reconcile fetch is non-forced by
+        design (order 449: never clobber un-relayed agent work), so it
+        rejects them as non-fast-forward, they stay diverged, and
+        publish-sync-state counts every diverged head as behind. The verdict
+        repeated on a second run. Any rewritten work ref anywhere in the fleet
+        therefore pins the whole-mirror verdict at heads-behind, and --sync,
+        which fails closed, can never answer current. Fleet work refs are
+        rebased routinely, so this is the normal case.
+
+        yoga's install regime would measure the same answer, so it was NOT
+        routed tonight. The run would only reproduce this defect.
+      evidence: |
+        podman: tillandsias-git-tillandsias localhost/tillandsias-git:v56.9.23.1
+        tillandsias --sync tillandsias (run twice, same answer):
+           ! [rejected] work/1324-ujvb -> work/1324-ujvb (non-fast-forward)
+           ! [rejected] work/1338-i23k -> work/1338-i23k (non-fast-forward)
+           ! [rejected] work/765-xpct -> work/765-xpct (non-fast-forward)
+           ! [rejected] work/tray-ux-linux-order -> work/tray-ux-linux-order (non-fast-forward)
+          sync-state:heads-behind:1790191842
+          rc=1
+        mirror main bab36b2af == upstream main bab36b2af
+        mirror linux-next 13084ac10, which has upstream 78e527d36 as an
+        ancestor (the mirror was ahead of this host's fetch, not behind)
+        mirror work/1324-ujvb d04e5bc0b vs upstream c9f9b6ca0: not an
+        ancestor (rewritten upstream)
+      next_action: |
+        DESIGN DECISION FIRST, THEN A SMALL FIX in images/git/publish-sync-state.sh
+        (plus sync_state_of and the fixture arms if the state vocabulary
+        changes). Choose one of:
+          (a) scope the verdict to the ref the caller will push:
+              --sync <project> [<branch>], default linux-next; or
+          (b) count a diverged head, where neither side is an ancestor of the
+              other, separately from a strictly-behind head, and exclude
+              diverged work/* heads from the heads-behind count.
+        Then re-run the rebuild regime here (the mirror recreates cheaply
+        when no forge sibling is live) and route yoga the install regime
+        with: tillandsias --sync tillandsias, expecting
+        sync-state:heads-current:<epoch> and rc=0. The tray action stays
+        open and unrouted.
+      provenance: |
+        lenovinha-silverblue on work/1350-ku7v, on the coordinator's ruling of
+        2026-09-23 (finish it, or set it implemented with a next_action; do
+        not leave it in progress). Pushed to the work ref during the release
+        cut freeze.
