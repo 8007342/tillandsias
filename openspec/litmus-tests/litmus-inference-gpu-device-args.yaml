@@ -70,7 +70,13 @@ critical_path:
     timeout_ms: 300000
     expected_behavior: "ok: inference run-arg seams green"
 
+  - step: "a CDI spec mounting a hostPath that no longer exists is STALE and regenerated, not current because the driver is unchanged (1248-j6vd)"
+    command: "bash scripts/test-nvidia-cdi-stale-hostpath.sh 2>&1 | tail -n 1"
+    timeout_ms: 30000
+    expected_behavior: "ok:nvidia-cdi-stale-hostpath:8/8"
+
 failure_modes:
+  - "nvidia-cdi-ensure.sh keys currency on the driver version alone and reports current about a spec whose mounted library was replaced by a distro update, so every GPU container start dies (1248-j6vd)"
   - "gpu-cuda injects the CDI device without checking nvidia_cdi_available(), so podman fails 'CDI device not found' on a GPU host with no spec"
   - "the CDI-absent branch stops warning, so a GPU host silently runs CPU-only inference and nobody can tell why"
   - "gpu-rocm loses /dev/kfd or /dev/dri, leaving ROCm present-but-unusable"
