@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    field: status
+    value: implemented
+    ts: "2026-09-23T06:51:11Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: note
+      ts: "2026-09-23T06:51:11Z"
+      host: macuahuitl
+      summary: |-
+        coordinator close-what-landed sweep 2026-09-23: code on trunk, verification needs another capability
