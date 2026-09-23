@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-two-reset-state-env-tests-mutate-one-process-global-variable-on-parallel-threads-so-the-workspace-gate-reddens-on-a-race
+    order: 1369-a76a
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, testing, gate]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-core/src/reset_state.rs
+    title: |
+      tillandsias-core's reset_state tests unset_means_reset_proceeds and only_zero_suppresses mutate TILLANDSIAS_DESTRUCTIVE_RESET_OK on parallel test threads, so the workspace gate goes red on a race and blocks every land
+    context: |
+      Found by yoga 2026-09-23 when finalize-cycle's land refused:
+      fail:test-baseline:ran=2385 new-red=1 first=tillandsias_core::reset_state::tests::unset_means_reset_proceeds.
+      The two tests share one process environment. only_zero_suppresses sets the
+      variable to "0" while unset_means_reset_proceeds removes it and asserts the
+      default. Measured on yoga with 30 runs of `cargo test -p tillandsias-core --lib
+      reset_state:: -- --test-threads=8` each way: 9/30 red before the fix, 0/30
+      after. The fix serializes both tests behind one static Mutex in the test module.
+    verifiable_closure: |
+      cargo test -p tillandsias-core --lib reset_state:: -- --test-threads=8 is
+      green 30 times out of 30 on the landed tree, measured by a loop that counts
+      failures. The same loop against the pre-fix module reproduces red at least
+      once, so the loop can see the race. PRE-FIX RESULT: 9/30 red on yoga.

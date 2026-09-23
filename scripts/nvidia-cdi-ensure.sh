@@ -6,7 +6,9 @@
 #
 # Verdict grammar, exactly one line on stdout:
 #   ok:nvidia-cdi:current:<driver>      spec present and matches the live driver
-#   ok:nvidia-cdi:generated:<driver>    spec written (absent, or driver moved)
+#   ok:nvidia-cdi:generated:<driver>    spec written (absent, driver moved, or a
+#                                       mounted hostPath is gone — 1248-j6vd; the
+#                                       missing path is named on stderr)
 #   skip:nvidia-cdi:no-gpu              no NVIDIA GPU on this host
 #   skip:nvidia-cdi:no-nvidia-ctk       toolkit absent — nothing to generate with
 #   degraded:nvidia-cdi:<reason>        wanted to generate and could not
@@ -65,9 +67,30 @@ fi
 _stamped=""
 [ -f "$CDI_STAMP" ] && _stamped="$(tr -d '[:space:]' <"$CDI_STAMP" 2>/dev/null)"
 
+# ORDER 1248-j6vd. THE DRIVER VERSION IS NOT THE ONLY THING THE SPEC PINS. It
+# also names libraries the distro versions independently of the driver: on
+# macuahuitl the spec pinned libnvidia-egl-gbm.so.1.1.3 while the host had moved
+# to 1.1.4 under an unchanged 610.57.04 driver, this printed current, and every
+# GPU container start died on a bind-mount source that no longer existed. So
+# currency also means every hostPath the spec mounts still resolves; one that
+# does not makes the spec STALE, and it is regenerated like a driver move.
+_stale_path=""
 if [ -s "$CDI_SPEC" ] && [ "$_stamped" = "$_live_driver" ]; then
-    printf 'ok:nvidia-cdi:current:%s\n' "$_live_driver"
-    exit 0
+    while IFS= read -r _hp; do
+        [ -n "$_hp" ] || continue
+        if [ ! -e "$_hp" ]; then
+            _stale_path="$_hp"
+            break
+        fi
+    done <<EOF
+$(sed -n 's/^[[:space:]-]*hostPath:[[:space:]]*["'\'']\{0,1\}\([^"'\'' ]*\).*/\1/p' "$CDI_SPEC")
+EOF
+    if [ -z "$_stale_path" ]; then
+        printf 'ok:nvidia-cdi:current:%s\n' "$_live_driver"
+        exit 0
+    fi
+    # On STDERR: the verdict grammar above promises exactly one line on stdout.
+    printf 'note:nvidia-cdi:stale-hostpath:%s\n' "$_stale_path" >&2
 fi
 
 mkdir -p "$CDI_DIR" 2>/dev/null || {

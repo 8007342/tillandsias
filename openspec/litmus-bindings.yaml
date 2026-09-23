@@ -185,7 +185,6 @@ specs:
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
   - litmus:preflight-runs-or-names-the-capability
-  - litmus:spawn-failure-names-program
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
   - litmus:parked-blocks-visibility-shape
@@ -595,6 +594,7 @@ specs:
 - spec_id: init-command
   status: active
   litmus_tests:
+  - litmus:spawn-failure-names-program
   - litmus:init-log-cleanup
   - litmus:installer-reports-wsl-guest-shape
   - litmus:user-runtime-checkout-free-install

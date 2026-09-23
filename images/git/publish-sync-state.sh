@@ -75,9 +75,15 @@
 # the rejection path relay-refs.sh's comment warns about, which deserves its own
 # review rather than a ride inside T1.
 #
-# Emits exactly one line on stdout:  sync-state:<state>:<epoch>
+# Usage: publish-sync-state <bare-mirror-dir> [<branch>]
+# Emits zero or one note line, then exactly one verdict line, on stdout:
+#   note:sync-state:diverged-work-refs:<n>   (information only; not the verdict)
+#   sync-state:<state>:<epoch>               (always the LAST line)
 
 MIRROR="${1:-}"
+# Optional push target. Unset keeps the whole-mirror verdict the cadence
+# callers (entrypoint, relay-refs) publish.
+BRANCH="${2:-}"
 
 log_msg() { echo "[publish-sync-state] $*" >&2; }
 
@@ -93,9 +99,26 @@ EPOCH="$(date -u +%s)"
 # An exported head with NO tracking twin is not "behind": it is a head upstream
 # has never been asked about (a purely local salvage ref, say). Counting it as
 # behind would make every mirror permanently behind and the verdict useless.
+#
+# THE VERDICT IS SCOPED TO THE PUSH TARGET when a branch is named (order
+# 1350-ku7v, coordinator's ruling 2026-09-23). The question the verdict
+# answers is "is it safe to spend a push on this mirror", and that depends
+# only on the branch being pushed. Measured on lenovinha 2026-09-23: four
+# work refs force-pushed upstream stayed diverged in the mirror (the reconcile
+# fetch is non-forced by design, order 449), every one counted as behind, and
+# --sync answered heads-behind with main and linux-next both current. Fleet
+# work refs are rebased routinely, so an unscoped count can never answer
+# current.
+#
+# A DIVERGED work/* HEAD IS INFORMATION, NOT VERDICT. With no branch named,
+# it is left out of the behind count and reported on a note: line, so the
+# force-push churn stays visible without pinning the answer. A diverged head
+# that is NOT a work ref still counts: trunk and platform heads are not
+# rewritten, so divergence there is a real hazard.
 behind_heads=0
 tracked_heads=0
 tracking_total=0
+diverged_work=0
 
 for _tr in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/remotes/origin 2>/dev/null); do
     tracking_total=$((tracking_total + 1))
@@ -108,10 +131,27 @@ for _ref in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/heads 2>/
     tracked_heads=$((tracked_heads + 1))
     _n="$(git -C "$MIRROR" rev-list --count "${_ref}..${_track}" 2>/dev/null)" || _n=0
     [ -n "$_n" ] || _n=0
-    if [ "$_n" -gt 0 ]; then
+    [ "$_n" -gt 0 ] || continue
+    _ahead="$(git -C "$MIRROR" rev-list --count "${_track}..${_ref}" 2>/dev/null)" || _ahead=0
+    [ -n "$_ahead" ] || _ahead=0
+    _diverged_work=0
+    case "$_short" in
+        work/*) [ "$_ahead" -gt 0 ] && _diverged_work=1 ;;
+    esac
+    [ "$_diverged_work" -eq 1 ] && diverged_work=$((diverged_work + 1))
+    if [ -n "$BRANCH" ]; then
+        [ "$_short" = "$BRANCH" ] && behind_heads=$((behind_heads + 1))
+    elif [ "$_diverged_work" -eq 0 ]; then
         behind_heads=$((behind_heads + 1))
     fi
 done
+
+# A named branch with no tracking twin cannot be answered: that is unknown,
+# never current. The scope was the whole question.
+if [ -n "$BRANCH" ] && ! git -C "$MIRROR" rev-parse --verify --quiet \
+        "refs/remotes/origin/${BRANCH}" >/dev/null 2>&1; then
+    tracking_total=0
+fi
 
 if [ "$tracking_total" -eq 0 ]; then
     STATE="heads-unknown"
@@ -147,4 +187,7 @@ else
     log_msg "WARNING: could not publish $NEW_REF in $MIRROR"
 fi
 
+if [ "$diverged_work" -gt 0 ]; then
+    echo "note:sync-state:diverged-work-refs:${diverged_work}"
+fi
 echo "sync-state:${STATE}:${EPOCH}"

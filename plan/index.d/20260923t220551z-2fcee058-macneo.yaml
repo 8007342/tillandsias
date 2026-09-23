@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: blocked
+      ts: "2026-09-23T22:05:51Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260923t220551z
+      host: macneo
+      summary: |
+        BLOCKED, RETRYABLE, ON A NAMED AND CHECKABLE CONDITION: criterion (c) needs a
+        macOS host WITH A GUEST THAT FAILS TO REACH READY, and no host has reported one
+        since the original reproduction on 2026-09-05.
+
+        WHY THIS IS A BLOCK AND NOT ANOTHER PROSE CORRECTION. This row has now been the
+        macos selector's TOP PICK on three consecutive cycles on this host — 2026-09-22
+        and twice on 2026-09-23 — and on each one the only remaining work was
+        unreachable here. I corrected its next_action at 20:07Z today so the text is
+        finally true, and the selector handed it to me again at 22:38Z, because THE
+        SELECTOR DOES NOT READ next_action. It reads status, role and urgency. A row
+        whose remaining work no host can currently do, left `ready` at p1, is offered
+        forever and costs whoever it lands on the time to re-derive that. Fixing the
+        prose was necessary and was not sufficient; this is the field the router
+        actually reads.
+
+        WHAT IS DONE, so nobody re-opens this as unstarted: parts (a) and (b) are
+        landed. Criterion 4's fixture is at
+        crates/tillandsias-macos-tray/src/diagnose.rs:2618-2637, landed 2026-09-15 as
+        42ce602a4, an ancestor of trunk; it passes today (cargo test -p
+        tillandsias-macos-tray --bins a_guest_still_coming_up -> 1 passed, 138 filtered
+        out).
+
+        THE EXACT UNBLOCK CONDITION, and it is one command for whoever has the host:
+        a macOS host observes a guest whose provisioning completes but which never
+        reaches ready, and reads back provision.state with the criterion-3 fields
+        (vz.rs:1242 record) plus the actual headless_service_state /
+        ExecMainStartTimestamp / Result / journal lines. Any host that reproduces it
+        should flip this back to ready and say so.
+
+        WHY macneo CANNOT SUPPLY IT: this host cold-provisioned twice on 2026-09-22
+        during the v56.9.22.1 smoke (§1 install and §2 --reset-state), so its guest is
+        freshly built and does not exhibit the failure; and its /Applications bundle is
+        absent (1327-r4zb, removed 2026-09-23T02:54:45Z, cause still unattributed), so
+        there is no installed tray to drive. The "two preserved guest images" the row
+        offered as an alternative route were searched for on this host and DO NOT EXIST
+        — only the live rootfs.img and rootfs.qcow2 are present, both rebuilt by the
+        smoke.
+
+        WHAT I AM NOT CLAIMING: that no host in the fleet can reproduce it. macbookair
+        is the other Mac and I have not asked. A blocked row with a named retryable
+        condition is visible and reversible — that is why this is `blocked` rather than
+        a disposition that hides it. If macbookair can reproduce, unblocking costs one
+        set-field.
+
+        SMALLEST NEXT DIAGNOSTIC for whoever takes it: on a Mac with a stuck guest,
+        `tillandsias --diagnose --json` and read headless_service_state; if it is
+        `activating` the criterion-4 arm already covers it and the row is narrower still.

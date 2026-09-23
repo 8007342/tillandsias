@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    event:
+      type: claim
+      ts: "2026-09-23T21:26:13Z"
+      agent_id: windows-yolanda-claude-20260923t212613z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows claims 1267-uafx at the coordinator's direction (batch item 3, release freeze in force). Work goes to refs/heads/work/1267-uafx only; the coordinator relays after the cut. Scope, per the coordinator: --check builds the native .exe on Windows; the hook's remedy RUNS a candidate before naming it; and the runnable-binary fixture scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh, wired in the same commit.

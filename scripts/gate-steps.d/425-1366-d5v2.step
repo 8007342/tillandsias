@@ -1,0 +1,25 @@
+# Gate step 1366-d5v2 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS is what the land tool PUSHES and how it names a push that did
+# not land. Measured on yoga 2026-09-23: run from a work branch, the tool gated
+# HEAD and pushed the LOCAL linux-next, a stale ancestor of trunk; the refusal
+# was read as a lost race and printed "origin moved" four times while origin
+# never moved.
+#
+# ARM 1 (HEAD is what lands) and ARM 2 (a failed push with origin unmoved is
+# refused by name, never "origin moved") are the load-bearing arms, and both
+# fail on the pre-fix tool. ARM 3 is the CONTROL: a real move must still be
+# retried and land, so a fix that simply stopped retrying fails here. ARM 4
+# names a relative credential-store path inside a linked worktree.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the land tool pushes HEAD and measures 'origin moved' (1366-d5v2)"
+STEP_SCRIPT="scripts/test-land-push-classification.sh"
+STEP_ERROR="the land tool no longer pushes the tree it gated, or reports a race it did not measure (1366-d5v2) — read which arm failed above; arm 1 (HEAD lands, not the local branch of the target's name) and arm 2 (origin unmoved is refused by name) are load-bearing, arm 3 is the control that a real move still retries"
+STEP_OK="The land tool pushes HEAD and says origin moved only when it did"
+#
+# SECOND REGIME (1302-7j8p). macneo ran it from a detached worktree of
+# work/1366-d5v2 at 3174004367 under /bin/bash 3.2.57 (arm64-apple-darwin26)
+# and BSD tools, 8/8. The caller was itself inside a git worktree while ARM 4
+# built one, so nesting is exercised, if not designed for.
+STEP_SECOND_REGIME="macneo 2026-09-23 darwin ok:land-push-classification:8/8"
