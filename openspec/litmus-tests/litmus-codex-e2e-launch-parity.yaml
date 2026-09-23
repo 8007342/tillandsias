@@ -1,6 +1,6 @@
 # @trace spec:meta-orchestration
 name: litmus:codex-e2e-launch-parity
-spec: ci-release
+spec: meta-orchestration
 phase: pre-build
 description: The codex e2e smoke lane is scored exactly like the opencode one — same limiter class, same verdict grammar, same de-escalation rule
 severity: high
