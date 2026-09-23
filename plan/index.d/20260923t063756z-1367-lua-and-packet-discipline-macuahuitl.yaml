@@ -28,6 +28,10 @@ packets:
       io.lines("VERSION") and os.remove all worked. That is the "clock is the quiet
       one" hole lua_predicate.rs's own header says it closes. A cached verdict that
       read the clock is replayed as if it had not.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Scored by cargo tests in
+      crates/tillandsias-plan/tests/lua_predicate_classes.rs, which run in
+      ./build.sh --check (cargo test --workspace); no litmus binds them yet.
     verifiable_closure: |
       A test in lua_predicate_classes.rs asserts the COMPLETE global set visible to a
       Cacheable predicate (an allow-list, not a deny-list), and three arms show a
@@ -66,6 +70,10 @@ packets:
       expert.shell, and fs.read and expect.* do not. Census at filing: 0 of 454 litmus
       specs use a Lua predicate, 1 uses rust_queries, and 2,918 command steps run
       through bash -c with stdout and stderr merged.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Scored by cargo tests in
+      crates/tillandsias-plan/tests/lua_predicate_classes.rs; the first litmus
+      that exercises a shim is 902-5bf9's, which does not exist yet.
     verifiable_closure: |
       Tests in lua_predicate_classes.rs: (1) a Cacheable predicate calls fs.read on a
       repo file and gets its bytes; (2) fs.read on "../x", on an absolute path outside
@@ -106,6 +114,10 @@ packets:
       batching (6-10 packets) but had no numeric WIP cap and no "close the story
       before the next" rule. Rule text: methodology/distributed-work.yaml
       packet_discipline (same commit as this row).
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The fixture this row delivers is
+      scripts/test-claim-wip-limit.sh, written in the same commit as the guard
+      and bound as litmus:claim-wip-limit-shape then.
     verifiable_closure: |
       A fixture over a scratch ledger: (1) a host holding N (the configured cap,
       default 3) in_progress packets outside a story is REFUSED a further set-field
