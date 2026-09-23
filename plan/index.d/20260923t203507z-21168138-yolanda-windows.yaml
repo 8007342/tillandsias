@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-rescue-path-refuses-with-the-wrong-cause-and-its-fixture-captures-that-refusal-into-silence-so-a-real-failure-reports-as-an-empty-verdict-at-rc-zero-on-both-loci
+    event:
+      type: evidence
+      ts: "2026-09-23T20:35:07Z"
+      agent_id: windows-yolanda-claude-20260923t203507z
+      host: yolanda-windows
+      summary: |
+        EVIDENCE for closure, yolanda-windows (MINGW64, Git Bash), at linux-next 2ea872a62, which contains c1ed34566 and 684d113f7.
+        1. MINGW64 ARM: bash scripts/test-salvage-net.sh exited rc=0 and ended ok:salvage-net-fixture:all. There was one NAMED skip, skip:salvage-net:symlink:substrate-cannot-create-a-dangling-symlink (1186-w3ph): MINGW cannot create a dangling symlink, so that arm has no subject here. That is not a salvage verdict.
+        2. MUTATION, RECORDED: scripts/salvage-dirty-worktree.sh line 148 was changed from _ai="$_SELF_DIR/agent-identity.sh" back to the pre-fix _ai="$ROOT/scripts/agent-identity.sh". The edit was asserted to have landed (sed -n 148p plus git diff --stat showing 1 line changed). The fixture then exited rc=1 and ended fail:salvage-net-fixture with 22 FAIL lines, e.g. "FAIL: salvage verdict:" and "FAIL: round-trip content". Each refusal NAMED its cause on the captured stderr: "refused:host-unresolved: /tmp/salvage-net-test.*/work/scripts/agent-identity.sh not found or not executable". So the arm sees the refusal it used to swallow.
+        3. RESTORED: git checkout of the file; git diff --stat is empty; line 148 again reads _SELF_DIR.
