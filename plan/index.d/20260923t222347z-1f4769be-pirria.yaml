@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-23T22:23:47Z"
+      agent_id: linux-pirria-claude-20260923t222347z
+      host: pirria
+      summary: |
+        INSTALL REGIME on pirria (linux-immutable), 2026-09-23, from linux-next 73755f6f6 (contains ea6b7e398 and f061f623f). Precondition (order 443): podman ps showed no tillandsias-*-forge* container. ./build.sh --install rc=0 -> Tillandsias v56.9.23.2; scripts/build-image.sh git --force rc=0 (553 MB, 16 s). Mirror held with (sleep 600; echo exit) | tillandsias --bash: tillandsias-git-tillandsias was recreated on localhost/tillandsias-git:v56.9.23.2; grep -c BRANCH publish-sync-state = 5. VERDICT: heads-current, rc=0, no diverged-work-refs note, 0 '[rejected]' lines. OBSERVATION: the reconcile line carries git GIT_TRACE output (trace: built-in / run_command) on the host console; it is harmless but noisy. Full output of tillandsias --sync tillandsias:
+            sync:reconcile:reconcile-exported-heads: 22:23:36.596370 git.c:465               trace: built-in: git fetch origin 'refs/heads/*:refs/heads/*'
+            22:23:36.596632 run-command.c:657       trace: run_command: git remote-https origin https://github.com/8007342/tillandsias.git
+            22:23:36.597393 git.c:750               trace: exec: git-remote-https origin https://github.com/8007342/tillandsias.git
+            22:23:36.597408 run-command.c:657       trace: run_command: git-remote-https origin https://github.com/8007342/tillandsias.git
+            22:23:36.946062 run-command.c:657       trace: run_command: git rev-list --objects --stdin --not --exclude-hidden=fetch --all --quiet --alternate-refs
+            22:23:36.982135 run-command.c:657       trace: run_command: git maintenance run --auto --no-quiet
+            22:23:36.983375 git.c:465               trace: built-in: git maintenance run --auto --no-quiet
+            sync-state:heads-current:1790202217
+            ok:sync:tillandsias:linux-next:heads-current
+            rc=0
