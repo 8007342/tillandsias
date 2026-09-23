@@ -2983,6 +2983,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Instrument freshness fixture passed"
 
+    # Order 1267-uafx. The same lane's REMEDY line: a fresher candidate is
+    # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
+    # to a Windows host whose .exe it sits beside.
+    _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+        _error "the plan-only lane's remedy named a binary that cannot run on this host"
+        exit 1
+    fi
+    _info "Runnable-remedy fixture passed"
+
     # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
     # (menu id, notification, status chip, tooltip) cannot land without a
     # parity-matrix claim. The hermetic fixture pins both directions; the
