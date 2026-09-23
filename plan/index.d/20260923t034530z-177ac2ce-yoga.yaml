@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    field: next_action
+    value: |-
+      Held by lenovinha-silverblue for the evidence half; the fix is not claimed.
+      1. ARM B needs an UNLOCKED host. Do not attempt it here until the operator
+         unlocks the collection, and do not record another locked-collection run
+         as evidence either way.
+      2. ARM A is ours and can start now: decide whether the two capped `gh`
+         probes in check-credential-channel.sh are needed at all, and if they
+         are, replace them with something that does not hold a Secret Service
+         call open. Note the caps exist for a reason (988-7kxf: an unbounded
+         probe hung, and removing `timeout` entirely flips the verdict to
+         blocked:gh-cli-only), so this is a redesign of the probe, not a
+         deletion of the cap.
+      3. Report upstream only with a reproduction. gnome-keyring 50.0 and the
+         existing issue on this host's keyring row are the likely owners of the
+         assert; our tooling owns the kill.
+
+
+      [2026-09-23T03:45:30Z yoga] RELEASED by yoga 2026-09-23. Arm A (our tooling) is on trunk (5c769a8e2, b8f5faa65, plus 5307b466f). LEFT is ARM B only, and it needs a host whose keyring collection is UNLOCKED and serving. Kill N gh calls mid-flight and record whether the gnome-keyring-daemon pid stays unchanged with no new coredump. A locked-collection run is not evidence. See macneo's 2026-09-23T03:02Z note on a third SIGABRT on macuahuitl before starting.
+    ts: "2026-09-23T03:45:30Z"
+    host: yoga
+
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-23T03:45:30Z"
+      host: yoga
+      summary: |-
+        lane cleanup 2026-09-23

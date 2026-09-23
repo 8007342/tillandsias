@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    field: status
+    value: completed
+    ts: "2026-09-23T03:45:19Z"
+    host: yoga
+
+events:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    event:
+      type: completed
+      ts: "2026-09-23T03:45:19Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 6b6e3479233c34fa1366bfa5d5870a16e3513edf contains 874e6bb29 (1303-2d5g) and gate step 413-1274-cbk7; scripts/test-litmus-parse-only-duplicate-key.sh prints ok:litmus-parse-only-duplicate-key:9/9 rc=0 on yoga 2026-09-23
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    event:
+      type: note
+      ts: "2026-09-23T03:45:19Z"
+      host: yoga
+      summary: |-
+        lane cleanup 2026-09-23
