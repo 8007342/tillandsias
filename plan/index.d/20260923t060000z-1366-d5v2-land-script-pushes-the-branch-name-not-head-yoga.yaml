@@ -37,6 +37,10 @@ packets:
       the same tree straight after landed (rc=0, 859142157..780a7f2e6, verified with
       git ls-remote). The script never reads the current branch: `grep -n
       "show-current\|checkout\|switch\|symbolic-ref"` matches only a hint line at 689.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The fixture this row delivers is
+      scripts/test-land-push-classification.sh, written in the same commit as the
+      fix and wired into a gate step, with the four arms below.
     verifiable_closure: |
       A fixture (scripts/test-land-push-classification.sh or arms in an existing
       land fixture) over a throwaway bare origin prints its counted verdict, where:
