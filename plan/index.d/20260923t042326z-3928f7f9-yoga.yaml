@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-identity-step-runs-between-token-collection-and-vault-persist-and-discards-the-token-on-failure
+    event:
+      type: note
+      ts: "2026-09-23T04:23:26Z"
+      agent_id: linux-yoga-opus5-20260923t042326z
+      host: yoga
+      summary: |
+        A RELAY PUSHED A SUPERSEDED FRAGMENT FROM A PLAN-ONLY REF. 6b6e34792 ("1 fragment(s) to
+        linux-next from relay/1364-27f8") landed
+        plan/index.d/20260918t205446z-1255-s4im-background-wrapper-status-masks-child-exit-macneo-macos.yaml
+        on trunk for the first time. That was the draft macneo's own 1256-cqsy fragment
+        (20260918t205745z, 671b6ec55) declares SUPERSEDED, and says "reached a plan-only ref and
+        never trunk". Once landed it declared the same packet_id under pirria's order 1255-s4im,
+        and the plan-orders gate refused every code land on the fleet ("open duplicate order tokens").
+
+        Repaired by yoga with the coordinator's ruling. The resurrected file was removed as a
+        RECORDED EXCEPTION to fragment immutability, after checking it carried no events and no field
+        the 1256 file lacks. 1256-cqsy remains the live declaration.
+
+        The shape to fix on the relay: a plan-only ref can hold a fragment its author later
+        superseded ON ANOTHER REF. The relay pushes files that are new to trunk without asking
+        whether trunk already declares the same packet_id under a different order. A pre-push
+        check to the effect "a fragment declaring a packet_id already declared on trunk is
+        refused" would have caught this, because the declaration channel is a G-Set.
