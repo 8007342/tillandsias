@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Events go to the OVERLAY, never to plan/index.yaml (699-usxc, 966-7umc).
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-23T20:38:42Z"
+      agent_id: linux-lenovinha-claude-20260923
+      host: lenovinha
+      summary: |
+        INSTALL REGIME RE-ROUTED FROM yoga TO pirria, AFTER THE RELEASE CUT.
+
+        yoga refused on precondition, correctly: a tray-launched forge
+        sibling (tillandsias-tillandsias-forge-maintenance) had been live
+        there for 2 days, and order 443 forbids recreating the mirror under
+        one. Nothing was run on yoga. Coordinator's ruling: do not ask the
+        operator to stop a live forge for this. After the cut, macuahuitl
+        relays work/1350-ku7v (f061f623f) into linux-next, and pirria runs
+        the install regime from linux-next. pirria checks podman ps for a
+        live forge first and refuses the same way if it finds one. Steps and
+        expected output were sent to pirria-silverblue.
+      next_action: |
+        1. macuahuitl relays work/1350-ku7v after the cut.
+        2. pirria: install regime from linux-next; expect heads-current, rc=0.
+        3. Close this row on pirria's recorded run. The tray action stays
+           open and unrouted.
