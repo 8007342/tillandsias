@@ -320,5 +320,39 @@ fi
 # Re-exec it via a path RELATIVE to the checkout (the absolute Git-Bash
 # /c/... form does not exist inside the distro).
 SCRIPT_REL="$(realpath --relative-to="$(pwd)" "$0")"
+
+# ORDER 1267-uafx: A GATE ADVANCES BOTH LOCI, OR SAYS WHICH ONE IT DID NOT.
+# The gate builds the Linux ELF inside the distro and never the native
+# target/release/tillandsias-plan.exe, which is the binary plan-binary-probe.sh
+# must resolve on this side. So every green gate left the .exe older than the
+# sources it had just validated, and the plan-only lane refused this host as
+# STALE at exactly the moment it was trying to push (measured on yolanda
+# 2026-09-19: green gate, three refusals). For the stamping modes the distro
+# run is therefore a CHILD, not an exec, and the native plan binary is rebuilt
+# after it passes. A host that cannot build natively is told so by name
+# rather than left to discover it at push time.
+_w2_refresh_native=0
+if [[ "$(basename "$SCRIPT_REL")" == build.sh ]]; then
+    for arg in "$@"; do
+        case "$arg" in --check|--ci-full) _w2_refresh_native=1 ;; esac
+    done
+fi
+if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" != 1 ]]; then
+    wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"
+    _w2_rc=$?
+    [[ "$_w2_rc" -eq 0 ]] || exit "$_w2_rc"
+    echo "[wsl2-builder] gate passed in '$BUILD_DISTRO'; refreshing the native plan binary this host's lanes resolve (1267-uafx)..."
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "[wsl2-builder] refused:native-plan-binary-not-refreshed:no-native-cargo — the gate passed, but target/release/tillandsias-plan.exe was NOT rebuilt, so the plan-only lane will read it as STALE. Install rustup on Windows, or run: cargo build --release -p tillandsias-plan" >&2
+        exit 3
+    fi
+    if ! (unset CARGO_TARGET_DIR; cargo build --release -p tillandsias-plan); then
+        echo "[wsl2-builder] refused:native-plan-binary-not-refreshed:build-failed — the gate passed, but the native cargo build of tillandsias-plan failed, so the plan-only lane will read the .exe as STALE. Re-run: cargo build --release -p tillandsias-plan" >&2
+        exit 3
+    fi
+    bash scripts/check-plan-binary-current.sh
+    exit $?
+fi
 exec wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
     bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"
