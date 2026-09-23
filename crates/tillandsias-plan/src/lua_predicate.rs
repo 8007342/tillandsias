@@ -124,6 +124,36 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
     Ok(t)
 }
 
+/// The Lua globals a CACHEABLE predicate may reach, besides the `expert` table
+/// (1367-upz6). Deterministic, side-effect-free library only: no `os`, no `io`,
+/// no `print`, no `load`, no `collectgarbage`, and `math` without `random`.
+/// Pinned from inside Lua by tests/lua_predicate_classes.rs.
+pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
+    "_G",
+    "_VERSION",
+    "assert",
+    "error",
+    "getmetatable",
+    "ipairs",
+    "math",
+    "next",
+    "pairs",
+    "pcall",
+    "rawequal",
+    "rawget",
+    "rawlen",
+    "rawset",
+    "select",
+    "setmetatable",
+    "string",
+    "table",
+    "tonumber",
+    "tostring",
+    "type",
+    "utf8",
+    "xpcall",
+];
+
 /// Build a Lua runtime whose `expert` table contains EXACTLY the verbs its class
 /// is entitled to.
 pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
@@ -151,6 +181,36 @@ pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
         let _ = globals.set("loadfile", LuaValue::Nil);
         let _ = globals.set("dofile", LuaValue::Nil);
         let _ = globals.set("require", LuaValue::Nil);
+    }
+
+    // ORDER 1367-upz6. The removals above are a DENY-list, and a deny-list
+    // left os.time, os.clock, io.lines, os.remove and math.random reachable,
+    // so a cacheable predicate could read the clock or the disk and have that
+    // verdict replayed from cache. The cacheable class is therefore cut down
+    // to an ALLOW-list: every global not named below is removed, and math
+    // loses its non-deterministic half. The observing class keeps the wider
+    // set; it is never cached and already holds the shell verb.
+    if matches!(class, PredicateClass::Cacheable) {
+        let globals = lua.globals();
+        let mut drop: Vec<String> = Vec::new();
+        for pair in globals.clone().pairs::<LuaValue, LuaValue>() {
+            let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
+            if let LuaValue::String(name) = k {
+                let name = name.to_string_lossy().to_string();
+                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str()) {
+                    drop.push(name);
+                }
+            }
+        }
+        for name in drop {
+            globals
+                .set(name.as_str(), LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("remove {name}: {e}")))?;
+        }
+        if let Ok(math) = globals.get::<LuaTable>("math") {
+            let _ = math.set("random", LuaValue::Nil);
+            let _ = math.set("randomseed", LuaValue::Nil);
+        }
     }
 
     let expert = lua
