@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    field: verifiable_closure
+    value: |-
+      (1) A BARE BINARY SHOWS THE PLANT, NOT "T". Copy the built
+      tillandsias-tray to /tmp — outside any .app layout and off the build
+      host's source tree — launch it, and the menu bar shows the icon.
+      MUST FAIL ON PRE-FIX CODE and both runs are reported: the pre-fix bare
+      binary shows "T" because status_item.rs:214 resolves
+      env!("CARGO_MANIFEST_DIR")/assets/tray-icon.png, which is the BUILD
+      MACHINE's source tree and exists on no user's Mac.
+
+      (2) SPLIT, BECAUSE HALF OF IT NEEDS AN EYE THIS HOST DOES NOT HAVE.
+      (2a) MECHANICAL, verified by macneo: setSize(18,18) and setTemplate(true)
+           are called, the embedded bytes decode, and the NSImage reports 18x18.
+           Reported with the measured values.
+      (2b) VISUAL, NOT VERIFIABLE BY AN UNATTENDED AGENT: that it renders
+           correctly sized in a LIGHT and a DARK menu bar. This is left
+           explicitly unverified by the implementer and named as needing the
+           person at the keyboard. setTemplate(true) is what makes the glyph
+           invert for dark mode, so 2b is precisely the criterion that would
+           catch a wrong template flag — which is why it must not be signed off
+           by asserting that the flag was set. Setting a property that should
+           produce an appearance is not observing the appearance.
+
+      (3) cargo test and clippy -D warnings pass for the crate on macOS.
+
+
+      [2026-09-23T06:59:42Z macneo] CRITERION (1) EXTENDED, per macbookair's measurement: AN INSTALLED CI ARTIFACT
+      SHOWS THE PLANT. The original criterion asked only for a bare binary outside the
+      bundle, which turned out to be the narrower case — the bundled path never
+      resolved either, so every CI-built tray showed "T" from a normal /Applications
+      install. Checking a bare binary alone would therefore have PASSED a fix that
+      still failed for every real user.
+
+        (1a) a bare binary outside any .app layout shows the plant — MET, evidenced on
+             the artifact: 0 occurrences of the build-host asset path in the binary,
+             4 embedded PNG signatures, 0 filesystem calls in the loader.
+        (1b) AN INSTALLED ARTIFACT FROM A PUBLISHED RELEASE shows the plant, launched
+             from /Applications/Tillandsias.app. NOT YET MET — it cannot be, because
+             no release containing this fix exists. TO BE CHECKED ON THE NEXT
+             PUBLISHED RELEASE, on a host that curl-installs it.
+             The pre-fix control for 1b is already recorded: macbookair, published
+             v56.9.22.1, exe_path inside the bundle, in_app=true, the icon file
+             PRESENT and byte-identical to the tarball's, and "T" on screen.
+
+      WHY 1b IS A SEPARATE CRITERION AND NOT A RESTATEMENT: the two candidate paths
+      failed for DIFFERENT reasons — one because the .app layout was mis-computed, one
+      because the fallback is a CI machine's source tree — and a fix could in principle
+      repair one and not the other. The embed repairs both by deleting the
+      computation, but the criterion should test the property rather than trust the
+      mechanism.
+    ts: "2026-09-23T06:59:42Z"
+    host: macneo
+
+events:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    event:
+      type: note
+      ts: "2026-09-23T06:59:42Z"
+      host: macneo
+      summary: |-
+        criterion 1 split: an installed CI artifact must show the plant, checkable only on the next published release
