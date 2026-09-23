@@ -34,10 +34,11 @@ use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSImage, NSMenu, NSMenuItem, NSStatusBar,
     NSStatusItem, NSVariableStatusItemLength,
 };
-use objc2_foundation::{MainThreadMarker, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSSize, NSString};
 
 use crate::action_host::TrayActionHost;
 use crate::menu_disabled_v2::{MacMenuItemSpec, render};
+use tillandsias_core::genus::TrayIconState;
 use tillandsias_host_shell::menu_state::{BOOT_STATUS_TEXT, MenuStructure, ids};
 
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
@@ -180,39 +181,36 @@ pub fn install_status_item(
     status_item
 }
 
-/// Packaged runs read `Tillandsias.app/Contents/Resources/tray-icon.png`; dev runs
-/// read `crates/tillandsias-macos-tray/assets/tray-icon.png`.
+/// ORDER 1367-irnh. THE ICON IS EMBEDDED, NOT READ FROM DISK.
+///
+/// This used to call `NSImage::initByReferencingFile` on two candidate paths:
+/// `<exe>/../Resources/tray-icon.png` inside the bundle, and
+/// `env!("CARGO_MANIFEST_DIR")/assets/tray-icon.png` — THE BUILD MACHINE'S
+/// SOURCE TREE, which exists on no user's Mac. A binary launched outside the
+/// .app layout resolved neither and fell through to the "T" text fallback,
+/// which is what the operator saw from a curl-downloaded tray.
+///
+/// The two tests that covered this resolved CARGO_MANIFEST_DIR and therefore
+/// PASSED on every development machine — the only machines that ran them. A
+/// test executable only where the defect cannot occur pins the defect as the
+/// contract; both are deleted rather than adjusted.
+///
+/// `tillandsias_core::icons::tray_icon_png` is generated at build time from the
+/// Ionantha SVGs and is already what the Linux and Windows trays call, so this
+/// makes macOS stop being the odd one out rather than introducing a mechanism.
 fn load_status_icon_image() -> Option<Retained<NSImage>> {
-    let path = status_icon_path()?;
-    let path_str = NSString::from_str(path.to_str()?);
-    let image = unsafe { NSImage::initByReferencingFile(NSImage::alloc(), &path_str) }?;
-    unsafe { image.setTemplate(true) };
-    Some(image)
-}
-
-/// Locate `tray-icon.png` by checking the app bundle (`Resources/tray-icon.png`),
-/// then falling back to the `CARGO_MANIFEST_DIR` for `cargo run`.
-fn status_icon_path() -> Option<std::path::PathBuf> {
-    status_icon_candidate_paths()
-        .into_iter()
-        .find(|p| p.exists())
-}
-
-fn status_icon_candidate_paths() -> Vec<std::path::PathBuf> {
-    let mut paths = Vec::new();
-    if let Ok(mut exedir) = std::env::current_exe() {
-        exedir.pop(); // typically 'MacOS' inside the bundle
-        if let Some(bundled) = exedir
-            .parent()
-            .and_then(|p| p.parent())
-            .map(|contents_dir| contents_dir.join("Resources/tray-icon.png"))
-        {
-            paths.push(bundled);
-        }
+    let png = tillandsias_core::icons::tray_icon_png(TrayIconState::Mature);
+    let data = NSData::with_bytes(png);
+    let image = unsafe { NSImage::initWithData(NSImage::alloc(), &data) }?;
+    unsafe {
+        // 18pt, not the PNG's pixel size: the menu bar is about 22pt and an
+        // unsized 32px image draws at 32pt, taller than the bar it sits in.
+        image.setSize(NSSize::new(18.0, 18.0));
+        // A template image is recoloured by AppKit for the current menu bar
+        // appearance, which is what makes it legible in dark mode.
+        image.setTemplate(true);
     }
-    // Fallback for `cargo run` inside the workspace:
-    paths.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/tray-icon.png"));
-    paths
+    Some(image)
 }
 
 fn status_icon_fallback_title() -> &'static str {
@@ -396,35 +394,55 @@ mod tests {
         );
     }
 
-    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
+    /// ORDER 1367-irnh. THE ICON MUST RESOLVE WITH NOTHING ON DISK.
+    ///
+    /// This replaces two tests that asserted the opposite: one required
+    /// `CARGO_MANIFEST_DIR/assets/tray-icon.png` to be among the candidate
+    /// paths, and one required a candidate path to EXIST. Both passed on every
+    /// development machine and could not fail on one — so the suite pinned the
+    /// build host's source tree as the contract, and a user's Mac, which has
+    /// neither the bundle nor the tree, showed the "T" fallback.
+    ///
+    /// The bytes come from `tillandsias_core::icons::tray_icon_png`, which is
+    /// generated at build time and compiled in. This test therefore holds on a
+    /// machine with no Tillandsias files at all, which is the whole point.
     #[test]
-    fn status_icon_candidates_include_source_tree_asset() {
-        let source_asset =
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/tray-icon.png");
-        assert!(
-            status_icon_candidate_paths().contains(&source_asset),
-            "dev runs must be able to load the same icon asset as the bundle"
-        );
-    }
-
-    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
-    #[test]
-    fn status_icon_path_resolves_to_existing_png() {
-        let path = status_icon_path().expect("tray-icon.png should exist in source tree or bundle");
+    fn tray_icon_bytes_are_embedded_and_decode() {
+        let png = tillandsias_core::icons::tray_icon_png(TrayIconState::Mature);
+        assert!(!png.is_empty(), "the embedded tray icon must not be empty");
         assert_eq!(
-            path.file_name().and_then(|s| s.to_str()),
-            Some("tray-icon.png")
+            &png[..8],
+            b"\x89PNG\r\n\x1a\n",
+            "the embedded bytes must be a PNG"
         );
     }
 
-    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
+    /// ORDER 1367-irnh, exit criterion 2a. The loader AppKit actually uses must
+    /// produce an image, and it must report the size it was told to take — 18pt
+    /// against a menu bar of roughly 22pt. Decoding through NSImage rather than
+    /// through a second image crate means this tests the path that runs.
+    #[test]
+    fn embedded_icon_builds_an_nsimage_sized_for_the_menu_bar() {
+        let image = load_status_icon_image().expect(
+            "the embedded bytes must build an NSImage; the T fallback exists only for this failing",
+        );
+        let size = unsafe { image.size() };
+        assert_eq!(size.width, 18.0, "icon width must be set for the menu bar");
+        assert_eq!(size.height, 18.0, "icon height must be set for the menu bar");
+        assert!(
+            unsafe { image.isTemplate() },
+            "the icon must be a template image, or it will not invert in a dark menu bar"
+        );
+    }
+
+    /// ORDER 1367-irnh. "T" survives ONLY as the decode-failure fallback.
+    ///
+    /// The fallback is not deleted — a state that can actually occur needs a
+    /// behaviour — but it is no longer reachable by a missing FILE, because no
+    /// file is read. Asserting the string alone, with no claim about paths.
     #[test]
     fn status_text_fallback_is_only_a_missing_icon_fallback() {
         assert_eq!(status_icon_fallback_title(), "T");
-        assert!(
-            status_icon_path().is_some(),
-            "normal builds should use the template image, not the text fallback"
-        );
     }
 
     /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
@@ -446,3 +464,4 @@ mod tests {
         );
     }
 }
+
