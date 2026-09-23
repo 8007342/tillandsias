@@ -29,6 +29,9 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# target_binary_runs: the same runnability rule the hook now applies (721-nyev:
+# plan-binary resolution goes through the shared probe).
+. "$ROOT/scripts/plan-binary-probe.sh"
 
 pass=0; fail=0
 ck() { # ck <description> <expected> <actual>
@@ -134,7 +137,7 @@ case "$_named" in
         ck "arm2: a newer candidate IS named ($_named)" yes yes ;;
     *)  ck "arm2: a newer candidate IS named (${_named:-none})" yes no ;;
 esac
-( cd "$LW/wc" && [ -n "$_named" ] && "$_named" capabilities >/dev/null 2>&1 ); _nrc=$?
+( cd "$LW/wc" && [ -n "$_named" ] && target_binary_runs "$_named" ); _nrc=$?
 ck "arm2: the named remedy binary RUNS" 0 "$_nrc"
 
 # ── ARM 3 — THE WINDOWS SHAPE ───────────────────────────────────────────────
