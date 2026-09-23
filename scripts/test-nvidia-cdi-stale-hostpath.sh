@@ -53,7 +53,7 @@ spec() {
     } > "$d/cdi/nvidia.yaml"
     printf '%s\n' "$stamp" > "$d/cdi/.nvidia-driver-version"
 }
-run() { PATH="$1/bin:$PATH" TILLANDSIAS_CDI_DIR="$1/cdi" bash "$SUBJECT" > "$1/out" 2>&1; }
+run() { PATH="$1/bin:$PATH" TILLANDSIAS_CDI_DIR="$1/cdi" bash "$SUBJECT" > "$1/stdout" 2> "$1/stderr"; cat "$1/stdout" "$1/stderr" > "$1/out"; }
 calls() { wc -l < "$1/ctk-calls" | tr -d ' '; }
 
 # ARM 1
@@ -79,6 +79,8 @@ grep -qx "note:nvidia-cdi:stale-hostpath:$d/lib/libnvidia-egl-gbm.so.1.1.3" "$d/
     && ok "ARM 2: the missing path is named" || bad "ARM 2: stale path not named: $(tr '\n' ' ' < "$d/out")"
 grep -qx 'ok:nvidia-cdi:generated:610.57.04' "$d/out" && [ "$(calls "$d")" = 1 ] \
     && ok "ARM 2: regenerated once" || bad "ARM 2: not regenerated (ctk_calls=$(calls "$d"))"
+[ "$(wc -l < "$d/stdout" | tr -d ' ')" = 1 ] \
+    && ok "ARM 2: stdout is still exactly one verdict line (the grammar's contract)" || bad "ARM 2: stdout has $(wc -l < "$d/stdout" | tr -d ' ') lines"
 grep -q 'libnvidia-egl-gbm.so.1.1.4' "$d/cdi/nvidia.yaml" \
     && ok "ARM 2: the installed spec is the regenerated one" || bad "ARM 2: old spec still installed"
 rm -rf "$d"

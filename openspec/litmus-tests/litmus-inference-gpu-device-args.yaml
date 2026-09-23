@@ -73,7 +73,7 @@ critical_path:
   - step: "a CDI spec mounting a hostPath that no longer exists is STALE and regenerated, not current because the driver is unchanged (1248-j6vd)"
     command: "bash scripts/test-nvidia-cdi-stale-hostpath.sh 2>&1 | tail -n 1"
     timeout_ms: 30000
-    expected_behavior: "ok:nvidia-cdi-stale-hostpath:7/7"
+    expected_behavior: "ok:nvidia-cdi-stale-hostpath:8/8"
 
 failure_modes:
   - "nvidia-cdi-ensure.sh keys currency on the driver version alone and reports current about a spec whose mounted library was replaced by a distro update, so every GPU container start dies (1248-j6vd)"

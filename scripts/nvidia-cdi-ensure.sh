@@ -6,7 +6,9 @@
 #
 # Verdict grammar, exactly one line on stdout:
 #   ok:nvidia-cdi:current:<driver>      spec present and matches the live driver
-#   ok:nvidia-cdi:generated:<driver>    spec written (absent, or driver moved)
+#   ok:nvidia-cdi:generated:<driver>    spec written (absent, driver moved, or a
+#                                       mounted hostPath is gone — 1248-j6vd; the
+#                                       missing path is named on stderr)
 #   skip:nvidia-cdi:no-gpu              no NVIDIA GPU on this host
 #   skip:nvidia-cdi:no-nvidia-ctk       toolkit absent — nothing to generate with
 #   degraded:nvidia-cdi:<reason>        wanted to generate and could not
@@ -87,7 +89,8 @@ EOF
         printf 'ok:nvidia-cdi:current:%s\n' "$_live_driver"
         exit 0
     fi
-    printf 'note:nvidia-cdi:stale-hostpath:%s\n' "$_stale_path"
+    # On STDERR: the verdict grammar above promises exactly one line on stdout.
+    printf 'note:nvidia-cdi:stale-hostpath:%s\n' "$_stale_path" >&2
 fi
 
 mkdir -p "$CDI_DIR" 2>/dev/null || {
