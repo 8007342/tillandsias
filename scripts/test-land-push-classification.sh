@@ -39,6 +39,13 @@ scratch() {
     d="$(mktemp -d "${TMPDIR:-/tmp}/land-push-class.XXXXXX")"
     G init -q --bare "$d/origin.git"
     G init -q -b linux-next "$d/w"
+    # The tool under test rebases and merges with the REAL git, which needs an
+    # identity. A host whose FQDN lets git auto-derive one passes without this;
+    # inside the builder toolbox (bare hostname) the rebase fails for want of
+    # an identity and the tool reads that as a conflict: ARMS 1 and 3 went red
+    # on macuahuitl's gate while 8/8 standalone (2026-09-23).
+    G -C "$d/w" config user.email t@t
+    G -C "$d/w" config user.name t
     G -C "$d/w" remote add origin "$d/origin.git"
     mkdir -p "$d/w/scripts" "$d/bin"
     cp "$LANDSH" "$d/w/scripts/land-on-platform-branch.sh"
