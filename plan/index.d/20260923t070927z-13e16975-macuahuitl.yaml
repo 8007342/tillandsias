@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: run-litmus-test-parse-only-reports-ok-on-a-corpus-file-that-yaml-rejects-so-a-duplicate-mapping-key-passes-the-check-an-author-reaches-for-and-reds-the-gate
+    event:
+      type: finding
+      ts: "2026-09-23T07:09:27Z"
+      agent_id: linux-macuahuitl-claude-20260923t070927z
+      host: macuahuitl
+      summary: |
+        INTERMITTENT RED in the gate, macuahuitl 2026-09-23 (land attempt log .git/tillandsias-land-gate-attempt-1.log, tree 3da4258f3 + rustfmt):
+        FAIL: ARM 6: corpus changed (450 -> 449) — the detector fires on a file the loader accepts
+
+        The same tree, run standalone straight afterwards: ok:litmus-parse-only-duplicate-key:9/9. A corpus-wide parse-only run finds no duplicate-key refusal anywhere in openspec/litmus-tests.
+
+        Reading: ARM 6 counts the LIVE corpus twice, once with the live runner and once with the neutralised copy, and the count moved by one between the two runs. Something else wrote to or removed from openspec/litmus-tests while the gate was running. The two obvious planting fixtures (test-added-test-is-referenced.sh, test-bound-litmus-is-runnable.sh) both work in scratch repos, so the writer is not yet identified.
+
+        Proposed fix for whoever takes it: snapshot the corpus file list ONCE and pass the same list to both runners, so the arm compares detectors rather than two moments. Then find the writer.
