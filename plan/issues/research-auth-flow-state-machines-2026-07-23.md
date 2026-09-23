@@ -173,3 +173,114 @@ NOT define the transport (packet iii) or the underlying dependency-node substrat
 - NOT ZeroClaw / agent↔agent messaging (deleted as a critical violation; out of scope).
 - NOT re-touching the Vault auth boundary or the pre-receive relay — the FSM observes
   those steps; it does not change their security posture.
+
+## Transition map refreshed against source (2026-09-23, forge-tillandsias)
+
+Partial slice of exit criterion 2 (the falsifiable mapping table). The line
+numbers in the sections above date from 2026-07-23 and have all moved:
+`run_provider_login` is now `main.rs` ~11029, not 6860. Cite the needles below
+(function names and error strings), not line numbers.
+
+### Execution order today (GitHub, Terminal lane)
+
+Two changes since this packet was filed matter to the FSM:
+
+- **Identity was placed between `collect` and `persist`** by 21243b4d3
+  (2026-07-28, "token first, then git identity"). That brought back the
+  collected-but-not-persisted class this packet was filed for. Filed and fixed
+  as **1364-27f8** (work ref `work/1364-27f8` at 98cccfd7f, pending landing): identity now runs after `verify_persisted`, and the
+  `--with-token` identity is read before `collect`.
+- **The interactive `collect` exec has a wall-clock deadline.** Since
+  2ac53a767 (order 714-4r6w) it runs through `run_podman_command`, which
+  bounds it by `OperationKind::Container.default_budget()`, 300 s. That budget
+  covers the human's time too: creating a fine-grained PAT, or finishing a
+  device-code flow plus the in-container CLI install for Codex/Antigravity.
+  714-4r6w criterion 3 already names this ("a deadline on the SETUP … and
+  none on the human's typing") and is still open, so it is not re-filed here.
+  For the FSM this is the case where `abandoned`, `blocked{collect, deadline}`
+  and a slow operator all produce the same error today.
+
+### Mapping table: every `?` / `Err` in `run_provider_login` → proposed stage and reason
+
+Each row has a needle to grep in `run_provider_login`. "Distinct today?"
+asks whether the error string alone tells a caller which stage failed.
+
+| # | Needle (call site) | Proposed stage | Proposed reason | Distinct today? |
+|---|---|---|---|---|
+| 1 | `require_desktop_user_session(` | `ensure_prereqs` | `no_desktop_session` | yes (own message) |
+| 2 | `resolve_existing_git_identity()?` (StdinToken, since 1364-27f8) | `ensure_prereqs` | `git_identity_missing` | yes |
+| 3 | `resolve_runtime_asset_root(` | `ensure_prereqs` | `runtime_assets_missing` | yes |
+| 4 | `ensure_image_exists(` | `ensure_prereqs` | `image_unavailable` | yes |
+| 5 | `ensure_git_login(debug)?` (vault) / `ensure_enclave_network`+`ensure_proxy_running` (no vault) | `ensure_prereqs` | `dependency_down{node}` | partly: the dependency model names the node, the fallback chain does not |
+| 6 | `check_auth_required_services(&["tillandsias-vault", "tillandsias-proxy"]` | `ensure_prereqs` | `service_unhealthy{name}` | yes |
+| 7 | `mint_approle_secret_lease(` | `ensure_prereqs` | `vault_lease` | yes |
+| 8 | `ensure_ca_bundle(debug)?` | `ensure_prereqs` | `ca_bundle` | yes |
+| 9 | `run_podman_command_silent(run, debug)?` (helper start) | `ensure_prereqs` | `helper_start` | **no**: bare podman stderr |
+| 10 | `check_auth_required_services(&required` | `ensure_prereqs` | `helper_unhealthy` | yes |
+| 11 | `run_podman_command(login, debug)?` | `collect` | `operator_abandoned` / `empty_token` / `provider_reject` / `deadline` | **no**: all four become `Command exited with status N` or `Failed to run command: <timeout>` |
+| 12 | `authentication verification failed after login` (`gh auth status`) | `verify_session` | `session_invalid` | yes |
+| 13 | `in-container vault write failed` | `persist` | `vault_write` (covers `ca_bundle` inside the container, since `vault-cli.sh`'s `require_cacert` fails here) | partly: stage yes, reason is free-text stderr |
+| 14 | `in-container vault write verification failed` | `verify_persisted` | `vault_readback` | yes |
+| 15 | `vault feature not compiled` | `persist` | `no_vault_feature` | yes (build-time, not a runtime state) |
+| 16 | `git identity was not saved` (since 1364-27f8, after persist) | `store_identity` (post-success, non-credential) | `identity_invalid` / `identity_write` | yes. The token is safe, so this belongs outside the credential FSM |
+| — | `gh api user` (`podman_command_output(username_cmd` … `.ok()`) | `verify_persisted` (identity lookup) | none: the failure is swallowed | n/a: the success message just drops the username |
+
+Rows 9 and 11 are the gaps criterion 2 asks about: fallible steps whose error
+does not identify a reason. Row 11 matters most. The one exec that involves
+the human carries four different outcomes in an exit status and nothing else.
+
+### Second provider (Codex): three transitions in one exec
+
+For every device-auth provider (`CODEX_DEVICE_AUTH_SPEC`,
+`CLAUDE_DEVICE_AUTH_SPEC`, `ANTIGRAVITY_DEVICE_AUTH_SPEC`), rows 12–14 do not
+exist on the Rust side. `collect`, `persist` and `verify_persisted` all run
+inside the login script (`images/default/codex-device-auth.sh`,
+`images/default/provider-device-auth.sh`), which is ONE
+`run_podman_command(login)` exec. The Rust flow then re-runs
+`verify_persisted` (row 14) on its own.
+
+The script's exit code is the only reason channel:
+
+| exit | meaning (script) | proposed `blocked{stage, reason}` |
+|---|---|---|
+| 2 | CLI lacks the device-auth capability / agy install failed / no agy login subcommand | `blocked{ensure_prereqs, provider_cli_unsupported}` (agy install failure: `provider_cli_install`) |
+| 3 | login returned but wrote no credential file | `blocked{collect, no_credential_file}` |
+| 64 | unknown provider argument | programming error, not a runtime state |
+| other non-zero | `codex login` itself failed, OR `vault-cli.sh write-stdin` failed, OR `vault-cli.sh read` failed (`set -euo pipefail` passes the child's code through) | **ambiguous**: `collect` vs `persist` vs `verify_persisted` |
+| deadline | 300 s budget (see above) | ambiguous with `abandoned` |
+
+So for Codex, the "collected, not persisted" case, the incident this packet
+exists for, cannot be told apart from "login failed" from the host side.
+Two ways to fix it (decision left for the implementation packet):
+(a) give the vault write and read-back their own exit codes in both scripts
+(e.g. 4 = persist, 5 = verify_persisted), a small and local change;
+(b) split the script so that, as with GitHub, `persist` is a separate exec
+issued by the Rust flow, which gives one exec per transition and matches the
+GitHub shape.
+Option (a) is enough for the FSM's `blocked{stage}`. Option (b) is needed if
+the FSM should be able to resume from `token_collected` without re-prompting
+(the "resume vs re-prompt" decision). A device-code credential still sits in
+the container only until the container's `--rm` cleanup.
+
+### Side findings (recorded, not filed)
+
+- `ProviderLoginConfig.auth_model` is never read, and the GitHub lane sets it
+  to `AuthModel::OAuthDevice` although GitHub is a pasted-token flow
+  (`AuthModel::Token`). It is a dead field with a wrong value. An FSM keyed on
+  auth model must not trust it. Either delete it or make it correct when
+  `LoginFlow<P>` lands.
+- `ensure_provider_auth` (the agent-lane auto-login, `main.rs` ~16650) calls
+  `run_provider_login` directly. It is nested inside the agent lanes, which
+  844-aq78 already wraps in `run_cli_with_vault_credential_cleanup`, so it is
+  covered. Noted so that a future refactor that lifts it out of that wrapper
+  does not lose the drain.
+
+### What remains for this packet
+
+- Exit criterion 1: FSM spec for GitHub + Codex with guards in sibling-ii
+  node terms (the stage column above is the state skeleton; guards are not
+  written).
+- Exit criterion 3: the prototype `LoginFlow` type and its three tests.
+- Exit criteria 4–5: the decision record (crate location, reason vocabulary,
+  guard evaluation, resume vs re-prompt: see (a)/(b) above) and which states
+  are visible to the user.
