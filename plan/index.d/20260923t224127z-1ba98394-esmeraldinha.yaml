@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    field: status
+    value: completed
+    ts: "2026-09-23T22:41:27Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: completed
+      ts: "2026-09-23T22:41:27Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: commit:35193f5dd,commit:ff7adef4f,fragment:plan/index.d/20260923t223120z-1cf4deec-esmeraldinha.yaml,fixture:scripts/test-litmus-budget-tally.sh
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-23T22:41:27Z"
+      host: esmeraldinha
+      summary: |-
+        Floor-tier re-measure on esmeraldinha at the MINGW locus, 2026-09-23. meta-orchestration ran 24 of 24 litmus. Both named arms were killed at their budget and tallied as BUDGET: build-cache-sweep-trigger at 31.5s and mcp-expert-health-probe-shape at 221.3s, both censored. The summary reads 'BUDGET: 2 of those FAILs', and they are still FAIL with rc=1, per 820-c8q8. Fixture: ok:litmus-budget-tally:7 at this locus. Code 35193f5dd is on origin/linux-next. The measurement event is in ff7adef4f (windows-next).
