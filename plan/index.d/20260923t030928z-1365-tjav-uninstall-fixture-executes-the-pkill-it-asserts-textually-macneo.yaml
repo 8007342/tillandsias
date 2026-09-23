@@ -1,0 +1,120 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-uninstall-sweep-fixture-asserts-the-trays-pkill-textually-because-running-it-would-kill-a-developers-real-tray-and-then-executes-the-very-block-that-contains-it-so-every-gate-on-a-mac-sigkills-the-operators-tray
+    order: 1365-tjav
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [macos, agent-safety, fail-loud, gating, test-hygiene]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-uninstall-sweeps-both-app-dirs.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The assertion
+      belongs in this fixture, which is the subject, so naming a litmus now
+      would declare a test nothing defines.
+      THE ARM TO ADD, in the same commit as the fix: the block this fixture
+      EXECUTES must contain no process-affecting command. Assert it over the
+      rewritten $TMP/block.sh rather than over $BLOCK, because the rewrite is
+      the thing that makes the file safe or not, and compose the forbidden
+      token at runtime so the arm cannot pass on the comment that forbids it
+      (the technique test-reset-state-contract.sh ARM2 already uses).
+    verifiable_closure: |
+      THE FIXTURE MUST NOT RUN A COMMAND THAT REACHES OUTSIDE ITS SANDBOX.
+      Pre-fix, on any Mac with a tray running, a single gate SIGTERMs and then
+      SIGKILLs the operator's tray twice — the block is executed at two places,
+      so four signals per gate.
+
+      MEASURED BY READING, macneo 2026-09-23, line numbers as they stand:
+        scripts/uninstall.sh:298  pkill -TERM -x tillandsias-tray 2>/dev/null || true
+        scripts/uninstall.sh:300  pkill -KILL -x tillandsias-tray 2>/dev/null || true
+        both inside the extracted range uninstall.sh:252-320
+        scripts/test-uninstall-sweeps-both-app-dirs.sh:74 and :86
+          HOME="$FAKE_HOME" bash "$TMP/block.sh"
+      The sandbox is HOME plus a sed rewriting the quoted literal "/Applications"
+      onto $FAKE_SYS. NEITHER REACHES THE PROCESS TABLE. A fake HOME does not
+      scope pkill.
+
+      POST-FIX the pkill lines must be neutralised in the rewritten block —
+      stubbed, or the block split so the destructive sweep is exercised without
+      the process stop — and the textual assertion at :57 must remain, because
+      the property it pins (the tray is stopped before its bundle is deleted)
+      was found live on 2026-08-30 and must not be lost to this fix.
+
+      NEGATIVE CONTROL, or the arm passes vacuously: with the neutralisation
+      removed, the new arm must RED. A fixture that cannot detect its own
+      unsandboxed command is this row repeating itself.
+    title: |
+      The uninstall-sweep fixture asserts the tray's pkill TEXTUALLY because running it would kill a developer's real tray — and then executes the very block that contains it, so every gate on a Mac SIGKILLs the operator's tray
+    context: |
+      THE COMMENT AND THE CODE DISAGREE, FOUR LINES APART. The fixture says, at
+      :47-51: "The tray must be STOPPED before its bundle is deleted. Asserted
+      textually, never behaviourally: a fixture that ran `pkill -f
+      tillandsias-tray` would kill the real tray on a developer's machine. Found
+      live 2026-08-30 — the uninstaller removed the bundle and left the process
+      running from it, still owning the VM."
+
+      The author was protecting against WRITING a pkill into the fixture. They
+      did not notice the fixture EXECUTES one, from the block it extracts. The
+      textual assertion at :57 reads the block; :74 and :86 run it.
+
+      MENTION-VERSUS-USE WITH THE ROLES REVERSED. The usual defect is a checker
+      treating a quoted string as an invocation. Here an author treated an
+      invocation as merely quoted: the same text is asserted AS TEXT and then
+      handed to bash. Both halves are correct in isolation and the composition is
+      the defect — which is why reading either half alone finds nothing wrong.
+
+      WHY THE SANDBOX DOES NOT COVER IT. The fixture is careful, and that is what
+      makes this instructive. It builds $FAKE_SYS and $FAKE_HOME, seeds stub
+      bundles, rewrites the literal "/Applications" onto the sandbox with sed,
+      and VERIFIES the rewrite applied (grep -q "$FAKE_SYS" || fail
+      "sandbox-redirect-did-not-apply"). Every one of those controls a
+      FILESYSTEM path. None of them scopes a process signal, and nothing in the
+      fixture asks whether the block does anything but touch files.
+
+      HOW IT WAS FOUND. macuahuitl-fedora came to the fixture hunting a different
+      suspect — whether the sed missed a spelling and the rm ran against a real
+      /Applications — after macneo's app bundle disappeared during a gate window.
+      THAT SUSPECT IS ELIMINATED and both hosts verified it independently: the
+      block's only real-path occurrence is the loop head `for _app_dir in
+      "/Applications" "$HOME/Applications"`, the sed does rewrite it, the single
+      removal goes through "$_app_dir", and the redirect is asserted. The pkill
+      was found while confirming the elimination.
+
+      WHAT THIS DOES NOT EXPLAIN, stated because the temptation is strong:
+      IT IS NOT THE BUNDLE REMOVAL. Killing a process does not unlink an
+      application, and 1327-r4zb stays open with its cause unattributed. A row
+      that arrives while hunting something else must not be allowed to close the
+      thing it was not.
+
+      AND ITS TWO PREDICTED SYMPTOMS DO NOT MATCH THIS HOST'S RECORD, which is
+      recorded as a disconfirmation rather than omitted. macuahuitl predicted a
+      reset guard finding no running tray where one was expected: the opposite
+      happened here, --reset-state DID find a live tray and refused (exit 3,
+      1360-jjyx). And a tray down after a gate could not be tested, because I had
+      killed the tray myself during §2 of the smoke and never relaunched it. So
+      the defect is established by reading the code, not by either symptom.
+    next_action: |
+      Not claimed. Any host can fix it; only a Mac with a tray running can
+      demonstrate the pre-fix behaviour, and macneo will run that when asked.
+      1. Neutralise the process commands in the REWRITTEN block, not in
+         uninstall.sh — the uninstaller is correct and 1231-cbie already
+         narrowed its matcher deliberately.
+      2. Keep the textual assertion at :57. The property it pins was found live
+         on 2026-08-30 and is not what is wrong here.
+      3. Add the arm from `unscoreable`, asserting over $TMP/block.sh, with the
+         negative control: remove the neutralisation and the arm must RED.
+      4. SWEEP THE SIBLINGS. This fixture is one of five uninstall fixtures and
+         the same extract-then-execute shape may appear in the others; I have not
+         read them and am not asserting that it does.
+    provenance: |
+      Found on macneo 2026-09-23 by macuahuitl-fedora while eliminating their own
+      candidate for 1327-r4zb, and verified independently on the macOS host
+      before filing at their request, since they read it on Linux where none of
+      it runs. Related: 1327-r4zb (the bundle removal, still open and NOT
+      explained by this), 1231-cbie (the matcher narrowing that this fixture's
+      comment already records), 1360-jjyx (the reset guard whose live-tray
+      refusal is the disconfirming datum), 885-92iu (a guard that cannot fail).
