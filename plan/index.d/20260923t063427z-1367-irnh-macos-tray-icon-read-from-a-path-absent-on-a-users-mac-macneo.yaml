@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    order: 1367-irnh
+    status: in_progress
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, tray, ux, packaging, test-hygiene]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-macos-tray/src/status_item.rs
+      - crates/tillandsias-macos-tray/Cargo.toml
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The test that
+      would score this is this packet's own deliverable — the two tests that
+      exist today PIN THE DEFECT, so there is nothing to name yet.
+      THE TESTS TO WRITE, in the same commit as the fix:
+        - the embedded bytes decode to an NSImage (replaces the two source-tree
+          tests at status_item.rs:403 and :423)
+        - the image reports the size it was set to
+      THE TEST NOT TO WRITE: anything asserting the icon "looks right". See the
+      verification split in the closure.
+    verifiable_closure: |
+      (1) A BARE BINARY SHOWS THE PLANT, NOT "T". Copy the built
+      tillandsias-tray to /tmp — outside any .app layout and off the build
+      host's source tree — launch it, and the menu bar shows the icon.
+      MUST FAIL ON PRE-FIX CODE and both runs are reported: the pre-fix bare
+      binary shows "T" because status_item.rs:214 resolves
+      env!("CARGO_MANIFEST_DIR")/assets/tray-icon.png, which is the BUILD
+      MACHINE's source tree and exists on no user's Mac.
+
+      (2) SPLIT, BECAUSE HALF OF IT NEEDS AN EYE THIS HOST DOES NOT HAVE.
+      (2a) MECHANICAL, verified by macneo: setSize(18,18) and setTemplate(true)
+           are called, the embedded bytes decode, and the NSImage reports 18x18.
+           Reported with the measured values.
+      (2b) VISUAL, NOT VERIFIABLE BY AN UNATTENDED AGENT: that it renders
+           correctly sized in a LIGHT and a DARK menu bar. This is left
+           explicitly unverified by the implementer and named as needing the
+           person at the keyboard. setTemplate(true) is what makes the glyph
+           invert for dark mode, so 2b is precisely the criterion that would
+           catch a wrong template flag — which is why it must not be signed off
+           by asserting that the flag was set. Setting a property that should
+           produce an appearance is not observing the appearance.
+
+      (3) cargo test and clippy -D warnings pass for the crate on macOS.
+    title: |
+      The macOS tray reads its icon from a path that exists only inside the bundle or on the build host, so a bare binary shows "T" — and the two tests pin the build host's source tree as the contract
+    context: |
+      MEASURED ON TRUNK d74473c0f, read on macneo before accepting the triage.
+        status_item.rs:188  NSImage::initByReferencingFile — the icon is loaded
+                            from DISK at runtime
+        :208  <exe>/../Contents/Resources/tray-icon.png   (packaged runs only)
+        :214  env!("CARGO_MANIFEST_DIR")/assets/tray-icon.png — THE BUILD
+              MACHINE'S SOURCE TREE, which exists on no user's Mac
+        :158, :218-219  when neither path resolves, the button title becomes "T"
+      So any launch outside the .app layout shows a letter. The operator
+      reported exactly this from a curl-downloaded tray.
+
+      THE TESTS PIN THE DEFECT AS THE CONTRACT, which is why nothing caught it.
+      :403 and :423 resolve CARGO_MANIFEST_DIR and therefore PASS on every
+      development machine — the only machines that run them. A test that can
+      only be executed where the bug cannot occur is 1302-7j8p's rule stated for
+      a filesystem instead of a regime: the hosts that run the test are exactly
+      the hosts the defect spares.
+
+      macOS IS THE ODD ONE OUT AND THE FIX ALREADY EXISTS IN THE TREE.
+      tillandsias_core::icons::tray_icon_png is generated at build time from the
+      Ionantha SVGs by tillandsias-core/build.rs:221, and it is ALREADY the call
+      the other two trays make — tillandsias-headless/src/tray/mod.rs:2160 and
+      tillandsias-windows-tray/src/tray_phase_icon.rs:96. Only macOS reads a
+      file. Verified, not assumed.
+
+      SECOND DEFECT, same site: no setSize, so a 32px PNG draws at 32pt against
+      a menu bar of roughly 22pt.
+
+      objc2-foundation's feature list in Cargo.toml carries NSString, NSURL,
+      NSArray, NSDictionary, NSUUID and NSThread but NOT NSData, so adding it is
+      real work rather than a no-op.
+    next_action: |
+      Claimed by macneo 2026-09-23, assigned by macuahuitl-fedora on the
+      operator's report. Only a Mac can compile and see this.
+      1. Add "NSData" to objc2-foundation's features.
+      2. Build the image from the embedded bytes —
+         NSImage::initWithData(alloc, &NSData::with_bytes(tray_icon_png(...))) —
+         then setSize(18,18) and setTemplate(true).
+      3. DELETE the candidate-path functions and the two source-tree tests.
+         They do not merely fail to catch this; they assert it.
+      4. Add the decode test and the size test.
+      5. Keep "T" ONLY for the decode-failure case, so the fallback still exists
+         for a state that can actually occur.
+      6. Optional, and left to the implementer: drop the tray-icon.png copy from
+         scripts/build-macos-tray.sh once nothing reads it.
+      OUT OF SCOPE TONIGHT: order 496, the per-phase lifecycle icon, which can
+      reuse the same call later.
+    provenance: |
+      Operator report relayed by macuahuitl-fedora 2026-09-23: the
+      curl-downloaded macOS tray shows the letter "T" instead of an icon. Their
+      read-only triage on d74473c0f, verified line by line on macneo before the
+      packet was filed. Related: 1302-7j8p (a test that only runs where the
+      defect cannot occur), 885-92iu (a test that cannot fail), 496 (the
+      per-phase icon, out of scope), 1366-d5v2 (the landing rule this will be
+      landed under).
