@@ -1,0 +1,13 @@
+# Gate step 1188-vixu — data, not code.
+#
+# Binds the HERMETIC fixture for the two 1284-jf86 halves the 900-z3kv fixture
+# never runs: a vault-data directory the invoking user cannot remove (the
+# subuid shape measured on pirria), retried through a STUB podman unshare, and
+# the exit status of a partial clear. Scratch XDG_CACHE_HOME, stub secret-tool
+# and stub podman: it touches nothing real.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the clearer retries subuid-owned vault-data through podman unshare and exits non-zero on a partial clear (1188-vixu)"
+STEP_SCRIPT="scripts/test-clear-vault-credentials-partial-is-nonzero.sh"
+STEP_ERROR="the credential clearer regressed (1188-vixu / 1284-jf86) — a subuid-owned vault-data is no longer retried through podman unshare, or a partial clear exits 0 again (the room reads cold while it is warm); see the verdict line above"
+STEP_OK="Partial-clear exit and podman-unshare retry check passed"
