@@ -170,7 +170,19 @@ critical_path:
     # a memo that let either site trust an absent or stale answer would turn a
     # reachability gate into an assumption (the 723-fndi shape). A green run
     # never covers this verdict, because a green host's podman works.
-    command: "t=$(mktemp -d); mkdir -p \"$t/bin\"; printf '#!/usr/bin/env bash\necho \"$1\" >> \"%s/calls\"\n[ \"$1\" = info ] && exit 1\nexit 0\n' \"$t\" > \"$t/bin/podman\"; chmod +x \"$t/bin/podman\"; out=$(PATH=\"$t/bin:$PATH\" XDG_RUNTIME_DIR=\"$t\" bash scripts/e2e-preflight.sh eligibility); n=$(grep -c '^info$' \"$t/calls\" 2>/dev/null || echo 0); rm -rf \"$t\"; if [ \"$out\" = 'skip:podman-not-functional' ] && [ \"$n\" = \"1\" ]; then echo 'ok: unreachable-podman-still-refuses'; else echo \"FAIL: verdict=$out info-calls=$n\"; exit 1; fi"
+    #
+    # ORDER 1186-w3ph. NAMED SKIP ON MINGW/MSYS/CYGWIN — THE VERDICT IS
+    # UNREACHABLE THERE BY DESIGN. e2e-preflight.sh's Windows branch has no
+    # host-podman info gate: podman lives inside the WSL2 distro, so the branch
+    # probes wsl.exe instead (the July fix recorded in
+    # plan/issues/build-install-smoke-e2e-findings-2026-07-09-windows.md). The
+    # one info call this stub records there comes from live_runtime_is_present
+    # and is irrelevant to the verdict. Asserting skip:podman-not-functional on
+    # that branch pinned a verdict the platform never produces: red forever on
+    # the one locus, with nothing in the failure text to say why. The fix is
+    # this step, NEVER the probe — adding a host-podman gate to the Windows
+    # branch reintroduces the July defect (coordinator ruling, 2026-09-22).
+    command: "case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) echo 'skip:podman-info-gate-absent-on-windows-branch (podman lives in the WSL2 distro; e2e-preflight probes wsl.exe, 1186-w3ph)'; exit 0;; esac; t=$(mktemp -d); mkdir -p \"$t/bin\"; printf '#!/usr/bin/env bash\necho \"$1\" >> \"%s/calls\"\n[ \"$1\" = info ] && exit 1\nexit 0\n' \"$t\" > \"$t/bin/podman\"; chmod +x \"$t/bin/podman\"; out=$(PATH=\"$t/bin:$PATH\" XDG_RUNTIME_DIR=\"$t\" bash scripts/e2e-preflight.sh eligibility); n=$(grep -c '^info$' \"$t/calls\" 2>/dev/null || echo 0); rm -rf \"$t\"; if [ \"$out\" = 'skip:podman-not-functional' ] && [ \"$n\" = \"1\" ]; then echo 'ok: unreachable-podman-still-refuses'; else echo \"FAIL: verdict=$out info-calls=$n\"; exit 1; fi"
     timeout_ms: 20000
     expected_behavior: "ok: unreachable-podman-still-refuses"
 

@@ -17,6 +17,8 @@
 #          and prints the push's own output.
 #   ARM 3  CONTROL: origin genuinely moves during the first push; the tool still
 #          says origin moved, retries, and lands.
+#   ARM 5  origin moves during the GATE and the gate's fetch updates the
+#          tracking ref: still a lost race, retried, lands.
 #   ARM 4  from a linked worktree whose credential helper is a RELATIVE
 #          `store --file=.git/...`, an auth failure names that cause.
 #
@@ -133,6 +135,37 @@ grep -q 'origin moved' "$d/out.txt" \
 grep -q '^ok:land:' "$d/out.txt" \
     && ok "ARM 3 CONTROL: the retry lands" \
     || bad "ARM 3 CONTROL: did not land (rc=$(cat "$d/rc")) $(tail -2 "$d/err.txt" | tr '\n' ' ')"
+rm -rf "$d"
+
+# ARM 5: origin moves DURING THE GATE, and the gate's own fetch updates the
+# tracking ref before the push. The real gate fetches, so a "before" read at
+# push time already contains the move; a tool that measures movement from that
+# read calls a genuine lost race "unmoved" and refuses (rc 6) instead of
+# retrying. Measured on macuahuitl's relay land 2026-09-23: four plan-lane
+# pushes landed mid-gate and the land refused push-failed-origin-unmoved.
+d="$(scratch passthrough)"
+G clone -q -b linux-next "$d/origin.git" "$d/sib" 2>/dev/null
+cat > "$d/w/build.sh" <<GATE
+#!/usr/bin/env bash
+if [ ! -e "$d/moved-once" ]; then
+    : > "$d/moved-once"
+    "$REAL_GIT" -c user.email=t@t -c user.name=t -C "$d/sib" commit -q --allow-empty -m "plan-lane push during the gate"
+    "$REAL_GIT" -C "$d/sib" push -q origin linux-next
+    "$REAL_GIT" fetch -q origin
+fi
+exit 0
+GATE
+chmod +x "$d/w/build.sh"
+G -C "$d/w" add -A && G -C "$d/w" commit -q -m "a gate that fetches while origin moves"
+run_land "$d" "$d/w"
+head_now="$(G -C "$d/w" rev-parse HEAD)"
+if grep -q '^refused:land:push-failed-origin-unmoved' "$d/err.txt"; then
+    bad "ARM 5: a real mid-gate move was refused as origin-unmoved (rc=$(cat "$d/rc"))"
+elif [ "$(origin_head "$d")" = "$head_now" ] && grep -q '^ok:land:' "$d/out.txt"; then
+    ok "ARM 5: a move seen by the gate's own fetch is still a race; the retry lands"
+else
+    bad "ARM 5: did not land (rc=$(cat "$d/rc")) $(tail -2 "$d/err.txt" | tr '\n' ' ')"
+fi
 rm -rf "$d"
 
 # ARM 4: linked worktree + relative store helper -> the cause is named.
