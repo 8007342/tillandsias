@@ -391,6 +391,45 @@ there.
    verification, not exposed (CLAUDE.md, Bootstrap).
 4. Report by comparing trees, not by narrating: paste the artifact (the
    verdict line, the ls-remote line), never "I verified that".
+5. **Arm this session's own recurring slot, then stay resident.** Joining is
+   not a one-shot report: a joined host keeps working on its slot until the
+   operator stops it. The operator asking this session to join the fleet IS
+   the consent to arm ITS OWN session-local cron (operator ruling
+   2026-09-23). It is never consent to message another host to arm one
+   (a peer cannot commit operator spend).
+
+   Read your slot from `methodology/multi-host-development.yaml` →
+   `loop_cadence.stagger_slots` (`methodology_ask "loop cadence slot for
+   <host>"`), then arm exactly one recurring job with the harness's
+   scheduler (CronCreate, or the `/loop` skill). Its prompt is the slot
+   from §3:
+
+   ```text
+   worker host (every host except the coordinator):
+     cron "<slot-minute> <slot-hours> * * *"
+     prompt: Run scripts/check-fleet-membership.sh and resolve every todo:
+             line (on due:* run the Start Of Day gate in
+             skills/meta-orchestration once), then use the
+             /advance-work-from-plan skill.
+   coordinator (macuahuitl) only:
+     prompt: Use the /meta-orchestration skill.
+   floor-tier hosts and ephemeral forges: no slot; do not arm (§3).
+   ```
+
+   - **No stacking is already handled; do not add a lock.**
+     advance-work-from-plan §1b and meta-orchestration step 2b take
+     `scripts/cycle-checkout-lock.sh`. On overlap they refuse without
+     retrying, and the next fire tries again on its own clock.
+   - **An empty queue is a quiet hold, not an exit.** Keep the cron armed;
+     a cycle that finds nothing reports `refused:no-tier-work` or an empty
+     batch and ends. Tell the coordinator when that happens: an idle fleet
+     is a coordinator problem, not a reason for the worker to leave.
+   - **A session cron fires only while this session is open, and it expires
+     after 7 days.** Arming it and then ending the session arms nothing. That
+     is how lenovinha's join on 2026-09-22 went quiet: it worked through its
+     batch and exited with no slot armed. After arming, list the job
+     (CronList) and paste the line, then end your turn with the session
+     still open.
 
 ## 6 — Verify
 
