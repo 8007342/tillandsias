@@ -1,0 +1,166 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (coordinator) 2026-09-23 from two read-only audits the
+# operator asked for: the Lua litmus runtime's completeness and test wiring,
+# and why the fleet ended with so many packets open at once.
+packets:
+  - packet_id: the-cacheable-lua-predicate-class-still-reaches-the-clock-the-filesystem-and-randomness-through-the-lua-stdlib-so-its-cached-verdicts-are-not-pure
+    order: 1367-upz6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [rust, lua, litmus, testing]
+    estimated_hours: 2
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/tests/lua_predicate_classes.rs
+    title: |
+      The Cacheable predicate class removes os.execute, io.open and friends but leaves os.time, os.clock, io.lines, os.remove, os.rename and math.random reachable, so a "pure" cached verdict can depend on the clock or the disk
+    context: |
+      1252-hsrz enforces purity by SYMBOL ABSENCE on the expert table; build_environment
+      strips only os.execute/exit/getenv, io.open/popen/close/output/input, debug,
+      loadfile, dofile and require from the Lua stdlib. The verb-enumeration test
+      checks the expert table only, so it cannot see the stdlib. Reproduced by the
+      coordinator's audit with the same removals under a host lua: os.time,
+      io.lines("VERSION") and os.remove all worked. That is the "clock is the quiet
+      one" hole lua_predicate.rs's own header says it closes. A cached verdict that
+      read the clock is replayed as if it had not.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Scored by cargo tests in
+      crates/tillandsias-plan/tests/lua_predicate_classes.rs, which run in
+      ./build.sh --check (cargo test --workspace); no litmus binds them yet.
+    verifiable_closure: |
+      A test in lua_predicate_classes.rs asserts the COMPLETE global set visible to a
+      Cacheable predicate (an allow-list, not a deny-list), and three arms show a
+      Cacheable predicate calling os.time(), io.lines(<repo file>) and
+      os.remove(<scratch file>) each fail with "attempt to call a nil value" (or
+      index nil), while the same calls under Observing are either present by design
+      or equally absent, as the allow-list states. PRE-FIX RESULT: all three calls
+      RESOLVE under Cacheable on today's code; the arms must be shown red first.
+    next_action: |
+      Build the Cacheable environment from an allow-list of stdlib entries (string,
+      table, math minus random, utf8) instead of deleting a deny-list from the full
+      stdlib; pin the list in the test. Story step 1 of the Lua litmus story
+      (coordinator audit 2026-09-23), before the shims (1367-q9yc).
+
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    order: 1367-q9yc
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [rust, lua, litmus, testing]
+    estimated_hours: 5
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      Add the pure shim layer 902-5bf9's exit criteria describe (a repo-rooted fs.read and expect.contains/matches/eq) as Rust functions exposed to the Cacheable class, so a litmus predicate can observe files and compare values without spawning a shell
+    context: |
+      The operator's direction (2026-09-23): litmus tests become meaningful through a
+      combination of Lua and SHIMS for bash and other PURE components. Today there are
+      no shims: the only bridge from a predicate to anything is expert.shell (argv
+      only, via tillandsias-exec), which is Observing-class and therefore never cached.
+      902-5bf9 names sh.run(argv), fs.read and expect.* as its stdlib; sh.run exists as
+      expert.shell, and fs.read and expect.* do not. Census at filing: 0 of 454 litmus
+      specs use a Lua predicate, 1 uses rust_queries, and 2,918 command steps run
+      through bash -c with stdout and stderr merged.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Scored by cargo tests in
+      crates/tillandsias-plan/tests/lua_predicate_classes.rs; the first litmus
+      that exercises a shim is 902-5bf9's, which does not exist yet.
+    verifiable_closure: |
+      Tests in lua_predicate_classes.rs: (1) a Cacheable predicate calls fs.read on a
+      repo file and gets its bytes; (2) fs.read on "../x", on an absolute path outside
+      the repo and on /etc/passwd RAISES a named error; (3) expect.contains,
+      expect.matches and expect.eq return a verdict VALUE (not an exit status), and a
+      false expectation fails the predicate with the expected and actual values in
+      the message; (4) the Cacheable allow-list from 1367-upz6 gains exactly these
+      names and nothing else. PRE-FIX RESULT: fs and expect are nil in both classes
+      today, so all four arms fail.
+    next_action: |
+      Story step 3 of the Lua litmus story (after 1367-upz6 and 1252-hsrz's binary
+      entry point). Then 902-5bf9 dispatches a lua step form in run-litmus-test.sh, and
+      1268-fx87 migrates the first real spec end to end.
+
+  - packet_id: nothing-bounds-how-many-packets-one-host-holds-in-progress-so-hosts-climbed-to-six-to-ten-concurrent-claims-and-the-fleet-ended-a-week-with-most-work-open
+    order: 1367-2sbc
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [plan, claims, methodology]
+    estimated_hours: 3
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      Claiming refuses when the host already holds its WIP limit of in_progress packets outside its declared story, so a host finishes or releases before it starts more
+    context: |
+      Operator, 2026-09-23: "we have started a lot of plan work at the same time and
+      now they're all incomplete; we might need some packet discipline, of not starting
+      several at the same time." Measured over 2026-09-13..23 from 1,839 fragments: the
+      median concurrent in_progress per host is 1, but late in the window hosts climbed
+      to 10 (yoga), 8 (lenovinha, forge) and 6 (macuahuitl). Filing outran closing for
+      six straight days (net +159; closes fell to 3/3/6 on 09-17..19). 39% of filings
+      happened while the filer held another claim. The methodology sanctions story
+      batching (6-10 packets) but had no numeric WIP cap and no "close the story
+      before the next" rule. Rule text: methodology/distributed-work.yaml
+      packet_discipline (same commit as this row).
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The fixture this row delivers is
+      scripts/test-claim-wip-limit.sh, written in the same commit as the guard
+      and bound as litmus:claim-wip-limit-shape then.
+    verifiable_closure: |
+      A fixture over a scratch ledger: (1) a host holding N (the configured cap,
+      default 3) in_progress packets outside a story is REFUSED a further set-field
+      status in_progress with a verdict naming the held orders; (2) packets claimed
+      together as one story (a shared story id on the claim) count as one unit, and a
+      new story is refused while any member of the previous one is non-terminal; (3)
+      releasing or completing one packet admits the next claim; (4) the refusal names
+      the override flag and the override is recorded as an event. PRE-FIX RESULT:
+      today's set-field admits an unbounded number of claims, so arms 1 and 2 fail.
+    next_action: |
+      Implement in set-field's status transition (the claim path every skill uses),
+      reading the folded ledger for this host's live claims. Keep the cap in one
+      place (the methodology rule) and read it, rather than hardcoding a second
+      number.
+
+  - packet_id: a-packet-whose-code-landed-keeps-its-open-status-because-nothing-compares-landed-commits-to-ledger-status
+    order: 1367-emjg
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [plan, audit, methodology]
+    estimated_hours: 2
+    depends_on: []
+    owned_files:
+      - scripts/check-landed-but-open.sh
+    title: |
+      A coordinator sweep lists every order cited by a code-landing commit on trunk whose ledger row is still ready, in_progress or pending, so "implemented but never closed" is a count rather than a discovery
+    context: |
+      Measured 2026-09-23: of 177 orders cited in code-landing commits over ten days,
+      21 (12%) still carried ready, in_progress or implemented. Real work landed and
+      the row was never flipped, so it kept competing in the queue and inflated the
+      open count the operator reads as "all incomplete".
+    verifiable_closure: |
+      scripts/check-landed-but-open.sh prints one line per suspect (order, status, the
+      landing sha) and a summary line whose total equals the number of suspect lines,
+      exit 0 always (advisory). Its fixture has three arms: a landed order with status
+      ready is listed; a landed order with status completed is not; a plan-only commit
+      citing an order is not counted as a landing. PRE-FIX RESULT: the script does not
+      exist.
+    next_action: |
+      Wire it into the coordinator's stranded-claim sweep in skills/meta-orchestration
+      (beside check-stranded-in-progress.sh), and report its summary line in the
+      handoff.

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fixtures-print-their-own-scenario-total-as-a-literal-so-an-arm-that-stops-running-is-reported-as-the-old-count
+    event:
+      type: note
+      ts: "2026-09-22T11:43:59Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |
+        A CONFIRMED-GOOD EXAMPLE, recorded because a sweep that only collects defects
+        leaves the next reader to re-derive which files were fine.
+
+        scripts/test-litmus-kill-adjudicator.sh reports `${pass}/${total}` — DERIVED from
+        counters incremented by its own check() helper, not a literal. Examined on
+        macbookair 2026-09-22 while working 1358-9wzz, which ADDED TWO ARMS to it: the
+        printed total moved 5/5 -> 7/7 on its own, with nobody editing the summary. That
+        is the property this row wants, demonstrated rather than asserted — the arms
+        changed and the number followed.
+
+        It is NOT in the fifteen-file candidate set, because its summary line carries
+        variables rather than a literal `(N/N)` and the grep that built that set keys on
+        the literal. Worth saying anyway: the set was built by pattern, so a file can be
+        honest and absent from it, and a file can be IN it and honest too. The set is a
+        search space, not a charge sheet.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-23T19:26:05Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260923t192605z
+      host: macos
+      summary: |
+        CORRECTION to the 2026-09-22 macneo note on what is left. It lists (b) and (a) as REMAINING, but both are already on origin/linux-next:
+          (b) criterion-4 activating fixture: 42ce602a4 (2026-09-15), diagnose.rs tests "ARM 1 — activating" (grep it).
+          (a) variant-preserving handshake error: secure_stream.rs classify() maps snow::Error::Input -> PeerSentNoUsableFrame and Decrypt|Dh -> CryptoDisagreement.
+        ONLY (c) remains: the cold-provision reproduction, which needs a host whose guest NEVER reaches Ready. macbookair is not one, so it is not claimed here. Leave the row unclaimed until such a host exists, or rule on obsoleting (c).

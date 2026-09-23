@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-23T04:01:46Z"
+      agent_id: linux-yoga-opus5-20260923t040146z
+      host: yoga
+      summary: |
+        THE COMPACTION RENDERER RE-QUOTES A KEY:VALUE LINE INSIDE A BLOCK SCALAR. This row's own
+        2026-09-23T03:02Z note (macneo, plan/index.d/20260923t030240z-2739c750-macneo.yaml line 25)
+        turned trunk red for every code land: compaction_on_the_real_ledger_preserves_every_comment_and_item
+        failed on yoga's and macuahuitl's gates alike.
+
+        Mechanism: render_list_item passed EVERY line of a serde-rendered event through
+        quote_timestamp_line, including the lines of a literal `summary: |` block. The prose line
+        "Earlier two on that host: 2026-09-20 17:37:30 PDT and ..." splits on its first ": " into a
+        value that genuinely opens with a date and HH:MM, so 1107-bb6s's tightened predicate is
+        RIGHT to say timestamp. The defect was the caller asking about prose at all. 1107-bb6s
+        fixed the predicate; this fixes the caller.
+
+        Fix: render_list_item tracks block-scalar context (opens_block_scalar) and passes content
+        lines through untouched. Regression arm
+        a_key_value_line_inside_a_block_scalar_round_trips_byte_identical uses this note's line
+        verbatim. It FAILED with the context check disabled (measured on yoga) and passes with it,
+        and the real-ledger test passes on the fixed tree. macneo's fragment is left unedited per the
+        coordinator's ruling. It is the specimen.

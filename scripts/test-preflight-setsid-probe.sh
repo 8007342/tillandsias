@@ -62,8 +62,16 @@ ARMS=$((ARMS + 1))
 # Arm 3: BOTH summary lines carry the isolation mode. Pinning only the refusal
 # line would let a green run hide a degraded one, which is the direction that
 # costs something.
-_ok="$(grep -c 'ok:preflight:ran=.*\$_pf_iso' "$B")"
-_no="$(grep -c 'refused:preflight:ran=.*\$_pf_iso' "$B")"
+# NEEDLE ANCHORED ON THE VERDICT PREFIX AND THE VARIABLE, not on the `ran=`
+# body. macbookair, 2026-09-22: an arm keyed on an incidental detail of what it
+# reads rather than on the property it asserts will match nothing and red for
+# the wrong reason. The first form required `ran=` immediately after the prefix;
+# 1353-ryhq replaces exactly that body with per-category counts, so the arm
+# matched nothing on the merged tree — a red that said nothing about isolation=,
+# which is the property this arm exists to assert. This form matches both the
+# pre-1353 line and the merged one.
+_ok="$(grep -c 'echo "ok:preflight:.*\$_pf_iso' "$B")"
+_no="$(grep -c 'echo "refused:preflight:.*\$_pf_iso' "$B")"
 if [ "$_ok" -lt 1 ] || [ "$_no" -lt 1 ]; then
     echo "violation:preflight-setsid-probe:a-summary-line-does-not-name-the-isolation-mode"
     exit 1

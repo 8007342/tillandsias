@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T14:10:47Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t141047z
+      host: macneo
+      summary: |
+        COUNTING COMMITS THAT NAME AN ORDER MEASURES LEDGER WRITES ABOUT THE WORK, NOT
+        THE WORK — AND THE COUNT IS INVERSELY CORRELATED WITH THE THING IT APPEARS TO
+        MEASURE. Recorded as an event rather than as a row, deliberately: no instrument
+        in the tree counts mentions today, so there is no defect to close, and a row
+        would sit unclaimed advertising work that does not exist. This is where an
+        auditor walked into it, so it is where the next auditor should meet it.
+
+        THE NEAR-MISS, 2026-09-22, macneo. macuahuitl-fedora asked me to hold the
+        v56.9.22.1 release ledger row to the standard I had just proposed: a claim
+        verified on a branch is not a claim verified in the release. I built the obvious
+        instrument — for each order cited in the row, count commits in the tag whose
+        message names it — and it returned:
+            1352-vmbc  8    1354-apns  2    1353-ryhq  9
+        which says the row's original clause was right and the correction they had just
+        made was unnecessary. IT IS NOT. SEVEN OF THOSE NINE ARE PLAN FRAGMENT PUSHES
+        from work/1353-ryhq — my own ledger writes, which travel to trunk through the
+        plan-only lane while the CODE sits unlanded on the work ref.
+
+        THE MECHANISM, and it is worse than noise. The plan lane cites an order in the
+        commit subject every time a fragment about it reaches trunk. Fragments are
+        written while a packet is being investigated, argued and evidenced — that is,
+        PRECISELY WHILE THE CODE IS NOT MOVING. So the mention count rises FASTEST for a
+        row whose code has not landed. It is not merely a noisy proxy; it is inversely
+        correlated with the thing it appears to measure, and seven of nine accruing
+        against motionless code is the datum that makes it undeniable.
+
+        THE DECISIVE TEST IS THE ARTIFACT, not the message. Name the file or string that
+        must exist in the tag for the claim to be true and read it out of the tag:
+            scripts/test-preflight-verdict-categories.sh   NOT IN TAG
+            scripts/test-preflight-setsid-probe.sh         IN TAG
+            scripts/gate-steps.d/420-1352-vmbc.step        IN TAG
+            git show bab36b2af:build.sh | grep -c 'declared-skip='   ->  0
+        That settled it in four reads and agreed with the correction.
+
+        WHAT SURVIVES THIS, checked rather than assumed so nobody over-corrects:
+        scripts/check-stale-ready-rows.sh:85 filters subjects on
+        `(fix|feat|close|test|record|style|docs|refactor)\(`, and a plan-lane subject is
+        `plan(`, so that guard is unaffected. A relay land subject is `land(N)`, also
+        outside the set — but a land merge carries the work ref's own commits with their
+        subjects intact, so the guard still sees the work. Confirmed in the tag: three
+        prefix-matching commits cite 1352-vmbc, including
+        `fix(1352-vmbc): record the darwin regime on gate step 420`. A confirmation, not
+        a finding; the value is that somebody has now looked.
+
+        THE FAMILY: this is mention-versus-use (the plan-binary decider reading a quoted
+        path as an invocation, same night) committed BY THE PERSON BUILDING AN INSTRUMENT
+        TO AUDIT SOMEONE ELSE'S CLAIM. Third time in one night that the instrument-builder
+        walked into the defect they were auditing.

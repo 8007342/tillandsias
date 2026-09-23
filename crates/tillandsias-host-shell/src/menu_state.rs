@@ -86,7 +86,7 @@ use serde::{Deserialize, Serialize};
 /// The paging machinery is KEPT and stays reachable through the env var, for two
 /// reasons: a desktop that genuinely clips needs a remedy, and a code path with
 /// no live caller is how the *last* version of this bug survived seven weeks
-/// green (see `build_project_pages`).
+/// green (see `paginate`).
 ///
 /// @trace spec:host-shell-architecture
 pub const MAX_CLOUD_PROJECTS_IN_MENU: usize = 10;
@@ -122,6 +122,12 @@ pub mod ids {
     pub const CLOUD_PROJECTS_EMPTY: &str = "cloud-projects.empty";
     pub const CLOUD_PROJECTS_LOADING: &str = "cloud-projects.loading";
     pub const CLOUD_PROJECTS_OVERFLOW: &str = "cloud-projects.overflow";
+    /// ORDER 1362 (tray-ux inversion). The Cloud submenu's direct children are
+    /// AGENT rows; each carries the project list for that agent. The id is new
+    /// because the row is new — it resolves to `Inert`, which is correct for a
+    /// pure container: enabledness comes from the ITEM, not the action, on all
+    /// three adapters (verified by macneo on AppKit and esme on Win32).
+    pub const CLOUD_AGENT: &str = "cloud-agent";
     /// Separator rendered before the footer (version/quit).
     pub const SEPARATOR: &str = "---";
     pub const GITHUB_LOGIN: &str = "github-login";
@@ -679,166 +685,187 @@ pub fn build(state: &MenuState) -> MenuStructure {
     items.push(MenuItem::disabled(ids::VERSION, ver_str, "informational"));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
-    // (5) LINUX ONLY: the project list goes LAST, below the footer.
+    // (5) THE LINUX-ONLY REORDER IS REVERTED. It made the menu WORSE, and the
+    // measurement that proves it is worth more than the change was.
     //
-    // OPERATOR REPORT 2026-09-22: "clicking on a project expands the options
-    // within the same space, so it goes under the existing menus."
+    // WHAT IT DID. Operator, 2026-09-22: "clicking on a project expands the
+    // options within the same space, so it goes under the existing menus." So
+    // the cloud list was moved below the footer, on the reasoning that an
+    // inline expansion would then grow into the scroll region instead of
+    // displacing anything.
     //
-    // WHY THIS IS A LINUX-ONLY REORDER AND NOT A PARITY BREAK WORTH AVOIDING.
-    // gnome-shell renders a nested DBusMenu submenu INLINE — measured in the
-    // extension's own source, `dbusMenu.js:590`, where `children-display ==
-    // 'submenu'` maps unconditionally to `PopupMenu.PopupSubMenuMenuItem`, an
-    // expanding section. There is no branch that produces a flyout, so the
-    // shape is the shell's choice and no property we can set changes it.
-    // Expanding a project therefore INSERTS its seven harness rows into the
-    // list, pushing everything below it down and off the fold.
+    // WHAT ACTUALLY HAPPENED. Operator, same day, after: "it correctly lists
+    // all projects with a vertical scroll bar, but I can't launch any project,
+    // when clicking on a project the agent selector isn't visible." An
+    // expansion that opens at the BOTTOM of an already-scrolling list has
+    // nothing below it to scroll into, and gnome-shell does not scroll a
+    // freshly-opened PopupSubMenu into view. Before the reorder the selector
+    // was visible and merely displaced the footer; after it, the selector could
+    // not be reached at all. A cosmetic complaint was traded for a functional
+    // one.
     //
-    // NSMenu and Win32 HMENU both open a real flyout over the parent, which
-    // displaces nothing — so on those two surfaces the footer-last convention
-    // is right and there is nothing to fix. Reordering them to match Linux
-    // would move `Quit` out of its conventional last slot on two platforms to
-    // solve a problem neither of them has.
+    // THE MENU WAS NEVER WRONG, WHICH IS THE PART TO KEEP. Read off the live
+    // tray's own DBusMenu rather than inferred from the symptom:
+    //     id 22   "Cloud"                children-display submenu, 25 children
+    //     id …975 "8007342/tillandsias"  children-display submenu,  7 children
+    //                                    Claude/Codex/OpenCode… enabled: true
+    // Every agent leaf was emitted, enabled and carried. So this was a
+    // RENDERING reach, not a construction defect, and no amount of reading
+    // build() would have found it — the same distinction as "could not ask"
+    // versus "answered no", one layer up in the UI.
     //
-    // So the ID SET stays identical on all three (the parity that 628-p5tj
-    // bought and the tests still assert); only the Linux ORDER differs, and it
-    // differs for a measured rendering difference rather than for drift. With
-    // the list last, an expansion grows into the scroll region the operator
-    // already confirmed works instead of displacing the footer.
-    if state.target == TargetSurface::LinuxTray
-        && let Some(pos) = items.iter().position(|i| i.id == ids::CLOUD_PROJECTS)
-    {
-        let cloud = items.remove(pos);
-        items.push(MenuItem::separator());
-        items.push(cloud);
-    }
+    // ORDER IS NOT THE LEVER. Both placements are reachable failures of the
+    // same thing: gnome-shell expands a submenu INLINE, and an inline expansion
+    // inside a scrolling popup is displaced-or-invisible depending only on
+    // where it sits. The lever is DEPTH — a project row that launches without
+    // needing a second level does not expand at all. That is the operator's
+    // option 2 from 2026-09-22 and it is the follow-up; it is not made here,
+    // because restoring the ability to launch comes before improving it.
 
     MenuStructure::Ready { items }
 }
 
-/// ORDER 591-33s6. Build one page of projects, fanning the remainder out into a
-/// nested submenu rather than truncating them behind a dead leaf.
+/// Split a built list of rows into pages, each carrying the next.
 ///
-/// WHAT THIS REPLACES AND WHY IT SAT SO LONG. The previous shape took the first
-/// `MAX_CLOUD_PROJECTS_IN_MENU` projects and pushed a single `MenuItem::leaf`
-/// labelled "… All cloud projects (N)…". `leaf` is ENABLED, so every platform
-/// rendered a live, clickable control — and every platform's handler for it is
-/// an empty arm (macOS `action_host.rs`, Windows `notify_icon.rs`) or a write to
-/// stderr no GUI user can see (Linux). Activating it dismissed the menu, because
-/// menus dismiss on activation everywhere, and nothing happened in exchange. The
-/// operator's report reads as "the menu loses focus", and the focus loss is
-/// ordinary; the defect is the nothing that follows it. Projects past the cap
-/// were genuinely unreachable for seven weeks.
+/// ORDER 591-33s6 for the fan-out, generalised by the 1362 inversion: it now
+/// pages ANY row list rather than projects specifically, because after the
+/// inversion the thing that can overflow is a list of projects UNDER AN AGENT,
+/// and a second copy of this logic keyed on a different id would drift from the
+/// first. `id_prefix` keeps page ids unique per agent.
 ///
-/// THE ASSUMPTION THAT KEPT IT OPEN was recorded in the Linux tray as
-/// `TODO(@tray-overflow)`: that a real picker "still wants a GtkWindow", needing
-/// a GTK application thread, GResource setup and a theming hook that the
-/// StatusNotifierItem/DBusMenu tray does not have. That is true of a *window*
-/// and false of a *submenu*. A nested submenu is native on all three toolkits —
-/// NSMenu, Win32 HMENU, DBusMenu — costs no window plumbing, and does not
-/// dismiss its parent when opened. The fix was one level down from where
-/// everyone was looking.
-///
-/// PAGING IS NOW OPT-IN, and the default is a flat list of everything
-/// (`page_size: None`). The paragraph here used to justify paging as "the shape
-/// that WORKS on all three" on the grounds that DBusMenu does not scroll. That
-/// was measured false on 2026-09-21 — gnome-shell scrolls its popup and expands
-/// nested submenus inline — and all three toolkits scroll, so the flat list is
-/// the shape that works everywhere and the fan-out is the fallback.
-///
-/// The recursion is deliberately still LIVE rather than deleted: it is one env
-/// var away, it is exercised by its own test, and deleting it would leave a
-/// desktop that really does clip with no remedy at all.
-fn build_project_pages(
-    projects: &[ProjectEntry],
-    scope: &str,
-    page: usize,
+/// PAGING IS OPT-IN and `None` is the default: every shell that renders this
+/// menu scrolls its own popup, measured on gnome-shell 2026-09-21. The
+/// machinery stays live because a desktop that really clips needs a remedy and
+/// because a code path with no live caller is how 591-33s6 survived seven weeks
+/// green.
+fn paginate(
+    rows: Vec<MenuItem>,
+    id_prefix: &str,
     page_size: Option<usize>,
-    podman_ready: bool,
-    target: TargetSurface,
+    page: usize,
 ) -> Vec<MenuItem> {
     let take = match page_size {
-        Some(n) => projects.len().min(n),
-        None => projects.len(),
+        Some(n) => rows.len().min(n),
+        None => rows.len(),
     };
-    let mut items: Vec<MenuItem> = projects[..take]
-        .iter()
-        .map(|p| build_project_submenu(scope, p, podman_ready, target))
-        .collect();
-
-    let rest = &projects[take..];
-    if !rest.is_empty() {
-        // A SUBMENU, never a leaf. Each page gets a distinct suffix because ids
-        // must be unique across the tree.
-        //
-        // THESE IDS RESOLVE TO `Inert`, AND THAT IS CORRECT — corrected here
-        // after macneo-macos checked it on real hardware rather than taking my
-        // word. An earlier version of this comment claimed the id "stays rooted
-        // at CLOUD_PROJECTS_OVERFLOW so anything still resolving that prefix
-        // keeps resolving". Nothing resolves by prefix: `menu_action.rs` matches
-        // `ids::CLOUD_PROJECTS_OVERFLOW` EXACTLY, so `…overflow.1` falls through
-        // to `resolve_project`, which only strips `project.`, and lands on
-        // `MenuAction::Inert`.
-        //
-        // It is harmless because enabledness comes from the ITEM, not from the
-        // resolved action: `MenuItem::submenu` sets `enabled: true` and the macOS
-        // adapter maps `enabled: item.enabled` directly, so the row is an enabled
-        // NSMenuItem with children and AppKit opens it on hover without ever
-        // dispatching. Worth knowing that it is a NEAR-MISS: had any adapter
-        // keyed enabledness off the resolved action instead, every page row would
-        // have rendered disabled, and a disabled NSMenuItem does not open its
-        // submenu — the pages would have been unreachable on macOS while looking
-        // correct on Linux. If you add such an adapter, give these ids an action.
-        //
-        // WINDOWS IS SAFE FOR A SECOND, STRONGER REASON (esme-windows, measured
-        // in `notify_icon.rs:3905` rather than reasoned): an `MF_POPUP` item
-        // generates no `WM_COMMAND` at all. Win32 opens the submenu and never
-        // dispatches, and a command id is only minted in the LEAF branch — so on
-        // Windows `MenuAction::Inert` for a page link is unreachable by
-        // construction, not merely harmless. Two independent reasons is what we
-        // want here, because the first one depends on every adapter continuing to
-        // choose correctly and the second does not.
-        //
-        // WHICH LEAVES EXACTLY ONE WAY BACK INTO THE ORIGINAL BUG, and it is the
-        // reason for the guard below. A page link that carried NO children would
-        // take the leaf branch on Windows, be minted a live command id, dispatch
-        // to `Inert`, and do nothing — while looking like a perfectly ordinary
-        // enabled row. That is 591-33s6 exactly, re-entered through a different
-        // door. The adapter cannot tell the difference, and neither can a reader.
-        //
-        // It is unreachable today (`rest` is non-empty, so the recursive call
-        // returns at least one item), which is precisely why it is worth pinning:
-        // an invariant that holds by accident of the current arithmetic is one
-        // edit away from not holding, and nothing downstream would report it.
-        let children = build_project_pages(rest, scope, page + 1, page_size, podman_ready, target);
-        debug_assert!(
-            !children.is_empty(),
-            "a page link must never be childless: it would render as a dispatching \
-             leaf on Win32 and re-enter 591-33s6",
-        );
-        // Degrade by OMITTING the row rather than shipping a dead button. A
-        // missing row is visible and wrong; a dead row is invisible and wrong,
-        // and this whole order is about the difference.
-        if !children.is_empty() {
-            items.push(MenuItem::submenu(
-                format!("{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, page + 1),
-                format!("\u{2026} {} more", rest.len()),
-                children,
-            ));
-        }
+    if take >= rows.len() {
+        return rows;
     }
+    let mut rows = rows;
+    let rest = rows.split_off(take);
+    let remaining = rest.len();
+    let children = paginate(rest, id_prefix, page_size, page + 1);
+    // Never childless: a page link with no children takes the LEAF branch on
+    // Win32, is minted a live command id, dispatches to Inert and does nothing
+    // while looking ordinary (esme-windows, 1347-r9g8). Unreachable here, which
+    // is why it is asserted rather than assumed.
+    debug_assert!(!children.is_empty(), "a page link must never be childless");
+    if !children.is_empty() {
+        rows.push(MenuItem::submenu(
+            format!(
+                "{}.{}.{}",
+                ids::CLOUD_PROJECTS_OVERFLOW,
+                id_prefix,
+                page + 1
+            ),
+            format!("\u{2026} {remaining} more"),
+            children,
+        ));
+    }
+    rows
+}
 
-    items
+/// ORDER 1362 — AGENTS FIRST, THEN PROJECTS. The inversion, and why.
+///
+/// THE MEASUREMENT THAT FORCED IT. gnome-shell expands a DBusMenu submenu
+/// INLINE and will not draw a flyout: `dbusMenu.js:591` maps
+/// `children-display == "submenu"` unconditionally to `PopupSubMenuMenuItem`,
+/// GNOME's popup vocabulary has no flyout-submenu class at all, and the
+/// extension exposes no setting that changes it. So the shape of the expansion
+/// is not ours to request — only its DEPTH and its POSITION are.
+///
+/// BOTH POSITIONS FAILED, which is what ruled position out as the lever.
+/// Projects above the footer: the expansion displaced the footer (operator,
+/// "it goes under the existing menus"). Projects last: the expansion opened at
+/// the bottom of an already-scrolling list with nothing below to scroll into,
+/// and the agent selector could not be reached AT ALL (operator, "I can't
+/// launch any project"). The second is worse than the first, and the revert is
+/// recorded in `build()`.
+///
+/// WHAT THE INVERSION CHANGES. The Cloud submenu's children are now the SEVEN
+/// agents, a short fixed list. Expanding one opens the project list — the thing
+/// the operator actually wants to browse — from near the top of the popup, with
+/// the whole scroll region below it rather than from deep inside a 22-row list.
+/// Seven rows also means the collapsed menu is short enough that the popup is
+/// not already at its scroll limit before anything expands.
+///
+/// THE LEAF IDS ARE UNCHANGED, DELIBERATELY: still `project.<scope>.<name>.<verb>`,
+/// which `menu_action::resolve_project` parses back out. The inversion moves
+/// where a leaf SITS, not what it is called, so every launch path keeps working
+/// and no adapter needs to learn a new grammar. Changing the ids here would be
+/// the tidy-looking edit that turns a menu into a set of inert rows.
+///
+/// PER-LEAF ENABLEDNESS IS PRESERVED EXACTLY rather than lifted to the agent
+/// row. A browser verb deferred to v2 on macOS disables its LEAVES, as before;
+/// the agent row stays enabled. Disabling the row instead would read better and
+/// behave worse — a disabled NSMenuItem does not open its submenu, so the
+/// projects under it would become unreachable rather than visibly unavailable
+/// (macneo, on real hardware).
+fn build_agent_rows(state: &MenuState) -> Vec<MenuItem> {
+    // Browser-launching leaves are deferred to v2 on macOS because AppKit trays
+    // cannot open GUI windows in v1.
+    let browser_verbs = &[ids::VERB_OPENCODE_WEB, ids::VERB_OBSERVATORIUM];
+
+    let agents: &[(&str, &str)] = &[
+        (ids::VERB_CLAUDE, "\u{1F47E} Claude"),
+        (ids::VERB_CODEX, "\u{1F3D7}\u{FE0F} Codex"),
+        (ids::VERB_OPENCODE, "\u{1F4BB} OpenCode"),
+        (ids::VERB_ANTIGRAVITY, "\u{1FA90} Antigravity"),
+        (ids::VERB_OPENCODE_WEB, "\u{1F4D0} OpenCode Web"),
+        (ids::VERB_OBSERVATORIUM, "\u{1F52D} Observatorium"),
+        (ids::VERB_MAINTENANCE, "\u{1F527} Maintenance"),
+    ];
+
+    let page_size = resolved_cloud_page_size();
+
+    agents
+        .iter()
+        .map(|(verb, agent_label)| {
+            let rows: Vec<MenuItem> = state
+                .cloud_projects
+                .iter()
+                .map(|project| {
+                    let leaf_id = format!("project.cloud.{}.{}", project.name, verb);
+                    let label = project
+                        .full_name
+                        .as_deref()
+                        .unwrap_or(&project.name)
+                        .to_string();
+                    if state.target.defers_gui_to_v2() && browser_verbs.contains(verb) {
+                        MenuItem::disabled(leaf_id, label, ids::V2_DISABLED_REASON)
+                    } else if state.podman_ready {
+                        MenuItem::leaf(leaf_id, label)
+                    } else {
+                        MenuItem::disabled(leaf_id, label, "VM is not ready yet")
+                    }
+                })
+                .collect();
+
+            MenuItem::submenu(
+                format!("{}.{}", ids::CLOUD_AGENT, verb),
+                *agent_label,
+                paginate(rows, verb, page_size, 0),
+            )
+        })
+        .collect()
 }
 
 fn build_cloud_projects(state: &MenuState) -> MenuItem {
-    let mut children: Vec<MenuItem> = build_project_pages(
-        &state.cloud_projects,
-        "cloud",
-        0,
-        resolved_cloud_page_size(),
-        state.podman_ready,
-        state.target,
-    );
+    let mut children: Vec<MenuItem> = if state.cloud_projects.is_empty() {
+        Vec::new()
+    } else {
+        build_agent_rows(state)
+    };
 
     if children.is_empty() {
         if state.cloud_projects_loaded {
@@ -1112,9 +1139,23 @@ mod tests {
                 Some(ids::STATUS),
                 "{target:?}: status line is not first: {seq:?}"
             );
+            // REVERTED 2026-09-22: `quit` is last on ALL THREE again. The
+            // Linux-only reorder that made the cloud list last was withdrawn
+            // when the operator measured its effect — an inline expansion at
+            // the bottom of a scrolling popup is not reachable at all, which is
+            // worse than one that displaces the footer.
+            //
+            // THE SWEEP STAYS, and it is the part that was worth having. This
+            // arm exists because the test above it only ever built the WINDOWS
+            // menu while claiming all three; that defect is independent of
+            // which order is correct, and reverting the order must not revert
+            // the coverage. Written as a positive expectation per surface
+            // rather than a single constant, so a future divergence is
+            // expressed here rather than discovered by an operator.
             let expected_last = match target {
-                TargetSurface::LinuxTray => ids::CLOUD_PROJECTS,
-                _ => ids::QUIT,
+                TargetSurface::LinuxTray
+                | TargetSurface::WindowsTray
+                | TargetSurface::MacosTray => ids::QUIT,
             };
             assert_eq!(
                 seq.last().map(String::as_str),
@@ -1277,28 +1318,55 @@ mod tests {
             .iter()
             .find(|i| i.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects submenu present");
-        assert_eq!(
-            cloud_node.children.len(),
-            22,
-            "every cloud project is rendered at one level by default",
-        );
-        assert!(
-            cloud_node
-                .children
-                .iter()
-                .all(|c| !c.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW)),
-            "no page link when no page size is configured",
-        );
+        // ORDER 1362 — AGENTS FIRST. Cloud's children are the seven agents and
+        // the projects sit under each. The flat-by-default property is
+        // unchanged and is asserted where it now lives: every project at one
+        // level UNDER ITS AGENT, no page link.
+        assert_eq!(cloud_node.children.len(), 7, "seven agent rows");
+        for agent in &cloud_node.children {
+            assert_eq!(
+                agent.children.len(),
+                22,
+                "every cloud project at one level under {}",
+                agent.id
+            );
+            assert!(
+                agent
+                    .children
+                    .iter()
+                    .all(|c| !c.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW)),
+                "no page link when no page size is configured",
+            );
+        }
 
         // EVERY project is reachable. This is the property the operator actually
         // asked for, so it is asserted directly rather than inferred from a count
         // at one level — and it is deliberately phrased so it holds under BOTH
         // shapes, flat and paged, since it is the invariant neither may break.
+        // reachable() counts LEAVES, and after the inversion each project has
+        // one leaf per agent — so the raw count is 7 x 22. The invariant worth
+        // asserting is the operator's: every PROJECT is reachable, so the
+        // DISTINCT project names are counted rather than the leaves.
         assert_eq!(
             reachable(cloud_node),
-            22,
-            "all 22 cloud projects must be reachable",
+            7 * 22,
+            "one leaf per (project, agent)"
         );
+        let mut names: Vec<&str> = Vec::new();
+        fn collect<'a>(node: &'a MenuItem, out: &mut Vec<&'a str>) {
+            if let Some(rest) = node.id.strip_prefix("project.cloud.")
+                && let Some((name, _verb)) = rest.rsplit_once('.')
+            {
+                out.push(name);
+            }
+            for c in &node.children {
+                collect(c, out);
+            }
+        }
+        collect(cloud_node, &mut names);
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), 22, "all 22 distinct cloud projects reachable");
     }
 
     /// Count the launchable project entries anywhere beneath a node.
@@ -1334,14 +1402,15 @@ mod tests {
             })
             .collect();
 
-        let pages = build_project_pages(
-            &projects,
-            "cloud",
-            0,
-            Some(MAX_CLOUD_PROJECTS_IN_MENU),
-            true,
-            TargetSurface::LinuxTray,
-        );
+        // Drives `paginate` directly with rows built the way build_agent_rows
+        // builds them, so the fan-out is exercised even though it is no longer
+        // the default path — which is the condition under which 591-33s6
+        // survived seven weeks green.
+        let rows: Vec<MenuItem> = projects
+            .iter()
+            .map(|p| MenuItem::leaf(format!("project.cloud.{}.claude", p.name), p.name.clone()))
+            .collect();
+        let pages = paginate(rows, "claude", Some(MAX_CLOUD_PROJECTS_IN_MENU), 0);
 
         assert_eq!(
             pages.len(),
@@ -1405,14 +1474,13 @@ mod tests {
                     })
                     .collect();
 
-                let pages = build_project_pages(
-                    &projects,
-                    "cloud",
-                    0,
-                    Some(page_size),
-                    true,
-                    TargetSurface::LinuxTray,
-                );
+                let rows: Vec<MenuItem> = projects
+                    .iter()
+                    .map(|p| {
+                        MenuItem::leaf(format!("project.cloud.{}.claude", p.name), p.name.clone())
+                    })
+                    .collect();
+                let pages = paginate(rows, "claude", Some(page_size), 0);
 
                 let mut links = 0;
                 let mut reached = 0;
@@ -1686,11 +1754,28 @@ mod tests {
             MenuStructure::Ready { items } => items,
             _ => panic!("expected Ready"),
         };
-        let proj = &items[1].children[0];
-        assert_eq!(proj.children.len(), 7);
-        assert!(proj.children.iter().all(|l| !l.enabled));
+        // ORDER 1362 inversion: seven agent rows, each carrying the projects.
+        // Per-LEAF enabledness is preserved exactly rather than lifted to the
+        // agent row — a disabled submenu does not open on AppKit, which would
+        // make the projects unreachable instead of visibly unavailable.
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects submenu present");
+        assert_eq!(cloud.children.len(), 7, "seven agent rows");
         assert!(
-            proj.children
+            cloud.children.iter().all(|a| a.enabled),
+            "the AGENT rows stay enabled so their projects remain reachable"
+        );
+        let leaves: Vec<&MenuItem> = cloud
+            .children
+            .iter()
+            .flat_map(|a| a.children.iter())
+            .collect();
+        assert_eq!(leaves.len(), 7, "one leaf per (project, verb)");
+        assert!(leaves.iter().all(|l| !l.enabled));
+        assert!(
+            leaves
                 .iter()
                 .all(|l| { l.disabled_reason.as_deref() == Some("VM is not ready yet") })
         );
@@ -1717,13 +1802,32 @@ mod tests {
             MenuStructure::Ready { items } => items,
             _ => panic!("expected Ready"),
         };
-        let proj = &items[1].children[0];
-        assert_eq!(proj.children.len(), 7);
-        assert!(proj.children.iter().all(|l| l.enabled));
-        // IDs follow the project.local.<name>.<verb> scheme.
-        assert!(proj.children[0].id.ends_with(".claude"));
-        assert!(proj.children[3].id.ends_with(".antigravity"));
-        assert!(proj.children[6].id.ends_with(".maintenance"));
+        // ORDER 1362: the tree is inverted — Cloud's children are the SEVEN
+        // AGENTS, each carrying the project list. The property this test exists
+        // for is unchanged and is asserted the same way: one enabled leaf per
+        // (project, verb), with the id grammar intact.
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects submenu present");
+        assert_eq!(cloud.children.len(), 7, "seven agent rows");
+        for agent in &cloud.children {
+            assert_eq!(agent.children.len(), 1, "one project under each agent");
+            assert!(agent.children.iter().all(|l| l.enabled));
+        }
+        // IDs still follow project.<scope>.<name>.<verb>, which
+        // menu_action::resolve_project parses back out. The inversion moved
+        // where a leaf SITS, never what it is called.
+        assert!(cloud.children[0].children[0].id.ends_with(".claude"));
+        assert!(cloud.children[3].children[0].id.ends_with(".antigravity"));
+        assert!(cloud.children[6].children[0].id.ends_with(".maintenance"));
+        assert!(
+            cloud.children[0].children[0]
+                .id
+                .starts_with("project.cloud.myapp."),
+            "leaf id grammar unchanged: {}",
+            cloud.children[0].children[0].id
+        );
     }
 
     /// @trace spec:vm-provisioning-lifecycle
@@ -1826,13 +1930,21 @@ mod tests {
             .iter()
             .find(|i| i.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects submenu present");
-        assert_eq!(cloud.children.len(), 3);
-        assert!(
-            cloud
-                .children
-                .iter()
-                .all(|c| c.id != ids::CLOUD_PROJECTS_OVERFLOW)
-        );
+        // ORDER 1362: Cloud's children are the seven agents; the three projects
+        // sit under each. The property is the same one this test was written
+        // for — no page link when nothing overflows — asserted at the level
+        // where overflow can now occur.
+        assert_eq!(cloud.children.len(), 7, "seven agent rows");
+        for agent in &cloud.children {
+            assert_eq!(agent.children.len(), 3, "three projects under each agent");
+            assert!(
+                agent
+                    .children
+                    .iter()
+                    .all(|c| !c.id.starts_with(ids::CLOUD_PROJECTS_OVERFLOW)),
+                "no page link when no page size is configured"
+            );
+        }
     }
 
     /// Operator report 2026-07-28: an empty cloud submenu must say

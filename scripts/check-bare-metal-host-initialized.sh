@@ -30,7 +30,17 @@ PROJECT="${TILLANDSIAS_PROJECT:-tillandsias}"
 HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)"
 MIRROR="tillandsias-git-${PROJECT}"
 ENSURE_CMD="tillandsias --ensure-enclave"
-LANE_CMD="TILLANDSIAS_HOST_PROJECT_ROOT=\$HOME/claudia tillandsias --bash ${PROJECT}"
+# ORDER 1356-u6xe. THE LANE COMMAND NAMES A PATH, NOT A PROJECT NAME. This
+# line used to interpolate the bare ${PROJECT}, and a reader who ran the
+# todo: verbatim got `Error: Project not found: tillandsias` and rc=1 — the
+# binary resolves a CHECKOUT PATH here. The skill's own §6.1 already records
+# the distinction ("a bare name had been passed where a path was wanted")
+# while this line, which is what a worker actually copies, did not: an
+# affordance a reader cannot paste is worse than no affordance, because it
+# spends the cycle it was written to save. Both values are derived from this
+# checkout rather than hardcoded to $HOME/claudia, so the printed command is
+# the one THIS host should run.
+LANE_CMD="TILLANDSIAS_HOST_PROJECT_ROOT=$(dirname "$ROOT") tillandsias --bash ${ROOT}"
 
 command -v podman >/dev/null 2>&1 || { echo "skip:bare-metal-host:no-podman"; exit 0; }
 

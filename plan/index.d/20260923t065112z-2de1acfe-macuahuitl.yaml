@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    field: next_action
+    value: |-
+      CORRECTED 2026-09-13 (yolanda), by reading the code rather than the packet. The 2026-09-04 next_action's ordered plan is STALE ON ITS FIRST TWO STEPS; only the macOS half and the cross-tray removal remain, and NEITHER IS WINDOWS-LANE WORK. (1) "wire the tmpfs FIRST" is DONE: forge_hot_src_tmpfs is called in production from build_forge_agent_run_args_with_vault as spec.tmpfs(...), on the clone-only lane, with a rationale comment explaining why the host-mount arm is excluded, and a test pins the call site by name. The claim that compute_hot_budget has zero callers is still true of THAT function, but the fourth hot path is emitted at the launch site, which is what the container_profile comment always said. (2) "delete the mount SECOND" is DONE for the WSL lane: wsl_lifecycle's provisioning test asserts home-forge-src.mount appears in no CODE line, comment-blind by construction. (3) WHAT REMAINS, both off this lane: the VZ unit in tillandsias-vm-layer's vz.rs still carries `After=home-forge-src.mount` with a test asserting it does — that file is `#[cfg(target_os = "macos")]`, so it compiles nowhere but osx-next and cannot be verified on a Windows host; and the twelve-file menu/type removal, which the original next_action already flagged as unfinishable here because macos-tray's action_host.rs and menu_disabled_v2.rs do not type-check on yolanda. Re-target to osx-next or a coordinator union pass. The heads-up on host-shell menu_state.rs / menu_action.rs, which all three trays consume, still stands.
+
+
+      [2026-09-18T05:50:39Z yolanda] BLOCKER, STATED AS WHAT IS LEFT RATHER THAN AS HISTORY (yolanda, 2026-09-18): THE TAIL OF THIS ROW REQUIRES A macOS HOST. The next_action already says "CANNOT BE FINISHED ON YOLANDA" inside a long paragraph; promoting it here so the selector and the picker see it before claiming rather than after.
+
+      WHAT REMAINS, and who can do it: (1) wire the /home/forge/src tmpfs in container_profile.rs -- any host that builds the crate; (2) the menu/type removal across twelve files -- vsock_server.rs (59 refs) and windows-tray notify_icon.rs (52) are the large ones and are doable off-macOS; (3) THE macOS HALF -- macos-tray action_host.rs and menu_disabled_v2.rs do not type-check on this host, so that portion cannot be compiled, let alone verified, anywhere but a macOS host.
+
+      CONSEQUENCE FOR PICKUP: a non-macOS host can advance (1) and (2) and MUST NOT mark the row done. Split the macOS half or hand it to macbookair rather than closing around it.
+
+      [2026-09-23T06:51:12Z macuahuitl] LEFT (2026-09-23): criterion 1 holds (CheckoutVerdict::Indeterminate + test). Needs a Windows re-run on esmeraldinha showing zero .invalid-* dirs, and the operator agreeing to the sequencing.
+    ts: "2026-09-23T06:51:12Z"
+    host: macuahuitl

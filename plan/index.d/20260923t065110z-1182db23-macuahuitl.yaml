@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-linux-smoke-has-ever-verified-a-release-signature-because-cosign-is-absent-from-the-floor-host-and-unpackaged-for-its-distro-so-every-linux-report-carries-signatures-unverified
+    field: next_action
+    value: 'LEFT (2026-09-23): code 17dabb426 (ensure-cosign bash 3.2). A floor-tier Linux smoke must emit cosign:verified:1/1.'
+    ts: "2026-09-23T06:51:10Z"
+    host: macuahuitl

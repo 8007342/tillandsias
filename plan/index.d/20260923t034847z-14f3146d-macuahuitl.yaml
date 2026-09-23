@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    field: next_action
+    value: |-
+      UNBLOCKED 2026-09-18 (coordinator): the Result type 1252-hsrz waits on — Command (argv only), Output (stdout, stderr, Completion, RunId, argv), Completion (Exited|Signaled|TimedOut), and run() — is committed by lenovinha at 326def3d2 on work/1252-fg9e, relayed to trunk after the v56.9.18.1 cut. Build the bridge against that branch; do not wait for the relay. Purity by symbol absence: the cacheable class cannot resolve sh.
+
+      [2026-09-23T03:48:47Z macuahuitl] LEFT (2026-09-23): only criterion 3 remains: a recorded forge-agent run validating a NEW predicate on an uncommitted spec with no recompile. Capability: forge session.
+    ts: "2026-09-23T03:48:47Z"
+    host: macuahuitl

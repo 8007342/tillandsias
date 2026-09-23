@@ -1,13 +1,13 @@
 ---
 name: openspec-sync-specs
-description: Sync delta specs from a change to main specs. Use when the user wants to update main specs with changes from a delta spec, without archiving the change.
+description: Sync delta specs from an OpenSpec change to main specs. Use when the user wants to update main specs with changes from a delta spec, without archiving the change. Also use when the user says "openspec sync" or "opsx sync".
 allowed-tools: Bash(openspec:*)
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
   author: openspec
   version: "1.0"
-  generatedBy: "1.11.0"
+  generatedBy: "1.13.1"
 ---
 
 Sync delta specs from a change to main specs.
@@ -15,6 +15,17 @@ Sync delta specs from a change to main specs.
 This is an **agent-driven** operation - you will read delta specs and directly edit main specs to apply the changes. This allows intelligent merging (e.g., adding a scenario without copying the entire requirement).
 
 **Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `schemas`, `view`). Once selected, treat `--store <id>` as sticky for the rest of the workflow. Every unscoped example of those commands below is shorthand: before running it, append the flag. For example, run `openspec status --change "<name>" --json --store "<id>"`, not the unscoped form shown below. Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.
+
+**Project check:** These steps expect a project that already uses OpenSpec. Before the first step that writes anything (`new change`, `archive`, `sync specs`, or authoring an artifact file), confirm the project has a root: run `openspec list --json` (with `--store <id>` when a store is selected, since the store is then the root) and read `root`. A root object means the project is set up. `"root": null` means it is not - there is no `openspec/` directory here, and a write such as `openspec new change` would create one as a side effect. The command also exits non-zero, which is that answer rather than a broken CLI, so read the JSON instead of retrying or working around it.
+
+One `"root": null` is not about setup: when a `status` error message starts with `Declared in` or `Invalid store declaration in` and names this project's `openspec/config.yaml` (or `config.yml`), the project does use OpenSpec through a store it declares, which this machine cannot resolve (the store is not registered, or the `store:` line is malformed). Do not treat it as uninitialized and skip the branches below: stop before writing and show the user that error's `message` and `fix`.
+
+Otherwise, with no root, what happens next depends on how this workflow was reached:
+
+- **Auto-selected**: you chose this workflow yourself, without the user naming OpenSpec, naming this skill, or running its slash command. Stop using OpenSpec and answer the request normally, as you would with no OpenSpec installed. Do not ask them to set anything up and do not mention OpenSpec setup.
+- **Explicit OpenSpec request**: the user named OpenSpec, named this skill, or ran its slash command. Stop before writing and ask how to proceed: set this project up (`openspec init`), target a store they already have (`--store <id>`), or continue without OpenSpec for this request. Wait for their answer.
+
+In both branches, never create the root as a side effect: do not run `openspec init` until the user asks for it, do not hand-create `openspec/` files, and do not let a command create it.
 
 `<capability-path>` is the spec directory relative to `specs/` (for example, `user-auth` or `identity/user-auth`). Preserve the full path from each delta spec when resolving its main spec.
 
@@ -96,6 +107,13 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 
    b. **Read the main spec** at `<planningHome.root>/openspec/specs/<capability-path>/spec.md` (may not exist yet)
 
+      **If it does not exist yet** (a new capability), match what `openspec archive` does:
+      only ADDED requirements may be applied - step d creates the spec from them.
+      MODIFIED and RENAMED have no requirement to act on, so stop the sync for that
+      capability and report that its main spec does not exist and only ADDED is allowed
+      for a new spec; never invent the missing requirement. REMOVED has nothing to
+      remove - skip it and warn.
+
    c. **Apply changes intelligently**:
 
       **ADDED Requirements:**
@@ -143,6 +161,14 @@ This is an **agent-driven** operation - you will read delta specs and directly e
         (this is what `openspec archive` does; it warns and moves on)
 
    d. **Create new main spec** if capability doesn't exist yet:
+      - Only when the delta has ADDED requirements to put in it and no MODIFIED or
+        RENAMED requirements blocked this capability in step b. Otherwise create nothing
+        and leave the specs directory untouched. For a REMOVED-only delta, if the change's
+        `.openspec.yaml` declares `retire_capabilities: true`, report it as already retired
+        and continue without recreating the spec. Without that marker, report the sync as blocked:
+        `openspec archive` rejects it with `Spec must have at least one requirement`.
+        An empty delta has no operations to sync; report it as blocked too.
+        Never write an empty `## Requirements` section.
       - Create `<planningHome.root>/openspec/specs/<capability-path>/spec.md`
       - Add Purpose section: copy the delta's `## Purpose` body verbatim when it has one
         (this is what `openspec archive` does); only write a brief TBD placeholder when it does not
@@ -167,6 +193,8 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 **Delta Spec Format Reference**
 
 ```markdown
+# Spec Delta
+
 ## Purpose
 
 Only on a delta that introduces a brand-new capability. Seeds the new main spec.
@@ -216,46 +244,12 @@ Short description of what this capability does and why it exists.
 ## Requirements
 
 ### Requirement: New Feature
-<!-- req-id: 3f9a1c04 -->
 The system SHALL do something new.
 
 #### Scenario: Basic case
 - **WHEN** user does X
 - **THEN** system does Y
 ```
-
-**Requirement identifiers, and the one judgement call only you can make**
-
-Every requirement in a main spec carries `<!-- req-id: xxxxxxxx -->` on the line
-directly below its heading (order 976-suab). It is random, assigned once, and it
-is what lets one obligation be followed across releases even after the file
-moves or the heading is reworded. `./build.sh --check` fails on a requirement
-without one, or on two that share one.
-
-**You do not write these by hand.** For a brand-new requirement, leave it off and
-run `scripts/stamp-requirement-ids.sh`, which stamps only what is missing and
-never touches an identifier that already exists.
-
-**When you MODIFY a requirement, you decide whether the identifier survives, and
-no tool can decide it for you.** The operator's rule:
-
-> If the meaning changes and no longer reflects the original intent then it's a
-> tombstone plus a new id. If the change is a refinement over the original text
-> and the original still stands then it's a stable id keeping.
-
-So: a refinement — sharpening wording, adding a scenario, tightening a bound the
-original already implied — **keeps** the identifier. A changed obligation —
-where the requirement now asks for something the old text did not — gets a
-tombstone and a **new** identifier, because it is a different promise wearing the
-same heading.
-
-A RENAMED requirement almost always keeps its identifier: renaming is the case
-the identifier exists for.
-
-**The validator cannot check this and will not warn you.** It enforces that
-identifiers exist and are unique, nothing more. A changed obligation that kept
-its old identifier passes the gate exactly as a correct refinement does — the
-green tells you the field is populated, never that you judged it right.
 
 **Key Principle: Intelligent Merging**
 

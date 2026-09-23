@@ -263,3 +263,105 @@ fn lua_runtime_states_containment_and_disclaims_selinux() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// ORDER 1367-upz6. Purity by symbol absence has to cover the Lua STDLIB, not
+// only the `expert` table: removing os.execute and io.open still left
+// os.time, io.lines and os.remove reachable, so a "cacheable" verdict could
+// read the clock or the disk and then be replayed as if it had not.
+// PRE-FIX: all three stdlib arms below RESOLVE under Cacheable and the
+// allow-list arm lists os, io, print, load and collectgarbage as extras.
+
+/// Every global a Cacheable predicate can see, named. An allow-list: a new
+/// global appearing here is a trust-boundary change and must be a diff to
+/// this list, not an accident of a wider stdlib.
+const CACHEABLE_GLOBALS: &[&str] = &[
+    "_G",
+    "_VERSION",
+    "assert",
+    "error",
+    "expert",
+    "getmetatable",
+    "ipairs",
+    "math",
+    "next",
+    "pairs",
+    "pcall",
+    "rawequal",
+    "rawget",
+    "rawlen",
+    "rawset",
+    "select",
+    "setmetatable",
+    "string",
+    "table",
+    "tonumber",
+    "tostring",
+    "type",
+    "utf8",
+    "xpcall",
+];
+
+#[test]
+fn the_cacheable_global_set_is_exactly_the_allow_list() {
+    let lua = build_environment(PredicateClass::Cacheable).expect("env");
+    let mut seen: Vec<String> = lua
+        .load("local n = {} for k in pairs(_G) do n[#n + 1] = k end return n")
+        .eval()
+        .expect("enumerate globals");
+    seen.sort();
+    let mut want: Vec<String> = CACHEABLE_GLOBALS.iter().map(|s| s.to_string()).collect();
+    want.sort();
+    assert_eq!(
+        seen, want,
+        "the cacheable global set drifted from the allow-list"
+    );
+
+    // math stays, but its non-deterministic half does not.
+    let random: bool = lua
+        .load("return math.random ~= nil or math.randomseed ~= nil")
+        .eval()
+        .expect("probe");
+    assert!(
+        !random,
+        "math.random is reachable from a cacheable predicate"
+    );
+}
+
+fn cacheable_call_fails_as_absent(body: &str) {
+    let mut reg = PredicateRegistry::new();
+    reg.register(
+        "impure",
+        PredicateClass::Cacheable,
+        &format!("function impure(arg) {body} return true end"),
+    )
+    .expect("registration compiles; the symbol is missing at CALL time");
+    let err = reg.eval("impure", "x").unwrap_err().to_string();
+    assert!(
+        err.contains("nil value"),
+        "`{body}` must fail as an absent symbol in the cacheable class, got: {err}"
+    );
+}
+
+#[test]
+fn a_cacheable_predicate_cannot_read_the_clock_through_the_stdlib() {
+    cacheable_call_fails_as_absent("local t = os.time()");
+}
+
+#[test]
+fn a_cacheable_predicate_cannot_read_a_file_through_the_stdlib() {
+    cacheable_call_fails_as_absent("for l in io.lines('VERSION') do end");
+}
+
+#[test]
+fn a_cacheable_predicate_cannot_remove_a_file_through_the_stdlib() {
+    let victim = std::env::temp_dir().join(format!("upz6-victim-{}", std::process::id()));
+    std::fs::write(&victim, b"x").expect("write victim");
+    let path = victim.display().to_string().replace('\\', "/");
+    cacheable_call_fails_as_absent(&format!("os.remove('{path}')"));
+    assert!(
+        victim.exists(),
+        "the file was removed by a cacheable predicate"
+    );
+    let _ = std::fs::remove_file(&victim);
+}

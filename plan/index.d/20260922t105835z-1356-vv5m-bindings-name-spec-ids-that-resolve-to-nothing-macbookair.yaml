@@ -1,0 +1,119 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-bindings-registry-names-spec-ids-and-resolves-none-so-a-binding-to-a-spec-that-does-not-exist-passes-every-gate
+    order: 1356-vv5m
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, bindings, guard, population, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-litmus-bindings.sh
+      - scripts/test-litmus-bindings.sh
+    unscoreable: ""
+    verifiable_closure: |
+      THE OUTPUT: a bindings entry whose spec_id names a spec that is not in the
+      live tree is REFUSED BY NAME, and the verdict says how many spec_ids were
+      resolved so a reader can see the population rather than infer it.
+
+      THE NEGATIVE CONTROLS ARE THE ROW, and both are demanded by the family this
+      belongs to (1255-rvr7):
+        * a bindings file naming a spec that does not exist must RED. Pre-fix it
+          is green — measured, see context.
+        * an EMPTY OR SHRUNKEN population must NOT read ok:. A checker that finds
+          zero spec_ids and prints ok: has the same defect one level up, and this
+          row must not ship it. Ask the one question of the new code: what does it
+          print when it finds NOTHING?
+        * a bindings file whose spec_ids ALL resolve must still pass, or the
+          ratchet turns one silent problem into an undiagnosed red suite — the
+          warning 660-ryhn's own triage carries.
+    title: |
+      openspec/litmus-bindings.yaml names spec_ids and nothing resolves them, so three litmus tests were bound under a spec that did not exist in the tree and every gate passed
+    context: |
+      MEASURED ON TRUNK, origin/linux-next, 2026-09-22 from macbookair:
+
+        spec_ids in openspec/litmus-bindings.yaml:                  141
+        with no openspec/specs/<id>/spec.md in that same tree:        1
+        -> expert-serve-grounded-pipeline
+
+      Three litmus tests are bound under that spec_id
+      (litmus:expert-serve-refusal-not-fallback,
+      litmus:expert-serve-citations-only-if-used,
+      litmus:expert-serve-endpoint-shape) and
+      openspec/specs/expert-serve-grounded-pipeline/ DOES NOT EXIST on that tree.
+      Every gate passes.
+
+      THE EXISTING CHECKER ASSERTS THE OTHER DIRECTION, and that is why this was
+      invisible rather than ignored. scripts/check-litmus-bindings.sh (660-ryhn)
+      answers "is every litmus FILE bound?" — a real defect, well guarded, and it
+      reads ok:litmus-bindings:files=448 bound=432 retired=6 grandfathered=10 on
+      the same tree at the same moment. Nothing asks the reverse question: does
+      every spec_id a binding NAMES resolve to a spec that exists?
+
+      HOW IT WAS FOUND, which is the argument for the family rather than for this
+      bug: while closing 920-pxg6 — whose remaining item read like filing — the
+      sync turned out to be what made three bound tests point at something real.
+      The coordinator's ruling called it "OpenSpec sync/archive only"; the tidying
+      step was the one keeping a spec_id honest.
+
+      THIS IS THE SECOND INSTRUMENT OF 1255-rvr7's FAMILY, cited as a sibling and
+      deliberately NOT folded into it. A guard over a population must assert the
+      POPULATION, not only the shape of what it finds:
+        skills guard      iterates runtimes, skips the absent, reports survivors
+        litmus bindings   names spec_ids, resolves none, reports nothing
+      Neither is a weak check. Both check the wrong thing, and the failure mode is
+      that they find LESS. What distinguishes the family from ordinary
+      under-coverage is the DIRECTION of the silence: a guard that misses a case
+      is quiet about that case; a guard whose population can shrink gets QUIETER
+      AS THE TREE GETS WORSE.
+
+      THE TEST THAT FINDS IT, and the refinement that makes it usable: ask what a
+      guard prints when it finds NOTHING — if the answer is ok:, the population is
+      unasserted. It earns its keep only against a guard that is CURRENTLY GREEN,
+      so run it against an empty population ON PURPOSE and treat ok: as the
+      finding rather than as the absence of one. Both instruments in this family
+      had been green a long while, which is exactly why nobody asked.
+
+      TIME-SENSITIVE EVIDENCE, stated so a later reader is not confused: the ONE
+      unresolved spec_id is fixed by PR #156 (920-pxg6), which adds
+      openspec/specs/expert-serve-grounded-pipeline/. Once that lands the count
+      goes to 0/141 and the SYMPTOM disappears while the HOLE remains — the
+      checker still resolves nothing. Do not read a later 0 as this row being
+      fixed; the row closes on the checker asserting resolution, not on the tree
+      happening to be clean.
+    deliverable: |
+      The bindings checker resolves every spec_id it reads and refuses by name
+      when one does not exist in the live tree, and its verdict carries the
+      RESOLVED COUNT so the population is visible rather than implied.
+
+      DO NOT stop at "the spec directory exists". Resolve to the artifact a
+      reader would open — openspec/specs/<id>/spec.md — or a directory left
+      behind by a deletion would satisfy the check.
+
+      ASSERT THE POPULATION OF THE NEW CHECK ITSELF. If parsing yields zero
+      spec_ids, REFUSE rather than print ok:0. This row is the second instrument
+      of a family about exactly that, and shipping the defect inside its own fix
+      is the failure mode to avoid — the sibling row did it once already, in the
+      sigpipe form, and was caught by a decider rather than by its author.
+
+      KEEP THE RATCHET the existing checker carries: an exemption channel must
+      stay possible, or binding-era strays turn one silent problem into an
+      undiagnosed red suite (660-ryhn's own triage warning). A retired or
+      deliberately-unresolved entry declares itself, the same way
+      unbound-grandfathered.txt already works for the other direction.
+    next_action: >
+      Read scripts/check-litmus-bindings.sh first — it is the right checker in
+      the wrong direction, and the fix belongs beside its existing question
+      rather than in a new file. Reproduce before changing anything: count the
+      spec_ids in openspec/litmus-bindings.yaml and test each for
+      openspec/specs/<id>/spec.md; on trunk today that is 141 with 1 unresolved,
+      and every gate green.
+    provenance: |
+      Filed and claimed by macbookair-macos (macos) 2026-09-22 at
+      macuahuitl-fedora's direction, from a measurement taken while closing
+      920-pxg6 and deliberately not folded into 1255-rvr7. The counts, the
+      unresolved id and the existing checker's verdict were all read from
+      origin/linux-next on this host rather than from a working tree.

@@ -1,0 +1,116 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-substrate-checkers-mirror-todo-prints-a-bare-project-name-where-the-binary-wants-a-checkout-path-so-a-worker-who-runs-the-affordance-verbatim-gets-project-not-found-and-rc1
+    order: 1356-u6xe
+    status: in_progress
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, diagnosis, onboarding, git-mirror-service]
+    estimated_hours: 1
+    host: lenovinha
+    owned_files:
+      - scripts/check-bare-metal-host-initialized.sh
+      - scripts/test-bare-metal-lane-command-is-runnable.sh
+    context: |
+      MEASURED ON lenovinha-silverblue 2026-09-22 while running
+      /join-the-fleet from a cold start. The fleet checker's substrate line
+      was the last todo: standing between this host and a green verdict, and
+      it printed:
+
+        todo:initialize-bare-metal-host:mirror:TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia tillandsias --bash tillandsias
+
+      Run verbatim, that command fails:
+
+        $ TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia tillandsias --bash tillandsias
+        Error: Project not found: tillandsias
+        RC=1
+
+      The binary resolves a CHECKOUT PATH after `--bash`, not a project name.
+      The working form, measured immediately after on the same host, brings up
+      mirror, ssh-sidecar, router and inference on the first try:
+
+        TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia \
+        TILLANDSIAS_MIRROR_SSHD=1 \
+        TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
+          tillandsias --bash $HOME/claudia/tillandsias --debug
+
+      Both readings were re-measured directly, each command alone with its own
+      $?, after the stack was already up — bare name rc=1 in under two seconds,
+      path form resolves and opens the lane shell. The status is the subject's
+      own, not a compound's last element (the trap §6.1 of the skill records).
+
+      THE DRIFT SHAPE IS THE POINT, not the typo. skills/initialize-bare-metal-host
+      §6.1 ALREADY KNOWS this distinction — it says in as many words that a
+      bring-up failed because "a bare name had been passed where a path was
+      wanted", and corrects an earlier wrong diagnosis at length. The prose
+      learned; the line a worker actually copies did not. A checker's todo: is
+      not documentation about a fix, it IS the fix as far as its reader is
+      concerned, and the two drifted apart with the correct version living in
+      the place nobody pastes from.
+
+      An affordance a reader cannot paste is worse than no affordance: it
+      spends the cycle it was written to save, and it spends it on the reader
+      least able to afford it — a host mid-onboarding, which is the one state
+      where the reader cannot yet tell a broken instruction from a broken host.
+    fix: |
+      LANE_CMD is derived from the checker's own $ROOT instead of being
+      hardcoded, so the printed command is the one THIS host should run:
+
+        LANE_CMD="TILLANDSIAS_HOST_PROJECT_ROOT=$(dirname "$ROOT") tillandsias --bash ${ROOT}"
+
+      $HOME/claudia was a second, quieter assumption in the same line: the
+      parent of the checkout is knowable and was being guessed. Deriving both
+      values removes the guess.
+    verifiable_closure: |
+      litmus:bare-metal-lane-command-is-runnable — THE PRINTED COMMAND NAMES
+      AN EXISTING CHECKOUT, AND ITS PROJECT ROOT IS THAT CHECKOUT'S PARENT.
+
+      Defined in openspec/litmus-tests/litmus-bare-metal-lane-command-is-runnable.yaml
+      (spec git-mirror-service, phase pre-build, size instant), three arms:
+      the fixture parses and is executable; the printed lane command names
+      an existing checkout whose parent is the project root; and a SOURCE
+      PIN read on the checker directly, requiring LANE_CMD to derive from
+      $ROOT and to contain no bare ${PROJECT} after --bash, so a fixture
+      that stopped looking cannot hide the regression.
+
+      The litmus is written in the same commit as the fix it tests
+      (1136-n8sh) and bound in openspec/litmus-bindings.yaml under
+      git-mirror-service. It is driven by
+      scripts/test-bare-metal-lane-command-is-runnable.sh,
+      which forces the mirror probe to miss with an unserved TILLANDSIAS_PROJECT,
+      parses the token after `--bash`, and requires it to be an absolute path to
+      a directory that exists, with TILLANDSIAS_HOST_PROJECT_ROOT equal to its
+      parent. It asserts the SHAPE of the printed command only: it runs no lane
+      and starts no container, and it skips by name on a host with no podman or
+      with the enclave down.
+
+      POST-FIX, on lenovinha-silverblue 2026-09-22:
+
+        $ TILLANDSIAS_PROJECT=nosuchproject scripts/check-bare-metal-host-initialized.sh
+        todo:initialize-bare-metal-host:mirror:TILLANDSIAS_HOST_PROJECT_ROOT=/var/home/lenovinha/claudia tillandsias --bash /var/home/lenovinha/claudia/tillandsias
+        rc=1
+
+        $ scripts/test-bare-metal-lane-command-is-runnable.sh
+        ok:bare-metal-lane-command-is-runnable:root=/var/home/lenovinha/claudia path=/var/home/lenovinha/claudia/tillandsias
+
+      THE FIXTURE WAS PROVED AGAINST THE DEFECT, not merely run green: with the
+      pre-fix LANE_CMD line restored in place, it fails by name —
+
+        fail:bare-metal-lane-command:argument-after---bash-is-not-a-path:definitely-no-such-project-1356u6xe
+        rc=1
+
+      — and passes again when the line is restored. A fixture that has never
+      been red against the bug it names has not been shown to test for it.
+    notes: |
+      Filed and fixed under the 2026-09-22 FREEZE declared for lenovinha by
+      macuahuitl (crates/ and scripts/ held off linux-next until the lift).
+      This touches scripts/, so it is prepared on work/1356-u6xe and lands
+      through the landing queue AFTER the lift, by the coordinator's explicit
+      direction to prepare it now. The row is filed with the push so the fix
+      arrives carrying its own evidence.
+      The row stays in_progress until the merge is on origin/linux-next; the
+      closing event's evidence SHA will be that landed commit, never this work
+      ref's own head (they are different objects).

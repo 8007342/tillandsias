@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    field: status
+    value: implemented
+    ts: "2026-09-23T07:29:54Z"
+    host: macneo
+
+events:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    event:
+      type: progress
+      ts: "2026-09-23T07:29:54Z"
+      host: macneo
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 61e210e05 landed on origin/linux-next at 5dea70973 (ok:land:5dea70973:attempt-1); trunk's status_item.rs has tray_icon_png at 4 sites and 0 executable occurrences of initByReferencingFile/CARGO_MANIFEST_DIR; cargo test -p tillandsias-macos-tray --bins 137 passed 0 failed; clippy -D warnings clean; artifact check 0 build-host paths, 4 embedded PNG signatures, 0 fs calls in the loader
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    event:
+      type: note
+      ts: "2026-09-23T07:29:54Z"
+      host: macneo
+      summary: |-
+        code landed, 1b and 2b named as outstanding per the coordinator's ladder

@@ -450,19 +450,36 @@ fi
 # The world the fixture built had a gate that does not read. The subject's
 # world has one that does. So the stub here CONSUMES STDIN on purpose, and the
 # assertion is that all three candidates are still processed.
+#
+# THE FIRST CANDIDATE FAILS ITS GATE, AND THAT IS THE ARM. pr_comment is the
+# only stdin-inheriting reader in the loop, and it is reached ONLY from the
+# evict and re-queue branches. An arm whose candidates all land never calls it,
+# so the hungry gh below is unreachable and the only guard left is the gate —
+# which the queue redirects from /dev/null. Measured 2026-09-22: with every
+# candidate landing, this arm scored 16/16 GREEN against the fd-3 read reverted.
+# It asserted a mechanism it did not exercise.
+#
+# So the failing candidate goes FIRST: pr_comment runs before the rest of the
+# list has been read. If the list is on stdin, its gh eats the remainder and
+# candidates 2-4 vanish or the queue blocks. If it is on fd 3, they all process.
 scaffold arm9
+candidate arm9 9000-fail fail.txt F
 candidate arm9 9001-aaaa a.txt A
 candidate arm9 9002-bbbb b.txt B
 candidate arm9 9003-cccc c.txt C
 cat > "$GH_PRS" <<JSON
-[{"number":1,"headRefName":"work/9001-aaaa","isDraft":false},
- {"number":2,"headRefName":"work/9002-bbbb","isDraft":false},
- {"number":3,"headRefName":"work/9003-cccc","isDraft":false}]
+[{"number":1,"headRefName":"work/9000-fail","isDraft":false},
+ {"number":2,"headRefName":"work/9001-aaaa","isDraft":false},
+ {"number":3,"headRefName":"work/9002-bbbb","isDraft":false},
+ {"number":4,"headRefName":"work/9003-cccc","isDraft":false}]
 JSON
 cat > "$GATE_BIN" <<'GATE'
 #!/usr/bin/env bash
 # A gate that drains stdin, exactly as ./build.sh --check does.
 cat >/dev/null 2>&1 || true
+# ...and that FAILS on the merge carrying fail.txt, so candidate 1 is evicted
+# and the loop reaches pr_comment while three candidates are still unread.
+[ -f fail.txt ] && exit 1
 exit 0
 GATE
 # AND THE FAKE gh DRAINS STDIN TOO, which is what makes this arm discriminate.
@@ -493,14 +510,14 @@ if [ "$_rc9" -eq 124 ]; then
 else
 n9="$(printf '%s' "$out9" | sed -n 's/^land:\([0-9]*\) .*/\1/p' | tr '\n' ',')"
 case "$out9" in
-    *"ok:land-queue:3 "*)
-        if [ "$n9" = "1,2,3," ]; then
-            ok "ARM 9: a STDIN-CONSUMING gate still lets all three candidates be processed — the list is read on fd 3, not stdin"
+    *"ok:land-queue:4 "*)
+        if [ "$n9" = "2,3,4," ]; then
+            ok "ARM 9: an evicting first candidate runs pr_comment (stdin-hungry gh) with three candidates still unread, and all three are still processed — the list is read on fd 3, not stdin"
         else
-            bad "ARM 9: the queue reported 3 examined but landed '$n9'"
+            bad "ARM 9: the queue examined 4 but landed '$n9' (expected 2,3,4) — a reader in the loop body ate the candidate list"
         fi ;;
     *)
-        bad "ARM 9: a stdin-consuming gate cut the drain short (landed '$n9') — the candidate list is being eaten by the loop body, which is the field defect of 2026-09-21
+        bad "ARM 9: a stdin-consuming loop body cut the drain short (landed '$n9', expected 2,3,4) — the candidate list is being eaten by the loop body, which is the field defect of 2026-09-21
 $(printf '%s' "$out9" | tail -3)" ;;
 esac
 fi

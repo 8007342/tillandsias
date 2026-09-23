@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-22T16:14:49Z"
+      agent_id: windows-yolanda-claude-20260922t161448z
+      host: yolanda-windows
+      summary: |-
+        DEFECT IN THIS ROW'S SHIPPED CHANGE, found by running the shipped artifact during the v56.9.22.1 Windows smoke rather than by reading it. Recorded here as the defect; the same finding is on 1349-tdpg as a census specimen, because the root cause is an unmeasured premise doing product work.
+
+        WHAT HAPPENED. On yolanda-windows the installer printed that the guest is shaped in a way that has killed builds on a host like this, reported 16 vCPUs sharing 8 GiB as about 512 MB per vCPU, and then RECOMMENDED A WSLCONFIG BYTE-IDENTICAL TO THE ONE ALREADY IN FORCE: memory=8GB, processors=16, autoMemoryReclaim=gradual, all three already set on that host. The reclaim arm correctly did NOT fire; only the ratio arm did.
+
+        WHY THAT IS WRONG. This host at exactly that configuration completed a 6704-second build.sh --check on 2026-09-21 with 896 memory samples, zero sampler errors, 115 samples inside the 11.5 to 18.3 percent band in which it had previously been reaped four times, and NO REAP of the gate. So 512 MB per vCPU is a configuration for which positive evidence exists, and the shipped threshold calls it dangerous. THE GATE IS THE MEASUREMENT THAT REFUTES THE THRESHOLD, and it predates the threshold by a day.
+
+        TWO CAUSES, BOTH MINE. First, the 700 MB per vCPU threshold was never measured: I chose it so that 320 would trip it, 320 being the ratio under which four consecutive builds were killed here, and I never established where the boundary actually lies. Second, the advice is never compared against the state in force, so the installer can recommend a change that is no change -- and that second defect survives ANY correction to the threshold, which makes it the more general repair.
+
+        REMEDY, two parts, and the second is cheaper and matters more: (1) derive the threshold from measurement, or state it as PROVISIONAL with its evidence and its known-good counterexample rather than as a fact; (2) NEVER PRINT A RECOMMENDATION IDENTICAL TO THE CONFIGURATION ALREADY APPLIED -- compare before advising, and if they match say so instead.
+
+        WHY NO GUARD CAUGHT IT. The fixture has seven arms and asserts that the warning NAMES the ratio with numbers. It never asserts WHICH CONFIGURATIONS TRIGGER IT. Seven green arms, a sabotage control proven to fire against a write attempt, a full gate and a preflight, and not one of them ran the installer against a real host's configuration -- they all read the source. That is arm-blindness as methodology/arm-blindness.yaml states it, on a change that shipped in the same release as the page: an arm testing a representation of the subject says nothing about the subject's behaviour.
+
+        AND IT IS THE INVERSE OF THE OTHER FINDINGS IN THIS FAMILY. Those were guards that COULD NOT REFUSE -- a capability probe reading --help, a gate-memory floor reading the guest rather than the host, arms testing a copy or a spelling. This is A GUARD THAT REFUSES SOMETHING CORRECT. Equally useless, and worse in one respect: a warning that fires on a known-good state teaches the reader to dismiss the whole class.
+
+        The row's closure is unaffected in its parsing half -- the installer does report the shape, does name the ratio with the user's own numbers, does warn about the experimental section, and never writes the user's file, all verified on the published artifact. What is defective is the THRESHOLD the report is judged against and the absence of a comparison with the current state.

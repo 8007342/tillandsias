@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-uninstall-sweep-fixture-asserts-the-trays-pkill-textually-because-running-it-would-kill-a-developers-real-tray-and-then-executes-the-very-block-that-contains-it-so-every-gate-on-a-mac-sigkills-the-operators-tray
+    field: next_action
+    value: |-
+      Not claimed. Any host can fix it; only a Mac with a tray running can
+      demonstrate the pre-fix behaviour, and macneo will run that when asked.
+      1. Neutralise the process commands in the REWRITTEN block, not in
+         uninstall.sh — the uninstaller is correct and 1231-cbie already
+         narrowed its matcher deliberately.
+      2. Keep the textual assertion at :57. The property it pins was found live
+         on 2026-08-30 and is not what is wrong here.
+      3. Add the arm from `unscoreable`, asserting over $TMP/block.sh, with the
+         negative control: remove the neutralisation and the arm must RED.
+      4. SWEEP THE SIBLINGS. This fixture is one of five uninstall fixtures and
+         the same extract-then-execute shape may appear in the others; I have not
+         read them and am not asserting that it does.
+
+
+      [2026-09-23T03:10:40Z macneo] ON ITEM 4, THE SIBLING SWEEP: READ THE FOUR FIXTURES, DO NOT GREP THEM.
+      macuahuitl-fedora, 2026-09-23, and it is the sharpest constraint on this
+      follow-up. The hazard does not appear in the fixture's own source — the whole
+      defect is that it arrives through EXTRACTED TEXT that is then handed to bash. A
+      grep of scripts/test-uninstall-*.sh for `pkill` finds this fixture only at its
+      textual ASSERTION and at the comment forbidding the behavioural form, and finds
+      nothing at all at the two lines that actually run it. Anyone auditing by pattern
+      will conclude the siblings are clean and will be wrong for the same reason the
+      author was.
+
+      THE QUESTION TO ASK OF EACH SIBLING is not "does it contain a dangerous
+      command" but "does it EXECUTE anything it extracted, and if so, what is in the
+      extracted range". Then check whether the sandbox covers every channel that range
+      touches — filesystem AND processes AND network AND the keychain — rather than
+      only the one the fixture was written to sandbox.
+
+      A DISCONFIRMATION RECORDED AS A RULE, because it nearly cost this finding: the
+      two symptoms offered with this defect (a tray down after a gate, a reset guard
+      finding no live tray) BOTH failed on the host that has the defect, one of them
+      exactly backwards. THE DEFECT IS ESTABLISHED BY READING THE CODE AND BY NEITHER
+      SYMPTOM. Had anyone looked for the symptoms, failed to find them, and concluded
+      the reading was wrong, a true finding would have been discarded for a reason
+      unrelated to whether it was true. Two line numbers are checkable by anyone on any
+      host; a symptom is checkable only where it happens to manifest.
+    ts: "2026-09-23T03:10:40Z"
+    host: macneo
+
+events:
+  - packet_id: the-uninstall-sweep-fixture-asserts-the-trays-pkill-textually-because-running-it-would-kill-a-developers-real-tray-and-then-executes-the-very-block-that-contains-it-so-every-gate-on-a-mac-sigkills-the-operators-tray
+    event:
+      type: note
+      ts: "2026-09-23T03:10:40Z"
+      host: macneo
+      summary: |-
+        read the siblings rather than grepping them; and the disconfirmation recorded as a rule

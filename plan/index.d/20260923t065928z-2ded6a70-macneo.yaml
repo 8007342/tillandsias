@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    field: context
+    value: |-
+      MEASURED ON TRUNK d74473c0f, read on macneo before accepting the triage.
+        status_item.rs:188  NSImage::initByReferencingFile — the icon is loaded
+                            from DISK at runtime
+        :208  <exe>/../Contents/Resources/tray-icon.png   (packaged runs only)
+        :214  env!("CARGO_MANIFEST_DIR")/assets/tray-icon.png — THE BUILD
+              MACHINE'S SOURCE TREE, which exists on no user's Mac
+        :158, :218-219  when neither path resolves, the button title becomes "T"
+      So any launch outside the .app layout shows a letter. The operator
+      reported exactly this from a curl-downloaded tray.
+
+      THE TESTS PIN THE DEFECT AS THE CONTRACT, which is why nothing caught it.
+      :403 and :423 resolve CARGO_MANIFEST_DIR and therefore PASS on every
+      development machine — the only machines that run them. A test that can
+      only be executed where the bug cannot occur is 1302-7j8p's rule stated for
+      a filesystem instead of a regime: the hosts that run the test are exactly
+      the hosts the defect spares.
+
+      macOS IS THE ODD ONE OUT AND THE FIX ALREADY EXISTS IN THE TREE.
+      tillandsias_core::icons::tray_icon_png is generated at build time from the
+      Ionantha SVGs by tillandsias-core/build.rs:221, and it is ALREADY the call
+      the other two trays make — tillandsias-headless/src/tray/mod.rs:2160 and
+      tillandsias-windows-tray/src/tray_phase_icon.rs:96. Only macOS reads a
+      file. Verified, not assumed.
+
+      SECOND DEFECT, same site: no setSize, so a 32px PNG draws at 32pt against
+      a menu bar of roughly 22pt.
+
+      objc2-foundation's feature list in Cargo.toml carries NSString, NSURL,
+      NSArray, NSDictionary, NSUUID and NSThread but NOT NSData, so adding it is
+      real work rather than a no-op.
+
+
+      [2026-09-23T06:59:28Z macneo] CORRECTION TO THIS ROW'S OWN DIAGNOSIS, and the error was mine. I wrote that the
+      bundled candidate path resolves for a normal .app install and that only launches
+      OUTSIDE the bundle were affected. THAT IS WRONG. The bundled path never resolved
+      on any host, and every CI-built tray shows "T".
+
+      THE REAL MECHANISM IS A .parent() OFF-BY-ONE, found by macbookair's smoke of the
+      published v56.9.22.1 and verified here by computing the path rather than reading
+      the code again:
+          current_exe   /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray
+          .pop()        /Applications/Tillandsias.app/Contents/MacOS
+          .parent()     /Applications/Tillandsias.app/Contents
+          .parent()     /Applications/Tillandsias.app        <- bound as `contents_dir`
+          .join(...)    /Applications/Tillandsias.app/Resources/tray-icon.png
+      The file ships at Contents/Resources/tray-icon.png. One .parent() too many, and
+      the binding is named contents_dir while holding the .app directory — the name
+      asserts the intent and the value is one level above it.
+
+      macbookair MEASURED IT ON THE INSTALLED ARTIFACT: exe_path inside the bundle,
+      in_app=true, Contents/Resources/tray-icon.png PRESENT and byte-identical to the
+      tarball's, and the tray still showed "T". So the second candidate — CI's baked
+      /Users/runner/... source path — is all that was ever left, and it exists on no
+      machine but the runner.
+
+      HOW I GOT IT WRONG, because the shape is this session's own subject. I listed the
+      installed bundle, saw Resources/tray-icon.png present, and concluded the loader
+      found it. I never traced the path the loader COMPUTES. That is reasoning from a
+      plausible model rather than running the thing — and I did it in the same message
+      where I warned another host not to read a green smoke as a refutation. Seeing the
+      file is not seeing the lookup succeed.
+
+      WHAT SURVIVES: the fix. Embedding the bytes removes the computation entirely, so
+      it repairs the off-by-one and the outside-the-bundle case together, and it would
+      have repaired them without either diagnosis being correct. WHAT DOES NOT SURVIVE:
+      my claim that a normal install was unaffected, and the three candidates I offered
+      for the operator's report — (a) launched outside the bundle, (b) a bundle missing
+      the icon, (c) a partial removal. ALL THREE ARE MOOT. The operator hit the plain
+      installed case, which was broken for everyone all along.
+
+      The companion contents-watcher started on the strength of candidate (c) stays
+      running for 1327-r4zb, where it is still the right instrument for a different
+      question.
+    ts: "2026-09-23T06:59:28Z"
+    host: macneo
+
+events:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    event:
+      type: note
+      ts: "2026-09-23T06:59:28Z"
+      host: macneo
+      summary: |-
+        correcting my own diagnosis: the bundled path never resolved; .parent() off-by-one found by macbookair, verified here

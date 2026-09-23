@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    event:
+      type: note
+      ts: "2026-09-23T19:09:46Z"
+      agent_id: linux-pirria-claude-20260923t190946z
+      host: pirria
+      summary: |
+        ENVIRONMENT FALSE RED (pirria, Silverblue, 2026-09-23). On bare Silverblue, `scripts/run-litmus-test.sh init-command --phase pre-build --size instant` fails litmus:spawn-failure-names-program with "error: linker `cc` not found" (violation:spawn-failure-names-program:0/2). The runner runs cargo-building fixtures on the host and does not route them into the tillandsias-builder toolbox. Wrapping the same run in `scripts/with-tillandsias-builder.sh` gives ok:spawn-failure-names-program:2/2 and init-command passed=4 failed=0. The fix is not wrong. Any immutable host without a host C toolchain will hit this next. The remedy belongs to the litmus runner (route cargo fixtures through the toolbox, or answer skip:no-cc rather than violation). Coordinator asked for this finding to be recorded.

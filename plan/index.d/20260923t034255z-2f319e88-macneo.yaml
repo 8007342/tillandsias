@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    field: status
+    value: completed
+    ts: "2026-09-23T03:42:55Z"
+    host: macneo
+
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: completed
+      ts: "2026-09-23T03:42:55Z"
+      host: macneo
+      summary: |-
+        status 'completed' with evidence_refs: 31803fbba landed in land81 at 4e8869dbd (ancestor of origin/linux-next, verified independently on macneo and macuahuitl); ok:gate-step-regimes:94 and ok:gate-step-regimes-fixture:4/4 on the merged tree; scripts/check-gate-step-regimes.sh, scripts/test-gate-step-regimes.sh and gate steps 312/313 present on trunk; methodology/convergence.yaml carries the rule, strengthened by #155
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: note
+      ts: "2026-09-23T03:42:55Z"
+      host: macneo
+      summary: |-
+        all closure criteria verified on trunk by artifact

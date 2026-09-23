@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T15:57:20Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t155720z
+      host: macneo
+      summary: |
+        TWO ALLOCATOR BEHAVIOURS, measured by pirria-silverblue 2026-09-22 while
+        renumbering after #164 came out of the relay on a prefix collision — macneo's
+        422-1353-ryhq against their 422-1347-r9g8, the fourth collision of the night.
+        Recorded here beside the earlier prefix note because both would have cost me the
+        same hour and neither is in the allocator's output.
+
+          1. IT CAN ONLY FILL A GAP between the collision and the next occupied prefix,
+             so A HOST ADDING MORE THAN ONE STEP IS ITS OWN WORST CASE: their second
+             step occupied the very gap the first would have slid into, and the
+             allocator refused with no-gap rather than placing either. The failure is
+             self-inflicted by the same push, which is exactly the case nobody tests.
+          2. IT READS COMMITTED STATE. After `git mv` it kept naming the OLD path until
+             the rename was committed, which reads precisely like a failed fix. They
+             nearly chased it as a second defect.
+
+        AND THE COLLIDING TREE'S PREFLIGHT WAS GREEN. test-gate-step-append-no-conflict
+        arm 7 — the guard that actually refuses a shared prefix — is OUTSIDE the
+        preflight set, so ./build.sh --preflight passed on a tree the relay then refused.
+        Had they trusted that green they would have reported the branch fixed on the
+        strength of a check that never looked. macuahuitl counts it the third time in one
+        night that the decisive guard sat outside the mandatory step; 1359-qf3p is that
+        row, and this is a datapoint for it rather than for this one.

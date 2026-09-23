@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    field: next_action
+    value: |-
+      CLAIM IS STALE, PROGRESS IS SAFE. Every commit the claimant made is on origin/linux-next (8 commits, last cc991cf9a 2026-09-06T08:46:58Z); there is no work/1084-x8ya branch on origin (0 of 57 remote branches); macneo's last ledger write is 2026-09-06T13:47:17Z and origin/osx-next's tip 958ea3e56 is 2026-09-06T14:03Z. Nothing is lost by releasing the claim.
+
+      WHAT IS LEFT, in the order a stranger should take it:
+
+      (a) CRITERION 2 REMEDY — platform-independent, do it first, any host. Make the snow error VARIANT survive to the poll site. Today crates/tillandsias-secure-channel/src/secure_stream.rs:39-41 `snow_err` collapses every snow::Error into io::ErrorKind::InvalidData with Display text, and crates/tillandsias-macos-tray/src/action_host.rs:380 prints that text. Required: a classification (at minimum Input = short/absent response -> listener question; Decrypt/Dh = crypto disagreement -> skew/PSK/binding question; other io error = transport) that reaches the `secure control wire handshake failed` line, with a fixture that feeds a too-short frame and a wrong-PSK frame and asserts the two are reported DIFFERENTLY. Pre-fix result must FAIL (today both print `noise: …`). Note owned_files lists crates/tillandsias-control-wire/src/lib.rs, which no commit touched; the real sites are secure_stream.rs and action_host.rs — widen owned_files.
+
+      (b) CRITERION 4 FIXTURE — platform-independent. A test that feeds headless_service_line / provision_record_from a record with headless_service_state `activating` (and `inactive` with empty timestamp written moments after `systemctl start --no-block`) and asserts the report does NOT name this defect and does not say failed. Zero tests exercise `activating` today (grep count 0 in diagnose.rs). Also decide whether the vm-status poll path needs a slow-boot guard; nothing in action_host.rs was changed by this packet.
+
+      (c) CRITERION 2 NAMED CAUSE + CRITERION 3 DEMONSTRATION — needs a macOS host with a live failing VM (pickup_role macos). Cold-provision on the host that reproduces (macneo did, 2026-09-05), read back provision.state with the criterion-3 fields (vz.rs:1242 record), and paste the actual headless_service_state / ExecMainStartTimestamp / Result / journal lines. With (a) landed, the poll line then says Input vs Decrypt. Together those name the cause. macneo's two preserved guest images and the queued operator ask for a Linux mount are the alternative route if the failure no longer reproduces.
+
+      DO NOT re-run: version-string scan of the image (cannot date the artefact, packet context), getty-bytes-on-the-wire hypothesis (refuted, wire is vsock 42420, doc section 'Refuted along the way').
+
+      [2026-09-14T08:12:52Z macneo] macneo 2026-09-14, static assessment against landed work. CRITERIA 1 and 3 NOW HAVE A MECHANISM: the guest writes guest_binary_sha256 into provision.state from inside the guest, and vz.rs surfaces it through PROVISION_STATE_SHARE_TAG — a host-visible SHARE read with a plain read_to_string, NOT the control wire, which is exactly the dead-wire-surviving channel criterion 3 asks to be named. CRITERION 2 CAUSE IS NAMED (PSK/version-binding: the PSK was keyed to the HOST binary not the GUEST binary, so mismatched binaries derived different PSKs and NNpsk0 failed at message one as `noise: input error`; fix 2976154d8, effect recorded twice at 9f4e826bf and cee4100fa) — this retires the version-skew hypothesis in favour of the packet second candidate. BUT STEP (a) IS HALF DONE AND THE MISSING HALF IS MACNEO OWN: 04cb49cd1 landed HandshakeFailure::classify with PeerSentNoUsableFrame / CryptoDisagreement / LocalMisconfiguration, and that symbol is referenced in EXACTLY ONE FILE (secure_stream.rs). Nothing in tillandsias-macos-tray consumes it — no HandshakeError, no downcast_ref — so the classification does NOT reach the `secure control wire handshake failed` poll line and the operator still cannot tell a listener question from a crypto disagreement. (a) is therefore now a small WIRING job, not a design one: consume the classification at the tray poll site, and extend the fixture so a too-short frame and a wrong-PSK frame are asserted to report DIFFERENTLY (today only CryptoDisagreement appears in fixtures; PeerSentNoUsableFrame is mapped but never asserted). STEP (b) / CRITERION 4 REMAINS UNTOUCHED: `activating` still has zero occurrences in diagnose.rs. THE LIVE-VM HALF OF (c) IS SMALLER THAN WRITTEN: with criteria 1 and 3 mechanised it reduces to reading provision.state off the share on a host with a running guest and confirming guest_binary_sha256 is present, well-formed, and matches the staged sha256 — the staged-versus-running SKEW check the unscoreable block already names. macneo did not close this: the assessment is a static read of write site, share tag, host read path and symbol references, with no live guest observed.
+
+      [2026-09-15T07:55:54Z macos] (a) is stale — already landed; (b) done and falsified; (c) needs the Linux-mount route
+
+      [2026-09-23T20:07:15Z macneo] CORRECTION 2026-09-23 (macneo): PART (b) / CRITERION 4 IS DONE AND HAS BEEN
+      SINCE 2026-09-15. The text above still advertises it, and this is the SECOND
+      time this row has been routed to macneo on that staleness — the first is
+      recorded on 1350-zj2r, and this is its second instance.
+
+      VERIFIED BY ARTIFACT, not by recollection:
+        crates/tillandsias-macos-tray/src/diagnose.rs:2618-2637 carries the criterion-4
+        test, landed as 42ce602a4 "fix(1084-x8ya): pin criterion 4 — a guest still
+        coming up is not a failure", 2026-09-15, an ancestor of origin/linux-next.
+        Its own doc comment records the measurement the old next_action still quotes:
+        "`activating` appeared ZERO times in this file while `headless_service_state`
+        appeared 13". That is no longer true — the word appears 8 times now, in the
+        test that fixed it.
+        Run today: cargo test -p tillandsias-macos-tray --bins a_guest_still_coming_up
+        -> 1 passed; 0 failed; 138 filtered out.
+        (The count is quoted with its selection deliberately: my first filter, "1084",
+        matched ZERO tests and still printed `test result: ok`. A green over an empty
+        selection is not evidence.)
+
+      SO WHAT IS ACTUALLY LEFT IS (c) ALONE: criterion 2's named cause and criterion
+      3's demonstration, which need a macOS host WITH A LIVE FAILING VM. Nothing
+      platform-independent remains.
+
+      AND macneo CANNOT SUPPLY (c) TODAY, which is why this is a correction and not a
+      claim. This host cold-provisioned twice on 2026-09-22 during the v56.9.22.1
+      smoke — §1 install and §2 --reset-state — so its guest state is freshly built
+      and the 2026-09-05 failure does not reproduce on it. Its /Applications bundle is
+      also absent (1327-r4zb, removed 2026-09-23T02:54:45Z, cause unattributed), so
+      there is no installed tray to drive. The "two preserved guest images" the old
+      text offers as the alternative route were searched for on this host and DO NOT
+      EXIST: the only images present are the live rootfs.img and rootfs.qcow2, both
+      rebuilt by the smoke. That alternative should not be offered to the next reader.
+
+      FOR THE NEXT HOST: take this only if you have a macOS host whose guest fails to
+      reach ready, or can make one. Do not take it for (b).
+    ts: "2026-09-23T20:07:15Z"
+    host: macneo
+
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-23T20:07:15Z"
+      host: macneo
+      summary: |-
+        part (b)/criterion 4 landed 2026-09-15 at 42ce602a4 and is still advertised; second mis-route to macneo

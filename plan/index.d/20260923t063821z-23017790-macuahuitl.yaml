@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: evidence
+      ts: "2026-09-23T06:38:21Z"
+      agent_id: linux-macuahuitl-claude-20260923t063821z
+      host: macuahuitl
+      summary: |
+        Coordinator audit 2026-09-23 (macuahuitl): criterion 3 (a forge agent validates a NEW predicate against an uncommitted spec without recompiling) CANNOT be run today, so it is not only waiting on a forge session. PredicateRegistry has zero non-test callers, and no subcommand in tillandsias-plan or tillandsias-litmus-rust registers or evaluates a .lua predicate. The only way in is a Rust test, which is a recompile.
+
+        LEFT, in order:
+        (1) A binary entry point, e.g. `tillandsias-litmus-rust predicate --class observing|cacheable --file x.lua --arg <spec>`. It prints a verdict with its run_id and exits non-zero on false.
+        (2) Then the recorded forge run: a transcript where a new .lua file is checked against an uncommitted spec, with no cargo line in it.
+
+        Related rows filed in the same pass:
+        - 1367-upz6: the Cacheable class still reaches os.time, io.lines and os.remove through the stdlib.
+        - 1367-q9yc: the pure shims, fs.read and expect.*.
+
+        Story order: 1367-upz6, then this row's entry point, then 1367-q9yc, then 902-5bf9 dispatch, then 1268-fx87 migrating the first real spec.

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-salvage-or-work-ref-to-sync-to-seed-sequence-is-documented-where-a-worker-looks-and-a-litmus-seeds-a-forge-from-a-salvage-ref-so-the-uncommitted-edit-workflow-exists-before-the-host-mount-is-removed
+    field: next_action
+    value: |-
+      Read the forge-welcome seeding path and the mirror's sync surface FIRST and record which commands actually exist today, because T1 (the on-demand sync) is not landed and the sequence cannot be documented as working before the middle step of it does. If T1 is still open when the documentation is drafted, write the sequence with the sync step named and marked as landing under T1 rather than describing a command that does not answer yet — and say so in the skill rather than silently omitting it.
+
+
+      [2026-09-23T03:45:31Z yoga] RELEASED by yoga 2026-09-23. Half (2) is done, landing with this cleanup (the litmus-forge-seeds-from-salvage-ref litmus, scripts/test-forge-seeds-from-salvage-ref.sh ok 5/5). Half (1) is done ONLY in skills/join-the-fleet/SKILL.md. LEFT is writing the same salvage-or-work-ref, sync, seed sequence verbatim into skills/initialize-bare-metal-host/SKILL.md, then setting completed.
+    ts: "2026-09-23T03:45:31Z"
+    host: yoga
+
+events:
+  - packet_id: the-salvage-or-work-ref-to-sync-to-seed-sequence-is-documented-where-a-worker-looks-and-a-litmus-seeds-a-forge-from-a-salvage-ref-so-the-uncommitted-edit-workflow-exists-before-the-host-mount-is-removed
+    event:
+      type: note
+      ts: "2026-09-23T03:45:31Z"
+      host: yoga
+      summary: |-
+        lane cleanup 2026-09-23

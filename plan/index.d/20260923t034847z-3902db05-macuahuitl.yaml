@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-desktop-launcher-asks-for-an-icon-named-tillandsias-and-nothing-has-ever-put-one-on-the-icon-search-path-while-the-uninstaller-has-always-removed-three-such-files
+    field: next_action
+    value: |-
+      Landed a first fix: the tray writes hicolor/scalable/apps/tillandsias.svg from its embedded art on startup when absent or empty, and uninstall.sh now removes that path too. Scalable rather than rendered pngs so no converter is needed. Still open: (1) confirm on a REAL fresh install with a GNOME session that the icon renders in the shell, which this host could not do tonight because the tray was not restarted under a desktop session; (2) decide whether the three legacy png paths should also be produced for themes that ignore scalable/, and (3) the gate this row exposes but does not close — nothing compares what the installer creates against what the uninstaller removes, and that asymmetry is what hid this for months.
+
+
+      [2026-09-23T03:48:47Z macuahuitl] LEFT (2026-09-23): fix landed. Remaining: a Linux GNOME desktop host confirms the icon renders and runs the negative-control demo; the installer-vs-uninstaller comparison gate is still open.
+    ts: "2026-09-23T03:48:47Z"
+    host: macuahuitl

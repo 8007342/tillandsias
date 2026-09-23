@@ -216,7 +216,7 @@ else
     D="$(scratch nobusctl)"
     OUT2B="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_HOST_KIND \
               PATH="$_bin2b" bash "$GUARD" 2>/dev/null )"
-    if printf '%s' "$OUT2B" | grep -q '^missing:no-credential-channel$'; then
+    if grep -q '^missing:no-credential-channel$' <<<"$OUT2B"; then
         ok "missing:no-credential-channel with genuinely no busctl on PATH"
     else
         bad "a host without busctl must read missing:, got '$OUT2B'"
@@ -244,9 +244,9 @@ echo "arm 4 — the remedy names UNLOCK and FORBIDS the re-auth (1025-a896)"
 D="$(scratch remedy)"
 run_guard "$D" "$W/bin-locked"
 _r_unlock=0; _r_noauth=0; _r_order=0
-printf '%s' "$ERR" | grep -qi 'UNLOCK' && _r_unlock=1
-printf '%s' "$ERR" | grep -qi "do not run 'gh auth login'" && _r_noauth=1
-printf '%s' "$ERR" | grep -q '1025-a896' && _r_order=1
+grep -qi 'UNLOCK' <<<"$ERR" && _r_unlock=1
+grep -qi "do not run 'gh auth login'" <<<"$ERR" && _r_noauth=1
+grep -q '1025-a896' <<<"$ERR" && _r_order=1
 if [ "$_r_unlock" -eq 1 ] && [ "$_r_noauth" -eq 1 ] && [ "$_r_order" -eq 1 ]; then
     ok "remedy says unlock, says not to re-auth, and cites 1025-a896"
 else

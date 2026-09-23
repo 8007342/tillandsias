@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-eligibility-litmus-arm-asserts-an-oracle-723-fndi-retired-so-it-cannot-pass-on-darwin
+    field: next_action
+    value: |-
+      Read scripts/e2e-preflight.sh's `fixture` subcommand FIRST — it is the reference implementation, not a thing to write, and it already covers four cases. The open shape questions are (a) whether the litmus arm should invoke that subcommand directly or mirror its construction inline, and (b) whether the podman stub stays beside it for the Linux path or is replaced. Both are answerable by running the arm on a Darwin host, which is why this carries pickup_role macos. Do NOT make the arm pass by declaring Darwin out of scope: the held-image case is the only coverage the VZ liveness branch has, and it is currently green in the fixture and absent from the litmus.
+
+
+      [2026-09-23T06:51:09Z macuahuitl] LEFT (2026-09-23): 5702a72e0 rewrote the step after the 09-15 Darwin pass; a macOS host re-runs it on trunk.
+    ts: "2026-09-23T06:51:09Z"
+    host: macuahuitl

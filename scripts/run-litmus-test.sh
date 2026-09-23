@@ -1744,7 +1744,32 @@ run_litmus_test_file() {
                 if [ "$_lt_stall_pct" -ge "${LITMUS_STALL_CONTENDED_PCT:-25}" ]; then
                     log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — step CONTENDED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
                 else
-                    log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — step NOT contended at kill time; genuinely too slow for its ${timeout_sec}s budget"
+                    # ORDER 1358-9wzz. REPORT WHAT WAS MEASURED, DO NOT CONCLUDE
+                    # WHAT WAS NOT. This branch used to say "step NOT contended
+                    # at kill time; genuinely too slow for its Ns budget", and
+                    # both halves were false about the step that produced them:
+                    # litmus:proxy-crash-supervision-shape step 3 runs bare in 5s
+                    # on macuahuitl and 4.98s on macbookair, and passes through
+                    # the runner alone at 6.5s — against this same 60s budget. It
+                    # reds only inside the FULL pre-build suite, so the cause is
+                    # INTERFERENCE, which is exactly what the sentence declared
+                    # absent.
+                    #
+                    # cpu.pressure `some` measures time runnable tasks waited FOR
+                    # A CPU. A low reading excludes CPU STARVATION and nothing
+                    # else — not I/O, not locks, not process-table pressure, not
+                    # pattern-kill effects from concurrent fixtures.
+                    #
+                    # THIS MODULE'S OWN CONTRACT ALREADY SAID SO. The comment
+                    # above _lt_cpu_stall_us: the caller "must then say
+                    # UNCLASSIFIED, never fall back to a number that measures
+                    # something else". Concluding "not contended" from a CPU
+                    # counter is that fallback, one branch over.
+                    #
+                    # The UNAVAILABLE path below is the model: it has no data and
+                    # says so honestly. The path with PARTIAL data must not
+                    # produce more confidence than the path with none.
+                    log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — CPU starvation EXCLUDED; cause otherwise UNCLASSIFIED, because this counter measures only waiting for a CPU and does not see I/O, locks, process-table pressure, or pattern-kill effects from concurrent steps. Re-run this step ALONE before treating it as too slow: a step that passes alone and reds in the suite is interference, not a budget."
                 fi
             fi
             return 1

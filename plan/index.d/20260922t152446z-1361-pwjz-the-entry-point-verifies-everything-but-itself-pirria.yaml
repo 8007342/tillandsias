@@ -1,0 +1,58 @@
+packets:
+  - packet_id: the-install-entry-point-verifies-everything-it-downloads-and-nothing-verifies-the-entry-point
+    order: 1361-pwjz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, integrity, cosign, install, all-platforms]
+    estimated_hours: 4
+    owned_files: []
+    observed_by: macneo
+    unscoreable: |
+      whether-transport-trust-at-the-entry-point-is-acceptable: this is a
+      DECISION, not a measurement, and the row must not presume the answer.
+      Accepting TLS as the anchor for the first artifact is a defensible
+      position that most installers in the world take. What this row refuses is
+      that the position remain UNSTATED, because an unstated position and an
+      oversight are indistinguishable to a reader — which is how this was found.
+    verifiable_closure: |
+      THE OUTPUT, one of three, per lane, written where a reader will meet it:
+        (a) the install path verifies its own published cosign bundle before
+            executing, or
+        (b) the installer is named in every lane's SHA256SUMS AND the path
+            consults it before executing, or
+        (c) a STATED decision that transport trust is accepted at the entry
+            point, with the reason.
+      (c) closes this row as completely as (a). What does not close it is
+          silence.
+    summary: |
+      OBSERVED BY macneo during the v56.9.22.1 smoke preflight, who explicitly
+      declined to assert it as a defect. That framing is kept.
+
+      THE CLAIM, narrow and checkable: every installer HAS a published cosign
+      bundle, and nothing in the curl-pipe-bash path consults it. The script
+      executes, and only then verifies what it downloads. So the artifact chain
+      BELOW the entry point is anchored and the entry point itself is not — a
+      curl-pipe-bash trusts the transport for the one artifact that then decides
+      what everything else means.
+
+      ALL THREE LANES, which is what separates this from 1360-34uw. That row is
+      macOS-only: install-macos.sh is missing from its manifest while the Linux
+      and Windows installers are named in theirs. Closing it fixes an asymmetry
+      and leaves THIS untouched, because a manifest the entry point never reads
+      before executing anchors only what comes after. Filed separately so the
+      cheap fix cannot be mistaken for the real one.
+
+      WHY THIS IS NOT AN ALARM. An operator who fetches the published bundle can
+      verify the script today; the material is all published. The gap is that
+      the DEFAULT path does not, and that no lane records whether that is a
+      choice.
+
+      NOT IN SCOPE: the unsigned SHA256SUMS and SHA256SUMS-macos. That is
+      anticipated by check-release-asset-integrity.sh's third integrity path —
+      a manifest whose every entry is individually signed — and was settled by
+      macuahuitl reading the guard and running it. Confirmed on pirria rather
+      than taken on report: ok:release-asset-integrity:17 of 17 checked, rc=0.
