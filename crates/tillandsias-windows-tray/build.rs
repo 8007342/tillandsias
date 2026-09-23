@@ -511,7 +511,7 @@ fn ico_dib_entry(size: u32, rgba: &[u8]) -> Vec<u8> {
     let w = size as i32;
     let h = size as i32;
     // AND mask rows are 1bpp padded to a 4-byte boundary.
-    let mask_stride = (((size + 31) / 32) * 4) as usize;
+    let mask_stride = (size.div_ceil(32) * 4) as usize;
     let mask_len = mask_stride * size as usize;
     let xor_len = (size * size * 4) as usize;
 
@@ -530,8 +530,7 @@ fn ico_dib_entry(size: u32, rgba: &[u8]) -> Vec<u8> {
 
     for y in (0..size as usize).rev() {
         let row = &rgba[y * size as usize * 4..(y + 1) * size as usize * 4];
-        for px in row.chunks_exact(4) {
-            let (r, g, b, a) = (px[0], px[1], px[2], px[3]);
+        for &[r, g, b, a] in row.as_chunks::<4>().0 {
             let un = |c: u8| -> u8 {
                 if a == 0 {
                     0
