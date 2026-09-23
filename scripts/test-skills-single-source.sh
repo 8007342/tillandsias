@@ -53,7 +53,7 @@ link() { # <runtime> <skill>
     fi
 }
 
-run() { SKILLS_CHECK_ROOT="$WORK" SKILLS_CHECK_RUNTIMES=".harnessA .harnessB" bash "$CHECK"; }
+run() { SKILLS_CHECK_ROOT="$WORK" SKILLS_CHECK_RUNTIMES="${RUNTIMES_OVERRIDE:-.harnessA .harnessB}" bash "$CHECK"; }
 
 # --- case 1: both runtimes link both canonical skills ------------------------
 for d in .harnessA .harnessB; do for s in alpha beta; do link "$d" "$s"; done; done
@@ -138,4 +138,125 @@ rc=$?
     || fail "case 6 mutant: expected the missing skill named, got '$out'"
 echo "ok: case 6 mutant — a lone per-skill link is still held to Direction 2"
 
-echo "PASS: skills single source of truth (7/7)"
+
+# --- case 7 (1255-rvr7): the POPULATION is asserted, not reported -------------
+# MEASURED pre-fix on macbookair, same script, only the list differing:
+#   ".claude .nonexistent-runtime" -> ok:skills-single-source:1:18  rc=0
+#   ".nonexistent-a"               -> ok:skills-single-source:0:18  rc=0
+# A guard over a population that accepts a population of ZERO is not a weak
+# guard, it is not a guard: deleting the tree it protects read as green.
+out="$(RUNTIMES_OVERRIDE=".harnessA .nonexistent-runtime" run)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 7: a declared runtime that does not exist must REFUSE"
+case "$out" in
+    violation:runtime-missing:.nonexistent-runtime/skills*) ;;
+    *) fail "case 7: expected the missing runtime named, got '$out'" ;;
+esac
+echo "ok: case 7 — a declared runtime with no tracked skills tree is refused by name"
+
+# The refusal must name the declaration that ACTUALLY governs the run. Saying
+# "RUNTIMES.txt" when no such file exists would be a remedy pointing at
+# something absent — the defect class this milestone is about, and a mistake
+# this fix made in its first draft.
+case "$out" in
+    *"declared in SKILLS_CHECK_RUNTIMES"*) ;;
+    *) fail "case 7: the refusal must name the governing declaration, got '$out'" ;;
+esac
+echo "ok: case 7b — the refusal names the declaration that governs this run"
+
+# --- case 8 (1255-rvr7): an ABSOLUTE link target is refused (hole D) ----------
+# Resolves on the author's host and nowhere else, including inside the builder
+# toolbox where the gate actually runs. Read from the INDEX so the verdict does
+# not depend on whether it happens to resolve HERE.
+git rm -q --cached .harnessB/skills >/dev/null 2>&1 || true
+git rm -q --cached .harnessB/skills/alpha >/dev/null 2>&1 || true
+blob=$(printf '/home/someone/skills' | git hash-object -w --stdin)
+git update-index --add --cacheinfo "120000,$blob,.harnessB/skills"
+out="$(run)"; rc=$?
+[ "$rc" -ne 0 ] || fail "case 8: an absolute link target must REFUSE"
+case "$out" in
+    violation:absolute-link-target:.harnessB/skills*) ;;
+    *) fail "case 8: expected the absolute target named, got '$out'" ;;
+esac
+echo "ok: case 8 — an absolute link target is refused (hole D)"
+
+# --- case 9 (1255-rvr7): a DIVERGENT target is refused (hole B) ---------------
+# A link that satisfies "is a symlink" while pointing outside canonical skills/
+# is the alias-tree drift arriving through the front door of the fix meant to
+# prevent it.
+git rm -q --cached .harnessB/skills >/dev/null
+blob=$(printf '../other-tree' | git hash-object -w --stdin)
+git update-index --add --cacheinfo "120000,$blob,.harnessB/skills"
+out="$(run)"; rc=$?
+[ "$rc" -ne 0 ] || fail "case 9: a link leaving canonical skills/ must REFUSE"
+case "$out" in
+    violation:link-leaves-canonical:.harnessB/skills*) ;;
+    *) fail "case 9: expected the divergent target named, got '$out'" ;;
+esac
+echo "ok: case 9 — a link that leaves canonical skills/ is refused (hole B)"
+
+# --- case 10 (1255-rvr7): a DANGLING target is refused (hole C) ---------------
+# Tracked, shaped correctly, pointing at nothing — every canonical skill
+# "reachable" purely because nothing looked.
+git rm -q --cached .harnessB/skills >/dev/null
+blob=$(printf '../skills/does-not-exist' | git hash-object -w --stdin)
+git update-index --add --cacheinfo "120000,$blob,.harnessB/skills"
+out="$(run)"; rc=$?
+[ "$rc" -ne 0 ] || fail "case 10: a dangling link must REFUSE"
+case "$out" in
+    violation:dangling-link:.harnessB/skills*) ;;
+    *) fail "case 10: expected the dangling target named, got '$out'" ;;
+esac
+echo "ok: case 10 — a dangling link is refused (hole C)"
+
+# --- case 11 (1255-rvr7), THE CONTROL ON THE FIX: the invariant still bites ---
+# A fix that merely stopped walking per-skill paths would satisfy every
+# reachability arm above and quietly destroy the thing this guard exists for. So
+# the ORIGINAL invariant is re-asserted after all the widening: a real SKILL.md
+# under a runtime, not a link to canonical, is still a second source.
+git rm -q --cached .harnessB/skills >/dev/null
+blob=$(printf '../skills' | git hash-object -w --stdin)
+git update-index --add --cacheinfo "120000,$blob,.harnessB/skills"
+mkdir -p .harnessA/skills/gamma
+echo "# a genuine second source" > .harnessA/skills/gamma/SKILL.md
+git add -f .harnessA/skills/gamma/SKILL.md >/dev/null 2>&1
+out="$(run)"; rc=$?
+[ "$rc" -ne 0 ] || fail "case 11: a genuine second source must still REFUSE"
+case "$out" in
+    violation:second-source:.harnessA/skills/gamma*) ;;
+    *) fail "case 11: expected the second source named, got '$out'" ;;
+esac
+echo "ok: case 11 — a genuine second source is still refused after the widening"
+
+
+# --- case 12 (1255-rvr7): resolution applies to PER-SKILL links too -----------
+# FOUND BY MUTATION, not by design: cases 8-10 all plant a bad DIRECTORY link,
+# so deleting the per-skill resolution call left every arm green. Both layouts
+# are supported, so both must be resolved, or holes B/C/D simply move from one
+# shape to the other.
+git rm -q --cached .harnessB/skills >/dev/null 2>&1 || true
+git rm -q --cached .harnessA/skills/gamma/SKILL.md >/dev/null 2>&1 || true
+rm -rf .harnessA/skills/gamma
+for s in alpha beta; do link .harnessB "$s"; done
+git rm -q --cached .harnessB/skills/alpha >/dev/null
+blob=$(printf '/somewhere/else/alpha' | git hash-object -w --stdin)
+git update-index --add --cacheinfo "120000,$blob,.harnessB/skills/alpha"
+out="$(run)"; rc=$?
+[ "$rc" -ne 0 ] || fail "case 12: a per-skill link with an absolute target must REFUSE"
+case "$out" in
+    violation:absolute-link-target:.harnessB/skills/alpha*) ;;
+    *) fail "case 12: expected the per-skill absolute target named, got '$out'" ;;
+esac
+echo "ok: case 12 — per-skill links are resolved too, not only the directory link"
+
+# ORDER 1255-rvr7. DERIVED, not a literal. This printed "(7/7)" while THIRTEEN
+# `ok: case` lines ran — the five arms added by this row passed and were reported
+# as seven. A self-reported count that cannot move cannot tell a reader it
+# measured less than it claims, and this is the SECOND instrument on this host
+# with that defect today (scripts/test-script-exec-bits.sh printed 14/14 while
+# seventeen scenarios ran).
+#
+# Counted from the `ok:` lines this run actually emitted, so adding or losing a
+# case moves the number without anyone maintaining it.
+_cases="$(grep -c '^echo "ok: case' "$ROOT/scripts/test-skills-single-source.sh")"
+echo "PASS: skills single source of truth ($_cases/$_cases)"

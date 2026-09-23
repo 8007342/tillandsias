@@ -1,0 +1,62 @@
+packets:
+  - packet_id: github-login-identity-step-runs-between-token-collection-and-vault-persist-and-discards-the-token-on-failure
+    order: 1364-27f8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [guest, credentials, login, vault]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    observed_by: forge-tillandsias
+    unscoreable: |
+      pinned-by-a-cargo-unit-test-not-a-litmus: the obligation is a source-order test inside
+      tillandsias-headless (main.rs tests module, beside github_login_prompts_after_infrastructure_preflight),
+      which ./build.sh --check runs; there is no litmus surface for the ordering of calls in one function.
+    title: |
+      run_provider_login prompts for (or reads) the git identity AFTER the GitHub token is collected
+      and BEFORE it is written to Vault, so an empty name, a mistyped email, or a missing gitconfig on
+      --with-token exits the flow and the ephemeral login container takes the verified token with it.
+    summary: |
+      FOUND while refreshing the order-469 transition map (research-auth-flow-state-machines) against
+      current source, not in the field. Read, not inferred:
+
+        main.rs run_provider_login, in execution order:
+          run_podman_command(login)                      collect (gh auth login --with-token)
+          prompt_and_store_git_identity()?  (Terminal)   identity   <- fallible, BEFORE persist
+          store_existing_git_identity()?   (StdinToken)  identity   <- fallible, BEFORE persist
+          gh auth status                                 verify_session
+          vault-cli.sh write-stdin secret/github/token   persist
+          vault-cli.sh read                              verify_persisted
+
+      prompt_and_store_git_identity carries the comment "The token is already stored by the time
+      this runs." It is not: the Vault write is two steps later. The comment and the reorder came in
+      together, 21243b4d3 (2026-07-28, "token first, then git identity"), which was a UX change for
+      the operator directive of 2026-07-29 and did not intend to move persistence.
+
+      Failure paths that discard an already-accepted token, each returning Err before persist:
+        - Terminal: empty name with no default ("Git author name cannot be empty"); an email with no
+          '@' or with whitespace. prompt_with_default does not re-ask, so ONE typo costs the token.
+        - StdinToken (--with-token): no [user] in any gitconfig path (git_identity_missing_message).
+          This is exactly esmeraldinha's 1052-984i refusal, and it fires AFTER the piped token was
+          consumed and accepted by gh.
+        - Either: managed_gitconfig_path / create_dir_all / fs::write failure.
+      LoginContainerCleanup then removes the container that held the gh session. It is the same
+      collected-but-not-persisted class as the 2026-07-23 macOS incident order 469 was filed for,
+      re-introduced by a later change, which is the argument 469 makes for named FSM stages.
+
+      NOT SILENT, unlike the incident: the error is printed and the exit is 1. The cost is a lost
+      credential and a re-paste, plus a message that names the identity and not the lost token.
+    fix_shape: |
+      Keep the operator-visible order (token prompt first, identity second — the macOS tray's
+      DynamicExpect sequence token/name/email is unchanged), but move identity AFTER
+      verify_persisted. For StdinToken, resolve the existing identity BEFORE any container work so a
+      missing gitconfig refuses with nothing collected; store it after persist.
+    verifiable_closure: |
+      A source-order test on run_provider_login: the vault write verification precedes both
+      identity calls, and the StdinToken identity read precedes the login exec. Pre-fix result:
+      FAILS (identity at the call site before `gh auth status`). The existing
+      github_login_prompts_after_infrastructure_preflight (token before identity) still passes.

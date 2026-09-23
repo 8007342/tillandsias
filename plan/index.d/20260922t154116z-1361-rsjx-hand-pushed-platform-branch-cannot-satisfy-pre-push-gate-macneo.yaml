@@ -1,0 +1,127 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-hand-pushed-platform-branch-cannot-satisfy-pre-push-gate-while-trunk-is-active-because-the-required-merge-touches-stamp-scope-files-and-stales-the-fresh-green-and-the-adopt-a-valid-stamp-affordance-shipped-for-the-landing-queue-only
+    order: 1361-rsjx
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [gating, multi-host, agent-safety, convergence]
+    estimated_hours: 3
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists (885-92iu / 1136-n8sh). The instrument is
+      this row's own deliverable.
+      THE FILE TO WRITE, in the same commit as the fix:
+      scripts/test-platform-push-terminates.sh
+      WHAT IT MUST ASSERT, hermetically, in a scaffold repo rather than against
+      a live trunk — a fixture that races a real remote measures the fleet's
+      traffic, not the code:
+        1. Given a platform branch with a GREEN stamp for its tree, and a trunk
+           that has moved by a stamp-scope file since, the push path offers a
+           terminating route. Today it does not: the mandated merge stales the
+           stamp and the only exit is to re-gate and win a race.
+        2. THE ADOPTION IS NOT A BYPASS. Whatever route is offered must verify a
+           stamp against the tree being pushed, exactly as the queue's adoption
+           does; a patch that pushes an unstamped tree FAILS this arm.
+        3. NEGATIVE CONTROL: a platform branch whose stamp does NOT cover its
+           tree is still refused. Otherwise arm 1 is satisfiable by deleting the
+           check.
+    verifiable_closure: |
+      A HOST THAT HOLDS A GREEN FULL-SCOPE STAMP FOR THE TREE IT IS PUSHING CAN
+      PUSH A PLATFORM BRANCH WITHOUT WINNING A RACE AGAINST TRUNK.
+
+      MEASURED PRE-FIX, macneo, 2026-09-22, and every step of it correct in
+      isolation:
+        1. osx-next was 32 commits ahead of trunk; the coordinator could not
+           fast-forward it, so macneo merged origin/linux-next into osx-next.
+        2. The push was refused for a stale stamp naming 254 paths — everything
+           the back-merge brought.
+        3. ./build.sh --check ran and PASSED. 2038s. Zero refusals or violations
+           in the log; gate-stamp.sh read ok:gate-fresh.
+        4. The push was refused again, now by a different guard:
+           blocked:linux-next-not-merged:osx-next. Trunk had moved during the
+           34 minutes — four commits, three of them plan-fragment pushes and one
+           README ledger row. Non-plan paths in the whole delta: README.md.
+        5. Merging again would stale the fresh stamp, because README.md is IN
+           the stamp scope, requiring another 34-minute gate, during which trunk
+           moves again. On a night when plan fragments land several times an
+           hour, the loop has no exit that depends on the pusher.
+      Post-fix the same sequence terminates without a second gate run.
+
+      THE AFFORDANCE ALREADY EXISTS ON THE OTHER PATH, which is what makes this
+      a gap rather than a design question: scripts/land-on-platform-branch.sh:250
+      prints `ok:land-adopts-valid-stamp:<stamped-time> — this tree already holds
+      a green full-scope gate stamp; skipping the gate and going straight to the
+      push (1174-u5wp)`. That shipped in v56.9.22.1 as 1335-2nzf. A host pushing
+      a platform branch by hand has no equivalent.
+    title: |
+      A hand-pushed platform branch cannot satisfy pre_push_gate while trunk is active, because the required merge touches stamp-scope files and stales the fresh green — and the adopt-a-valid-stamp affordance shipped for the landing queue only
+    context: |
+      THE COMPOSITION, and neither rule is wrong on its own.
+      methodology pull_merge_cadence.pre_push_gate requires merging
+      origin/linux-next into a platform branch before EVERY push. The gate stamp
+      requires that ./build.sh --check last passed on the tree being pushed. A
+      merge of an active trunk changes stamp-scope files, so satisfying the
+      first invalidates the second, and the gate that restores it takes long
+      enough for the first to be violated again.
+
+      THE HOOK ALREADY RECORDS THIS COMPOSITION FOR ITS SIBLING CASE, and that
+      comment is the best evidence the shape is real rather than one host's bad
+      night. scripts/hooks/pre-push-local-gate.sh:333-341, on the PLAN-ONLY
+      lane: "methodology pull_merge_cadence.pre_push_gate requires merging
+      origin/linux-next into a platform branch before EVERY push. That merge
+      brings other hosts' non-plan files into the diff against the PLATFORM
+      remote… So the two rules compose into 'plan-only only if trunk has not
+      moved', and the busier trunk is the less reachable the lane." (1056-5344,
+      esmeraldinha 2026-09-05.) This row is that note's sibling for the FULL
+      GATE path, where the cost is 34 minutes rather than a lane selection.
+
+      THE COST, measured rather than estimated: one full gate on this host is
+      2038 seconds. The delta that invalidated it was one README line and three
+      plan-fragment pushes, one of which was the pusher's own.
+
+      HOW IT WAS RESOLVED THIS TIME, which is the workaround and not the fix:
+      the coordinator relayed osx-next INTO trunk through the landing queue,
+      which gated once and ADOPTED the stamp, and then levelled osx-next by
+      fast-forwarding trunk onto it. That terminates because the second step
+      needs no gate — not because fast-forwards are exempt, which they are not,
+      but because after the relay the coordinator's checkout tree IS trunk's
+      tree, so their own fresh stamp covers the ref, and osx-next containing
+      trunk is true by construction because at that point it IS trunk. Recorded
+      precisely because "fast-forwards are exempt" is a false rule that would
+      otherwise travel under a true result.
+
+      WHAT THIS IS NOT. Not an argument to weaken the stamp, not an argument
+      against pre_push_gate, and not a request for --no-verify, which on a
+      platform branch is exactly what the stamp exists to prevent. The queue
+      solved this correctly for itself; the gap is that a host cannot reach the
+      same mechanism.
+    next_action: |
+      Not claimed. Any host can do it; the measurement is on this row.
+      1. Give the pre-push path the queue's adoption: if the stamp is green for
+         THIS tree, accept it, exactly as land-on-platform-branch.sh:250 does —
+         the stamp is a tree digest, so adopting it grants precisely the
+         authority the hook already requires and nothing more.
+      2. The refusal at blocked:linux-next-not-merged should say what the pusher
+         is expected to do when merging will stale a stamp they just earned.
+         Today it names the merge and not the consequence.
+      3. Write scripts/test-platform-push-terminates.sh with the three arms in
+         `unscoreable`, hermetic in a scaffold repo. A fixture that races a real
+         remote measures the fleet's traffic rather than the code.
+      4. Consider whether a plan-fragment-only trunk move should stale a
+         platform push at all, which is the same question 1335-2nzf answered YES
+         to for the queue. If the answer is the same here, this row is small.
+    provenance: |
+      Measured on macneo 2026-09-22 while levelling osx-next after the
+      v56.9.22.1 cut, at macuahuitl-fedora's request, and filed at their
+      direction with the composition argument, the hook's own 1056-5344 comment
+      as the sibling case, and the 34-minute gate as the cost. Related:
+      1335-2nzf and 1174-u5wp (the adoption that shipped for the queue),
+      1056-5344 (the same composition on the plan-only lane), 864-q7dm and
+      970-7fqk (the stale-stamp branch and naming the cause on the right axis),
+      1177-k4jq (the sanctioned ungated lane, which is not the answer here
+      because the merge is clean and the tree is gated).

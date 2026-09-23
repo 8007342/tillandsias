@@ -1,0 +1,41 @@
+# Gate step 1349-tdpg — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS is the census that reports how old our self-flagged evidence
+# debt is, and specifically that its COUNT can be shown to respond.
+#
+# WHY A COUNT NEEDS A FIXTURE AT ALL. A count is the least self-announcing
+# result there is: "3 hits" and "my pattern matches nothing, and 3 unrelated
+# lines happen to contain the word" are the same output. The fixture plants ONE
+# dated admission beside a decoy containing the same words while admitting
+# nothing ("we measured this and someone verified it") and requires exactly one
+# hit, so the number is known to discriminate rather than merely to exist.
+#
+# IT EARNED ITS KEEP BEFORE THE CENSUS EVER RAN ON THIS REPO. Arm 1 failed on
+# the first execution: the census counted LINES, and the specimen comment is two
+# lines. Counting lines makes the number rise with how carefully someone wrapped
+# their prose — the mention-count heuristic's anti-correlation with care,
+# reintroduced through formatting.
+#
+# ARM 5 IS THE CONTROL ON THE CONTROL: a second admission must move the count
+# 1 -> 2. Without it, an arm-1 pass is consistent with a census hardcoded to
+# answer 1. ARM 4 pins that the census exits 0 WITH hits present, because it is
+# a report and never a gate (1338-x5rq's 187 suppressions: gate on an
+# instrument that matches honest deferred notes and the rational response is to
+# stop writing the note, which destroys the only signal it has).
+#
+# WHY IT IS HERE AT ALL (885-92iu). Written and green in its author's hand on
+# 2026-09-22, referenced by nothing. check-added-test-is-referenced named it
+# that same night and the warn was pushed past, because on a work ref a fatal
+# decider and an advisory one print the same shape (1352-qbrd).
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the admitted-missing-evidence census counts admissions, not words (1349-tdpg)"
+STEP_SCRIPT="scripts/test-census-admitted-missing-evidence.sh"
+STEP_ERROR="the evidence-debt census no longer discriminates (1349-tdpg) — read which arm failed above; arm 1 (the decoy must NOT be counted) and arm 5 (a second admission must move the count) are the load-bearing ones, and arm 4 pins that it stays a report rather than a gate"
+STEP_OK="The evidence-debt census counts admissions and its count is shown to move"
+#
+# SECOND REGIME (macneo, 2026-09-22 darwin). This fixture touches no bounding
+# tool and no network: it plants a two-file scratch repo, commits with a pinned
+# author date, and reads ages back through git blame. Nothing in it is
+# platform-conditional, which is why its number is identical on both regimes.
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:census-admitted-missing-evidence-fixture:8"

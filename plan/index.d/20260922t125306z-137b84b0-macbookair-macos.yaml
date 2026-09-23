@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fixtures-print-their-own-scenario-total-as-a-literal-so-an-arm-that-stops-running-is-reported-as-the-old-count
+    field: status
+    value: in_progress
+    ts: "2026-09-22T12:53:06Z"
+    host: macbookair-macos
+
+events:
+  - packet_id: fixtures-print-their-own-scenario-total-as-a-literal-so-an-arm-that-stops-running-is-reported-as-the-old-count
+    event:
+      type: note
+      ts: "2026-09-22T12:53:06Z"
+      host: macbookair-macos
+      summary: |-
+        taking it to its MEASUREMENT only, per the coordinator: twelve verdicts, not twelve edits; open lanes only during the freeze

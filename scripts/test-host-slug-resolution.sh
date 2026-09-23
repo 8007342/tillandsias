@@ -155,5 +155,48 @@ for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     rm -rf "$_r"
 done
 
-if [ $rc -eq 0 ]; then note "ok:host-slug-resolution:5/5 arms"; else note "violation:host-slug-resolution"; fi
+# ── ARM 6 — THE SABOTAGE THAT FIRES THE NEGATIVE ARM ────────────────────────
+#
+# WHY THIS EXISTS, and it is a defect found in THIS FILE. Arm 2 asserts a
+# NEGATIVE — that neither subject substitutes a literal host name — by grepping
+# for the spelling `HOST="unknown"`. A placeholder spelled ANY OTHER WAY sails
+# through it. Measured: injecting `HOST=nohost` into the refusal branch of
+# salvage-dirty-worktree.sh reintroduces exactly the defect 1337-3tk6 was filed
+# about, and THE WHOLE SUITE REPORTS 5/5 GREEN. Arm 4 cannot see it either,
+# because it runs a COPY of the resolution line rather than the subject.
+#
+# A POSITIVE ARM FAILS LOUDLY WHEN ITS SUBJECT REGRESSES. A NEGATIVE ARM GOES
+# QUIET WHEN ITS OWN PATTERN STOPS MATCHING, AND QUIET IS INDISTINGUISHABLE FROM
+# CORRECT (macuahuitl, 2026-09-22, drawn from an installer arm that failed twice
+# on one property while green both times).
+#
+# So this arm stops asserting the ABSENCE of a spelling and asserts the
+# BEHAVIOUR instead: give the REAL subject a resolver that answers NOTHING and
+# require it to REFUSE. A placeholder of any spelling makes it proceed, and this
+# arm fires — which is what arm 2 could not do.
+for _subj in salvage-dirty-worktree.sh push-plan-fragments-to-trunk.sh; do
+    [ -f "$ROOT/scripts/$_subj" ] || { fail "host-slug:arm6:subject missing: $_subj"; continue; }
+    _r="$(mktemp -d)"; mkdir -p "$_r/scripts"
+    git -C "$_r" init -q
+    git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
+    printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
+    cp "$ROOT/scripts/$_subj" "$_r/scripts/"
+    for _dep in plan-binary-probe.sh; do
+        [ -f "$ROOT/scripts/$_dep" ] && cp "$ROOT/scripts/$_dep" "$_r/scripts/"
+    done
+    # A resolver that RUNS and answers NOTHING — distinct from arm 5's sentinel,
+    # and distinct from an absent resolver, which would be the wrong cause.
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$_r/scripts/agent-identity.sh"
+    chmod +x "$_r/scripts/agent-identity.sh" "$_r/scripts/$_subj"
+    _o="$(cd "$_r" && ./scripts/"$_subj" probe-slug 2>&1)"; _arc=$?
+    case "$_o" in
+        *refused:host-unresolved*)
+            note "ok:host-slug:arm6-silent-resolver:$_subj REFUSES when the resolver answers nothing (rc=$_arc)" ;;
+        *)
+            fail "host-slug:arm6:$_subj did NOT refuse with a silent resolver (rc=$_arc) — it is substituting a placeholder of some spelling, which arm 2's literal grep cannot see; first line: $(printf '%s' "$_o" | head -1)" ;;
+    esac
+    rm -rf "$_r"
+done
+
+if [ $rc -eq 0 ]; then note "ok:host-slug-resolution:6/6 arms"; else note "violation:host-slug-resolution"; fi
 exit $rc

@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: salvage-dirty-worktree-resolves-its-host-only-through-the-hostname-binary-which-a-forge-image-does-not-ship-so-every-salvage-ref-pushed-by-the-script-from-a-forge-is-attributed-to-unknown
+    event:
+      type: note
+      ts: "2026-09-22T11:36:35Z"
+      agent_id: linux-yoga-opus5-20260922t113635z
+      host: yoga
+      summary: |
+        A RESOLUTION CHANGE IS AN INTERFACE CHANGE FOR EVERYTHING THAT BUILDS A FAKE
+        TREE. My fix, my consequence, recorded here rather than left in a message.
+
+        WHAT I CHANGED AND WHY IT WAS STILL RIGHT: both pushers resolved
+        agent-identity.sh relative to BASH_SOURCE[0] AFTER a `cd "$ROOT"`, so a
+        subdirectory-relative invocation resolved it against the wrong directory and
+        refused with "node-name returned nothing" when the helper was never FOUND — a
+        refusal naming the wrong cause, in the rescue path. Resolving from $ROOT is
+        correct and the product behaviour stands: a real checkout HAS the file, and a
+        scratch that models one should too.
+
+        WHAT I DID NOT SEE. Fixtures that build a scratch checkout populate its
+        scripts/ from a NAMED LIST. agent-identity.sh is not on those lists, because
+        before this change the subject found the helper beside ITSELF and a scratch that
+        copied only the subject worked. After it, the subject looks where the LIST
+        decides, and the list does not know. Measured by macuahuitl on trunk:
+        litmus:claims-fleet-visible red at 5 of 22, litmus:salvage-net-roundtrip red at
+        step 1, and 24 arms of the salvage fixture red on macOS. pirria is repairing the
+        fixtures on 1354-dw8x.
+
+        THE SHAPE, and it is the one to carry: CHANGING WHERE A SCRIPT LOOKS FOR
+        SOMETHING CHANGES WHAT EVERY FAKE TREE MUST CONTAIN. The subject's dependency
+        list did not change — its RESOLUTION did — and dependency lists in fixtures are
+        written against the old resolution without naming it. Nothing in the diff says
+        "scratch trees must now include agent-identity.sh", and no reviewer reads a
+        one-line path change as an interface change. It is the verdict-string lesson one
+        layer over: I changed what the subject READS rather than what it PRINTS, and the
+        fixtures that model the subject broke in the same silent way a fixture breaks
+        when a verdict string moves.
+
+        AND I HAD THE EVIDENCE IN MY HAND. Arm 5, which I wrote for this very fix,
+        copies agent-identity.sh into its scratch explicitly — because lenovinha made me
+        copy prerequisites in after my first draft died before reaching the code under
+        test. I learned "a scratch needs the subject's prerequisites" for MY fixture and
+        did not ask which OTHER fixtures build scratch trees for these two subjects. The
+        generalisation was one question away and I did not ask it.
+
+        WHEN IT WOULD HAVE BEEN CAUGHT, AND WHY IT WAS NOT: 99670e90e is not an ancestor
+        of v56.9.21.1, so it entered after the last release, and `./build.sh --check`
+        never runs the pre-build litmus tier. Every --check land since has passed. The
+        first pre-build run after it — macuahuitl's, an hour ago — is the first thing
+        that COULD see it. That is 1282-rkkm's doctrine for the third time tonight, and
+        the third time it has been my change: a green --check is silent about the tier
+        that gates the release.
+
+        WHAT I WOULD DO DIFFERENTLY, concretely: when a change moves WHERE a script
+        resolves a dependency, grep for other fixtures that construct a tree for that
+        subject BEFORE landing — `git grep -l "$subject" -- 'scripts/test-*'` and read
+        each one's scratch-population list. That is a mechanical check and it would have
+        returned the two litmus fixtures in seconds.

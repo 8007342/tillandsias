@@ -1,0 +1,67 @@
+packets:
+  - packet_id: the-macos-installer-is-not-named-in-its-own-sha256sums-while-the-linux-and-windows-installers-are
+    order: 1360-34uw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, integrity, macos, cosign]
+    estimated_hours: 2
+    owned_files: []
+    observed_by: macneo
+    generalised_by: pirria
+    unscoreable: |
+      whether-the-macos-manifest-is-short-by-policy-or-by-omission: this row
+      assumes omission because the other two lanes name their installer, but the
+      macOS release path is a different script and may have a reason. If it is
+      deliberate, the closure is that reason written down, NOT an edit — a
+      one-line policy note satisfies this row as fully as adding the entry.
+    verifiable_closure: |
+      THE OUTPUT: for each of the three lanes, either the installer is named in
+      that lane's SHA256SUMS, or the lane records why it is not. A reader can
+      tell which, per lane, without downloading the release.
+    summary: |
+      OBSERVED BY macneo during the v56.9.22.1 smoke preflight, and it is THEIR
+      finding; pirria only measured whether it generalises. It does not — it is
+      macOS-only, and that is the useful half.
+
+      MEASURED against the published v56.9.22.1 assets, read rather than
+      inferred (asset list from gh, manifests downloaded, entries enumerated):
+
+        installer              own cosign bundle   named in its manifest
+        install.sh                   YES                  YES
+        install-windows.ps1          YES                  YES
+        install-macos.sh             YES                  NO
+
+      SHA256SUMS has 7 entries including install.sh. SHA256SUMS-windows has 4
+      including install-windows.ps1. SHA256SUMS-macos has exactly 2, the tarball
+      and the dmg. So the macOS manifest is the outlier, and the asymmetry is the
+      whole finding: two lanes already do the thing the third does not.
+
+      NOT ASSERTED AS A DEFECT, keeping macneo's framing. The macOS installer
+      DOES verify the tarball against the manifest and dies on mismatch, so the
+      artifact chain below the entry point is anchored, and install-macos.sh has
+      a published cosign bundle an operator can verify. The checkable claim is
+      only that this lane's manifest does not name its own installer while the
+      other two do.
+
+      THE ENTRY-POINT QUESTION IS A SEPARATE ROW and is NOT closed by this one:
+      adding the entry fixes the asymmetry and leaves untouched the fact that a
+      curl-pipe-bash consults no manifest before executing. Filed separately so
+      the cheap fix cannot stand in for the real question.
+
+      A READER MEETING THE UNSIGNED MANIFESTS WILL ASK WHAT I ASKED, and the
+      answer is a one-command check, so it is recorded here. SHA256SUMS and
+      SHA256SUMS-macos carry no .cosign.bundle while SHA256SUMS-windows does.
+      That is ANTICIPATED BY DESIGN, not a defect: check-release-asset-integrity.sh
+      names three integrity paths — an asset has a bundle, or it is named in a
+      SIGNED SHA256SUMS, or it IS such a manifest and every entry it names is
+      individually signed. The third path covers exactly this situation. Settled
+      by macuahuitl reading the guard and then running it, and confirmed
+      independently on pirria rather than taken on report:
+        scripts/check-release-asset-integrity.sh --tag v56.9.22.1
+        -> ok:release-asset-integrity:17 of 17 checked, rc=0
+      The guard's own header carries the history that makes it credible: an
+      earlier release where five assets had no bundle and four of those were fine.

@@ -1,0 +1,54 @@
+# @trace order:1324-ujvb, spec:ci-release
+name: litmus:cosign-arrives-verified
+spec: ci-release
+description: >
+  ORDER 1324-ujvb. cosign verifies our release artifacts; who verifies cosign?
+  A tool fetched from whatever the release API answers today can authenticate
+  everything we ship while being itself unauthenticated — the row's defect one
+  level up. This pins that the bootstrap is checked twice, by two different
+  means: the pinned SHA256 gates EXECUTION, and the executed cosign then
+  verifies its OWN release signature against sigstore's certificate and
+  transparency log.
+
+  THE NEGATIVE ARMS ARE THE POINT. A verifier that answers "Verified OK" tells
+  you nothing until you have watched it answer something else, so the fixture
+  requires a tampered blob, a wrong signing identity and a wrong OIDC issuer to
+  each be REJECTED. `cosign:verified:1/1` from a check that cannot fail is the
+  same artifact as a green test over dead code.
+
+  IT ALSO PINS THE could-not-run/failed LINE. A host that cannot install
+  (no curl, no network, no pin, an unsupported platform, or a binary that will
+  not execute here) reports could-not-run and exits 0; a verification that RAN
+  AND FAILED exits 1. Lenovinha's review found the two conflated: on a Mac the
+  download succeeded, the hash matched, and the self-verification then EXECUTED
+  A LINUX BINARY, reporting a SIGNATURE FAILURE on a host that simply could not
+  run the file.
+
+  WHY size: long AND NOT A GATE STEP. The fixture downloads the release
+  (~141MB) and reaches sigstore's transparency log, so putting it in every
+  `--check` would pay that on every build and make the gate depend on the
+  network. It belongs where slow, network-reaching evidence belongs.
+
+  WHY IT IS BOUND AT ALL (885-92iu): this fixture ran green in its author's
+  hand and in no suite for the length of one night, and
+  check-added-test-is-referenced named it that same night. The warn was pushed
+  past because on a work ref a fatal decider and an advisory one print the same
+  shape (1352-qbrd).
+severity: critical
+size: long
+phase: pre-build
+preconditions:
+  - workspace contains scripts/ensure-cosign.sh
+  - workspace contains scripts/cosign-release.pin
+critical_path:
+  - step: "the trust anchor and both verification directions hold, and every negative control is rejected"
+    command: "bash scripts/test-ensure-cosign.sh 2>&1 | tail -1"
+    timeout_ms: 900000
+    expected_behavior: "ok:ensure-cosign-fixture: (or skip:no-network / skip:unsupported-platform, which are could-not-run and never a pass)"
+    assert_output_contains: "ok:ensure-cosign-fixture:"
+    assert_output_nonempty: true
+  - step: "the pin is read KEY-ANCHORED, so prose discussing sha256= cannot be read as the value"
+    command: "grep -cE '^checksums_sha256=[0-9a-f]{64}$' scripts/cosign-release.pin"
+    timeout_ms: 5000
+    expected_behavior: "1"
+    assert_output_contains: "1"

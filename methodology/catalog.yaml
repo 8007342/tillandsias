@@ -34,6 +34,9 @@ methodology_catalog:
     litmus:
       file: methodology/litmus.yaml
       provides: "Executable decision boundaries and stability."
+    arm_blindness:
+      file: methodology/arm-blindness.yaml
+      provides: "Why a green suite is not a checked suite, and which suites to re-check."
     cheatsheets:
       file: methodology/cheatsheets.yaml
       provides: "Knowledge cache operations and provenance requirements."
