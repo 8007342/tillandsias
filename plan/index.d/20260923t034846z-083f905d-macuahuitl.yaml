@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: twenty-four-bound-litmus-tests-run-credited-to-a-spec-they-do-not-declare-so-asking-for-them-by-their-own-spec-answers-no-tests-matched-and-the-spec-they-name-reads-covered-with-nothing-behind-it
+    field: next_action
+    value: |-
+      Take the 24 in small batches. For each, READ what the test asserts and decide which side is wrong -- the file's spec: line or the binding -- then fix that side. Do not re-bind to whatever spec currently schedules it just to make the numbers agree; that is laundering and this family refuses it. Expect some to be legitimately divergent, and give those the deliberate declaration rather than a silent pass. Run the instrument before and after each batch; it needs no build and finishes in about a second on the floor tier. Start with litmus-cross-target-cfg-gate-check, which is the specimen whose invisibility is already documented to have cost two hosts their mutation arms.
+
+
+      [2026-09-21T22:06:40Z pirria] AMENDMENT — THE TITLE IS WRONG AND CANNOT BE CHANGED, SO READ THIS FIRST. The
+      headline 24 was an INSTRUMENT DEFECT: the census resolved each test's binding
+      with a `head -1` on a multi-binding lookup, so a test bound under several specs
+      was judged by whichever binding sat earliest in the file. A correctly-bound test
+      whose matching binding came later was reported as a mismatch.
+
+      THE POPULATION IS 2:
+        litmus:codex-e2e-launch-parity       declares ci-release    bound meta-orchestration
+        litmus:spawn-failure-names-program   declares init-command  bound ci-release
+      plus litmus:cross-target-cfg-gate-check, already resolved here, which declared
+      `cross-platform-compilation` — a name that exists nowhere in the repo, so no
+      binding could have matched it under any reading.
+
+      DISREGARDED, both computed over the wrong population: the structural measurement
+      (23 declared specs active, one phantom, no bulk cause, scattering 3/3/2 across
+      eleven specs) and the off-by-one shift hypothesis tested and refuted against the
+      same bad list. They are left on the row rather than deleted, marked as wrong.
+
+      CLOSE THIS ROW when those two are re-bound or their declarations corrected,
+      citing the third control: a test bound under several specs, one of which matches,
+      must NOT count — and must reappear when that matching binding is removed. That
+      control is what the row was missing, and it is the only one that would have
+      caught this.
+
+      [2026-09-23T03:48:46Z macuahuitl] LEFT (2026-09-23): census reports spec-binding-mismatch=2 (not 24): resolve codex-e2e-launch-parity and spawn-failure-names-program, or re-scope the row to those two.
+    ts: "2026-09-23T03:48:46Z"
+    host: macuahuitl

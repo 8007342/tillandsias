@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: set-field-append-s-drops-lines-guard-compares-against-the-local-fold-so-an-append-written-against-a-fold-that-lacks-a-peer-s-newer-append-silently-deletes-the-peer-s-lines-with-no-conflict-and-no-marker
+    field: status
+    value: completed
+    ts: "2026-09-23T03:48:31Z"
+    host: macuahuitl
+
+events:
+  - packet_id: set-field-append-s-drops-lines-guard-compares-against-the-local-fold-so-an-append-written-against-a-fold-that-lacks-a-peer-s-newer-append-silently-deletes-the-peer-s-lines-with-no-conflict-and-no-marker
+    event:
+      type: completed
+      ts: "2026-09-23T03:48:31Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: fix c321d27e4 ae4749426 wired in pre-push-local-gate.sh; ok:append-vs-origin:refused-drop:1:admitted-current:1 re-run 2026-09-23 on macuahuitl
+  - packet_id: set-field-append-s-drops-lines-guard-compares-against-the-local-fold-so-an-append-written-against-a-fold-that-lacks-a-peer-s-newer-append-silently-deletes-the-peer-s-lines-with-no-conflict-and-no-marker
+    event:
+      type: note
+      ts: "2026-09-23T03:48:31Z"
+      host: macuahuitl
+      summary: |-
+        coordinator cleanup 2026-09-23 macuahuitl: every exit criterion verified on origin/linux-next e4dbdb1a1
