@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-script-gates-head-but-pushes-the-local-branch-of-the-target-name-and-reads-every-push-failure-as-origin-moved
+    event:
+      type: progress
+      ts: "2026-09-23T19:19:25Z"
+      agent_id: linux-yoga-claude-20260923t191925z
+      host: yoga
+      summary: |
+        IMPLEMENTED ON work/1366-d5v2 AT 3174004367, NOT LANDED. The release-cut hold forbids
+        scripts/ lands on linux-next until the coordinator announces the cut is done.
+
+        What changed in scripts/land-on-platform-branch.sh:
+        (1) the push is `git push origin HEAD:refs/heads/$BRANCH`, so the tool pushes the tree it
+            gated and never the local branch of the target's name;
+        (2) origin's head is recorded before the push. A failed push that leaves it unmoved
+            refuses as refused:land:push-failed-origin-unmoved (exit 6) and prints the push's own
+            output. "origin moved" is printed only when origin actually moved, and the line now
+            carries both shas;
+        (3) an auth failure from a linked worktree whose store helper has a relative --file=
+            prints cause:land:relative-credential-store-in-linked-worktree. The row's own
+            next_action puts the real path fix in fleet setup, so the tool only names the cause.
+
+        Evidence, measured on yoga 2026-09-23: scripts/test-land-push-classification.sh prints
+        ok:land-push-classification:8/8. With TILLANDSIAS_LAND_UNDER_TEST set to the pre-fix
+        tool (origin/linux-next's copy) it prints 3 passed, 5 failed: arms 1, 2 and 4 fail and
+        the control arm 3 (a real move still retries and lands) passes on both. All 8 sibling
+        scripts/test-land-*.sh fixtures and test-pre-push-work-ref-lane.sh stay green.
+
+        LEFT, in order: (a) a second-regime run on macOS (1302-7j8p requires one before a gate
+        step), then a gate step naming the fixture; (b) land after the cut; (c) close with the
+        landed sha. The claim is kept deliberately. The work is done and waiting on the hold, so
+        releasing it to ready would offer finished work for someone to redo.
