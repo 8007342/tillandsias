@@ -92,9 +92,9 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
     }
 }
 
-/// Agent actions live inside each per-project submenu (Linux parity).
-/// Each project has exactly 6 leaves: Claude/Codex/OpenCode/OpenCode Web/
-/// Observatorium/Maintenance.
+/// Agents-first inversion (tray-ux, operator 2026-09-22): Cloud's children
+/// are the 7 agent rows in canonical order, each opening the project list.
+/// Leaf ids are unchanged (`project.cloud.<name>.<verb>`).
 #[test]
 fn agent_picker_lists_three_agents_in_canonical_order() {
     let mut state = MenuState::initial();
@@ -120,8 +120,7 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
         .iter()
         .find(|i| i.id == "cloud-projects")
         .expect("cloud-projects present");
-    let proj = &projects.children[0];
-    let verbs: Vec<&str> = proj
+    let verbs: Vec<&str> = projects
         .children
         .iter()
         .map(|l| l.id.rsplit('.').next().unwrap_or(""))
@@ -138,8 +137,13 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
             "maintenance"
         ]
     );
-    // All leaves enabled because podman_ready = true.
-    assert!(proj.children.iter().all(|l| l.enabled));
+    // Each agent row opens the project leaf, enabled because podman_ready = true.
+    for row in &projects.children {
+        let verb = row.id.rsplit('.').next().unwrap_or("");
+        assert_eq!(row.children.len(), 1);
+        assert_eq!(row.children[0].id, format!("project.cloud.myapp.{verb}"));
+        assert!(row.children[0].enabled);
+    }
 }
 
 /// LoggedIn gates OUT the `github-login` row (mutually exclusive with the

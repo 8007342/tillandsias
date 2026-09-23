@@ -1203,6 +1203,16 @@ loop_cadence:
     macuahuitl-tillandsias-forge: "no slot — ephemeral and idempotent, driven by the coordinator per story; relaunch with tillandsias --claude --remote-control macuahuitl-tillandsias-forge"
     floor-forges: "no slot — pirria-tillandsias-forge and esme-tillandsias-wsl2 are floor tier (4 cores): one-off per coordinator, because a per-cycle merge of linux-next costs the floor tens of minutes (863-iicc)"
     tillandsias.org-forge: "no slot — the operator's own forge on macuahuitl (the first real user); never dispatched by the coordinator"
+  worker_slot: >
+    What a slot RUNS (operator ruling 2026-09-20, relayed by lenovinha;
+    written here 2026-09-23). A WORKER host's slot runs
+    scripts/check-fleet-membership.sh, then /advance-work-from-plan. Only the
+    coordinator's slot runs full /meta-orchestration, because that loop
+    composes coordination and release work a worker must not do by accident.
+    A host arms its own slot as a SESSION-LOCAL cron, when the operator asks
+    it to join the fleet (skills/join-the-fleet section 5 step 5). The
+    session stays open afterwards, since a session cron only fires while its
+    session lives.
   coordinator_note: >
     The coordinator's slot at even:23 lands 30 minutes after yolanda's
     previous-window push and 30 before her next, and sweeps sibling landings

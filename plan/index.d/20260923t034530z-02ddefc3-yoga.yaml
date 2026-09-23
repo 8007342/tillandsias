@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    field: status
+    value: ready
+    ts: "2026-09-23T03:45:30Z"
+    host: yoga
+
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: progress
+      ts: "2026-09-23T03:45:30Z"
+      host: yoga
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: arm A landed 5c769a8e2, b8f5faa65; arm-2 premise fix 5307b466f lands with this cleanup
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-23T03:45:30Z"
+      host: yoga
+      summary: |-
+        lane cleanup 2026-09-23; released

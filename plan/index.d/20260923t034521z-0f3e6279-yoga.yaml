@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: change-class-gate-selector
+    field: next_action
+    value: VERIFY ONLY. Slice 2 (90eb71542) and the plan-core-by-PATH fix (c26bdcbe7) landed in yoga's 2026-09-23 cleanup. Left is to confirm the scoped-stamp criterion (a scoped run never writes scope=full) against the landed tree, then re-measure a code-only --check and look for both pilot guards' skip lines. Set completed citing that log.
+    ts: "2026-09-23T03:45:21Z"
+    host: yoga
+
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: note
+      ts: "2026-09-23T03:45:21Z"
+      host: yoga
+      summary: |-
+        lane cleanup 2026-09-23

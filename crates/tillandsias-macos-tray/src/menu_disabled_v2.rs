@@ -113,6 +113,16 @@ mod tests {
         build(&state)
     }
 
+    /// The agent row for `verb` under Cloud (agents-first inversion).
+    fn agent_row<'a>(projects: &'a MacMenuItemSpec, verb: &str) -> &'a MacMenuItemSpec {
+        let id = format!("{}.{}", ids::CLOUD_AGENT, verb);
+        projects
+            .children
+            .iter()
+            .find(|r| r.id == id)
+            .unwrap_or_else(|| panic!("agent row {id} present"))
+    }
+
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
     #[test]
     fn render_starts_with_status_item_disabled() {
@@ -130,12 +140,12 @@ mod tests {
             .iter()
             .find(|s| s.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects");
-        let proj = &projects.children[0];
-        let obs = proj
-            .children
-            .iter()
-            .find(|l| l.id.ends_with(&format!(".{}", ids::VERB_OBSERVATORIUM)))
-            .expect("observatorium leaf present in project submenu");
+        let row = agent_row(projects, ids::VERB_OBSERVATORIUM);
+        assert!(
+            row.enabled,
+            "agent row stays enabled so its projects stay reachable"
+        );
+        let obs = &row.children[0];
         assert!(!obs.enabled, "Observatorium must be disabled on macOS v1");
         assert_eq!(obs.tooltip, ids::V2_DISABLED_REASON);
     }
@@ -148,12 +158,12 @@ mod tests {
             .iter()
             .find(|s| s.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects");
-        let proj = &projects.children[0];
-        let web = proj
-            .children
-            .iter()
-            .find(|l| l.id.ends_with(&format!(".{}", ids::VERB_OPENCODE_WEB)))
-            .expect("opencode-web leaf present in project submenu");
+        let row = agent_row(projects, ids::VERB_OPENCODE_WEB);
+        assert!(
+            row.enabled,
+            "agent row stays enabled so its projects stay reachable"
+        );
+        let web = &row.children[0];
         assert!(!web.enabled, "OpenCode Web must be disabled on macOS v1");
         assert_eq!(web.tooltip, ids::V2_DISABLED_REASON);
     }
@@ -181,14 +191,21 @@ mod tests {
             .iter()
             .find(|s| s.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects present");
-        assert_eq!(projects.children.len(), 1);
-        // Linux parity: each project has 7 leaves (Antigravity added
-        // 2026-07-11).
+        // Agents-first inversion (tray-ux, operator 2026-09-22): Cloud's
+        // children are the 7 agent rows; each opens the project list.
         assert_eq!(
-            projects.children[0].children.len(),
+            projects.children.len(),
             7,
-            "each project has 7 leaves (claude/codex/opencode/antigravity/opencode-web/observatorium/maintenance)"
+            "7 agent rows (claude/codex/opencode/antigravity/opencode-web/observatorium/maintenance)"
         );
+        for agent in &projects.children {
+            assert_eq!(
+                agent.children.len(),
+                1,
+                "{} lists the one project",
+                agent.id
+            );
+        }
     }
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
@@ -200,13 +217,12 @@ mod tests {
             specs.iter().all(|s| s.id != ids::AGENTS),
             "top-level agents picker must be gone (Linux parity)"
         );
-        // Per-project leaves include claude/codex/opencode as first 3 entries.
+        // The agent rows lead with claude/codex/opencode.
         let projects = specs
             .iter()
             .find(|s| s.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects");
-        let proj = &projects.children[0];
-        let verbs: Vec<&str> = proj
+        let verbs: Vec<&str> = projects
             .children
             .iter()
             .map(|l| l.id.rsplit('.').next().unwrap_or(""))
@@ -226,12 +242,7 @@ mod tests {
             .iter()
             .find(|s| s.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects");
-        let proj = &projects.children[0];
-        let obs = proj
-            .children
-            .iter()
-            .find(|l| l.id.ends_with(&format!(".{}", ids::VERB_OBSERVATORIUM)))
-            .expect("observatorium leaf present");
+        let obs = &agent_row(projects, ids::VERB_OBSERVATORIUM).children[0];
         assert!(!obs.tooltip.is_empty(), "tooltip must carry v2 reason");
     }
 

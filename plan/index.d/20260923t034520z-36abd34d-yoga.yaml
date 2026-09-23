@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: change-class-gate-selector
+    field: status
+    value: implemented
+    ts: "2026-09-23T03:45:20Z"
+    host: yoga
+
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: progress
+      ts: "2026-09-23T03:45:20Z"
+      host: yoga
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: slice 1 on trunk via 860d6dbbf; slice 2 90eb71542 and fix c26bdcbe7 merged into work/1350-8hmy and landed with this cleanup; scripts/test-change-class.sh ok:change-class:28/28 on yoga; pilot measured 741c37de9
+  - packet_id: change-class-gate-selector
+    event:
+      type: note
+      ts: "2026-09-23T03:45:20Z"
+      host: yoga
+      summary: |-
+        lane cleanup 2026-09-23; verify pending

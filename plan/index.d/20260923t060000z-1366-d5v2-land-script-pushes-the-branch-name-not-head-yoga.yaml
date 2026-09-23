@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-land-script-gates-head-but-pushes-the-local-branch-of-the-target-name-and-reads-every-push-failure-as-origin-moved
+    order: 1366-d5v2
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [landing, git, gate, credentials]
+    estimated_hours: 3
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      land-on-platform-branch.sh integrates and gates HEAD but runs `git push origin "$BRANCH"`, which pushes the LOCAL branch of that name, and it reports every push that did not land as "origin moved"
+    context: |
+      Filed by yoga 2026-09-23 on the coordinator's (macuahuitl) instruction, from
+      the renderer-fix land. Two findings, and the second is NOT a symptom of the
+      first. The coordinator first thought it was, and I measured otherwise.
+
+      (a) FROM A LINKED WORKTREE THE PUSH CANNOT AUTHENTICATE. yoga's credential
+      helper is `store --file=.git/.gh-credentials`, a RELATIVE path. In a linked
+      worktree `.git` is a file, so git printed "unable to open .git/.gh-credentials:
+      not a directory", then "could not read Username", and the script refused with
+      refused:land:auth-failed (rc=5). That is correctly classified, but it is
+      unlandable from any worktree.
+
+      (b) FROM THE MAIN CHECKOUT, ON A BRANCH OTHER THAN linux-next, EVERY PUSH IS
+      "origin moved". Checked out on work/renderer-blockscalar, the script merged
+      origin/linux-next into HEAD and gated HEAD green. It then ran, at line 500,
+      `git push origin "$BRANCH"`, which pushes refs/heads/linux-next. That local
+      branch was 1cf3a6628, an ancestor of trunk, so the push was refused (rc=1). The
+      merge-base proof then failed and line 677 printed "push did not land (rc=1);
+      origin moved" four times while origin sat at 859142157 throughout, ending in
+      refused:land:attempts-exhausted:4. A plain `git push origin HEAD:linux-next` of
+      the same tree straight after landed (rc=0, 859142157..780a7f2e6, verified with
+      git ls-remote). The script never reads the current branch: `grep -n
+      "show-current\|checkout\|switch\|symbolic-ref"` matches only a hint line at 689.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The fixture this row delivers is
+      scripts/test-land-push-classification.sh, written in the same commit as the
+      fix and wired into a gate step, with the four arms below.
+    verifiable_closure: |
+      A fixture (scripts/test-land-push-classification.sh or arms in an existing
+      land fixture) over a throwaway bare origin prints its counted verdict, where:
+      ARM 1: HEAD is a gated branch that is not $BRANCH, and the local $BRANCH is a
+      stale ancestor of origin. The script lands HEAD (origin's ref equals HEAD
+      afterwards) or refuses by name before gating. It must never push the stale
+      local ref. ARM 2: the push fails with origin UNMOVED (a rejecting pre-receive
+      hook on the bare origin). The script must NOT print "origin moved". It prints
+      the push's stderr and a classification derived by comparing origin's head
+      before and after the push. ARM 3 (control): origin genuinely moves between
+      gate and push, and the script still says origin moved and retries. ARM 4:
+      from a linked worktree whose credential helper is a relative
+      `store --file=.git/...` path, the helper resolves via `git rev-parse
+      --git-common-dir`, or the script names that cause instead of a generic
+      auth-failed. PRE-FIX RESULT: ARMS 1 AND 2 FAIL on the current script, as
+      measured on yoga above. Both arms must be shown red on the pre-fix script
+      before the fix is scored.
+    next_action: |
+      Push HEAD explicitly (`git push origin HEAD:refs/heads/$BRANCH`), or refuse by
+      name when the current branch is not $BRANCH, because one of the two must be
+      decided and written down. Then replace the unconditional "origin moved" at line
+      677 with a before/after comparison of origin's head, printing the push log when
+      origin did not move. For (a), fix the helper path where the fleet's setup
+      writes it (a --git-common-dir absolute path), not inside the land script.

@@ -494,6 +494,7 @@ specs:
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
   - litmus:forge-clone-reachability-probe-shape
+  - litmus:forge-seeds-from-salvage-ref
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write

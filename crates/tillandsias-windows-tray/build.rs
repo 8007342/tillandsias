@@ -289,7 +289,25 @@ fn main() {
     // emitted a warning. We tolerate the warning case so the build still
     // succeeds when mingw's windres isn't fully wired (common on Linux
     // dev boxes cross-checking the Windows target).
-    let result = embed_resource::compile(&resource_path, embed_resource::NONE);
+    //
+    // ORDER 1335-jz8c: prefer the GENERATED script, which points at an .ico
+    // rendered from the Ionantha SVG during this build. If either the render or
+    // the .rc emit fails — no SVG, no OUT_DIR, resvg unhappy — fall back to the
+    // committed assets/tillandsias.rc + assets/tillandsias.ico, unchanged. A
+    // cosmetic asset does not get to fail a build.
+    let generated = render_tray_ico(&manifest_dir_path)
+        .and_then(|ico| generate_resource_rc(&manifest_dir_path, &ico));
+    let compiled_rc = match &generated {
+        Some(p) => p.clone(),
+        None => {
+            println!(
+                "cargo:warning=tillandsias-windows-tray: icon render unavailable, \
+                 using committed assets/tillandsias.ico"
+            );
+            resource_path.clone()
+        }
+    };
+    let result = embed_resource::compile(&compiled_rc, embed_resource::NONE);
     if let Err(err) = result.manifest_optional() {
         println!(
             "cargo:warning=tillandsias-windows-tray: embed-resource compile failed: {err} — continuing"
@@ -424,4 +442,163 @@ fn render_one_logo(
     resvg::render(&tree, transform, &mut pixmap.as_mut());
     let png = pixmap.encode_png().map_err(|e| e.to_string())?;
     std::fs::write(png_path, &png).map_err(|e| e.to_string())
+}
+
+/// ORDER 1335-jz8c — the exe/tray .ico becomes a BUILD PRODUCT.
+///
+/// Until this order the icon was `assets/tillandsias.ico`: a committed binary
+/// hand-rasterized once, on one host, with ImageMagick (the recipe is still in
+/// assets/tillandsias.rc's header). That is exactly the failure mode
+/// `render_msix_logos` above exists to avoid — a checked-in raster silently
+/// stops matching the SVG it came from and nothing goes red when it does.
+///
+/// Renders `assets/icons/ionantha/bud.svg` — Ionantha, not Xerographica,
+/// because every OTHER tray glyph in this product comes from the Ionantha set
+/// (`tillandsias-core/build.rs` TRAY_ICON_SOURCES), and `bud` specifically
+/// because that is the source for `TrayIconState::Mature`, the at-rest state
+/// the static exe icon should depict.
+///
+/// Returns the generated .ico path, or `None` on any failure. Best-effort by
+/// the same policy as the MSIX logos: a cosmetic asset must never turn
+/// `cargo check` red. The caller falls back to the committed .ico.
+fn render_tray_ico(manifest_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    const ICO_SIZES: [u32; 7] = [16, 24, 32, 48, 64, 128, 256];
+
+    let svg = manifest_dir.join("../../assets/icons/ionantha/bud.svg");
+    println!("cargo:rerun-if-changed=../../assets/icons/ionantha/bud.svg");
+    if !svg.exists() {
+        return None;
+    }
+    let out_dir = std::env::var("OUT_DIR").ok()?;
+    let svg_data = std::fs::read(&svg).ok()?;
+    let tree = resvg::usvg::Tree::from_data(&svg_data, &resvg::usvg::Options::default()).ok()?;
+
+    let mut images: Vec<(u32, Vec<u8>)> = Vec::with_capacity(ICO_SIZES.len());
+    for size in ICO_SIZES {
+        let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
+        let svg_size = tree.size();
+        // Uniform scale + centre, as render_one_logo does and for the same
+        // reason: stretching a rosette to fill a square is visibly wrong.
+        let scale = (size as f32 / svg_size.width()).min(size as f32 / svg_size.height());
+        let tx = (size as f32 - svg_size.width() * scale) / 2.0;
+        let ty = (size as f32 - svg_size.height() * scale) / 2.0;
+        let transform = tiny_skia::Transform::from_translate(tx, ty).pre_scale(scale, scale);
+        resvg::render(&tree, transform, &mut pixmap.as_mut());
+        // 256 goes in as PNG (the only size where the DIB form is wasteful and
+        // where PNG-in-ICO is universally understood); every smaller size goes
+        // in as a 32bpp DIB, which every Windows icon loader back to XP reads.
+        // The committed .ico this replaces was built the same way.
+        let blob = if size == 256 {
+            pixmap.encode_png().ok()?
+        } else {
+            ico_dib_entry(size, pixmap.data())
+        };
+        images.push((size, blob));
+    }
+
+    let ico = assemble_ico(&images);
+    let path = std::path::PathBuf::from(&out_dir).join("tillandsias-generated.ico");
+    std::fs::write(&path, &ico).ok()?;
+    Some(path)
+}
+
+/// Encode one 32bpp BGRA bottom-up DIB icon image: BITMAPINFOHEADER, the XOR
+/// colour bitmap, then the (all-zero, i.e. "use the alpha channel") AND mask.
+///
+/// `rgba` is tiny-skia's premultiplied RGBA, top-down. Windows wants
+/// straight-alpha BGRA bottom-up, so this both un-premultiplies and flips.
+fn ico_dib_entry(size: u32, rgba: &[u8]) -> Vec<u8> {
+    let w = size as i32;
+    let h = size as i32;
+    // AND mask rows are 1bpp padded to a 4-byte boundary.
+    let mask_stride = (size.div_ceil(32) * 4) as usize;
+    let mask_len = mask_stride * size as usize;
+    let xor_len = (size * size * 4) as usize;
+
+    let mut out = Vec::with_capacity(40 + xor_len + mask_len);
+    out.extend_from_slice(&40u32.to_le_bytes()); // biSize
+    out.extend_from_slice(&w.to_le_bytes()); // biWidth
+    out.extend_from_slice(&(h * 2).to_le_bytes()); // biHeight = XOR + AND
+    out.extend_from_slice(&1u16.to_le_bytes()); // biPlanes
+    out.extend_from_slice(&32u16.to_le_bytes()); // biBitCount
+    out.extend_from_slice(&0u32.to_le_bytes()); // biCompression = BI_RGB
+    out.extend_from_slice(&((xor_len + mask_len) as u32).to_le_bytes()); // biSizeImage
+    out.extend_from_slice(&0i32.to_le_bytes()); // biXPelsPerMeter
+    out.extend_from_slice(&0i32.to_le_bytes()); // biYPelsPerMeter
+    out.extend_from_slice(&0u32.to_le_bytes()); // biClrUsed
+    out.extend_from_slice(&0u32.to_le_bytes()); // biClrImportant
+
+    for y in (0..size as usize).rev() {
+        let row = &rgba[y * size as usize * 4..(y + 1) * size as usize * 4];
+        for &[r, g, b, a] in row.as_chunks::<4>().0 {
+            let un = |c: u8| -> u8 {
+                if a == 0 {
+                    0
+                } else {
+                    ((c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8
+                }
+            };
+            out.extend_from_slice(&[un(b), un(g), un(r), a]);
+        }
+    }
+    out.resize(out.len() + mask_len, 0);
+    out
+}
+
+/// ICONDIR + ICONDIRENTRY[] + the image blobs, in that order.
+fn assemble_ico(images: &[(u32, Vec<u8>)]) -> Vec<u8> {
+    let count = images.len();
+    let mut out = Vec::new();
+    out.extend_from_slice(&0u16.to_le_bytes()); // idReserved
+    out.extend_from_slice(&1u16.to_le_bytes()); // idType = 1 (icon)
+    out.extend_from_slice(&(count as u16).to_le_bytes());
+    // 256 is encoded as 0 in the single-byte width/height fields.
+    let mut offset = (6 + 16 * count) as u32;
+    for (size, blob) in images {
+        let dim = if *size >= 256 { 0u8 } else { *size as u8 };
+        out.push(dim); // bWidth
+        out.push(dim); // bHeight
+        out.push(0); // bColorCount (0 = >=8bpp)
+        out.push(0); // bReserved
+        out.extend_from_slice(&1u16.to_le_bytes()); // wPlanes
+        out.extend_from_slice(&32u16.to_le_bytes()); // wBitCount
+        out.extend_from_slice(&(blob.len() as u32).to_le_bytes());
+        out.extend_from_slice(&offset.to_le_bytes());
+        offset += blob.len() as u32;
+    }
+    for (_, blob) in images {
+        out.extend_from_slice(blob);
+    }
+    out
+}
+
+/// Write a generated .rc next to the generated .ico, with ABSOLUTE paths for
+/// both the manifest and the icon.
+///
+/// The committed assets/tillandsias.rc names its two inputs relatively, so it
+/// can only be compiled from the assets dir. Rather than teach it about
+/// OUT_DIR, this emits an equivalent script in OUT_DIR. Resource ids are
+/// unchanged: 1/24 manifest, 1 ICON.
+fn generate_resource_rc(
+    manifest_dir: &std::path::Path,
+    ico: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let out_dir = std::env::var("OUT_DIR").ok()?;
+    let manifest = manifest_dir.join("assets").join("tillandsias.manifest");
+    if !manifest.exists() {
+        return None;
+    }
+    // rc.exe and windres both treat `\` in a quoted path as an escape.
+    let esc = |p: &std::path::Path| p.display().to_string().replace(char::from(92u8), "\\\\");
+    let rc = format!(
+        "// GENERATED by build.rs (order 1335-jz8c) — do not edit.\n\
+         // Icon rendered from assets/icons/ionantha/bud.svg at build time.\n\
+         1 24 \"{}\"\n\
+         1 ICON \"{}\"\n",
+        esc(&manifest),
+        esc(ico)
+    );
+    let path = std::path::PathBuf::from(&out_dir).join("tillandsias-generated.rc");
+    std::fs::write(&path, rc).ok()?;
+    Some(path)
 }

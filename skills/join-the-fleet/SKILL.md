@@ -207,6 +207,54 @@ there.
      hundred. Treat that warning as a STOP, not noise: merge trunk, re-run,
      and only when the two-dot and three-dot diffs agree does the check mean
      what it says.
+     THEN, still before `gh pr ready`, run the gate's own deciders on
+     the MERGED work ref: `./build.sh --preflight` (order 1305-udgs;
+     every guard that can refuse a push, in seconds, no build; `--full`
+     for the whole roster). A work-ref push only WARNS on a red decider,
+     so nothing before this step refuses for you. MEASURED 2026-09-22:
+     three of six reviewed, fixture-green PRs were dropped from one
+     relay by sub-second deciders their authors never ran (an unguarded
+     bash-4 `${v,,}`, a `printf | grep -q` verdict pipeline, a data
+     string quoting a target/ plan-binary path), costing a relaunch
+     each.
+     REGIME: `--preflight` needs setsid; on macOS it refused every guard
+     (`refused:preflight:ran=0 skipped=3 failed=108`, macbookair
+     2026-09-22) until 1352-vmbc. Where it cannot run, a host runs the
+     deciders directly on the merged ref, which is what the relay
+     preflight does: check-bash-dialect,
+     check-sigpipe-verdict-pipelines-added,
+     check-plan-binary-probe-usage, check-litmus-pin-claims,
+     check-script-exec-bits, check-added-fragments-parse,
+     check-scorable-obligation-added, and `cargo fmt --check`.
+     ONE COMMAND, FOUR BEHAVIOURS (measured 2026-09-22, one row:
+     1353-ryhq). macOS died on an unguarded `exec setsid` until
+     1352-vmbc. Windows and the MinGW locus RUN it and print `ok:` while
+     about a third of the guards skip on a 5s front-door deadline they
+     miss by one or two seconds (drvfs and MSYS spawn cost, not slow
+     fixtures). A forge printed `refused:` for two guards that never
+     executed because the checkout tmpfs was full (1349-53h6). AND LINUX
+     IS NOT EXEMPT: `ok:preflight:ran=99 skipped=12 wall=107s` on yoga,
+     with two skips named `deadline:6s — outlived the 5s front-door
+     deadline; the gate still runs it`. So the caveat is universal and
+     the regimes differ only in how much they skip. IF PREFLIGHT REPORTS
+     `refused:` FOR A DECIDER, CHECK WHETHER THAT DECIDER RAN before
+     concluding anything about your tree; and read the summary line,
+     because `ok:` means nothing that ran refused, NOT that the tree is
+     clean. Two more traps in the same step: on the MinGW locus
+     `build.sh` re-execs into the WSL2 builder before flags are parsed,
+     so `--preflight` never tests MinGW itself; and a bare `cargo` that
+     is not on PATH answers 127, which is indistinguishable from a pass
+     to anything reading only for failure.
+     TWO CHANGES NO DIFF SHOWS AS AN INTERFACE CHANGE (both cost a red
+     release tier on 2026-09-22). Changing what a subject PRINTS breaks
+     its consumers: a verdict token is an interface, so `git grep -l
+     '<verdict string>'` across `*.yaml *.sh *.rs *.md` and list every
+     live consumer with the reason each is safe. Changing what a subject
+     READS breaks its FAKES: a resolution change is an interface change
+     for everything that builds a scratch tree, whose script lists were
+     written against the old resolution without naming it — `git grep -l
+     '<subject>' -- 'scripts/test-*'`. Finding three consumers is worth
+     nothing without the sweep that says there is no fourth.
      A plan-lane push to linux-next is CHEAP FOR THE PUSHER AND EXPENSIVE FOR
      A GATING CANDIDATE: the queue and the relay lane compare base shas, so a
      fragment landing during a twenty-minute FULL gate requeues the candidate
@@ -246,6 +294,53 @@ there.
   Until a host's token can open PRs (the fleet's fine-grained token lacks
   "Pull requests: write" as of 2026-09-20), push the work ref and tell the
   coordinator its SHA: the relay lane lands it exactly as the queue would.
+- **Testing an UNCOMMITTED edit inside a forge** (T4 of
+  cloud-only-project-lifecycle, 1350-8hmy). A forge checks out a fresh tree; it
+  does not see your working copy. The sequence, and it WORKS TODAY on a host
+  that pushes through its own mirror:
+
+  1. get the dirt onto a ref — `scripts/salvage-dirty-worktree.sh <slug>` for a
+     tree you cannot gate, or an ordinary `work/<order>` push for work in
+     progress. Run salvage from the REPO ROOT: `scripts/salvage-dirty-worktree.sh
+     <slug>`, not `./salvage-dirty-worktree.sh` from inside `scripts/`;
+  2. push it THROUGH THIS HOST'S OWN LANE (skills/initialize-bare-metal-host §6).
+     `receive-pack` writes `refs/heads/<ref>` into the mirror as the push
+     happens — the post-receive hook only LOGS, it does not perform the update;
+  3. launch the forge. A clone-only forge clones `git://git-<project>/<project>`
+     — THE MIRROR — at entrypoint (crates/tillandsias-headless/src/main.rs), so
+     the ref is already there, and `git checkout <ref>` inside the forge gets
+     your tree.
+
+  MEASURED, yoga 2026-09-22, on a ref pushed through the lane that night:
+  the mirror held `refs/heads/salvage/yoga/20260921-lane-acceptance` at
+  `281011af5472…`, byte-identical to GitHub's, with 693 refs present and the
+  mirror's `linux-next` current at `aef882402`.
+
+  **WHAT THIS DOES NOT COVER, and the failure is silent.** A ref pushed from
+  SOMEWHERE ELSE — another host's work ref, or anything that reached GitHub
+  without passing through YOUR mirror — is not in your mirror until it syncs,
+  and today the exported heads move only at startup and on a relay. There is no
+  `tillandsias --sync` yet: that command lands under T1 of
+  cloud-only-project-lifecycle, and this page names it rather than describing it,
+  because a documented command that does not answer is worse than a named gap.
+  Until then, a mirror that has not relayed lately is SILENTLY BEHIND — lenovinha
+  met this at 00:03 on 2026-09-22 with a mirror four commits behind GitHub, and
+  the symptom was a push rejected for a stale old-object-id, not a message about
+  staleness.
+  AND DO NOT GO LOOKING FOR A sync-state REF: v56.9.22.1 shipped the
+  sync-state PUBLISHER and the sweep's stranded-tag explanation, but
+  nothing CALLS the publisher — the script was never copied into the
+  mirror image and no call site existed — so a mirror built from this
+  release produces no sync-state ref and `git ls-remote` for it returns
+  nothing. The lifecycle that runs it arrives with PR #163. Stated here
+  because a half-shipped feature reads exactly like a broken one from
+  the outside, and the search costs more than the sentence.
+
+  **AND TESTING ON THE HOST IS UNAFFECTED BY ANY OF THIS.** Editing in your
+  checkout and running `./build.sh --check` needs no forge, no mirror and no
+  ref: yoga landed five rows across nine gates that way on 2026-09-20 without a
+  project mount. This sequence is for testing an uncommitted edit INSIDE a
+  forge, which is a narrower question than "how do I test my edit".
 - **Platform branches**: macOS and Windows commit platform-specific work to
   their own branch; the coordinator relays to `linux-next`. Before every push
   of a non-linux-next platform branch, merge `origin/linux-next` into it
@@ -296,6 +391,45 @@ there.
    verification, not exposed (CLAUDE.md, Bootstrap).
 4. Report by comparing trees, not by narrating: paste the artifact (the
    verdict line, the ls-remote line), never "I verified that".
+5. **Arm this session's own recurring slot, then stay resident.** Joining is
+   not a one-shot report: a joined host keeps working on its slot until the
+   operator stops it. The operator asking this session to join the fleet IS
+   the consent to arm ITS OWN session-local cron (operator ruling
+   2026-09-23). It is never consent to message another host to arm one
+   (a peer cannot commit operator spend).
+
+   Read your slot from `methodology/multi-host-development.yaml` →
+   `loop_cadence.stagger_slots` (`methodology_ask "loop cadence slot for
+   <host>"`), then arm exactly one recurring job with the harness's
+   scheduler (CronCreate, or the `/loop` skill). Its prompt is the slot
+   from §3:
+
+   ```text
+   worker host (every host except the coordinator):
+     cron "<slot-minute> <slot-hours> * * *"
+     prompt: Run scripts/check-fleet-membership.sh and resolve every todo:
+             line (on due:* run the Start Of Day gate in
+             skills/meta-orchestration once), then use the
+             /advance-work-from-plan skill.
+   coordinator (macuahuitl) only:
+     prompt: Use the /meta-orchestration skill.
+   floor-tier hosts and ephemeral forges: no slot; do not arm (§3).
+   ```
+
+   - **No stacking is already handled; do not add a lock.**
+     advance-work-from-plan §1b and meta-orchestration step 2b take
+     `scripts/cycle-checkout-lock.sh`. On overlap they refuse without
+     retrying, and the next fire tries again on its own clock.
+   - **An empty queue is a quiet hold, not an exit.** Keep the cron armed;
+     a cycle that finds nothing reports `refused:no-tier-work` or an empty
+     batch and ends. Tell the coordinator when that happens: an idle fleet
+     is a coordinator problem, not a reason for the worker to leave.
+   - **A session cron fires only while this session is open, and it expires
+     after 7 days.** Arming it and then ending the session arms nothing. That
+     is how lenovinha's join on 2026-09-22 went quiet: it worked through its
+     batch and exited with no slot armed. After arming, list the job
+     (CronList) and paste the line, then end your turn with the session
+     still open.
 
 ## 6 — Verify
 

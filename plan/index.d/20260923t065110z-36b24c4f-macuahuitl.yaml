@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-salvage-rescue-path-refuses-with-the-wrong-cause-and-its-fixture-captures-that-refusal-into-silence-so-a-real-failure-reports-as-an-empty-verdict-at-rc-zero-on-both-loci
+    field: next_action
+    value: |-
+      Fix the FIXTURE first and separately from the script, because the two defects hide each other: while the fixture swallows stderr, any fix to the script's wording is invisible to the arm, and while the script refuses with the wrong cause, a reader of a fixed fixture is told something untrue. Take 2>/dev/null out of that capture, or capture stderr into a variable the failure message prints. Then correct the rescue path to distinguish NOT FOUND from RETURNED NOTHING. Prove each by mutation, and run the arm at BOTH loci — it is not a locus defect and a one-locus pass would not show it.
+
+
+      [2026-09-23T06:51:10Z macuahuitl] LEFT (2026-09-23): c1ed34566 684d113f7, test-salvage-net ok on Linux. A Windows MINGW64 host runs the arm and records a mutation run.
+    ts: "2026-09-23T06:51:10Z"
+    host: macuahuitl
