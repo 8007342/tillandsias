@@ -738,7 +738,12 @@ pub fn build(state: &MenuState) -> MenuStructure {
 /// machinery stays live because a desktop that really clips needs a remedy and
 /// because a code path with no live caller is how 591-33s6 survived seven weeks
 /// green.
-fn paginate(rows: Vec<MenuItem>, id_prefix: &str, page_size: Option<usize>, page: usize) -> Vec<MenuItem> {
+fn paginate(
+    rows: Vec<MenuItem>,
+    id_prefix: &str,
+    page_size: Option<usize>,
+    page: usize,
+) -> Vec<MenuItem> {
     let take = match page_size {
         Some(n) => rows.len().min(n),
         None => rows.len(),
@@ -757,7 +762,12 @@ fn paginate(rows: Vec<MenuItem>, id_prefix: &str, page_size: Option<usize>, page
     debug_assert!(!children.is_empty(), "a page link must never be childless");
     if !children.is_empty() {
         rows.push(MenuItem::submenu(
-            format!("{}.{}.{}", ids::CLOUD_PROJECTS_OVERFLOW, id_prefix, page + 1),
+            format!(
+                "{}.{}.{}",
+                ids::CLOUD_PROJECTS_OVERFLOW,
+                id_prefix,
+                page + 1
+            ),
             format!("\u{2026} {remaining} more"),
             children,
         ));
@@ -1143,9 +1153,9 @@ mod tests {
             // rather than a single constant, so a future divergence is
             // expressed here rather than discovered by an operator.
             let expected_last = match target {
-                TargetSurface::LinuxTray | TargetSurface::WindowsTray | TargetSurface::MacosTray => {
-                    ids::QUIT
-                }
+                TargetSurface::LinuxTray
+                | TargetSurface::WindowsTray
+                | TargetSurface::MacosTray => ids::QUIT,
             };
             assert_eq!(
                 seq.last().map(String::as_str),
@@ -1337,13 +1347,17 @@ mod tests {
         // one leaf per agent — so the raw count is 7 x 22. The invariant worth
         // asserting is the operator's: every PROJECT is reachable, so the
         // DISTINCT project names are counted rather than the leaves.
-        assert_eq!(reachable(cloud_node), 7 * 22, "one leaf per (project, agent)");
+        assert_eq!(
+            reachable(cloud_node),
+            7 * 22,
+            "one leaf per (project, agent)"
+        );
         let mut names: Vec<&str> = Vec::new();
         fn collect<'a>(node: &'a MenuItem, out: &mut Vec<&'a str>) {
-            if let Some(rest) = node.id.strip_prefix("project.cloud.") {
-                if let Some((name, _verb)) = rest.rsplit_once('.') {
-                    out.push(name);
-                }
+            if let Some(rest) = node.id.strip_prefix("project.cloud.")
+                && let Some((name, _verb)) = rest.rsplit_once('.')
+            {
+                out.push(name);
             }
             for c in &node.children {
                 collect(c, out);
@@ -1753,7 +1767,11 @@ mod tests {
             cloud.children.iter().all(|a| a.enabled),
             "the AGENT rows stay enabled so their projects remain reachable"
         );
-        let leaves: Vec<&MenuItem> = cloud.children.iter().flat_map(|a| a.children.iter()).collect();
+        let leaves: Vec<&MenuItem> = cloud
+            .children
+            .iter()
+            .flat_map(|a| a.children.iter())
+            .collect();
         assert_eq!(leaves.len(), 7, "one leaf per (project, verb)");
         assert!(leaves.iter().all(|l| !l.enabled));
         assert!(
@@ -1804,7 +1822,9 @@ mod tests {
         assert!(cloud.children[3].children[0].id.ends_with(".antigravity"));
         assert!(cloud.children[6].children[0].id.ends_with(".maintenance"));
         assert!(
-            cloud.children[0].children[0].id.starts_with("project.cloud.myapp."),
+            cloud.children[0].children[0]
+                .id
+                .starts_with("project.cloud.myapp."),
             "leaf id grammar unchanged: {}",
             cloud.children[0].children[0].id
         );
