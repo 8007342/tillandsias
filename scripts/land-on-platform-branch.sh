@@ -416,6 +416,14 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # full gate run each time. Measured 2026-08-23: an expired GitHub token cost
     # four gate cycles and reported "origin moved" for all of them.
     _plog="${TMPDIR:-/tmp}/land-push.$$.log"
+    # ORDER 1366-d5v2. PUSH HEAD, NAMED, and remember where origin stood. This
+    # loop integrates and gates HEAD; it used to push the LOCAL branch of the
+    # target's name, so a run from a work branch gated one tree and pushed
+    # another (measured on yoga 2026-09-23: a stale local linux-next, refused
+    # non-fast-forward four times, each reported as "origin moved" while
+    # origin sat still). The before-sha is what makes "origin moved" a
+    # measurement rather than a guess.
+    _origin_before="$(git rev-parse -q --verify "origin/$BRANCH" 2>/dev/null || true)"
     # ORDER 1131-iax2: BOUND THE PUSH. `git push` has no timeout of its own, and a
     # credential helper that blocks makes it hang FOREVER — the outer land
     # timeout is the only thing that ends it, and what it produces is a
@@ -497,7 +505,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     _auth_retried=0
     while :; do
     if [ -n "$_bounder" ]; then
-        "$_bounder" "$_push_timeout" git push origin "$BRANCH" > "$_plog" 2>&1
+        "$_bounder" "$_push_timeout" git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
         rc=$?
     else
         # No coreutils timeout (some macOS hosts without gnu-coreutils): do not
@@ -510,7 +518,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # better than silence, but it is not a fix, and the packet says so.
         echo "land: warn — no 'timeout' or 'gtimeout' found; push is UNBOUNDED on this host (1131-iax2)" >&2
         echo "land:        install GNU coreutils to bound it: brew install coreutils" >&2
-        git push origin "$BRANCH" > "$_plog" 2>&1
+        git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
         rc=$?
     fi
     if [ "$rc" -ne 0 ] && [ "$_auth_retried" -eq 0 ] \
@@ -580,6 +588,19 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         if grep -qiE "authentication failed|invalid username or token|could not read Username|Permission denied \(publickey\)" "$_plog"; then
             echo "refused:land:auth-failed — git cannot authenticate to origin." >&2
             sed -n '1,3p' "$_plog" >&2
+            # ORDER 1366-d5v2. A store helper with a RELATIVE --file= resolves
+            # against the working directory, and in a linked worktree .git is a
+            # FILE, so the helper cannot open its store and the push reads as
+            # an auth failure on a host whose credential is fine. Name it: the
+            # remedy is different (land from the main checkout, or make the
+            # path absolute) and no re-auth is involved.
+            _helper_rel="$(git config --get-all credential.helper 2>/dev/null | sed -n 's/.*--file=\([^/~][^ ]*\).*/\1/p' | head -n 1)"
+            if [ -n "$_helper_rel" ] && [ -f "$(git rev-parse --show-toplevel 2>/dev/null)/.git" ]; then
+                echo "  cause:land:relative-credential-store-in-linked-worktree:$_helper_rel" >&2
+                echo "  The credential helper reads '$_helper_rel', a RELATIVE path, and this is a" >&2
+                echo "  linked worktree, whose .git is a file. Land from the main checkout, or set the" >&2
+                echo "  helper's --file to an absolute path under \$(git rev-parse --git-common-dir)." >&2
+            fi
             echo "  The commit is safe locally; nothing was lost. STOP HERE and report the" >&2
             echo "  blocker: do NOT run 'gh auth login' or 'gh auth refresh' — a re-auth on one" >&2
             echo "  host evicts the operator's token on the others (1025-a896). The operator" >&2
@@ -666,15 +687,28 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             rm -f "$_plog"; exit 6
         fi
     fi
-    rm -f "$_plog"
+    # _plog is kept until the verdict below: a push that failed with origin
+    # unmoved prints it (1366-d5v2).
 
     # The only proof that counts: ask the remote.
     git fetch -q origin "$BRANCH" 2>/dev/null
     if git merge-base --is-ancestor HEAD "origin/$BRANCH" 2>/dev/null; then
+        rm -f "$_plog"
         echo "ok:land:$(git rev-parse --short HEAD):attempt-$attempt"
         exit 0
     fi
-    echo "land: push did not land (rc=$rc); origin moved — retrying"
+    # ORDER 1366-d5v2. "origin moved" is now MEASURED: compare origin's head
+    # after the failed push with the head recorded before it. If origin did
+    # not move, this was not a lost race, retrying cannot help, and the push's
+    # own words are the diagnosis.
+    _origin_after="$(git rev-parse -q --verify "origin/$BRANCH" 2>/dev/null || true)"
+    if [ -n "$_origin_before" ] && [ "$_origin_after" = "$_origin_before" ]; then
+        echo "refused:land:push-failed-origin-unmoved:${_origin_before:0:9} — the push did not land (rc=$rc) and origin/$BRANCH did not move, so this was not a lost race" >&2
+        [ -s "$_plog" ] && sed -n '1,8p' "$_plog" >&2
+        rm -f "$_plog"; exit 6
+    fi
+    rm -f "$_plog"
+    echo "land: push did not land (rc=$rc); origin moved ${_origin_before:0:9} -> ${_origin_after:0:9} — retrying"
 done
 
 echo "refused:land:attempts-exhausted:$ATTEMPTS — origin is moving faster than this host gates" >&2
