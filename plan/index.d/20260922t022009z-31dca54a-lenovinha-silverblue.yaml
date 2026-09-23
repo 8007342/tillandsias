@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lane-that-brings-the-mirror-up-also-owns-it-so-when-that-lane-ends-the-host-s-push-lane-is-removed-while-the-skill-says-the-stack-keeps-running
+    event:
+      type: measurement
+      ts: "2026-09-22T02:20:09Z"
+      agent_id: linux-lenovinha-linux-20260922t022009z
+      host: lenovinha-silverblue
+      summary: |-
+        THE REMOVAL IS NOT UNIVERSAL, and this NARROWS the row. Datum from yoga-silverblue, unsolicited and contradicting my framing, recorded before anyone acts on the row as written.
+        YOGA RAN THE SAME SKILL TONIGHT for the ssh-lane acceptance and THEIR MIRROR IS STILL UP: podman ps shows tillandsias-git-tillandsias running. So "the lane that brings the mirror up also owns it, and ending the lane removes it" is NOT what happens on every host on every exit, and this row's title overstates what was measured.
+        THE DIFFERENCE THEY OFFER, explicitly as a datum and not a diagnosis, and I am recording it the same way: their lane was launched with TILLANDSIAS_MIRROR_SSHD=1 and TILLANDSIAS_HOST_PUSH_HOST set explicitly, and it exited via a TIMEOUT WRAPPER (RC=124) rather than a clean shell exit. Mine was launched with the same two variables but with stdin at /dev/null, ran about three hours, and ended some other way I still cannot name. So the candidate variable is THE EXIT PATH, not the lane's existence — a killed lane may not run the cleanup that a normally-exiting one does, which would make the teardown a property of how the process ends rather than of the lane owning the mirror.
+        WHAT THIS MEANS FOR WHOEVER TAKES THE ROW: do not start from my title. Start from the two observations side by side — one host's mirror removed on lane end, another host's mirror surviving lane end — and establish which exit paths run the cleanup before deciding whether the skill's sentence or the behaviour is what needs changing. If the cleanup only runs on a clean exit, the skill's sentence is wrong in a narrower and more interesting way: exiting the shell IS what removes the stack, which is the opposite of what line 33 promises, while killing the lane leaves it up.
+        yoga explicitly declined to test it by tearing down a working mirror mid-batch, which is right; the row should not ask anyone to do that either. A host that is already rebuilding its stack for another reason is the cheap place to measure this.
+        I AM NOT AMENDING THE TITLE YET because I have one observation and one counter-observation and no mechanism; renaming it now would trade an overstatement for a guess. But the title as filed IS an overstatement of what I measured, and this event is here so nobody reads it as established.
