@@ -1784,6 +1784,16 @@ fn quote_timestamp_line(line: &str) -> String {
     }
 }
 
+/// True when a rendered `key: |`-style line opens a block scalar, so every
+/// deeper-indented line after it is content, not structure.
+fn opens_block_scalar(line: &str) -> bool {
+    let Some((_, v)) = line.trim_end().rsplit_once(": ") else {
+        return false;
+    };
+    v.strip_prefix(['|', '>'])
+        .is_some_and(|ind| ind.chars().all(|c| matches!(c, '-' | '+' | '0'..='9')))
+}
+
 /// A single-line YAML rendering of `v`, or `None` when it cannot be one line.
 fn scalar_text(v: &Value) -> Option<String> {
     // A YAML-1.1 timestamp must carry quotes into the base; see above.
@@ -1867,8 +1877,27 @@ fn render_list_item(item: &Value, indent: usize) -> String {
             // column.
             let s = serde_yaml::to_string(&vec![item.clone()]).expect("a mapping item serializes");
             let s = s.trim_end_matches('\n');
+            // Quote only STRUCTURAL lines. A line inside a literal block scalar
+            // is a peer's prose, and prose may open `word: 2026-09-20 17:37:30`,
+            // which the predicate rightly calls a timestamp. Re-quoting it
+            // rewrote a summary in the system of record (the 1107-bb6s shape,
+            // hit again past the predicate fix): the caller must not ask.
+            let mut block_key_col: Option<usize> = None;
             s.lines()
-                .map(|l| format!("{pad}{}\n", quote_timestamp_line(l)))
+                .map(|l| {
+                    let col = l.len() - l.trim_start().len();
+                    if let Some(k) = block_key_col {
+                        if l.trim().is_empty() || col > k {
+                            return format!("{pad}{l}\n");
+                        }
+                        block_key_col = None;
+                    }
+                    if opens_block_scalar(l) {
+                        let key = l.trim_start().trim_start_matches("- ");
+                        block_key_col = Some(l.len() - key.len());
+                    }
+                    format!("{pad}{}\n", quote_timestamp_line(l))
+                })
                 .collect()
         }
         Value::String(s) if s.contains('\n') => format!("{pad}- {}\n", block_scalar(s, indent + 4)),
@@ -2853,6 +2882,30 @@ packets:
     /// answered `false` more often would pass the prose cases and silently
     /// un-quote real timestamps, reopening 729-biik (Psych reads a bare
     /// YAML-1.1 timestamp as `Time`, which `safe_load` refuses).
+    /// A literal block scalar inside an event is prose, and prose may carry a
+    /// line shaped `key: <real timestamp> ...`. The predicate is right to call
+    /// that value a timestamp; the renderer must never have asked. Specimen:
+    /// macneo's 1347-r9g8 note, plan/index.d/20260923t030240z-2739c750-macneo.yaml.
+    #[test]
+    fn a_key_value_line_inside_a_block_scalar_round_trips_byte_identical() {
+        let summary = "THIRD SIGABRT.\n\n  2026-09-22 19:13:49 PDT \u{2014} third on macuahuitl, ALL THREE MID-GATE.\n2026-09-22 19:13:49\n\nEarlier two on that host: 2026-09-20 17:37:30 PDT and 2026-09-21 14:48:03 PDT.\n  ts: 2026-09-21T22:14:24Z\n- key: 2026-09-21T22:14:24Z\n# note: 2026-09-21 14:42:03\nend";
+        let mut m = serde_yaml::Mapping::new();
+        m.insert("type".into(), "note".into());
+        m.insert("ts".into(), "2026-09-23T03:02:40Z".into());
+        m.insert("summary".into(), summary.into());
+        let text = render_list_item(&Value::Mapping(m), 6);
+        assert!(
+            text.contains("ts: \"2026-09-23T03:02:40Z\""),
+            "the structural ts is still quoted: {text}"
+        );
+        let back: Vec<Value> = serde_yaml::from_str(&text).expect("rendered item parses");
+        assert_eq!(
+            back[0].get("summary").and_then(Value::as_str),
+            Some(summary),
+            "block-scalar prose must round-trip byte-identical"
+        );
+    }
+
     #[test]
     fn prose_opening_with_a_date_is_not_a_yaml11_timestamp() {
         for s in [
