@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Events go to the OVERLAY, never to plan/index.yaml (699-usxc, 966-7umc).
+# The `event:` block is mandatory (812-d45t).
+events:
+  - packet_id: the-ssh-push-lane-is-wired-end-to-end-so-a-host-push-reaches-github-through-its-own-mirror-with-no-credential-on-the-host-side-of-the-hop
+    event:
+      type: note
+      ts: "2026-09-23T19:34:45Z"
+      agent_id: linux-lenovinha-claude-20260923
+      host: lenovinha
+      summary: |
+        SALVAGE REF FOR 1310-5e6g DELETED. EVERYTHING ON IT IS ON TRUNK.
+
+        This is recorded on this row because 1310-5e6g was never written as a
+        row: its code was re-cited here (1313-prin). The ref was
+        salvage/lenovinha-silverblue/20260920-1310-5e6g-wires-rows-and-skill,
+        tip 2d009dbff, a WIP commit that said "three build_git_run_args call
+        sites still to update". It was checked symbol by symbol against
+        origin/linux-next at 13084ac10+ on 2026-09-23 before deletion.
+        Every addition is already present:
+
+          crates/tillandsias-headless/src/main.rs
+            MIRROR_SSHD_HOST_PORT
+            git_run_args_pass_the_ssh_lane_flag_into_the_mirror (test)
+            ssh_lane_flag_has_a_single_source_of_truth (test)
+            mint_git_mirror_host_signer_auto_auth
+            build_git_run_args host_signer_secret parameter
+            the three call sites the WIP tip named as unfinished, all passing
+            the secret: opencode, opencode-web and forge launch
+          crates/tillandsias-headless/src/vault_bootstrap.rs
+            mirror_host_signer_role_name
+            provision_host_signer_approle
+            provision_host_signer_approle_for_launch
+            host_signer_role_name_equals_its_policy_name (test)
+            host_signer_approle_binds_exactly_one_policy (test)
+
+        Where each part landed:
+          code: e60ee5ee9 (1313-prin, the ssh lane's consumption half)
+          plan fragments: e4e9bf314 (relay of the 2026-09-20 fragments)
+          initialize-bare-metal-host skill half: 49897e337, f6dcfc796
+
+        A rebase onto trunk would be empty. The coordinator approved
+        deletion on 2026-09-23 on the strength of this check.
+      provenance: |
+        lenovinha-silverblue, on the coordinator's ruling of 2026-09-23, so
+        the reason for the deletion outlives the ref.
