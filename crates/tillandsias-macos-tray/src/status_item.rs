@@ -428,7 +428,10 @@ mod tests {
         );
         let size = unsafe { image.size() };
         assert_eq!(size.width, 18.0, "icon width must be set for the menu bar");
-        assert_eq!(size.height, 18.0, "icon height must be set for the menu bar");
+        assert_eq!(
+            size.height, 18.0,
+            "icon height must be set for the menu bar"
+        );
         assert!(
             unsafe { image.isTemplate() },
             "the icon must be a template image, or it will not invert in a dark menu bar"
@@ -464,4 +467,3 @@ mod tests {
         );
     }
 }
-
