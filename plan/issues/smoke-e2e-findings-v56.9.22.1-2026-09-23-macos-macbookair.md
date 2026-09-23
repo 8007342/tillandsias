@@ -16,8 +16,8 @@ macbookair is an operator workstation. The destructive §1 (installer swaps /App
 - (d) Launched by launchd (PPID 1), i.e. open -a / Finder / login, from /Applications. **This does not matter.** See below.
 
 ## Finding: the bundle candidate path is off by one directory
-status_item.rs:203-209 pops the exe name (-> Contents/MacOS), then calls .parent() TWICE (-> Tillandsias.app), then joins "Resources/tray-icon.png".
+status_item.rs `status_icon_candidate_paths()` pops the exe name (-> Contents/MacOS), then calls .parent() TWICE (-> Tillandsias.app), then joins "Resources/tray-icon.png".
 So the path resolves to /Applications/Tillandsias.app/Resources/tray-icon.png, which is ABSENT (verified with ls). The file really lives under Contents/Resources.
 The only other candidate is the baked CARGO_MANIFEST_DIR: /Users/runner/work/tillandsias/tillandsias/crates/tillandsias-macos-tray/assets/tray-icon.png (from `strings` on the release binary), which exists on no user Mac.
 So every CI-built tray falls back to "T", however it is launched. Dev builds show the plant only because the source tree exists locally. That explains why nobody on the fleet saw it.
-Consequence for 1367-irnh: its context says ":208 <exe>/../Contents/Resources (packaged runs only)" works. It does not; packaged runs are broken too. Embedding the PNG fixes both. Closure (1) should also launch the INSTALLED .app of a CI-built artifact, not only a bare binary in /tmp.
+Consequence for 1367-irnh: its context says the bundle candidate works for packaged runs. It does not; packaged runs are broken too. Embedding the PNG fixes both. Closure (1) should also launch the INSTALLED .app of a CI-built artifact, not only a bare binary in /tmp.
