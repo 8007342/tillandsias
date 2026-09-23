@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    field: status
+    value: in_progress
+    ts: "2026-09-23T21:16:14Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    event:
+      type: note
+      ts: "2026-09-23T21:16:14Z"
+      host: yolanda-windows
+      summary: |-
+        claim
