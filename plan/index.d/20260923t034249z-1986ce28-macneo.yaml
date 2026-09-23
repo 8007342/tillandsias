@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-step-wired-from-one-regime-reddened-the-other-regime-twice-in-one-day-so-a-step-needs-a-recorded-second-regime-run-before-it-enters-check
+    event:
+      type: evidence
+      ts: "2026-09-23T03:42:49Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260923t034249z
+      host: macneo
+      summary: |
+        CLOSED. Every criterion in the closure holds on trunk, verified by artifact
+        rather than by recollection, on 2026-09-23 from macneo.
+
+          scripts/check-gate-step-regimes.sh          on trunk
+          scripts/test-gate-step-regimes.sh           on trunk, bound by gate step 312
+          scripts/gate-steps.d/312-1302-7j8p.step     binds the checker, carries its own record
+          scripts/gate-steps.d/313-1302-7j8p-fixture.step  binds the fixture (885-92iu)
+          methodology/convergence.yaml                carries the rule, and the STRONGER
+                                                      form landed separately as #155
+          ok:gate-step-regimes:94 measured on the merged tree
+
+        EVIDENCE REFS: work/1302-7j8p at 31803fbba, landed in land81 at 4e8869dbd,
+        confirmed an ancestor of origin/linux-next by both macneo and macuahuitl
+        independently. The convergence follow-up is #155.
+
+        THE CLOSURE STRING DIFFERS FROM THE ROW ON PURPOSE and the pointer is already on
+        this packet in two places: the fixture prints ok:gate-step-regimes-fixture:4/4,
+        not the 3/3 the row named. Arm 4 asserts that a NAMED SKIP counts as a record —
+        without it a checker satisfies arms 1-3 while refusing steps that genuinely
+        cannot run off Linux, which makes the backfill impossible to finish honestly
+        (965-sxec). Coordinator ruling macuahuitl-fedora 2026-09-22: keep arm 4.
+
+        WHAT THIS ROW EARNED WITHIN A DAY, worth recording at close because it is the
+        only evidence that a guard was worth building: land80 refused with
+        violation:gate-step-single-regime:420-1352-vmbc.step, exactly one of 92 — the
+        gate step for the setsid capability probe, authored before this checker existed,
+        guarding a defect that CANNOT OCCUR ON LINUX and about to enter the gate on a
+        Linux attestation. Caught by construction rather than by anyone remembering.
+
+        WHAT IS NOT CLOSED BY THIS and is not this row's debt: the Windows half of the
+        second-regime backfill still needs a host on that regime. It was routed at
+        filing time and remains routed.
