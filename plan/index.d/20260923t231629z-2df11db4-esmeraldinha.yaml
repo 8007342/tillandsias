@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    field: status
+    value: completed
+    ts: "2026-09-23T23:16:29Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: completed
+      ts: "2026-09-23T23:16:29Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: commit:62e5115b3,commit:26eedbe90,fragment:plan/index.d/20260922t105015z-0d69fd1f-esmeraldinha.yaml,fragment:plan/index.d/20260922t105225z-101bde32-esmeraldinha.yaml
+  - packet_id: eight-litmus-fixtures-are-red-at-the-mingw-locus-because-they-assert-about-a-world-they-never-built-four-mechanisms-and-one-open-cargo-arm
+    event:
+      type: note
+      ts: "2026-09-23T23:16:29Z"
+      host: esmeraldinha
+      summary: |-
+        Closed by re-route plus one step fix. The only arm left to fix was the fifth mechanism: e2e-eligibility-probe-shape step 9 pinned a verdict that the Windows branch of e2e-preflight.sh cannot emit. It now prints a named skip at MINGW/MSYS/CYGWIN, and e2e-preflight.sh is untouched per the coordinator ruling. That fix landed on origin/linux-next at 62e5115b3, verified by content: the skip line is present on trunk. Of the other 22 Sep arms, five are budget kills (1187-iij8, closed), one fails on every locus (1354-dw8x), and one is capability-absent (opencode-prompt-e2e-shape). The four originally named mechanisms: none is confirmed today. Unmeasured: 10 forge-environment-discoverability litmus that my 25-minute cap cut on 2026-09-22. This closure does not claim them.
