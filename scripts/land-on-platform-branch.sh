@@ -702,8 +702,17 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # not move, this was not a lost race, retrying cannot help, and the push's
     # own words are the diagnosis.
     _origin_after="$(git rev-parse -q --verify "origin/$BRANCH" 2>/dev/null || true)"
-    if [ -n "$_origin_before" ] && [ "$_origin_after" = "$_origin_before" ]; then
-        echo "refused:land:push-failed-origin-unmoved:${_origin_before:0:9} — the push did not land (rc=$rc) and origin/$BRANCH did not move, so this was not a lost race" >&2
+    # CLASSIFY BY ANCESTRY, NOT BY A BEFORE/AFTER COMPARE (2026-09-23). The
+    # gate itself fetches, so a "before" read at push time already contains
+    # any push that landed DURING the gate, and comparing against it called a
+    # genuine lost race "unmoved" (macuahuitl's relay land, rc 6, while four
+    # plan-lane pushes had landed mid-gate). The question that decides retry
+    # is whether origin holds commits this HEAD never integrated. If it does,
+    # the race was lost and the loop re-integrates. If origin is already
+    # contained in HEAD and the push still failed, nothing moved that
+    # matters, and the push's own words are the diagnosis.
+    if [ -n "$_origin_after" ] && git merge-base --is-ancestor "origin/$BRANCH" HEAD 2>/dev/null; then
+        echo "refused:land:push-failed-origin-unmoved:${_origin_after:0:9} — the push did not land (rc=$rc) and origin/$BRANCH holds nothing this HEAD lacks, so this was not a lost race" >&2
         [ -s "$_plog" ] && sed -n '1,8p' "$_plog" >&2
         rm -f "$_plog"; exit 6
     fi
