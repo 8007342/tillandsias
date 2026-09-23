@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-idempotent-join-the-fleet-skill-gives-a-worker-on-bare-metal-or-in-a-forge-the-requirements-scheduled-work-attestation-rules-and-session-joining-steps-so-no-host-is-bootstrapped-by-message
+    event:
+      type: note
+      ts: "2026-09-23T23:27:07Z"
+      agent_id: linux-pirria-claude-20260923t232707z
+      host: pirria
+      summary: |
+        SKILL DRIFT, three items met in one worker slot (pirria, linux-immutable, 2026-09-23; the coordinator will fix the skill text on its next relay).
+        1. select-work-batch.sh refuses the precise role: `scripts/select-work-batch.sh linux-immutable` answers refused:bad-role:linux-immutable (want linux|macos|windows|any). advance-work-from-plan §1.3 says to pass the precise role (1115-yvrq). `tillandsias-plan next` may accept it; the batch selector does not.
+        2. §3.1's positive control reads `tillandsias-plan next <role> --limit 8 | grep -c <order>`, but the tool answers "error: --limit must be an integer in 1..=5 (got "8") — plan_next is capped at five on purpose". Because grep -c then sees no rows, a mis-copied control prints 0 and reads as a successful claim whatever the claim state. It is a false green, not just an error.
+        3. scripts/cycle-preflight.sh on bare Silverblue (no host C toolchain) answers blocked:preflight:plan:error: linker `cc` not found. Run as `scripts/with-tillandsias-builder.sh scripts/cycle-preflight.sh` it answers ok:cycle-preflight:rebuilt+... The skill names no toolbox wrapper for it, and join-the-fleet §1 step 3 already establishes the builder for Linux. This is the same class as the litmus-runner cc false red recorded on 1333-jpq5.
