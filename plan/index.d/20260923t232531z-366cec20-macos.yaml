@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-23T23:25:31Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260923t232531z
+      host: macos
+      summary: |
+        macbookair (macOS, bash 3.2 + system/brew ruby): two IN-GATE ./build.sh --check runs on 2026-09-23, rc=1 (unrelated citation guard) and rc=0. NEITHER shows the refusal.
+        Verified POSITIONALLY per the pickup instruction. In each log the phase line "Checking the plan archiver preserves the ready set (831-ezea)" is followed directly by "Running in check mode..." and "ok:archive-answerability:333/333 ... ready set unchanged at 632": a REAL run, and no archiver-check-memoized line sits between the phase line and the verdict (the memo token appears only later, inside the 911-m7js fixture's own arms).
+        The 965-sxec fixture passed 4/4 in-gate both times, and the 1132-r4mt self-naming fixture passed 5/5.
+        This adds a third host/regime (macOS) with no in-gate rc=3. It argues toward the pickup note's closing question: were the original two reports memo replays or absent steps, not refusals? Not claimed; still no refusing log to stage the out2 print against.
