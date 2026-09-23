@@ -11,3 +11,11 @@ STEP_DESC="Checking the clearer retries subuid-owned vault-data through podman u
 STEP_SCRIPT="scripts/test-clear-vault-credentials-partial-is-nonzero.sh"
 STEP_ERROR="the credential clearer regressed (1188-vixu / 1284-jf86) — a subuid-owned vault-data is no longer retried through podman unshare, or a partial clear exits 0 again (the room reads cold while it is warm); see the verdict line above"
 STEP_OK="Partial-clear exit and podman-unshare retry check passed"
+#
+# SCOPE OF THE SECOND-REGIME RECORD (macneo's caveat, recorded with it): the
+# darwin run attests that this FIXTURE is correct and portable under bash 3.2.
+# It does not exercise the clearer's own macOS behaviour, because there is
+# none: the clearer reaches the keychain only through secret-tool, which is
+# absent there, so its real darwin path is could-not-run:no-secret-tool. If
+# the clearer grows a macOS `security` arm, this record does not cover it.
+STEP_SECOND_REGIME="macneo 2026-09-23 darwin ok:clear-vault-credentials-partial-is-nonzero:4/4"
