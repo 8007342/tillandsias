@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: released
+      ts: "2026-09-23T03:46:10Z"
+      agent_id: windows-yolanda-claude-20260923t034610z
+      host: yolanda-windows
+      summary: |
+        RELEASED TO READY by yolanda-windows during a cleanup session, on the coordinator's direction. Idle since 2026-09-22T16:14Z; nobody holds this now.
+
+        ALREADY ON TRUNK (linux-next): f461e6179 and 062396fd6, landed by 2d8f90b31. The installer reads .wslconfig, reports the guest shape (vCPUs, memory, whether autoMemoryReclaim is set), warns on a ratio, and offers a config on consent. The 1339-had5 gate fixes (d051a120c, f64b1a442) are on trunk too.
+
+        WHAT IS LEFT, for someone who has not seen this row before:
+        1. THE THRESHOLD WAS NEVER MEASURED. The installer flags anything under 700 MB per vCPU. That number was picked so that 320 would trip it. At 512 MB per vCPU this host completed a 6704 s build.sh --check with no reap (2026-09-21), yet the installer flags that setup as dangerous. Either derive the threshold from measurement, or label it provisional in the message and cite its evidence.
+        2. THE ADVICE IS NOT COMPARED WITH THE CONFIG IN FORCE. In the v56.9.22.1 smoke the installer recommended a .wslconfig byte-identical to the one already applied. Never print a recommendation that equals the current config.
+        3. THE FIXTURE CANNOT CATCH EITHER DEFECT. Its seven arms read the source; none asserts WHICH configurations trigger the warning. Add a known-good arm (512 MB/vCPU with reclaim set) that asserts silence, and an already-applied arm that asserts no recommendation.
+        4. THE CHEATSHEET CRITERION IS UNMET. No cheatsheet contains the measured values: 320 MB/vCPU failure, processors is a policy not a number, one VM shared by all distros, the drop_caches lever with its numbers, and that CARGO_BUILD_JOBS does not bound test threads.
+        Items 1-3 need a real Windows host to verify behaviour. Item 4 can be done anywhere.

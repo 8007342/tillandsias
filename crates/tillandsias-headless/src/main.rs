@@ -11033,6 +11033,15 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(&flag, debug);
 
+    // ORDER 1364-27f8. The non-interactive lane reads an EXISTING identity, so
+    // resolve it before anything is collected: a missing gitconfig refuses here
+    // with no token consumed. Resolved after the token instead, the refusal
+    // discarded a token gh had already accepted (1052-984i's field repro).
+    let github_stdin_identity = match (&config.provider, config.input_mode) {
+        (ProviderId::GitHub, LoginInputMode::StdinToken) => Some(resolve_existing_git_identity()?),
+        _ => None,
+    };
+
     // Without `--debug` this whole preflight was SILENT, and on a cold guest it
     // loads a ~580MB image and brings up Vault + the enclave proxy — minutes of
     // a terminal that shows literally nothing, which reads to an operator as a
@@ -11220,13 +11229,6 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     run_podman_command(login, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
-        match config.input_mode {
-            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
-            LoginInputMode::StdinToken => store_existing_git_identity()?,
-        }
-    }
-
-    if matches!(config.provider, ProviderId::GitHub) {
         let mut auth_status = podman_command();
         auth_status.args([
             "exec",
@@ -11295,6 +11297,20 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         return Err(format!(
             "vault feature not compiled; cannot store {provider_name} token"
         ));
+    }
+
+    // ORDER 1364-27f8. Identity comes AFTER the Vault write is verified. The
+    // operator still sees token first, identity second (directive 2026-07-29),
+    // but a typo in these prompts can no longer throw away a token that gh
+    // accepted: the helper container holding it is removed on any early return.
+    if matches!(config.provider, ProviderId::GitHub) {
+        let identity = match github_stdin_identity {
+            Some((name, email)) => store_git_identity(&name, &email),
+            None => prompt_and_store_git_identity(),
+        };
+        identity.map_err(|e| {
+            format!("{provider_name} token is stored in Vault; git identity was not saved: {e}")
+        })?;
     }
 
     let mut username: Option<String> = None;
@@ -11491,7 +11507,9 @@ fn git_identity_missing_message(field: &str) -> String {
     )
 }
 
-fn store_existing_git_identity() -> Result<(), String> {
+/// Read and validate the identity the non-interactive lane will store, without
+/// storing it — so the caller can refuse before a token is collected.
+fn resolve_existing_git_identity() -> Result<(String, String), String> {
     let current = read_git_identity_defaults();
     let name = current
         .name
@@ -11500,16 +11518,22 @@ fn store_existing_git_identity() -> Result<(), String> {
         .email
         .ok_or_else(|| git_identity_missing_message("user.email"))?;
 
-    store_git_identity(&name, &email)
+    validate_git_identity(&name, &email)?;
+    Ok((name, email))
 }
 
-fn store_git_identity(name: &str, email: &str) -> Result<(), String> {
+fn validate_git_identity(name: &str, email: &str) -> Result<(), String> {
     if name.trim().is_empty() {
         return Err("Git author name cannot be empty".to_string());
     }
     if !email.contains('@') || email.trim().contains(char::is_whitespace) {
         return Err("Git author email must look like an email address".to_string());
     }
+    Ok(())
+}
+
+fn store_git_identity(name: &str, email: &str) -> Result<(), String> {
+    validate_git_identity(name, email)?;
 
     let gitconfig = managed_gitconfig_path()?;
     if let Some(parent) = gitconfig.parent() {
@@ -23270,7 +23294,7 @@ mod tests {
             .find("check_auth_required_services(&required, debug)?")
             .expect("github login must run provider-neutral health preflight");
         let prompt_idx = login_window
-            .find("prompt_and_store_git_identity()?")
+            .find("None => prompt_and_store_git_identity()")
             .expect("github login must prompt for git identity");
         let token_idx = login_window
             .find("config.token_script")
@@ -23306,6 +23330,48 @@ mod tests {
         assert!(
             token_idx < prompt_idx,
             "token entry must precede the git identity prompt: {login_window}"
+        );
+    }
+
+    /// ORDER 1364-27f8. Identity is fallible, and every early return removes the
+    /// helper container holding the collected token, so it must not sit between
+    /// collection and the verified Vault write. The non-interactive lane's
+    /// identity read must precede the login exec, so a missing gitconfig refuses
+    /// before a token is consumed.
+    #[test]
+    fn github_login_identity_cannot_discard_a_collected_token() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        let find = |needle: &str| {
+            login_window
+                .find(needle)
+                .unwrap_or_else(|| panic!("run_provider_login must contain {needle:?}"))
+        };
+        let stdin_identity_idx = find("Some(resolve_existing_git_identity()?)");
+        let login_exec_idx = find("run_podman_command(login, debug)?");
+        let verify_persisted_idx = find("in-container vault write verification failed");
+        let terminal_identity_idx = find("None => prompt_and_store_git_identity()");
+        let stdin_store_idx = find("store_git_identity(&name, &email)");
+
+        assert!(
+            stdin_identity_idx < login_exec_idx,
+            "the --with-token identity must be resolved before the token is collected"
+        );
+        for (label, idx) in [
+            ("terminal identity prompt", terminal_identity_idx),
+            ("stdin identity store", stdin_store_idx),
+        ] {
+            assert!(
+                verify_persisted_idx < idx,
+                "{label} must follow the verified Vault write, or its failure discards the token"
+            );
+        }
+        assert!(
+            !login_window.contains("store_existing_git_identity"),
+            "the store-then-refuse helper must not return to the login flow"
         );
     }
 

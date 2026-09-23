@@ -75,6 +75,10 @@ windows = { version = "0.58", features = [
     # 663-64xi: NotifyIconSettings reconciliation at tray startup.
     "Win32_System_Registry",
 ] }
+# 1335-jz8c: decode the embedded 32x32 tray PNGs into icon resources for
+# CreateIconFromResourceEx. Already in the lockfile via the build-time
+# renderer, so this resolves offline.
+png = "0.17"
 uuid = { workspace = true }
 # File-based tracing: a GUI-subsystem tray has no console, so logs must go to a
 # file (%LOCALAPPDATA%\tillandsias\logs\tray.log) that "Open Log" can surface.

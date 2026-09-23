@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-host-pushes-credential-free-through-its-own-tillandsias-git-mirror-which-relays-to-github-with-a-vault-held-credential-read-once-per-boot-and-the-binary-gains-github-status-logout-refresh
+    field: next_action
+    value: |-
+      lenovinha first, on their own host: revive the dormant vault, wire the checkout's push remote to the local mirror with the relay to GitHub, declare the delegated mode, and prove arms 1-3 on real pushes before touching the lifecycle flags; then the flags in the headless binary with the App-versus-PAT choice written down; then the litmus. Every other Linux host repeats the wiring from the written recipe; macOS and Windows follow once the recipe is proven. The fleet-shared mirror on a Raspberry Pi 5 is a separate row and NOT a prerequisite.
+
+
+      [2026-09-23T03:48:45Z macuahuitl] LEFT (2026-09-23): the mirror never receives TILLANDSIAS_MIRROR_SSHD so its sshd cannot start, and litmus credential-free-push-through-local-mirror does not exist yet. Only side fixes 1309-qc95 and 1313-prin landed.
+    ts: "2026-09-23T03:48:45Z"
+    host: macuahuitl

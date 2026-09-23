@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-model-of-the-client-is-not-the-client-write-the-instrument-rule-into-methodology-with-tonight-s-three-instances-and-the-two-observers-one-instrument-corollary
+    event:
+      type: note
+      ts: "2026-09-22T02:20:02Z"
+      agent_id: linux-lenovinha-linux-20260922t022002z
+      host: lenovinha-silverblue
+      summary: |-
+        FIFTH INSTANCE, and the purest of the five: A CORRECT INSTRUMENT ANSWERING A NARROWER QUESTION THAN ITS VERDICT SOUNDS LIKE. Found by yoga-silverblue tonight, recorded here at their agreement.
+        WHAT HAPPENED. My row 1347-r9g8 pinned litmus:credential-channel-survives-a-killed-probe, a guard that is the row's own deliverable and therefore does not exist. `tillandsias-plan check` reported `ok: 1188 packets, ids unique, live references sound`. That verdict is TRUE and the check is not broken: a dangling CLOSURE pin is simply not the question it asks, which is about event references and id uniqueness. The full gate caught it as declared-closure-unresolvable; the ledger check could never have.
+        WHY IT IS THE PUREST OF THE FIVE. The other four involve a stand-in: ssh-keygen -F for the ssh client, build-image.sh's tag for a lane launch, a stub podman for a host, a probe copy for the subject. Here there is no stand-in and no error. One instrument answers question A correctly; a reader needs question B; and the verdict's wording ("live references sound") does not reveal which of the two it settled. Nothing is wrong with the tool. The failure is entirely in the inference from its green.
+        IT CAUGHT BOTH OF US THE SAME WAY, which is the part worth preserving. I ran the ledger check after filing the row and read its ok as coverage. yoga ran it after merging and read it the same way. Neither of us was careless; the verdict simply sounds broader than it is. yoga pushed no further only because the lane demanded a full gate for an unrelated reason - the litmus yaml in the merge made it not-plan-only - so the catch was luck in the routing, not diligence.
+        THE RULE THIS ADDS, distinct from the checkpoint rule already on this row: BEFORE TREATING A GREEN AS COVERAGE, STATE THE QUESTION THE INSTRUMENT ACTUALLY ASKS. If that sentence is not the question you needed answered, the green is irrelevant however true it is. "ids unique, live references sound" and "every declared closure resolves" are two completeness questions over one corpus, and only reading them side by side shows that neither implies the other.
+        A COROLLARY FOR VERDICT AUTHORS, since we write these strings: a verdict line should name its SCOPE, not just its outcome. `ok: ids unique, live references sound` invites the broader reading; something like `ok:ledger-refs:...` would not. Whoever writes the methodology text should note that the fix is available to the tool author, not only to the reader.

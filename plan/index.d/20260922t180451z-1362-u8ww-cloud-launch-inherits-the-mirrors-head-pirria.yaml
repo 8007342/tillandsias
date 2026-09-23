@@ -1,0 +1,81 @@
+packets:
+  - packet_id: a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch
+    order: 1362-u8ww
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [forge, git-mirror, tray, isolation, branching]
+    estimated_hours: 5
+    owned_files: []
+    observed_by: operator
+    unscoreable: |
+      which-branch-a-forge-SHOULD-start-on: this row does not presume the
+      answer, and the answer is policy rather than measurement. Candidates: the
+      repo's own default as GitHub reports it; the host's platform branch; a
+      fresh branch minted per launch; or the operator's explicit choice at
+      launch time. Each has a different failure mode — a fresh branch per launch
+      is the safest for isolation and the worst for an operator who wanted to
+      continue work. THE ROW IS CLOSED BY A DEFINED BRANCH AND A STATED REASON,
+      not by any particular choice.
+    verifiable_closure: |
+      THE OUTPUT: launching a cloud project twice, from two hosts whose mirrors
+      are at different HEADs, puts both forges on the SAME, NAMED branch — and
+      the launch says which branch it chose, so an operator can tell before
+      typing anything. A reader can check this without inspecting a mirror.
+    summary: |
+      OPERATOR, 2026-09-22: launched an OpenCode session for the cloud project
+      8007342/tillandsias and it "defaulted to this checkout: work/1325-ygq5,
+      which smells like a local checkout".
+
+      IT IS NOT A LOCAL CHECKOUT, AND THAT IS THE INTERESTING PART. The host
+      disk genuinely is untouched — resolve_cloud_project_checkout says so and
+      means it. The forge clones. What it clones from, and what that clone
+      checks out, is the defect.
+
+      MECHANISM, measured end to end rather than inferred from the symptom:
+
+        1. the tray runs `tillandsias --cloud 8007342/tillandsias --opencode`
+           (handle_launch_cloud_project)
+        2. `--cloud` sets TILLANDSIAS_PROJECT_REMOTE_URL to
+           https://github.com/8007342/tillandsias.git
+           (resolve_cloud_project_checkout, main.rs:6775 — "host disk untouched")
+        3. the generated forge gitconfig carries a GitHub -> mirror redirect
+           (`url.<mirror>.insteadOf`, main.rs:12099), so that URL resolves to
+           THIS HOST'S mirror rather than to GitHub
+        4. the mirror's HEAD is a symbolic ref, and a clone checks out whatever
+           it names
+        5. MEASURED on pirria, twice and by two routes — inside the running git
+           container and again from the volume with the container gone:
+             /srv/git/tillandsias  HEAD -> refs/heads/work/1325-ygq5
+           which is the branch this host happened to be working on
+
+      So a launch the UI presents as a REMOTE project silently resolves to local
+      state, and the branch is whatever the mirror's HEAD last named. The
+      operator read it correctly from the branch name alone.
+
+      THE MIRROR HAS A SANE DEFAULT AVAILABLE AND IS NOT POINTING AT IT. 246
+      heads, with both main and linux-next present as loose refs. So this is a
+      HEAD that was never defined rather than a missing branch, and the cheap
+      half of the fix is real.
+
+      WHY IT IS p1 RATHER THAN COSMETIC. An agent launched for a cloud project
+      starts on another host's work branch and may commit to it, while the
+      operator believes they are on the project's mainline. That is a
+      correctness and isolation problem, not a display one: the wrong answer is
+      indistinguishable from the right one until someone reads the branch name,
+      and nothing in the launch says which branch was chosen.
+
+      THERE IS NO BRANCHING DISCIPLINE FOR FORGE LAUNCHES, which is the
+      operator's own framing and the larger half of this row. The fleet has
+      branch rules for hosts — platform branches, work refs, the landing queue —
+      and none of them reach a forge. Whatever this row decides has to be a
+      RULE a forge follows, not a one-line HEAD fix on one mirror, or the next
+      host reproduces it with a different branch name.
+
+      RELATED, NOT THE SAME: 997-e4v2 and 591-x7ws are about removing host src
+      access. This is the opposite direction — the host disk is correctly
+      untouched and the LOCAL MIRROR is the channel that leaks host state into a
+      forge that believes it is remote.
