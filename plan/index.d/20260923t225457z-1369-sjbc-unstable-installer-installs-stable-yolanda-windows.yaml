@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-installer-fetched-from-the-unstable-release-silently-installs-stable-because-the-channel-defaults-to-stable-unless-an-environment-variable-is-set-so-the-url-a-user-chose-does-not-decide-what-they-get
+    order: 1369-sjbc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, installer, windows, macos, linux, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/install-windows.ps1
+      - scripts/install-macos.sh
+      - scripts/install.sh
+      - .github/workflows/release.yml
+    unscoreable: |
+      unpinnable-until-the-guard-exists (1136-n8sh). The deliverable is the
+      channel default baked into the copy uploaded to the unstable release,
+      plus a fixture that asserts it. Nothing defines that vocabulary yet.
+      FUTURE LITMUS FILENAME: scripts/test-unstable-installer-defaults-to-unstable.sh.
+      It takes each of the three installers as the release job would upload them
+      to `unstable`, runs them with TILLANDSIAS_CHANNEL UNSET, and asserts that
+      the resolved channel base is /releases/download/unstable. A control
+      asserts that the stable copy still resolves /releases/latest/download, so
+      the fix cannot be "always unstable". Wire it in the same commit.
+    title: |
+      an installer fetched from the UNSTABLE release silently installs STABLE:
+      the channel defaults to stable unless TILLANDSIAS_CHANNEL is set, so the
+      URL the user chose does not decide what they get
+    context: |
+      MEASURED on yolanda-windows 2026-09-23 during the 1335-jz8c icon smoke.
+      `irm https://github.com/8007342/tillandsias/releases/download/unstable/install-windows.ps1 | iex`,
+      run with TILLANDSIAS_CHANNEL unset, printed
+        Asset: tillandsias-tray-56.9.21.1-windows-x64.zip
+        Downloading https://github.com/8007342/tillandsias/releases/latest/download/...
+      and installed "tillandsias-tray 56.9.21.1 (2f5f2a90a)" while
+      v56.9.23.1 and unstable both carried the 56.9.23.1 Windows set.
+      Nothing said the channel had been chosen for the user. The script's
+      header at :424-433 says stable is the default; the user who typed an
+      /unstable/ URL had no reason to read it.
+      THE SAME DEFAULT IS IN ALL THREE: install-windows.ps1:429
+      ($Channel = ... else 'stable'), install-macos.sh:41 and install.sh:23
+      (CHANNEL="${TILLANDSIAS_CHANNEL:-stable}"). The release notes
+      (release.yml:405-411) do print the channel-setting form, so a reader of
+      the notes is fine. A reader of an older packet or a pasted link is not:
+      the bare form survives in plan/archive/packets-2026-08.yaml:6148 and 7700,
+      which is where this host's command came from.
+      COST OF THE WRONG DEFAULT HERE: the install also ran its destructive
+      reset (distro, disk, vault credentials, download cache), so a user
+      smoke-testing unstable pays a full re-provision to get the OLD build.
+    next_action: |
+      A script cannot know the URL it was fetched from, so the fix belongs in
+      the release job (coordinator's reading, 2026-09-23). The copy uploaded to
+      the unstable release gets its default rewritten to unstable. The stable
+      copy is untouched, and an explicit TILLANDSIAS_CHANNEL / --channel still
+      wins. Also print the resolved channel and its base URL as the FIRST line
+      of every install, so a mismatch is visible before the reset runs.
+      Do all three installers in one change; they share the defect and the
+      fixture.
+    provenance: |
+      Found by yolanda-windows 2026-09-23. Diagnosed by macuahuitl-fedora as
+      the channel default rather than missing assets. My first report said
+      v56.9.23.1 had no Windows assets; that was wrong. I listed them while
+      the Windows release job was still uploading (assets are timestamped
+      22:30:51Z). Filed at the coordinator's direction.

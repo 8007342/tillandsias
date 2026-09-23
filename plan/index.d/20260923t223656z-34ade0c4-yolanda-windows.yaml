@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-tray-ships-one-hand-rasterized-outline-icon-that-never-changes-while-the-events-and-the-rendered-lifecycle-pngs-it-needs-already-arrive
+    event:
+      type: note
+      ts: "2026-09-23T22:36:56Z"
+      agent_id: windows-yolanda-claude-20260923t223656z
+      host: yolanda-windows
+      summary: |
+        SMOKE ON THE PUBLISHED BUILD, yolanda-windows 2026-09-23. Status left untouched: criteria 2 and 3 are unobserved, not failed.
+
+        1. A BARE UNSTABLE-URL INSTALL GETS STABLE. `irm .../releases/download/unstable/install-windows.ps1 | iex` with TILLANDSIAS_CHANNEL unset downloaded from releases/LATEST: "Asset: tillandsias-tray-56.9.21.1-windows-x64.zip". It installed "tillandsias-tray 56.9.21.1 (2f5f2a90a)" and registered "v56.9.21.1". CORRECTION to my first report to the coordinator, which said v56.9.23.1 carried no Windows assets: WRONG. I listed them while the Windows job was still uploading; the tag carries the full Windows set, timestamped 22:30:51Z. The cause is the channel default (stable unless TILLANDSIAS_CHANNEL is set), filed as 1369-sjbc. The release notes print the correct form: set TILLANDSIAS_CHANNEL=unstable first.
+           The same install ran its destructive reset on this host: WSL2 distro and disk, the two host vault credentials, and the download cache were destroyed, then re-provisioned to Ready.
+
+        2. CRITERION 1, EXE SIDE, HOLDS ON THE PUBLISHED BINARY. The tillandsias-tray.exe from the unstable release was downloaded and its sha256 bd8b7cbc68e04705...0974f7 matches SHA256SUMS-windows. It reports "tillandsias-tray 56.9.23.1 (29f7c2df6)". Its associated icon (System.Drawing ExtractAssociatedIcon) is the green ionantha rosette. The installed 56.9.21.1 exe shows the old sprout-and-flower tillandsias.ico. It was installed over %LOCALAPPDATA%\Programs\Tillandsias, then ie4uinit.exe -show was run.
+           The Start-menu shortcut is Tillandsias.lnk, with target=...\tillandsias-tray.exe and IconLocation=...\tillandsias-tray.exe,0, so it inherits the exe icon, as the row says.
+
+        3. NOT OBSERVED: Start-menu, taskbar, Alt-Tab, Explorer, and the per-phase tray glyph. The screen capture on this host returned an all-black frame (display locked or off), so no visual reading was possible. The tray reports phase Ready over the wire (`--status-once --json`: reachable=true, phase=Ready, podman_ready=true, wire_version=4), but nothing here reads WHICH glyph the tray shows. Criteria 2 (Pup/Mature/Stopping/Dried per phase) and 3 (operator look and feel) need someone at the unlocked screen. The 56.9.23.1 tray is installed and running now, ready for that look.
