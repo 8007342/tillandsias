@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr).
+status:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    field: next_action
+    value: |
+      DESIGN (coordinator's ruling 2026-09-23, option a plus a note from b),
+      implemented on work/1350-ku7v and waiting on the release cut to relay:
+        - tillandsias --sync <project> [<branch>], branch defaulting to
+          linux-next. The verdict answers "is it safe to spend a push on this
+          branch", so only that head decides it.
+        - publish-sync-state <mirror> [<branch>]. With no branch (the cadence
+          callers), diverged work/* heads are left out of the behind count.
+          Diverged non-work heads still count.
+        - Diverged work/* heads are reported as INFORMATION on a line before
+          the verdict: note:sync-state:diverged-work-refs:<n>.
+      REMAINING:
+        1. Relay work/1350-ku7v to linux-next after the cut.
+        2. yoga, INSTALL REGIME, on a build that includes the relay:
+           tillandsias --sync tillandsias
+           expected: note:sync-state:diverged-work-refs:<n> (may be absent),
+           then sync-state:heads-current:<epoch>, then
+           ok:sync:tillandsias:linux-next:heads-current, rc=0.
+        3. Close this row when yoga's run is recorded. The tray action stays
+           open and unrouted.
+    ts: "2026-09-23T19:49:39Z"
+    host: lenovinha
+
+events:
+  - packet_id: t1-the-mirror-syncs-from-upstream-on-demand-and-on-a-cadence-and-publishes-a-sync-state-a-forge-and-a-host-can-read-before-spending-a-push-on-a-stale-mirror
+    event:
+      type: note
+      ts: "2026-09-23T19:49:39Z"
+      agent_id: linux-lenovinha-claude-20260923
+      host: lenovinha
+      summary: |
+        VERDICT SCOPED TO THE PUSH TARGET. THE REBUILD REGIME PASSES ON lenovinha.
+
+        The fix for the defect measured earlier today: rebased work refs no
+        longer pin the verdict at heads-behind. It is implemented on
+        work/1350-ku7v, where it waits for the release cut (the cut freeze
+        forbids landing crates/ and scripts/ on linux-next). The verdict is
+        scoped to one branch, and diverged work refs are reported as a count
+        on a note line instead of counted as behind.
+
+        Fixture arm 13: a mirror with a rebased work ref and linux-next
+        current must answer heads-current, with the note. It FAILS on the
+        pre-fix publisher (answers heads-behind, scoped and unscoped) and
+        passes on the fix. A second check keeps the scope real: linux-next
+        behind, scoped to linux-next, still answers heads-behind.
+
+        Rebuild regime, live: the git image was rebuilt with the new
+        publisher and the mirror recreated. No forge sibling was live. The
+        same four rebased work refs are still rejected by the non-forced
+        reconcile fetch, and the answer is now heads-current, rc=0.
+      evidence: |
+        bash scripts/test-mirror-sync-state.sh -> ok:mirror-sync-state:14/14 arms
+        same fixture with the linux-next publisher -> FAIL: arm13 ...
+          unscoped sync-state:heads-behind, scoped sync-state:heads-behind
+        cargo test -p tillandsias-headless -> 570 passed, 0 failed
+          (new: a_note_line_before_the_verdict_is_never_read_as_the_verdict)
+        live, localhost/tillandsias-git:v56.9.23.1 rebuilt with the fix:
+          tillandsias --sync tillandsias
+            note:sync-state:diverged-work-refs:4
+            sync-state:heads-current:1790192974
+            ok:sync:tillandsias:linux-next:heads-current
+            rc=0
+          tillandsias --sync tillandsias main
+            note:sync-state:diverged-work-refs:4
+            sync-state:heads-current:1790192975
+            ok:sync:tillandsias:main:heads-current
+            rc=0
+      provenance: |
+        lenovinha-silverblue on work/1350-ku7v, implementing the
+        coordinator's design ruling of 2026-09-23.

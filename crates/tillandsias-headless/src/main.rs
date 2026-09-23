@@ -336,6 +336,16 @@ fn main() {
         .iter()
         .position(|a| a == "--sync")
         .map(|i| user_args.get(i + 1).cloned().unwrap_or_default());
+    // The optional push target after the project (coordinator's ruling,
+    // 2026-09-23): the verdict answers "is it safe to push THIS branch", so it
+    // is scoped to one. Defaults to linux-next, the trunk every host lands on.
+    let sync_branch: String = user_args
+        .iter()
+        .position(|a| a == "--sync")
+        .and_then(|i| user_args.get(i + 2))
+        .filter(|a| !a.starts_with("--"))
+        .cloned()
+        .unwrap_or_else(|| "linux-next".to_string());
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -995,9 +1005,9 @@ fn main() {
     // --ensure-enclave is (1004-xw3q) — a CLI query nested under `if init`
     // falls through into the app's service path and sits idle.
     if let Some(project) = sync_project.as_deref() {
-        if let Err(e) =
-            run_cli_with_vault_credential_cleanup(debug, || run_sync_project(project, debug))
-        {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+            run_sync_project(project, &sync_branch, debug)
+        }) {
             eprintln!("{}", e);
             std::process::exit(1);
         }
@@ -1549,7 +1559,7 @@ fn print_usage(version: &str) {
         "  --ensure-enclave Bring the application-lifetime enclave services (network, Vault, egress proxy) up idempotently without launching a lane — the restore path after a reboot or a stopped proxy; --init only builds images"
     );
     println!(
-        "  --sync <project> Fetch upstream into this host's mirror for <project> and print the mirror's sync state — the on-demand half of the state the mirror also publishes on a cadence; ask this BEFORE spending a push on a stale mirror. Exits non-zero unless the answer is heads-current"
+        "  --sync <project> [<branch>] Fetch upstream into this host's mirror for <project> and print the mirror's sync state for <branch> (default linux-next) — the on-demand half of the state the mirror also publishes on a cadence; ask this BEFORE spending a push on a stale mirror. Exits non-zero unless the answer is heads-current"
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
@@ -10093,14 +10103,27 @@ fn run_ensure_enclave(debug: bool) -> Result<(), String> {
 ///
 /// @trace order:1350-ku7v
 fn sync_state_of(verdict: &str) -> &str {
-    verdict
-        .trim()
+    verdict_line_of(verdict)
         .strip_prefix("sync-state:")
         .and_then(|rest| rest.split(':').next())
         .unwrap_or("")
 }
 
-/// `--sync <project>`: the DEMANDED half of T1's sync state.
+/// The verdict line out of the publisher's output: the LAST line carrying the
+/// `sync-state:` prefix. The publisher may print `note:` lines before it
+/// (diverged work refs, 1350-ku7v); they are information and never the
+/// verdict. No such line returns "", which reads as unparseable.
+///
+/// @trace order:1350-ku7v
+fn verdict_line_of(output: &str) -> &str {
+    output
+        .lines()
+        .map(str::trim)
+        .rfind(|l| l.starts_with("sync-state:"))
+        .unwrap_or("")
+}
+
+/// `--sync <project> [<branch>]`: the DEMANDED half of T1's sync state.
 ///
 /// ORDER 1350-ku7v. The mirror publishes
 /// `refs/tillandsias/sync-state/<state>[/<detail>]/<epoch>` at startup, on
@@ -10133,7 +10156,12 @@ fn sync_state_of(verdict: &str) -> &str {
 ///
 /// @trace spec:git-mirror-service
 /// @trace order:1350-ku7v
-fn run_sync_project(project: &str, debug: bool) -> Result<(), String> {
+/// THE VERDICT IS SCOPED TO `branch`, THE PUSH TARGET (default linux-next).
+/// Measured on lenovinha 2026-09-23: force-pushed work refs stay diverged in
+/// the mirror by design, and an unscoped count answered heads-behind with
+/// main and linux-next both current. Diverged work refs are still reported,
+/// on a `note:` line the publisher prints, so the churn stays visible.
+fn run_sync_project(project: &str, branch: &str, debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --sync")?;
     report_runtime_lane("--sync", debug);
 
@@ -10183,6 +10211,7 @@ fn run_sync_project(project: &str, debug: bool) -> Result<(), String> {
         &container,
         "/usr/local/share/git-service/publish-sync-state",
         &mirror,
+        branch,
     ]);
     let verdict = podman_command_output(publish, debug).map_err(|e| {
         // A MIRROR IMAGE THAT PREDATES THE PUBLISHER IS A NAMED STATE, not a
@@ -10200,7 +10229,14 @@ fn run_sync_project(project: &str, debug: bool) -> Result<(), String> {
             format!("blocked:sync:publisher-failed:{container}: {e}")
         }
     })?;
-    let verdict = verdict.trim();
+    for note in verdict
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("note:"))
+    {
+        println!("{note}");
+    }
+    let verdict = verdict_line_of(&verdict);
 
     let state = sync_state_of(verdict);
 
@@ -10208,11 +10244,11 @@ fn run_sync_project(project: &str, debug: bool) -> Result<(), String> {
 
     match state {
         "heads-current" => {
-            println!("ok:sync:{project}:heads-current");
+            println!("ok:sync:{project}:{branch}:heads-current");
             Ok(())
         }
         "heads-behind" | "heads-unknown" => Err(format!(
-            "blocked:sync:{project}:{state} — this mirror is not current with upstream; \
+            "blocked:sync:{project}:{branch}:{state} — this mirror is not current with upstream for {branch}; \
              a push spent now is the race this state exists to warn about"
         )),
         _ => Err(format!(
@@ -18819,6 +18855,20 @@ mod tests {
     /// ORDER 1350-ku7v. The --sync verdict parse, which decides whether a host
     /// spends a push. Every arm here is a way the answer could be misread as
     /// "current" when it is not — the failure mode this row exists to stop.
+    #[test]
+    fn a_note_line_before_the_verdict_is_never_read_as_the_verdict() {
+        let out = "note:sync-state:diverged-work-refs:4\nsync-state:heads-current:1790191842";
+        assert_eq!(
+            super::verdict_line_of(out),
+            "sync-state:heads-current:1790191842"
+        );
+        assert_eq!(super::sync_state_of(out), "heads-current");
+        assert_eq!(
+            super::sync_state_of("note:sync-state:diverged-work-refs:4"),
+            ""
+        );
+    }
+
     #[test]
     fn the_sync_verdict_parse_never_reads_a_stale_mirror_as_current() {
         assert_eq!(
