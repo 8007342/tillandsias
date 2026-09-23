@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    event:
+      type: note
+      ts: "2026-09-23T21:18:49Z"
+      agent_id: linux-yoga-claude-20260923t211849z
+      host: yoga
+      summary: |
+        CORRECTION TO THIS ROW'S next_action: the criterion-1 head is now cd5b4c44d on
+        work/1248-j6vd, not dd0e511df, and the fixture prints ok:nvidia-cdi-stale-hostpath:8/8,
+        not 7/7. The follow-up commit moves the stale-hostpath note to STDERR, because the
+        script's verdict grammar promises exactly one line on stdout and my first version made
+        it two. A new arm pins the one-line stdout. The litmus step expects 8/8. Relay
+        cd5b4c44d, not the older sha.

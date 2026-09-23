@@ -1,0 +1,60 @@
+packets:
+  - packet_id: there-is-no-non-interactive-way-to-bring-the-per-project-mirror-up-and-hold-it-so-agents-drive-a-tty-forge-shell-and-both-ways-they-do-it-leak-a-live-forge
+    order: 1368-dan8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, containers, forge, skills, agent-safety]
+    estimated_hours: 4
+    owned_files: []
+    observed_by: pirria
+    unscoreable: |
+      real-host-container-lifetime: the defect is what `podman ps` holds after
+      a holder process ends, and the litmus fixtures for this path run against
+      a stub podman that cannot observe a container's lifetime (1346-cdwt).
+      The closure is a recorded real-host observation, as 1348-gkvi's is.
+    title: |
+      there is no non-interactive way to bring the per-project mirror up and hold it, so agents drive a TTY forge shell (`tillandsias --bash`) and both ways they do it leak a live forge, which then trips order 443's no-live-forge precondition on the next task
+    verifiable_closure: |
+      A documented, non-interactive command brings up the per-project mirror
+      and holds it for a stated duration or until it is released, and it starts
+      NO forge container. REAL-HOST observation recorded on this row: run it
+      under `timeout` AND with stdin closed, and after the holder ends,
+      `podman ps` shows no tillandsias-*-forge* container (the negative
+      control: the same two runs through `tillandsias --bash` today show one).
+      The join-the-fleet / initialize-bare-metal-host bring-up step and
+      1350-ku7v's install-regime steps name the new mode.
+    context: |
+      TWO LEAK PATHS, measured on two hosts on 2026-09-23.
+
+      1. WRAPPER KILLED (pirria). The join-the-fleet substrate todo was
+         `TILLANDSIAS_HOST_PROJECT_ROOT=... tillandsias --bash <checkout>`.
+         An agent cannot hold a TTY, so it ran
+         `timeout 500 tillandsias --bash ... </dev/null`. timeout killed the
+         wrapper ("Terminated"), and check-bare-metal-host-initialized went
+         green. But tillandsias-tillandsias-forge-maintenance (created
+         11:50:22 PDT) was still Up 2 hours later. This is the 1132-r4mt shape:
+         killing the wrapper does not reap the container.
+
+      2. PIPED EXIT NEVER READ (lenovinha). With
+         `(sleep 600; echo exit) | tillandsias --bash "$PWD" &` the first run
+         (a 900 s variant) exited cleanly. On the second run, 49 minutes
+         later the wrapper was still alive, the forge was still up, and the
+         piped `exit` had never been consumed: the forge shell did not read
+         stdin. `podman stop` on the forge let the wrapper exit and tear the
+         stack down cleanly.
+
+      CONSEQUENCE. Order 443's precondition ("any live tillandsias-*-forge*
+      -> STOP") correctly refuses the next piece of work. On pirria that held
+      1350-ku7v's install regime. The forge is indistinguishable from one
+      an operator is using, so no agent may stop it on its own.
+
+      RELATED, NOT A DUPLICATE: 1348-gkvi is the opposite lifetime defect
+      (ending the lane REMOVES the mirror, while the skill says the stack keeps
+      running). Both share the root cause that the mirror's lifetime is tied to
+      a forge lane. A fix that gives the mirror its own holder (e.g.
+      `tillandsias --ensure-mirror <project>`, next to --ensure-enclave) likely
+      closes both, and the closure should say so on each row.
