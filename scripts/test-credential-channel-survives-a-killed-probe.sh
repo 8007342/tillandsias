@@ -71,10 +71,10 @@ fi
 _run_guard() {  # $1=bindir  -> stdout file $W/.out, rc in $W/.rc
     local bindir="$1"
     if [ -n "$_BOUND" ]; then
-        PATH="$bindir:$PATH" \
+        env -u TILLANDSIAS_HOST_KIND PATH="$bindir:$PATH" \
             "$_BOUND" 90 bash "$GUARD" >"$W/.out" 2>"$W/.err"
     else
-        PATH="$bindir:$PATH" \
+        env -u TILLANDSIAS_HOST_KIND PATH="$bindir:$PATH" \
             bash "$GUARD" >"$W/.out" 2>"$W/.err"
     fi
     echo $? >"$W/.rc"

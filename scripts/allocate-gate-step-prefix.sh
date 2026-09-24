@@ -71,7 +71,14 @@ for r in $BASE $EXCLUDES; do
     fi
 done
 
-_tmpbase="$ROOT/target/plan-scratch"
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "$CARGO_TARGET_DIR" in
+        /* | [A-Za-z]:[/\\]*) _tmpbase="${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+        *) _tmpbase="$ROOT/${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+    esac
+else
+    _tmpbase="${TMPDIR:-/tmp}/plan-scratch"
+fi
 mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 tmp="$(mktemp -d "$_tmpbase/gate-step-prefix.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT INT TERM

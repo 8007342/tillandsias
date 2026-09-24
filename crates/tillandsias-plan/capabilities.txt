@@ -55,6 +55,7 @@ loop-status-append
 loop-status-compact
 loop-status-fragments
 loop-status-verify
+lua
 methodology
 methodology-ask
 methodology-index

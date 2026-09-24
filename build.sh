@@ -863,6 +863,15 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 _pf_cantrun=$((_pf_cantrun + 1))
                 sed 's/^/  /' "$_pf_tmp" >&2
                 echo "could-not-run:preflight:${_pf_base%.sh}:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
+            elif grep -qE 'No space left on device' "$_pf_tmp"; then
+                # ORDER 1349-53h6 — RUNNER RESOURCE EXHAUSTION IS NOT TREE REFUSAL.
+                # When a guard fails because the checkout or /tmp filesystem ran out
+                # of space, the runner failed to execute the guard; the tree was never
+                # examined. Booking this as refused: conflated "the subject is wrong"
+                # with "the runner ran out of disk".
+                _pf_cantrun=$((_pf_cantrun + 1))
+                sed 's/^/  /' "$_pf_tmp" >&2
+                echo "could-not-run:preflight:${_pf_base%.sh}:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2
             else
                 _pf_failed=$((_pf_failed + 1))
                 cat "$_pf_tmp" >&2
