@@ -2724,6 +2724,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "must-ship-next release advisory fixture passed"
 
+    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
+    # installers default to unstable; the versioned copy keeps stable. Hermetic,
+    # a few seconds; wired in local-ci.sh as well.
+    _step "Checking the unstable-channel installer default (1369-sjbc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
+        _error "an installer fetched from the unstable release can again install stable"
+        exit 1
+    fi
+    _info "unstable-channel installer default fixture passed"
+
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
     # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps
