@@ -1899,21 +1899,18 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
     // clears, kept literal here so the two cannot drift apart silently.
     for attr in [VAULT_SHAMIR_SHARE_V1, "vault-root-token-v1"] {
         let a = attr.to_string();
+        // Classified INSIDE the closure (1371-a7w2): with_keyring_timeout
+        // stringifies the error, and keyring::Error::NoEntry displays as "No
+        // matching entry found in secure storage", which a text match missed.
         let res = with_keyring_timeout(move || {
-            Entry::new(KEYCHAIN_SERVICE, &a).and_then(|e| e.delete_credential())
+            classify_keyring_delete(
+                Entry::new(KEYCHAIN_SERVICE, &a).and_then(|e| e.delete_credential()),
+            )
         });
         match res {
-            Ok(()) => cleared.push(format!("keychain:{attr}")),
-            Err(e) => {
-                // A missing entry is CLEARED, not failed — the post-condition is
-                // absence, and an already-absent item satisfies it. Anything
-                // else is a real failure and must not be reported as success.
-                if e.to_lowercase().contains("no entry") || e.to_lowercase().contains("not found") {
-                    cleared.push(format!("keychain:{attr} (already absent)"));
-                } else {
-                    failed.push(format!("keychain:{attr}: {e}"));
-                }
-            }
+            Ok(true) => cleared.push(format!("keychain:{attr}")),
+            Ok(false) => cleared.push(format!("keychain:{attr} (already absent)")),
+            Err(e) => failed.push(format!("keychain:{attr}: {e}")),
         }
     }
 
@@ -1981,6 +1978,18 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         }
     }
     (cleared, failed)
+}
+
+/// A missing entry is CLEARED, not failed — the post-condition is absence, and
+/// an already-absent item satisfies it. `Ok(true)` = deleted, `Ok(false)` =
+/// already absent; any other error is a real failure and passes through.
+#[cfg(target_os = "linux")]
+fn classify_keyring_delete(res: Result<(), keyring::Error>) -> Result<bool, keyring::Error> {
+    match res {
+        Ok(()) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(e) => Err(e),
+    }
 }
 
 fn with_keyring_timeout<F, T, E>(f: F) -> Result<T, String>
@@ -4765,6 +4774,27 @@ pub async fn ensure_mirror_identity_provisioned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1371-a7w2: an already-absent keychain entry is CLEARED, not failed.
+    /// The old text match missed keyring's "No matching entry found in secure
+    /// storage", so --reset-state refused on every clean host.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn keyring_delete_no_entry_is_already_absent_and_platform_failure_fails() {
+        // Premise: the pre-fix text match cannot see NoEntry's display.
+        let shown = keyring::Error::NoEntry.to_string().to_lowercase();
+        assert!(
+            !shown.contains("no entry") && !shown.contains("not found"),
+            "{shown}"
+        );
+        assert!(matches!(classify_keyring_delete(Ok(())), Ok(true)));
+        assert!(matches!(
+            classify_keyring_delete(Err(keyring::Error::NoEntry)),
+            Ok(false)
+        ));
+        let platform = keyring::Error::PlatformFailure("dbus gone".into());
+        assert!(classify_keyring_delete(Err(platform)).is_err());
+    }
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 

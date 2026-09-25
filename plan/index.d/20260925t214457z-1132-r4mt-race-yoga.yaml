@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: investigated
+      ts: "2026-09-25T21:44:57Z"
+      host: yoga
+      summary: |
+        CRITERION 2: MECHANISM NAMED AND REPRODUCED DELIBERATELY, 3/3, on yoga at b862d02f3.
+        Two `scripts/archive-plan-packets.sh --check` runs concurrently in ONE checkout (the
+        stray-gate shape 1141-vf9w measured: a gate surviving its launcher, running this
+        archiver beside a second gate). Every pair produced a refusal; the other run passed:
+          t1 (2s apart): A rc=3 could-not-run:archiver:unreadable-fragment  B rc=0
+          t2 (5s apart): A rc=3 could-not-run:archiver:ruby-worker-failed   B rc=0
+                         ruby: 'IO.readlines': No such file ... plan_tmp/index.yaml (ENOENT)
+          t3 (8s apart): A rc=1 "diff: .../plan_tmp_bak/: No such file" -> "second run
+                         modified files. Not idempotent."                   B rc=3 ruby-worker-failed
+        Neither rc=3 carries "no usable ruby", so arm 4's conjunction FAILS: exactly the
+        2026-09-12 yoga shape (rc=3, 4/5). And rc=1 is the same race via a false
+        idempotency verdict, a candidate for macuahuitl's rc=1 of the same night.
+        THE SHARED STATE, from source: on Linux native_scratch_dir returns $REPO_ROOT, so
+        both runs use the SAME $REPO_ROOT/plan_tmp, plan_tmp_bak and plan_tmp_*.txt, and
+        :302 writes the SAME scripts/archive-plan-packets-check.rb; each run's
+        _archiver_cleanup (:203) deletes all of them under the other. Standalone never has a
+        second run, hence rc=0 there. Why nobody has reproduced it since 2026-09-13: 1141-vf9w
+        (23c3dfce3) reaps the stray and check-no-competing-gate refuses a second gate, which
+        removes the concurrency. It does not remove the shared scratch: both concurrent
+        runs here printed ok:no-competing-gate (that guard is per gate, not per archiver).
+        Checkout clean afterwards (git status of plan_tmp* / .rb / toolbox empty), so this
+        experiment does not exhibit arm 5; arm 5 needs a KILL mid-archiver, not a race.
+        Harness: pair.sh (two backgrounded --check runs, sleep 2/5/8 between). Captures kept on yoga.

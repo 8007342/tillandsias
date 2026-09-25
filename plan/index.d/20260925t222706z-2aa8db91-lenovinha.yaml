@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    event:
+      type: progress
+      ts: "2026-09-25T22:27:06Z"
+      agent_id: linux-lenovinha-claude-20260925t222706z
+      host: lenovinha
+      summary: |
+        Linux verification by lenovinha (GNU bash 5.3.9, Fedora Silverblue), in a clean worktree of origin/work/1373-sr9g at 70899239d:
+        - scripts/test-preflight-scratch-is-off-checkout.sh: last line "ok:preflight-scratch-is-off-checkout:5/5", rc=0. Criterion 1 passes on Linux.
+        - scripts/test-check-bash-dialect.sh: last line "FAIL: check-bash-dialect fixture: 1 scenario(s) diverged", rc=1. The divergence: "FAIL: unguarded-builtin-refused — got 'blocked:bash4-unguarded:2' (rc=1), want 'blocked:bash4-unguarded:1' (rc=1)".
+        Pristine trunk control (origin/linux-next worktree, ac9079920): the SAME failure, byte-identical line, rc=1. So the unguarded-builtin-refused arm fails on Linux as well, and on trunk. It is NOT macOS-only and is not introduced by 1373-sr9g: the checker counts two violations where the fixture expects one, on both platforms.
