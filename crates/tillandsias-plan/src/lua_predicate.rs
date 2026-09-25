@@ -1,7 +1,11 @@
-// @trace order:1252-hsrz, spec:ci-release
+// @trace order:1252-hsrz, order:1367-q9yc, spec:ci-release
 //
 // lua_predicate.rs — two predicate classes, and the cacheable one CANNOT REACH
 // THE SHELL because the symbol is not in its environment.
+//
+// Pure shims (order 1367-q9yc) expose repo-rooted `fs.read` and `expect.*`
+// assertions to both classes, enabling predicates to read repo files and
+// assert values without invoking a shell or impure host tools.
 //
 // ── WHY THIS EXISTS AND WHAT IT IS NOT ──────────────────────────────────────
 //
@@ -60,7 +64,7 @@
 use crate::lua_runtime::LuaError;
 use mlua::prelude::*;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Which capabilities a predicate is given, and therefore whether its result may
 /// be cached. The class is what the environment is built FROM, not a label
@@ -125,7 +129,7 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
 }
 
 /// The Lua globals a CACHEABLE predicate may reach, besides the `expert` table
-/// (1367-upz6). Deterministic, side-effect-free library only: no `os`, no `io`,
+/// (1367-upz6, 1367-q9yc). Deterministic, side-effect-free library only: no `os`, no `io`,
 /// no `print`, no `load`, no `collectgarbage`, and `math` without `random`.
 /// Pinned from inside Lua by tests/lua_predicate_classes.rs.
 pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
@@ -133,6 +137,8 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
     "_VERSION",
     "assert",
     "error",
+    "expect",
+    "fs",
     "getmetatable",
     "ipairs",
     "math",
@@ -153,6 +159,110 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
     "utf8",
     "xpcall",
 ];
+
+/// Locate the repository root by checking environment variables, parent directories
+/// for plan/index.yaml or .git, and current executable directory.
+fn find_repo_root() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("TILLANDSIAS_REPO_ROOT") {
+        let pb = PathBuf::from(p);
+        if pb.is_dir() {
+            return Some(pb);
+        }
+    }
+    if let Ok(p) = std::env::var("PROJECT_ROOT") {
+        let pb = PathBuf::from(p);
+        if pb.is_dir() {
+            return Some(pb);
+        }
+    }
+    if let Ok(mut dir) = std::env::current_dir() {
+        loop {
+            if dir.join("plan/index.yaml").is_file() || dir.join(".git").exists() {
+                return Some(dir);
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+    if let Ok(mut exe) = std::env::current_exe() {
+        exe.pop();
+        loop {
+            if exe.join("plan/index.yaml").is_file() || exe.join(".git").exists() {
+                return Some(exe);
+            }
+            if !exe.pop() {
+                break;
+            }
+        }
+    }
+    None
+}
+
+/// Lexicographically normalize a path, eliminating `.` and `..` segments.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::Prefix(p) => out.push(Component::Prefix(p)),
+            Component::RootDir => out.push(Component::RootDir),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::Normal(c) => out.push(c),
+        }
+    }
+    out
+}
+
+fn format_lua_value(val: &LuaValue) -> String {
+    match val {
+        LuaValue::Nil => "nil".to_string(),
+        LuaValue::Boolean(b) => b.to_string(),
+        LuaValue::Integer(i) => i.to_string(),
+        LuaValue::Number(n) => n.to_string(),
+        LuaValue::String(s) => format!("{:?}", s.to_string_lossy()),
+        LuaValue::Table(t) => {
+            let mut parts = Vec::new();
+            for (k, v) in t.clone().pairs::<LuaValue, LuaValue>().flatten() {
+                parts.push(format!(
+                    "{}: {}",
+                    format_lua_value(&k),
+                    format_lua_value(&v)
+                ));
+            }
+            format!("{{{}}}", parts.join(", "))
+        }
+        other => format!("{other:?}"),
+    }
+}
+
+fn values_equal(a: &LuaValue, b: &LuaValue) -> bool {
+    if a == b {
+        return true;
+    }
+    match (a, b) {
+        (LuaValue::Table(ta), LuaValue::Table(tb)) => {
+            let mut count_a = 0;
+            for (k, va) in ta.clone().pairs::<LuaValue, LuaValue>().flatten() {
+                count_a += 1;
+                match tb.get::<LuaValue>(k) {
+                    Ok(vb) => {
+                        if !values_equal(&va, &vb) {
+                            return false;
+                        }
+                    }
+                    Err(_) => return false,
+                }
+            }
+            let count_b = tb.clone().pairs::<LuaValue, LuaValue>().flatten().count();
+            count_a == count_b
+        }
+        _ => false,
+    }
+}
 
 /// Build a Lua runtime whose `expert` table contains EXACTLY the verbs its class
 /// is entitled to.
@@ -211,6 +321,122 @@ pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
             let _ = math.set("random", LuaValue::Nil);
             let _ = math.set("randomseed", LuaValue::Nil);
         }
+    }
+
+    // ORDER 1367-q9yc. Pure shims exposed to both Cacheable and Observing classes:
+    // (1) repo-rooted fs.read rejecting path traversals and absolute paths outside repo root;
+    // (2) expect.contains, expect.matches, expect.eq returning boolean true or raising
+    // an error with expected and actual values on mismatch.
+    {
+        let repo_root = find_repo_root().unwrap_or_else(|| PathBuf::from("."));
+        let repo_root = repo_root.canonicalize().unwrap_or(repo_root);
+
+        let fs_table = lua
+            .create_table()
+            .map_err(|e| LuaError::VmError(format!("failed to create fs table: {e}")))?;
+
+        let f_read = {
+            let root = repo_root.clone();
+            lua.create_function(move |lua, path_str: String| {
+                if path_str.is_empty() {
+                    return Err(mlua::Error::RuntimeError(
+                        "fs.read: refused — empty path".to_string(),
+                    ));
+                }
+                let path = Path::new(&path_str);
+                let normalized = if path.is_absolute() {
+                    normalize_path(path)
+                } else {
+                    normalize_path(&root.join(path))
+                };
+                if !normalized.starts_with(&root) {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "fs.read: refused — path '{path_str}' is outside repository root"
+                    )));
+                }
+                if let Ok(canon) = normalized.canonicalize()
+                    && !canon.starts_with(&root)
+                {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "fs.read: refused — symlink '{path_str}' resolves outside repository root"
+                    )));
+                }
+                let bytes = std::fs::read(&normalized).map_err(|e| {
+                    mlua::Error::RuntimeError(format!("fs.read: failed to read '{path_str}': {e}"))
+                })?;
+                lua.create_string(&bytes)
+            })
+            .map_err(|e| LuaError::VmError(format!("fs.read: {e}")))?
+        };
+        fs_table
+            .set("read", f_read)
+            .map_err(|e| LuaError::VmError(format!("fs.read: {e}")))?;
+        lua.globals()
+            .set("fs", fs_table)
+            .map_err(|e| LuaError::VmError(format!("failed to set fs global: {e}")))?;
+
+        let expect_table = lua
+            .create_table()
+            .map_err(|e| LuaError::VmError(format!("failed to create expect table: {e}")))?;
+
+        let f_contains = lua
+            .create_function(|_, (haystack, needle): (String, String)| {
+                if haystack.contains(&needle) {
+                    Ok(true)
+                } else {
+                    Err(mlua::Error::RuntimeError(format!(
+                        "expectation failed: expected string to contain {:?}, got {:?}",
+                        needle, haystack
+                    )))
+                }
+            })
+            .map_err(|e| LuaError::VmError(format!("expect.contains: {e}")))?;
+        expect_table
+            .set("contains", f_contains)
+            .map_err(|e| LuaError::VmError(format!("expect.contains: {e}")))?;
+
+        let f_matches = lua
+            .create_function(|_, (haystack, pattern): (String, String)| {
+                let re = regex::Regex::new(&pattern).map_err(|e| {
+                    mlua::Error::RuntimeError(format!(
+                        "expect.matches: invalid regex pattern {:?}: {e}",
+                        pattern
+                    ))
+                })?;
+                if re.is_match(&haystack) {
+                    Ok(true)
+                } else {
+                    Err(mlua::Error::RuntimeError(format!(
+                        "expectation failed: expected string to match pattern {:?}, got {:?}",
+                        pattern, haystack
+                    )))
+                }
+            })
+            .map_err(|e| LuaError::VmError(format!("expect.matches: {e}")))?;
+        expect_table
+            .set("matches", f_matches)
+            .map_err(|e| LuaError::VmError(format!("expect.matches: {e}")))?;
+
+        let f_eq = lua
+            .create_function(|_, (actual, expected): (LuaValue, LuaValue)| {
+                if values_equal(&actual, &expected) {
+                    Ok(true)
+                } else {
+                    let act_str = format_lua_value(&actual);
+                    let exp_str = format_lua_value(&expected);
+                    Err(mlua::Error::RuntimeError(format!(
+                        "expectation failed: expected {exp_str}, got {act_str}"
+                    )))
+                }
+            })
+            .map_err(|e| LuaError::VmError(format!("expect.eq: {e}")))?;
+        expect_table
+            .set("eq", f_eq)
+            .map_err(|e| LuaError::VmError(format!("expect.eq: {e}")))?;
+
+        lua.globals()
+            .set("expect", expect_table)
+            .map_err(|e| LuaError::VmError(format!("failed to set expect global: {e}")))?;
     }
 
     let expert = lua

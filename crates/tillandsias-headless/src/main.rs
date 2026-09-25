@@ -13581,34 +13581,24 @@ async fn run_agent_container_attached(
     // ORDER 437: Pre-flight RAM check refuses launch on insufficient host RAM
     // (Req 4 of forge-hot-cold-split).
     // @trace order:437, spec:forge-hot-cold-split
-    let memory_val = args.iter().find_map(|a| {
-        if let Some(v) = a.strip_prefix("--memory=") {
-            Some(v)
-        } else {
-            None
-        }
-    }).or_else(|| {
-        args.iter().position(|a| a == "--memory").and_then(|idx| args.get(idx + 1).map(|s| s.as_str()))
-    });
-    if let Some(val) = memory_val {
-        if let Ok(required_mb) = val.trim_end_matches(['m', 'M']).parse::<u32>() {
-            if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
-                if let Some(available_mb) =
-                    tillandsias_core::preflight::parse_mem_available_mb(&meminfo)
-                {
-                    if let Err(err) =
-                        tillandsias_core::preflight::check_host_ram(available_mb, required_mb)
-                    {
-                        eprintln!(
-                            "[preflight] refusing to launch {container_name}: {err} (order 437)"
-                        );
-                        return Err(format!(
-                            "refusing to launch {container_name}: host RAM preflight: {err}"
-                        ));
-                    }
-                }
-            }
-        }
+    let memory_val = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--memory="))
+        .or_else(|| {
+            args.iter()
+                .position(|a| a == "--memory")
+                .and_then(|idx| args.get(idx + 1).map(|s| s.as_str()))
+        });
+    if let Some(val) = memory_val
+        && let Ok(required_mb) = val.trim_end_matches(['m', 'M']).parse::<u32>()
+        && let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo")
+        && let Some(available_mb) = tillandsias_core::preflight::parse_mem_available_mb(&meminfo)
+        && let Err(err) = tillandsias_core::preflight::check_host_ram(available_mb, required_mb)
+    {
+        eprintln!("[preflight] refusing to launch {container_name}: {err} (order 437)");
+        return Err(format!(
+            "refusing to launch {container_name}: host RAM preflight: {err}"
+        ));
     }
 
     // 873-vgyg. CLEAR AN EXITED CORPSE; WAIT OUT A RUNNING HOLDER; NEVER KILL ONE.
@@ -28236,7 +28226,10 @@ esac
             mem_val, swap_val,
             "--memory and --memory-swap must be equal (zero swap escape)"
         );
-        assert!(mem_val.ends_with('m'), "memory value must have 'm' unit suffix");
+        assert!(
+            mem_val.ends_with('m'),
+            "memory value must have 'm' unit suffix"
+        );
 
         let opencode_args = build_opencode_forge_args(
             &project,
@@ -28257,12 +28250,16 @@ esac
             .iter()
             .position(|a| a == "--memory")
             .expect("opencode launch must emit --memory");
-        let oc_mem_val = opencode_args.get(oc_mem_pos + 1).expect("opencode memory value");
+        let oc_mem_val = opencode_args
+            .get(oc_mem_pos + 1)
+            .expect("opencode memory value");
         let oc_swap_pos = opencode_args
             .iter()
             .position(|a| a == "--memory-swap")
             .expect("opencode launch must emit --memory-swap");
-        let oc_swap_val = opencode_args.get(oc_swap_pos + 1).expect("opencode memory-swap value");
+        let oc_swap_val = opencode_args
+            .get(oc_swap_pos + 1)
+            .expect("opencode memory-swap value");
 
         assert_eq!(
             oc_mem_val, oc_swap_val,

@@ -670,9 +670,15 @@ mod tests {
             .memory_mb(586)
             .memory_swap_mb(586);
         let args = spec.build_run_args();
-        let mem_pos = args.iter().position(|a| a == "--memory").expect("--memory flag");
+        let mem_pos = args
+            .iter()
+            .position(|a| a == "--memory")
+            .expect("--memory flag");
         assert_eq!(args.get(mem_pos + 1).map(String::as_str), Some("586m"));
-        let swap_pos = args.iter().position(|a| a == "--memory-swap").expect("--memory-swap flag");
+        let swap_pos = args
+            .iter()
+            .position(|a| a == "--memory-swap")
+            .expect("--memory-swap flag");
         assert_eq!(args.get(swap_pos + 1).map(String::as_str), Some("586m"));
 
         let argv = spec.build_run_argv().expect("policy-valid");

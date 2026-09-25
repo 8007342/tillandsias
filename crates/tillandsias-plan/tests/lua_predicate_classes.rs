@@ -1,4 +1,4 @@
-// @trace order:1252-hsrz, spec:ci-release
+// @trace order:1252-hsrz, order:1367-q9yc, spec:ci-release
 //
 // The verifiable closure of 1252-hsrz, one test per exit criterion, each naming
 // the PRE-FIX result the packet recorded.
@@ -280,7 +280,9 @@ const CACHEABLE_GLOBALS: &[&str] = &[
     "_VERSION",
     "assert",
     "error",
+    "expect",
     "expert",
+    "fs",
     "getmetatable",
     "ipairs",
     "math",
@@ -364,4 +366,134 @@ fn a_cacheable_predicate_cannot_remove_a_file_through_the_stdlib() {
         "the file was removed by a cacheable predicate"
     );
     let _ = std::fs::remove_file(&victim);
+}
+
+// ---------------------------------------------------------------------------
+// ORDER 1367-q9yc. Pure shims: repo-rooted `fs.read` and `expect.*` assertions.
+// PRE-FIX RESULT: fs and expect are nil in both classes, so all arms fail.
+
+/// CRITERION 1. A Cacheable predicate calls `fs.read` on a repo file and gets its bytes.
+#[test]
+fn a_cacheable_predicate_reads_repo_files_via_fs_read() {
+    let mut reg = PredicateRegistry::new();
+    reg.register(
+        "reads_repo_file",
+        PredicateClass::Cacheable,
+        "function reads_repo_file(path)
+            local content = fs.read(path)
+            return expect.contains(content, 'tillandsias-plan')
+        end",
+    )
+    .expect("register");
+
+    let verdict = reg
+        .eval("reads_repo_file", "crates/tillandsias-plan/Cargo.toml")
+        .expect("eval");
+    assert!(verdict, "expected fs.read to read Cargo.toml successfully");
+}
+
+/// CRITERION 2. fs.read on `../x`, on an absolute path outside the repo, and on
+/// `/etc/passwd` RAISES a named error.
+#[test]
+fn fs_read_refuses_outside_paths_and_traversals() {
+    let mut reg = PredicateRegistry::new();
+    reg.register(
+        "read_probe",
+        PredicateClass::Cacheable,
+        "function read_probe(path) return fs.read(path) end",
+    )
+    .expect("register");
+
+    for bad_path in ["../x", "/etc/passwd", "/tmp/definitely_outside_file"] {
+        let err = reg.eval("read_probe", bad_path).unwrap_err().to_string();
+        assert!(
+            err.contains("outside repository root") || err.contains("refused"),
+            "expected refusal for bad path '{bad_path}', got: {err}"
+        );
+    }
+}
+
+/// CRITERION 3. expect.contains, expect.matches and expect.eq return a verdict
+/// VALUE (not an exit status), and a false expectation fails the predicate with
+/// the expected and actual values in the message.
+#[test]
+fn expect_shims_return_verdict_values_and_fail_loud() {
+    let mut reg = PredicateRegistry::new();
+    reg.register(
+        "pure_assertions",
+        PredicateClass::Cacheable,
+        r#"function pure_assertions(arg)
+            local c = expect.contains('hello world', 'world')
+            local m = expect.matches('v1.2.3', [[^v[0-9]+\.[0-9]+\.[0-9]+$]])
+            local e1 = expect.eq(42, 42)
+            local e2 = expect.eq('alpha', 'alpha')
+            return c and m and e1 and e2
+        end"#,
+    )
+    .expect("register");
+
+    let verdict = reg.eval("pure_assertions", "").expect("eval");
+    assert!(
+        verdict,
+        "expected pure assertions to pass and return boolean true"
+    );
+
+    // Negative control 1: expect.contains mismatch fails loud with expected and actual.
+    reg.register(
+        "fail_contains",
+        PredicateClass::Cacheable,
+        "function fail_contains(arg) return expect.contains('actual_haystack', 'missing_needle') end",
+    )
+    .expect("register");
+    let err_contains = reg.eval("fail_contains", "").unwrap_err().to_string();
+    assert!(
+        err_contains.contains("missing_needle") && err_contains.contains("actual_haystack"),
+        "expected error to carry expected and actual values, got: {err_contains}"
+    );
+
+    // Negative control 2: expect.matches mismatch fails loud with expected and actual.
+    reg.register(
+        "fail_matches",
+        PredicateClass::Cacheable,
+        "function fail_matches(arg) return expect.matches('actual_text', [[^[0-9]+$]]) end",
+    )
+    .expect("register");
+    let err_matches = reg.eval("fail_matches", "").unwrap_err().to_string();
+    assert!(
+        err_matches.contains("^[0-9]+$") && err_matches.contains("actual_text"),
+        "expected error to carry expected and actual values, got: {err_matches}"
+    );
+
+    // Negative control 3: expect.eq mismatch fails loud with expected and actual.
+    reg.register(
+        "fail_eq",
+        PredicateClass::Cacheable,
+        "function fail_eq(arg) return expect.eq('actual_str', 'expected_str') end",
+    )
+    .expect("register");
+    let err_eq = reg.eval("fail_eq", "").unwrap_err().to_string();
+    assert!(
+        err_eq.contains("expected_str") && err_eq.contains("actual_str"),
+        "expected error to carry expected and actual values, got: {err_eq}"
+    );
+}
+
+/// CONTROL: Pure shims `fs.read` and `expect.*` are also available in the Observing class.
+#[test]
+fn pure_shims_available_in_observing_class_too() {
+    let mut reg = PredicateRegistry::new();
+    reg.register(
+        "observing_shims",
+        PredicateClass::Observing,
+        "function observing_shims(path)
+            local content = fs.read(path)
+            return expect.contains(content, 'tillandsias')
+        end",
+    )
+    .expect("register");
+
+    let verdict = reg
+        .eval("observing_shims", "crates/tillandsias-plan/Cargo.toml")
+        .expect("eval");
+    assert!(verdict);
 }

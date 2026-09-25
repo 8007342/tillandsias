@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: progress
+      ts: "2026-09-25T17:10:14Z"
+      agent_id: forge-forge-tillandsias-antigravity-20260925t171014z
+      host: forge-tillandsias
+      summary: |
+        Implemented and verified Lua predicate bridge (order 1252-hsrz):
+        1. Criterion 1: Cacheable class predicate calling shell verb fails to resolve symbol (`nil value`). Proven by `a_cacheable_predicate_cannot_resolve_the_shell_verb`.
+        2. Criterion 2: Observing class predicate resolves shell verb, mutates observed state, and is never served from cache (`an_observing_verdict_is_never_served_from_cache`). Cacheable predicate results are served from cache (`a_cacheable_verdict_is_served_from_cache`).
+        3. Criterion 3: Added binary entry point `tillandsias-plan predicate --file <path> [arg] [--class <cacheable|observing>] [--name <fn>]`. Proven directly in transcript: forge agent authored a new predicate for an uncommitted spec without recompiling the host binary, and executed it yielding PASS (exit 0) on match and FAIL (exit 1) on mismatch.
+        4. Criterion 4: Enumerable verb list matches audited set exactly (`the_verb_enumeration_matches_the_audited_set_exactly`).
+        5. Criterion 5: Containment defined as verb set + container boundary, disclaiming SELinux (`lua_runtime_states_containment_and_disclaims_selinux`).

@@ -110,6 +110,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validator-surface-hash",
     "parked-blocks",
     "pipeline",
+    "predicate",
     "query",
     "ready",
     "forgotten",
@@ -512,7 +513,11 @@ const USAGE: &str = concat!(
     "                                     fragments, malformed ones, and whether compaction is eligible\n",
     "           lua <script.lua | -e code> [args...]\n",
     "                                     Run a Lua script or snippet with the embedded, tillandsias-managed\n",
-    "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n"
+    "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n",
+    "           predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]\n",
+    "                                     ORDER 1252-hsrz. Evaluate a Lua predicate with the capability-bounded\n",
+    "                                     predicate runtime (pure shims fs.read/expect.*, shell only in observing class).\n",
+    "                                     Enables forge agents to validate uncommitted specs without host recompilation.\n"
 );
 
 /// Read a cycle fragment for `loop-status-append`, refusing every input shape
@@ -3818,6 +3823,112 @@ fn run_lua_cli(args: &[String]) {
     }
 }
 
+/// ORDER 1252-hsrz. The predicate CLI entrypoint: evaluate a Lua predicate against
+/// an uncommitted spec without recompiling the host binary.
+fn run_predicate_cli(args: &[String]) {
+    if args.is_empty() {
+        eprintln!(
+            "usage: tillandsias-plan predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]"
+        );
+        std::process::exit(2);
+    }
+
+    let mut file_path: Option<PathBuf> = None;
+    let mut arg: Option<String> = None;
+    let mut class = tillandsias_plan::lua_predicate::PredicateClass::Observing;
+    let mut func_name: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--file" if i + 1 < args.len() => {
+                file_path = Some(PathBuf::from(&args[i + 1]));
+                i += 2;
+            }
+            "--class" if i + 1 < args.len() => {
+                match args[i + 1].as_str() {
+                    "cacheable" => {
+                        class = tillandsias_plan::lua_predicate::PredicateClass::Cacheable
+                    }
+                    "observing" => {
+                        class = tillandsias_plan::lua_predicate::PredicateClass::Observing
+                    }
+                    other => {
+                        eprintln!(
+                            "error: unknown predicate class: {other} (expected cacheable or observing)"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                i += 2;
+            }
+            "--name" if i + 1 < args.len() => {
+                func_name = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--arg" if i + 1 < args.len() => {
+                arg = Some(args[i + 1].clone());
+                i += 2;
+            }
+            other if other.starts_with("--") => {
+                eprintln!("error: unrecognized option '{other}'");
+                std::process::exit(2);
+            }
+            other => {
+                if file_path.is_none() {
+                    file_path = Some(PathBuf::from(other));
+                } else if arg.is_none() {
+                    arg = Some(other.to_string());
+                } else {
+                    eprintln!("error: unexpected argument '{other}'");
+                    std::process::exit(2);
+                }
+                i += 1;
+            }
+        }
+    }
+
+    let Some(path) = file_path else {
+        eprintln!("error: missing predicate script file");
+        std::process::exit(2);
+    };
+
+    if !path.exists() {
+        eprintln!("error: predicate file '{}' does not exist", path.display());
+        std::process::exit(1);
+    }
+
+    let name = func_name.unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("predicate")
+            .to_string()
+    });
+
+    let arg_str = arg.unwrap_or_default();
+
+    let mut reg = tillandsias_plan::lua_predicate::PredicateRegistry::new();
+    if let Err(e) = reg.register_file(&name, class, &path) {
+        eprintln!("error: failed to load predicate: {e}");
+        std::process::exit(1);
+    }
+
+    match reg.eval(&name, &arg_str) {
+        Ok(true) => {
+            println!("PASS");
+            std::process::exit(0);
+        }
+        Ok(false) => {
+            println!("FAIL");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: predicate failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -3879,6 +3990,11 @@ fn main() {
 
     if args[0] == "lua" {
         run_lua_cli(&args[1..]);
+        return;
+    }
+
+    if args[0] == "predicate" {
+        run_predicate_cli(&args[1..]);
         return;
     }
 

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    event:
+      type: progress
+      ts: "2026-09-25T17:10:14Z"
+      agent_id: forge-forge-tillandsias-antigravity-20260925t171014z
+      host: forge-tillandsias
+      summary: |
+        Implemented pure shims layer for Lua predicates (order 1367-q9yc):
+        1. `fs.read`: Rooted at repository root. Rejects path traversals (e.g. `../x`), symlinks pointing outside, and absolute paths outside the repo root (`/etc/passwd`, `/tmp/...`) with named error. Tested by `a_cacheable_predicate_reads_repo_files_via_fs_read` and `fs_read_refuses_outside_paths_and_traversals`.
+        2. `expect.contains(haystack, needle)`: returns boolean true on match; fails loud with expected and actual strings on mismatch.
+        3. `expect.matches(haystack, pattern)`: regex-backed pattern matching, returns boolean true on match; fails loud with expected pattern and actual string on mismatch.
+        4. `expect.eq(actual, expected)`: deep equality for scalars and tables, returns boolean true on match; fails loud with formatted expected and actual values on mismatch.
+        5. Cacheable allow-list (`CACHEABLE_STDLIB_GLOBALS` and `CACHEABLE_GLOBALS`) updated with `expect` and `fs`. Pinned by `the_cacheable_global_set_is_exactly_the_allow_list`.
+        6. Verified shims are available in both Cacheable and Observing classes.
+        7. Verified full suite: 18/18 tests pass in `tests/lua_predicate_classes.rs`.
