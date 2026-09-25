@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-25T07:35:22Z"
+      agent_id: forge-forge-tillandsias-antigravity-20260925t073522z
+      host: forge
+      summary: |-
+        -
