@@ -133,6 +133,18 @@ if [ -z "${TILLANDSIAS_ARCHIVE_CHECK_WORK:-}" ] \
     _ck="$(printf '%s' "$REPO_ROOT" | cksum | cut -d' ' -f1)"
     WORK="/root/.cache/tillandsias-archive-answerability-${_ck}"
     unset _ck
+elif [ -z "${TILLANDSIAS_ARCHIVE_CHECK_WORK:-}" ] \
+     && { [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || [ "$(stat -f -c '%T' "$REPO_ROOT" 2>/dev/null)" = "tmpfs" ]; }; then
+    # In a forge environment, $REPO_ROOT is a 256 MiB ephemeral tmpfs that
+    # cannot fit the answerability tree copy (order 1349-53h6 / 560). Route $WORK
+    # to CARGO_TARGET_DIR or the user's cache dir where disk space is available.
+    if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+        WORK="${CARGO_TARGET_DIR%/}/archive-answerability"
+    elif [ -d "${XDG_CACHE_HOME:-${HOME:-}/.cache}" ]; then
+        WORK="${XDG_CACHE_HOME:-${HOME:-}/.cache}/tillandsias-archive-answerability"
+    else
+        WORK="$REPO_ROOT/target/archive-answerability"
+    fi
 else
     WORK="${TILLANDSIAS_ARCHIVE_CHECK_WORK:-$REPO_ROOT/target/archive-answerability}"
 fi

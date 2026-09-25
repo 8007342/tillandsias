@@ -91,6 +91,13 @@ native_scratch_is_slow() {
     case " $_NATIVE_SCRATCH_SLOW_FS " in
         *" $t "*) return 0 ;;
     esac
+    # In a forge environment, $REPO_ROOT is mounted on a 256 MiB ephemeral tmpfs
+    # that is already near capacity, so staging large trees (like plan_tmp) onto
+    # it causes ENOSPC (order 1349-53h6 / 560). Treat forge tmpfs as requiring
+    # native scratch off-checkout.
+    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] && [ "$t" = "tmpfs" ]; then
+        return 0
+    fi
     return 1
 }
 
@@ -111,12 +118,12 @@ native_scratch_dir() {
     fi
 
     # Candidates in order. TMPDIR first because a caller that set it means it;
-    # then the XDG cache, then /tmp. Each is accepted only if it is itself NOT
-    # slow — on a host where the whole world is 9p there is nothing to win, and
-    # a candidate inside the worktree would be the same filesystem wearing a
-    # different path.
+    # then CARGO_TARGET_DIR parent / XDG cache, then /tmp. Each is accepted only
+    # if it is itself NOT slow — on a host where the whole world is 9p there is
+    # nothing to win, and a candidate inside the worktree would be the same
+    # filesystem wearing a different path.
     local cand base
-    for base in "${TMPDIR:-}" "${XDG_CACHE_HOME:-${HOME:-}/.cache}" /tmp; do
+    for base in "${TMPDIR:-}" "${CARGO_TARGET_DIR:+$(dirname "$CARGO_TARGET_DIR")}" "${XDG_CACHE_HOME:-${HOME:-}/.cache}" /tmp; do
         [ -n "$base" ] || continue
         [ -d "$base" ] || continue
         native_scratch_is_slow "$base" && continue

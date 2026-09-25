@@ -853,6 +853,8 @@ git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)' && { echo "CONFLICT MARKER PRESEN
 #    to keep you out of.
 if command -v tillandsias-policy >/dev/null 2>&1; then
   yamlcheck() { tillandsias-policy validate-yaml "$1"; }
+elif command -v tillandsias-plan >/dev/null 2>&1; then
+  yamlcheck() { tillandsias-plan check >/dev/null; }
 elif command -v yq >/dev/null 2>&1; then
   yamlcheck() { yq . "$1" >/dev/null; }
 elif command -v ruby >/dev/null 2>&1; then

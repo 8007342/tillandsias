@@ -266,23 +266,29 @@ if [ "$1" == "--check" ]; then
         printf '[archiver-profile] %-28s %6sms\n' TOTAL "$(( $(_ap_now) - _ap_t0 ))" >&2
     }
     _ap_phase start
+    _use_lua=0
+    if [ "${TILLANDSIAS_ARCHIVER_BACKEND:-lua}" != "ruby" ] && [ -f "$DIR/archive-plan-packets.lua" ]; then
+        _use_lua=1
+    fi
     echo "Running in check mode..."
-    if ! _ruby_runnable; then
-        # A STABLE TOKEN ON STDOUT, so a caller can tell THIS could-not-run from
-        # the others without parsing prose. Only this cause is skip-eligible: a
-        # stale plan binary or an unreadable fragment also exit 3 and must never
-        # be waved through, because those are repairable where they happen.
-        echo "could-not-run:no-usable-ruby (965-sxec)"
-        # ...then the CANONICAL refusal, on stderr, from the single place that
-        # owns that text. This block used to carry its own copy of the prose,
-        # which is how the merged tree ended up with two refusals that named the
-        # instrument differently and satisfied different tests (coordinator,
-        # 2026-09-02: yoga's arm wants "no usable ruby in this locus" and a
-        # Remedy on STDERR, because a refusal printed on stdout is invisible to
-        # a caller reading a log; yolanda's arm wants the token). _require_ruby
-        # re-checks the memoised lane, prints that text to stderr, and exits 3 —
-        # so both hold with ONE copy of the words.
-        _require_ruby
+    if [ "$_use_lua" -eq 0 ]; then
+        if ! _ruby_runnable; then
+            # A STABLE TOKEN ON STDOUT, so a caller can tell THIS could-not-run from
+            # the others without parsing prose. Only this cause is skip-eligible: a
+            # stale plan binary or an unreadable fragment also exit 3 and must never
+            # be waved through, because those are repairable where they happen.
+            echo "could-not-run:no-usable-ruby (965-sxec)"
+            # ...then the CANONICAL refusal, on stderr, from the single place that
+            # owns that text. This block used to carry its own copy of the prose,
+            # which is how the merged tree ended up with two refusals that named the
+            # instrument differently and satisfied different tests (coordinator,
+            # 2026-09-02: yoga's arm wants "no usable ruby in this locus" and a
+            # Remedy on STDERR, because a refusal printed on stdout is invisible to
+            # a caller reading a log; yolanda's arm wants the token). _require_ruby
+            # re-checks the memoised lane, prints that text to stderr, and exits 3 —
+            # so both hold with ONE copy of the words.
+            _require_ruby
+        fi
     fi
     # ORDER 964-9yyp. On a fast worktree this is "$REPO_ROOT" and every path
     # below is byte-for-byte what it was — a host that was correct before this
@@ -296,11 +302,13 @@ if [ "$1" == "--check" ]; then
     cp -a plan/ "$SCRATCH"/plan_tmp/
     _ap_phase copy-plan-tree
     
-    # The generated .rb reads and writes the COPY, so it needs the copy's real
-    # location. `|` stays the delimiter because the replacement is a path and
-    # contains no `|`; it is a directory name we chose, not user input.
-    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
-    _ap_phase sed-rewrite-rb
+    if [ "$_use_lua" -eq 0 ]; then
+        # The generated .rb reads and writes the COPY, so it needs the copy's real
+        # location. `|` stays the delimiter because the replacement is a path and
+        # contains no `|`; it is a directory name we chose, not user input.
+        sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
+        _ap_phase sed-rewrite-rb
+    fi
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
     # diff was already here and it proved the WRONG PROPERTY. An archiver that
@@ -397,18 +405,26 @@ if [ "$1" == "--check" ]; then
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
     _ap_phase orphans-before
 
-    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+    _run_worker() {
+        if [ "$_use_lua" -eq 1 ]; then
+            "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" --index "$SCRATCH"/plan_tmp/index.yaml --archive "$SCRATCH"/plan_tmp/archive >/dev/null
+        else
+            _ruby scripts/archive-plan-packets-check.rb >/dev/null
+        fi
+    }
+
+    if ! _run_worker; then
         # DISTINCT FROM no-usable-ruby, and the distinction is the point: that
         # one means the lane has no runnable interpreter and is forge-skippable;
-        # this one means a ruby WAS runnable and the worker still failed, which
+        # this one means a worker WAS runnable and the worker still failed, which
         # is never skippable.
         echo "could-not-run:archiver:ruby-worker-failed (1132-r4mt)"
-        echo "Check COULD NOT RUN: the archiver's ruby worker failed to execute"
+        echo "Check COULD NOT RUN: the archiver's worker failed to execute"
         echo "  (965-sxec). The ready set was never re-derived, so nothing here is"
         echo "  a statement about it."
         exit 3
     fi
-    _ap_phase ruby-sweep
+    _ap_phase worker-sweep
 
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
     _ap_phase orphans-after
@@ -433,13 +449,13 @@ if [ "$1" == "--check" ]; then
 
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
-    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+    if ! _run_worker; then
         echo "could-not-run:archiver:ruby-worker-failed-idempotency-pass (1132-r4mt)"
-        echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
+        echo "Check COULD NOT RUN: the archiver's worker failed on the second"
         echo "  pass (965-sxec), so idempotency was never evaluated."
         exit 3
     fi
-    _ap_phase ruby-sweep
+    _ap_phase worker-sweep
     
     _ap_phase idempotency-diff
     if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
@@ -470,7 +486,7 @@ if [ "$1" == "--check" ]; then
         # 923-ws3r. The sub-check names its own inability distinctly from a real
         # regression, so relay the distinction instead of flattening it.
         case "$_answerability" in
-            *:no-runnable-plan-binary*|*:cannot-create-workdir*|*:sweep-failed*|*:ready-listing-failed*|*:unknown-argument*)
+            *:no-runnable-plan-binary*|*:cannot-create-workdir*|*:sweep-failed*|*:ready-listing-failed*|*:unknown-argument*|*:tree-copy-failed*)
                 echo "could-not-run:archiver:answerability-harness-failed (1132-r4mt)"
                 echo "Check COULD NOT RUN: the answerability harness failed before it could"
                 echo "  judge the sweep, so this says NOTHING about the ledger — read its log."
@@ -500,7 +516,7 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
-if [ -f "$DIR/archive-plan-packets.lua" ]; then
+if [ -f "$DIR/archive-plan-packets.lua" ] && [ "${TILLANDSIAS_ARCHIVER_BACKEND:-lua}" != "ruby" ]; then
     "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
 else
     _ruby scripts/archive-plan-packets.rb

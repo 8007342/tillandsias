@@ -32,7 +32,7 @@ printf '#!/usr/bin/env bash\necho "tillandsias: brew install ruby failed (attest
 printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB/toolbox"
 chmod +x "$STUB/ruby" "$STUB/toolbox"
 
-out="$(env PATH="$STUB:$PATH" ./scripts/archive-plan-packets.sh --check 2>&1)"
+out="$(env TILLANDSIAS_ARCHIVER_BACKEND=ruby PATH="$STUB:$PATH" ./scripts/archive-plan-packets.sh --check 2>&1)"
 rc=$?
 
 # 1. The exit code routes to could-not-run, not to a bare 127 and not to 1.

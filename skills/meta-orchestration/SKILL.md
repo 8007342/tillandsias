@@ -2186,8 +2186,8 @@ Before exit:
 
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
-   `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.
-   **`ruby` is NOT in the forge image; `yq` is** — a skill that names only ruby
+   `tillandsias-plan check` (for plan files) / `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"` on hosts with ruby.
+   **`ruby` is NOT in the forge image; `tillandsias-plan` and `yq` are** — a skill that names only ruby
    sends a forge agent to a tool that does not exist, and the tool sitting next
    to it is `python3`, which is FORBIDDEN for committed automation (see
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
