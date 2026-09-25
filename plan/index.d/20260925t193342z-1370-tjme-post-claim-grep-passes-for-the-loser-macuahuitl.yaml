@@ -1,0 +1,40 @@
+packets:
+  - packet_id: the-post-claim-check-grep-c-order-equals-zero-passes-for-the-loser-of-a-claim-race-so-two-hosts-both-read-their-claim-as-confirmed
+    order: 1370-tjme
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [plan-ledger, fleet-coordination]
+    estimated_hours: 2
+    owned_files: [skills/join-the-fleet/SKILL.md, skills/advance-work-from-plan/SKILL.md]
+    observed_by: macuahuitl
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable is the claim-confirmation
+      fixture itself; it lands as scripts/test-claim-confirmation-names-the-earliest-claimant.sh,
+      bound in the same commit as the step it tests (1136-n8sh).
+    title: |
+      the post-claim check "tillandsias-plan next <role> | grep -c <order> → 0" passes for the LOSER of a claim race, because any host's claim hides the row, so two hosts both read their claim as confirmed
+    verifiable_closure: |
+      A fixture builds a scratch ledger where host A claims an order and
+      host B then claims the same order on top of it. The claim-confirmation
+      step that join-the-fleet section 3 and advance-work-from-plan name,
+      run as host B, exits non-zero and names host A's earlier claim. Run as
+      host A, it exits 0. Pre-fix result: FAILS, because the documented
+      `next <role> | grep -c <order>` prints 0 for both hosts. The skills name
+      the new step in place of the grep.
+    context: |
+      Measured 2026-09-25 on origin/linux-next during a fleet rejoin.
+      lenovinha-silverblue wrote its 776-jcf3 claim event at 19:24:33Z but
+      pushed it at 19:28:42Z (15dc2964e); yoga-silverblue wrote its claim
+      at 19:25:13Z and pushed first (1d2810626, 19:25:17Z). Both hosts
+      reported the section 3 post-claim check green. The coordinator first
+      ruled by PUSH order (wrong); yoga caught it, since the rule compares
+      the claim events' own ts, and yielded (44420b49e); lenovinha holds.
+      So a second shape for the same fix: whoever adjudicates must read
+      claim-event ts, not commit or push time, because a claim can sit
+      unpushed for minutes. The discriminating question is not "is the row
+      hidden" but "do the fold's claim events for this order name ONLY me,
+      or am I the earliest". A rejoin that fans out to several same-tier
+      hosts in one minute reproduces it.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: note
+      ts: "2026-09-25T19:32:48Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW, HELD FOR AN OPERATOR DECISION (macuahuitl coordinator, 2026-09-25). f623728c8 on origin/work/437-forge-src-tmpfs-topology makes build_forge_agent_run_args_with_vault cap forge agents at the sum of their tmpfs mounts plus 256 MB with zero swap. The reviewer estimates about 850 MB in the default clone lane and about 594 MB with a host mount, and a cargo build inside the forge will likely OOM under that. This row's operator_note reserves the decision, so the coordinator did not relay it. Same commit: it deletes an unrelated trace line ("@trace plan/issues/forge-github-token-injection (order 359, REVERSED)"), and the host RAM preflight only runs on the run_agent_container_attached path. Criteria 1 and 3 were already delivered by 997-e4v2.
