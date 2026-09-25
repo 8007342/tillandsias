@@ -22,6 +22,20 @@
 # sides before and after, and refuses on any mismatch.
 set -uo pipefail
 
+_in_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_in_dir" ] && [ "$_in_dir" != "/" ] && [ ! -f "$_in_dir/lib/tool-dispatch.sh" ]; do
+    _in_dir="$(dirname "$_in_dir")"
+done
+if [ -f "$_in_dir/lib/tool-dispatch.sh" ]; then
+    . "$_in_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_in_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 SRC=""
 DST=""
 NEG=""
@@ -64,20 +78,20 @@ next_id="$src_c"
 added=0
 while IFS= read -r line; do
     [ -n "$line" ] || continue
-    text="$(printf '%s' "$line" | jq -r '.text')"
-    path="$(printf '%s' "$line" | jq -r '.path')"
-    kind="$(printf '%s' "$line" | jq -r '.kind')"
-    key="$(printf '%s' "$line" | jq -r '.key')"
+    text="$(printf '%s' "$line" | "$JQ" -r '.text')"
+    path="$(printf '%s' "$line" | "$JQ" -r '.path')"
+    kind="$(printf '%s' "$line" | "$JQ" -r '.kind')"
+    key="$(printf '%s' "$line" | "$JQ" -r '.key')"
 
-    body="$(jq -nc --arg m "$MODEL" --arg i "$text" '{model:$m,input:$i}')"
+    body="$("$JQ" -nc --arg m "$MODEL" --arg i "$text" '{model:$m,input:$i}')"
     vec="$(curl -sS --fail-with-body -X POST "$ENDPOINT/v1/embeddings" \
-        -H 'content-type: application/json' -d "$body" | jq -c '.data[0].embedding')"
+        -H 'content-type: application/json' -d "$body" | "$JQ" -c '.data[0].embedding')"
     if [ -z "$vec" ] || [ "$vec" = null ]; then
         echo "error: embedding failed for negative chunk: $key" >&2
         exit 1
     fi
 
-    jq -nc --argjson id "$next_id" --arg p "$path" --arg k "$kind" --arg key "$key" --arg t "$text" \
+    "$JQ" -nc --argjson id "$next_id" --arg p "$path" --arg k "$kind" --arg key "$key" --arg t "$text" \
         '{id:$id,path:$p,kind:$k,key:$key,line_start:1,line_end:1,content_hash:"negative-case",text:$t}' \
         >>"$DST/chunks.jsonl"
     printf '%s\n' "$vec" >>"$DST/vectors.jsonl"
@@ -101,10 +115,10 @@ dst_v="$(wc -l <"$DST/vectors.jsonl")"
 # Positive proof of join, not just of count: the LAST chunk's vector must be the
 # embedding of the LAST chunk's own text. Equal counts are satisfied by a
 # perfectly shifted file, which is the failure this is here to catch.
-last_text="$(tail -1 "$DST/chunks.jsonl" | jq -r '.text')"
-probe="$(jq -nc --arg m "$MODEL" --arg i "$last_text" '{model:$m,input:$i}')"
+last_text="$(tail -1 "$DST/chunks.jsonl" | "$JQ" -r '.text')"
+probe="$("$JQ" -nc --arg m "$MODEL" --arg i "$last_text" '{model:$m,input:$i}')"
 expect="$(curl -sS -X POST "$ENDPOINT/v1/embeddings" -H 'content-type: application/json' \
-    -d "$probe" | jq -c '.data[0].embedding')"
+    -d "$probe" | "$JQ" -c '.data[0].embedding')"
 actual="$(tail -1 "$DST/vectors.jsonl")"
 if [ "$expect" != "$actual" ]; then
     echo "error: last chunk's vector is NOT its own embedding — join is wrong, index discarded" >&2

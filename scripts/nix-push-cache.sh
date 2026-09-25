@@ -35,6 +35,20 @@
 
 set -uo pipefail
 
+_npc_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_npc_dir" ] && [ "$_npc_dir" != "/" ] && [ ! -f "$_npc_dir/lib/tool-dispatch.sh" ]; do
+    _npc_dir="$(dirname "$_npc_dir")"
+done
+if [ -f "$_npc_dir/lib/tool-dispatch.sh" ]; then
+    . "$_npc_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_npc_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
@@ -69,14 +83,14 @@ deps_out_path() {
     local out="$1" json depsdrv djson outpath
     json="$(cd "$REPO_ROOT" && _nix derivation show ".#${out}" 2>/dev/null)" || return 1
     [ -n "$json" ] || return 1
-    depsdrv="$(printf '%s' "$json" | jq -r '
+    depsdrv="$(printf '%s' "$json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))
         | keys[] | select(test("-deps-"))' 2>/dev/null | head -n 1)"
     [ -n "$depsdrv" ] || return 1
     djson="$(cd "$REPO_ROOT" && _nix derivation show "$(_logical "$depsdrv")" 2>/dev/null)" || return 1
-    outpath="$(printf '%s' "$djson" | jq -r '
+    outpath="$(printf '%s' "$djson" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value | .outputs.out.path' 2>/dev/null)"
     [ -n "$outpath" ] && [ "$outpath" != "null" ] || return 1

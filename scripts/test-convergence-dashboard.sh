@@ -14,6 +14,20 @@
 
 set -euo pipefail
 
+_tcd_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_tcd_dir" ] && [ "$_tcd_dir" != "/" ] && [ ! -f "$_tcd_dir/lib/tool-dispatch.sh" ]; do
+    _tcd_dir="$(dirname "$_tcd_dir")"
+done
+if [ -f "$_tcd_dir/lib/tool-dispatch.sh" ]; then
+    . "$_tcd_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_tcd_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -80,48 +94,52 @@ assert_true "md exposes Integration & Interpretation section" \
 # --- Group 2: rendered json shape --------------------------------------------
 printf '\n  [group] rendered json shape\n'
 assert_true "json exists" "[ -f '$JSON_PATH' ]"
-assert_true "json parses cleanly" "jq -e . '$JSON_PATH' >/dev/null"
-assert_true "json has generated_at" "jq -e '.generated_at | type == \"string\"' '$JSON_PATH' >/dev/null"
-assert_true "json has alert_level" "jq -e 'has(\"alert_level\")' '$JSON_PATH' >/dev/null"
-assert_true "json has alert_thresholds" "jq -e '.alert_thresholds.red_below_percent_closed == 90' '$JSON_PATH' >/dev/null"
-assert_true "json has yellow alert threshold" "jq -e '.alert_thresholds.yellow_below_percent_closed == 95' '$JSON_PATH' >/dev/null"
-assert_true "json has dashboard_contract" "jq -e '.dashboard_contract | type == \"object\"' '$JSON_PATH' >/dev/null"
+assert_true "json parses cleanly" "\"$JQ\" -e . '$JSON_PATH' >/dev/null"
+assert_true "json has generated_at" "\"$JQ\" -e '.generated_at | type == \"string\"' '$JSON_PATH' >/dev/null"
+assert_true "json has alert_level" "\"$JQ\" -e 'has(\"alert_level\")' '$JSON_PATH' >/dev/null"
+assert_true "json has alert_thresholds" "\"$JQ\" -e '.alert_thresholds.red_below_percent_closed == 90' '$JSON_PATH' >/dev/null"
+assert_true "json has yellow alert threshold" "\"$JQ\" -e '.alert_thresholds.yellow_below_percent_closed == 95' '$JSON_PATH' >/dev/null"
+assert_true "json has dashboard_contract" "\"$JQ\" -e '.dashboard_contract | type == \"object\"' '$JSON_PATH' >/dev/null"
 assert_true "dashboard_contract names source-of-truth spec" \
-    "jq -e '.dashboard_contract.integration.source_of_truth == \"openspec/specs/knowledge-source-of-truth/spec.md\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.dashboard_contract.integration.source_of_truth == \"openspec/specs/knowledge-source-of-truth/spec.md\"' '$JSON_PATH' >/dev/null"
 assert_true "dashboard_contract declares refresh cadence" \
-    "jq -e '.dashboard_contract.refresh_policy.staleness_threshold_hours == 24' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.dashboard_contract.refresh_policy.staleness_threshold_hours == 24' '$JSON_PATH' >/dev/null"
 assert_true "dashboard_contract enumerates signature fields" \
-    "jq -e '.dashboard_contract.signature_format.fields | length >= 10' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.dashboard_contract.signature_format.fields | length >= 10' '$JSON_PATH' >/dev/null"
 
 # --- Group 3: alert level classification -------------------------------------
 printf '\n  [group] alert level classification\n'
-LATEST_PCT=$(jq -r '.latest.percent_closed // 0' "$JSON_PATH")
-LATEST_ALERT=$(jq -r '.alert_level' "$JSON_PATH")
-EXPECTED_ALERT=$(awk -v p="$LATEST_PCT" 'BEGIN {
-    if (p < 90) print "red";
-    else if (p < 95) print "yellow";
-    else print "green";
-}')
+RECORD_COUNT=$("$JQ" '.record_count // 0' "$JSON_PATH")
+LATEST_PCT=$("$JQ" -r '.latest.percent_closed // 0' "$JSON_PATH")
+LATEST_ALERT=$("$JQ" -r '.alert_level' "$JSON_PATH")
+if [ "$RECORD_COUNT" -gt 0 ]; then
+    EXPECTED_ALERT=$(awk -v p="$LATEST_PCT" 'BEGIN {
+        if (p < 90) print "red";
+        else if (p < 95) print "yellow";
+        else print "green";
+    }')
+else
+    EXPECTED_ALERT="unknown"
+fi
 assert_equal "alert_level matches latest percent_closed=$LATEST_PCT" \
     "$LATEST_ALERT" "$EXPECTED_ALERT"
 
 # --- Group 4: trend metrics --------------------------------------------------
 printf '\n  [group] trend metrics over last 7 records\n'
-RECORD_COUNT=$(jq '.record_count' "$JSON_PATH")
 if [ "$RECORD_COUNT" -gt 0 ]; then
     assert_true "pass_rate_7d_percent is numeric" \
-        "jq -e '.trend_metrics.pass_rate_7d_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+        "\"$JQ\" -e '.trend_metrics.pass_rate_7d_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
     assert_true "coverage_avg_7d_percent is numeric" \
-        "jq -e '.trend_metrics.coverage_avg_7d_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+        "\"$JQ\" -e '.trend_metrics.coverage_avg_7d_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
 
     # Compare against an independent computation from the history array
-    EXPECTED_PASS=$(jq '.history[-7:] | (map(select(.ci_result == "PASS")) | length) / length * 100' "$JSON_PATH")
-    ACTUAL_PASS=$(jq '.trend_metrics.pass_rate_7d_percent' "$JSON_PATH")
+    EXPECTED_PASS=$("$JQ" '.history[-7:] | (map(select(.ci_result == "PASS")) | length) / length * 100' "$JSON_PATH")
+    ACTUAL_PASS=$("$JQ" '.trend_metrics.pass_rate_7d_percent' "$JSON_PATH")
     assert_equal "pass_rate_7d_percent matches recomputation" \
         "$ACTUAL_PASS" "$EXPECTED_PASS"
 
-    EXPECTED_AVG=$(jq '.history[-7:] | map(.percent_closed) | add / length' "$JSON_PATH")
-    ACTUAL_AVG=$(jq '.trend_metrics.coverage_avg_7d_percent' "$JSON_PATH")
+    EXPECTED_AVG=$("$JQ" '.history[-7:] | map(.percent_closed) | add / length' "$JSON_PATH")
+    ACTUAL_AVG=$("$JQ" '.trend_metrics.coverage_avg_7d_percent' "$JSON_PATH")
     assert_equal "coverage_avg_7d_percent matches recomputation" \
         "$ACTUAL_AVG" "$EXPECTED_AVG"
 fi
@@ -132,7 +150,7 @@ if [ "$RECORD_COUNT" -gt 0 ]; then
     REQUIRED_FIELDS=(release date commit total_cc earned_cc residual_cc percent_closed worst_spec worst_reason evidence projection ci_result)
     for field in "${REQUIRED_FIELDS[@]}"; do
         assert_true "history[0] has field $field" \
-            "jq -e '.history[0] | has(\"$field\")' '$JSON_PATH' >/dev/null"
+            "\"$JQ\" -e '.history[0] | has(\"$field\")' '$JSON_PATH' >/dev/null"
     done
 fi
 
@@ -140,17 +158,17 @@ fi
 # @trace spec:resource-metric-collection, spec:observability-metrics
 printf '\n  [group] resource metrics block\n'
 assert_true "json has metrics block" \
-    "jq -e '.metrics | type == \"object\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.metrics | type == \"object\"' '$JSON_PATH' >/dev/null"
 assert_true "metrics has cpu_percent" \
-    "jq -e '.metrics.cpu_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.metrics.cpu_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
 assert_true "metrics has memory_percent" \
-    "jq -e '.metrics.memory_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.metrics.memory_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
 assert_true "metrics has disk_percent" \
-    "jq -e '.metrics.disk_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.metrics.disk_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
 assert_true "metrics has sample_timestamp" \
-    "jq -e '.metrics.sample_timestamp | type == \"string\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.metrics.sample_timestamp | type == \"string\"' '$JSON_PATH' >/dev/null"
 assert_true "metrics declares its source crate" \
-    "jq -e '.metrics.source == \"tillandsias-metrics::DashboardSnapshot\"' '$JSON_PATH' >/dev/null"
+    "\"$JQ\" -e '.metrics.source == \"tillandsias-metrics::DashboardSnapshot\"' '$JSON_PATH' >/dev/null"
 
 # --- Group 6: source-of-truth integration ------------------------------------
 printf '\n  [group] source-of-truth integration\n'

@@ -19,6 +19,20 @@
 
 set -euo pipefail
 
+_nbc_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_nbc_dir" ] && [ "$_nbc_dir" != "/" ] && [ ! -f "$_nbc_dir/lib/tool-dispatch.sh" ]; do
+    _nbc_dir="$(dirname "$_nbc_dir")"
+done
+if [ -f "$_nbc_dir/lib/tool-dispatch.sh" ]; then
+    . "$_nbc_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_nbc_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 WORK_DIR="${WORK_DIR:-/work}"
 FLAKE_LOCK="$WORK_DIR/flake.lock"
 
@@ -32,7 +46,7 @@ _ALL_TSV=$(mktemp)
 _FETCH_DIR=$(mktemp -d)
 trap 'rm -f "$_ALL_TSV"; rm -rf "$_FETCH_DIR"' EXIT
 
-jq -r '
+"$JQ" -r '
     .nodes as $N |
     ($N.root.inputs | keys) as $root_keys |
 

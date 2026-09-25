@@ -25,6 +25,21 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+
+_mrk_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_mrk_dir" ] && [ "$_mrk_dir" != "/" ] && [ ! -f "$_mrk_dir/lib/tool-dispatch.sh" ]; do
+    _mrk_dir="$(dirname "$_mrk_dir")"
+done
+if [ -f "$_mrk_dir/lib/tool-dispatch.sh" ]; then
+    . "$_mrk_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_mrk_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 . "$ROOT/scripts/plan-binary-probe.sh"
 if ! PLAN="$(ensure_fresh_plan_binary)"; then
     echo "fail:recall-at-k:no-fresh-plan-binary" >&2
@@ -58,9 +73,9 @@ trap 'rm -rf "$TMP"' EXIT
 
 _unload_all() {
     local m
-    for m in $(curl -sS "$ENDPOINT/api/ps" 2>/dev/null | jq -r '.models[]?.name' | tr -d ''); do
+    for m in $(curl -sS "$ENDPOINT/api/ps" 2>/dev/null | "$JQ" -r '.models[]?.name' | tr -d '\r'); do
         curl -sS -o /dev/null -X POST "$ENDPOINT/api/generate" \
-            -d "$(jq -nc --arg m "$m" '{model:$m, keep_alive:0, prompt:""}')" 2>/dev/null
+            -d "$("$JQ" -nc --arg m "$m" '{model:$m, keep_alive:0, prompt:""}')" 2>/dev/null
     done
     sleep 3
 }
@@ -72,12 +87,12 @@ while IFS=$'\t' read -r band question; do
     [ -n "$question" ] || continue
     curl -sS --max-time 120 -X POST "$ENDPOINT/v1/embeddings" \
         -H 'content-type: application/json' \
-        -d "$(jq -nc --arg m "$EMBED_MODEL" --arg i "$question" '{model:$m,input:$i}')" 2>/dev/null \
-        | jq -c '.data[0].embedding' > "$TMP/qv.json"
+        -d "$("$JQ" -nc --arg m "$EMBED_MODEL" --arg i "$question" '{model:$m,input:$i}')" 2>/dev/null \
+        | "$JQ" -c '.data[0].embedding' > "$TMP/qv.json"
     [ -s "$TMP/qv.json" ] && [ "$(cat "$TMP/qv.json")" != null ] || continue
     "$PLAN" spec-retrieve --index-dir "$INDEX_DIR" --query-vec "$TMP/qv.json" --k "$K" \
         2>/dev/null > "$TMP/hits.json" || continue
-    jq -c --arg b "$band" --arg q "$question" \
+    "$JQ" -c --arg b "$band" --arg q "$question" \
         '{band:$b, q:$q, hits:[.[] | {path, text: (.text[0:1200]), score}]}' \
         "$TMP/hits.json" >> "$TMP/retrieved.jsonl"
 done < "$QUESTIONS"
@@ -91,9 +106,9 @@ _ask() { # _ask <prompt> -> YES|NO|EMPTY|UNPARSED
     local r raw
     r="$(curl -sS --max-time 180 -X POST "$ENDPOINT/api/generate" \
         -H 'content-type: application/json' \
-        -d "$(jq -nc --arg m "$JUDGE_MODEL" --arg p "$1" \
+        -d "$("$JQ" -nc --arg m "$JUDGE_MODEL" --arg p "$1" \
             '{model:$m,prompt:$p,stream:false,options:{temperature:0,num_predict:4}}')" 2>/dev/null)"
-    raw="$(printf '%s' "$r" | jq -r '.response // ""' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+    raw="$(printf '%s' "$r" | "$JQ" -r '.response // ""' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
     case "$raw" in
         YES*) printf 'YES' ;; NO*) printf 'NO' ;; "") printf 'EMPTY' ;; *) printf 'UNPARSED' ;;
     esac
@@ -101,13 +116,13 @@ _ask() { # _ask <prompt> -> YES|NO|EMPTY|UNPARSED
 
 printf 'band\thit_rank\tverdict\tpair\tpath\tquestion\n'
 while IFS= read -r row; do
-    band="$(jq -r '.band' <<<"$row")"
-    q="$(jq -r '.q' <<<"$row")"
-    n="$(jq -r '.hits | length' <<<"$row")"
+    band="$("$JQ" -r '.band' <<<"$row")"
+    q="$("$JQ" -r '.q' <<<"$row")"
+    n="$("$JQ" -r '.hits | length' <<<"$row")"
     i=0
     while [ "$i" -lt "$n" ]; do
-        path="$(jq -r --argjson i "$i" '.hits[$i].path' <<<"$row")"
-        text="$(jq -r --argjson i "$i" '.hits[$i].text' <<<"$row")"
+        path="$("$JQ" -r --argjson i "$i" '.hits[$i].path' <<<"$row")"
+        text="$("$JQ" -r --argjson i "$i" '.hits[$i].text' <<<"$row")"
         aff="$(_ask "QUESTION: ${q}
 
 PASSAGE:

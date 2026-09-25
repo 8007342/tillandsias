@@ -6,6 +6,20 @@
 
 set -euo pipefail
 
+_ucd_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_ucd_dir" ] && [ "$_ucd_dir" != "/" ] && [ ! -f "$_ucd_dir/lib/tool-dispatch.sh" ]; do
+    _ucd_dir="$(dirname "$_ucd_dir")"
+done
+if [ -f "$_ucd_dir/lib/tool-dispatch.sh" ]; then
+    . "$_ucd_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_ucd_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="${SOURCE:-$REPO_ROOT/target/convergence/centicolon-signature.jsonl}"
 DOC_DIR="$REPO_ROOT/docs/convergence"
@@ -48,7 +62,7 @@ if [[ -s "$SOURCE" ]]; then
     while IFS= read -r row_line_in; do
         rows+=("$row_line_in")
     done < <(
-        jq -r '
+        "$JQ" -r '
           . as $r
           | ($r.release_version // $r.version // "unknown") as $release
           | ($r.release_date // ($r.timestamp | tostring | split("T")[0]) // "unknown") as $date
@@ -116,7 +130,7 @@ append_trend_window() {
     [[ -z "$glyphs" ]] && return 0
 
     window_index=$((window_index + 1))
-    jq -nc \
+    "$JQ" -nc \
         --arg kind "$kind" \
         --argjson index "$window_index" \
         --arg start_release "$start_release" \
@@ -170,7 +184,7 @@ for row in ${rows[@]+"${rows[@]}"}; do
     }')"
     sparkline+="$glyph"
     residualline+="$inverse"
-    jq -nc \
+    "$JQ" -nc \
         --arg release "$release" \
         --arg date "$date" \
         --arg commit "$commit" \
@@ -232,9 +246,9 @@ if [[ -n "$window_closed" ]]; then
 fi
 
 if [[ "${#rows[@]}" -gt 0 ]]; then
-    history_json="$(jq -s '.' "$json_lines_file")"
-    latest_json="$(jq '.[-1]' <<<"$history_json")"
-    trend_windows_json="$(jq -s '.' "$trend_windows_json_file")"
+    history_json="$("$JQ" -s '.' "$json_lines_file")"
+    latest_json="$("$JQ" '.[-1]' <<<"$history_json")"
+    trend_windows_json="$("$JQ" -s '.' "$trend_windows_json_file")"
 else
     history_json='[]'
     latest_json='{}'
@@ -253,8 +267,8 @@ record_count="${#rows[@]}"
 # Both inputs use the most recent rows because release cadence is irregular
 # and a fixed time window can be empty for days at a time.
 if [[ "$record_count" -gt 0 ]]; then
-    pass_rate_7d=$(jq '.[-7:] | (map(select(.ci_result == "PASS")) | length) / length * 100' <<<"$history_json")
-    coverage_avg_7d=$(jq '.[-7:] | map(.percent_closed) | add / length' <<<"$history_json")
+    pass_rate_7d=$("$JQ" '.[-7:] | (map(select(.ci_result == "PASS")) | length) / length * 100' <<<"$history_json")
+    coverage_avg_7d=$("$JQ" '.[-7:] | map(.percent_closed) | add / length' <<<"$history_json")
 else
     pass_rate_7d="null"
     coverage_avg_7d="null"
@@ -266,7 +280,7 @@ alert_yellow_threshold=95
 
 # Compute alert level from the most recent percent_closed.
 if [[ "$record_count" -gt 0 ]]; then
-    latest_alert=$(jq -nc \
+    latest_alert=$("$JQ" -nc \
         --argjson pct "${latest_pct:-0}" \
         --argjson red "$alert_red_threshold" \
         --argjson yellow "$alert_yellow_threshold" \
@@ -288,7 +302,7 @@ fi
 # @trace spec:resource-metric-collection, spec:observability-metrics, spec:observability-convergence
 metrics_block_default='{"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"}'
 if [[ -s "$METRICS_SAMPLE" ]]; then
-    metrics_block_json=$(jq -c '{
+    metrics_block_json=$("$JQ" -c '{
         cpu_percent: (.cpu_percent // 0.0),
         memory_percent: (.memory_percent // 0.0),
         disk_percent: (.disk_percent // 0.0),
