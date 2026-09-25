@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    field: next_action
+    value: |-
+      Claimed by macneo 2026-09-23, assigned by macuahuitl-fedora on the
+      operator's report. Only a Mac can compile and see this.
+      1. Add "NSData" to objc2-foundation's features.
+      2. Build the image from the embedded bytes —
+         NSImage::initWithData(alloc, &NSData::with_bytes(tray_icon_png(...))) —
+         then setSize(18,18) and setTemplate(true).
+      3. DELETE the candidate-path functions and the two source-tree tests.
+         They do not merely fail to catch this; they assert it.
+      4. Add the decode test and the size test.
+      5. Keep "T" ONLY for the decode-failure case, so the fallback still exists
+         for a state that can actually occur.
+      6. Optional, and left to the implementer: drop the tray-icon.png copy from
+         scripts/build-macos-tray.sh once nothing reads it.
+      OUT OF SCOPE TONIGHT: order 496, the per-phase lifecycle icon, which can
+      reuse the same call later.
+
+
+      [2026-09-23T07:29:54Z macneo] IMPLEMENTED 2026-09-23. Landed on origin/linux-next at 5dea70973
+      (ok:land:5dea70973:attempt-1), work/1367-irnh at 61e210e05, PR #170 merged by
+      relay. Verified by the CHANGE and not only by the commit: 61e210e05 is an
+      ancestor of trunk, and trunk's status_item.rs carries tray_icon_png at 4 sites
+      with ZERO executable occurrences of initByReferencingFile or CARGO_MANIFEST_DIR
+      — the 4 textual matches that remain are this fix's own doc comments describing
+      what was removed. The relay added a rustfmt-only commit (a line wrap and a
+      trailing blank line).
+
+      1b IS THE OUTSTANDING VERIFICATION AND IT IS NAMED, NOT ASSUMED:
+        A host curl-installs the NEXT PUBLISHED RELEASE and records the plant in the
+        menu bar. THE CHECK MUST BE MADE FROM /Applications/Tillandsias.app, not from
+        a binary extracted out of the tarball — 1a already covers the bare binary, and
+        1b exists precisely because the INSTALLED case was the broken one nobody
+        tested. macbookair's v56.9.22.1 run is the pre-fix control: exe_path inside
+        the bundle, in_app=true, Contents/Resources/tray-icon.png present and
+        byte-identical to the tarball's, and "T" on screen.
+
+      2b IS THE OTHER OUTSTANDING ITEM AND IS THE OPERATOR'S, NOT A HOST'S:
+        that the icon renders correctly sized in a LIGHT and a DARK menu bar.
+        setSize(18,18) and setTemplate(true) are asserted by test and the NSImage
+        reports 18x18, but setting the properties that should produce an appearance is
+        not observing the appearance. setTemplate(true) is exactly what dark mode
+        exercises, so this is the criterion that would catch a wrong template flag and
+        it cannot be signed off by asserting the flag was set.
+
+      STILL OPEN AND DELIBERATELY NOT DONE HERE:
+        scripts/build-macos-tray.sh:157-164 still copies tray-icon.png into
+        Contents/Resources. NOTHING READS IT NOW. Removing it touches release
+        packaging and was kept out of a fix the operator was waiting on. Whoever takes
+        it should check the dmg path too, not only the tarball.
+        Order 496, the per-phase lifecycle icon, is the same call with a different
+        TrayIconState — a one-line change once someone wants it.
+
+      [2026-09-23T21:24:57Z macneo] 1b IS ASSIGNED TO macbookair (coordinator routing, 2026-09-23). Recorded in the
+      FIELD rather than only in a message, because a routing decision that lives in a
+      conversation is invisible to the next host the selector sends here — which is
+      this row's sibling failure and was measured twice on 1084-x8ya today.
+
+      WHY macbookair AND NOT macneo: macbookair ran the v56.9.22.1 PRE-FIX control on
+      that same machine (exe_path inside the bundle, in_app=true,
+      Contents/Resources/tray-icon.png present and byte-identical to the tarball's,
+      and "T" on screen). Its before and after therefore share one host, which is what
+      makes the pair a control rather than two observations. macneo has no pre-fix
+      observation of its own and its /Applications bundle is currently absent
+      (1327-r4zb), so a run here would be the weaker evidence AND a second destructive
+      smoke on a second Mac for the same question.
+
+      macneo IS THE SECOND OBSERVER IF macbookair's RESULT IS AMBIGUOUS, and only then.
+
+      THE PRECONDITION IS NOW MET, verified by artifact against the tag rather than
+      assumed to have ridden along: v56.9.23.1 (a4bd84744) carries the fix —
+        git show v56.9.23.1:crates/tillandsias-macos-tray/src/status_item.rs
+          grep -c tray_icon_png                                         -> 4
+          executable initByReferencingFile / CARGO_MANIFEST_DIR         -> 0
+        (4 textual matches remain and all are this fix's own doc comments naming what
+         was removed; counting them as code is the mention-versus-use error that
+         nearly misread the landing.)
+
+      2b IS STILL THE OPERATOR'S AND IS NOT DISCHARGED BY 1b. A glyph appearing in
+      place of "T" does not establish that it is correctly sized in a LIGHT and a DARK
+      menu bar. setTemplate(true) is exactly what dark mode exercises, so 2b is the
+      criterion that would catch a wrong template flag, and no host can sign it off by
+      asserting the flag is set.
+    ts: "2026-09-23T21:24:57Z"
+    host: macneo
+
+events:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    event:
+      type: note
+      ts: "2026-09-23T21:24:57Z"
+      host: macneo
+      summary: |-
+        1b routed to macbookair, which holds the pre-fix control on the same host; recorded in the field so the routing is visible to the selector

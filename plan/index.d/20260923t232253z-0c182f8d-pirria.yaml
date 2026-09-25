@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: clear-vault-host-credentials-cannot-remove-subuid-owned-vault-data-and-exits-zero-on-a-partial-clear-so-the-room-reads-cold-while-it-is-warm
+    event:
+      type: progress
+      ts: "2026-09-23T23:22:53Z"
+      agent_id: linux-pirria-claude-20260923t232253z
+      host: pirria
+      summary: |
+        PROGRESS (pirria). The clearer's behaviour was already fixed on trunk by 1284-jf86 (2d99d3de8): a podman unshare retry, and exit 1 on a partial clear. That covers exit criteria 1-3 as CODE, but NO fixture exercised them (every arm of test-clear-vault-host-credentials.sh plants a user-removable vault-data). This row's residual is the pin its unscoreable: names. work/1188-vixu = 35a1493b3, draft PR #174: scripts/test-clear-vault-credentials-partial-is-nonzero.sh (write-protected subtree simulates the subuid tree; stub podman unshare resolves / refuses / is absent; negative control: a removable dir never calls podman), bound as gate step 281-1188-vixu. Current clearer: ok:...:4/4. Pre-fix 2d99d3de8^: violation:...:1/4. REMAINING: (a) STEP_SECOND_REGIME needs a darwin or msys run before check-gate-step-regimes admits the step (1302-7j8p); (b) exit criterion 4 (reset + clear on pirria, then probe-credential-cold-state reads cold) is DESTRUCTIVE to this host's live GitHub credential and is left for an operator-approved smoke.

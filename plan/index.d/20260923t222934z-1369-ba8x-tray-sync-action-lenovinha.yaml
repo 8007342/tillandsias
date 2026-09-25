@@ -1,0 +1,34 @@
+packets:
+  - packet_id: the-tray-offers-a-sync-action-that-runs-the-on-demand-mirror-sync-and-shows-its-verdict-before-the-operator-spends-a-push
+    order: 1369-ba8x
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, git-mirror]
+    estimated_hours: 3
+    owned_files: []
+    observed_by: lenovinha
+    unscoreable: |
+      real-host-tray: the closure is a tray menu action observed on a live
+      desktop session against a running mirror, which no headless fixture can
+      exercise.
+    title: |
+      the tray offers a Sync action that runs the on-demand mirror sync (tillandsias --sync <project>) and shows its verdict, so an operator can ask "is my mirror current" before spending a push
+    verifiable_closure: |
+      On a live Linux tray with a running per-project mirror, a Sync menu
+      action for a project runs the same code path as the CLI command
+      tillandsias --sync <project> (run_sync_project, not a re-implementation),
+      and the tray shows heads-current, heads-behind or heads-unknown for the
+      branch, plus the diverged-work-refs count when present. A stopped mirror
+      shows the named block and its remedy, never a crash. Recorded on this
+      row as a real-host observation.
+    context: |
+      Split out of 1350-ku7v (T1) when that row closed on 2026-09-23. T1's
+      scope named "a CLI flag and a tray action". The CLI half shipped and
+      was accepted on two regimes (lenovinha rebuild, pirria install; relay
+      ea6b7e398). The tray half was never routed, and leaving it inside a
+      closed row would hide it. The command's verdict contract (the last
+      sync-state: line is the verdict, and note: lines are information) is in
+      verdict_line_of and sync_state_of in crates/tillandsias-headless/src/main.rs.

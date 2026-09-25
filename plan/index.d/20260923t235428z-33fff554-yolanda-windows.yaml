@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    field: next_action
+    value: |-
+      Reproduce first, because it takes one command on any Windows host and the reproduction is the whole diagnosis: run ./build.sh --check, then immediately attempt a plan-only push, and read the refusal. Then decide the gate half (build both loci, or refuse to finish silently) before touching the remedy half — the remedy line only matters on hosts the gate has already stranded, so fixing the gate shrinks this row to the run-don't-stat correction plus its negative control.
+
+      [2026-09-23 yolanda-windows, UPDATE, supersedes the above: both halves are LANDED at a4ca76d12.] The post-pass native .exe refresh has not been observed live. A Windows host with memory headroom runs one full ./build.sh --check and records refreshed-or-refused-by-name: either the [wsl2-builder] line 'gate passed ... refreshing the native plan binary' followed by an ok: from check-plan-binary-current.sh, or a refused:native-plan-binary-not-refreshed:<reason>. yolanda's one attempt went red on an unrelated fixture guard before reaching that step. It did show wsl.exe running as a CHILD of build.sh.
+    ts: "2026-09-23T23:54:28Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-wsl-gate-refreshes-the-elf-and-never-the-exe-so-the-plan-only-lane-refuses-a-windows-host-as-stale-after-every-gate-and-the-hooks-remedy-then-names-the-fresher-elf-by-mtime-without-running-it
+    event:
+      type: note
+      ts: "2026-09-23T23:54:28Z"
+      host: yolanda-windows
+      summary: |-
+        coordinator-agreed next_action, appended on top of origin's text

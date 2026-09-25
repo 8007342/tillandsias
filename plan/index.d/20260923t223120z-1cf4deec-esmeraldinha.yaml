@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: single-step-litmus-budgets-assume-a-fast-host-so-a-floor-tier-timeout-wears-an-assertion-failures-colour-and-sends-a-fixer-to-something-not-broken
+    event:
+      type: note
+      ts: "2026-09-23T22:31:20Z"
+      agent_id: windows-esmeraldinha-claude-20260923t223121z
+      host: esmeraldinha
+      summary: |-
+        FLOOR-TIER RE-MEASURE OF THE TWO NAMED ARMS, esmeraldinha (Intel N100, 4 cores, 15.8GB; Windows 11, MINGW64_NT-10.0-26200; checkout on drvfs), 2026-09-23 22:17:42Z to 22:31:01Z. Method: scripts/run-litmus-test.sh meta-orchestration --compact, run directly and not through build.sh, on windows-next c7d3603bf, which includes 35193f5dd. The run executed 24 of 24 bound litmus, with 0 skipped and 0 not-run.
+
+        THE TALLY IS NOW CORRECT AT THIS LOCUS. The summary reads: PASS 20 / FAIL 4 / BUDGET: 2 of those FAILs were killed at their budget, not failed assertions (still FAIL - 820-c8q8) / Status [FAIL], rc=1. The two budget kills are exactly the two arms this row names:
+          build-cache-sweep-trigger      STEP 1/15  TIMEOUT  31.5s   killed at budget - censored
+          mcp-expert-health-probe-shape  STEP 18/20 TIMEOUT  221.3s  killed at budget - censored
+        On 2026-09-22 the same two arms at the same locus (31.8s and 228.1s) went into FAIL with no BUDGET line. Today they carry the subset line, and the verdict is still FAIL and still non-zero, as 820-c8q8 requires.
+
+        THE OTHER TWO FAILS ARE NOT BUDGET, and the tally correctly does not claim them. e2e-eligibility-probe-shape step 9 is 1186-w3ph's fifth mechanism. Its fix is on work/1186-w3ph 26eedbe90 and is not yet on this tree. opencode-prompt-e2e-shape step 5 (launch forge) is capability-absent at this locus. BUDGET=2 plus 2 non-budget FAILs equals FAIL 4, so the parts sum.
+
+        Fixture: scripts/test-litmus-budget-tally.sh -> ok:litmus-budget-tally:7 at this locus, rc=0, 37s.
+
+        Both censored times are CEILINGS, not durations. This re-measure verifies that the TALLY is right; it does not make these arms green on the floor. Their remedy is still a named skip or routing, never a raised budget. Evidence for closure: criterion (tally a kill apart from an assertion, still FAIL) holds on the floor tier.

@@ -107,10 +107,18 @@ pub fn announce_reset_plan(destroyed: &[&str], preserved: &[&str]) {
 mod tests {
     use super::*;
 
+    /// ORDER 1369-a76a. The two env tests below mutate ONE process-global
+    /// variable, and cargo runs tests on parallel threads that share the
+    /// environment: `only_zero_suppresses` setting "0" while
+    /// `unset_means_reset_proceeds` asserted the unset default reddened the gate
+    /// on yoga (2026-09-23, new-red, green on rerun). Serialize them.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// The default is the RESET. The operator's ruling makes an install the
     /// repair, so an absent variable must not be read as caution.
     #[test]
     fn unset_means_reset_proceeds() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { std::env::remove_var("TILLANDSIAS_DESTRUCTIVE_RESET_OK") };
         assert!(destructive_reset_allowed());
     }
@@ -120,6 +128,7 @@ mod tests {
     /// silently spare state on every host that set it to enable the reset.
     #[test]
     fn only_zero_suppresses() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { std::env::set_var("TILLANDSIAS_DESTRUCTIVE_RESET_OK", "0") };
         assert!(!destructive_reset_allowed());
         for v in ["1", "yes", "", "false", "00"] {

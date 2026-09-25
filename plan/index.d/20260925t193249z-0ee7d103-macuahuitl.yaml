@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: note
+      ts: "2026-09-25T19:32:49Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW (macuahuitl coordinator, 2026-09-25). 355d0dcf2 claims this row as well. The row was blocked on 1252-fg9e, which is still ready. Criterion 3 (a transcript of a forge agent writing a predicate without recompiling) is claimed with no artifact, and no predicate file is in the diff. The predicate command defaults to the observing class, which has shell access. Row stays open until the transcript exists.

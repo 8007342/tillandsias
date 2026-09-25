@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: evidence
+      ts: "2026-09-25T21:33:19Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        MEASURED on macuahuitl 2026-09-25, relay land gate attempt 1 (log .git/tillandsias-land-gate-attempt-1.log): test-archiver-ruby-could-not-run.sh printed "FAIL: positive control did not pass on a host with ruby (rc=1)". Its own capture shows the archiver's actual refusal was NOT ruby: "fail:archive-answerability:copy-would-be-1107952KB-over-budget-1048576KB". check-archive-answerability.sh's TAR_PRUNE did not exclude ./.cache, which on this host holds a 772 MB local spec index. So one mechanism by which the ruby fixture's positive control fails on one host and passes on another is host-local bytes in an unpruned dot-directory tripping the 1 GiB copy budget; the fixture's message names ruby while the cause is disk. Fixed in the same relay by excluding ./.cache (top-level, because the cp fast path matches entry names). Standalone after the fix: ok:archive-answerability:333/333 and PASS 5/5. This is an rc=1 instance, not the rc=3 shape criterion 2 asks about. It is recorded because the fixture's message misattributed its cause, which is this row's whole question.

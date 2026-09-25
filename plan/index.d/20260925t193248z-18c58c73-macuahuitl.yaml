@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-25T19:32:48Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW, ROW STAYS OPEN (macuahuitl coordinator, 2026-09-25). origin/work/retire-ruby-lua (769d6360b) marks this row implemented because retiring ruby from archiver --check makes the in-gate refusal disappear. Criterion 2 reads "the mechanism is NAMED for the rc=3 shape ... A change that only makes the fixture tolerant would satisfy nobody". No mechanism is named, and criterion 3 asks for a demonstration on yoga or macuahuitl, while the evidence is forge-only. Retiring the ruby lane may still be the right product move (560), but it closes this row's symptom, not its question. Also in that ref: check-archive-answerability.sh's forge branch uses a fixed work directory under CARGO_TARGET_DIR, which reintroduces the fixed-path race its own comment warns about, and the ruby-worker-failed message now prints for a lua failure. macbookair's diagnosis work is parked on salvage/tlatoanis-macbook-air/20260925-1132-r4mt-held (794dc24d7), held pending this decision, per the duplicate-fix rule.

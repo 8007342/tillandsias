@@ -138,6 +138,41 @@ fi
 # ════════════════════════════════════════════════════════════════════════════
 # ARMS 7-9 — THE LIFECYCLE. Order 1350-ku7v, second half.
 #
+# ── ARM 13 — a rebased work ref does not pin the verdict. ────────────────────
+# Measured on lenovinha 2026-09-23 (1350-ku7v): four work refs force-pushed
+# upstream stayed diverged in the mirror, because the reconcile fetch is
+# non-forced by design, and the publisher answered heads-behind with
+# linux-next current. THE FAILS CONTROL: on the pre-fix publisher this arm
+# answers heads-behind.
+echo "arm 13 — a rebased work ref with linux-next current answers heads-current, with a note"
+m13="$W/m13"; mk_mirror "$m13" 0 >/dev/null
+s13="$W/m13.src"
+git -C "$s13" checkout -q -b work/rebased
+echo local > "$s13/w"; git -C "$s13" add w; git -C "$s13" commit -q -m local-tip
+git -C "$s13" push -q "$m13" HEAD:refs/heads/work/rebased
+git -C "$s13" reset -q --hard HEAD~1
+echo rewritten > "$s13/w"; git -C "$s13" add w; git -C "$s13" commit -q -m rewritten-tip
+git -C "$m13" fetch -q "$s13" "+refs/heads/work/rebased:refs/remotes/origin/work/rebased"
+all13="$(sh "$PUB" "$m13" 2>/dev/null)"
+scoped13="$(sh "$PUB" "$m13" linux-next 2>/dev/null)"
+v13="$(printf '%s\n' "$all13" | grep '^sync-state:' | tail -1)"
+w13="$(printf '%s\n' "$scoped13" | grep '^sync-state:' | tail -1)"
+if [ "$(state_of "$v13")" = "heads-current" ] && [ "$(state_of "$w13")" = "heads-current" ] \
+   && grep -qx 'note:sync-state:diverged-work-refs:1' <<<"$all13"; then
+    ok "rebased work ref -> current, noted ($v13; scoped $w13)"
+else
+    bad "arm13: a rebased work ref pinned the verdict: unscoped '$all13', scoped '$scoped13'"
+fi
+# The scope is real: a diverged NON-work head still reads behind unscoped,
+# and linux-next itself behind reads behind when scoped to it.
+m13b="$W/m13b"; mk_mirror "$m13b" 2 >/dev/null
+b13="$(sh "$PUB" "$m13b" linux-next 2>/dev/null | grep '^sync-state:' | tail -1)"
+if [ "$(state_of "$b13")" = "heads-behind" ]; then
+    ok "linux-next behind, scoped to it -> behind ($b13)"
+else
+    bad "arm13: linux-next behind scoped to linux-next read '$b13'"
+fi
+
 # Arms 1-6 prove the publisher computes and publishes the right verdict. They
 # would all have passed while the script was shipped nowhere and called by
 # nothing, which is exactly what it was: a working script wired to nothing.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    event:
+      type: note
+      ts: "2026-09-25T19:32:48Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW (macuahuitl coordinator, 2026-09-25). 355d0dcf2 on origin/work/1367-lua-predicate-shims matches the packet, but it sits atop the held stack (964-tzmp, 914-ahsy, 560, 437), so it cannot relay alone as the ref stands. Follow-ups: fs.read is exposed to the cacheable class although lua_predicate.rs says a cacheable predicate may not read the disk, and PredicateRegistry caches on (name, arg), so a changed file yields a stale verdict. find_repo_root falls back to "." (a cwd of / admits every path). The test a_cacheable_predicate_cannot_read_a_file_through_the_stdlib passes but no longer means its name. Next action: rebase the shims onto trunk alone, or fix the stack below it.
