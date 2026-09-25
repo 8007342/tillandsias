@@ -77,6 +77,15 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: plausible record emitted"
 
+  # Order 1242-4x53, slice 1 (schema). A gate failure must be able to say
+  # whether it REPRODUCED on a same-regime re-run; this pins the field, its
+  # yes|no domain, and that absent stays absent rather than reading as "no".
+  # The re-run caller and the seeded-regression control are later slices.
+  - step: "SCHEMA: --emit-timing carries reproduced=yes|no, and writes no key when absent or invalid"
+    command: "bash scripts/test-timing-record-carries-reproduced.sh 2>&1 | tail -1"
+    timeout_ms: 20000
+    expected_behavior: "ok:timing-record-reproduced:5/5"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"
