@@ -67,6 +67,20 @@ keys="$("$JQ" -r 'keys_unsorted | .[0:6] | join(",")' < "$TMP/a1.jsonl" 2>/dev/n
 [ "$keys" = "ts,host,step,phase,duration_ms,exit" ] && ok "leading field order unchanged" \
     || bad "leading field order moved: $keys"
 
+# ARM 6 — the shell API callers use (timing_emit) forwards its fifth argument.
+( . "$ROOT/scripts/timing-log.sh"
+  now="$(timing_now_ms)"
+  TILLANDSIAS_TIMING_LOG="$TMP/a6.jsonl" timing_emit arm6 test "$((now - 50))" 1 yes )
+[ "$(field "$TMP/a6.jsonl")" = yes ] && ok "timing_emit forwards reproduced=yes" \
+    || bad "timing_emit dropped reproduced: $(cat "$TMP/a6.jsonl" 2>/dev/null)"
+
+# ARM 7 — and a four-argument call (every existing caller) still writes no key.
+( . "$ROOT/scripts/timing-log.sh"
+  now="$(timing_now_ms)"
+  TILLANDSIAS_TIMING_LOG="$TMP/a7.jsonl" timing_emit arm7 test "$((now - 50))" 1 )
+[ "$(field "$TMP/a7.jsonl")" = ABSENT ] && ok "four-argument timing_emit writes no reproduced key" \
+    || bad "four-argument timing_emit wrote a key: $(cat "$TMP/a7.jsonl" 2>/dev/null)"
+
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then
     printf 'ok:timing-record-reproduced:%d/%d\n' "$pass" "$total"

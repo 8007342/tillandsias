@@ -906,6 +906,8 @@ archive_check_log() {
     local status="$2"
     local source_log="${3:-}"
     local archive_name="${4:-${check_id}.log}"
+    # 1242-4x53: yes|no when a failed check was re-run once in the same regime.
+    local reproduced="${5:-}"
 
     mkdir -p "$CHECK_LOG_DIR"
     touch "$CHECK_LOG_INDEX"
@@ -959,7 +961,7 @@ archive_check_log() {
     if [[ "$status" != "skipped" && "$_acl_dur" -gt 0 ]]; then
         local _acl_rc=0
         [[ "$status" == "fail" ]] && _acl_rc=1
-        timing_emit "check:$check_id" "$CI_PHASE" "$((_acl_now - _acl_dur))" "$_acl_rc"
+        timing_emit "check:$check_id" "$CI_PHASE" "$((_acl_now - _acl_dur))" "$_acl_rc" "$reproduced"
     fi
 }
 
