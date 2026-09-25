@@ -169,6 +169,8 @@ fn option_takes_value(arg: &str) -> bool {
             | "--security-opt"
             | "--userns"
             | "--pids-limit"
+            | "--memory"
+            | "--memory-swap"
             | "--env"
             | "--network"
             | "--mount"

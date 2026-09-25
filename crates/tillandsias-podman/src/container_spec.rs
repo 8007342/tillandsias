@@ -99,6 +99,8 @@ pub struct ContainerSpec {
     no_new_privileges: bool,
     label_disable: bool,
     pids_limit: Option<u32>,
+    memory_mb: Option<u32>,
+    memory_swap_mb: Option<u32>,
     network: Option<String>,
     env: Vec<(String, String)>,
     secrets: Vec<String>,
@@ -129,6 +131,8 @@ impl ContainerSpec {
             no_new_privileges: true,
             label_disable: true,
             pids_limit: None,
+            memory_mb: None,
+            memory_swap_mb: None,
             network: None,
             env: Vec::new(),
             secrets: Vec::new(),
@@ -185,6 +189,30 @@ impl ContainerSpec {
     pub fn pids_limit(mut self, value: u32) -> Self {
         self.pids_limit = Some(value);
         self
+    }
+
+    /// Set `--memory <value>m` limit in MiB.
+    ///
+    /// @trace order:437, spec:forge-hot-cold-split (Requirement: --memory ceiling
+    ///   pairs with tmpfs caps)
+    pub fn memory_mb(mut self, value: u32) -> Self {
+        self.memory_mb = Some(value);
+        self
+    }
+
+    /// Set `--memory-swap <value>m` limit in MiB.
+    ///
+    /// Spec mandates `--memory-swap` MUST equal `--memory` exactly (zero net swap).
+    /// @trace order:437, spec:forge-hot-cold-split (Requirement: --memory ceiling
+    ///   pairs with tmpfs caps)
+    pub fn memory_swap_mb(mut self, value: u32) -> Self {
+        self.memory_swap_mb = Some(value);
+        self
+    }
+
+    /// Read the declared tmpfs mount specifications.
+    pub fn tmpfs_mounts(&self) -> &[String] {
+        &self.tmpfs
     }
 
     pub fn network(mut self, value: impl Into<String>) -> Self {
@@ -325,6 +353,14 @@ impl ContainerSpec {
         if let Some(limit) = self.pids_limit {
             args.push("--pids-limit".to_string());
             args.push(limit.to_string());
+        }
+        if let Some(mb) = self.memory_mb {
+            args.push("--memory".to_string());
+            args.push(format!("{mb}m"));
+        }
+        if let Some(mb) = self.memory_swap_mb {
+            args.push("--memory-swap".to_string());
+            args.push(format!("{mb}m"));
         }
 
         for (key, value) in &self.env {
@@ -626,6 +662,21 @@ mod tests {
         assert!(!args.contains(&"--privileged".to_string()));
         assert!(!args.contains(&"--network=host".to_string()));
         assert!(args.contains(&"--device=/dev/dri/renderD128".to_string()));
+    }
+
+    #[test]
+    fn memory_and_memory_swap_limits_are_serialized_and_validated() {
+        let spec = ContainerSpec::new("example:v1")
+            .memory_mb(586)
+            .memory_swap_mb(586);
+        let args = spec.build_run_args();
+        let mem_pos = args.iter().position(|a| a == "--memory").expect("--memory flag");
+        assert_eq!(args.get(mem_pos + 1).map(String::as_str), Some("586m"));
+        let swap_pos = args.iter().position(|a| a == "--memory-swap").expect("--memory-swap flag");
+        assert_eq!(args.get(swap_pos + 1).map(String::as_str), Some("586m"));
+
+        let argv = spec.build_run_argv().expect("policy-valid");
+        assert!(crate::policy::validate_launch_argv(&argv).is_ok());
     }
 
     #[test]

@@ -8130,6 +8130,28 @@ fn build_opencode_forge_args(
         // images/default/entrypoint-forge-opencode-web.sh.
         ForgeMode::Web => ("/usr/local/bin/entrypoint-forge-opencode-web.sh", ""),
     };
+    // ORDER 437: derive compute_memory_ceiling_mb from the tmpfs mounts in args
+    // and emit equal --memory and --memory-swap limits (Req 3 of forge-hot-cold-split).
+    // @trace order:437, spec:forge-hot-cold-split
+    let opencode_tmpfs_sizes: Vec<u32> = args
+        .windows(2)
+        .filter_map(|w| {
+            if w[0] == "--tmpfs" {
+                tillandsias_core::preflight::parse_tmpfs_size_mb(&w[1])
+            } else {
+                None
+            }
+        })
+        .collect();
+    if !opencode_tmpfs_sizes.is_empty() {
+        let opencode_ceiling =
+            tillandsias_core::preflight::compute_memory_ceiling_mb(opencode_tmpfs_sizes);
+        args.push("--memory".into());
+        args.push(format!("{opencode_ceiling}m"));
+        args.push("--memory-swap".into());
+        args.push(format!("{opencode_ceiling}m"));
+    }
+
     args.push("--entrypoint".into());
     args.push(entrypoint.into());
     args.push(forge_image_tag(version));
@@ -13556,6 +13578,39 @@ async fn run_agent_container_attached(
         }
     }
 
+    // ORDER 437: Pre-flight RAM check refuses launch on insufficient host RAM
+    // (Req 4 of forge-hot-cold-split).
+    // @trace order:437, spec:forge-hot-cold-split
+    let memory_val = args.iter().find_map(|a| {
+        if let Some(v) = a.strip_prefix("--memory=") {
+            Some(v)
+        } else {
+            None
+        }
+    }).or_else(|| {
+        args.iter().position(|a| a == "--memory").and_then(|idx| args.get(idx + 1).map(|s| s.as_str()))
+    });
+    if let Some(val) = memory_val {
+        if let Ok(required_mb) = val.trim_end_matches(['m', 'M']).parse::<u32>() {
+            if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
+                if let Some(available_mb) =
+                    tillandsias_core::preflight::parse_mem_available_mb(&meminfo)
+                {
+                    if let Err(err) =
+                        tillandsias_core::preflight::check_host_ram(available_mb, required_mb)
+                    {
+                        eprintln!(
+                            "[preflight] refusing to launch {container_name}: {err} (order 437)"
+                        );
+                        return Err(format!(
+                            "refusing to launch {container_name}: host RAM preflight: {err}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     // 873-vgyg. CLEAR AN EXITED CORPSE; WAIT OUT A RUNNING HOLDER; NEVER KILL ONE.
     //
     // A launch that dies during startup leaves a container EXITED but holding
@@ -16568,7 +16623,15 @@ fn build_forge_agent_run_args_with_vault(
     // verifiable provenance to origin with nobody's account involved.
     // See also bake-allowlisted-tools-into-the-image.
     //
-    // @trace plan/issues/forge-github-token-injection (order 359, REVERSED)
+    // ORDER 437: derive compute_memory_ceiling_mb from the tmpfs mounts in spec
+    // and emit equal --memory and --memory-swap limits (Req 3 of forge-hot-cold-split).
+    // @trace order:437, spec:forge-hot-cold-split
+    let tmpfs_sizes = spec
+        .tmpfs_mounts()
+        .iter()
+        .filter_map(|t| tillandsias_core::preflight::parse_tmpfs_size_mb(t));
+    let ceiling_mb = tillandsias_core::preflight::compute_memory_ceiling_mb(tmpfs_sizes);
+    let spec = spec.memory_mb(ceiling_mb).memory_swap_mb(ceiling_mb);
 
     spec.build_run_args()
 }
@@ -28133,6 +28196,80 @@ esac
              the host-mount arm would mask the bind mount"
         );
     }
+
+    /// ORDER 437: Forge launch builders emit equal --memory and --memory-swap
+    /// derived from compute_memory_ceiling_mb over the tmpfs mounts.
+    ///
+    /// @trace order:437, spec:forge-hot-cold-split
+    #[test]
+    fn forge_launch_emits_equal_memory_and_memory_swap_ceiling() {
+        let project = PathBuf::from("/tmp/test-project-437");
+        let certs = PathBuf::from("/tmp/test-certs-437");
+        let agent_args = build_forge_agent_run_args_with_vault(
+            &project,
+            Some(&project),
+            None,
+            "test-proj-437",
+            None,
+            &certs,
+            "1.0.0",
+            ForgeAgentMode::Antigravity,
+            false,
+            None,
+            None,
+            false,
+            &test_cache_root(),
+        );
+
+        let mem_pos = agent_args
+            .iter()
+            .position(|a| a == "--memory")
+            .expect("agent launch must emit --memory");
+        let mem_val = agent_args.get(mem_pos + 1).expect("memory value");
+        let swap_pos = agent_args
+            .iter()
+            .position(|a| a == "--memory-swap")
+            .expect("agent launch must emit --memory-swap");
+        let swap_val = agent_args.get(swap_pos + 1).expect("memory-swap value");
+
+        assert_eq!(
+            mem_val, swap_val,
+            "--memory and --memory-swap must be equal (zero swap escape)"
+        );
+        assert!(mem_val.ends_with('m'), "memory value must have 'm' unit suffix");
+
+        let opencode_args = build_opencode_forge_args(
+            &project,
+            Some(&project),
+            None,
+            "test-proj-437",
+            None,
+            None,
+            &certs,
+            "1.0.0",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        let oc_mem_pos = opencode_args
+            .iter()
+            .position(|a| a == "--memory")
+            .expect("opencode launch must emit --memory");
+        let oc_mem_val = opencode_args.get(oc_mem_pos + 1).expect("opencode memory value");
+        let oc_swap_pos = opencode_args
+            .iter()
+            .position(|a| a == "--memory-swap")
+            .expect("opencode launch must emit --memory-swap");
+        let oc_swap_val = opencode_args.get(oc_swap_pos + 1).expect("opencode memory-swap value");
+
+        assert_eq!(
+            oc_mem_val, oc_swap_val,
+            "opencode --memory and --memory-swap must be equal"
+        );
+    }
+
     #[test]
     fn idiomatic_podman_launch_paths_do_not_bypass_shared_layer() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
