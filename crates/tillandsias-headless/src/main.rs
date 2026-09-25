@@ -6983,6 +6983,24 @@ fn forge_host_mount_enabled(raw: Option<&str>) -> bool {
     matches!(raw, Some("1"))
 }
 
+/// ORDER 776-jcf3 (criterion 3 residual b). The host-mount opt-in binds a
+/// REAL checkout; a cloud launch has none, and its `project_path` is the bare
+/// project name. Honouring the opt-in there bind-mounts that relative name —
+/// podman reads `-v tillandsias:/…` as a NAMED VOLUME, not a path — and the
+/// gitdir facade reads `git -C tillandsias` against the launcher CWD, the
+/// stray-directory capture 1119-w2rj closed for every other read. So the
+/// opt-in is granted only with a checkout, and refused loudly without one.
+fn forge_host_mount_granted(requested: bool, host_checkout: Option<&Path>) -> bool {
+    if requested && host_checkout.is_none() {
+        eprintln!(
+            "[tillandsias] TILLANDSIAS_FORGE_HOST_MOUNT=1 ignored: cloud launch has no \
+             host checkout to mount; the forge stays clone-only (order 776-jcf3)"
+        );
+        return false;
+    }
+    requested
+}
+
 fn forge_uses_host_mount() -> bool {
     forge_host_mount_enabled(
         std::env::var("TILLANDSIAS_FORGE_HOST_MOUNT")
@@ -7953,7 +7971,7 @@ fn build_opencode_forge_args(
                 git_mirror_service_identity(mirror_id, project_name)
             ),
         ]);
-    } else if forge_uses_host_mount() {
+    } else if forge_host_mount_granted(forge_uses_host_mount(), host_checkout) {
         // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
         // bind-mounts the operator's real checkout rw and installs the gitdir
         // facade. Retained for the solo live-edit workflow where a single user
@@ -16818,7 +16836,8 @@ fn run_forge_agent_cli_mode(
         provider_vault_secret,
         prompt,
         // ORDER 1021-hf9e: read the process env HERE, in the production lane.
-        forge_uses_host_mount(),
+        // ORDER 776-jcf3: and grant it only with a real checkout.
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
         &tillandsias_core::cache_root::cache_root(),
     );
 
@@ -22054,6 +22073,29 @@ mod tests {
         );
     }
 
+    /// Order 776-jcf3: a cloud launch (no host checkout) never gets the host
+    /// mount, even when opted in; a local launch keeps the opt-in as-is.
+    #[test]
+    fn host_mount_is_refused_without_a_host_checkout() {
+        let checkout = Path::new("/home/forge/src/alpha");
+        assert!(
+            !forge_host_mount_granted(true, None),
+            "cloud launch + opt-in => clone-only"
+        );
+        assert!(
+            forge_host_mount_granted(true, Some(checkout)),
+            "local launch + opt-in => host mount"
+        );
+        assert!(
+            !forge_host_mount_granted(false, Some(checkout)),
+            "no opt-in => clone-only"
+        );
+        assert!(
+            !forge_host_mount_granted(false, None),
+            "default => clone-only"
+        );
+    }
+
     /// Order 465 residual: the escape hatch must be LOUD. The warning text is
     /// pure, so pin the load-bearing claims: what is reduced, why (rw
     /// host-mount bypassing the isolated clone + mirror-push lane), what still
@@ -22099,7 +22141,7 @@ mod tests {
 
         let opencode = source_window(source, "fn build_opencode_forge_args(");
         let optin_idx = opencode
-            .find("else if forge_uses_host_mount()")
+            .find("else if forge_host_mount_granted(forge_uses_host_mount(), host_checkout)")
             .expect("opencode builder keeps the opt-in host-mount branch");
         let warn_idx = opencode
             .find("warn_forge_host_mount_isolation_reduced();")
@@ -28676,7 +28718,7 @@ esac
         // fresh tree from the mirror (GIT_SERVICE presence flag) with no host
         // mount and no facade.
         let optin_idx = window
-            .find("else if forge_uses_host_mount()")
+            .find("else if forge_host_mount_granted(forge_uses_host_mount(), host_checkout)")
             .expect("host-mount must be opt-in behind forge_uses_host_mount()");
         let host_mount_idx = window
             .find("TILLANDSIAS_PROJECT_HOST_MOUNT=1")
