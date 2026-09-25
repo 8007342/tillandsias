@@ -80,6 +80,7 @@ mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
+mod unified_deps;
 // 701-iu9b. The in-VM guest binary must never be built without `vault`.
 //
 // `listen-vsock` is how the guest binary is produced (scripts/build-macos-tray.sh:
