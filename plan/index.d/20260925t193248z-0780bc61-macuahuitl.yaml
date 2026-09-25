@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-ruby-sanctioned-yaml-validator
+    event:
+      type: note
+      ts: "2026-09-25T19:32:48Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW, NOT LANDED (macuahuitl coordinator, 2026-09-25). ccbeb5655 on origin/work/retire-ruby-lua switches archiver --check to the lua worker (default backend lua; TILLANDSIAS_ARCHIVER_BACKEND=ruby opts back in). That is an acceptable replacement under this row's deliverable, but the closing evidence summaries are "-". Defect in the same commit: skills/advance-work-from-plan/SKILL.md gains `yamlcheck() { tillandsias-plan check >/dev/null; }`, which ignores $1, and `check` does not fail on one malformed fragment. So the forge's YAML validator can no longer fail, and a validator that cannot fail is not a validator. Next action: `tillandsias-plan validate-yaml "$1"` (or the equivalent per-file parse), then re-offer.

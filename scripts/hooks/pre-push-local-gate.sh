@@ -1097,6 +1097,12 @@ attempt_plan_only_lane() {
             [[ -f "$_cand" ]] || continue
             [[ "$_cand" -ef "$plan_bin" ]] && continue
             [[ "$_cand" -nt "$plan_bin" ]] || continue
+            # 1267-uafx: RUN it before naming it. On a shared Windows/WSL
+            # checkout the WSL gate leaves a Linux ELF here that is newer than
+            # the .exe and exits 126 on this side; an mtime alone recommended
+            # it verbatim (704-zcgi's rule: an executable bit is a claim,
+            # running the binary is evidence).
+            target_binary_runs "$_cand" || continue
             _fresher="$_cand"; break
         done
         echo "plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)" >&2

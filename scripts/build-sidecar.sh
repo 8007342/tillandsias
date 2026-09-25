@@ -80,8 +80,18 @@ SIDECAR_DEST="$ROOT/images/router/tillandsias-router-sidecar"
 # Use a SEPARATE target dir so a nested invocation (e.g. build.rs calling
 # this script while the parent cargo holds target/'s lock) cannot deadlock.
 # The nested build still benefits from cargo's incremental compilation
-# under target-musl/.
-SIDECAR_TARGET_DIR="$ROOT/target-musl"
+# under target-musl/. On a forge, $ROOT is a 256 MB tmpfs while CARGO_TARGET_DIR
+# is disk-backed with 1+ TB free (order 1349-53h6).
+if [ -n "${TILLANDSIAS_SIDECAR_TARGET_DIR:-}" ]; then
+    SIDECAR_TARGET_DIR="$TILLANDSIAS_SIDECAR_TARGET_DIR"
+elif [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "$CARGO_TARGET_DIR" in
+        /* | [A-Za-z]:[/\\]*) SIDECAR_TARGET_DIR="${CARGO_TARGET_DIR%/}-musl" ;;
+        *) SIDECAR_TARGET_DIR="$ROOT/${CARGO_TARGET_DIR%/}-musl" ;;
+    esac
+else
+    SIDECAR_TARGET_DIR="$ROOT/target-musl"
+fi
 # Evaluation stamp (order 765-5efu), gitignored beside the staged binary.
 SIDECAR_STAMP="$ROOT/images/router/.sidecar.stamp"
 

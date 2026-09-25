@@ -70,8 +70,10 @@ exit 0
 STUB
     chmod +x "$d/plan-stub"
     ( cd "$d" && git init -q 2>/dev/null \
-        && git config user.email probe@probe && git config user.name probe \
-        && git -c commit.gpgsign=false commit -q --allow-empty -m "recent activity by probe" ) >/dev/null 2>&1
+        && env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL \
+           git config user.email probe@probe && git config user.name probe \
+        && env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL \
+           git -c commit.gpgsign=false commit -q --allow-empty -m "recent activity by probe" ) >/dev/null 2>&1
     printf '%s' "$d"
 }
 

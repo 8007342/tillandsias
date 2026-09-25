@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-script-gates-head-but-pushes-the-local-branch-of-the-target-name-and-reads-every-push-failure-as-origin-moved
+    event:
+      type: note
+      ts: "2026-09-23T22:07:00Z"
+      agent_id: windows-esmeraldinha-claude-20260923t220700z
+      host: esmeraldinha
+      summary: |-
+        SECOND HOST, SAME CAUSE: esmeraldinha (Windows 11, MINGW64_NT-10.0-26200, Git for Windows) reproduced criterion (a) on 2026-09-23 without going through the land script. The trigger was a plain git push from a git worktree.
+
+        MEASURED. From a worktree created with git worktree add ../tl-1186 -b work/1186-w3ph origin/linux-next, the command git push -u origin work/1186-w3ph failed twice, rc=128, with: error: failed to execute prompt script (exit code 1) / fatal: could not read Username for 'https://github.com': No such file or directory. git config --show-origin in the worktree resolves credential.helper to store --file=.git/.gh-credentials, from the MAIN checkout's .git/config. In a worktree .git is a FILE, so the relative path names nothing and the helper returns no credential. The same branch pushed from the main checkout at once (dfd9b3dcb..26eedbe90, rc=0), so the token was fine and only the path was wrong.
+
+        WHY IT MATTERS BEYOND THE LAND TOOL. Worktrees are the recommended isolation for a committing subagent, so every host whose fleet setup wrote the relative helper cannot push from the isolation it is told to use. The failure text names a username, not a path, which points a reader at the credential rather than the config. This confirms the remaining fix is where fleet setup writes the helper: make it absolute against git rev-parse --git-common-dir.
