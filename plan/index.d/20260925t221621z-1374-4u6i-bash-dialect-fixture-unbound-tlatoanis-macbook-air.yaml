@@ -1,0 +1,47 @@
+packets:
+  - packet_id: the-check-bash-dialect-fixture-runs-in-no-gate-and-one-of-its-arms-has-been-red-since-a-second-rule-started-counting-mapfile-twice
+    order: 1374-4u6i
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [bash-dialect, testing, gate, guard-binding]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-bash-dialect.sh
+      - scripts/test-check-bash-dialect.sh
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable IS the binding. The
+      fixture is bound by nothing today, so no litmus can name it yet; the
+      future litmus is openspec/litmus-tests/litmus-check-bash-dialect-fixture.yaml
+      (or a scripts/gate-steps.d step), written in the same commit as the arm fix.
+    title: |
+      scripts/test-check-bash-dialect.sh runs in no gate, and its unguarded-builtin-refused arm is red on trunk (blocked:bash4-unguarded:2, wants :1) because mapfile matches both PAT_BUILTIN and PAT_BASH4 and a file is counted once per rule
+    context: |
+      MEASURED 2026-09-25 on tlatoanis-macbook-air against pristine origin/linux-next:
+      `bash scripts/test-check-bash-dialect.sh` -> FAIL unguarded-builtin-refused,
+      got blocked:bash4-unguarded:2 (rc=1), want blocked:bash4-unguarded:1.
+      MECHANISM: check-bash-dialect.sh:34 PAT_BUILTIN and :111 PAT_BASH4 both
+      match (mapfile|readarray); the per-file loop increments `unguarded` once
+      per rule that hits, so one mapfile line is two findings. PAT_BASH4 arrived
+      in d2ceb4e4d (2026-09-05, 1055-6yp8) to add `read -N` and re-listed the
+      builtins. The CHECKER's verdict is still correct (blocked); only the count
+      and the fixture's exact-match expectation disagree.
+      WHY IT SURVIVED: nothing runs the fixture. On origin/linux-next the only
+      files naming test-check-bash-dialect.sh are check-bash-dialect.sh (a comment
+      and its own scan exclusion) and test-portability-idioms.sh (a line reference).
+      No build.sh line, no local-ci.sh line, no gate-steps.d step, no litmus.
+      scripts/audit-guard-activation.sh reports the CHECKER active (<- build.sh)
+      and says nothing about its fixture. So a guard whose own tests went red
+      three weeks ago kept being reported as an active guard.
+      Coordinator ruling (macuahuitl, 2026-09-25): fix the arm FIRST, then bind;
+      binding first would import a red into every gate. Linux result of the arm
+      pending from lenovinha.
+    exit_criteria:
+      - 'the double count is resolved in the CHECKER (one construct is one finding, e.g. PAT_BASH4 drops the builtins PAT_BUILTIN already owns) or the arm is changed with the reason stated; pre-fix result: FAILS unguarded-builtin-refused on pristine trunk'
+      - 'bash scripts/test-check-bash-dialect.sh passes on macOS (bash 3.2) and on a Linux host'
+      - the fixture is then BOUND (a litmus or gate step) in the same commit, and scripts/audit-guard-activation.sh or the bound-or-retired census shows it reachable
+      - 'NEGATIVE CONTROL: with the binding in place, reverting the checker fix makes that binding red'
