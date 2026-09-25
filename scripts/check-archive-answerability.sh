@@ -201,6 +201,11 @@ TAR_PRUNE=(
     --exclude=./plan_tmp
     --exclude=./plan_tmp_bak
     --exclude=./node_modules
+    # .cache holds the local spec index (772 MB on macuahuitl 2026-09-25) and
+    # metrics logs; the check reads neither, and the index alone put the copy
+    # at 1107952 KB against the 1 GiB budget, failing the gate on the one host
+    # that had built it. Top-level only: the cp fast path matches entry names.
+    --exclude=./.cache
 )
 
 BUDGET_KB=$(( 1024 * 1024 ))   # 1 GiB
