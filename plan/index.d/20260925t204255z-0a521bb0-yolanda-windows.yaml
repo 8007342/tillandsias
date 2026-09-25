@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    event:
+      type: note
+      ts: "2026-09-25T20:42:55Z"
+      agent_id: windows-yolanda-claude-20260925t204254z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-25. Checked all four exit criteria against trunk. The guard and fixture were already there (c7e860ff1, 2b777de3e); only the row was open.
+        C1 met. scripts/test-seam-writers-canonical.sh gives ok:seam-writers-canonical-fixture:7 (arms 1, 2, 3a, 3b, 4 no-writers, 5 pipefail-large, 6 no-sigpipe-pipeline). Separately re-ran on the REAL tree from git archive e1256ec24^, which printed refused:seam-writer-uncanonical for accel_probe.rs and for remote_projects.rs.
+        C2 was the gap. The fixture is pinned by litmus:seam-writer-canonical-lock-shape, but nothing ran the check against the live tree. Work ref work/1251-54p3 at a90b83031 adds that run to local-ci as a named advisory log_skip. Today it prints refused:seam-writer-uncanonical for remote_projects.rs (the 1250-92ty hazard). Promote to log_fail_tracked when 1250-92ty closes.
+        C3 met: the FILE-GRANULAR limitation is written in the script header.
+        C4 met: fixture arm 4 refuses on a vanished target, and the litmus runs it against crates/tillandsias-plan.
+        Stays in_progress until a90b83031 lands on linux-next. Fallback note: forge-plan MCP serves source_commit f6fd5658d (stale), so reads went through the native plan binary.
