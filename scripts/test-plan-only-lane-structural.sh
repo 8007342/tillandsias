@@ -358,7 +358,7 @@ fi
 READER_HASH=""
 ( cd "$CD/wc"
   # shellcheck disable=SC1090
-  . <(sed -n '/^_validator_surface_files() {/,/^attempt_plan_only_lane() {/p' "$GUARD" | sed '$d')
+  eval "$(sed -n '/^_validator_surface_files() {/,/^attempt_plan_only_lane() {/p' "$GUARD" | sed '$d')"
   _validator_surface_hash
 ) > "$WORK/reader-hash.txt" 2>/dev/null
 READER_HASH="$(cat "$WORK/reader-hash.txt" 2>/dev/null)"

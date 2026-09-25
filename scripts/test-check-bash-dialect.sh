@@ -121,9 +121,24 @@ printf '#!/usr/bin/env bash\nfile_list=()\nfor file in "${file_list[@]}"; do\n  
 expect "no-set-u-not-flagged" "ok:bash-dialect-clean" 0
 rm "$TMP/emptyarr.sh"
 
+# 1373-sr9g: sourcing a process substitution defines nothing on bash 3.2.
+# MUTATION ARM: the exact pre-fix line from test-preflight-scratch-is-off-checkout.sh:102.
+printf '#!/usr/bin/env bash\n    . <(sed -n %s "$SIDECAR")\n' "'/if \\[ -n \"\\\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p'" > "$TMP/procsub.sh"
+expect "dot-procsub-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nsource <(printf X=1)\n' > "$TMP/procsub.sh"
+expect "source-procsub-refused" "blocked:bash4-unguarded:1" 1
+# The remedy passes, and so does a process substitution that is not sourced.
+printf '#!/usr/bin/env bash\n    eval "$(sed -n %s "$SIDECAR")"\n' "'/if \\[ -n \"\\\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p'" > "$TMP/procsub.sh"
+expect "eval-remedy-passes" "ok:bash-dialect-clean" 0
+printf '#!/usr/bin/env bash\ndiff <(sort a) <(sort b)\nwhile read -r l; do :; done < <(ls)\n' > "$TMP/procsub.sh"
+expect "unsourced-procsub-not-flagged" "ok:bash-dialect-clean" 0
+printf '#!/usr/bin/env bash\n. <(printf X=1) # procsub-source: ok (fixture)\n' > "$TMP/procsub.sh"
+expect "procsub-exemption-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/procsub.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 19/19 scenarios green"
+echo "PASS: check-bash-dialect fixture 24/24 scenarios green"
 exit 0
