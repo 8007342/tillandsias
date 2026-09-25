@@ -69,7 +69,14 @@ export TILLANDSIAS_PLAN_BIN="$_validator"
 PLAN="$_validator"
 export TILLANDSIAS_AGENT_ID="macos-fixture-osx-fixture-20200101t000000z"
 
-_tmpbase="$ROOT/target/plan-scratch"
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "$CARGO_TARGET_DIR" in
+        /* | [A-Za-z]:[/\\]*) _tmpbase="${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+        *) _tmpbase="$ROOT/${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+    esac
+else
+    _tmpbase="${TMPDIR:-/tmp}/plan-scratch"
+fi
 mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/claims-fleet-visible.XXXXXX")"
 [ -n "${KEEP:-}" ] || trap 'rm -rf "$W"' EXIT INT TERM

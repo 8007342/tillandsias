@@ -100,6 +100,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "loop-status-compact",
     "loop-status-fragments",
     "loop-status-verify",
+    "lua",
     "methodology",
     "methodology-ask",
     "metrics-log-path",
@@ -508,7 +509,10 @@ const USAGE: &str = concat!(
     "                                     exactly the ones folded, gated on: nothing dropped, nothing\n",
     "                                     lost, operator-owned sections byte-identical, fold idempotent\n",
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
-    "                                     fragments, malformed ones, and whether compaction is eligible\n"
+    "                                     fragments, malformed ones, and whether compaction is eligible\n",
+    "           lua <script.lua | -e code> [args...]\n",
+    "                                     Run a Lua script or snippet with the embedded, tillandsias-managed\n",
+    "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n"
 );
 
 /// Read a cycle fragment for `loop-status-append`, refusing every input shape
@@ -3731,6 +3735,89 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     }
 }
 
+/// Run a Lua script or snippet with the embedded, tillandsias-managed Lua 5.4 runtime.
+fn run_lua_cli(args: &[String]) {
+    if args.is_empty() {
+        eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
+        std::process::exit(2);
+    }
+
+    if std::env::var_os("TILLANDSIAS_PLAN_BIN").is_none()
+        && let Ok(exe) = std::env::current_exe()
+    {
+        unsafe {
+            std::env::set_var("TILLANDSIAS_PLAN_BIN", exe);
+        }
+    }
+
+    let lua = mlua::Lua::new();
+
+    if args[0] == "-e" {
+        if args.len() < 2 {
+            eprintln!("error: -e requires a code argument");
+            std::process::exit(2);
+        }
+        let code = &args[1];
+        let arg_table = match lua.create_table() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("error: failed to create Lua arg table: {e}");
+                std::process::exit(1);
+            }
+        };
+        let _ = arg_table.set(-1, "tillandsias-plan");
+        let _ = arg_table.set(0, "-e");
+        for (i, a) in args[2..].iter().enumerate() {
+            let _ = arg_table.set((i + 1) as i64, a.as_str());
+        }
+        let _ = lua.globals().set("arg", arg_table);
+
+        if let Err(e) = lua.load(code).set_name("=(command line)").exec() {
+            eprintln!("lua error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    let script_path = &args[0];
+    let script_source = match std::fs::read_to_string(script_path) {
+        Ok(s) => {
+            if s.starts_with("#!") {
+                if let Some(pos) = s.find('\n') {
+                    format!("--{}", &s[2..pos]) + &s[pos..]
+                } else {
+                    String::new()
+                }
+            } else {
+                s
+            }
+        }
+        Err(e) => {
+            eprintln!("error: read {script_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let arg_table = match lua.create_table() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: failed to create Lua arg table: {e}");
+            std::process::exit(1);
+        }
+    };
+    let _ = arg_table.set(-1, "tillandsias-plan");
+    let _ = arg_table.set(0, script_path.as_str());
+    for (i, a) in args[1..].iter().enumerate() {
+        let _ = arg_table.set((i + 1) as i64, a.as_str());
+    }
+    let _ = lua.globals().set("arg", arg_table);
+
+    if let Err(e) = lua.load(&script_source).set_name(script_path).exec() {
+        eprintln!("lua error: {e}");
+        std::process::exit(1);
+    }
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -3787,6 +3874,11 @@ fn main() {
                 .to_string_lossy()
                 .as_ref(),
         );
+        return;
+    }
+
+    if args[0] == "lua" {
+        run_lua_cli(&args[1..]);
         return;
     }
 

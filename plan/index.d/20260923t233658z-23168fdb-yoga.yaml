@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-land-script-gates-head-but-pushes-the-local-branch-of-the-target-name-and-reads-every-push-failure-as-origin-moved
+    field: next_action
+    value: |-
+      Push HEAD explicitly (`git push origin HEAD:refs/heads/$BRANCH`), or refuse by
+      name when the current branch is not $BRANCH, because one of the two must be
+      decided and written down. Then replace the unconditional "origin moved" at line
+      677 with a before/after comparison of origin's head, printing the push log when
+      origin did not move. For (a), fix the helper path where the fleet's setup
+      writes it (a --git-common-dir absolute path), not inside the land script.
+
+
+      [2026-09-23T23:36:58Z yoga] CLOSED 2026-09-23. Cosmetic leftover for whoever next touches scripts/land-on-platform-branch.sh: when the tracking ref was already current, the retry line prints 'origin moved <a> -> <a>'. It should say 'origin holds commits HEAD lacks'. Not worth its own row.
+    ts: "2026-09-23T23:36:58Z"
+    host: yoga
+
+events:
+  - packet_id: the-land-script-gates-head-but-pushes-the-local-branch-of-the-target-name-and-reads-every-push-failure-as-origin-moved
+    event:
+      type: note
+      ts: "2026-09-23T23:36:58Z"
+      host: yoga
+      summary: |-
+        close note

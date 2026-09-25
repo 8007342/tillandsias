@@ -500,4 +500,8 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
-_ruby scripts/archive-plan-packets.rb
+if [ -f "$DIR/archive-plan-packets.lua" ]; then
+    "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
+else
+    _ruby scripts/archive-plan-packets.rb
+fi

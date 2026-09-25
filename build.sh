@@ -863,6 +863,15 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 _pf_cantrun=$((_pf_cantrun + 1))
                 sed 's/^/  /' "$_pf_tmp" >&2
                 echo "could-not-run:preflight:${_pf_base%.sh}:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
+            elif grep -qE 'No space left on device' "$_pf_tmp"; then
+                # ORDER 1349-53h6 — RUNNER RESOURCE EXHAUSTION IS NOT TREE REFUSAL.
+                # When a guard fails because the checkout or /tmp filesystem ran out
+                # of space, the runner failed to execute the guard; the tree was never
+                # examined. Booking this as refused: conflated "the subject is wrong"
+                # with "the runner ran out of disk".
+                _pf_cantrun=$((_pf_cantrun + 1))
+                sed 's/^/  /' "$_pf_tmp" >&2
+                echo "could-not-run:preflight:${_pf_base%.sh}:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2
             else
                 _pf_failed=$((_pf_failed + 1))
                 cat "$_pf_tmp" >&2
@@ -2982,6 +2991,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Instrument freshness fixture passed"
+
+    # Order 1267-uafx. The same lane's REMEDY line: a fresher candidate is
+    # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
+    # to a Windows host whose .exe it sits beside.
+    _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+        _error "the plan-only lane's remedy named a binary that cannot run on this host"
+        exit 1
+    fi
+    _info "Runnable-remedy fixture passed"
 
     # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
     # (menu id, notification, status chip, tooltip) cannot land without a

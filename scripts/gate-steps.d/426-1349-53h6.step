@@ -1,0 +1,13 @@
+# Gate step 1349-53h6 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: scratch and build-output roots are resolved off small/tmpfs
+# checkouts when CARGO_TARGET_DIR is set, and ./build.sh --preflight maps
+# runner resource exhaustion (No space left on device) to could-not-run:preflight:...:no-space
+# rather than refused:preflight:...
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking preflight scratch resolves off checkout and disk exhaustion is could-not-run (1349-53h6)"
+STEP_SCRIPT="scripts/test-preflight-scratch-is-off-checkout.sh"
+STEP_ERROR="preflight scratch writes inside small checkout or disk exhaustion reported as tree refusal (1349-53h6)"
+STEP_OK="Preflight scratch is off-checkout and resource exhaustion is categorized as could-not-run"
+STEP_SECOND_REGIME="macneo 2026-09-24 darwin ok:preflight-scratch-is-off-checkout:5/5"
