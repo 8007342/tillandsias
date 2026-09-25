@@ -104,12 +104,12 @@ done
     "none of install.sh, install-macos.sh, install-windows.ps1 is in $src, so nothing would default to unstable" \
     "call this from the job that stages an installer, after staging it"
 
-resign=("${rewritten[@]}")
+resign=(${rewritten[@]+"${rewritten[@]}"})
 for sums in "$dst"/SHA256SUMS*; do
     [ -f "$sums" ] || continue
     case "$sums" in *.cosign.bundle) continue ;; esac
     touched=0
-    for inst in "${rewritten[@]}"; do
+    for inst in ${rewritten[@]+"${rewritten[@]}"}; do
         # Both coreutils forms: `<hash>  <name>` (text) and `<hash> *<name>`
         # (binary; MSYS and Git-for-Windows sha256sum emit it). The form is
         # kept as found. A line that names the installer in any OTHER shape is
@@ -150,7 +150,7 @@ done
 # bundle must ship with a fresh one, and a file that shipped without one (the
 # Linux SHA256SUMS) stays as the versioned release has it.
 nresign=0
-for r in "${resign[@]}"; do
+for r in ${resign[@]+"${resign[@]}"}; do
     [ -f "$src/$r.cosign.bundle" ] || continue
     rm -f "$dst/$r.cosign.bundle"
     echo "resign:$r"
