@@ -373,9 +373,22 @@ BATCH="${TILLANDSIAS_SPEC_INDEX_BATCH:-64}"
 # oversized chunk from failing a whole batch and stalling the build.
 MAX_CHARS="${TILLANDSIAS_SPEC_INDEX_MAX_CHARS:-6000}"
 
-for _tool in jq curl; do
-    command -v "$_tool" >/dev/null 2>&1 || { echo "skip:spec-index:no-$_tool"; exit 0; }
+_sie_tool_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_sie_tool_dir" ] && [ "$_sie_tool_dir" != "/" ] && [ ! -f "$_sie_tool_dir/lib/tool-dispatch.sh" ]; do
+    _sie_tool_dir="$(dirname "$_sie_tool_dir")"
 done
+if [ -f "$_sie_tool_dir/lib/tool-dispatch.sh" ]; then
+    . "$_sie_tool_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_sie_tool_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
+command -v "$JQ" >/dev/null 2>&1 || { echo "skip:spec-index:no-jq"; exit 0; }
+command -v curl >/dev/null 2>&1 || { echo "skip:spec-index:no-curl"; exit 0; }
 # The refusal NAMES WHAT IT TRIED (967-xq5e). The old verdict was
 # `skip:spec-index:no-embed-endpoint` and nothing else — it named a missing
 # variable and named nothing that would supply it, empty stderr, so 32 honest
@@ -614,7 +627,7 @@ fi
 
 # One JSON string per line, truncated, never empty (an empty input is a 400
 # from most /v1/embeddings servers and would strand the whole batch).
-jq -c --argjson max "$MAX_CHARS" \
+"$JQ" -c --argjson max "$MAX_CHARS" \
     '((.text // "") | .[0:$max]) | if (. | length) == 0 then " " else . end' \
     "$work/chunks.jsonl" > "$work/texts.jsonl" || {
     echo "blocked:spec-index:text-extract-failed"; exit 1; }
@@ -675,7 +688,7 @@ if [ "$DELTA" = "1" ]; then
         # Without that equality this paste would mint a hash->vector map that
         # is wrong from its first line.
         paste -d '\t' \
-            <(jq -r '.content_hash // empty' "${gen%/}/chunks.jsonl") \
+            <("$JQ" -r '.content_hash // empty' "${gen%/}/chunks.jsonl") \
             "${gen%/}/vectors.jsonl" 2>/dev/null >> "$work/reuse.tsv" || true
     done
     # First occurrence wins; identical content hashes carry identical text and
@@ -687,7 +700,7 @@ if [ "$DELTA" = "1" ]; then
 fi
 
 # Per-chunk decision, in chunk order: REUSE <vector> or EMBED.
-jq -r '.content_hash // ""' "$work/chunks.jsonl" > "$work/hashes.txt"
+"$JQ" -r '.content_hash // ""' "$work/chunks.jsonl" > "$work/hashes.txt"
 paste -d '\t' "$work/hashes.txt" "$work/texts.jsonl" > "$work/plan.tsv"
 awk -F'\t' -v reuse="$work/reuse.tsv" '
 BEGIN { while ((getline l < reuse) > 0) { i = index(l, "\t"); if (i) v[substr(l,1,i-1)] = substr(l,i+1) } }
@@ -716,7 +729,7 @@ for part in "$work"/b/part-*; do
     # in every comparison filed so far. nomic's own template is a bare
     # `{{ .Prompt }}`, so nothing supplies it downstream either. Empty by
     # default, which reproduces every historical measurement exactly.
-    jq -sc --arg m "$EMBED_MODEL" --arg p "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" \
+    "$JQ" -sc --arg m "$EMBED_MODEL" --arg p "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" \
         '{model:$m, input:[.[] | $p + .]}' "$part" > "$work/payload.json" || {
         # ORDER 964-zedm: NAME THE DIRECTORY THAT RAN OUT. This printed
         # `blocked:spec-index:payload-failed` and nothing else, and jq's own
@@ -824,14 +837,14 @@ for part in "$work"/b/part-*; do
         echo "  on batch size, not on residency: retry with a smaller" >&2
         echo "  TILLANDSIAS_SPEC_INDEX_BATCH (qwen3-embedding:4b needs 32, not 64)." >&2
         _resident="$(curl -fsS --max-time 5 "${EMBED_EP%/v1}/api/ps" 2>/dev/null \
-            | jq -r '[.models[]?.name] | join(", ")' 2>/dev/null)"
+            | "$JQ" -r '[.models[]?.name] | join(", ")' 2>/dev/null)"
         if [ -n "$_resident" ] && [ "$_resident" != "$EMBED_MODEL" ]; then
             echo "  HINT ONLY, not a diagnosis: other models are resident (${_resident})." >&2
             echo "  If the body above does NOT explain the failure, 849-tz8g may apply." >&2
         fi
         exit 1
     fi
-    if ! jq -c '.data[].embedding' "$work/resp.json" > "$work/batch-vecs.jsonl" 2>/dev/null; then
+    if ! "$JQ" -c '.data[].embedding' "$work/resp.json" > "$work/batch-vecs.jsonl" 2>/dev/null; then
         echo "blocked:spec-index:embed-response-unparseable"
         exit 1
     fi
@@ -888,9 +901,9 @@ if [ "$n_reused" -gt 0 ] && [ "$_sample" -gt 0 ]; then
         case "$dec" in R*) ;; *) continue ;; esac
         _cached="${dec#R	}"
         _text="$(sed -n "${_line}p" "$work/texts.jsonl")"
-        _probe="$(jq -nc --arg m "$EMBED_MODEL" --argjson t "$_text" '{model:$m, input:[$t]}')"
+        _probe="$("$JQ" -nc --arg m "$EMBED_MODEL" --argjson t "$_text" '{model:$m, input:[$t]}')"
         _got="$(curl -fsS --max-time 120 "$EMBED_EP/embeddings" -H 'Content-Type: application/json' \
-            -d "$_probe" 2>/dev/null | jq -c '.data[0].embedding' 2>/dev/null)"
+            -d "$_probe" 2>/dev/null | "$JQ" -c '.data[0].embedding' 2>/dev/null)"
         [ -n "$_got" ] && [ "$_got" != null ] || continue   # endpoint hiccup: not a mis-join
         if [ "$_got" != "$_cached" ]; then
             echo "blocked:spec-index:delta-identity-mismatch-at-chunk-$_line"

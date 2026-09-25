@@ -37,6 +37,20 @@
 
 set -uo pipefail
 
+_bsb_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_bsb_dir" ] && [ "$_bsb_dir" != "/" ] && [ ! -f "$_bsb_dir/lib/tool-dispatch.sh" ]; do
+    _bsb_dir="$(dirname "$_bsb_dir")"
+done
+if [ -f "$_bsb_dir/lib/tool-dispatch.sh" ]; then
+    . "$_bsb_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_bsb_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 EP="${BENCH_ENDPOINT:-${TILLANDSIAS_INFERENCE_ENDPOINT:-http://127.0.0.1:11434}}"
 BUDGET_MS="${BENCH_BUDGET_MS:-1500}"
 REPS="${BENCH_REPS:-3}"
@@ -46,9 +60,8 @@ NUM_PREDICT="${BENCH_NUM_PREDICT:-}"
 MIN_TOK="${BENCH_MIN_EVAL_TOK:-16}"
 MODELS="${BENCH_MODELS:-smollm2:135m gemma3:270m smollm2:360m qwen2.5:0.5b qwen3:0.6b tinyllama:1.1b}"
 
-for tool in curl jq; do
-    command -v "$tool" >/dev/null 2>&1 || { echo "bench: ERROR missing dependency: $tool" >&2; exit 2; }
-done
+command -v curl >/dev/null 2>&1 || { echo "bench: ERROR missing dependency: curl" >&2; exit 2; }
+command -v "$JQ" >/dev/null 2>&1 || { echo "bench: ERROR missing dependency: jq" >&2; exit 2; }
 curl -fsS -m 5 "$EP/api/version" >/dev/null 2>&1 || { echo "bench: ERROR no endpoint at $EP" >&2; exit 2; }
 
 # GNU date guard: BSD date passes %N through literally and exits 0 with garbage,
@@ -73,10 +86,10 @@ PROMPT="$(printf "Based on this excerpt from '%s':\n\n%s\n\nQuestion: %s\nAnswer
     "$SECTION_TITLE" "$SECTION_CONTENT" "$QUESTION")"
 
 if [ -n "$NUM_PREDICT" ]; then
-    mk_payload() { jq -nc --arg m "$1" --arg p "$PROMPT" --argjson n "$NUM_PREDICT" \
+    mk_payload() { "$JQ" -nc --arg m "$1" --arg p "$PROMPT" --argjson n "$NUM_PREDICT" \
         '{model:$m, prompt:$p, stream:false, options:{num_predict:$n}}'; }
 else
-    mk_payload() { jq -nc --arg m "$1" --arg p "$PROMPT" \
+    mk_payload() { "$JQ" -nc --arg m "$1" --arg p "$PROMPT" \
         '{model:$m, prompt:$p, stream:false}'; }
 fi
 
@@ -107,10 +120,10 @@ for model in $MODELS; do
         # the kind of thing a later edit breaks silently.
         if [ -z "$best" ] || [ "$ms" -lt "$best" ]; then best=$ms; fi
         if [ -z "$worst" ] || [ "$ms" -gt "$worst" ]; then worst=$ms; fi
-        prompt_tok=$(echo "$resp" | jq -r '.prompt_eval_count // 0')
-        eval_tok=$(echo "$resp" | jq -r '.eval_count // 0')
-        prefill_ms=$(echo "$resp" | jq -r '((.prompt_eval_duration // 0) / 1000000) | floor')
-        gen_ms=$(echo "$resp" | jq -r '((.eval_duration // 0) / 1000000) | floor')
+        prompt_tok=$(echo "$resp" | "$JQ" -r '.prompt_eval_count // 0')
+        eval_tok=$(echo "$resp" | "$JQ" -r '.eval_count // 0')
+        prefill_ms=$(echo "$resp" | "$JQ" -r '((.prompt_eval_duration // 0) / 1000000) | floor')
+        gen_ms=$(echo "$resp" | "$JQ" -r '((.eval_duration // 0) / 1000000) | floor')
     done
 
     if [ "$n" -eq 0 ]; then

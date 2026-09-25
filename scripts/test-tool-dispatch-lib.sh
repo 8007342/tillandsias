@@ -128,6 +128,7 @@ _hd_hits=""
 for f in $(git -C "$ROOT" ls-files 'scripts/*.sh'); do
     _h="$(awk -v needle='"$JQ"' -v fname="$f" '
         term == "" {
+            if (/^[ \t]*#/) next
             if (match($0, /<<-?[ \t]*"?'"'"'?[A-Za-z_][A-Za-z0-9_]*"?'"'"'?/)) {
                 t = substr($0, RSTART, RLENGTH)
                 gsub(/[<\-\t "'"'"']/, "", t)

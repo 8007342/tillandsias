@@ -20,6 +20,20 @@
 
 set -uo pipefail
 
+_pcer_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_pcer_dir" ] && [ "$_pcer_dir" != "/" ] && [ ! -f "$_pcer_dir/lib/tool-dispatch.sh" ]; do
+    _pcer_dir="$(dirname "$_pcer_dir")"
+done
+if [ -f "$_pcer_dir/lib/tool-dispatch.sh" ]; then
+    . "$_pcer_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_pcer_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 HOOK_NAME="post-commit-expert-refresh"
 # Portable nanosecond clock. `date +%s%N` is GNU-only and BSD SUCCEEDS while
 # emitting a literal "N", so the `|| echo 0` never fired and the arithmetic
@@ -176,8 +190,8 @@ if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/(lua/|src/pipeline\.rs|s
         if [ -x "$_sentinel_bin" ]; then
             # Decompose only — no inference needed, just verifies Lua loads
             _sentinel_out="$("$_sentinel_bin" --index "$REPO_ROOT/plan/index.yaml" decompose "what is the current direction" 2>/dev/null || true)"
-            if printf '%s' "$_sentinel_out" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-                _count=$(printf '%s' "$_sentinel_out" | jq 'length')
+            if printf '%s' "$_sentinel_out" | "$JQ" -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+                _count=$(printf '%s' "$_sentinel_out" | "$JQ" 'length')
                 echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: ok:decompose:$_count-variants" >> "$HOOK_LOG"
             else
                 echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: FAIL:decompose: $_sentinel_out" >> "$HOOK_LOG"

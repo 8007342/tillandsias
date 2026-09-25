@@ -127,9 +127,23 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$LANE" ] || { echo "bench-accel-lane: --lane <cpu|gpu|npu> is required" >&2; exit 2; }
-for t in curl jq; do
-    command -v "$t" >/dev/null 2>&1 || { echo "bench-accel-lane: $t is required" >&2; exit 2; }
+
+_bal_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_bal_dir" ] && [ "$_bal_dir" != "/" ] && [ ! -f "$_bal_dir/lib/tool-dispatch.sh" ]; do
+    _bal_dir="$(dirname "$_bal_dir")"
 done
+if [ -f "$_bal_dir/lib/tool-dispatch.sh" ]; then
+    . "$_bal_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_bal_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
+command -v curl >/dev/null 2>&1 || { echo "bench-accel-lane: curl is required" >&2; exit 2; }
+[ -n "$JQ" ] && { command -v "$JQ" >/dev/null 2>&1 || [ -x "$JQ" ]; } || { echo "bench-accel-lane: jq is required" >&2; exit 2; }
 [ -s "$CHUNKS" ] || { echo "bench-accel-lane: no chunk corpus at $CHUNKS (build it with scripts/spec-index-ensure.sh)" >&2; exit 2; }
 curl -fsS --max-time 10 "$ENDPOINT/api/tags" >/dev/null 2>&1 \
     || { echo "bench-accel-lane: endpoint $ENDPOINT did not answer" >&2; exit 2; }
@@ -164,11 +178,11 @@ trap 'rm -rf "$work"' EXIT
 # A DETERMINISTIC sample, so two hosts measure the same text. Taking the first N
 # non-trivial chunks is reproducible; a random sample would make the matrix
 # incomparable for no benefit.
-jq -c 'select((.text | length) > 40) | .text' "$CHUNKS" | head -n "$N" > "$work/sample.jsonl"
+"$JQ" -c 'select((.text | length) > 40) | .text' "$CHUNKS" | head -n "$N" > "$work/sample.jsonl"
 got="$(wc -l < "$work/sample.jsonl" | tr -d '[:space:]')"
 [ "$got" -gt 0 ] || { echo "bench-accel-lane: sample is empty" >&2; exit 2; }
 
-p50_chars="$(jq -r 'length' "$work/sample.jsonl" | sort -n | awk '{a[NR]=$1} END{print a[int(NR/2)+1]}')"
+p50_chars="$("$JQ" -r 'length' "$work/sample.jsonl" | sort -n | awk '{a[NR]=$1} END{print a[int(NR/2)+1]}')"
 
 # TIMED BY CURL, not by the shell. `date +%s%3N` is a GNU-ism that BSD date
 # accepts while emitting garbage (761-g36m / 784-dwkh: the exit-code guard never
@@ -201,7 +215,7 @@ _req_ms() {
 # keep_alive:0 unloads immediately. Only under --force-lane: the two-server
 # callers this script was written for have nothing to evict.
 if [ "$FORCE_LANE" -eq 1 ]; then
-    jq -nc --arg m "$GEN_MODEL" '{model:$m, keep_alive:0}' > "$work/evict.json"
+    "$JQ" -nc --arg m "$GEN_MODEL" '{model:$m, keep_alive:0}' > "$work/evict.json"
     curl -fsS --max-time 30 "$ENDPOINT/api/generate" -H 'Content-Type: application/json' \
         -d @"$work/evict.json" >/dev/null 2>&1 || true
     sleep 2
@@ -209,7 +223,7 @@ fi
 
 # ── warm-up, discarded ──────────────────────────────────────────────────────
 head -1 "$work/sample.jsonl" | while IFS= read -r t; do
-    jq -nc --arg m "$EMBED_MODEL" --argjson i "$t" '{model:$m, input:$i}' > "$work/warm.json"
+    "$JQ" -nc --arg m "$EMBED_MODEL" --argjson i "$t" '{model:$m, input:$i}' > "$work/warm.json"
 done
 curl -fsS --max-time 120 "$ENDPOINT/v1/embeddings" -H 'Content-Type: application/json' \
     -d @"$work/warm.json" >/dev/null 2>&1 || true
@@ -221,7 +235,7 @@ rep=1
 while [ "$rep" -le "$REPS" ]; do
     : > "$work/times.txt"
     while IFS= read -r t; do
-        jq -nc --arg m "$EMBED_MODEL" --argjson i "$t" '{model:$m, input:$i}' > "$work/req.json"
+        "$JQ" -nc --arg m "$EMBED_MODEL" --argjson i "$t" '{model:$m, input:$i}' > "$work/req.json"
         _req_ms "$ENDPOINT/v1/embeddings" "$work/req.json" >> "$work/times.txt"
     done < "$work/sample.jsonl"
     # A failed request records -1 and is EXCLUDED from the median rather than
@@ -256,17 +270,17 @@ while [ "$rep" -le "$REPS" ]; do
     # the reps stay comparable to each other and across hosts; only the cache
     # key differs.
     _rep_prompt="rep $rep of $REPS. $GEN_PROMPT"
-    jq -nc --arg m "$GEN_MODEL" --arg p "$_rep_prompt" --argjson n "$GEN_TOKENS" \
+    "$JQ" -nc --arg m "$GEN_MODEL" --arg p "$_rep_prompt" --argjson n "$GEN_TOKENS" \
         --argjson lo "$LANE_OPTS" \
         '{model:$m, prompt:$p, stream:false, options:({num_predict:$n} + $lo)}' > "$work/gen.json"
     if curl -fsS --max-time 300 "$ENDPOINT/api/generate" -H 'Content-Type: application/json' \
         -d @"$work/gen.json" > "$work/gen-resp.json" 2>/dev/null; then
-        tps="$(jq -r 'if (.eval_duration // 0) > 0 then ((.eval_count // 0) / (.eval_duration / 1000000000)) else 0 end' "$work/gen-resp.json" 2>/dev/null)"
+        tps="$("$JQ" -r 'if (.eval_duration // 0) > 0 then ((.eval_count // 0) / (.eval_duration / 1000000000)) else 0 end' "$work/gen-resp.json" 2>/dev/null)"
         # PREFILL from the server's own prompt counters. Both halves come from
         # one response on purpose: prefill and decode measured in separate runs
         # are two different cache states, and the whole routing question is the
         # RATIO between them.
-        ptps="$(jq -r 'if (.prompt_eval_duration // 0) > 0 then ((.prompt_eval_count // 0) / (.prompt_eval_duration / 1000000000)) else 0 end' "$work/gen-resp.json" 2>/dev/null)"
+        ptps="$("$JQ" -r 'if (.prompt_eval_duration // 0) > 0 then ((.prompt_eval_count // 0) / (.prompt_eval_duration / 1000000000)) else 0 end' "$work/gen-resp.json" 2>/dev/null)"
     else
         tps="0"; ptps="0"
     fi
@@ -296,9 +310,9 @@ done
 observed="unknown"
 if ps_json="$(curl -fsS --max-time 10 "$ENDPOINT/api/ps" 2>/dev/null)"; then
     vram="$(printf '%s' "$ps_json" \
-        | jq -r --arg m "$GEN_MODEL" '[.models[]? | select(.name == $m or .model == $m) | .size_vram // 0] | max // 0' 2>/dev/null)"
+        | "$JQ" -r --arg m "$GEN_MODEL" '[.models[]? | select(.name == $m or .model == $m) | .size_vram // 0] | max // 0' 2>/dev/null)"
     total="$(printf '%s' "$ps_json" \
-        | jq -r --arg m "$GEN_MODEL" '[.models[]? | select(.name == $m or .model == $m) | .size // 0] | max // 0' 2>/dev/null)"
+        | "$JQ" -r --arg m "$GEN_MODEL" '[.models[]? | select(.name == $m or .model == $m) | .size // 0] | max // 0' 2>/dev/null)"
     case "${vram:-0}" in
         ''|0)
             if [ "${total:-0}" = "0" ]; then
@@ -376,7 +390,7 @@ if [ "${RECORD:-0}" = "1" ]; then
     # shape is the same either way and a reader never has to distinguish
     # "absent key" from "null value" to reach the same conclusion: unknown.
     _bench_locus=null
-    [ -n "$LOCUS" ] && _bench_locus="$(jq -n --arg l "$LOCUS" '$l')"
+    [ -n "$LOCUS" ] && _bench_locus="$("$JQ" -n --arg l "$LOCUS" '$l')"
     # Older binaries ignore unknown fields (serde default), so sending these to
     # a release that predates schema_version 2 is a no-op rather than a break.
     # THE PARAMETER AXIS, without which the crossover cannot be derived at all
@@ -399,7 +413,7 @@ if [ "${RECORD:-0}" = "1" ]; then
     # parameters, and it would sort below every real size in the crossover scan.
     _bench_params=null
     [ -n "$MODEL_PARAMS_B" ] && _bench_params="$MODEL_PARAMS_B"
-    jq -nc --arg d "$LANE" --arg e "ollama" \
+    "$JQ" -nc --arg d "$LANE" --arg e "ollama" \
         --argjson p "${_bench_prefill:-0}" --argjson dec "${_bench_decode:-0}" \
         --argjson deg "$_bench_degraded" --argjson reason "$_bench_reason" \
         --arg suite "$WORKLOAD_SUITE" --argjson locus "$_bench_locus" \
@@ -409,7 +423,7 @@ if [ "${RECORD:-0}" = "1" ]; then
         echo "note:bench-accel-lane:record-failed (numbers still on stdout)" >&2
 fi
 
-jq -nc \
+"$JQ" -nc \
     --arg lane "$LANE" \
     --arg observed "$observed" \
     --arg endpoint "$ENDPOINT" \
@@ -423,7 +437,7 @@ jq -nc \
     --argjson gen_tokens_per_s "[$gen_tps]" \
     --argjson gen_prefill_tps "[$gen_ptps]" \
     --arg suite "$WORKLOAD_SUITE" \
-    --argjson locus_out "$( [ -n "$LOCUS" ] && jq -n --arg l "$LOCUS" '$l' || echo null )" \
+    --argjson locus_out "$( [ -n "$LOCUS" ] && "$JQ" -n --arg l "$LOCUS" '$l' || echo null )" \
     '{
        workload_suite: $suite,
        locus: $locus_out,

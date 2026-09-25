@@ -41,6 +41,20 @@
 
 set -euo pipefail
 
+_qt_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_qt_dir" ] && [ "$_qt_dir" != "/" ] && [ ! -f "$_qt_dir/lib/tool-dispatch.sh" ]; do
+    _qt_dir="$(dirname "$_qt_dir")"
+done
+if [ -f "$_qt_dir/lib/tool-dispatch.sh" ]; then
+    . "$_qt_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_qt_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -257,7 +271,7 @@ execute_query_jq() {
         local count=0
         for log_file in "${log_files[@]}"; do
             if [[ -f "$log_file" ]]; then
-                count=$(( count + $(jq -c "$jq_filter" "$log_file" 2>/dev/null | wc -l || echo 0) ))
+                count=$(( count + $("$JQ" -c "$jq_filter" "$log_file" 2>/dev/null | wc -l || echo 0) ))
             fi
         done
         echo "{\"count\": $count}"
@@ -276,13 +290,13 @@ execute_query_jq() {
         if [[ "$select_filter" == "." ]]; then
             cat "$temp_entries" > "$filtered_entries"
         else
-            jq -c "$select_filter" "$temp_entries" > "$filtered_entries" 2>/dev/null || touch "$filtered_entries"
+            "$JQ" -c "$select_filter" "$temp_entries" > "$filtered_entries" 2>/dev/null || touch "$filtered_entries"
         fi
 
         # Apply the stats operation using jq
         if [[ $query_str =~ stats\ count\(\)\ by\ ([a-zA-Z_]+) ]]; then
             local group_field="${BASH_REMATCH[1]}"
-            jq -s "group_by(.\"$group_field\") | map({group: .[0].\"$group_field\", count: length})" "$filtered_entries"
+            "$JQ" -s "group_by(.\"$group_field\") | map({group: .[0].\"$group_field\", count: length})" "$filtered_entries"
         else
             # For other stats, just echo the filtered entries
             cat "$filtered_entries"
@@ -292,7 +306,7 @@ execute_query_jq() {
     else
         # For other operations, just apply the filter
         for log_file in "${log_files[@]}"; do
-            [[ -f "$log_file" ]] && jq -c "$jq_filter" "$log_file" 2>/dev/null || true
+            [[ -f "$log_file" ]] && "$JQ" -c "$jq_filter" "$log_file" 2>/dev/null || true
         done
     fi
 }

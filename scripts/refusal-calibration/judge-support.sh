@@ -21,6 +21,20 @@
 # against what the retriever ACTUALLY returned rather than a paraphrase.
 set -uo pipefail
 
+_js_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_js_dir" ] && [ "$_js_dir" != "/" ] && [ ! -f "$_js_dir/lib/tool-dispatch.sh" ]; do
+    _js_dir="$(dirname "$_js_dir")"
+done
+if [ -f "$_js_dir/lib/tool-dispatch.sh" ]; then
+    . "$_js_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_js_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 MODEL="${TILLANDSIAS_JUDGE_MODEL:-qwen2.5:0.5b}"
 ENDPOINT="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://127.0.0.1:11434}"
 INDEX_DIR=""
@@ -50,7 +64,7 @@ while IFS=$'\t' read -r band corpus top1 top2 margin kind path question; do
     # The exact text the retriever returned, by path. First matching chunk:
     # good enough for a support judgement, and it keeps the judge honest by
     # never showing it text the retriever did not actually surface.
-    snippet="$(jq -r --arg p "$path" 'select(.path == $p) | .text' \
+    snippet="$("$JQ" -r --arg p "$path" 'select(.path == $p) | .text' \
         "$INDEX_DIR/chunks.jsonl" 2>/dev/null | head -c 1200)"
     [ -n "$snippet" ] || snippet="(no text found for $path)"
 
@@ -89,11 +103,11 @@ EOF
 
     _ask() { # _ask <prompt> -> YES|NO|EMPTY|UNPARSED
         local b r raw
-        b="$(jq -nc --arg m "$MODEL" --arg p "$1" \
+        b="$("$JQ" -nc --arg m "$MODEL" --arg p "$1" \
             '{model:$m, prompt:$p, stream:false, options:{temperature:0, num_predict:4}}')"
         r="$(curl -sS --max-time 180 -X POST "$ENDPOINT/api/generate" \
             -H 'content-type: application/json' -d "$b" 2>/dev/null)"
-        raw="$(printf '%s' "$r" | jq -r '.response // ""' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+        raw="$(printf '%s' "$r" | "$JQ" -r '.response // ""' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
         case "$raw" in
             YES*) printf 'YES' ;;
             NO*) printf 'NO' ;;

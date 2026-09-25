@@ -7,12 +7,26 @@
 
 set -euo pipefail
 
+_cmcp_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_cmcp_dir" ] && [ "$_cmcp_dir" != "/" ] && [ ! -f "$_cmcp_dir/lib/tool-dispatch.sh" ]; do
+    _cmcp_dir="$(dirname "$_cmcp_dir")"
+done
+if [ -f "$_cmcp_dir/lib/tool-dispatch.sh" ]; then
+    . "$_cmcp_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_cmcp_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DELEGATE_SCRIPT="$REPO_ROOT/scripts/claude-delegate.sh"
 
 json_escape() {
-    jq -Rs . <<<"${1:-}"
+    "$JQ" -Rs . <<<"${1:-}"
 }
 
 rpc_send() {
@@ -78,8 +92,8 @@ call_delegate() {
 }
 
 while IFS= read -r line; do
-    method="$(jq -r '.method // empty' <<<"$line")"
-    id="$(jq -r '.id // empty' <<<"$line")"
+    method="$("$JQ" -r '.method // empty' <<<"$line")"
+    id="$("$JQ" -r '.id // empty' <<<"$line")"
 
     case "$method" in
         initialize)
@@ -89,11 +103,11 @@ while IFS= read -r line; do
             tools_list "$id"
             ;;
         tools/call)
-            tool="$(jq -r '.params.name // empty' <<<"$line")"
-            args="$(jq -c '.params.arguments // {}' <<<"$line")"
-            task="$(jq -r '.task // empty' <<<"$args")"
-            model="$(jq -r '.model // empty' <<<"$args")"
-            effort="$(jq -r '.effort // empty' <<<"$args")"
+            tool="$("$JQ" -r '.params.name // empty' <<<"$line")"
+            args="$("$JQ" -c '.params.arguments // {}' <<<"$line")"
+            task="$("$JQ" -r '.task // empty' <<<"$args")"
+            model="$("$JQ" -r '.model // empty' <<<"$args")"
+            effort="$("$JQ" -r '.effort // empty' <<<"$args")"
 
             if [[ -z "$task" ]]; then
                 rpc_error "$id" -32602 "tools/call requires task"

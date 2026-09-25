@@ -26,6 +26,20 @@
 
 set -uo pipefail
 
+_ndp_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_ndp_dir" ] && [ "$_ndp_dir" != "/" ] && [ ! -f "$_ndp_dir/lib/tool-dispatch.sh" ]; do
+    _ndp_dir="$(dirname "$_ndp_dir")"
+done
+if [ -f "$_ndp_dir/lib/tool-dispatch.sh" ]; then
+    . "$_ndp_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_ndp_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
@@ -65,7 +79,7 @@ for out in "${OUTPUTS[@]}"; do
     # defaults to `cargo-package` here since the deps calls set none), so
     # `-deps-` selects it. `vendor-cargo-deps.drv` — the vendored registry —
     # deliberately does NOT match: no trailing dash.
-    deps="$(printf '%s' "$top_json" | jq -r '
+    deps="$(printf '%s' "$top_json" | "$JQ" -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))

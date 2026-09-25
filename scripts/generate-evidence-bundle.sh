@@ -27,6 +27,20 @@
 
 set -euo pipefail
 
+_geb_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+while [ -n "$_geb_dir" ] && [ "$_geb_dir" != "/" ] && [ ! -f "$_geb_dir/lib/tool-dispatch.sh" ]; do
+    _geb_dir="$(dirname "$_geb_dir")"
+done
+if [ -f "$_geb_dir/lib/tool-dispatch.sh" ]; then
+    . "$_geb_dir/lib/tool-dispatch.sh" 2>/dev/null || true
+    . "$_geb_dir/lib/tool-materialize.sh" 2>/dev/null || true
+fi
+if command -v fast_tool >/dev/null 2>&1; then
+    JQ="$(fast_tool jq || printf 'jq')"
+else
+    JQ="jq"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUTPUT_DIR="$PROJECT_ROOT/target/convergence"
@@ -211,6 +225,7 @@ TRACES_COVERAGE_FILE="$BUNDLE_STAGING/traces-coverage.json"
 TRACE_OUTPUT=$("$SCRIPT_DIR/validate-traces.sh" 2>&1 || true)
 TRACE_ERRORS=$(printf '%s\n' "$TRACE_OUTPUT" | grep -c "^ERROR:" || true)
 TRACE_WARNINGS=$(printf '%s\n' "$TRACE_OUTPUT" | grep -c "^WARN:" || true)
+TRACE_DETAILS=$(echo "$TRACE_OUTPUT" | "$JQ" -Rs '.')
 
 cat > "$TRACES_COVERAGE_FILE" <<EOF
 {
@@ -219,7 +234,7 @@ cat > "$TRACES_COVERAGE_FILE" <<EOF
   "errors": $TRACE_ERRORS,
   "warnings": $TRACE_WARNINGS,
   "status": $([ "$TRACE_ERRORS" -eq 0 ] && echo '"PASS"' || echo '"FAIL"'),
-  "details": $(echo "$TRACE_OUTPUT" | jq -Rs '.')
+  "details": $TRACE_DETAILS
 }
 EOF
 
@@ -256,6 +271,7 @@ for litmus_file in "${LITMUS_SOURCE_FILES[@]}"; do
     LITMUS_PASSED=$((LITMUS_PASSED + $(litmus_count_passed "$litmus_file")))
     LITMUS_FAILED=$((LITMUS_FAILED + $(litmus_count_failed "$litmus_file")))
 done
+LITMUS_SUMMARY=$(echo "$LITMUS_OUTPUT" | tail -20 | "$JQ" -Rs '.')
 
 cat > "$LITMUS_RESULTS_FILE" <<EOF
 {
@@ -264,7 +280,7 @@ cat > "$LITMUS_RESULTS_FILE" <<EOF
   "tests_passed": $LITMUS_PASSED,
   "tests_failed": $LITMUS_FAILED,
   "status": $([ "$LITMUS_FAILED" -eq 0 ] && echo '"PASS"' || echo '"FAIL"'),
-  "summary": $(echo "$LITMUS_OUTPUT" | tail -20 | jq -Rs '.')
+  "summary": $LITMUS_SUMMARY
 }
 EOF
 
@@ -347,7 +363,7 @@ if [[ -f "$DASHBOARD_FILE" ]]; then
     if grep -q '"evidence_bundle_path"' "$DASHBOARD_FILE"; then
         # Create a temporary jq filter to update the field
         TEMP_DASHBOARD=$(mktemp)
-        jq --arg path "$OUTPUT_DIR/$BUNDLE_NAME" \
+        "$JQ" --arg path "$OUTPUT_DIR/$BUNDLE_NAME" \
            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
            '.evidence_bundle_path = $path | .evidence_bundle_generated = $ts' \
            "$DASHBOARD_FILE" > "$TEMP_DASHBOARD"
