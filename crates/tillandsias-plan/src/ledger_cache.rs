@@ -53,8 +53,21 @@ fn fingerprint(index: &Path) -> Option<String> {
             parts.push((f.to_string_lossy().to_string(), m.len(), mtime_nanos(&m)));
         }
     }
+    if let Some(archive_dir) = index.parent().map(|d| d.join("archive"))
+        && let Ok(entries) = std::fs::read_dir(archive_dir)
+    {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) == Some("yaml")
+                && let Ok(m) = e.metadata()
+            {
+                parts.push((p.to_string_lossy().to_string(), m.len(), mtime_nanos(&m)));
+            }
+        }
+    }
     parts.sort();
     let mut acc = String::new();
+    let _ = write!(acc, "v1\u{1}");
     for (p, len, ts) in parts {
         let _ = write!(acc, "{p}\u{1}{len}\u{1}{ts}\u{2}");
     }
@@ -91,9 +104,87 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 /// cache — the 42 fixture invocations in the gate all pass `--index`.
 fn cache_path(index: &Path) -> Option<PathBuf> {
     let abs = std::fs::canonicalize(index).ok()?;
-    let root = abs.parent()?.parent()?;
     let key = format!("{:016x}", fnv1a(abs.to_string_lossy().as_bytes()));
+    if let Ok(dir) = std::env::var("TILLANDSIAS_PLAN_CACHE_DIR")
+        && !dir.is_empty()
+    {
+        return Some(PathBuf::from(dir).join(format!("{key}.redb")));
+    }
+    if let Ok(target) = std::env::var("CARGO_TARGET_DIR")
+        && !target.is_empty()
+    {
+        return Some(
+            PathBuf::from(target)
+                .join("plan-cache")
+                .join(format!("{key}.redb")),
+        );
+    }
+    let root = abs.parent()?.parent()?;
     Some(root.join(".cache").join("plan").join(format!("{key}.redb")))
+}
+
+fn snapshot_path(index: &Path) -> Option<PathBuf> {
+    cache_path(index).map(|p| p.with_extension("snap"))
+}
+
+/// Retrieve the cached folded Ledger, or `None` if absent, corrupt, or fingerprint mismatches.
+pub fn get_ledger(index: &Path) -> Option<crate::Ledger> {
+    if std::env::var_os("TILLANDSIAS_NO_PLAN_CACHE").is_some() {
+        return None;
+    }
+    let path = snapshot_path(index)?;
+    let want = fingerprint(index)?;
+    let bytes = std::fs::read(&path).ok()?;
+    if bytes.len() < 12 || &bytes[0..8] != b"PLANFOLD" {
+        return None;
+    }
+    let fp_len = u32::from_le_bytes(bytes[8..12].try_into().ok()?) as usize;
+    if bytes.len() < 12 + fp_len {
+        return None;
+    }
+    let got_fp = std::str::from_utf8(&bytes[12..12 + fp_len]).ok()?;
+    if got_fp != want {
+        return None;
+    }
+    serde_json::from_slice(&bytes[12 + fp_len..]).ok()
+}
+
+/// Save the folded Ledger to the snapshot cache.
+pub fn save_ledger(index: &Path, ledger: &crate::Ledger) {
+    if std::env::var_os("TILLANDSIAS_NO_PLAN_CACHE").is_some() {
+        return;
+    }
+    let Some(path) = snapshot_path(index) else {
+        return;
+    };
+    let Some(fp) = fingerprint(index) else {
+        return;
+    };
+    let Ok(payload) = serde_json::to_vec(ledger) else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let tmp = path.with_extension(format!("snap.tmp{}", std::process::id()));
+    let mut data = Vec::with_capacity(12 + fp.len() + payload.len());
+    data.extend_from_slice(b"PLANFOLD");
+    data.extend_from_slice(&(fp.len() as u32).to_le_bytes());
+    data.extend_from_slice(fp.as_bytes());
+    data.extend_from_slice(&payload);
+    if std::fs::write(&tmp, data).is_ok() {
+        let _ = std::fs::rename(&tmp, &path);
+    }
+}
+
+/// Invalidate any existing cache for this index.
+pub fn invalidate(index: &Path) {
+    if let Some(p) = snapshot_path(index) {
+        let _ = std::fs::remove_file(p);
+    }
+    if let Some(p) = cache_path(index) {
+        let _ = std::fs::remove_file(p);
+    }
 }
 
 /// One folded packet by id, or `None` for any reason at all.
@@ -136,14 +227,22 @@ pub fn rebuild(index: &Path, folded: &Value) {
     // database and a crashed writer leaves the previous cache intact.
     let tmp = path.with_extension(format!("redb.tmp{}", std::process::id()));
     let _ = std::fs::remove_file(&tmp);
-    let Ok(db) = Database::create(&tmp) else {
-        return;
+    let db = match Database::create(&tmp) {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("cache rebuild: Database::create error: {e}");
+            return;
+        }
     };
     {
-        let Ok(tx) = db.begin_write() else { return };
+        let tx = match db.begin_write() {
+            Ok(tx) => tx,
+            Err(_) => return,
+        };
         {
-            let Ok(mut packets) = tx.open_table(PACKETS) else {
-                return;
+            let mut packets = match tx.open_table(PACKETS) {
+                Ok(t) => t,
+                Err(_) => return,
             };
             let mut all = Vec::new();
             crate::collect_packets(folded, &mut all);
@@ -158,8 +257,9 @@ pub fn rebuild(index: &Path, folded: &Value) {
             }
         }
         {
-            let Ok(mut meta) = tx.open_table(META) else {
-                return;
+            let mut meta = match tx.open_table(META) {
+                Ok(t) => t,
+                Err(_) => return,
             };
             let _ = meta.insert(FINGERPRINT_KEY, fp.as_str());
         }
@@ -256,6 +356,37 @@ mod tests {
             got.get("status").and_then(Value::as_str),
             Some("completed"),
             "the LWW update from the fragment must be present in the cached value"
+        );
+        let _ = std::fs::remove_dir_all(index.parent().unwrap().parent().unwrap());
+    }
+
+    /// ORDER 964-tzmp: snapshot cache round-trips the full Ledger and invalidates on fragment change.
+    #[test]
+    fn snapshot_round_trips_folded_ledger() {
+        let index = tmp_ledger("roundtrip");
+        let l1 = crate::Ledger::load_with_fragments(&index).expect("load l1");
+        assert_eq!(l1.packets.len(), 1);
+        // Second load hits snapshot cache
+        let l2 = crate::Ledger::load_with_fragments(&index).expect("load l2");
+        assert_eq!(l2.packets.len(), 1);
+        assert_eq!(
+            l2.resolve("alpha")
+                .and_then(|p| crate::str_field(p, "status")),
+            Some("ready")
+        );
+
+        // Adding a fragment invalidates snapshot automatically
+        std::fs::write(
+            index.parent().unwrap().join("index.d/zz.yaml"),
+            "packets:\n  - packet_id: beta\n    status: ready\n",
+        )
+        .expect("write fragment");
+        let l3 = crate::Ledger::load_with_fragments(&index).expect("load l3");
+        assert_eq!(l3.packets.len(), 2);
+        assert_eq!(
+            l3.resolve("beta")
+                .and_then(|p| crate::str_field(p, "status")),
+            Some("ready")
         );
         let _ = std::fs::remove_dir_all(index.parent().unwrap().parent().unwrap());
     }
