@@ -1,0 +1,45 @@
+packets:
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    order: 1373-sr9g
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [bash-dialect, macos, testing, gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-preflight-scratch-is-off-checkout.sh
+      - scripts/test-plan-only-lane-structural.sh
+      - scripts/check-bash-dialect.sh
+      - scripts/test-check-bash-dialect.sh
+    observed_by: tlatoanis-macbook-air
+    title: |
+      `. <(…)` sources NOTHING on bash 3.2 (macOS /bin/bash), so test-preflight-scratch-is-off-checkout.sh arm5 reds every macOS ./build.sh --check on trunk, and check-bash-dialect has no rule for the construct
+    verifiable_closure: |
+      bash scripts/test-preflight-scratch-is-off-checkout.sh — on macbookair (bash 3.2.57) AND a Linux host it
+      ends ok:preflight-scratch-is-off-checkout:5/5; pre-fix result on bash 3.2: refused 1/5 failed (arm5).
+      bash scripts/test-check-bash-dialect.sh passes with a mutation arm proving the new rule flags the
+      pre-fix `. <(sed …)` line and passes the `eval "$(sed …)"` form.
+    context: |
+      MEASURED 2026-09-25 on tlatoanis-macbook-air, bash 3.2.57(1)-release arm64:
+      `bash -c '. <(echo X=1); echo ${X:-unset}'` printed `unset` in 5 of 5 runs
+      (one earlier run printed 1 — the read races the pipe, so it is not even
+      reliably empty). eval "$(…)" of the same text is correct every time.
+      The victim: 1349-53h6 (completed) landed scripts/test-preflight-scratch-is-off-checkout.sh
+      in e4385b28a; its arm5 reads build-sidecar.sh's SIDECAR_TARGET_DIR derivation
+      through `. <(sed -n …)` at :102 and gets an empty variable, so the macOS gate
+      refuses `refused:preflight-scratch-is-off-checkout:1/5 failed`. The sed
+      extraction (10 lines) and build-sidecar.sh itself are correct: the product is
+      fine, the fixture cannot read it.
+      SIBLING, same pass: `git grep -n '\. <(\|source <(' -- scripts` on
+      origin/linux-next names exactly two sites, the one above and
+      scripts/test-plan-only-lane-structural.sh:361, whose litmus
+      (plan-only-lane-structural) was red on this host the same afternoon.
+      check-bash-dialect passed both files: a third instance of its class shipping
+      with no rule (1055-6yp8 read -N, 747-knbp empty array).
+    exit_criteria:
+      - 'arm5 fixed by eval "$(sed …)" at test-preflight-scratch-is-off-checkout.sh:102: pre-fix FAILS arm5 on bash 3.2, post-fix 5/5 on macbookair AND on a Linux host'
+      - the sibling at test-plan-only-lane-structural.sh:361 gets the same swap, with its before/after result on bash 3.2 recorded
+      - 'check-bash-dialect.sh flags `. <(` and `source <(`, with a mutation arm in test-check-bash-dialect.sh proving it flags the pre-fix line and passes the eval form'
