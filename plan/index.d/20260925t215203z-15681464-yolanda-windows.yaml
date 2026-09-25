@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    field: status
+    value: completed
+    ts: "2026-09-25T21:52:03Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    event:
+      type: completed
+      ts: "2026-09-25T21:52:03Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 404686532
+  - packet_id: a-check-that-every-file-writing-a-process-global-seam-var-references-the-canonical-lock-prototyped-and-scored-against-real-trees-and-it-names-the-culprit-of-1245-wbqh-before-any-test-runs
+    event:
+      type: note
+      ts: "2026-09-25T21:52:03Z"
+      host: yolanda-windows
+      summary: |-
+        landed on origin/linux-next at 404686532 (land commit; work ref a90b83031 is its ancestor; divergence declared at bcbb926d2). All four exit criteria met: fixture ok:seam-writers-canonical-fixture:7; real e1256ec24^ tree names accel_probe.rs; file-granular limitation in the script header; no-writers control refuses. Live run advisory in local-ci until 1250-92ty closes.
