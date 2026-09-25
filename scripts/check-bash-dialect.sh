@@ -111,6 +111,23 @@ GNUSED_EXEMPT='# gnu-sed: ok'
 PAT_BASH4='(^|[^A-Za-z0-9_])(mapfile|readarray)([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])read([[:space:]]+-[A-Za-z]*)*[[:space:]]+-[A-Za-z]*N'
 BASH4_EXEMPT='# bash4: ok'
 
+# SOURCING A PROCESS SUBSTITUTION (1373-sr9g, 2026-09-25). `. <(cmd)` and
+# `source <(cmd)` parse on bash 3.2, run, and return 0 — and define NOTHING
+# (or, racing the pipe, occasionally define it). The consumer reads an empty
+# variable and reports a finding against a correct tree.
+#
+# MEASURED 2026-09-25 on tlatoanis-macbook-air, bash 3.2.57:
+# `bash -c '. <(echo X=1); echo ${X:-unset}'` printed `unset` 5 times of 5.
+# test-preflight-scratch-is-off-checkout.sh arm5 (1349-53h6) read
+# build-sidecar.sh's derivation that way and REDDED EVERY macOS GATE; its
+# sibling in test-plan-only-lane-structural.sh failed the same way. This gate
+# passed both files: the third time its class shipped with no rule for it.
+#
+# REMEDY: eval "$(cmd)" — the text arrives as one word, no pipe to race.
+# Line-level exemption: `# procsub-source: ok (<reason>)`.
+PAT_PROCSUB_SOURCE='(^|[[:space:];&|(])(\.|source)[[:space:]]+<\('
+PROCSUB_SOURCE_EXEMPT='# procsub-source: ok'
+
 # EMPTY-ARRAY EXPANSION UNDER `set -u` (761-g36m extension, 2026-08-30).
 # Not a bash-4-ism: `"${arr[@]}"` parses in both dialects. It is a SEMANTIC
 # divergence, the same family as the GNU date/du/sed rules above — bash 3.2
@@ -332,6 +349,27 @@ for f in $SCAN_FILES; do
   if [ -n "$bash4_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED bash-4 builtin in '$f' (mapfile/readarray/read -N do not exist in bash 3.2; darwin errors and then reports a violation against a healthy tree; see 1055-6yp8):" >&2
     printf '%s' "$bash4_bad" | head -3 >&2
+    unguarded=$((unguarded + 1))
+  fi
+
+  # Sourcing a process substitution: silently empty on bash 3.2. No `set -u`
+  # precondition — the definition is missing under every option set.
+  procsub_bad=""
+  _ps="$(code_of "$f" | grep -nE "$PAT_PROCSUB_SOURCE" || true)"
+  if [ -n "$_ps" ]; then
+    while IFS= read -r _h; do
+      [ -n "$_h" ] || continue
+      _ln="${_h%%:*}"
+      if sed -n "${_ln}p" "$f" | grep -qF "$PROCSUB_SOURCE_EXEMPT"; then
+        continue
+      fi
+      procsub_bad="${procsub_bad}${_h}
+"
+    done <<< "$_ps"
+  fi
+  if [ -n "$procsub_bad" ]; then
+    echo "[check-bash-dialect] SOURCED process substitution in '$f' (bash 3.2 — the only bash macOS ships — sources NOTHING from '. <(cmd)' and returns 0, so the consumer reads an empty variable; redded every macOS gate via 1349-53h6 arm5, see 1373-sr9g). Use eval \"\$(cmd)\":" >&2
+    printf '%s' "$procsub_bad" | head -3 >&2
     unguarded=$((unguarded + 1))
   fi
 
