@@ -1190,6 +1190,20 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "rust-clippy-all-features" "fail" /tmp/clippy-all-features-check.log
     fi
 
+    # ORDER 1251-54p3. The seam-writer guard's FIXTURE is pinned by
+    # litmus:seam-writer-canonical-lock-shape; this is the LIVE run against
+    # the tree, ADVISORY until 1250-92ty lands. Trunk correctly refuses
+    # remote_projects.rs today, which is that row's hazard, so gating now
+    # would red every host on it. Promote to log_fail_tracked when it closes.
+    # Captured, then printed: the verdict is the exit code of one command.
+    seam_writers_out="$(bash "$REPO_ROOT/scripts/check-seam-writers-canonical.sh" 2>&1)"
+    seam_writers_rc=$?
+    if [[ "$seam_writers_rc" -eq 0 ]]; then
+        log_pass "seam writers all take the canonical lock: $seam_writers_out"
+    else
+        log_skip "advisory (1251-54p3, gating after 1250-92ty): ${seam_writers_out%%$'\n'*}"
+    fi
+
     # Tests - run lib tests only; host-sensitive integration suites are covered by
     # their dedicated litmus/runtime gates rather than the fast deterministic pass.
     # @trace spec:testing
