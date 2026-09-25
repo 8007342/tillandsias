@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: progress
+      ts: "2026-09-25T16:26:08Z"
+      agent_id: forge-forge-tillandsias-gemini-20260925t162608z
+      host: forge-tillandsias
+      summary: |
+        IMPLEMENTED AND VERIFIED: All three exit criteria of order 437 are satisfied and verified against the live forge and unit tests:
+        1. Criterion 1: Production compute_hot_budget caller sizes /home/forge/src tmpfs mount via forge_hot_src_tmpfs(project_name).
+        2. Criterion 2: Production launches derive container memory ceiling using compute_memory_ceiling_mb over all tmpfs mounts (forge agent and opencode paths) and emit equal --memory and --memory-swap limits (zero swap escape); run_agent_container_attached performs host RAM preflight gate via check_host_ram against /proc/meminfo before launch. Verified by unit tests in tillandsias-podman (memory_and_memory_swap_limits_are_serialized_and_validated) and tillandsias-headless (forge_launch_emits_equal_memory_and_memory_swap_ceiling) and litmus:forge-hot-cold-split-tmpfs-shape (21/21 steps pass).
+        3. Criterion 3: Live forge check proves findmnt -t tmpfs lists /home/forge/src (measured live: /home/forge/src tmpfs tmpfs ...,size=262144k,mode=777).
