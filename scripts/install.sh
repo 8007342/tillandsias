@@ -20,17 +20,29 @@ ASSET="tillandsias-linux-x86_64"
 # Select with `--channel unstable` or TILLANDSIAS_CHANNEL=unstable. The
 # curl-install SMOKE still overrides everything via TILLANDSIAS_RELEASE_BASE to
 # pin one specific release without changing what real users get.
-CHANNEL="${TILLANDSIAS_CHANNEL:-stable}"
+#
+# ORDER 1369-sjbc. The DEFAULT is the channel of the release this copy was
+# published in. A script cannot see the URL it was fetched from, so the release
+# job rewrites the next line in the copy it uploads to `unstable`
+# (scripts/stage-unstable-installers.sh). Before that, a user who ran the
+# /unstable/ URL with no flag silently got STABLE. Keep this line exactly
+# `DEFAULT_CHANNEL="stable"`: the rewrite refuses unless it matches exactly once.
+DEFAULT_CHANNEL="stable"
+CHANNEL="${TILLANDSIAS_CHANNEL:-$DEFAULT_CHANNEL}"
+CHANNEL_SOURCE="default of this installer copy"
+[ -n "${TILLANDSIAS_CHANNEL:-}" ] && CHANNEL_SOURCE="TILLANDSIAS_CHANNEL"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --channel)
             [ "$#" -ge 2 ] || { printf '  ERROR: --channel needs a value\n' >&2; exit 1; }
             CHANNEL="$2"
+            CHANNEL_SOURCE="--channel"
             shift 2
             ;;
         --channel=*)
             CHANNEL="${1#--channel=}"
+            CHANNEL_SOURCE="--channel"
             shift
             ;;
         *)
@@ -51,6 +63,15 @@ case "$CHANNEL" in
 esac
 
 RELEASE_BASE="${TILLANDSIAS_RELEASE_BASE:-$CHANNEL_BASE}"
+
+# ORDER 1369-sjbc. The resolved channel, where it came from and the base URL,
+# printed FIRST, before anything is downloaded or replaced, so a mismatch is
+# visible while it can still be stopped. TILLANDSIAS_INSTALL_RESOLVE_ONLY=1
+# stops here: the fixture reads this line without installing anything.
+printf '  resolved-channel: %s (%s) base: %s
+' "$CHANNEL" "$CHANNEL_SOURCE" "$RELEASE_BASE"
+[ "${TILLANDSIAS_INSTALL_RESOLVE_ONLY:-0}" = "1" ] && exit 0
+
 PATH_MARKER_BEGIN="# >>> tillandsias PATH >>>"
 PATH_MARKER_END="# <<< tillandsias PATH <<<"
 

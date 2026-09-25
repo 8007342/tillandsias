@@ -62,6 +62,41 @@ $StartMenuDir  = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $ShortcutPath  = Join-Path $StartMenuDir "$AppName.lnk"
 $StartupDir    = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 $StartupLnk    = Join-Path $StartupDir "$AppName.lnk"
+
+# -- Resolve the release channel FIRST (order 1369-sjbc) ----------------------
+# Release channels (plan order 305 stable, 621-* unstable):
+#   stable   (default) -> /releases/latest/download - newest PROMOTED release.
+#   unstable           -> /releases/download/unstable - a rolling prerelease the
+#                         release workflow re-points at EVERY daily build.
+# `iex`-piped invocations cannot take parameters, so the channel is selected via
+# the environment: $env:TILLANDSIAS_CHANNEL='unstable' before the pipe.
+#
+# ORDER 1369-sjbc. The DEFAULT is the channel of the release this copy was
+# published in: the release job rewrites the next line in the copy it uploads
+# to `unstable` (scripts/stage-unstable-installers.sh), because a script cannot
+# see the URL it was fetched from. Before that, `irm .../unstable/...| iex`
+# with no variable set silently installed STABLE and still ran the reset.
+# Keep the line exactly as written; the rewrite refuses unless it matches once.
+$DefaultChannel = 'stable'
+if ($env:TILLANDSIAS_CHANNEL) {
+    $Channel = $env:TILLANDSIAS_CHANNEL
+    $ChannelSource = 'TILLANDSIAS_CHANNEL'
+} else {
+    $Channel = $DefaultChannel
+    $ChannelSource = 'default of this installer copy'
+}
+switch ($Channel) {
+    'stable'   { $ChannelBase = "https://github.com/$Repo/releases/latest/download" }
+    'unstable' { $ChannelBase = "https://github.com/$Repo/releases/download/unstable" }
+    default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
+}
+
+# ORDER 1369-sjbc. Resolved channel, its source and base URL, printed before
+# anything is downloaded and long before the reset, so a mismatch can still be
+# stopped. TILLANDSIAS_INSTALL_RESOLVE_ONLY=1 stops here (fixture seam).
+$ResolvedBase = if ($env:TILLANDSIAS_VERSION) { "https://github.com/$Repo/releases/download/v$($env:TILLANDSIAS_VERSION.TrimStart('v'))" } else { $ChannelBase }
+Write-Host "  resolved-channel: $Channel ($ChannelSource) base: $ResolvedBase"
+if ($env:TILLANDSIAS_INSTALL_RESOLVE_ONLY -eq '1') { return }
 # windows-260722-3: the tray (and thus its child processes, e.g. the WSL
 # keepalive) must NEVER run with the INSTALL dir as CWD -- children that
 # outlive a hard-killed tray hold the directory handle and block the next
@@ -420,18 +455,8 @@ Say "Install path: $InstalledExe"
 Write-Host ""
 
 # -- Resolve version and base URL ---------------------------------------------
-# Release channels (plan order 305 stable, 621-* unstable):
-#   stable   (default) -> /releases/latest/download - newest PROMOTED release.
-#   unstable           -> /releases/download/unstable - a rolling prerelease the
-#                         release workflow re-points at EVERY daily build.
-# `iex`-piped invocations cannot take parameters, so the channel is selected via
-# the environment: $env:TILLANDSIAS_CHANNEL='unstable' before the pipe.
-$Channel = if ($env:TILLANDSIAS_CHANNEL) { $env:TILLANDSIAS_CHANNEL } else { 'stable' }
-switch ($Channel) {
-    'stable'   { $ChannelBase = "https://github.com/$Repo/releases/latest/download" }
-    'unstable' { $ChannelBase = "https://github.com/$Repo/releases/download/unstable" }
-    default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
-}
+# The channel itself is resolved at the top of this script (order 1369-sjbc),
+# before any host-side step runs; $Channel and $ChannelBase are set there.
 
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')

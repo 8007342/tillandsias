@@ -1632,6 +1632,22 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "must-ship-rows" "skipped"
     fi
 
+    # Order 1369-sjbc: the copy the release jobs upload to `unstable` defaults
+    # its installers to unstable; the versioned (later stable) copy does not.
+    # Wired in build.sh --check as well; hermetic, a few seconds.
+    if [[ -f "scripts/test-unstable-installer-defaults-to-unstable.sh" ]]; then
+        if bash scripts/test-unstable-installer-defaults-to-unstable.sh 2>&1 | tee /tmp/unstable-installer-default.log; then
+            log_pass "Unstable-channel installers default to unstable; stable copies do not"
+            archive_check_log "unstable-installer-default" "pass" /tmp/unstable-installer-default.log
+        else
+            log_fail_tracked "unstable-installer-default" "Unstable installer default regression (see /tmp/unstable-installer-default.log)"
+            archive_check_log "unstable-installer-default" "fail" /tmp/unstable-installer-default.log
+        fi
+    else
+        log_fail_missing_guard "unstable-installer-default" "scripts/test-unstable-installer-defaults-to-unstable.sh"
+        archive_check_log "unstable-installer-default" "skipped"
+    fi
+
     # Order 970-7fqk, sibling of the above.
     if [[ -f "scripts/test-gate-stamp-names-content-movers.sh" ]]; then
         if bash scripts/test-gate-stamp-names-content-movers.sh 2>&1 | tee /tmp/gate-stamp-movers.log; then
