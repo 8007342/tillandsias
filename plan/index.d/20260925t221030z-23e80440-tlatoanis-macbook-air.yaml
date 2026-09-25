@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    field: status
+    value: in_progress
+    ts: "2026-09-25T22:10:30Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    event:
+      type: note
+      ts: "2026-09-25T22:10:30Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed and claimed by tlatoanis-macbook-air per coordinator decision 2026-09-25
