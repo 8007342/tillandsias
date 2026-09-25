@@ -31,6 +31,18 @@ jobs:
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
         with:
           flakehub: false
+          # v56.9.25.1's Linux job failed three times on ONE NAR: the CDN edge
+          # serving the runners dropped cache.nixos.org's cargo-package-winapi-
+          # i686 NAR at exactly 2 MiB ("Stream error in the HTTP/2 framing
+          # layer"), the resume got HTTP 416, and with no fallback nix aborted
+          # ("no substituter that can build it") although the same NAR fetched
+          # whole over HTTP/2 and HTTP/1.1 from a host. http2=false avoids the
+          # framing layer; fallback=true builds a path whose substitution
+          # failed instead of failing the release (a cargo-package-* path is a
+          # fixed-output crates.io fetch, so building it is cheap and exact).
+          extra-conf: |
+            http2 = false
+            fallback = true
 
       - name: Nix Cache
         id: nix-cache

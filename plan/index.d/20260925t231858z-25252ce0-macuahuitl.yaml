@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-release-workflow-s-linux-job-misses-its-nix-cache-on-every-cut-with-unchanged-flake-inputs-two-cuts-in-one-day-rebuilt-for-57-and-32-minutes-and-the-step-that-calls-it-a-regression-is-advisory
+    event:
+      type: evidence
+      ts: "2026-09-25T23:18:58Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        MEASURED 2026-09-25, release run 36199151737 (tag v56.9.25.1), attempts 1-3, each failed in ~90 s in "Build musl-static binaries via Nix": cache.nixos.org's NAR for /nix/store/pl3ajga5fr54api91dvgp24197gcvjjj-cargo-package-winapi-i686-pc-windows-gnu-0.4.0 (nar/18glck8z2qvfvfb54hn1nyh6sxv09m1jr90i4gvsmbp07whrjq40.nar.zst, FileSize 2740849) broke with "Stream error in the HTTP/2 framing layer" at offset 2097152; the resume got HTTP 416; nix then refused with "is required, but there is no substituter that can build it" (fallback off). The same path substituted fine on v56.9.23.1 (run 35922095344). From macuahuitl the same URL fetched whole (2740849 bytes) over HTTP/2 and HTTP/1.1, so the object is sound and the CDN edge serving the runners is not. FlakeHub returned 401 on both runs and is a warning, not the cause. Consequence for this row: the Linux job's dependence on cache.nixos.org is load-bearing and has no fallback, so one bad edge fails a whole cut. Fix landed with this event: nix-installer-action extra-conf `http2 = false` + `fallback = true`; v56.9.25.2 is the fix-forward cut (zero code delta from the v56.9.25.1 gated tree).
