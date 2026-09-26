@@ -40,9 +40,12 @@ _digest() {
         # 964-9yyp adds native-scratch-dir.sh: it decides WHERE the check's
         # tree churn happens, so a change to it is a change to the instrument
         # even though it cannot change the verdict.
-        for f in scripts/archive-plan-packets.sh scripts/archive-plan-packets.rb scripts/check-archive-answerability.sh scripts/native-scratch-dir.sh; do
+        # ORDER 560 adds the Lua worker, now the default sweep, and the backend
+        # selector: a green recorded with one worker says nothing about the other.
+        for f in scripts/archive-plan-packets.sh scripts/archive-plan-packets.lua scripts/archive-plan-packets.rb scripts/check-archive-answerability.sh scripts/native-scratch-dir.sh; do
             [ -f "$f" ] && { printf '%s\n' "$f"; "${SHA[@]}" < "$f"; }
         done
+        printf 'archiver-backend:%s\n' "${TILLANDSIAS_ARCHIVER_BACKEND:-default}"
         # The plan binary's identity — resolved through the sanctioned probe
         # (746-htj9: never a hardcoded target/ path), by size+mtime: a rebuild
         # changes both, and hashing a 30 MB binary on every gate would cost

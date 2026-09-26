@@ -139,6 +139,41 @@ The login container MUST be destroyed on every exit path so no `gh` on-disk stat
 - **AND** all on-disk `gh` state inside the container MUST be destroyed with the container
 - **AND** no token MUST be written to any host file outside the keyring
 
+### Requirement: Mobile QR Code Device Flow
+<!-- req-id: 7a82bc19 -->
+
+Interactive GitHub Login MUST use GitHub App OAuth Device Authorization Grant (RFC 8628) with high-contrast terminal QR code rendering, allowing operators to complete authentication entirely on a mobile device without local browser involvement.
+
+@trace spec:gh-auth-script, spec:tillandsias-vault
+
+#### Scenario: Mobile QR Code display
+- **WHEN** the user initiates interactive `--github-login`
+- **THEN** the flow MUST request a device code from GitHub using Client ID `Iv23liddVkg9ME6OB1K1`
+- **AND** the terminal MUST render a QR code containing `https://github.com/login/device?user_code=<user_code>`
+- **AND** the QR code MUST be formatted using Unicode block characters with ANSI high-contrast styling (`\x1b[47m\x1b[30m`) ensuring readability across both dark and light terminal emulators
+- **AND** the flow MUST display the verification URL and user code as text fallback
+
+#### Scenario: Mobile authorization polling and persistence
+- **WHEN** the QR code is displayed
+- **THEN** an in-container polling loop MUST poll GitHub until the device authorization is completed or expired
+- **AND** once approved, the container MUST authenticate the containerized `gh` session via `gh auth login --with-token`
+- **AND** the full credential bundle (access token, refresh token, expiry timestamps, client ID) MUST be written to Vault at `secret/github/token`
+- **AND** no token bytes SHALL enter the host process memory or host environment
+
+### Requirement: Token Rotation and Expiration Management
+<!-- req-id: 9c34ea81 -->
+
+GitHub App user-to-server access tokens expire after 8 hours. The system MUST persist and manage refresh tokens in Vault, supporting automatic and explicit token rotation.
+
+@trace spec:gh-auth-script, spec:secret-rotation, spec:tillandsias-vault
+
+#### Scenario: Refresh token rotation
+- **WHEN** an access token nears expiration (within 30 minutes) or has expired
+- **AND** a valid refresh token exists in Vault
+- **THEN** the system MUST exchange the refresh token at `https://github.com/login/oauth/access_token` for a new access token and rotated refresh token
+- **AND** the new access token and rotated refresh token MUST be updated in Vault `secret/github/token`
+- **AND** an accountability audit event MUST be recorded under `spec:secret-rotation`
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
