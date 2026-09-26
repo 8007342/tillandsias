@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-plan-json-get-help-does-not-list-its-flags-or-its-jq-subset-so-a-migrating-author-learns-the-surface-by-probing-the-binary
+    order: 1401-bcd7
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-binary, json, jq-replacement, docs]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/json_query.rs
+      - crates/tillandsias-plan/src/main.rs
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-json-get-help-names-its-subset.sh, written in the same commit as what it tests (1136-n8sh).
+      `tillandsias-plan json get --help` (and `yaml get --help`) prints its
+      flags (-r, stdin input) and the supported filter forms (paths, `[]`,
+      `//`, `keys[]`, `length`) AND names the refused ones (select, join,
+      string interpolation) with the recommended reshape; a test asserts each
+      form's line is present. PRE-FIX RESULT: FAILS — the current help shows
+      neither the flags nor the subset.
+    title: |
+      `tillandsias-plan json get --help` lists neither its flags nor its jq subset, so the 1395-88tp author learned that -r exists, stdin works, `//`, `keys[]` and `length` are supported and select/join/interpolation are not by probing the binary — every jq-ratchet migration pays that again
+    context: |
+      SURVEY, macuahuitl-forge 2026-09-26: "The harder part was the REWRITE for
+      jq: learning json get's surface ... I found that by probing the binary
+      directly, since the help text doesn't show the json verb's flags or
+      subset." The jq-callsite ratchet (1395-ue3i) now pushes every new site
+      onto this verb, so the help text is its onboarding.
+    deliverable: |
+      Help text for json get / yaml get naming flags, supported and refused
+      forms, and the reshape for each refused form; a fixture pinning it.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from macuahuitl-forge's
+      survey after the 1395-88tp bounce.
