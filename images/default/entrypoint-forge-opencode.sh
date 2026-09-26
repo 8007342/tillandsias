@@ -231,6 +231,14 @@ fi
 export TILLANDSIAS_CRASH_LAST_OUTPUT="/tmp/forge-lifecycle.log"
 if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
     trace_lifecycle "exec" "launching prompted opencode run (supervised, 767-nkkq)"
+    # 1385-h6uz: `opencode run` prints a tool call only when it FINISHES, so a
+    # long call (a build) was silent for hours. Announce each call as it
+    # starts, from opencode's own log, on this lane's stdout (which streams to
+    # the host). Started before the exec so it outlives this shell; it says so
+    # loudly if the log never appears. Best-effort: absent, the run is as before.
+    if [ -x /usr/local/bin/opencode-tool-start-follower ]; then
+        /usr/local/bin/opencode-tool-start-follower &
+    fi
     exec /usr/local/bin/harness-supervisor opencode \
         "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "$TILLANDSIAS_OPENCODE_PROMPT"
 elif [ "$IS_DIAGNOSTICS" = "true" ]; then

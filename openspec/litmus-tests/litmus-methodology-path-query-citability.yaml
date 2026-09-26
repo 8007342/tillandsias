@@ -157,6 +157,10 @@ critical_path:
     expected_behavior: "ok: declaration-token-is-the-hook"
 
   # ── the ratified constraints of the slice ────────────────────────────────
+  # 1405-3mrp: the pinned set gained regex (1367-q9yc: lua_std expect.matches) and
+  # sha2 (1367-q9yc: the content-addressed predicate memo, and 1375-btuf hash.sha256).
+  # Both were already workspace dependencies, so no new crate was downloaded; the pin
+  # exists to make that a DECISION, and this comment is where it is recorded.
   - step: "NO NEW CRATE, NO NEW DEPENDENCY, and no interpreter can be reached from this path"
     # Both constraints are explicit in the ratified §5 slice text. The
     # dependency count is asserted, not inspected: three workspace deps, the
@@ -169,7 +173,7 @@ critical_path:
     # engine spawns NO subprocess at all, so no interpreter of any language is
     # reachable from it, and the MCP wrapper's methodology path executes only
     # the compiled binary.
-    command: "test ! -d crates/tillandsias-methodology || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb serde serde_json serde_yaml tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -cE 'std::process::Command|std::process::' crates/tillandsias-plan/src/methodology.rs)\" = '0' || { echo 'FAIL: the L0 engine spawns a subprocess'; exit 1; }; sed -n '/^methodology_envelope() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'out=\"$(\"$PLAN_BIN\"' || { echo 'FAIL: the wrapper does not execute the compiled binary'; exit 1; }; echo 'ok: no-new-crate-no-new-dependency'"
+    command: "test ! -d crates/tillandsias-methodology || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -cE 'std::process::Command|std::process::' crates/tillandsias-plan/src/methodology.rs)\" = '0' || { echo 'FAIL: the L0 engine spawns a subprocess'; exit 1; }; sed -n '/^methodology_envelope() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'out=\"$(\"$PLAN_BIN\"' || { echo 'FAIL: the wrapper does not execute the compiled binary'; exit 1; }; echo 'ok: no-new-crate-no-new-dependency'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-crate-no-new-dependency"
 

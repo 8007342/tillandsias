@@ -1544,7 +1544,25 @@ attempt_plan_only_lane() {
     # not fetched is invisible to it. The lane already fetches, so the lane is
     # where the comparison can be made.
     if [[ -f scripts/check-append-vs-origin-fold.sh ]]; then
-        if ! out="$(bash scripts/check-append-vs-origin-fold.sh 2>&1)"; then
+        # ORDER 1310-7apk: fold only the pairs THIS PUSH's fragments write. The
+        # whole-corpus scope cost 116 s on pirria and ~2 min on yolanda for a
+        # one-line push. A push with no index.d fragment has nothing to fold.
+        local -a _afold=()
+        local _af
+        for _af in "${files[@]}"; do
+            case "$_af" in plan/index.d/*.yaml) _afold+=("$_af") ;; esac
+        done
+        local _afold_rc=0
+        if [[ ${#_afold[@]} -eq 0 ]]; then
+            out="ok:append-vs-origin:checked:0"
+        else
+            out="$(bash scripts/check-append-vs-origin-fold.sh "${_afold[@]}" 2>&1)" || _afold_rc=$?
+        fi
+        if [[ "$_afold_rc" -eq 3 ]]; then
+            echo "plan-only lane: validation COULD NOT RUN — the fold comparison outlived its deadline (1310-7apk); this is not a verdict on the push:" >&2
+            echo "$out" | head -6 | sed 's/^/  /' >&2
+            return 1
+        elif [[ "$_afold_rc" -ne 0 ]]; then
             echo "plan-only lane: validation FAILED — this push drops a line origin's fold carries (1261-bn7v):" >&2
             echo "$out" | head -12 | sed 's/^/  /' >&2
             return 1

@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-floor-linux-hosts-plan-only-lane-completes-under-thirty-seconds-with-the-push-scoped-fold-check-measured-on-pirria-or-esme
+    order: 1408-8ifb
+    status: ready
+    kind: measurement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [plan-only-lane, low-end, floor-tier, measurement, hooks]
+    estimated_hours: 1
+    owned_files: []
+    unscoreable: |
+      host-measurement: the deliverable is a timing taken on a floor-tier Linux
+      host (pirria or esme), recorded as an event with the lane's own output
+      lines. No fixture on another host can stand in for it.
+    title: |
+      a floor Linux host's plan-only lane completes a single-fragment push in under 30 s with the push-scoped fold check (1310-7apk, landed at 7c07a0f11): the criterion moved off 1310-7apk so its closure is not held on host availability
+    context: |
+      MOVED FROM 1310-7apk criterion 2, at the coordinator's direction
+      (2026-09-26). 1310-7apk scoped check-append-vs-origin-fold.sh to the
+      push's own fragments and bounded it; it landed at 7c07a0f11 and closed
+      on Windows evidence. This row carries the one criterion only a floor
+      host can answer.
+      THE NUMBER TO BEAT, pre-fix, measured on pirria 2026-09-20 at trunk
+      8d06f5cd7: pre-push-local-gate 135.8 s for ONE fragment, 116.0 s of it
+      the fold check (checked:100).
+      POST-FIX, on the one host measured so far (yolanda-windows, native,
+      2026-09-26): the whole lane, rc=0 in 58 s and 56 s for one fragment; the
+      scoped fold alone about 10 s (checked:1). The other ~46 s of that
+      Windows lane is outside the fold check and is UNPROFILED; this row does
+      not claim to know where it goes.
+      HOW: on pirria or esme, after pulling a trunk that carries 7c07a0f11,
+      push one plan fragment with scripts/push-plan-fragments-to-trunk.sh and
+      time it end to end; record the wall time and the lane's
+      "plan-only lane clean" line.
+    exit_criteria:
+      - 'a single-fragment plan-only push on pirria or esme completes the local gate in under 30 s (pre-fix: 135.8 s on pirria, 116.0 s of it this check)'
+      - 'the recorded run names its host, trunk SHA and wall time, and pastes the lane lines verbatim'
+    verifiable_closure: |
+      An event on this row from pirria or esme carrying the end-to-end wall time
+      (under 30 s), the trunk SHA (a descendant of 7c07a0f11), and the lane's own
+      lines. Pre-fix result: FAILS, 135.8 s on pirria at 8d06f5cd7.
+    events:
+      - type: filed
+        ts: "2026-09-26T14:25:21Z"
+        agent_id: windows-yolanda-claude-20260926t142522z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction as 1310-7apk's criterion 2,
+          moved so nothing is dropped; routed to the floor tier (low-end).
