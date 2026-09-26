@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-gate-arm-runs-an-added-fixture-with-cargo-target-dir-unset-so-a-cd-before-resolve-plan-binary-path-passes-every-forge-and-author-and-reds-only-at-relay
+    event:
+      type: completed
+      ts: "2026-09-26T22:31:54Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Landed in relay commit a8a746fa6 on origin/linux-next. Verified by content: trunk preflight-fixtures-default-target.sh carries the timeout/gtimeout-or-named-skip bound; fixture ok:fixture-default-target-fixture:8 on the updated windows-next. The decider ran on its own land (ok:fixture-default-target:1 checked, per the coordinator). Resolver drive-letter defect split to 1415-my8j.
