@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-09-26T05:46:31Z"
+      agent_id: windows-yolanda-claude-20260926t054631z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-26: synchronous first slice on work/1384-aixy at 9bc9561d9.
+        SCOPE, named as asked:
+        (1) This slice is proc.run only (design 4.1): argv table, typed status, byte-exact stdout/stderr, timeout_ms with a GROUP kill (killpg on Unix; on Windows a job object with KILL_ON_JOB_CLOSE plus TerminateJobObject), shell-string refusal naming allow_shell_strings, and Observing only.
+        (2) STILL OPEN for later slices: proc.spawn with on_line callbacks (arm 4), proc.chain/select/all, mlua async and the coroutine host, the run trace, and the allow_shell_strings declaration itself.
+        (3) The fs WRITE verbs (fs.mkdir, fs.write, fs.list) go under 1380-u7sq, their only consumer being the archiver. fs.read already exists and is repo-confined.
+        NATIVE WINDOWS evidence for arm 3 (the regime the row asks yolanda for): tests/lua_proc.rs passes 8/8 natively. Arm 3 runs both ways: grouped, the grandchild marker never appears and the call returns in about 0.55 s; ungrouped, the control marker DOES appear. Removing the job object reds arm 3. Removing only TerminateJobObject does not, because KILL_ON_JOB_CLOSE kills on the handle's drop; that is two kill paths.
+        DEFECT found and fixed in proc.run: dropping the per-call runtime waited for Tokio's blocking pipe threads. After an ungrouped deadline that took 30.2 s against wall_ms 544. It now calls shutdown_background(). sh.run has the same shape and is left for its owner.
+        Merging this changes the plan crate's validator surface, so every host's plan binary reads stale until rebuilt.

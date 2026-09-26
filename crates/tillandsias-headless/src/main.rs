@@ -3482,8 +3482,11 @@ fn build_stack_common_args(
         // took a PID-1 harness SIGSEGV with it (667-se87, 604-vmcg third
         // sighting, 2026-08-10). This is a fork-bomb ceiling, not a scheduler:
         // size it above the workload's honest peak.
-        "--pids-limit=4096".into(),
     ];
+    // ORDER 1375-xxzj: the forge cgroup budget — memory.max/high/low,
+    // memory.swap.max and pids.max = clamp(512·nproc, 4096, 16384), which
+    // keeps the 4096 floor above.
+    args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     args.extend(proxy_env_args());
     args.extend([
         "--env".into(),
@@ -7873,10 +7876,10 @@ fn build_opencode_forge_args(
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
-        // Same 4096 rationale as build_stack_common_args (667-se87): this
-        // lane hosts workspace builds too.
-        "--pids-limit=4096".into(),
     ];
+    // Same budget as build_stack_common_args (1375-xxzj; the 4096 pids floor of
+    // 667-se87 is kept by the clamp): this lane hosts workspace builds too.
+    args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     match mode {
         ForgeMode::Cli => {
             // When a prompt is provided, the entrypoint execs
@@ -10774,18 +10777,23 @@ while [ "$(date +%s)" -lt "$EXPIRES_AT" ]; do
   if [ -n "$(jq -r '.refresh_token // empty' <<<"$RESP")" ]; then
     jq -c --arg cid "$CLIENT_ID" \
       '{{data: {{refresh_token: .refresh_token, refresh_token_expires_at: ((now|floor) + (.refresh_token_expires_in // 15811200)), client_id: $cid}}}}' \
-      <<<"$RESP" | vault-cli.sh write-json {refresh_path} \
+      <<<"$RESP" | vault-cli.sh write-json {refresh_path} >/dev/null \
       || {{ printf '\nCould not store the refresh token in Vault.\n' >&2; exit 1; }}
   else
     printf '\nGitHub returned no refresh token; this login will need repeating when the token expires.\n' >&2
   fi
   jq -c --arg cid "$CLIENT_ID" \
     '{{data: {{token: .access_token, expires_at: ((now|floor) + (.expires_in // 28800)), client_id: $cid}}}}' \
-    <<<"$RESP" | vault-cli.sh write-json {token_path} \
+    <<<"$RESP" | vault-cli.sh write-json {token_path} >/dev/null \
     || {{ printf '\nCould not store the GitHub token in Vault.\n' >&2; exit 1; }}
+  # vault-cli's write-json prints Vault's KV-v2 write metadata as JSON
+  # (created_time, version: no secret). It is discarded above, and the user
+  # gets one line they can read instead (operator, 2026-09-26: "some json
+  # strings I couldn't read ... less scary"). Failures still reach stderr.
+  printf '\n[tillandsias] Saved your GitHub login to the Tillandsias vault \342\234\223\n'
   jq -r '.access_token' <<<"$RESP" \
     | gh auth login --hostname github.com --git-protocol https --with-token || exit $?
-  printf '\n[tillandsias] Authorization successful!\n'
+  printf '[tillandsias] Authorization successful!\n'
   exit 0
 done
 printf '\nLogin timed out waiting for authorization.\n' >&2
@@ -16517,7 +16525,8 @@ fn build_forge_agent_run_args_with_vault(
         // forge. The rationale travels with EVERY site now; a fix whose
         // comment rides only some copies makes the missed ones look
         // intentional.
-        .pids_limit(4096);
+        // ORDER 1375-xxzj: the full cgroup budget; its pids clamp keeps the 4096 floor.
+        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host());
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
         // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
@@ -23634,6 +23643,80 @@ mod tests {
         assert!(
             !s.contains("write-stdin"),
             "no fallback path that writes a token-only record"
+        );
+    }
+
+    /// Operator, 2026-09-26, after the first live login: "the terminal outputted
+    /// some json strings I couldn't read". vault-cli's write-json prints Vault's
+    /// KV-v2 metadata. This RUNS the real poll script under bash with stub
+    /// curl / vault-cli.sh / gh / sleep, the stub vault-cli printing metadata
+    /// JSON the way the real one does, and asserts the user's stdout carries no
+    /// `{` and does carry the friendly line. Skips by name where bash or jq is
+    /// absent (the gate hosts have both).
+    #[cfg(unix)]
+    #[test]
+    fn the_device_poll_prints_no_json_to_the_user() {
+        use std::os::unix::fs::PermissionsExt;
+        for tool in ["bash", "jq"] {
+            if std::process::Command::new("sh")
+                .args(["-c", &format!("command -v {tool}")])
+                .output()
+                .map(|o| !o.status.success())
+                .unwrap_or(true)
+            {
+                eprintln!("skip:the_device_poll_prints_no_json_to_the_user:no-{tool}");
+                return;
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let stub = |name: &str, body: &str| {
+            let p = dir.path().join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        stub(
+            "curl",
+            r#"cat >/dev/null; printf '%s' '{"access_token":"ghu_FAKE","refresh_token":"ghr_FAKE","expires_in":28800,"refresh_token_expires_in":15811200}'"#,
+        );
+        stub(
+            "vault-cli.sh",
+            r#"cat >/dev/null; printf '%s\n' '{"created_time":"2026-09-26T05:00:00Z","version":3}'"#,
+        );
+        stub("gh", "cat >/dev/null; exit 0");
+        stub("sleep", "exit 0");
+        let dc = parse_device_code_response(&fake_device_code_reply()).unwrap();
+        let path = format!(
+            "{}:{}",
+            dir.path().display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg("-s")
+            .env("PATH", path)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write as _;
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(device_poll_script(&dc).as_bytes())
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "poll failed: {stderr}");
+        assert!(!stdout.contains('{'), "the user saw JSON: {stdout}");
+        assert!(
+            stdout.contains("Saved your GitHub login to the Tillandsias vault"),
+            "{stdout}"
+        );
+        assert!(
+            !stdout.contains("ghu_") && !stderr.contains("ghu_"),
+            "a token reached the terminal"
         );
     }
 

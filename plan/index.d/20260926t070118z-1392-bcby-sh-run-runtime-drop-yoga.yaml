@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-sh-run-drops-its-per-call-tokio-runtime-which-waits-for-blocking-pipe-threads-so-a-deadline-returns-long-after-it-reports
+    order: 1392-bcby
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, plan-binary, windows, process-control]
+    estimated_hours: 1
+    owned_files: [crates/tillandsias-plan/src/lua_predicate.rs]
+    observed_by: yoga
+    unscoreable: |
+      windows-only-reproduction: the pre-fix hang needs blocking pipe-reader threads, which
+      Tokio uses on Windows and not on Unix (measured: it does not reproduce on Linux), so the
+      pre-fix FAIL can only be recorded on a Windows host; the closure names that host run.
+    title: |
+      Lua sh.run (= expert.shell) builds a per-call Tokio runtime and DROPS it after block_on, which waits for its blocking pipe threads, so after an ungrouped deadline the call returns long after it reports (proc.run's 1384-aixy defect, same shape)
+    verifiable_closure: |
+      On a Windows host with the native plan binary, the 1384-aixy repro driven through
+      sh.run (an ungrouped child whose deadline fires while a grandchild holds the pipes)
+      returns within 1 s of its reported after_ms. Pre-fix result: FAILS there (proc.run's
+      identical shape returned 30.2 s after reporting wall_ms=544, yolanda, c066502c5). On
+      Linux the same call returns at the deadline both before and after the fix (yoga:
+      after_ms=502, wall 506 and 507 ms, grouped and setsid-escaped), which is why the
+      closure is a Windows run and not a Linux arm that could not fail.
+    context: |
+      Fix: runtime.shutdown_background() after block_on, as 1384-aixy did for proc.run.
+      Decision event on 1375-btuf (20260926t054956z): fix rather than fold onto proc.run.
+    events:
+      - type: filed
+        ts: "2026-09-26T07:01:18Z"
+        host: yoga
+        summary: Filed by yoga (owner of lua_std's sh.run) at the coordinator's prompt, after 1375-btuf landed.

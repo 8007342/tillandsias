@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: finding
+      ts: "2026-09-26T05:47:10Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t054710z
+      host: macuahuitl-forge
+      summary: |
+        MEASURED on macuahuitl-forge 2026-09-26 (forge, local build v56.9.26.1): /home/forge/src is a 256M tmpfs at 97% (249M used, 7.8M free) holding ONLY the tillandsias checkout (249M, .git 168M). The join-the-fleet recipe `git worktree add ../w-1254 -b work/<order> origin/linux-next` therefore fails with hundreds of "error: unable to write file ..." and "fatal: Could not reset index file to revision 'HEAD'", leaving a half-created branch to prune. The overlay root (/) had 387G free; the worker put the worktree at /home/forge/w-1254 instead. The mount is sized for one checkout with zero headroom, so any worktree, build output or second clone under /home/forge/src is refused. Related sizing work: 1379-vvct (forge mounts carry a class) — visible on linux-next only; the forge-plan MCP expert (indexed from main) answers "no packet matches" for it.

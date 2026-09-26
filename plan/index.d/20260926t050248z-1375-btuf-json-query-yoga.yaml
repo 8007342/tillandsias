@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: note
+      ts: "2026-09-26T05:02:48Z"
+      host: yoga
+      summary: |
+        json.query WIRED to the landed 1375-rn9b engine (json_query::parse + eval, the surface
+        agreed with lenovinha): a Lua sequence of every result, args bound as $name, errors
+        prefixed json.query: parse:/unsupported:/runtime: (tests/lua_std.rs, 12/12).
+        CRITERION CORRECTION, measured: the criterion says json.query(doc,
+        '.a[] | select(. > 1)') over {"a":[1,2,{"b":null}]} "returns {2}". jq orders objects
+        ABOVE numbers, so {"b":null} > 1 is true: real jq 1.8.1 prints [2,{"b":null}] for that
+        exact input, and the engine returns the same 2 results. The test pins the jq answer;
+        the criterion's {2} is wrong under the jq parity 1375-rn9b is bound to. Nothing else in
+        the criterion changes.

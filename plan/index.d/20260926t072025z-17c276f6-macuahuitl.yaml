@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: finding
+      ts: "2026-09-26T07:20:25Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        FINDING, macuahuitl coordinator 2026-09-26 ~07:19Z, while relay-landing work/1254-fdsu and work/1388-pfys with `scripts/land-on-platform-branch.sh linux-next 3` (default env, selector ON): the land tool gated GREEN, then its own push was refused by the pre-push hook: `✗ pre-push refused: the gate stamp is scoped to 'build-scripts,images' but refs/heads/linux-next has no usable local base to diff against` → `refused:land:push-failed — retrying THIS PUSH cannot help (not a lost race)`, rc=6, one full gate lost. The relay merge commit's classes (build-scripts, images) produce a SCOPED stamp, and the hook cannot honour a scoped stamp on this push. That's the same shape merge-to-main-and-release already documents for bump branches ("run with TILLANDSIAS_CLASS_SELECTOR=off"). Workaround applied: TILLANDSIAS_CLASS_SELECTOR=off on the land. Consequence: every relay land through the land tool can lose a gate to this once 765-xpct's selector is active, and the land tool's own refusal text does not name the selector as the cause. Fix direction: the land tool either passes TILLANDSIAS_CLASS_SELECTOR=off itself for relay merges, or the hook classifies against origin/<branch> when the local base is unusable.

@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-native-windows-a-piped-tillandsias-plan-lua-with-a-deadline-waits-for-a-leaked-grandchild-because-the-spawned-child-inherits-the-clis-own-stdout-handle
+    order: 1394-g2fb
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [exec, windows, handles, pipes, deadlines]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    unscoreable: |
+      unpinnable-until-the-guard-exists (1136-n8sh): the deliverable includes
+      the timing fixture that scores it. FUTURE FILENAME:
+      crates/tillandsias-exec/tests/piped_caller_deadline.rs, written in the
+      same commit as the fix.
+    title: |
+      on native Windows a PIPED `tillandsias-plan lua …` whose script runs a child with a deadline waits for that child's leaked grandchild (about 30 s), because the spawned child inherits the CLI's own stdout handle and the grandchild keeps the CALLER'S pipe open, even after the runtime-drop fixes
+    context: |
+      MEASURED on yolanda-windows 2026-09-26 with the SAME post-fix binary
+      (origin/work/1392-bcby 50afbc94c, which carries sh.run's
+      shutdown_background), repro sh.run{'bash',
+      'scripts/fixtures/spawn-grandchild.sh', m, timeout_ms=500}, ungrouped:
+        stdout redirected to a FILE:   wall 745 ms, 723 ms
+        stdout PIPED (`| tr -d '\r'`): wall 30558 ms, 30421 ms
+      The runtime-drop defect (1384-aixy for proc.run, 1392-bcby for sh.run)
+      is fixed in both runs. What remains is the CALLER'S pipe: on Windows the
+      child is created with handle inheritance on, it inherits the CLI's
+      inheritable stdout, the fixture's background grandchild inherits it in
+      turn, and the reader of the pipe (grep, tr, a script's $(...)) sees no
+      EOF until that grandchild exits. Every `tillandsias-plan lua … | grep`
+      and every `$(tillandsias-plan …)` on a Windows host is exposed.
+      Candidate fixes, deliberately NOT chosen here: restrict inheritance to
+      the three stdio handles (PROC_THREAD_ATTRIBUTE_HANDLE_LIST); or have the
+      deadline reap the grandchild (group/job, 1384-aixy's group=true already
+      does for proc.run); or both.
+    exit_criteria:
+      - 'on native Windows, `tillandsias-plan lua -e "<run an ungrouped child that leaves a background grandchild, timeout_ms=500>" | <any reader>` returns within the deadline + 2 s (pre-fix: about 30 s, 30558/30421 ms measured)'
+      - 'the same call with stdout redirected to a file is unchanged (control: 745/723 ms pre-fix), so the fix is shown to act on the PIPE case, not on the child'
+      - 'stated for both sh.run and proc.run (group=false), since both spawn through tillandsias_exec'
+    verifiable_closure: |
+      The future fixture crates/tillandsias-exec/tests/piped_caller_deadline.rs
+      runs the CLI with its stdout PIPED to the test and a deadline of 500 ms,
+      and asserts the read reaches EOF within deadline + 2 s on native Windows;
+      plus the redirected-to-file control. Pre-fix result: FAILS, piped wall
+      30558 ms and 30421 ms (yolanda-windows, 2026-09-26).
+    events:
+      - type: filed
+        ts: "2026-09-26T07:17:04Z"
+        agent_id: windows-yolanda-claude-20260926t071705z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request; found while timing 1392-bcby for
+          yoga, as the confound in the first (piped) measurement.

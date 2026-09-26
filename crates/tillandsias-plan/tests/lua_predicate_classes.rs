@@ -288,7 +288,6 @@ const CACHEABLE_GLOBALS: &[&str] = &[
     "ipairs",
     "json", // 1375-btuf lua_std (pure)
     "math",
-    "next",
     "pairs",
     "path", // 1375-btuf lua_std (pure, lexical)
     "pcall",

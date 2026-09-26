@@ -1910,16 +1910,17 @@ pub fn transport_conformance_main() -> i32 {
 }
 
 /// `--github-login`: boot the VM and drive the *released* guest
-/// `tillandsias-headless --github-login` over the control wire. Each end user is
-/// **prompted on the host terminal for their OWN** git author name, git author
-/// email, and GitHub PAT — nothing is defaulted from the operator's host git
-/// config. The token echo is suppressed (`stty -echo`) and the values are fed to
-/// the guest's prompts via the proven expect-style PTY input path, so the token
-/// lands on the guest `/dev/tty` and never appears in `argv`. (The host process
-/// does hold the token transiently in memory while delivering it; it is never
-/// logged or written to argv.)
+/// `tillandsias-headless --github-login` over the control wire.
 ///
-/// Operator usage: run in a terminal and answer the prompts —
+/// The credential is a GitHub DEVICE FLOW (1381-za6b, 3a2b01d9e): the guest
+/// prints a QR code, a verification URL and a one-time code, which reach this
+/// terminal verbatim (1383-dkxi), and the user approves on their phone or in a
+/// browser. No token is typed and none passes through the host. The user is
+/// then **prompted on the host terminal for their OWN** git author name and
+/// email — nothing is defaulted from the operator's host git config — and
+/// those are fed to the guest's prompts via the expect-style PTY input path.
+///
+/// Operator usage: run in a terminal, scan the QR code, answer the prompts —
 ///   tillandsias-tray --github-login
 ///
 /// @trace spec:gh-auth-script, plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
@@ -1952,7 +1953,9 @@ pub fn github_login_main() -> i32 {
     rt.block_on(async move {
         use std::time::Duration;
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-        use tillandsias_vm_layer::vsock_exec::{DynamicExpect, exec_over_stream_expect_dynamic};
+        use tillandsias_vm_layer::vsock_exec::{
+            DynamicExpect, exec_over_stream_expect_dynamic_with_output,
+        };
 
         eprintln!("[github-login] starting VM…");
         if let Err(e) = vz.start().await {
@@ -1998,18 +2001,18 @@ pub fn github_login_main() -> i32 {
         // is also unbounded — the 70-minute wedges of 2026-08-10/11. The
         // attended login of 2026-07-24 worked precisely because it predates the
         // guest's reorder.
+        //
+        // ORDER 1383-dkxi. The credential step is no longer a prompt. Since
+        // 3a2b01d9e (1381-za6b) the guest's GitHub terminal login is a DEVICE
+        // FLOW: it prints a QR code, a verification URL and a one-time code,
+        // then polls GitHub until the user approves on their phone or browser.
+        // It never prints "authentication token", so the old first needle here
+        // waited forever — the same sequential-expect deadlock as 2026-08-10,
+        // triggered by the guest changing its first step again. There is
+        // nothing to TYPE for the credential, so there is no expect for it:
+        // the device code reaches the user through the raw output sink below,
+        // and the first thing the host answers is the git identity.
         let expects = vec![
-            DynamicExpect {
-                needle: b"authentication token".to_vec(),
-                label: "github token".to_string(),
-                response: Box::new(|| {
-                    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
-                    if pat.is_empty() {
-                        return Err("--github-login: a GitHub token is required".to_string());
-                    }
-                    Ok(format!("{pat}\n").into_bytes())
-                }),
-            },
             DynamicExpect {
                 needle: b"author name".to_vec(),
                 label: "git author name".to_string(),
@@ -2039,9 +2042,11 @@ pub fn github_login_main() -> i32 {
                 }),
             },
         ];
-        eprintln!("[github-login] driving guest login (token -> git name -> email)…");
+        eprintln!(
+            "[github-login] driving guest login (device code + QR -> git name -> email)…"
+        );
         let github_login_preamble = proxy_exec_preamble("--github-login");
-        let result = exec_over_stream_expect_dynamic(
+        let result = exec_over_stream_expect_dynamic_with_output(
             stream,
             &[
                 "/bin/bash",
@@ -2087,7 +2092,24 @@ pub fn github_login_main() -> i32 {
                 &github_login_preamble,
             ],
             expects,
-            |ev| eprintln!("[github-login] {ev}"),
+            // Escaped previews of guest output would repeat, unreadably, what
+            // the raw sink below already shows; every other event (needle
+            // matches, silence and heartbeat reports) still reaches the user.
+            |ev| {
+                if !ev.starts_with("guest output (") {
+                    eprintln!("[github-login] {ev}");
+                }
+            },
+            // 1383-dkxi: the guest's terminal output IS the login now — the QR
+            // code, the URL and the one-time code — so it goes to the user's
+            // terminal verbatim. It used to reach them only as an escaped,
+            // 200-byte, once-a-second preview, so the QR was never visible.
+            |bytes| {
+                use std::io::Write as _;
+                let mut err = std::io::stderr().lock();
+                let _ = err.write_all(bytes);
+                let _ = err.flush();
+            },
         )
         .await;
 

@@ -46,7 +46,75 @@ pub fn register(lua: &Lua, class: PredicateClass) -> LuaResult<()> {
     if matches!(class, PredicateClass::Observing) {
         g.set("time", time_table(lua)?)?;
     }
+    determinism(lua)?;
     Ok(())
+}
+
+/// 1384-bp6t: ONE SCRIPT, ONE BYTE STREAM.
+///
+/// Lua 5.4 seeds string hashing per process (`luai_makeseed`: ASLR + the
+/// clock), and `pairs`/`next` walk the hash, so the same script printed a
+/// different key order in every process: measured on yoga, three runs of one
+/// 12-key table gave three checksums. `pairs` is replaced by a walk in a
+/// DEFINED order — numbers ascending, then strings in byte order, then any
+/// other key type by `tostring` — `table.keys` returns that order, and the
+/// raw `next` is withheld so nothing can reach the hash order.
+///
+/// `os.setlocale` is withheld too (1254-fdsu's class): one `os.setlocale("")`
+/// under fr_FR flipped `%.2f` from `3.50` to `3,50` and made `tonumber("3,5")`
+/// parse. The Rust binary never calls setlocale, so Lua stays in "C" as long
+/// as no script can change it.
+fn determinism(lua: &Lua) -> LuaResult<()> {
+    lua.load(
+        r#"
+        local rawnext, type, tostring, tsort = next, type, tostring, table.sort
+        local rank = { number = 1, string = 2 }
+        local function before(a, b)
+            local ta, tb = type(a), type(b)
+            if ta ~= tb then return (rank[ta] or 3) < (rank[tb] or 3) or
+                ((rank[ta] or 3) == (rank[tb] or 3) and ta < tb) end
+            if ta == "number" or ta == "string" then return a < b end
+            return tostring(a) < tostring(b)
+        end
+        local function keys(t)
+            local ks = {}
+            for k in rawnext, t, nil do ks[#ks + 1] = k end
+            tsort(ks, before)
+            return ks
+        end
+        pairs = function(t)
+            local ks, i = keys(t), 0
+            return function()
+                i = i + 1
+                local k = ks[i]
+                if k ~= nil then return k, t[k] end
+            end, t, nil
+        end
+        table.keys = keys
+        next = nil
+        if type(os) == "table" then os.setlocale = nil end
+        "#,
+    )
+    .set_name("=lua_std.determinism")
+    .exec()
+}
+
+/// Rebuild every object with its keys in byte order, recursively. The
+/// workspace enables serde_json `preserve_order`, so a map built from a Lua
+/// table keeps the HASH order it was walked in; sorting here is what makes
+/// `json.encode` of the same table the same bytes in every process.
+fn canonical(v: serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Object(m) => {
+            let mut pairs: Vec<(String, serde_json::Value)> = m.into_iter().collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            serde_json::Value::Object(pairs.into_iter().map(|(k, v)| (k, canonical(v))).collect())
+        }
+        serde_json::Value::Array(a) => {
+            serde_json::Value::Array(a.into_iter().map(canonical).collect())
+        }
+        other => other,
+    }
 }
 
 fn rt(msg: impl Into<String>) -> LuaError {
@@ -66,9 +134,10 @@ fn json_table(lua: &Lua) -> LuaResult<LuaTable> {
     t.set(
         "encode",
         lua.create_function(|lua, (v, opts): (LuaValue, Option<LuaTable>)| {
-            let j: serde_json::Value = lua
-                .from_value(v)
-                .map_err(|e| rt(format!("json.encode: {e}")))?;
+            let j: serde_json::Value = canonical(
+                lua.from_value(v)
+                    .map_err(|e| rt(format!("json.encode: {e}")))?,
+            );
             let pretty = opts
                 .and_then(|o| o.get::<Option<bool>>("pretty").ok().flatten())
                 .unwrap_or(false);
@@ -80,18 +149,38 @@ fn json_table(lua: &Lua) -> LuaResult<LuaTable> {
             out.map_err(|e| rt(format!("json.encode: {e}")))
         })?,
     )?;
-    // json.query(v, filter [, args]) is the 1375-rn9b engine
-    // (json_query::parse + json_query::eval, surface agreed with lenovinha
-    // 2026-09-26): a Lua sequence of results, erroring with the engine's
-    // "parse:/unsupported:/runtime:" text. Until that engine is on trunk the
-    // name exists and REFUSES by name rather than being nil, so a caller
-    // reads why instead of "attempt to call a nil value".
+    // json.query(v, filter [, args]) — the 1375-rn9b engine
+    // (json_query::parse + json_query::eval; surface agreed with lenovinha
+    // 2026-09-26). Returns a Lua SEQUENCE of every result; `args` binds `$name`.
+    // Errors carry the engine's own prefix — parse:<at>: / unsupported:<construct>
+    // / runtime: — so a caller or the ratchet can match on the kind. Pure: a
+    // function of its arguments, so it sits in the Cacheable class (and over
+    // fs.read it stays pure because that memo is content-addressed, 1367-q9yc).
     t.set(
         "query",
-        lua.create_function(|_, (_v, _f): (LuaValue, String)| -> LuaResult<LuaValue> {
-            Err(rt(
-                "json.query: unsupported:engine-not-landed — json_query::eval arrives with 1375-rn9b",
-            ))
+        lua.create_function(|lua, (v, f, args): (LuaValue, String, Option<LuaTable>)| {
+            let input: serde_json::Value = lua
+                .from_value(v)
+                .map_err(|e| rt(format!("json.query: input: {e}")))?;
+            let filter =
+                crate::json_query::parse(&f).map_err(|e| rt(format!("json.query: {e}")))?;
+            let mut opts = crate::json_query::Opts::default();
+            if let Some(a) = args {
+                for pair in a.pairs::<String, LuaValue>() {
+                    let (k, lv) = pair?;
+                    let jv: serde_json::Value = lua
+                        .from_value(lv)
+                        .map_err(|e| rt(format!("json.query: arg {k}: {e}")))?;
+                    opts.args.insert(k, jv);
+                }
+            }
+            let results = crate::json_query::eval(&input, &filter, &opts)
+                .map_err(|e| rt(format!("json.query: {e}")))?;
+            let out = lua.create_table()?;
+            for (i, r) in results.iter().enumerate() {
+                out.set(i + 1, lua.to_value(r)?)?;
+            }
+            Ok(out)
         })?,
     )?;
     Ok(t)

@@ -85,15 +85,53 @@ fn the_observing_class_has_the_clock_and_sh_run() {
     );
 }
 
+/// 1375-btuf criterion: json.query(doc, '.a[] | select(. > 1)') returns {2}.
+/// PRE-FIX RESULT (before 1375-rn9b landed): it refused by name,
+/// "unsupported:engine-not-landed".
 #[test]
-fn json_query_refuses_by_name_until_its_engine_lands() {
+fn json_query_runs_the_rn9b_engine_and_returns_a_sequence() {
+    let out = eval_str(
+        PredicateClass::Cacheable,
+        r#"local r = json.query(json.parse('{"a":[1,2,{"b":null}]}'), '.a[] | select(. > 1)')
+           return #r .. ':' .. json.encode(r)"#,
+    );
+    // The row's criterion text says {2}. jq orders objects ABOVE numbers, so
+    // `{"b":null} > 1` is true and real jq 1.8.1 prints [2,{"b":null}] for this
+    // exact input; the engine agrees with jq, and jq parity is 1375-rn9b's
+    // contract. Pinned to jq; the criterion correction is an event on the row.
+    assert_eq!(out, r#"2:[2,{"b":null}]"#);
+    let two = eval_str(
+        PredicateClass::Cacheable,
+        r#"local r = json.query(json.parse('{"a":[1,2,3]}'), '.a[] | select(. == 2)')
+           return #r .. ':' .. tostring(r[1])"#,
+    );
+    assert_eq!(two, "1:2");
+    let bound = eval_str(
+        PredicateClass::Cacheable,
+        r#"local r = json.query(json.parse('{"k":"v"}'), '.k == $want', {want = "v"})
+           return tostring(r[1])"#,
+    );
+    assert_eq!(bound, "true");
+}
+
+#[test]
+fn json_query_errors_carry_the_engines_kind_prefix() {
     let lua = build_environment(PredicateClass::Cacheable).expect("env");
-    let err = lua
-        .load("return json.query({}, '.')")
+    let parse = lua
+        .load("return json.query({}, '.a[')")
         .eval::<mlua::Value>()
         .unwrap_err()
         .to_string();
-    assert!(err.contains("unsupported:engine-not-landed"), "{err}");
+    assert!(parse.contains("json.query: parse:"), "{parse}");
+    let unsupported = lua
+        .load("return json.query({}, 'reduce .[] as $x (0; . + $x)')")
+        .eval::<mlua::Value>()
+        .unwrap_err()
+        .to_string();
+    assert!(
+        unsupported.contains("json.query: unsupported:"),
+        "{unsupported}"
+    );
 }
 
 fn plan_bin() -> std::path::PathBuf {
