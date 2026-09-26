@@ -86,6 +86,10 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# 1242-4x53: re-run a failed check's failures once, same regime, and record
+# whether they REPRODUCED. Best-effort like the timing side-channel above.
+. "$REPO_ROOT/scripts/lib-rerun-failed-rust-tests.sh" 2>/dev/null || true
+command -v rerun_failed_rust_tests >/dev/null 2>&1 || rerun_failed_rust_tests() { return 0; }
 # 765-dfry: per-check duration anchor. Checks run sequentially and each ends
 # in archive_check_log, so "time since the previous archive (or section
 # start)" IS the check's own duration. Re-anchored by log_section and by
@@ -1269,7 +1273,12 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
-        archive_check_log "rust-tests" "fail" /tmp/test-check.log
+        # 1242-4x53: did it fail AGAIN, same env and seat? Two reds in one
+        # release tier passed on re-run, and until now the record could not say.
+        _rust_reproduced="$(rerun_failed_rust_tests /tmp/test-check.log \
+            run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast)"
+        [[ -n "$_rust_reproduced" ]] && log_info "rust-tests failure reproduced on a same-regime re-run: $_rust_reproduced (1242-4x53)"
+        archive_check_log "rust-tests" "fail" /tmp/test-check.log "rust-tests.log" "$_rust_reproduced"
     fi
 
     # Tray + vsock-server feature contract
