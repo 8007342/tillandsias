@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    field: status
+    value: completed
+    ts: "2026-09-26T00:24:55Z"
+    host: macos
+
+events:
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    event:
+      type: completed
+      ts: "2026-09-26T00:24:55Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: 21027af15 (landed on origin/linux-next, carries work/1373-sr9g 34c180ea4) + test-preflight-scratch-is-off-checkout.sh ok 5/5 on macOS bash 3.2.57 (pre-fix refused 1/5) and on Linux GNU bash 5.3.9 (lenovinha, dd1b903b7); test-plan-only-lane-structural.sh 10/10 on bash 3.2 (pre-fix 9/10); check-bash-dialect flags both pre-fix sites (blocked:bash4-unguarded:2), 5 new test-check-bash-dialect arms pass, the two refusal arms fail against the pre-rule checker
+  - packet_id: sourcing-a-process-substitution-is-empty-on-bash-3-2-so-two-fixtures-read-nothing-on-macos-and-the-dialect-guard-has-no-rule-for-it
+    event:
+      type: note
+      ts: "2026-09-26T00:24:55Z"
+      host: macos
+      summary: |-
+        closed after landing. Caveat stated, not hidden: test-check-bash-dialect.sh as a whole still exits 1 on its PRE-EXISTING unguarded-builtin-refused arm (mapfile counted twice; identical on pristine trunk, both OSes). That is 1374-4u6i, not this row.
