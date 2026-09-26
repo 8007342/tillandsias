@@ -525,6 +525,13 @@ pub fn relate(envelope: &Envelope, root: &Path) -> CallerRelation {
 
     let mut drifted = BTreeSet::new();
     let mut absent_here = BTreeSet::new();
+    // 1233-jqp4: the outcome depends only on (path, frame), and a plan answer
+    // cites ONE file hundreds of times at one commit. Evaluated per citation,
+    // "what is ready for linux" ran `git show <frame>:plan/index.yaml` 372 times
+    // and re-read the 5.9 MB working copy as often (measured on yoga
+    // 2026-09-26: 569 git calls, 5958 ms for one groundtruth case), a cost that
+    // grows with the ledger AND with the number of rows cited. Once per pair.
+    let mut evaluated: BTreeSet<(String, Option<String>)> = BTreeSet::new();
     for c in &envelope.citations {
         // A path that escapes the checkout is a separate, harder violation that
         // `verify` already reports; do not hand it to git.
@@ -537,8 +544,11 @@ pub fn relate(envelope: &Envelope, root: &Path) -> CallerRelation {
         {
             continue;
         }
-        let here = std::fs::read_to_string(root.join(rel)).ok();
         let frame = c.commit.as_deref().or(answer_commit.as_deref());
+        if !evaluated.insert((c.path.clone(), frame.map(str::to_string))) {
+            continue;
+        }
+        let here = std::fs::read_to_string(root.join(rel)).ok();
         let there = frame.and_then(|sha| view.file_at(sha, &c.path));
         match (here, there) {
             (None, Some(_)) => {
@@ -3567,6 +3577,52 @@ events:
             !dirty.relation.spans_transfer(),
             "'same' plus drift must not read as safe"
         );
+    }
+
+    /// 1233-jqp4: `relate` evaluates each (path, frame) PAIR once, because a
+    /// plan answer cites one file hundreds of times at one commit. The key must
+    /// carry the FRAME, not just the path: the same file cited at a frame where
+    /// it matches the working tree AND at one where it does not is still
+    /// drifted. A dedupe keyed on path alone would evaluate the first citation,
+    /// skip the rest, and report this file clean — which is exactly the
+    /// optimisation this test exists to stop being wrong.
+    #[test]
+    fn repeated_citations_of_one_file_still_see_the_frame_where_it_drifted() {
+        let r = repo("relate-dedupe");
+        r.write("f.md", "old\n");
+        let old = r.commit("old");
+        r.write("f.md", "new\n");
+        let new = r.commit("new");
+        let cite = |sha: &str| {
+            Citation::new(
+                "f.md".to_string(),
+                1,
+                1,
+                CitationKind::Plan,
+                BTreeMap::new(),
+            )
+            .with_commit(sha)
+        };
+        // Clean frame first, cited twice, THEN the drifted frame.
+        let env = Envelope::supported(
+            KEY,
+            vec![cite(&new), cite(&new), cite(&old)],
+            Confidence::Exact,
+            Freshness::new(new.clone(), "2026-09-26T00:00:00Z".to_string()),
+        );
+        assert_eq!(
+            relate(&env, r.path()).drifted(),
+            ["f.md"],
+            "the working tree matches {new} but not {old}; a citation at {old} must report drift"
+        );
+        // And the clean frame alone, however often it is cited, stays clean.
+        let clean = Envelope::supported(
+            KEY,
+            vec![cite(&new), cite(&new), cite(&new)],
+            Confidence::Exact,
+            Freshness::new(new.clone(), "2026-09-26T00:00:00Z".to_string()),
+        );
+        assert!(relate(&clean, r.path()).drifted().is_empty());
     }
 
     /// The default stamp fills only what has no frame, so an index that knows
