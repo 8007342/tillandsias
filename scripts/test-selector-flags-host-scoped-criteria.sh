@@ -24,99 +24,123 @@
 # and withholding it would convert a three-minute release into invisible work
 # nobody does.
 #
-# It drives the REAL selector against the REAL ledger, changing only the host
-# identity through the seam the script documents (TILLANDSIAS_WORKSTATION). A
-# scratch ledger was the alternative and was rejected: the thing under test is
-# whether the selector reads criteria that real rows actually carry, and a
-# fixture that writes its own rows would assert only that its own prose parses.
+# HERMETIC SINCE 1420-9jdf. It used to drive the real selector against the LIVE
+# ledger and exit 3 "inconclusive batch" whenever today's batch held no
+# host-scoped row, which made every host's preflight read refused on a clean
+# tree. It now drives the REAL selector over a SCRATCH ledger: the scratch tree
+# symlinks the real scripts/ (so the selector's ROOT, derived from BASH_SOURCE,
+# is the scratch tree and its awk reads the scratch plan/), and the plan binary
+# is wrapped with --index. The earlier objection — "a scratch ledger asserts
+# only that its own prose parses" — is met by using 1132-r4mt's criterion
+# VERBATIM as the host-scoped row: the subject is whether the selector reads
+# criteria real rows carry, and that sentence is one. Writing it also found a
+# defect the live batch hid: "(yoga or macuahuitl)" marked the row for yoga,
+# because the self-exclusion wanted a space before the host name. Arm 2 now
+# runs the control as EVERY named host, not only the first.
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 3
 SEL="$ROOT/scripts/select-work-batch.sh"
 [ -x "$SEL" ] || { echo "skip:host-scoped-criteria:$SEL absent"; exit 3; }
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+_abs_plan() {
+    local p
+    p="$(resolve_plan_binary 2>/dev/null)" || return 1
+    case "$p" in
+        (/*) printf '%s' "$p" ;;
+        (*) printf '%s/%s' "$PWD" "${p#./}" ;;
+    esac
+}
+REAL_PLAN="$(_abs_plan)" || { echo "skip:host-scoped-criteria:no-plan-binary"; exit 3; }
 
 pass=0; fail=0
 ok()  { pass=$((pass + 1)); echo "  PASS  $1"; }
 bad() { fail=$((fail + 1)); echo "  FAIL  $1"; }
 
-OUT="$(TILLANDSIAS_WORKSTATION=lenovinha "$SEL" linux 2>/dev/null)"
-if [ -z "$OUT" ]; then
-    echo "skip:host-scoped-criteria:the selector produced no batch (refused or no eligible work)"
-    exit 3
-fi
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/host-scoped.XXXXXX")" || { echo "skip:host-scoped-criteria:mktemp"; exit 3; }
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/plan/index.d"
+ln -s "$ROOT/scripts" "$WORK/scripts"
+cat > "$WORK/plan/index.yaml" <<'EOF'
+plan_index:
+  default_status_values: [ready, completed]
+packets:
+  - packet_id: fixture-host-scoped-row
+    order: 990-hs01
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p1
+    release_target: fixture-epic
+    capability_tags: [plan]
+    exit_criteria:
+      - 'a test asserts the refusal is gone'
+      - 'demonstrated on a host that has actually reproduced the refusal (yoga or macuahuitl), not on a host that has never seen it'
+  - packet_id: fixture-plain-row-one
+    order: 990-pl01
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+    release_target: fixture-epic
+    capability_tags: [plan]
+    exit_criteria:
+      - 'a test asserts the new behaviour on any host'
+  - packet_id: fixture-plain-row-two
+    order: 990-pl02
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+    release_target: fixture-epic
+    capability_tags: [plan]
+EOF
+printf '#!/usr/bin/env bash\nexec "%s" --index "%s" "$@"\n' "$REAL_PLAN" "$WORK/plan/index.yaml" > "$WORK/plan-bin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/xbranch"
+chmod +x "$WORK/plan-bin" "$WORK/xbranch"
+# The roster in the `capability-matrix --hosts` shape: <host>\t<tier>\t<accels>.
+ROSTER="$(printf '%s\n' "lenovinha	cpu	none" "macuahuitl	gpu-cuda	none" "yoga	cpu	none" | sort)"
 
-# Find a row the selector marked, and read the hosts it named. Discovered from
-# the run rather than hardcoded, so this fixture does not rot when 1132-r4mt
-# closes — if nothing in today's batch is host-scoped it SKIPS by name rather
-# than passing vacuously.
-MARKED="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="host-scoped"{print $2; exit}')"
-NAMED="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="host-scoped"{print $3; exit}' \
-         | sed -n 's/.*name \([a-z0-9,-]*\) and not.*/\1/p')"
+# Every seam pinned, so nothing live leaks in: ledger, roster, tier, caps,
+# accels and the cross-branch fold (which would otherwise read git refs).
+select_as() {
+    (cd / && TILLANDSIAS_PLAN_BIN="$WORK/plan-bin" TILLANDSIAS_CAP_HOSTS="$ROSTER" \
+        TILLANDSIAS_WORKSTATION="$1" TILLANDSIAS_HOST_TIER=general \
+        TILLANDSIAS_HOST_CAPS=nix TILLANDSIAS_HOST_ACCELS= \
+        TILLANDSIAS_XBRANCH_CHECK="$WORK/xbranch" \
+        bash "$WORK/scripts/select-work-batch.sh" linux --release v0.5 --budget 3 --seed host-scoped-fixture 2>/dev/null)
+}
+marked_rows() { printf '%s\n' "$1" | awk -F'\t' '$1=="host-scoped"{print $2}'; }
+
+OUT="$(select_as lenovinha)"
+if ! printf '%s\n' "$OUT" | awk -F'\t' '$1=="packet"{f=1} END{exit !f}'; then
+    echo "  FAIL  the selector offered nothing from the fixture ledger: $(printf '%s' "$OUT" | head -3)"
+    echo "violation:host-scoped-criteria:1"
+    exit 1
+fi
+MARKED="990-hs01"
+MARK_LINE="$(printf '%s\n' "$OUT" | awk -F'\t' -v o="$MARKED" '$1=="host-scoped" && $2==o {print $3; exit}')"
 
 echo "arm 1 — a row whose exit criteria name other hosts is MARKED, and the mark names them"
-if [ -z "$MARKED" ]; then
-    # NOTHING MARKED IS NOT AUTOMATICALLY A SKIP. Against the pre-fix selector
-    # this fixture skipped, which is the toothless shape this repo keeps finding:
-    # a fixture that cannot fail cannot protect anything, and removing the
-    # marking entirely would have read as "inconclusive batch" forever.
-    #
-    # So decide it INDEPENDENTLY, by reading the same rows the selector offered
-    # and asking whether any of them names another host. Deliberately a second
-    # implementation rather than a call into the selector: if both agree the
-    # batch is clean, the skip is real; if this one finds a host-scoped row the
-    # selector did not mark, that is the defect and it fails.
-    _roster="$(tillandsias-plan capability-matrix --hosts 2>/dev/null | awk -F'\t' '{print tolower($1)}' | grep -v '^$' | tr '\n' ' ')"
-    _missed=""
-    if [ -n "$_roster" ]; then
-        for _p in $(printf '%s\n' "$OUT" | awk -F'\t' '$1=="packet"{print $3}'); do
-            _txt="$(awk -v pid="$_p" '
-                $0 ~ ("packet_id: " pid "$") { inp=1; inc=0; next }
-                inp && /^[[:space:]]*-[[:space:]]*packet_id:/ { inp=0; inc=0 }
-                inp && /^[[:space:]]*exit_criteria:/ { inc=1; next }
-                inp && inc && /^[[:space:]]*[a-z_]+:/ && !/^[[:space:]]*-/ { inc=0 }
-                inp && inc { print }
-            ' plan/index.yaml plan/index.d/*.yaml 2>/dev/null | tr 'A-Z' 'a-z')"
-            [ -n "$_txt" ] || continue
-            case " $_txt " in *" lenovinha"*) continue ;; esac
-            for _h in $_roster; do
-                [ "$_h" = "lenovinha" ] && continue
-                case "$_txt" in *"$_h"*) _missed="${_missed:+$_missed }$_p"; break ;; esac
-            done
-        done
-    fi
-    if [ -n "$_missed" ]; then
-        bad "the selector marked NOTHING, but these offered rows name other hosts in their criteria: $_missed"
-        echo
-        echo "host-scoped criteria: $pass passed, $fail failed"
-        echo "violation:host-scoped-criteria:$fail"
-        exit 1
-    fi
-    echo "  skip: no row in today's batch carries host-scoped criteria, confirmed independently"
-    echo
-    echo "host-scoped criteria: $pass passed, $fail failed (inconclusive batch)"
-    exit 3
-fi
-if [ -n "$NAMED" ]; then
-    ok "$MARKED marked, naming: $NAMED"
-else
-    bad "$MARKED marked but the line does not name the hosts its criteria require"
-fi
+case "$MARK_LINE" in
+    *"name macuahuitl,yoga and not lenovinha"*) ok "$MARKED marked for lenovinha, naming macuahuitl,yoga" ;;
+    "") bad "$MARKED was not marked for lenovinha although its criteria name yoga and macuahuitl" ;;
+    *) bad "$MARKED marked but the hosts are wrong: $MARK_LINE" ;;
+esac
 
-echo "arm 2 — CONTROL: as one of the hosts the criteria DO name, the mark disappears"
+echo "arm 2 — CONTROL: as EACH host the criteria DO name, the mark disappears"
 # The whole value of the mark is that it discriminates. A selector that marked
-# every row would pass arm 1 and be worthless.
-FIRST_NAMED="${NAMED%%,*}"
-if [ -z "$FIRST_NAMED" ]; then
-    bad "cannot run the control: no host name parsed out of the mark"
-else
-    OUT2="$(TILLANDSIAS_WORKSTATION="$FIRST_NAMED" "$SEL" linux 2>/dev/null)"
-    if printf '%s\n' "$OUT2" | awk -F'\t' '$1=="host-scoped"{print $2}' | grep -qx "$MARKED"; then
-        bad "still marked as $FIRST_NAMED, a host its own criteria name — the mark does not discriminate"
+# every row would pass arm 1 and be worthless. Every named host, not the first:
+# "(yoga" is the case a space-bounded match missed.
+for _named in macuahuitl yoga; do
+    if marked_rows "$(select_as "$_named")" | grep -qx "$MARKED"; then
+        bad "still marked as $_named, a host its own criteria name — the mark does not discriminate"
     else
-        ok "not marked as $FIRST_NAMED — the mark reads the criteria, it does not fire blindly"
+        ok "not marked as $_named — the mark reads the criteria, it does not fire blindly"
     fi
-fi
+done
 
 echo "arm 3 — CONTROL: marking is ADVISORY, the row is still offered"
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="packet"{print $2}' | grep -qx "$MARKED"; then
@@ -126,12 +150,11 @@ else
 fi
 
 echo "arm 4 — CONTROL: rows with no host-scoped criteria print unmarked"
-_pkts="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="packet"{print $2}' | grep -c .)"
-_marks="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="host-scoped"{print $2}' | grep -c .)"
-if [ "$_marks" -lt "$_pkts" ]; then
-    ok "$_marks of $_pkts rows marked — not a blanket annotation"
+_extra="$(marked_rows "$OUT" | grep -vx "$MARKED" | tr '\n' ' ')"
+if [ -z "$_extra" ]; then
+    ok "only $MARKED is marked; the rows naming no host are not"
 else
-    bad "every row in the batch was marked ($_marks/$_pkts); that is noise, not a signal"
+    bad "rows whose criteria name no host were marked: $_extra — that is noise, not a signal"
 fi
 
 echo "arm 5 — the host vocabulary is DERIVED, not a hand-maintained list"
