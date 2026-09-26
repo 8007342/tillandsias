@@ -1,0 +1,15 @@
+# Gate step 1375-tsfu — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: the jq call-site ratchet. Arm 1 runs
+# scripts/check-jq-callsite-ratchet.sh over this tree, so every --check prints
+# `ok:jq-callsites:<n>:floor:<f>` (the adoption counter for `json get`), and a
+# NEW jq site whose filter `tillandsias-plan json get` already answers refuses
+# the tree. Arms 2-5 pin the block/warn/empty-population/ratchet behaviour.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the jq call-site ratchet: count, block new in-subset sites, floor only falls (1375-tsfu)"
+STEP_SCRIPT="scripts/test-check-jq-callsite-ratchet.sh"
+STEP_ERROR="a new jq call site is inside the json get subset, or the ratchet misbehaves (1375-tsfu)"
+STEP_OK="jq call sites at or below the floor; new sites outside the subset only warn"
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no plan binary with the json verb resolved, so the ratchet could not classify"
