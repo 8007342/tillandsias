@@ -1,0 +1,12 @@
+# @trace order:1376-8zdz — stop instances whose tray lease is gone; reap files.
+# NOT ProtectHome: it must read the leases under /run/user (which ProtectHome
+# hides), unlike the template.
+[Unit]
+Description=Tillandsias per-launch swap garbage collector
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/tillandsias/swap.conf
+ExecStart=@HELPER@ gc
+ExecStartPost=@HELPER@ reap
+NoNewPrivileges=yes

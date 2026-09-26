@@ -71,10 +71,14 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+// 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
+// macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
 mod container_deps;
 mod control_dispatch;
+#[cfg(target_os = "linux")]
+mod forge_swap;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -413,6 +417,9 @@ fn main() {
     let fresh_capabilities = user_args.iter().any(|a| a == "--fresh");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
+    let refresh_github_token = user_args
+        .iter()
+        .any(|a| a == "--refresh-github-token" || a == "--github-refresh");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
     let codex_login = user_args.iter().any(|a| a == "--codex-login");
     // --agy-login is the operator-facing alias (matches the `agy` binary name).
@@ -669,6 +676,8 @@ fn main() {
         "--sync",
         "--github-login",
         "--with-token",
+        "--refresh-github-token",
+        "--github-refresh",
         "--claude-login",
         "--codex-login",
         "--antigravity-login",
@@ -872,6 +881,35 @@ fn main() {
             std::process::exit(1);
         }
         return;
+    }
+
+    if refresh_github_token {
+        // Order 1383-5hpk. An explicit rotation spends the single-use refresh
+        // token, so it is an operator action: refused without a desktop
+        // session (a daemon, cron or remote shell must not rotate the fleet's
+        // credential behind the operator), and audited either way.
+        if let Err(refusal) = github_refresh_gate(has_graphical_session()) {
+            audit_github_token_refresh("refused-no-desktop-session");
+            eprintln!("{refusal}");
+            std::process::exit(3);
+        }
+        #[cfg(feature = "vault")]
+        {
+            let result = vault_bootstrap::refresh_github_token_in_vault(debug);
+            let (code, outcome, message) = github_refresh_verdict(&result);
+            audit_github_token_refresh(outcome);
+            if code == 0 {
+                println!("{message}");
+            } else {
+                eprintln!("{message}");
+            }
+            std::process::exit(code);
+        }
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("Error: vault feature not compiled; cannot refresh GitHub token");
+            std::process::exit(1);
+        }
     }
 
     if list_cloud_projects {
@@ -1503,6 +1541,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
+    println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
     println!("       tillandsias --antigravity-login [--debug]");
@@ -1564,6 +1603,10 @@ fn print_usage(version: &str) {
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
+    println!(
+        "  --refresh-github-token Refresh GitHub OAuth access token using refresh token in Vault"
+    );
+    println!("  --github-refresh       Alias for --refresh-github-token");
     println!(
         "  --claude-login Authenticate Claude (device flow: claude auth login --claudeai) into Vault"
     );
@@ -10542,6 +10585,276 @@ fn podman_command() -> tillandsias_podman::SyncPodmanCommand {
     podman_cmd_sync()
 }
 
+/// GitHub App Client ID for Tillandsias (Owned by: @8007342, App ID: 5081125).
+pub const GITHUB_APP_CLIENT_ID: &str = "Iv23liddVkg9ME6OB1K1";
+
+/// Render a terminal QR code with blocky characters.
+///
+/// Uses `qrcode::render::unicode::Dense1x2` wrapped in ANSI styling
+/// (white background `\x1b[47m`, black foreground `\x1b[30m`) so that
+/// the QR code renders as crisp black modules on a white square
+/// with high contrast across both light and dark terminal emulators.
+pub fn render_terminal_qr(url: &str) -> Result<String, String> {
+    use qrcode::QrCode;
+    use qrcode::render::unicode::Dense1x2;
+
+    let code = QrCode::new(url.as_bytes()).map_err(|e| format!("QR encoding failed: {e}"))?;
+    let raw = code.render::<Dense1x2>().quiet_zone(true).build();
+
+    let mut out = String::new();
+    for line in raw.lines() {
+        out.push_str("\x1b[47m\x1b[30m  ");
+        out.push_str(line);
+        out.push_str("  \x1b[0m\n");
+    }
+    Ok(out)
+}
+
+/// `--refresh-github-token` spends the single-use refresh token, so it is an
+/// operator action: without a desktop session it is refused (order 1383-5hpk).
+fn github_refresh_gate(has_desktop_session: bool) -> Result<(), String> {
+    if has_desktop_session {
+        Ok(())
+    } else {
+        Err(
+            "refused:github-refresh:no-desktop-session: --refresh-github-token rotates the \
+             GitHub credential Vault holds for this installation, and GitHub refresh tokens \
+             are single-use. Run it from the operator's desktop session."
+                .to_string(),
+        )
+    }
+}
+
+/// Map a rotation result to (exit code, audit outcome, message). A refresh
+/// that found nothing to refresh is NOT a success: exit 2, so a caller that
+/// scripted it can tell "rotated" from "there was nothing to rotate".
+#[cfg(feature = "vault")]
+fn github_refresh_verdict(
+    result: &Result<vault_bootstrap::RotationOutcome, String>,
+) -> (i32, &'static str, String) {
+    use vault_bootstrap::RotationOutcome;
+    match result {
+        Ok(RotationOutcome::Rotated) => (
+            0,
+            "rotated",
+            "[tillandsias] GitHub token rotated; the new pair is in Vault".to_string(),
+        ),
+        Ok(RotationOutcome::NoRefreshToken) => (
+            2,
+            "no-refresh-token",
+            "refused:github-refresh:no-refresh-token: Vault holds a GitHub token but no refresh \
+             token, so nothing can be rotated. Run tillandsias --github-login."
+                .to_string(),
+        ),
+        Ok(RotationOutcome::NoToken) => (
+            2,
+            "no-token",
+            "refused:github-refresh:no-token: Vault holds no GitHub credential. Run \
+             tillandsias --github-login."
+                .to_string(),
+        ),
+        Err(e) => (1, "failed", format!("Error refreshing GitHub token: {e}")),
+    }
+}
+
+/// The accountability event the spec names for rotation (spec:secret-rotation).
+// @trace spec:secret-rotation
+fn audit_github_token_refresh(outcome: &str) {
+    info!(
+        accountability = true,
+        category = "secrets",
+        spec = "secret-rotation",
+        operation = "github_token_refresh",
+        secret_name = "github-token",
+        outcome = outcome,
+        "GitHub token refresh: {outcome}"
+    );
+}
+
+/// GitHub's device-code response, validated for everything it is embedded in.
+#[derive(Debug, Clone, PartialEq)]
+struct DeviceCode {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    interval: u64,
+    expires_in: u64,
+}
+
+/// Parse the device-code response. Errors never carry the response (order
+/// 1383-5hpk): the old ones printed `raw: {output}`, and that body holds the
+/// device code. The codes are also checked against the shapes they are
+/// embedded in (a shell string, a URL), so a malformed reply is refused here
+/// rather than quoted into a script.
+fn parse_device_code_response(output: &str) -> Result<DeviceCode, String> {
+    let v: serde_json::Value = serde_json::from_str(output)
+        .map_err(|_| "GitHub's device-code response is not valid JSON".to_string())?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        let code = if err.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') && err.len() <= 64 {
+            err
+        } else {
+            "unrecognised-error-code"
+        };
+        return Err(format!("GitHub refused the device-code request ({code})"));
+    }
+    let field = |k: &str| -> Result<String, String> {
+        v[k].as_str()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .ok_or_else(|| format!("GitHub's device-code response has no {k}"))
+    };
+    let device_code = field("device_code")?;
+    let user_code = field("user_code")?;
+    if !device_code.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err("GitHub's device_code is not alphanumeric; refusing to use it".into());
+    }
+    if !user_code
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err("GitHub's user_code has unexpected characters; refusing to use it".into());
+    }
+    let verification_uri = v["verification_uri"]
+        .as_str()
+        .filter(|u| u.starts_with("https://github.com/"))
+        .unwrap_or("https://github.com/login/device")
+        .to_string();
+    Ok(DeviceCode {
+        device_code,
+        user_code,
+        verification_uri,
+        interval: v["interval"].as_u64().unwrap_or(5).clamp(1, 60),
+        expires_in: v["expires_in"].as_u64().unwrap_or(899),
+    })
+}
+
+/// The poll's wall-clock budget: the device code's own lifetime plus a
+/// margin for the last poll to land. The first version ran under the generic
+/// 300 s container budget, so it was killed at 300 s against GitHub's 899 s
+/// code: a login the operator approved at minute six failed (order 1383-5hpk).
+fn device_poll_budget(expires_in: u64) -> std::time::Duration {
+    std::time::Duration::from_secs(expires_in.saturating_add(60))
+}
+
+/// The in-container poll script. It reaches `bash -s` on STDIN, and curl reads
+/// the device code from stdin (`--data @-`), so the device code is on no argv
+/// anywhere, host or container (order 1383-5hpk).
+///
+/// On approval it writes Vault BEFORE anything uses the token: the refresh
+/// record first (the single-use credential), then the token record, and only
+/// then `gh auth login`. The records are built by jq straight from GitHub's
+/// response, so no token is ever a command-line argument.
+fn device_poll_script(dc: &DeviceCode) -> String {
+    format!(
+        r#"set -u
+CLIENT_ID='{client_id}'
+DEVICE_CODE='{device_code}'
+INTERVAL={interval}
+EXPIRES_AT=$(( $(date +%s) + {expires_in} ))
+
+while [ "$(date +%s)" -lt "$EXPIRES_AT" ]; do
+  sleep "$INTERVAL"
+  RESP=$(printf 'client_id=%s&device_code=%s&grant_type=urn:ietf:params:oauth:grant-type:device_code' \
+      "$CLIENT_ID" "$DEVICE_CODE" \
+    | curl -s -X POST https://github.com/login/oauth/access_token \
+        -H 'Accept: application/json' --data @-)
+  ERROR=$(jq -r '.error // empty' <<<"$RESP" 2>/dev/null) || ERROR=unparseable-response
+  case "$ERROR" in
+    '') ;;
+    authorization_pending) printf '.'; continue ;;
+    slow_down) INTERVAL=$(( INTERVAL + 5 )); continue ;;
+    expired_token) printf '\nDevice code expired. Please re-run tillandsias --github-login.\n' >&2; exit 1 ;;
+    access_denied) printf '\nAuthorization was denied on your mobile device.\n' >&2; exit 1 ;;
+    *) printf '\nAuthentication error (%s).\n' "$ERROR" | tr -cd 'a-z_ ().\n' >&2; exit 1 ;;
+  esac
+  if [ -z "$(jq -r '.access_token // empty' <<<"$RESP")" ]; then
+    printf '\nGitHub approved the login but returned no access token.\n' >&2
+    exit 1
+  fi
+  if [ -n "$(jq -r '.refresh_token // empty' <<<"$RESP")" ]; then
+    jq -c --arg cid "$CLIENT_ID" \
+      '{{data: {{refresh_token: .refresh_token, refresh_token_expires_at: ((now|floor) + (.refresh_token_expires_in // 15811200)), client_id: $cid}}}}' \
+      <<<"$RESP" | vault-cli.sh write-json {refresh_path} \
+      || {{ printf '\nCould not store the refresh token in Vault.\n' >&2; exit 1; }}
+  else
+    printf '\nGitHub returned no refresh token; this login will need repeating when the token expires.\n' >&2
+  fi
+  jq -c --arg cid "$CLIENT_ID" \
+    '{{data: {{token: .access_token, expires_at: ((now|floor) + (.expires_in // 28800)), client_id: $cid}}}}' \
+    <<<"$RESP" | vault-cli.sh write-json {token_path} \
+    || {{ printf '\nCould not store the GitHub token in Vault.\n' >&2; exit 1; }}
+  jq -r '.access_token' <<<"$RESP" \
+    | gh auth login --hostname github.com --git-protocol https --with-token || exit $?
+  printf '\n[tillandsias] Authorization successful!\n'
+  exit 0
+done
+printf '\nLogin timed out waiting for authorization.\n' >&2
+exit 1
+"#,
+        client_id = GITHUB_APP_CLIENT_ID,
+        device_code = dc.device_code,
+        interval = dc.interval,
+        expires_in = dc.expires_in,
+        refresh_path = "secret/github/refresh",
+        token_path = "secret/github/token",
+    )
+}
+
+/// The poll's podman argv: the script arrives on stdin, so nothing secret is
+/// here (order 1383-5hpk criterion 6).
+fn device_poll_exec_args(container: &str) -> [&str; 5] {
+    ["exec", "--interactive", container, "/bin/bash", "-s"]
+}
+
+/// Device code request and polling for GitHub App interactive login.
+fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
+    let device_code_cmd = format!(
+        "curl -s -X POST https://github.com/login/device/code \
+         -H 'Accept: application/json' \
+         -d 'client_id={GITHUB_APP_CLIENT_ID}'"
+    );
+    let mut cmd = podman_command();
+    cmd.args(["exec", container, "/bin/sh", "-c", &device_code_cmd]);
+    let output = podman_command_output(cmd, debug)?;
+    let dc = parse_device_code_response(&output)?;
+
+    let mobile_url = format!("{}?user_code={}", dc.verification_uri, dc.user_code);
+    let qr_code_str = render_terminal_qr(&mobile_url)?;
+
+    println!("\nScan this QR code with your mobile phone to complete GitHub login:\n");
+    print!("{qr_code_str}");
+    println!();
+    println!("  Or in any browser, visit: {}", dc.verification_uri);
+    println!("  Enter one-time code:      {}\n", dc.user_code);
+
+    // The litmus switch (an ENVIRONMENT flag, never the reply's content) stops
+    // here: it proves the request and the QR, and cannot reach the poll, an
+    // interactive `gh auth login`, or any Vault write (order 1383-5hpk).
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
+        println!("[litmus] device login stopped before polling; nothing was written");
+        return Ok(());
+    }
+
+    println!("Waiting for mobile authorization (polling GitHub)...");
+    let script = device_poll_script(&dc);
+    let mut poll_cmd = podman_command();
+    poll_cmd.args(device_poll_exec_args(container));
+    if debug {
+        eprintln!(
+            "[tillandsias] running: podman exec --interactive {container} /bin/bash -s (poll script on stdin)"
+        );
+    }
+    let status = poll_cmd
+        .status_bounded_with_stdin(script.as_bytes(), device_poll_budget(dc.expires_in))
+        .map_err(|e| format!("GitHub device authorization failed: {e}"))?;
+    if !status.success() {
+        return Err(format!(
+            "GitHub device authorization failed: poll exited with {status}"
+        ));
+    }
+    Ok(())
+}
+
 /// In-container token entry for `--github-login`.
 ///
 /// We deliberately avoid `gh auth login`'s interactive masked prompt: it puts
@@ -11275,13 +11588,19 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     // believe those fields WERE their GitHub credentials. Taking the token
     // first makes the credential step unambiguous, and the identity prompt
     // then arrives already framed as commit metadata.
-    let mut login = podman_command();
-    login.args(provider_login_exec_args(
-        &container,
-        &config.token_script,
-        config.input_mode,
-    ));
-    run_podman_command(login, debug)?;
+    if matches!(config.provider, ProviderId::GitHub)
+        && matches!(config.input_mode, LoginInputMode::Terminal)
+    {
+        run_github_device_login(&container, debug)?;
+    } else {
+        let mut login = podman_command();
+        login.args(provider_login_exec_args(
+            &container,
+            &config.token_script,
+            config.input_mode,
+        ));
+        run_podman_command(login, debug)?;
+    }
 
     if matches!(config.provider, ProviderId::GitHub) {
         let mut auth_status = podman_command();
@@ -11319,10 +11638,12 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                  printf '%s' \"$TOKEN\" | vault-cli.sh write-stdin {} token",
                 config.provider.vault_path()
             );
-            let mut vault_write = podman_command();
-            vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
-            run_podman_command_silent(vault_write, debug)
-                .map_err(|e| format!("in-container vault write failed: {e}"))?;
+            if matches!(config.input_mode, LoginInputMode::StdinToken) {
+                let mut vault_write = podman_command();
+                vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
+                run_podman_command_silent(vault_write, debug)
+                    .map_err(|e| format!("in-container vault write failed: {e}"))?;
+            }
         }
 
         let mut vault_verify = podman_command();
@@ -13659,6 +13980,13 @@ async fn run_agent_container_attached(
             }
         }
     }
+
+    // 1376-8zdz. Held until this function returns, i.e. until the attached
+    // container has exited on every path below; dropping it stops the swap.
+    // Never blocks the launch: an uninstalled or refused service prints one
+    // `swap:` line and the forge runs as before.
+    #[cfg(target_os = "linux")]
+    let _swap = forge_swap::acquire(container_name, debug);
 
     let Some(config) = delegated else {
         return client
@@ -23200,6 +23528,240 @@ mod tests {
         );
         assert!(args.iter().any(|arg| arg == "--interactive"));
         assert!(args.iter().any(|arg| arg == "--tty"));
+    }
+
+    #[test]
+    fn github_app_client_id_is_pinned() {
+        assert_eq!(GITHUB_APP_CLIENT_ID, "Iv23liddVkg9ME6OB1K1");
+    }
+
+    #[test]
+    fn terminal_qr_renderer_produces_high_contrast_ansi_blocks() {
+        let qr = render_terminal_qr("https://github.com/login/device?user_code=ABCD-1234")
+            .expect("QR code rendering must succeed");
+        assert!(!qr.is_empty(), "QR code must not be empty");
+        assert!(
+            qr.contains("\x1b[47m\x1b[30m"),
+            "QR code must use ANSI white bg / black fg for contrast"
+        );
+        assert!(qr.contains("\x1b[0m"), "QR code must reset ANSI formatting");
+        assert!(qr.lines().count() >= 10, "QR code must have multiple lines");
+    }
+
+    #[test]
+    fn github_refresh_flags_are_known() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        assert!(source.contains("\"--refresh-github-token\""));
+        assert!(source.contains("\"--github-refresh\""));
+    }
+
+    // ---- 1383-5hpk: the GitHub App device login's credential path ----------
+
+    const FAKE_DEVICE_CODE: &str = "3584d83530557fdd1f46af8289938c8ef79f9dc5";
+
+    fn fake_device_code_reply() -> String {
+        format!(
+            r#"{{"device_code":"{FAKE_DEVICE_CODE}","user_code":"WDJB-MJHT","verification_uri":"https://github.com/login/device","expires_in":899,"interval":5}}"#
+        )
+    }
+
+    /// Criterion 3: the poll may run for the device code's whole lifetime.
+    /// Before, it ran under the 300 s container budget against an 899 s code.
+    #[test]
+    fn the_device_poll_budget_covers_the_codes_lifetime() {
+        let dc = parse_device_code_response(&fake_device_code_reply()).unwrap();
+        assert_eq!(dc.expires_in, 899);
+        let budget = device_poll_budget(dc.expires_in);
+        assert!(
+            budget.as_secs() >= dc.expires_in,
+            "{budget:?} < {}",
+            dc.expires_in
+        );
+        assert!(
+            budget > tillandsias_podman::OperationKind::Container.default_budget(),
+            "the poll must not run under the generic container budget"
+        );
+    }
+
+    /// Criterion 6: the device code is on no argv. The podman argv carries no
+    /// code, the script reaches bash on stdin, and inside the script curl reads
+    /// the code from stdin rather than from a `-d` argument.
+    #[test]
+    fn the_device_code_is_on_no_spawned_argv() {
+        let dc = parse_device_code_response(&fake_device_code_reply()).unwrap();
+        let argv = device_poll_exec_args("tillandsias-gh-login");
+        assert!(
+            argv.iter().all(|a| !a.contains(FAKE_DEVICE_CODE)),
+            "{argv:?}"
+        );
+        assert_eq!(argv.last(), Some(&"-s"), "the script must arrive on stdin");
+        let script = device_poll_script(&dc);
+        assert!(
+            script.contains(FAKE_DEVICE_CODE),
+            "the code travels in the stdin script"
+        );
+        assert!(
+            script.contains("--data @-"),
+            "curl must read the form from stdin"
+        );
+        let curl_lines: Vec<&str> = script.lines().filter(|l| l.contains("curl")).collect();
+        assert!(!curl_lines.is_empty());
+        for l in curl_lines {
+            assert!(
+                !l.contains("DEVICE_CODE") && !l.contains(FAKE_DEVICE_CODE),
+                "curl argv: {l}"
+            );
+        }
+    }
+
+    /// Criterion 4, login side: Vault is written before anything uses the
+    /// token, the single-use refresh record first.
+    #[test]
+    fn the_device_poll_stores_before_it_uses_the_token() {
+        let dc = parse_device_code_response(&fake_device_code_reply()).unwrap();
+        let s = device_poll_script(&dc);
+        let refresh = s
+            .find("write-json secret/github/refresh")
+            .expect("refresh write");
+        let token = s
+            .find("write-json secret/github/token")
+            .expect("token write");
+        let gh = s.find("gh auth login").expect("gh login");
+        assert!(
+            refresh < token && token < gh,
+            "order must be refresh, token, gh"
+        );
+        assert!(
+            !s.contains("write-stdin"),
+            "no fallback path that writes a token-only record"
+        );
+    }
+
+    /// Criterion 1: no branch keys on the reply's CONTENT. A reply that merely
+    /// says "mock" is an error, not a test path, and the refusal quotes nothing
+    /// from the reply.
+    #[test]
+    fn a_reply_mentioning_mock_is_refused_not_mocked() {
+        for reply in [
+            r#"{"mock":true}"#,
+            r#"{"device_code":"mock-device-code","user_code":"MOCK-CODE"}"#,
+            "mock",
+        ] {
+            let err = parse_device_code_response(reply).unwrap_err();
+            assert!(
+                !err.contains("mock") && !err.contains("MOCK"),
+                "{reply} -> {err}"
+            );
+        }
+    }
+
+    /// Criterion 1: the litmus switch stops before the poll. Source order in
+    /// this function, comments stripped, so a comment cannot satisfy it.
+    #[test]
+    fn the_litmus_switch_returns_before_any_poll_or_write() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("fn run_github_device_login(")
+            .expect("function present");
+        let body: String = source[start..]
+            .split("\n}\n")
+            .next()
+            .unwrap()
+            .lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let litmus = body
+            .find("LITMUS_PODMAN_MODE")
+            .expect("litmus switch present");
+        let ret = litmus
+            + body[litmus..]
+                .find("return Ok(())")
+                .expect("litmus returns");
+        let poll = body.find("device_poll_script(").expect("poll present");
+        assert!(
+            ret < poll,
+            "the litmus switch must return before the poll is built"
+        );
+        assert!(
+            !body.contains("gh auth login") && !body.contains("vault-cli"),
+            "no gh login or Vault write outside the poll script"
+        );
+    }
+
+    /// Device-code errors never quote the reply (it carries the device code),
+    /// and a code with shell-special characters is refused before it can be
+    /// quoted into the poll script.
+    #[test]
+    fn device_code_errors_quote_nothing_and_hostile_codes_are_refused() {
+        let no_user_code = format!(r#"{{"device_code":"{FAKE_DEVICE_CODE}"}}"#);
+        let err = parse_device_code_response(&no_user_code).unwrap_err();
+        assert!(!err.contains(FAKE_DEVICE_CODE), "{err}");
+        let hostile = r#"{"device_code":"abc';rm -rf /;'","user_code":"WDJB-MJHT"}"#;
+        assert!(parse_device_code_response(hostile).is_err());
+        let err = parse_device_code_response("not json 3584d835").unwrap_err();
+        assert!(!err.contains("3584d835"), "{err}");
+    }
+
+    /// Criterion 5: the explicit refresh refuses without a desktop session.
+    #[test]
+    fn the_explicit_refresh_refuses_without_a_desktop_session() {
+        assert!(github_refresh_gate(true).is_ok());
+        let err = github_refresh_gate(false).unwrap_err();
+        assert!(
+            err.starts_with("refused:github-refresh:no-desktop-session"),
+            "{err}"
+        );
+    }
+
+    /// Criterion 5 and the "no refresh token is non-zero" rule.
+    #[cfg(feature = "vault")]
+    #[test]
+    fn the_refresh_verdict_is_non_zero_unless_it_rotated() {
+        use vault_bootstrap::RotationOutcome;
+        assert_eq!(github_refresh_verdict(&Ok(RotationOutcome::Rotated)).0, 0);
+        assert_eq!(
+            github_refresh_verdict(&Ok(RotationOutcome::NoRefreshToken)).0,
+            2
+        );
+        assert_eq!(github_refresh_verdict(&Ok(RotationOutcome::NoToken)).0, 2);
+        assert_eq!(github_refresh_verdict(&Err("x".into())).0, 1);
+    }
+
+    /// Criterion 5: the audit event the spec names (spec:secret-rotation) is
+    /// actually emitted, read from a captured subscriber, not from the source.
+    #[test]
+    fn the_refresh_writes_the_secret_rotation_audit_event() {
+        use std::sync::{Arc, Mutex};
+        #[derive(Clone)]
+        struct Buf(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Buf {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let buf = Buf(Arc::new(Mutex::new(Vec::new())));
+        let writer = buf.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_ansi(false)
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            audit_github_token_refresh("refused-no-desktop-session");
+        });
+        let out = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+        for needle in [
+            "secret-rotation",
+            "github_token_refresh",
+            "refused-no-desktop-session",
+            "accountability=true",
+        ] {
+            assert!(out.contains(needle), "audit event missing {needle}: {out}");
+        }
     }
 
     #[test]

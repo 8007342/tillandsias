@@ -13,6 +13,7 @@
 #   ok:json-get-parity:<n>/<n>        every case matched (stdout bytes + rc)
 #   mismatch:<n>:<filter>             one line per divergent case, then rc=1
 #   blocked:json-get-absent           the binary has no `json` verb (pre-fix)
+#   skip:json-get-parity:no-plan-binary  no runnable binary; exit 3 (STEP_SKIP_EXIT), never 0
 #
 #   --regenerate   rewrite the golden from host jq (needs jq)
 set -uo pipefail
@@ -23,7 +24,7 @@ GOLDEN="$ROOT/scripts/portability/jq-subset-golden.txt"
 
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 0; }
+PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
 
 # Run one case under a tool; print its stdout followed by a final "rc=<n>".
 # `set -f` so a filter's `*`-free text and flags are never globbed.
@@ -60,10 +61,16 @@ if [ "${1:-}" = "--regenerate" ]; then
     exit 0
 fi
 
-if ! "$PLAN" capabilities 2>/dev/null | grep -qx 'json'; then # sigpipe-ok: capabilities output is bounded and non-streaming
-    echo "blocked:json-get-absent"
-    exit 1
-fi
+# Capture first, then test: a spawn inside `if !` hides its own exit status.
+caps="$("$PLAN" capabilities 2>/dev/null)"
+case "
+$caps
+" in
+    *"
+json
+"*) ;;
+    *) echo "blocked:json-get-absent"; exit 1 ;;
+esac
 [ -f "$GOLDEN" ] || { echo "blocked:json-get-parity:golden-missing"; exit 1; }
 
 have_jq=0

@@ -1,0 +1,11 @@
+# @trace order:1376-8zdz — kill -9 of the tray removes its swap within ~3 min.
+[Unit]
+Description=Tillandsias per-launch swap garbage collector (every 2 min)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
