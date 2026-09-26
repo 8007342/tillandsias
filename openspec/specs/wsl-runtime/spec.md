@@ -13,6 +13,7 @@ active
 ## Requirements
 
 ### Requirement 1: WSL distribution prerequisites
+<!-- req-id: d00b41cb -->
 **Modality:** MUST
 
 Tillandsias containers on WSL2 MUST run in a Linux distribution with:
@@ -28,6 +29,7 @@ Tillandsias containers on WSL2 MUST run in a Linux distribution with:
 ---
 
 ### Requirement 2: Container networking on WSL
+<!-- req-id: 186c6b60 -->
 **Modality:** MUST
 
 Containers launched in WSL MUST:
@@ -43,6 +45,7 @@ Containers launched in WSL MUST:
 ---
 
 ### Requirement 3: Workspace mount strategy
+<!-- req-id: 1af2e988 -->
 **Modality:** MUST
 
 Tillandsias workspace (e.g., `C:\Users\<USER>\src\tillandsias`) MUST:
@@ -58,6 +61,7 @@ Tillandsias workspace (e.g., `C:\Users\<USER>\src\tillandsias`) MUST:
 ---
 
 ### Requirement 4: Environment variable inheritance
+<!-- req-id: 128bae13 -->
 **Modality:** MUST
 
 Containers launched in WSL MUST receive:
@@ -73,6 +77,7 @@ Containers launched in WSL MUST receive:
 ---
 
 ### Requirement 5: File path translation
+<!-- req-id: 9d559142 -->
 **Modality:** SHOULD
 
 Containers SHOULD support automatic Windows ↔ Linux path translation:
@@ -87,6 +92,7 @@ Containers SHOULD support automatic Windows ↔ Linux path translation:
 ---
 
 ### Requirement 6: Port forwarding to Windows host
+<!-- req-id: 4092a906 -->
 **Modality:** MUST
 
 Containers running services (proxy, inference, etc.) MUST:
@@ -102,6 +108,7 @@ Containers running services (proxy, inference, etc.) MUST:
 ---
 
 ### Requirement 7: Credential and secret isolation
+<!-- req-id: aa16c8cc -->
 **Modality:** MUST
 
 On WSL, secrets MUST NOT leak to containers:
@@ -117,6 +124,7 @@ On WSL, secrets MUST NOT leak to containers:
 ---
 
 ### Requirement 8: Event-driven socket communication
+<!-- req-id: f0a5da2d -->
 **Modality:** MUST
 
 The host tray and WSL daemon MUST communicate asynchronously via:
