@@ -540,6 +540,15 @@ if [ "${1:-}" = "--emit-timing-batch" ]; then
                 extra = ""
                 if ($6 == "pass" || $6 == "fail" || $6 == "skip") extra = extra ",\"status\":\"" $6 "\""
                 if ($7 ~ /^[0-9]+$/) extra = extra ",\"failed_step\":" $7
+                # ORDER 1395-88tp: optional column 8 = sha256 of the litmus
+                # file bytes, the key the CentiColon grader credits a green
+                # record to. Only a 64-hex value writes the key.
+                if ($8 ~ /^[0-9a-f]+$/ && length($8) == 64) extra = extra ",\"digest\":\"" $8 "\""
+                # Columns 9-11 (1395-88tp): regime (darwin, linux, msys), the
+                # spec the test ran under, and the sha256 of that spec file.
+                if ($9 ~ /^[a-z0-9_-]+$/) extra = extra ",\"regime\":\"" $9 "\""
+                if ($10 ~ /^[A-Za-z0-9_.-]+$/) extra = extra ",\"spec\":\"" $10 "\""
+                if ($11 ~ /^[0-9a-f]+$/ && length($11) == 64) extra = extra ",\"spec_digest\":\"" $11 "\""
                 printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s%s}\n", \
                     ts, host, step, phase, dur, ec, rootf, extra
             }' >>"$TIMING_LOG"
@@ -1214,6 +1223,15 @@ fi
 printf 'timing: steps=%s build_check_ms_avg=%s%s litmus_ms_avg=%s slowest=%s source=%s\n' \
     "${timing_steps:-0}" "${timing_build_check_avg:--}" "$timing_mix" "${timing_litmus_avg:--}" \
     "${timing_slowest:--:-}" "$timing_source"
+
+# ORDER 1395-ue3i: the CentiColon R line, ADVISORY, in the cycle record so
+# V_c can be computed from it on trunk (1395-miwn). --no-snapshot: reporting
+# here must never advance the snapshot and swallow the next --check's
+# lost-satisfaction warning. Best-effort: a pipeline that cannot run prints
+# `centicolon: blocked:…`, and a missing script prints nothing.
+if [ -f "$(dirname "$0")/check-centicolon-ratchet.sh" ]; then
+    { bash "$(dirname "$0")/check-centicolon-ratchet.sh" --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
+fi
 
 if [ "$EXPERTS_ONLY" = true ] || [ "$NO_REPO_SCAN" = true ]; then
     exit 0
