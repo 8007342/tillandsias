@@ -60,10 +60,16 @@ if [ "${1:-}" = "--regenerate" ]; then
     exit 0
 fi
 
-if ! "$PLAN" capabilities 2>/dev/null | grep -qx 'json'; then # sigpipe-ok: capabilities output is bounded and non-streaming
-    echo "blocked:json-get-absent"
-    exit 1
-fi
+# Capture first, then test: a spawn inside `if !` hides its own exit status.
+caps="$("$PLAN" capabilities 2>/dev/null)"
+case "
+$caps
+" in
+    *"
+json
+"*) ;;
+    *) echo "blocked:json-get-absent"; exit 1 ;;
+esac
 [ -f "$GOLDEN" ] || { echo "blocked:json-get-parity:golden-missing"; exit 1; }
 
 have_jq=0
