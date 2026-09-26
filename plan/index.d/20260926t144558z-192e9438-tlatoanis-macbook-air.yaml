@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    event:
+      type: progress
+      ts: "2026-09-26T14:45:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t144558z
+      host: tlatoanis-macbook-air
+      summary: |
+        CRITERION 1 LANDED: work/1385-h6uz (23f8d1500) is on origin/linux-next via relay commit 0c8b7e020, plus relay-fix 0c6821c49 (fixture line 59: printf|grep -q became a here-string, after the sigpipe decider refused it on Linux; 7/7 x3 on Linux GNU tail). Both were verified with merge-base --is-ancestor, and trunk's forge Containerfile installs opencode-tool-start-follower. The row stays in_progress: (a) the LIVE run, with a forge image rebuilt from trunk (the operator's), showing '[forge] tool start: …' on the host during a long call; (b) criterion 2, name the guard mechanism from that record; (c) criterion 3, a cold-host macOS lane ends at blocked:upstream-no-credential.
