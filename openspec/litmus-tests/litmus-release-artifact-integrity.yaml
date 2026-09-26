@@ -42,7 +42,7 @@ critical_path:
     # wolf four times and been switched off.
     command: "scripts/test-release-asset-integrity.sh 2>&1 | tail -1"
     timeout_ms: 30000
-    expected_behavior: "ok:release-asset-integrity-fixture:10"
+    expected_behavior: "ok:release-asset-integrity-fixture:11"
 
   - step: "every upload in every release job is preceded by that check over the same directory"
     # The Linux job's `test -f` lines are an allow-list of remembered files;

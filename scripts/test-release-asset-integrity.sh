@@ -120,6 +120,14 @@ cd "$ROOT"
 run "7a premise: the untouched tree passes" 0 "ok:release-asset-integrity:3 of 3 checked" "$d"
 : > "$d/tillandsias-tray-1.0-macos-arm64.tar.gz"
 run "7b a 0-byte asset with its bundle kept is refused" 1 "tillandsias-tray-1.0-macos-arm64.tar.gz (per SHA256SUMS-macos): the bytes do not match" "$d"
+# The two remedies must not merge again: a changed-bytes refusal that sends
+# its reader to "fix signing" gets the corruption re-signed (macuahuitl).
+out="$("$CHECK" "$d" 2>&1)"
+case "$out" in
+    *"for artifact in"*|*"has no integrity path"*) echo "FAIL  7c the bytes refusal prints the signing remedy: [$out]"; failures+=("7c") ;;
+    *"Re-stage the artifact from the build output"*) echo "PASS  7c the bytes refusal gives the re-stage remedy, not the signing one" ;;
+    *) echo "FAIL  7c no re-stage remedy: [$out]"; failures+=("7c") ;;
+esac
 
 # ── 8. cosign verify-blob, opt-in: a stub cosign that rejects every bundle
 # must turn into a refusal naming the asset; unset, the skip is NAMED.
@@ -143,5 +151,5 @@ if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
 fi
-echo "ok:release-asset-integrity-fixture:10"
+echo "ok:release-asset-integrity-fixture:11"
 exit 0
