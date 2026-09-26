@@ -226,3 +226,53 @@ fn the_child_environment_is_the_base_set() {
     assert_eq!(out, "C|UTC|unset");
     let _ = repo_root();
 }
+
+/// Order 1394-mdqj: a caller that PIPES the plan binary must not wait for a
+/// grandchild the script's child leaked. The CLI runs with its stdout piped to
+/// this test; its script runs an UNGROUPED child that leaves a background
+/// grandchild, under a 500 ms deadline. Reading the CLI's stdout reaches EOF
+/// promptly only if the child did not inherit the CLI's own stdout handle.
+/// PRE-FIX RESULT (native Windows, yolanda 2026-09-26): about 30.4 s, the
+/// grandchild's sleep (30558 / 30421 ms), against 745 / 723 ms redirected to a
+/// file. Linux does not inherit that way; the test passes there too, and says
+/// nothing about Windows unless it runs there.
+#[test]
+fn a_piped_caller_is_not_held_by_a_leaked_grandchild() {
+    if !bash_available() {
+        eprintln!("skip:lua_proc:piped-caller:no-bash");
+        return;
+    }
+    use std::io::Read as _;
+    let dir = tempfile::tempdir().unwrap();
+    let marker = lua_path(&dir.path().join("m"));
+    let script = format!(
+        r#"local r = proc.run{{argv = {{"bash", "scripts/fixtures/spawn-grandchild.sh", "{marker}"}},
+                               timeout_ms = 500, group = false}}
+           print(r.status)"#
+    );
+    let t0 = Instant::now();
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_tillandsias-plan"))
+        .args(["lua", "-e", &script])
+        .current_dir(repo_root())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn the plan CLI");
+    let mut out = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut out)
+        .unwrap();
+    let eof_after = t0.elapsed();
+    let _ = child.wait();
+    assert!(
+        out.contains("timed_out"),
+        "the deadline must have fired: {out:?}"
+    );
+    assert!(
+        eof_after < Duration::from_secs(3),
+        "the caller's pipe stayed open {eof_after:?}: a leaked grandchild holds it"
+    );
+}
