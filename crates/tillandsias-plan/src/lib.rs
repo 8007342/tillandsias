@@ -23,6 +23,7 @@
 //!
 //! @trace spec:spec-traceability
 
+use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -84,6 +85,7 @@ pub mod spec;
 /// entry.
 pub mod spec_index;
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Ledger {
     /// Raw packet mappings in file order (open-world: everything survives).
     pub packets: Vec<Value>,
@@ -187,7 +189,7 @@ pub struct Ledger {
 /// the index) plus the 1-indexed inclusive line span that substantiates the
 /// value. The span always contains the `packet_id: <id>` line, mirroring the
 /// base-span invariant citations rely on.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldSource {
     /// Fragment FILENAME (e.g. `20260807t000000z-x-linux.yaml`), not a path:
     /// the repo-relative rendering depends on the caller's index label.
@@ -360,7 +362,7 @@ impl ParkedBlock {
 /// Indexes mirror the active ones exactly, including the ambiguity policy: an
 /// order claimed by more than one archived packet is dropped rather than
 /// resolved to whichever file was read last.
-#[derive(Default)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct Archive {
     /// Full archived packet mappings, open-world like the active ones.
     packets: Vec<Value>,
@@ -378,19 +380,53 @@ struct Archive {
 }
 
 impl Ledger {
+    fn record_full_parse(path: &Path) {
+        if let Ok(log_path) = std::env::var("TILLANDSIAS_PLAN_PARSE_LOG") {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+            {
+                let _ = writeln!(f, "full_parse\t{}", path.display());
+            }
+        }
+    }
+
     /// Load the ledger from a plan index file. Walks the whole YAML tree
     /// collecting every mapping that carries a `packet_id` — resilient to
     /// the organically-grown nesting around the packet list.
     pub fn load(path: &Path) -> Result<Self, String> {
+        Self::load_with_doc(path).map(|(l, _)| l)
+    }
+
+    /// Load the ledger and also return the parsed base YAML Value, avoiding a
+    /// redundant re-parse during fragment folding (order 964-tzmp).
+    pub fn load_with_doc(path: &Path) -> Result<(Self, Value), String> {
+        Self::record_full_parse(path);
+        let t0 = std::time::Instant::now();
         let raw =
             std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let t_read = t0.elapsed();
+        let t1 = std::time::Instant::now();
         let archive = Self::collect_archive(path);
+        let t_archive = t1.elapsed();
         let archived_ids: BTreeSet<String> = archive.by_id.keys().cloned().collect();
-        let mut ledger =
-            Self::parse(&raw, archived_ids).map_err(|e| format!("{}: {e}", path.display()))?;
+        let t2 = std::time::Instant::now();
+        let doc: Value =
+            serde_yaml::from_str(&raw).map_err(|e| format!("{}: parse: {e}", path.display()))?;
+        let mut ledger = Self::from_doc(&raw, &doc, archived_ids)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let t_parse = t2.elapsed();
         ledger.archive = archive;
         ledger.source_path = Some(path.to_path_buf());
-        Ok(ledger)
+        if std::env::var_os("TILLANDSIAS_PLAN_PROFILE").is_some() {
+            eprintln!(
+                "[profile load] read: {t_read:?}, collect_archive: {t_archive:?}, parse: {t_parse:?}, total: {:?}",
+                t0.elapsed()
+            );
+        }
+        Ok((ledger, doc))
     }
 
     /// Archive awareness: sibling plan/archive/*.yaml holds completed packets.
@@ -486,8 +522,18 @@ impl Ledger {
     /// any bytes hit disk.
     pub fn parse(raw: &str, archived_ids: BTreeSet<String>) -> Result<Self, String> {
         let doc: Value = serde_yaml::from_str(raw).map_err(|e| format!("parse: {e}"))?;
+        Self::from_doc(raw, &doc, archived_ids)
+    }
+
+    /// Build a Ledger from an already-parsed YAML Value and the raw text
+    /// (for byte-exact spans) with a known archived-id set.
+    pub fn from_doc(
+        raw: &str,
+        doc: &Value,
+        archived_ids: BTreeSet<String>,
+    ) -> Result<Self, String> {
         let mut packets = Vec::new();
-        collect_packets(&doc, &mut packets);
+        collect_packets(doc, &mut packets);
         let mut by_id = BTreeMap::new();
         // order -> (packet_id, how many packets claim it). COUNTED, then
         // filtered, exactly like `by_order_token` below.
