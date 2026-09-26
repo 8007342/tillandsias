@@ -532,8 +532,16 @@ if [ "${1:-}" = "--emit-timing-batch" ]; then
                 if (phase == "") phase = "-"
                 if (host == "") host = "-"
                 gsub(/["\\]/, "", step); gsub(/["\\]/, "", phase); gsub(/["\\]/, "", host)
-                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s}\n", \
-                    ts, host, step, phase, dur, ec, rootf
+                # ORDER 1242-4x53 (coordinator decision 2026-09-26): optional
+                # column 6 = pass|fail|skip, column 7 = the step a failed test
+                # died on. Outside the domain writes no key, and absence never
+                # reads as a verdict. Appended after the root fields so every
+                # current reader stays inert.
+                extra = ""
+                if ($6 == "pass" || $6 == "fail" || $6 == "skip") extra = extra ",\"status\":\"" $6 "\""
+                if ($7 ~ /^[0-9]+$/) extra = extra ",\"failed_step\":" $7
+                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s%s}\n", \
+                    ts, host, step, phase, dur, ec, rootf, extra
             }' >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
