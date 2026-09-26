@@ -2933,6 +2933,63 @@ fn host_verbs_dispatch(subcommand: &str, args: &[String]) {
     }
 }
 
+/// ORDER 1401-bcd7. What `json get --help` / `yaml get --help` print, so a
+/// jq-ratchet migration reads the surface instead of probing the binary for it.
+/// `{SUB}` is replaced with `json` or `yaml`. Every "refused" line names the
+/// reshape that stays inside the subset; scripts/test-json-get-help-names-its-subset.sh
+/// pins each line against what the parser actually accepts.
+const JSON_QUERY_HELP: &str = "\
+usage: tillandsias-plan {SUB} get [flags] <filter> [file...]
+
+A jq SUBSET over {SUB} input. Argument order is jq's, so a call site swaps
+`jq` for `tillandsias-plan {SUB} get`. No file, or `-`, reads stdin.
+
+flags:
+  -r, --raw-output       print strings without quotes
+  -c, --compact-output   one line per result
+  -e, --exit-status      exit 1 if the last result is false/null, 4 if none
+  -n, --null-input       run the filter once against null; read no input
+  -s, --slurp            read every input into one array
+  -M                     accepted and ignored (output is never coloured)
+  --arg k v              bind $k to the string v
+  --argjson k v          bind $k to the JSON value v
+  --parse-only           parse the filter and exit (0 in the subset, 3 not)
+  -h, --help             this text
+
+supported:
+  paths                  .a  .a.b  .[\"x-y\"]  .a[0]  .a[-1]  .[$k]
+  iterate                .a[]   keys[]   .o | keys[]
+  optional               .a?   .a[]?
+  pipe, comma            .a | .b     .a, .b
+  alternative            .a // \"default\"
+  array construction     [.a[] | .k]
+  compare, logic         ==  !=  <  <=  >  >=  and  or  not
+  literals               \"str\"  1  true  false  null  $var
+  builtins               select(f)  has(k)  length  keys  keys_unsorted
+                         type  not  empty  ascii_downcase  tostring
+
+refused (exit 3, `unsupported:<construct>`), and the reshape:
+  join(\",\")              -r '.a[]' | paste -sd, -
+  \"\\(.a) \\(.b)\"          -r '.a, .b' and assemble the lines in shell
+  {a: .a}                one query per field, or the array [.a, .b]
+  map(f)                 [.[] | f]
+  arithmetic (+ - * / %) compute in shell: $(( ... ))
+  if/then/else           select(cond), with // for the default
+  . as $v                --arg/--argjson, or two queries
+  slices .[1:3]          index .[n], or trim in shell
+  @csv @tsv @sh @base64  -r the fields and format in shell
+  test split startswith contains ltrimstr
+                         -r the string and match with case/grep in shell
+  first last             .[0]   .[-1]
+  sort unique            -r '.[]' | sort -u
+  to_entries values      -r 'keys[]', then .[$k] per key with --arg k
+  any                    [.[] | select(cond)] | length > 0
+  ..  reduce  def  try   no reshape inside the subset: use a Lua table
+
+exit: 0 ok; 1/4 under -e; 2 usage or unreadable input; 3 parse error or
+unsupported; 5 a runtime error in some input (the rest still run).
+";
+
 /// ORDER 1375-rn9b. `json get` / `yaml get`: the jq subset, on the binary every
 /// gate host already has. Argument order is jq's (flags, filter, files) so a
 /// call site swaps `jq` for `tillandsias-plan json get` and nothing else.
@@ -2957,8 +3014,14 @@ fn json_query_dispatch(subcommand: &str, args: &[String]) {
         );
         std::process::exit(2);
     };
-    if args.get(1).map(String::as_str) != Some("get") {
-        usage();
+    let help = || -> ! {
+        print!("{}", JSON_QUERY_HELP.replace("{SUB}", subcommand));
+        std::process::exit(0);
+    };
+    match args.get(1).map(String::as_str) {
+        Some("get") => {}
+        Some("-h" | "--help") => help(),
+        _ => usage(),
     }
     let (mut raw, mut compact, mut exit_status, mut null_input, mut slurp, mut parse_only) =
         (false, false, false, false, false, false);
@@ -2988,6 +3051,7 @@ fn json_query_dispatch(subcommand: &str, args: &[String]) {
                 continue;
             }
             "--parse-only" => parse_only = true,
+            "--help" => help(),
             "--raw-output" => raw = true,
             "--compact-output" => compact = true,
             "--exit-status" => exit_status = true,
@@ -3003,6 +3067,7 @@ fn json_query_dispatch(subcommand: &str, args: &[String]) {
                         'e' => exit_status = true,
                         'n' => null_input = true,
                         's' => slurp = true,
+                        'h' => help(),
                         'M' => {}
                         _ => usage(),
                     }
