@@ -148,6 +148,12 @@ impl Default for InferenceConfig {
 pub struct GroundedConfig {
     pub inference: InferenceConfig,
     pub root: PathBuf,
+    /// ORDER 1415-89bs. An injected synth-budget override for TESTS. `None`
+    /// (production) keeps the operator override env-driven: the
+    /// TILLANDSIAS_SYNTH_BUDGET_MS read still happens per request. A test that
+    /// set_var'd it instead gave every sibling test calling run_grounded a
+    /// 1500ms budget for as long as it ran.
+    pub synth_budget_override_ms: Option<u64>,
 }
 
 impl GroundedConfig {
@@ -155,6 +161,7 @@ impl GroundedConfig {
         Self {
             inference: InferenceConfig::default(),
             root,
+            synth_budget_override_ms: None,
         }
     }
 }
@@ -293,10 +300,10 @@ pub fn resolve_synth_budget_ms(tier_budget_ms: u64, override_ms: Option<u64>) ->
     }
 }
 
-fn effective_synth_budget(tier: LatencyTier) -> Duration {
+fn effective_synth_budget(tier: LatencyTier, injected_ms: Option<u64>) -> Duration {
     Duration::from_millis(resolve_synth_budget_ms(
         tier.budget_ms(),
-        synth_budget_override_ms(),
+        injected_ms.or_else(synth_budget_override_ms),
     ))
 }
 
@@ -617,7 +624,7 @@ pub async fn run_grounded(
         "non_usable" => LatencyTier::NonUsable,
         _ => LatencyTier::Fine,
     };
-    let budget = effective_synth_budget(tier);
+    let budget = effective_synth_budget(tier, cfg.synth_budget_override_ms);
     // ORDER 939-jxgz. The budget is a REQUEST deadline over the model-prose
     // phases (decomposition + synthesis), not a per-phase allowance. Before
     // this, decomposition ran under raw 120s socket timeouts OUTSIDE the
@@ -1220,6 +1227,54 @@ mod tests {
         (format!("http://127.0.0.1:{port}/v1"), count)
     }
 
+    /// ORDER 1415-89bs. Every .rs under this crate's src/ and tests/ that
+    /// set_var's or remove_var's `var` by its literal name. Tests run as
+    /// parallel threads of one process, so such a call races every sibling
+    /// test whose code path reads `var`. The needle is assembled at runtime
+    /// so this helper and its callers never match themselves.
+    fn crate_sources_mutating(var: &str) -> Vec<String> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut hits = Vec::new();
+        let mut stack = vec![root.join("src"), root.join("tests")];
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    let src = std::fs::read_to_string(&p).unwrap_or_default();
+                    for verb in ["set_var", "remove_var"] {
+                        if src.contains(&format!("{verb}(\"{var}\"")) {
+                            hits.push(format!("{} {verb}", p.display()));
+                        }
+                    }
+                }
+            }
+        }
+        hits
+    }
+
+    #[test]
+    fn no_test_mutates_the_synth_budget_env() {
+        let hits = crate_sources_mutating(&format!("TILLANDSIAS_{}", "SYNTH_BUDGET_MS"));
+        assert!(
+            hits.is_empty(),
+            "inject GroundedConfig::synth_budget_override_ms instead: {hits:?}"
+        );
+    }
+
+    #[test]
+    fn no_test_mutates_the_spec_index_dir_env() {
+        let hits = crate_sources_mutating(&format!("TILLANDSIAS_{}", "SPEC_INDEX_DIR"));
+        assert!(
+            hits.is_empty(),
+            "inject Harness::with_spec_index_dir instead: {hits:?}"
+        );
+    }
+
     fn cfg_with(embed: Option<String>, synth: String, root: PathBuf) -> GroundedConfig {
         GroundedConfig {
             inference: InferenceConfig {
@@ -1231,6 +1286,7 @@ mod tests {
                 domain: None,
             },
             root,
+            synth_budget_override_ms: None,
         }
     }
 
@@ -1305,7 +1361,7 @@ mod tests {
         // The budget under test; the config's transport timeout stays at its
         // 120s default so the bound can only come from the deadline.
         cfg.inference.timeout = Duration::from_secs(120);
-        unsafe { std::env::set_var("TILLANDSIAS_SYNTH_BUDGET_MS", "1500") };
+        cfg.synth_budget_override_ms = Some(1500);
         let runtime = shared_runtime(&root);
         let rt = tokio::runtime::Runtime::new().unwrap();
         let t0 = std::time::Instant::now();
@@ -1317,7 +1373,6 @@ mod tests {
             &cfg,
             "compare the k spec's retrieval floors with its refusal grammar and explain how the two interact across tiers",
         ));
-        unsafe { std::env::remove_var("TILLANDSIAS_SYNTH_BUDGET_MS") };
         let wall = t0.elapsed();
         assert!(
             wall < Duration::from_millis(1500) + Duration::from_secs(8),
