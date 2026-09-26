@@ -115,7 +115,8 @@ select_as() {
 marked_rows() { printf '%s\n' "$1" | awk -F'\t' '$1=="host-scoped"{print $2}'; }
 
 OUT="$(select_as lenovinha)"
-if ! printf '%s\n' "$OUT" | awk -F'\t' '$1=="packet"{f=1} END{exit !f}'; then
+_offered="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="packet"' | grep -c .)"
+if [ "${_offered:-0}" -eq 0 ]; then
     echo "  FAIL  the selector offered nothing from the fixture ledger: $(printf '%s' "$OUT" | head -3)"
     echo "violation:host-scoped-criteria:1"
     exit 1
