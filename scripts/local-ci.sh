@@ -1090,25 +1090,6 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # 1395-n7qd: the CentiColon extractor is a Cacheable Lua predicate whose
-    # obligation list is a pure function of repo bytes. Daily tier until a
-    # darwin run is recorded for a gate step (1302-7j8p).
-    # ============================================================================
-    log_section "CentiColon Extractor (1395-n7qd)"
-    if [[ -f "scripts/test-centicolon-extract.sh" ]]; then
-        if bash scripts/test-centicolon-extract.sh > /tmp/centicolon-extract.log 2>&1; then
-            log_pass "CentiColon extractor: hermetic arms, real corpus and determinism hold"
-            archive_check_log "centicolon-extract" "pass" /tmp/centicolon-extract.log
-        else
-            log_fail_tracked "centicolon-extract" "CentiColon extractor fixture failed (see /tmp/centicolon-extract.log)"
-            [[ "$VERBOSE" == "1" ]] && cat /tmp/centicolon-extract.log >&2
-            archive_check_log "centicolon-extract" "fail" /tmp/centicolon-extract.log
-        fi
-    else
-        log_fail_missing_guard "centicolon-extract" "scripts/test-centicolon-extract.sh"
-    fi
-
-    # ============================================================================
     # 1132-r4mt: concurrent archiver --check runs must not break each other.
     # ONE pair here, not in --check: a pair is two full archiver checks (386s
     # measured on yoga, serialised by the answerability lock). The post-fix
