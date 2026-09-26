@@ -1,0 +1,20 @@
+# Gate step 1404-4x3r — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. scripts/drain-queue.sh claims a ready packet on origin and
+# launches a paid agent session per row. Run with no arguments it drained the
+# whole queue: on yoga, 2026-09-26, a bare run claimed packet 278 and ran codex
+# for about 6 minutes. It now refuses unless --drain (or --dry-run) is given.
+#
+# WHY A SANDBOX AND NOT A LIVE RUN. The fixture never runs the real script bare;
+# that is the incident. It copies the script into a scratch repo whose ./repeat,
+# claim-ledger-node.sh and plan binary only RECORD being called. Pre-fix the
+# record read one claim, one repeat launch and one release. ARM 3 is the
+# positive control: --drain --limit 1 must reach both stubs exactly once, so a
+# refusal cannot pass because the stubs were unreachable.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a bare drain-queue run refuses and spends nothing (1404-4x3r)"
+STEP_SCRIPT="scripts/test-drain-queue-bare-refuses.sh"
+STEP_ERROR="a bare scripts/drain-queue.sh would claim a packet and launch a paid agent (1404-4x3r); see which arm failed above"
+STEP_OK="drain-queue refuses a bare run and still drains on --drain"
+STEP_SECOND_REGIME="yolanda 2026-09-26 msys ok:drain-queue-bare-refuses:3"
