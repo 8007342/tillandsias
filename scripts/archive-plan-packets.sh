@@ -247,6 +247,19 @@ _ruby_runnable() {
     _ruby_usable
 }
 
+# ORDER 560. Which worker does the sweep. The embedded Lua runtime
+# (`tillandsias-plan lua`) is the default wherever archive-plan-packets.lua is
+# present: it needs nothing but the plan binary this script already requires,
+# so a host or forge with no ruby (every Windows host, every forge image) can
+# run --check instead of exiting 3. TILLANDSIAS_ARCHIVER_BACKEND=ruby opts back
+# into the ruby worker; that is the only way ruby is reached now, and the
+# no-usable-ruby refusal below applies only on that path.
+if [ "${TILLANDSIAS_ARCHIVER_BACKEND:-}" = "ruby" ] || [ ! -f "$DIR/archive-plan-packets.lua" ]; then
+    _ap_backend=ruby
+else
+    _ap_backend=lua
+fi
+
 if [ "$1" == "--check" ]; then
     # ORDER 964-js34: per-phase profile, opt-in and zero-cost when off.
     _ap_t0=0; _ap_last=0
@@ -272,7 +285,7 @@ if [ "$1" == "--check" ]; then
     }
     _ap_phase start
     echo "Running in check mode..."
-    if ! _ruby_runnable; then
+    if [ "$_ap_backend" = "ruby" ] && ! _ruby_runnable; then
         # A STABLE TOKEN ON STDOUT, so a caller can tell THIS could-not-run from
         # the others without parsing prose. Only this cause is skip-eligible: a
         # stale plan binary or an unreadable fragment also exit 3 and must never
@@ -320,8 +333,23 @@ if [ "$1" == "--check" ]; then
     # The generated .rb reads and writes the COPY, so it needs the copy's real
     # location. `|` stays the delimiter because the replacement is a path and
     # contains no `|`; it is a directory name we chose, not user input.
-    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > "$SCRATCH"/archive-plan-packets-check.rb
-    _ap_phase sed-rewrite-rb
+    #
+    # ORDER 560: only the ruby backend needs a rewritten copy. The Lua worker
+    # takes --index/--archive and derives index.d from the index path, so it is
+    # pointed at the same per-run copy by arguments instead.
+    if [ "$_ap_backend" = "ruby" ]; then
+        sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > "$SCRATCH"/archive-plan-packets-check.rb
+        _ap_phase sed-rewrite-rb
+    fi
+
+    # One sweep of the per-run copy with the selected worker (order 560).
+    _ap_sweep() {
+        if [ "$_ap_backend" = "lua" ]; then
+            "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua"                 --index "$SCRATCH"/plan_tmp/index.yaml                 --archive "$SCRATCH"/plan_tmp/archive
+        else
+            _ruby "$SCRATCH"/archive-plan-packets-check.rb
+        fi
+    }
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
     # diff was already here and it proved the WRONG PROPERTY. An archiver that
@@ -418,18 +446,21 @@ if [ "$1" == "--check" ]; then
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
     _ap_phase orphans-before
 
-    if ! _ruby "$SCRATCH"/archive-plan-packets-check.rb >/dev/null; then
+    if ! _ap_sweep >/dev/null; then
         # DISTINCT FROM no-usable-ruby, and the distinction is the point: that
         # one means the lane has no runnable interpreter and is forge-skippable;
-        # this one means a ruby WAS runnable and the worker still failed, which
-        # is never skippable.
-        echo "could-not-run:archiver:ruby-worker-failed (1132-r4mt)"
-        echo "Check COULD NOT RUN: the archiver's ruby worker failed to execute"
+        # this one means a worker WAS runnable and still failed, which is never
+        # skippable. The token names the backend that failed (order 560): a Lua
+        # failure used to be reported as a ruby one, which sends the reader to
+        # debug an interpreter that never ran.
+        echo "could-not-run:archiver:${_ap_backend}-worker-failed (1132-r4mt, 560)"
+        echo "Check COULD NOT RUN: the archiver's $_ap_backend worker failed to execute"
         echo "  (965-sxec). The ready set was never re-derived, so nothing here is"
-        echo "  a statement about it."
+        echo "  a statement about it. TILLANDSIAS_ARCHIVER_BACKEND=ruby selects the"
+        echo "  ruby worker where a usable ruby exists."
         exit 3
     fi
-    _ap_phase ruby-sweep
+    _ap_phase "${_ap_backend}-sweep"
 
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
     _ap_phase orphans-after
@@ -454,13 +485,13 @@ if [ "$1" == "--check" ]; then
 
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
-    if ! _ruby "$SCRATCH"/archive-plan-packets-check.rb >/dev/null; then
-        echo "could-not-run:archiver:ruby-worker-failed-idempotency-pass (1132-r4mt)"
-        echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
+    if ! _ap_sweep >/dev/null; then
+        echo "could-not-run:archiver:${_ap_backend}-worker-failed-idempotency-pass (1132-r4mt, 560)"
+        echo "Check COULD NOT RUN: the archiver's $_ap_backend worker failed on the second"
         echo "  pass (965-sxec), so idempotency was never evaluated."
         exit 3
     fi
-    _ap_phase ruby-sweep
+    _ap_phase "${_ap_backend}-sweep"
     
     _ap_phase idempotency-diff
     if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
@@ -521,7 +552,7 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
-if [ -f "$DIR/archive-plan-packets.lua" ]; then
+if [ "$_ap_backend" = "lua" ]; then
     "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
 else
     _ruby scripts/archive-plan-packets.rb

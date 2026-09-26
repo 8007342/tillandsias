@@ -851,8 +851,16 @@ git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)' && { echo "CONFLICT MARKER PRESEN
 #    and is FORBIDDEN for committed automation (tlatoani_hard_no_python) — its
 #    presence is not permission, and it is the trap this fallback chain exists
 #    to keep you out of.
+#    ORDER 560: the plan binary is the validator every regime already has
+#    (Windows hosts have no ruby and often no yq). It must parse THE FILE:
+#    `tillandsias-plan check` ignores its argument and exits 0 on a malformed
+#    file, so a yamlcheck built on it can never fail. Resolved through the
+#    shared probe, because the binary is usually not on PATH.
+_yc_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _yc_plan=""
 if command -v tillandsias-policy >/dev/null 2>&1; then
   yamlcheck() { tillandsias-policy validate-yaml "$1"; }
+elif [ -n "$_yc_plan" ]; then
+  yamlcheck() { "$_yc_plan" validate-yaml "$1" >/dev/null; }
 elif command -v yq >/dev/null 2>&1; then
   yamlcheck() { yq . "$1" >/dev/null; }
 elif command -v ruby >/dev/null 2>&1; then
