@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    field: status
+    value: in_progress
+    ts: "2026-09-26T08:24:34Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    event:
+      type: note
+      ts: "2026-09-26T08:24:34Z"
+      host: yolanda-windows
+      summary: |-
+        claimed 2026-09-26 in a slot cycle: the Windows stdout-handle inheritance that makes a PIPED plan-binary call wait for a leaked grandchild; fix in tillandsias-exec; closure is a native-Windows piped run within 1 s of after_ms
