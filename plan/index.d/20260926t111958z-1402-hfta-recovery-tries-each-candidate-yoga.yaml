@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-one-shot-unseal-recovery-retries-only-the-first-share-candidate-which-is-the-rejected-own-secret-so-automatic-recovery-is-dead
+    order: 1402-hfta
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, rust, recovery, fail-loud]
+    estimated_hours: 3
+    owned_files: [crates/tillandsias-headless/src/vault_bootstrap.rs]
+    observed_by: macuahuitl
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds its own test in vault_bootstrap.rs in the
+      same commit (1136-n8sh).
+    title: |
+      recover_rejected_unseal_secret_once tries only the FIRST share candidate (read_shamir_share_b64: candidates.remove(0)), which since 803-49re is the guest's own podman secret, the very key the vault just REJECTED, so the automatic recovery can never succeed
+    verifiable_closure: |
+      A test in vault_bootstrap.rs: with the own secret rejected by the storage and a later
+      candidate (delivered, keychain or fallback) that would unseal it, the recovery tries
+      each candidate in order, SKIPS the candidate whose bytes equal the rejected secret,
+      and reaches the working one. NEGATIVE CONTROL: when every candidate is the rejected
+      bytes or absent, it still emits the attended-recovery verdict and does not loop.
+      Pre-fix result: FAILS: read_shamir_share_b64 returns candidates.remove(0), and the
+      own secret leads the list.
+    context: |
+      Found by the independent security review of 1200-ih38 (macuahuitl, 2026-09-26) and
+      verified by yoga by reading: read_shamir_share_b64 returns candidates.remove(0), and
+      shamir_share_candidates orders the guest's own tillandsias-vault-unseal secret first
+      (803-49re). recover_rejected_unseal_secret_once runs only after that own secret was
+      rejected, so it re-tries the rejected key. Pre-existing, not introduced by 1200-ih38.
+    events:
+      - type: filed
+        ts: "2026-09-26T11:19:58Z"
+        host: yoga
+        summary: Filed by yoga at the coordinator's request from the 1200-ih38 security review.

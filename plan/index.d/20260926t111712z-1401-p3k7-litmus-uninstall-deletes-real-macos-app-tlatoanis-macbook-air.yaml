@@ -1,0 +1,46 @@
+packets:
+  - packet_id: litmus-uninstall-preserves-vm-image-runs-the-real-uninstaller-which-deletes-the-installed-macos-app-and-kills-the-live-tray-on-every-mac-that-runs-the-pre-build-tier
+    order: 1401-p3k7
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [macos, litmus, uninstall, destructive, test-isolation]
+    estimated_hours: 2
+    owned_files:
+      - scripts/uninstall.sh
+      - openspec/litmus-tests/litmus-uninstall-preserves-vm-image.yaml
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable is an /Applications seam in
+      uninstall.sh plus a litmus that proves the real /Applications is untouched;
+      the pin lands with them.
+    title: |
+      litmus:uninstall-preserves-vm-image (pre-build, instant) runs the REAL scripts/uninstall.sh with only a fake HOME, and uninstall.sh:317 sweeps the ABSOLUTE /Applications/Tillandsias.app and pkill -KILLs tillandsias-tray, so on any Mac every pre-build litmus run deletes the operator's installed app and kills a live tray
+    context: |
+      MEASURED on tlatoanis-macbook-air, 2026-09-26. /Applications/Tillandsias.app
+      (v56.9.25.2, the stable release) was used successfully at 09:41–09:42Z. At
+      09:44:38Z the unified log shows Spotlight "removed 1 vanished app path(s)" and
+      /Applications' mtime is 09:44:38Z. At that moment this host was running
+      `scripts/run-litmus-test.sh --phase pre-build --size instant` (324 tests, a
+      second-regime check for 1395-88tp). That filter selects this test.
+      Its steps (litmus-uninstall-preserves-vm-image.yaml ~:54, :59) run
+      `HOME="$d" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=... bash scripts/uninstall.sh [--wipe]`.
+      HOME and the install dir are faked; /Applications is not, and cannot be:
+      uninstall.sh:317 is `for _app_dir in "/Applications" "$HOME/Applications"; do rm -rf "$_app_dir/Tillandsias.app" "$_app_dir/Tillandsias.app.bak"; done`,
+      and the same macOS block runs `pkill -KILL -x tillandsias-tray`.
+      On Linux /Applications does not exist, so the step is harmless there and has
+      been since 55ffd43b5 (2026-08-17, 804-bpke). On a Mac it destroys the install
+      every time the pre-build tier runs — including any macOS release-tier run.
+      Ruled out on the same ref by reading: test-uninstall-sweeps-both-app-dirs.sh
+      (rewrites "/Applications" to a temp dir before running the block; nothing real
+      survives the rewrite), test-install-macos-swap-is-interruptible.sh (its own
+      reimplementation inside mktemp), test-reset-state-contract.sh (grep only).
+      Aggravating: the per-test litmus records that would have named the test at
+      09:44:38 were lost to the 1395-88tp BSD awk -v bug at that ref.
+    exit_criteria:
+      - 'uninstall.sh takes its system Applications dir from an overridable seam (e.g. TILLANDSIAS_UNINSTALL_APPLICATIONS_DIR, default /Applications), and every litmus step or fixture that runs the real uninstaller points it at a temp dir; pre-fix result: FAILS (the step deletes the real /Applications/Tillandsias.app on darwin)'
+      - 'the same seam covers the pkill: a test run must not kill a live tray (e.g. skip the kill when the Applications dir is overridden, or make the process name overridable)'
+      - 'a darwin control proves it: a sentinel /Applications-stand-in app survives the litmus while the real /Applications is never touched (measure before/after inode or mtime of the real dir)'
