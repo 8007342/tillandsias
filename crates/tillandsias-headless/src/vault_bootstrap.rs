@@ -929,6 +929,262 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     Ok(())
 }
 
+/// Write a GitHub token bundle (access token, optional refresh token, expiry timestamps) to Vault.
+pub fn write_github_token_bundle_to_vault(
+    token: &str,
+    refresh_token: Option<&str>,
+    expires_at: Option<u64>,
+    refresh_token_expires_at: Option<u64>,
+    client_id: Option<&str>,
+    debug: bool,
+) -> Result<(), String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] {VAULT_CONTAINER_NAME} not running; bringing Vault up on demand before token write"
+            );
+        }
+        ensure_vault_running(debug)
+            .map_err(|e| format!("could not bring Vault up to store the GitHub token: {e}"))?;
+    }
+    let _stability = vault_stability_lease(debug)?;
+    let rt = tokio_runtime()?;
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+
+    let mut map = serde_json::Map::new();
+    map.insert(
+        "token".to_string(),
+        serde_json::Value::String(token.to_string()),
+    );
+    if let Some(rt_val) = refresh_token {
+        map.insert(
+            "refresh_token".to_string(),
+            serde_json::Value::String(rt_val.to_string()),
+        );
+    }
+    if let Some(exp) = expires_at {
+        map.insert(
+            "expires_at".to_string(),
+            serde_json::Value::Number(exp.into()),
+        );
+    }
+    if let Some(rexp) = refresh_token_expires_at {
+        map.insert(
+            "refresh_token_expires_at".to_string(),
+            serde_json::Value::Number(rexp.into()),
+        );
+    }
+    if let Some(cid) = client_id {
+        map.insert(
+            "client_id".to_string(),
+            serde_json::Value::String(cid.to_string()),
+        );
+    }
+
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] writing GitHub token bundle to secret/github/token (has_refresh_token: {})",
+            refresh_token.is_some()
+        );
+    }
+    rt.block_on(client.write_secret("secret/github/token", serde_json::Value::Object(map)))
+        .map_err(|e| format!("vault write_secret failed: {e}"))?;
+    let read_back = rt
+        .block_on(client.read_secret("secret/github/token"))
+        .map_err(|e| format!("vault read_secret verification failed: {e}"))?;
+    if read_back["token"].as_str() != Some(token) {
+        return Err("vault read-back did not match written token".into());
+    }
+    println!(
+        "[tillandsias] GitHub token stored in Vault at secret/github/token (policy: git-mirror-policy)"
+    );
+    Ok(())
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default)]
+pub struct GitHubTokenBundle {
+    pub token: String,
+    pub refresh_token: Option<String>,
+    pub expires_at: Option<u64>,
+    pub refresh_token_expires_at: Option<u64>,
+    pub client_id: Option<String>,
+}
+
+pub fn read_github_token_bundle_from_vault(
+    debug: bool,
+) -> Result<Option<GitHubTokenBundle>, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Ok(None);
+    }
+    let _stability = vault_stability_lease(debug)?;
+    let rt = tokio_runtime()?;
+    let base_url = vault_api_base_url();
+    let root_token = match read_and_handover_root_token(debug) {
+        Ok(t) => t,
+        Err(_) => return Ok(None),
+    };
+    let client = vault_client(&base_url, &root_token, debug)?;
+    let secret = match rt.block_on(client.read_secret("secret/github/token")) {
+        Ok(s) => s,
+        Err(_) => return Ok(None),
+    };
+    let token = match secret["token"].as_str() {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => return Ok(None),
+    };
+    let refresh_token = secret["refresh_token"].as_str().map(|s| s.to_string());
+    let expires_at = secret["expires_at"].as_u64();
+    let refresh_token_expires_at = secret["refresh_token_expires_at"].as_u64();
+    let client_id = secret["client_id"].as_str().map(|s| s.to_string());
+    Ok(Some(GitHubTokenBundle {
+        token,
+        refresh_token,
+        expires_at,
+        refresh_token_expires_at,
+        client_id,
+    }))
+}
+
+#[derive(Clone, Debug)]
+pub struct GitHubRefreshResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: u64,
+    pub refresh_token_expires_in: u64,
+}
+
+pub fn perform_github_token_refresh(
+    client_id: &str,
+    refresh_token: &str,
+    debug: bool,
+) -> Result<GitHubRefreshResponse, String> {
+    let rt = tokio_runtime()?;
+    rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("failed to build HTTP client for token refresh: {e}"))?;
+
+        if debug {
+            eprintln!("[tillandsias] POST https://github.com/login/oauth/access_token (grant_type=refresh_token)");
+        }
+
+        let res = client
+            .post("https://github.com/login/oauth/access_token")
+            .header(reqwest::header::ACCEPT, "application/json")
+            .form(&[
+                ("client_id", client_id),
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("token refresh HTTP request failed: {e}"))?;
+
+        if !res.status().is_success() {
+            return Err(format!("token refresh request failed with HTTP {}", res.status()));
+        }
+
+        let body: serde_json::Value = res
+            .json()
+            .await
+            .map_err(|e| format!("failed to parse token refresh response JSON: {e}"))?;
+
+        if let Some(err) = body.get("error").and_then(|e| e.as_str()) {
+            let desc = body.get("error_description").and_then(|d| d.as_str()).unwrap_or(err);
+            return Err(format!("GitHub token refresh refused: {desc} ({err})"));
+        }
+
+        let access_token = body["access_token"]
+            .as_str()
+            .ok_or_else(|| format!("missing access_token in refresh response: {body}"))?
+            .to_string();
+        let new_refresh_token = body["refresh_token"]
+            .as_str()
+            .ok_or_else(|| format!("missing refresh_token in refresh response: {body}"))?
+            .to_string();
+        let expires_in = body["expires_in"].as_u64().unwrap_or(28800);
+        let refresh_token_expires_in = body["refresh_token_expires_in"].as_u64().unwrap_or(15811200);
+
+        Ok(GitHubRefreshResponse {
+            access_token,
+            refresh_token: new_refresh_token,
+            expires_in,
+            refresh_token_expires_in,
+        })
+    })
+}
+
+pub fn refresh_github_token_in_vault(debug: bool) -> Result<bool, String> {
+    let bundle = match read_github_token_bundle_from_vault(debug)? {
+        Some(b) => b,
+        None => return Ok(false),
+    };
+    let refresh_token = match bundle.refresh_token {
+        Some(rt) if !rt.is_empty() => rt,
+        _ => return Ok(false),
+    };
+    let client_id = bundle
+        .client_id
+        .as_deref()
+        .unwrap_or(crate::GITHUB_APP_CLIENT_ID);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+
+    let refresh_resp = perform_github_token_refresh(client_id, &refresh_token, debug)?;
+
+    let new_expires_at = now + refresh_resp.expires_in;
+    let new_rt_expires_at = now + refresh_resp.refresh_token_expires_in;
+
+    write_github_token_bundle_to_vault(
+        &refresh_resp.access_token,
+        Some(&refresh_resp.refresh_token),
+        Some(new_expires_at),
+        Some(new_rt_expires_at),
+        Some(client_id),
+        debug,
+    )?;
+
+    Ok(true)
+}
+
+#[allow(dead_code)]
+pub fn refresh_github_token_if_needed(debug: bool) -> Result<bool, String> {
+    let bundle = match read_github_token_bundle_from_vault(debug)? {
+        Some(b) => b,
+        None => return Ok(false),
+    };
+    let _refresh_token = match bundle.refresh_token {
+        Some(rt) if !rt.is_empty() => rt,
+        _ => return Ok(false),
+    };
+    let expires_at = match bundle.expires_at {
+        Some(exp) => exp,
+        None => return Ok(false),
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+
+    if now + 1800 < expires_at {
+        return Ok(false);
+    }
+
+    if debug {
+        eprintln!(
+            "[tillandsias] GitHub token near expiry or expired (expires_at={expires_at}, now={now}); refreshing..."
+        );
+    }
+
+    refresh_github_token_in_vault(debug)
+}
+
 /// In-container address of the Vault TLS listener. The Vault server listens on
 /// the container loopback at :8200; `podman exec` does NOT inherit the
 /// entrypoint's environment, so every exec'd `vault` CLI call must set this (and
