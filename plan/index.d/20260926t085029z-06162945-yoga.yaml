@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: centicolon-r-is-printed-every-check-and-ratcheted-so-a-lost-satisfaction-is-refused-an-added-requirement-is-a-scope-change-and-a-vanished-obligation-needs-a-change-record
+    field: status
+    value: in_progress
+    ts: "2026-09-26T08:50:29Z"
+    host: yoga
+
+events:
+  - packet_id: centicolon-r-is-printed-every-check-and-ratcheted-so-a-lost-satisfaction-is-refused-an-added-requirement-is-a-scope-change-and-a-vanished-obligation-needs-a-change-record
+    event:
+      type: progress
+      ts: "2026-09-26T08:50:29Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: work/1395-xjty
+  - packet_id: centicolon-r-is-printed-every-check-and-ratcheted-so-a-lost-satisfaction-is-refused-an-added-requirement-is-a-scope-change-and-a-vanished-obligation-needs-a-change-record
+    event:
+      type: note
+      ts: "2026-09-26T08:50:29Z"
+      host: yoga
+      summary: |-
+        fs.list(dir) bundled with 1395-xjty on work/1395-xjty (same files), per coordinator
