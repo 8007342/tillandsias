@@ -67,6 +67,7 @@ next-order
 parked-blocks
 pipeline
 plan-events
+predicate
 query
 # reader.
 ready

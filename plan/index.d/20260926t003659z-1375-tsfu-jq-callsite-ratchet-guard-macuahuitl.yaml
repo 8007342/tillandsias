@@ -1,0 +1,63 @@
+packets:
+  - packet_id: nothing-counts-jq-call-sites-so-a-lua-or-rust-equivalent-cannot-become-adoption-a-ratchet-guard-prints-the-count-every-check-refuses-a-new-site-in-the-supported-subset-and-lowers-the-floor-as-migrations-land
+    order: 1375-tsfu
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [portability, guard, jq, adoption, fail-loud]
+    estimated_hours: 3
+    depends_on: [tillandsias-plan-json-get-answers-the-jq-subset-that-87-percent-of-the-corpus-uses-byte-identical-so-a-gate-reads-json-with-the-binary-every-host-already-has]
+    owned_files: [scripts/check-jq-callsite-ratchet.sh, scripts/test-check-jq-callsite-ratchet.sh, scripts/portability/jq-callsite-floor.txt, build.sh]
+    observed_by: macuahuitl
+    title: |
+      nothing counts jq call sites, so a Lua or Rust equivalent becoming AVAILABLE will not become ADOPTION — `rust_queries:` has had one adopter in 454 litmus files since 2026-05-22; a ratchet guard prints `ok:jq-callsites:<n>:floor:<f>` on every --check, refuses a NEW bare jq call site whose filter is inside the supported subset, warns on one outside it, and lowers the recorded floor when a migration lands
+    verifiable_closure: |
+      bash scripts/test-check-jq-callsite-ratchet.sh asserts: (1) on the live
+      tree the guard prints `ok:jq-callsites:<n>:floor:<f>` with n equal to
+      what `git grep -c` gives for the guard's own published pattern over
+      scripts/ build.sh launch.sh and the litmus `command:` fields, and n <= f;
+      (2) positive control — in a scratch copy, adding `x=$(jq -r .a f.json)`
+      to a file the floor does not list makes it print
+      `blocked:jq-callsite-added:<file>:<filter>` and exit 1; (3) adding a
+      `group_by` filter prints `warn:jq-callsite-added-unsupported:<file>`
+      and exits 0; (4) a scan over an empty population prints
+      `blocked:jq-ratchet-empty-population`, never ok (a guard must assert
+      its population); (5) lowering a file's count below the floor and
+      running with `--ratchet` rewrites the floor file and the diff is one
+      line. The guard is a build.sh --check step in the same commit
+      (1325-ygq5). Pre-fix result: FAILS — the script does not exist.
+    context: |
+      MEASURED 2026-09-26 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      902-5bf9's context is the lesson: `rust_queries:` was added
+      2026-05-22, is dispatched by run_rust_queries_for_litmus on every run,
+      and is used by 1 of 454 litmus files — availability without a forcing
+      function is not adoption. The fleet's own pattern for this is a
+      counted advisory that becomes a gate (1130-i6xj's
+      check-portability-idioms.sh, 761-g36m's check-bash-dialect.sh):
+      the guard never reds the standing debt (277 sites at filing), only
+      NEW sites, and the floor moves one way.
+      WHAT THE GUARD PUBLISHES. One regex for "a bare jq invocation" (the
+      filing survey used a token-followed-by-flag/quote/dot pattern and
+      counted 277 sites in 68 files — the guard's pattern is the one the
+      fleet argues about from now on, so it is in the script header with its
+      false-positive list: `resolve_tool jq`, `fast_tool jq`, prose in
+      comments). Per-file counts in scripts/portability/jq-callsite-floor.txt
+      (`<count> <path>` lines, sorted by path — a plain text file that
+      merges). A NEW site is a file whose count exceeds its floor line, or
+      a file with no line. Supported-subset detection reuses 1375-rn9b's
+      parser: `tillandsias-plan json get --parse-only '<filter>'` says
+      whether the filter is in the subset, so the guard never re-implements
+      the grammar. A site outside the subset WARNS (the honest state: the
+      author has no equivalent yet, bucket C/D moves to Lua under
+      1375-btuf), a site inside it BLOCKS with the remedy printed: the
+      `tillandsias-plan json get` spelling for that filter.
+      COUNTER, NOT JUST GATE. The ok: line is the adoption instrument the
+      operator asked for: burndown reads the number from the gate log across
+      hosts, and a release note can say `jq call sites: 277 -> N`.
+      1374-4u6i and 1174-jd8n are the cautionary rows: a fixture that runs
+      in no gate, and an advisory that counts mentions instead of actions —
+      hence (1) pins the count to a reproducible grep, and (4) refuses an
+      empty population.

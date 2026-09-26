@@ -41,6 +41,8 @@ tokio = { workspace = true }
 chrono = { workspace = true }
 # Order 964-tzmp: the derived ledger cache (see workspace Cargo.toml).
 redb = { workspace = true }
+regex = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 # ORDER 977-dpbj. proptest, not quickcheck: integrated shrinking that respects

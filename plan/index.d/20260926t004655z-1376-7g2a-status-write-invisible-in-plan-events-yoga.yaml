@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-status-write-made-without-evidence-leaves-no-status-event-so-plan-events-cannot-show-who-claimed-a-row-or-when
+    order: 1376-7g2a
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan-ledger, fleet-coordination]
+    estimated_hours: 2
+    owned_files: [crates/tillandsias-plan/src/main.rs]
+    observed_by: yoga
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable includes its own test,
+      crates/tillandsias-plan/tests/plan_events_show_every_status_write.rs,
+      landing in the same commit as the fix (1136-n8sh).
+    title: |
+      a status write made with set-field WITHOUT --evidence leaves no status event, so plan-events cannot show who claimed a row or when; only a free-text note (the --reason) survives
+    verifiable_closure: |
+      Every status write is visible in plan-events: for each entry in a row's
+      status channel, plan-events <order> prints an event carrying that write's
+      value, host and ts, whether or not --evidence was given. Checked on the
+      measured case: lenovinha's 776-jcf3 claim
+      (plan/index.d/20260925t192433z-34245708-lenovinha.yaml, in_progress,
+      2026-09-25T19:24:33Z) must appear in plan-events 776-jcf3 as a status
+      event. Pre-fix result: FAILS — plan-events 776-jcf3 has exactly one
+      lenovinha event at that ts, type note, "claimed by lenovinha-silverblue on
+      joining the fleet; ...", and 0 events whose summary is a status write.
+    context: |
+      Measured 2026-09-25 by yoga while writing 1370-tjme's claim-confirmation
+      step. The status write IS in the fragment's status: channel (the LWW
+      record the fold reads), but plan-events, the folded reader that exists so
+      callers stop grepping index.d (882-vqe4), shows a status write only when
+      set-field was given --evidence: main.rs:2461-2465 build "status '<v>'
+      [(not terminal)] with evidence_refs" on that path; without it the only
+      event is the --reason note. Consequence: a reader of plan-events cannot
+      reconstruct a row's claim history, so 1370-tjme had to read the status
+      channel from the fragments instead, which compaction erases. Criterion
+      names the OUTPUT a reader needs, not a mechanism: making --evidence
+      mandatory would satisfy "an event exists" while breaking every caller
+      that claims without evidence; recording the write, or having plan-events
+      fold the status channel, are both acceptable.
+    events:
+      - type: filed
+        ts: "2026-09-26T00:46:55Z"
+        host: yoga
+        summary: |
+          Filed by yoga at the coordinator's direction (macuahuitl, 2026-09-26),
+          from 1370-tjme's finding. Pre-fix measured with the plan binary at
+          trunk: plan-events 776-jcf3 | status events by lenovinha at
+          2026-09-25T19:24:33Z = 0.

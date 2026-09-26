@@ -1,0 +1,56 @@
+packets:
+  - packet_id: the-jq-callers-on-the-every-cycle-path-hardware-fingerprint-land-queue-the-status-loss-folds-and-the-914-ahsy-loop-callers-with-subset-filters-move-to-json-get-and-the-ratchet-floor-drops-by-twenty
+    order: 1375-2x4e
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [portability, jq, scripts, windows, macos]
+    estimated_hours: 4
+    depends_on: [tillandsias-plan-json-get-answers-the-jq-subset-that-87-percent-of-the-corpus-uses-byte-identical-so-a-gate-reads-json-with-the-binary-every-host-already-has, nothing-counts-jq-call-sites-so-a-lua-or-rust-equivalent-cannot-become-adoption-a-ratchet-guard-prints-the-count-every-check-refuses-a-new-site-in-the-supported-subset-and-lowers-the-floor-as-migrations-land]
+    owned_files: [scripts/hardware-fingerprint.sh, scripts/land-queue.sh, scripts/check-base-ledger-status-loss.sh, scripts/check-fragment-status-loss.sh, scripts/check-long-running-view.sh, scripts/portability/jq-callsite-floor.txt]
+    observed_by: macuahuitl
+    title: |
+      the jq callers on the every-cycle path — hardware-fingerprint.sh (14 sites, runs on every host's first cycle), land-queue.sh (2), the three status-loss and long-running `select | [..] | @tsv` folds, and the 914-ahsy loop callers whose filters are in the supported subset — move to `tillandsias-plan json get`, the ratchet floor drops by at least 20, and the CRLF-through-`jq -r` class closes for those sites
+    verifiable_closure: |
+      bash scripts/check-jq-callsite-ratchet.sh prints a floor at least 20
+      below the floor recorded in scripts/portability/jq-callsite-floor.txt
+      at the commit that landed 1375-tsfu, and the five named scripts have a
+      floor line of 0; `bash scripts/test-hardware-fingerprint.sh` passes
+      with jq shadowed by an exit-127 stub on PATH (the fixture gains that
+      arm in this row, and the stub logs its calls so an unreached stub is
+      `blocked:stub-not-reached`). Pre-fix result: FAILS — the floor is at
+      its recorded value and hardware-fingerprint.sh's 14 reads go through
+      bare jq.
+    context: |
+      MEASURED 2026-09-26 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      Fleet-critical jq surface, by the survey's invocation pattern:
+      scripts/hardware-fingerprint.sh 14 (bucket A, plus 2 validator-only —
+      this is the capability row every host publishes, so a jq-less host
+      publishes a wrong or empty fingerprint), scripts/land-queue.sh 2
+      (`type == "array"` and `sort_by(.number) | .[] | select(.isDraft | not)`
+      — the second is bucket D: sort_by moves to Lua or to two verbs, the
+      implementer says which), check-base-ledger-status-loss.sh,
+      check-fragment-status-loss.sh, check-long-running-view.sh 1 each (all
+      the same `select(...) | [...] | @tsv` fold, guarded by `command -v jq`
+      with a slower per-packet loop as fallback — so the FAST path exists
+      only on jq hosts; after this row there is one path). agent-identity.sh,
+      push-plan-fragments-to-trunk.sh and the pre-push gate carry 0 jq.
+      914-ahsy (in relay review, macuahuitl 2026-09-25): its conversion added
+      `"$JQ"` call sites (196 vs 81 on trunk) and the quoted multi-word
+      toolbox arm breaks on exactly the jq-less host it targeted; its 19
+      remaining loop callers (bench-accel-lane.sh, refusal-calibration/*,
+      update-convergence-dashboard.sh, test-convergence-dashboard.sh at 19+5
+      sites, claude-mcp.sh, spec-index-ensure.sh, query-traces.sh,
+      check-local-expert-health.sh, hooks/post-commit-expert-refresh.sh)
+      split by filter: bucket A/B callers are this row's second half and
+      need NO dispatch at all; bucket C/D residue stays on fast_tool until
+      1375-btuf gives it a Lua home. Coordinate with 914-ahsy's holder before
+      touching a file its work ref also edits (on a duplicate fix, hold).
+      @tsv: `tillandsias-plan json get` does not grow @tsv; the three folds
+      want `-r '[.a,.b] | join("\t")'`-shaped output, which is the ONE
+      construction verb worth adding to the subset if the implementer finds
+      it cleaner than emitting two columns with two calls — record the
+      choice in the ratchet header so the subset stays enumerable.
