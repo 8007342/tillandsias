@@ -109,7 +109,9 @@ readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspe
 # The default is unchanged, so every existing caller resolves identically.
 readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
-readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
+# TILLANDSIAS_LITMUS_RUNTIME_DIR (1375-6pnd): a fixture that must run with NO
+# yq needs a runtime dir without the cached toolbox yq shim below.
+readonly LITMUS_RUNTIME_DIR="${TILLANDSIAS_LITMUS_RUNTIME_DIR:-${PROJECT_ROOT}/target/litmus-runtime}"
 readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
 readonly LITMUS_PODMAN_RUNROOT="${PROJECT_ROOT}/target/litmus-podman/runroot"
 readonly LITMUS_PODMAN_TMPDIR="${PROJECT_ROOT}/target/litmus-podman/tmp"
@@ -284,6 +286,13 @@ if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
         LITMUS_PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || LITMUS_PLAN_BIN=""
     fi
 fi
+# Whether that binary answers `yaml get` (1375-6pnd), decided ONCE here: _yaml_jq
+# always runs inside $(...), so a cache set there would not outlive the call.
+_LITMUS_HAS_YAML_GET=0
+if [[ -n "$LITMUS_PLAN_BIN" ]]; then
+    _litmus_caps="$("$LITMUS_PLAN_BIN" capabilities 2>/dev/null)"
+    case $'\n'"$_litmus_caps"$'\n' in *$'\nyaml\n'*) _LITMUS_HAS_YAML_GET=1 ;; esac
+fi
 # _yaml_jq <file> <jq-filter> — the first tier. Returns non-zero (and prints
 # nothing) when the tier is unavailable or the file does not load, so callers
 # fall through to the next tier. A `blocked:` verdict from yaml-json lands on
@@ -314,8 +323,21 @@ fi
 # fix becomes a claim.
 _yaml_jq() {
     [[ -n "$LITMUS_PLAN_BIN" ]] || return 1
-    command -v jq &>/dev/null || return 1
     local out
+    # ORDER 1375-6pnd: `yaml get` answers the runner's filters (all inside the
+    # json get subset) from the binary itself, so the test SELECTION no longer
+    # depends on jq or yq being on the host. Measured before this change: with
+    # jq, yq and the toolbox yq shim all absent, a spec whose tests are
+    # pre-build selected NOTHING (the yq tier's `|| echo runtime` default
+    # claimed every phase was runtime) while a host with jq selected them all.
+    # LF on every platform, so no CR strip is needed on this path.
+    if [[ "$_LITMUS_HAS_YAML_GET" == 1 ]]; then
+        out="$("$LITMUS_PLAN_BIN" yaml get -r "$2" "$1" 2>/dev/null)" || return 1
+        [[ -n "$out" ]] && printf '%s\n' "$out"
+        return 0
+    fi
+    # An older binary without `yaml get`: the previous yaml-json | jq path.
+    command -v jq &>/dev/null || return 1
     out="$("$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null)" || return 1
     printf '%s\n' "${out//$'\r'/}"
 }
