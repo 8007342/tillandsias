@@ -628,8 +628,7 @@ mod win_job {
                     std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
                 )
                 .map_err(std::io::Error::other)?;
-                AssignProcessToJobObject(job.0, HANDLE(raw))
-                    .map_err(std::io::Error::other)?;
+                AssignProcessToJobObject(job.0, HANDLE(raw)).map_err(std::io::Error::other)?;
                 Ok(job)
             }
         }
