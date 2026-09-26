@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diff-scoped-deciders-read-git-diff-against-a-base-which-omits-untracked-files-so-a-brand-new-script-is-invisible-until-it-is-staged
+    event:
+      type: note
+      ts: "2026-09-26T14:46:43Z"
+      agent_id: windows-yolanda-claude-20260926t144642z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-26, work/1391-8ikx.
+        CORRECTION of my own claim reason: I wrote that STAGED-but-uncommitted changes were also invisible, "measured here". That was WRONG. check-sigpipe-verdict-pipelines-added.sh diffs the WORKING TREE against the base (`git diff <base>`), so staged and unstaged edits to tracked files ARE in scope. The "0 checked" I saw on 1310-7apk meant only that I had added no verdict pipelines, which the counter defect below made indistinguishable from "examined nothing".
+        SWEEP of all five *-added deciders:
+        - check-declared-closures-added, check-fragment-closure-evidence-added, check-litmus-expression-pinning-added and check-scorable-obligation-added ALREADY enumerate untracked files (git ls-files --others --exclude-standard).
+        - check-sigpipe-verdict-pipelines-added was the ONLY one that did not, and it had a second defect: `checked` was incremented only on a violation, so every ok read "0 checked" whether one file or fifty had been examined, which is the "ok over nothing" this row names.
+        FIX (this ref): the population is `git diff --name-only <base>` plus untracked files (sort -u); an untracked file counts all its lines as added; `checked` counts the files examined. The verdict grammar is unchanged (ok:sigpipe-verdict-added:<n> checked), so the litmus shape pin and its consumers still hold.
+        Fixture test-sigpipe-verdict-pipelines.sh gains U1 (an untracked new script's verdict pipeline is refused) and U2 (a clean untracked script is examined and counted). BOTH FAILED PRE-FIX, each with "ok:sigpipe-verdict-added:0 checked". Now 13/13; the sibling fixture test-sigpipe-guard-sees-paths-and-continuations passes 15/15. Live, on this change: ok:sigpipe-verdict-added:2 checked.
