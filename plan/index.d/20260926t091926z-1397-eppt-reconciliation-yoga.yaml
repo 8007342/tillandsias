@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: twenty-one-specs-declare-a-status-the-litmus-bindings-registry-contradicts-so-seven-specs-the-registry-calls-obsolete-still-count-as-active-obligations
+    event:
+      type: progress
+      ts: "2026-09-26T09:19:26Z"
+      host: yoga
+      summary: |
+        RECONCILED 20 of 21, ONE NAMED UNDECIDED (work/1397-eppt). Decided on evidence, never on
+        "the spec wins": the commit that last set each side, and whether live code implements it.
+        Spec-side "active" in the 7 disputed specs was bulk-written by f1740e204 ("add Status
+        section — 32 specs") and weighs little; registry retirements were deliberate acts.
+        REGISTRY -> active, stale tombstone dropped (the capability was rebuilt in native crates
+        after the 5a7156eda "src-tauri-era orphaned" retirement):
+          singleton-guard (crates/tillandsias-core/src/singleton.rs, native tray),
+          tray-cli-coexistence (headless main.rs), tray-projects-rename (the native tray renders the
+          spec's exact "🏠 ~/src" submenu; locale keys menu.projects / menu.cloud_projects),
+          subdomain-routing-via-reverse-proxy (22 code files; its "deprecated" arrived as a side
+          effect of 3adc78a98, a litmus fix), windows-event-logging (the spec was deliberately
+          re-activated 2026-07-18 by f0314ab93, after the registry suspended it 2026-05-13).
+        SPEC -> obsolete: update-system (registry TRUE: native crates keep only an unused
+          UpdatesConfig, no updater; "active" came from 2902b12f1, generated from annotations).
+        SPEC gains "## Status active": ephemeral-guarantee, forge-as-only-runtime, vsock-exec-authz
+          (implemented, litmus-bound, registry active).
+        SPEC draft/proposed -> active: cache-recovery-mechanism, forge-standalone (both drafts were
+          template values at file creation), vm-provisioning-lifecycle (proposed at design time;
+          implementing orders drained 2026-07-18; 34 code files).
+        DEAD vs DEAD -> both obsolete, keeping the lawful tombstone trail: six specs move to the
+          registry's obsolete, whose tombstone names the successor (cheatsheet-mcp-server,
+          enforce-trace-presence, fix-podman-machine-host-aliases, fix-windows-extended-path,
+          forge-cache-architecture, secret-rotation); two registry entries move to the spec's
+          obsolete and gain the spec's own "Superseded By" as a tombstone
+          (browser-window-rate-limiting -> superseded:host-browser-mcp, certificate-authority ->
+          superseded:reverse-proxy-internal).
+        UNDECIDED, named and printed on every run by the guard: tray-host-control-socket. The
+          registry tombstone says superseded by orders 123-128 (host-guest-transport; 125 and 128
+          still pending); successor specs host-guest-transport and vsock-transport exist and
+          control-wire traces vsock-transport 19x vs this spec 8x, but whether the Unix-socket tray
+          control plane still exists beside vsock is a design call. Left as found.
+        GUARD scripts/check-spec-registry-status.sh, wired into build.sh --check (audit-guard-
+        activation: active <- build.sh). Pre-fix on the untouched tree: refused 21, agreeing with
+        the extractor (a first cut read 22: it compared a whole annotated status line, and
+        secrets-management's "obsolete (removed in v0.3 …)" is not a disagreement). Post-fix:
+        ok:spec-registry-status:141 undecided=1. Control: an introduced forge-standalone draft is
+        refused by name, rc=1.

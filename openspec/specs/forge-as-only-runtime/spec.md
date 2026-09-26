@@ -1,6 +1,12 @@
 <!-- @trace spec:forge-as-only-runtime -->
 # forge-as-only-runtime Specification
 
+## Status
+
+active
+
+Reconciled 2026-09-26 (1397-eppt): had no Status section; implemented (code traces this spec) and bound to a litmus in the registry, which says active.
+
 ## Identity
 
 - **Name**: forge-as-only-runtime

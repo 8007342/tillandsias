@@ -2,7 +2,9 @@
 
 ## Status
 
-deprecated
+obsolete
+
+Reconciled 2026-09-26 (1397-eppt): both sides already called this spec dead; the registry carries the lawful tombstone trail (superseded:forge-cache-dual), so its word, obsolete, is the one both now use.
 
 ## Tombstone
 

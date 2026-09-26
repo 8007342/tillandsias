@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    field: status
+    value: completed
+    ts: "2026-09-26T09:50:11Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    event:
+      type: completed
+      ts: "2026-09-26T09:50:11Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: df35d2553
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    event:
+      type: note
+      ts: "2026-09-26T09:50:11Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next at df35d2553 (my be9c82f83 plus one relay-fix for a LATENT defect: crates/tillandsias-plan/build.rs did not rerun-if-changed on tests/, so a tests/-only change left build-id != source-revision; build.rs now reruns on tests/). Verified by content on trunk: protect_parent_std_handles in tillandsias-exec (called from Command::run and Command::spawn), and the test a_piped_caller_is_not_held_by_a_leaked_grandchild. The fix clears the INHERIT flag on the process's own stdin/stdout/stderr once before the first spawn, so a child no longer inherits the CLI's stdout (the caller's pipe). NATIVE WINDOWS closure (yolanda): the plan CLI runs with stdout PIPED, its script's ungrouped child leaving a background grandchild under a 500 ms deadline, and EOF arrives in about 1.1 s. SABOTAGE with the guard call removed: "the caller's pipe stayed open 30.4655647s", which matches the pre-fix 30558/30421 ms piped (745/723 ms to a file).

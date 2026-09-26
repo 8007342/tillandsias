@@ -240,6 +240,7 @@ impl Command {
         let Some((program, rest)) = self.argv.split_first() else {
             return Err(ExecError::EmptyArgv);
         };
+        protect_parent_std_handles();
         let run = RunId::new();
 
         let mut cmd = tokio::process::Command::new(program);
@@ -561,6 +562,7 @@ impl Command {
         let Some((program, rest)) = self.argv.split_first() else {
             return Err(ExecError::EmptyArgv);
         };
+        protect_parent_std_handles();
         let mut cmd = tokio::process::Command::new(program);
         cmd.args(rest)
             .stdin(Stdio::null())
@@ -649,5 +651,48 @@ mod win_job {
                 let _ = CloseHandle(self.0);
             }
         }
+    }
+}
+
+/// Clear the INHERIT flag on this process's own stdin/stdout/stderr, once,
+/// before the first spawn (order 1394-mdqj).
+///
+/// On Windows a child is created with handle inheritance on, so it inherits
+/// EVERY inheritable handle of this process, including this process's own
+/// stdout. When a caller pipes this process (`tillandsias-plan lua ... | grep`),
+/// that stdout IS the caller's pipe; a grandchild the child leaves behind then
+/// holds the caller's pipe open, and the reader sees no EOF until it exits.
+/// Measured on yolanda-windows: 30558 / 30421 ms piped against 745 / 723 ms
+/// redirected to a file, with the same binary.
+///
+/// Clearing the flag changes nothing a child is meant to get: every spawn here
+/// hands the child its own dedicated pipes (or null), and a Stdio::inherit
+/// elsewhere in the process is duplicated as inheritable by std itself. It is
+/// process-wide and idempotent; a no-op off Windows.
+fn protect_parent_std_handles() {
+    #[cfg(windows)]
+    {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            use windows::Win32::Foundation::{
+                HANDLE_FLAG_INHERIT, HANDLE_FLAGS, SetHandleInformation,
+            };
+            use windows::Win32::System::Console::{
+                GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+            };
+            for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+                // SAFETY: GetStdHandle returns this process's own handle (or
+                // null/invalid, which is skipped); SetHandleInformation only
+                // clears a flag on it.
+                unsafe {
+                    if let Ok(h) = GetStdHandle(id)
+                        && !h.is_invalid()
+                        && !h.0.is_null()
+                    {
+                        let _ = SetHandleInformation(h, HANDLE_FLAG_INHERIT.0, HANDLE_FLAGS(0));
+                    }
+                }
+            }
+        });
     }
 }

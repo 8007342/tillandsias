@@ -14,7 +14,8 @@
 # CACHEABLE class give identical, NON-EMPTY output (an empty output on all three
 # would compare equal — the premise refuses it); (2) os.setlocale is nil in
 # both classes; (3) under an installed comma-radix locale %.2f is 3.50 and
-# tonumber("3,5") is nil (a named skip if none is installed); (4) next is nil in
+# tonumber("3,5") is nil (a named skip if none is installed); (4) next is withheld (reading it
+# raises an error naming table.is_empty, 1395-xjty) in
 # both classes and table.keys returns numbers ascending, then strings.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -54,11 +55,25 @@ else
     esac
 fi
 
+# ── 1b: fs.list (OBSERVING only; unstable, never memoized) is still one
+#       byte stream for a given tree (1395-xjty, operator ruling on 1395-ue3i)
+l1="$(lua_o -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
+l2="$(lua_o -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
+l3="$(lua_o -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
+case "$l1" in
+    *determinism.lua*)
+        if [ "$l1" = "$l2" ] && [ "$l2" = "$l3" ]; then ok "fs.list prints the same bytes in three processes"; else bad "fs.list differs across processes: $l1 | $l2 | $l3"; fi ;;
+    *) bad "premise: fs.list did not list scripts/fixtures (got: $(printf '%.60s' "$l1"))" ;;
+esac
+
 # ── 2 and 4: withheld names, sorted keys ──────────────────────────────────
-v="$(lua_o -e 'return tostring(os.setlocale), tostring(next), table.concat(table.keys({b=1,a=2,[3]=0,[1]=0}), ",")' | tr '\n' ' ')"
-[ "$v" = "nil nil 1,3,a,b " ] && ok "observing: os.setlocale nil, next nil, table.keys sorted" || bad "observing: $v"
-v="$(lua_c -e 'return tostring(os), tostring(next), table.concat(table.keys({b=1,a=2,[3]=0,[1]=0}), ",")' | tr '\n' ' ')"
-[ "$v" = "nil nil 1,3,a,b " ] && ok "cacheable: os (so os.setlocale) nil, next nil, table.keys sorted" || bad "cacheable: $v"
+# `next` is withheld; since 1395-xjty READING it raises an error naming
+# table.is_empty (the replacement an author needs), so the arm asserts the
+# named error rather than a nil.
+v="$(lua_o -e 'local ok, e = pcall(function() return next end); local nx = (not ok and tostring(e):find("table.is_empty", 1, true)) and "next-named" or ("next:" .. tostring(ok) .. ":" .. tostring(e)); return tostring(os.setlocale), nx, table.concat(table.keys({b=1,a=2,[3]=0,[1]=0}), ","), tostring(table.is_empty({})) .. tostring(table.is_empty({a=1}))' | tr '\n' ' ')"
+[ "$v" = "nil next-named 1,3,a,b truefalse " ] && ok "observing: os.setlocale nil, next withheld with a named error, table.keys sorted, table.is_empty" || bad "observing: $v"
+v="$(lua_c -e 'local ok, e = pcall(function() return next end); local nx = (not ok and tostring(e):find("table.is_empty", 1, true)) and "next-named" or ("next:" .. tostring(ok) .. ":" .. tostring(e)); return tostring(os), nx, table.concat(table.keys({b=1,a=2,[3]=0,[1]=0}), ","), tostring(table.is_empty({})) .. tostring(table.is_empty({a=1}))' | tr '\n' ' ')"
+[ "$v" = "nil next-named 1,3,a,b truefalse " ] && ok "cacheable: os (so os.setlocale) nil, next withheld with a named error, table.keys sorted, table.is_empty" || bad "cacheable: $v"
 
 # ── 3: a comma-radix locale cannot reach Lua's number formatting ──────────
 loc=""; installed="

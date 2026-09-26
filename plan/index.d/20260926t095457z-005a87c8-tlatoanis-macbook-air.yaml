@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    event:
+      type: progress
+      ts: "2026-09-26T09:54:57Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t095456z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED 2026-09-26 on tlatoanis-macbook-air: the macOS one-shot lane DOES stream to the host in real time, and it prints a tool call only when the call FINISHES. Probe: `tillandsias-tray --opencode /home/forge/src/tillandsias --prompt "Reply with the single word READY. Then run the shell command: sleep 30; echo SLEPT. Then reply DONE."`, with every host-side line timestamped as it arrived:
+          +27s  "> build · big-pickle"   (the agent started)
+          +36s  READY                   (streamed live)
+          +66s  "$ sleep 30; echo SLEPT"  (the tool call appears only now, 30s after it started)
+          +66s  SLEPT
+          +67s  DONE
+          +90s  {"status":"opencode-finished","exit_code":0}
+        So: the host path (exec_over_stream_with_input_streaming -> stdout) and harness-supervisor (child inherits fds, captures nothing) are NOT where output is lost. `opencode run` renders a tool call on completion, not on start.
+        This names a mechanism for the 3h smoke silence that fits every measurement: an agent inside ONE long tool call prints nothing until that call returns. The smoke's steady ~1-core CPU and continuous rootfs writes are the shape of a cargo build (meta-orchestration's first steps run cycle-preflight, which rebuilds the plan binary, and the gate). It is not yet proven that the smoke's call was a build; what is proven is that a long tool call is invisible in this lane until it ends.
+        Criterion 1 is therefore narrower than filed: output DOES reach the host; what is missing is a START event for a tool call. Next step: find whether `opencode run` can emit tool starts (e.g. --format json events, which stream per part) or --print-logs, and switch the one-shot lane to it.
