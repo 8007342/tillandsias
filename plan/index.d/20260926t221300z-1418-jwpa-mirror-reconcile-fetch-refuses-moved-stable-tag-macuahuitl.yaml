@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-git-mirror-reconcile-fetch-takes-tags-non-forced-so-a-moved-stable-tag-prints-would-clobber-existing-tag-after-every-refused-push-and-the-real-refusal-reason-is-not-shown
+    order: 1418-jwpa
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, forge, tags, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - images/git/relay-refs.sh
+    unscoreable: |
+      needs-host-evidence-first: the fixer must first read the mirror's own log
+      for the refused push to learn the PRIMARY refusal reason (see context); the
+      closure then depends on which cause it was. The tag half alone is pinnable:
+      with upstream `stable` moved, the post-refusal reconcile fetch must not
+      print a clobber refusal (forced `+refs/tags/*:refs/tags/*`, as every
+      startup fetch in entrypoint.sh already uses). PRE-FIX: it prints
+      "! [rejected] stable -> stable (would clobber existing tag)".
+    title: |
+      After a refused push, the git mirror's reconcile fetch (relay-refs.sh ~:320) takes tags NON-forced, so the moved `stable` tag (it moves on every stable promotion, by design) prints "! [rejected] stable -> stable (would clobber existing tag)" — which a forge read as the CAUSE of its refused salvage push, while the actual refusal ("upstream did not durably accept the ref transaction") had already happened for a reason the forge's output does not show
+    context: |
+      REPORTED by macuahuitl-forge 2026-09-26 ~22:40Z while salvaging before a
+      replacement: push of salvage/forge-tillandsias/20260926-launch-opsx-regen
+      (872c2da2a, only regenerated .claude/ files, low stakes) refused with
+      `remote: ! [rejected] stable -> stable (would clobber existing tag)` then
+      `[pre-receive] Push rejected: configured upstream did not durably accept
+      the ref transaction`. The forge concluded EVERY push through the mirror is
+      declined; that is NOT established.
+      READING (coordinator): the clobber line matches only relay-refs.sh's
+      post-refusal reconcile fetch ('refs/tags/*:refs/tags/*', non-forced);
+      entrypoint.sh's startup fetches use '+refs/tags/*:refs/tags/*'. The
+      pre-receive refusal comes FIRST. The `stable` tag moved on 2026-09-25
+      when v56.9.25.2 was promoted, so the tag half is certain; the primary
+      refusal reason is not. Fixer: read the mirror container's log for that
+      push (pre-receive-hook.sh's relay output), then fix the tag refspec and,
+      separately, whatever the primary cause was.
+    deliverable: |
+      The primary refusal cause, named from the log; the reconcile fetch forces
+      tags; a fixture with a moved upstream tag.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from macuahuitl-forge's
+      pre-replacement report.
