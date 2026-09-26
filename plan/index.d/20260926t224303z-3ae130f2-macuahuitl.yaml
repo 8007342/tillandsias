@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-reconcile-fetch-takes-tags-non-forced-so-a-moved-stable-tag-prints-would-clobber-existing-tag-after-every-refused-push-and-the-real-refusal-reason-is-not-shown
+    event:
+      type: finding
+      ts: "2026-09-26T22:43:03Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        CONFIRMED (credential half), 2026-09-26 ~22:55Z: after the operator ran the GitHub login flow on the host's Vault, the mirror's next probe published refs/tillandsias/upstream-auth/authorized/1790462557, replacing denied/unauthenticated/1790462436, and the rebuilt macuahuitl-forge's check-credential-channel went from blocked:upstream-push-unauthorized to ok:forge-git-mirror. So an unauthenticated upstream token WAS the primary refusal cause, and the moved-tag line was post-refusal noise. STILL INFERRED, not confirmed: that the token EXPIRED (GitHub App user-token ~8 h lifetime) rather than being absent or malformed for another reason. The fixer should confirm from the Vault/mirror logs when the 401s began. Either way the remaining work on this row stands: (1) the reconcile fetch should force tags; (2) a credential that silently goes bad overnight needs a loud, early verdict (or a refresh path) instead of surfacing only as a refused push.
