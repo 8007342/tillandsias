@@ -33,7 +33,7 @@ set -uo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-pass=0; fail=0
+pass=0; fail=0; skipped=0
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 DOT='^[0-9]+\.[0-9]+$'
@@ -137,6 +137,7 @@ raw="$(frontier_raw scripts/select-work-batch.sh)"
 if printf '%s\n' "$raw" | grep -q '^refused:no-plan-binary'; then
     # A precondition, not a verdict: no runnable plan binary means no frontier
     # to measure. Named skip, so the arm is visibly not scored.
+    skipped=$((skipped+2))
     echo "  skip: select-work-batch arms — $(printf '%s\n' "$raw" | grep -m1 '^refused:no-plan-binary')"
 else
     v="$(frontier_vals "$raw")"
@@ -152,5 +153,8 @@ unpinned="$(grep -nE 'awk .*%\.[0-9]f' scripts/hooks/pre-commit-openspec.sh | gr
 if [ -z "$unpinned" ]; then ok "pre-commit-openspec: every %.Nf awk is LC_ALL=C-pinned (static)"
 else bad "pre-commit-openspec has an unpinned %.Nf awk: $unpinned"; fi
 
-if [ "$fail" -eq 0 ]; then echo "ok:awk-float-lc-numeric:$pass"; exit 0; fi
+if [ "$fail" -eq 0 ]; then
+    if [ "$skipped" -gt 0 ]; then echo "ok:awk-float-lc-numeric:$pass (skipped=$skipped)"; else echo "ok:awk-float-lc-numeric:$pass"; fi
+    exit 0
+fi
 echo "fail:awk-float-lc-numeric:$fail failed, $pass passed"; exit 1
