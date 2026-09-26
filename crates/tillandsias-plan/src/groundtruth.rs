@@ -704,6 +704,11 @@ pub struct Harness {
     /// envelope then took `Freshness::for_source`, i.e. THIS CHECKOUT'S HEAD,
     /// and stamped it onto spans the index read at a different commit.
     spec_freshness: Option<crate::answer::Freshness>,
+    /// ORDER 1415-89bs. An injected spec-index directory for TESTS; `None`
+    /// (production) keeps the env-first resolution ladder. A test that
+    /// set_var'd TILLANDSIAS_SPEC_INDEX_DIR instead redirected every sibling
+    /// test that resolves the ladder (spec_index::resolve_dir) while it ran.
+    spec_index_dir: Option<String>,
 }
 
 /// ORDER 888-miiy. Marks an engine error as a HOST CAPABILITY GAP rather than
@@ -746,7 +751,15 @@ impl Harness {
             spec_vectors: None,
             spec_chunks: None,
             spec_freshness: None,
+            spec_index_dir: None,
         }
+    }
+
+    /// Answer spec.answer from THIS index directory instead of resolving the
+    /// ladder (1415-89bs): the test seam that replaces mutating process env.
+    pub fn with_spec_index_dir(mut self, dir: impl Into<String>) -> Self {
+        self.spec_index_dir = Some(dir.into());
+        self
     }
 
     pub fn root(&self) -> &Path {
@@ -786,7 +799,10 @@ impl Harness {
             // keeps a shifted pairing from grading as plausible-and-wrong)
             // lives in spec_index::SpecIndexEntry now; only the caching and
             // the ENGINE_UNAVAILABLE framing above stay grading-specific.
-            let dir = resolve_spec_index_dir()?;
+            let dir = match &self.spec_index_dir {
+                Some(d) => d.clone(),
+                None => resolve_spec_index_dir()?,
+            };
             let entry = crate::spec_index::SpecIndexEntry::load_dir(Path::new(&dir))?;
             // 1229-2862: TAKE THE FRAME BEFORE DESTRUCTURING. `entry.freshness()`
             // borrows the entry, so it must be read here rather than reconstructed
@@ -1593,19 +1609,16 @@ citations_include:
         }))
         .expect("case deserializes");
 
-        let prev = std::env::var("TILLANDSIAS_SPEC_INDEX_DIR").ok();
-        // SAFETY: restored before this test returns; no sibling reads it.
-        unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_DIR", &idx) };
+        // 1415-nvzz shape: inject the index, never set_var it. The old
+        // comment here said "no sibling reads it"; spec_index::resolve_dir
+        // reads it for every test that resolves the ladder.
         let mut h = Harness::new(
             r.path().to_path_buf(),
             r.path().join("plan/index.yaml"),
             "plan/index.yaml".to_string(),
-        );
+        )
+        .with_spec_index_dir(idx.to_string_lossy().into_owned());
         let envelope = h.run(&case);
-        match prev {
-            Some(v) => unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_DIR", v) },
-            None => unsafe { std::env::remove_var("TILLANDSIAS_SPEC_INDEX_DIR") },
-        }
 
         let envelope = envelope.expect("the spec engine answers from the published entry");
         assert_eq!(
