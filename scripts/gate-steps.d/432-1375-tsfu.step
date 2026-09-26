@@ -13,3 +13,4 @@ STEP_ERROR="a new jq call site is inside the json get subset, or the ratchet mis
 STEP_OK="jq call sites at or below the floor; new sites outside the subset only warn"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no plan binary with the json verb resolved, so the ratchet could not classify"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: check-jq-callsite-ratchet 6/6"
