@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# gate-shared-ledger-parse.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: note
+      ts: "2026-09-26T00:17:00Z"
+      host: lenovinha
+      summary: |-
+        takeover by lenovinha-silverblue from the operator forge, per coordinator
