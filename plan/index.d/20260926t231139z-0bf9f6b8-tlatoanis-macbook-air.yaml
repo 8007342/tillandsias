@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-meta-orchestration-litmus-tests-fail-on-darwin-on-an-unmodified-trunk-cause-unknown
+    event:
+      type: finding
+      ts: "2026-09-26T23:11:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t231140z
+      host: tlatoanis-macbook-air
+      summary: |
+        DIAGNOSED 2026-09-26, both axes (main-vs-worktree, live-vs-scratch state). The five reds are TWO causes:
+        (A) FOUR are "no tillandsias-plan binary in this checkout", not darwin: the fresh linked worktree had no target/*/tillandsias-plan. ledger-node-claim-shape 6/7 (the unverifiable ledger degrades loudly and LEASES, so the near-miss id "fixture-reel-node" was claimed, rc=0), resumable-claim-dirt (fixture: "no runnable tillandsias-plan"), long-running-view-agreement (without the binary the view check reads missing=2; with it: ok 26 live packets) and forge-expert-base-guard-shape 10/15 (methodology query). Each passes with TILLANDSIAS_PLAN_BIN supplied, and in the MAIN checkout (which has target/release). A real ./build.sh --check builds the binary in preflight, so the Mac gate does not see these.
+        (B) ONE is a genuine darwin-regime TEST defect: e2e-eligibility-probe-shape step 8 (1202-jpzy "exactly one podman info") can never hold on Darwin, where e2e-preflight never asks podman by design (723-fndi, VZ substrate); it ALSO read LIVE state, the real rootfs.img held open by this Mac's running VM (verdict skip:live-runtime-present). Same in the main checkout. Step 9 (its podman-failure negative control) is the same class. Fixed on work/1418-bug2 a6e76cab0: step 8 asserts podman calls=0 on Darwin with TILLANDSIAS_VZ_IMAGE_OVERRIDE pinned to a nonexistent image (mutation: a podman info in the Darwin branch -> FAIL rc=1); step 9 takes a named Darwin skip like its Windows arm. darwin spec with a binary: passed=23 failed=0.
