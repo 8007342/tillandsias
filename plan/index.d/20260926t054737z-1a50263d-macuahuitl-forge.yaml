@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    event:
+      type: finding
+      ts: "2026-09-26T05:47:37Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t054735z
+      host: macuahuitl-forge
+      summary: |
+        SIBLING OUTSIDE THE OWNED SET, named not fixed: scripts/refusal-calibration/analyze-bands.sh consumes measure-bands' TSV (top1/top2/margin, dot decimals) with awk arithmetic and prints %.4f bands (lines 49-72). Under a comma LC_NUMERIC, a locale-honouring awk (macOS awk; gawk in POSIX mode) both misparses the dotted input (0.8312 -> 0) and prints commas. Fix shape: LC_ALL=C on its awk. Other hits in the sweep are display-only: build.sh:496,501 (+%.1fs unattributed), bench-hot-path-placement.sh:90 (a '#' comment line). update-convergence-dashboard.sh is 1191-vrjf's.

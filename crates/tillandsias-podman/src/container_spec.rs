@@ -99,6 +99,9 @@ pub struct ContainerSpec {
     no_new_privileges: bool,
     label_disable: bool,
     pids_limit: Option<u32>,
+    // ORDER 1375-xxzj: a forge cgroup budget. Typed rather than a passthrough
+    // option, so the anti-bypass allowlist stays `--device=` only.
+    memory_budget: Option<tillandsias_core::forge_budget::ForgeBudget>,
     network: Option<String>,
     env: Vec<(String, String)>,
     secrets: Vec<String>,
@@ -129,6 +132,7 @@ impl ContainerSpec {
             no_new_privileges: true,
             label_disable: true,
             pids_limit: None,
+            memory_budget: None,
             network: None,
             env: Vec::new(),
             secrets: Vec::new(),
@@ -184,6 +188,13 @@ impl ContainerSpec {
 
     pub fn pids_limit(mut self, value: u32) -> Self {
         self.pids_limit = Some(value);
+        self
+    }
+
+    /// ORDER 1375-xxzj. Apply a forge cgroup budget (memory.max, memory.high,
+    /// memory.low, memory.swap.max, pids.max). It supersedes `pids_limit`.
+    pub fn memory_budget(mut self, budget: tillandsias_core::forge_budget::ForgeBudget) -> Self {
+        self.memory_budget = Some(budget);
         self
     }
 
@@ -322,7 +333,9 @@ impl ContainerSpec {
         if self.tty {
             args.push("--tty".to_string());
         }
-        if let Some(limit) = self.pids_limit {
+        if let Some(budget) = self.memory_budget {
+            args.extend(budget.podman_args());
+        } else if let Some(limit) = self.pids_limit {
             args.push("--pids-limit".to_string());
             args.push(limit.to_string());
         }

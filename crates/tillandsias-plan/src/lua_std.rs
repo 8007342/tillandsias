@@ -149,18 +149,38 @@ fn json_table(lua: &Lua) -> LuaResult<LuaTable> {
             out.map_err(|e| rt(format!("json.encode: {e}")))
         })?,
     )?;
-    // json.query(v, filter [, args]) is the 1375-rn9b engine
-    // (json_query::parse + json_query::eval, surface agreed with lenovinha
-    // 2026-09-26): a Lua sequence of results, erroring with the engine's
-    // "parse:/unsupported:/runtime:" text. Until that engine is on trunk the
-    // name exists and REFUSES by name rather than being nil, so a caller
-    // reads why instead of "attempt to call a nil value".
+    // json.query(v, filter [, args]) — the 1375-rn9b engine
+    // (json_query::parse + json_query::eval; surface agreed with lenovinha
+    // 2026-09-26). Returns a Lua SEQUENCE of every result; `args` binds `$name`.
+    // Errors carry the engine's own prefix — parse:<at>: / unsupported:<construct>
+    // / runtime: — so a caller or the ratchet can match on the kind. Pure: a
+    // function of its arguments, so it sits in the Cacheable class (and over
+    // fs.read it stays pure because that memo is content-addressed, 1367-q9yc).
     t.set(
         "query",
-        lua.create_function(|_, (_v, _f): (LuaValue, String)| -> LuaResult<LuaValue> {
-            Err(rt(
-                "json.query: unsupported:engine-not-landed — json_query::eval arrives with 1375-rn9b",
-            ))
+        lua.create_function(|lua, (v, f, args): (LuaValue, String, Option<LuaTable>)| {
+            let input: serde_json::Value = lua
+                .from_value(v)
+                .map_err(|e| rt(format!("json.query: input: {e}")))?;
+            let filter =
+                crate::json_query::parse(&f).map_err(|e| rt(format!("json.query: {e}")))?;
+            let mut opts = crate::json_query::Opts::default();
+            if let Some(a) = args {
+                for pair in a.pairs::<String, LuaValue>() {
+                    let (k, lv) = pair?;
+                    let jv: serde_json::Value = lua
+                        .from_value(lv)
+                        .map_err(|e| rt(format!("json.query: arg {k}: {e}")))?;
+                    opts.args.insert(k, jv);
+                }
+            }
+            let results = crate::json_query::eval(&input, &filter, &opts)
+                .map_err(|e| rt(format!("json.query: {e}")))?;
+            let out = lua.create_table()?;
+            for (i, r) in results.iter().enumerate() {
+                out.set(i + 1, lua.to_value(r)?)?;
+            }
+            Ok(out)
         })?,
     )?;
     Ok(t)

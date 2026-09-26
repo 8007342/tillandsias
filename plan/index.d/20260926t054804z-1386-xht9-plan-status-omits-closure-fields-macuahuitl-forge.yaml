@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-status-prints-only-id-status-slug-so-a-worker-cannot-read-a-rows-unscoreable-or-closure-without-falling-back-to-the-fragment-file
+    order: 1386-xht9
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [plan-binary, mcp-first, forge-local-experts]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan
+    unscoreable: |
+      unpinnable-until-the-guard-exists: litmus test-plan-status-prints-claim-fields.sh lands in the fixing commit.
+      FAILS pre-fix: `tillandsias-plan status 1254-fdsu | grep -q unscoreable` exits 1 (status prints order/status/slug only).
+    title: |
+      `tillandsias-plan status` (and the plan_status / plan_answer "status of" MCP answers) print only order, status and slug, so the fields a claimer must read first — unscoreable, verifiable_closure, owned_files, next_action — are reachable only by opening the fragment, which the mcp_first_read_path rule calls a fallback
+    context: |
+      FOUND on macuahuitl-forge 2026-09-26 taking 1254-fdsu. The coordinator's
+      dispatch said "read the row's unscoreable: block first (tillandsias-plan
+      status 1254-fdsu, then its fragment)". status printed:
+        1254-fdsu  ready  awk-float-formatting-honours-lc-numeric-...
+      and plan_answer "status of 437" returns a status table plus a citation
+      span (plan/index.yaml:8182-8323) but no field content. Every claimer
+      therefore falls back to reading files for the most important read of the
+      cycle, and logs it as "not exposed".
+    deliverable: |
+      A status/detail form (CLI and MCP) that prints the claim-relevant fields
+      of one row: title, owned_files, unscoreable, verifiable_closure,
+      next_action, plus the latest events — with a size cap, so the ledger
+      is not dumped wholesale.
+    provenance: |
+      Filed by macuahuitl-forge (forge on macuahuitl) 2026-09-26, level-2
+      expert survey requested by the macuahuitl coordinator.

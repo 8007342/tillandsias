@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: progress
+      ts: "2026-09-26T05:43:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t054358z
+      host: tlatoanis-macbook-air
+      summary: |
+        CRITERION 3 MET for both measured failures, each with a named mechanism (work/1242-4x53, not landed):
+        - Failure 1 (groundtruth::tests::the_spec_engine_stamps_the_index_frame_not_the_readers_head): a REGIME difference, not non-determinism. It fails deterministically with TILLANDSIAS_PODMAN_REFUSE_REAL armed and no podman seated; the gate armed it and the standalone re-run did not. Fixed in local-ci by the /bin/false seat (see the earlier progress event).
+        - Failure 2 (litmus:enclave-service-health-shape step 3, "22 passed, 1 failed"): a ONE-SECOND CLOCK RACE. The fixture fakes an exit at now-250492 and expects age_s=250492 exactly, but the reporter reads `date -u +%s` again. Measured on macOS: 1 of 20 serial pre-fix, 0 of 21 with 7 in parallel (not interference); with the race forced by sleep 1.1, pre-fix FAILS 3/3 in the gate's exact shape and post-fix passes 3/3; 60/60 unforced post-fix. The fix is test-only: the fixture pins the reporter's one clock read.
+        So the two unshared causes are both named, and the unscoreable note ("one mechanism or two") resolves to TWO: a regime seat and a clock race, neither of them load interference.
+        REMAINING: criterion 2 (the per-host split over a week) needs slices 1-3 landed and a week of records. The re-run hook on the litmus path is not built: the runner fails a step from about six arms and emits no per-test timing record, which is a design decision for the coordinator rather than a slice.
