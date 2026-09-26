@@ -662,7 +662,7 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
 /// the other. Enumeration measures the machine; this field records what the
 /// tier probe asserted. Do not re-thread it downward.
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
-    let (devices, mut enumeration_gaps) = enumerate_devices();
+    let (mut devices, mut enumeration_gaps) = enumerate_devices();
     // 793-zumy REMAINING 2. "No container to ask" is a GAP, not a finding —
     // the same distinction `enumeration_gaps` already carries for a device
     // class this platform cannot enumerate. Measured by yoga 2026-09-02: with
@@ -673,6 +673,9 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         enumeration_gaps.push("container-lane".to_string());
     }
     let engines = enumerate_engines();
+    // 1253-54zj: the NPU verdict is decided here, where the engines are known,
+    // not written as a literal at the enumerators' push sites.
+    derive_npu_usability(&mut devices, &engines);
     let measurements = Vec::new(); // Microbenchmarks run on demand / bounded
     let host = enumerate_host();
     let timestamp = chrono::Utc::now().to_rfc3339();
@@ -856,6 +859,54 @@ fn enumerate_npus_checked() -> Option<Vec<DeviceRecord>> {
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         None
+    }
+}
+
+/// The unusable reason an NPU record carries when a HEALTH fact, not an engine
+/// question, is what stops it: the OS reports the device as not-OK. The
+/// derivation below leaves this reason alone; every other NPU verdict is its
+/// to decide.
+const NPU_DEVICE_NOT_OK: &str = "device-not-ok";
+
+/// DERIVE each NPU record's verdict from the engine list (order 1253-54zj).
+///
+/// Before this, both enumerators wrote `usable: false` and
+/// `unusable_reason: "engine-missing"` as LITERALS at their push sites, so an
+/// NPU row could not change for any host-side reason. yoga measured it: its
+/// row was byte-identical before and after a full NPU toolkit layering,
+/// because the comparison could not have come out any other way.
+///
+/// The rule is the one [`gpu_engine`] and [`phase_device_usable`] already
+/// apply to the GPU (order 793-qr4t): an NPU is usable when some engine lists
+/// `npu` in `supported_device_classes` AND is reachable on one of the
+/// device's lanes (`lanes: None` means every lane). Otherwise the hardware is
+/// here and nothing drives it: `engine-missing`. The same word as before, now
+/// derived, so today's rows keep their verdict and a host that ships an NPU
+/// engine sees its row flip.
+///
+/// `none` is never produced here. That word means NO HARDWARE and comes from
+/// the envelope when no NPU record exists at all; this function only sees
+/// records that were enumerated, so absence cannot be promoted into
+/// present-but-undriveable.
+// @trace order:1253-54zj, order:793-qr4t, spec:accel-capability-probe
+pub(crate) fn derive_npu_usability(devices: &mut [DeviceRecord], engines: &[EngineRecord]) {
+    for d in devices.iter_mut().filter(|d| d.device_class == "npu") {
+        if d.unusable_reason.as_deref() == Some(NPU_DEVICE_NOT_OK) {
+            d.usable = false;
+            continue;
+        }
+        let driven = engines.iter().any(|e| {
+            e.supported_device_classes.iter().any(|c| c == "npu")
+                && e.lanes
+                    .as_ref()
+                    .is_none_or(|ls| ls.iter().any(|l| d.lanes.contains(l)))
+        });
+        d.usable = driven;
+        d.unusable_reason = if driven {
+            None
+        } else {
+            Some("engine-missing".to_string())
+        };
     }
 }
 
@@ -3837,10 +3888,13 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
                 // A device the OS reports as not-OK is enumerated but not
                 // healthy; say which, rather than folding it into the same
                 // engine-missing bucket as a working one.
+                // The engine verdict is NOT decided here: derive_npu_usability
+                // decides it in run_probe from the engines list (1253-54zj).
+                // Only the OS health fact is recorded at this site.
                 let reason = if status.eq_ignore_ascii_case("OK") {
-                    "engine-missing"
+                    None
                 } else {
-                    "device-not-ok"
+                    Some(NPU_DEVICE_NOT_OK.to_string())
                 };
                 Some(DeviceRecord {
                     device_class: "npu".to_string(),
@@ -3864,7 +3918,7 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
                     fw_version: None,
                     driver: None,
                     usable: false,
-                    unusable_reason: Some(reason.to_string()),
+                    unusable_reason: reason,
                     policy_unscheduled: None,
                     lanes: vec!["host-native".to_string()],
                     memory_bandwidth_gbps: None,
@@ -3938,7 +3992,10 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
 
                 let node_path = format!("/dev/accel/{name}");
 
-                // PROBE-3: usable: false with unusable_reason: "engine-missing"
+                // PROBE-3 (1253-54zj): the verdict is NOT written here any more.
+                // It used to be the literal usable:false + "engine-missing", so
+                // no host-side change could flip an NPU row. derive_npu_usability
+                // decides it in run_probe from the engines list.
                 npus.push(DeviceRecord {
                     device_class: "npu".to_string(),
                     vendor,
@@ -3950,7 +4007,7 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
                     fw_version,
                     driver: driver_name,
                     usable: false,
-                    unusable_reason: Some("engine-missing".to_string()),
+                    unusable_reason: None,
                     policy_unscheduled: None,
                     lanes: vec!["host-native".to_string()],
                     memory_bandwidth_gbps: None,
@@ -6115,6 +6172,103 @@ mod tests {
             // pre-field deny-list still judges it, exactly as before.
             name_source: None,
         }
+    }
+
+    fn engine(classes: &[&str], lanes: Option<&[&str]>) -> EngineRecord {
+        EngineRecord {
+            name: "test-engine".to_string(),
+            backend: "test".to_string(),
+            supported_device_classes: classes.iter().map(|c| c.to_string()).collect(),
+            lanes: lanes.map(|ls| ls.iter().map(|l| l.to_string()).collect()),
+        }
+    }
+
+    /// An NPU record as the enumerators now emit it: hardware found, verdict
+    /// NOT decided (usable false, no reason). Both push sites produce this.
+    fn undecided_npu() -> DeviceRecord {
+        let mut d = device("npu", "AMD XDNA NPU", &["host-native"], None);
+        d.usable = false;
+        d
+    }
+
+    /// 1253-54zj ARM 1, the arm that proves the derivation is real: a host
+    /// whose engines declare an npu-capable engine reads usable:true. Before
+    /// the fix this was unreachable on every host, because both push sites
+    /// wrote usable:false as a literal and nothing ever changed it.
+    #[test]
+    fn npu_with_an_npu_capable_engine_is_usable() {
+        let mut devs = vec![undecided_npu()];
+        derive_npu_usability(
+            &mut devs,
+            &[engine(&["cpu", "gpu"], None), engine(&["npu"], None)],
+        );
+        assert!(
+            devs[0].usable,
+            "an npu-capable engine must make the NPU usable"
+        );
+        assert_eq!(devs[0].unusable_reason, None);
+    }
+
+    /// 1253-54zj ARM 2: hardware present, only cpu/gpu engines (yoga's measured
+    /// state) -> engine-missing, now DERIVED. The input record carries NO reason,
+    /// so the word can only have come from the derivation; a test that checked
+    /// the string on the old literal record would pass unchanged pre-fix.
+    #[test]
+    fn npu_without_an_npu_engine_is_engine_missing_by_derivation() {
+        let mut devs = vec![undecided_npu()];
+        assert_eq!(
+            devs[0].unusable_reason, None,
+            "precondition: the input carries no verdict"
+        );
+        derive_npu_usability(&mut devs, &[engine(&["cpu", "gpu"], None)]);
+        assert!(!devs[0].usable);
+        assert_eq!(devs[0].unusable_reason.as_deref(), Some("engine-missing"));
+    }
+
+    /// 1253-54zj ARM 3, NEGATIVE CONTROL: no NPU hardware stays `none`, even
+    /// with an npu-capable engine installed. Absence must never be promoted to
+    /// present-but-undriveable (the confusion gpu_engine()'s doc names).
+    #[test]
+    fn no_npu_hardware_reads_none_even_with_an_npu_engine() {
+        let mut devs = vec![device("gpu", "GPU", &["host-native"], None)];
+        let engines = vec![engine(&["npu"], None)];
+        derive_npu_usability(&mut devs, &engines);
+        assert!(
+            devs.iter().all(|d| d.device_class != "npu"),
+            "the derivation must not invent a record"
+        );
+        let mut doc = doc_with(devs);
+        doc.engines = engines;
+        let env = super::accel_envelope(&doc);
+        assert!(
+            env.contains("accel_npu=none"),
+            "absent NPU must render none: {env}"
+        );
+    }
+
+    /// 1253-54zj: the lane matters, as in phase_device_usable. An engine
+    /// reachable only in the container cannot drive a host-native NPU.
+    #[test]
+    fn a_container_only_npu_engine_does_not_drive_a_host_native_npu() {
+        let mut devs = vec![undecided_npu()];
+        derive_npu_usability(&mut devs, &[engine(&["npu"], Some(&["container"]))]);
+        assert!(!devs[0].usable);
+        assert_eq!(devs[0].unusable_reason.as_deref(), Some("engine-missing"));
+    }
+
+    /// 1253-54zj: a health fact the OS reported (native Windows, PnP status
+    /// not OK) is kept; an engine cannot make an unhealthy device usable.
+    #[test]
+    fn a_device_not_ok_npu_stays_unusable_with_its_health_reason() {
+        let mut devs = vec![device(
+            "npu",
+            "NPU",
+            &["host-native"],
+            Some(NPU_DEVICE_NOT_OK),
+        )];
+        derive_npu_usability(&mut devs, &[engine(&["npu"], None)]);
+        assert!(!devs[0].usable);
+        assert_eq!(devs[0].unusable_reason.as_deref(), Some(NPU_DEVICE_NOT_OK));
     }
 
     /// 805-r98w. The fingerprint exists so two hosts can be SHOWN identical

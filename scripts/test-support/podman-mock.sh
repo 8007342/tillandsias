@@ -490,6 +490,14 @@ case "$subcommand" in
             printf '%s\n' "${LITMUS_FAKE_GITHUB_USER:-mock-user}"
             exit 0
         fi
+        if [[ "$*" == *"/login/device/code"* ]]; then
+            printf '{"device_code":"mock-device-code","user_code":"MOCK-CODE","verification_uri":"https://github.com/login/device","expires_in":899,"interval":5}\n'
+            exit 0
+        fi
+        if [[ "$*" == *"/login/oauth/access_token"* ]]; then
+            printf '{"access_token":"%s","refresh_token":"mock-refresh-token","expires_in":28800,"refresh_token_expires_in":15811200}\n' "${LITMUS_FAKE_GITHUB_TOKEN:-mock-github-token}"
+            exit 0
+        fi
         # Never fabricate a vault first-boot handover: answering
         # `cat /run/vault-handover/*` with canned output made the real
         # binary persist `mock-exec-output` over the operator's REAL

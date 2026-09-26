@@ -47,7 +47,9 @@ exit 127
     chmod +x "$work/bin/$c"
 done
 
-out="$(PATH="$work/bin:$PATH" bash scripts/archive-plan-packets.sh --check 2>&1)"
+# ORDER 560: the Lua worker is the default and needs no ruby, so the
+# no-usable-ruby path is reachable only through the ruby opt-in.
+out="$(PATH="$work/bin:$PATH" TILLANDSIAS_ARCHIVER_BACKEND=ruby bash scripts/archive-plan-packets.sh --check 2>&1)"
 rc=$?
 
 # ARM 1 — the exit code reaches the could-not-run channel instead of a bare 127.

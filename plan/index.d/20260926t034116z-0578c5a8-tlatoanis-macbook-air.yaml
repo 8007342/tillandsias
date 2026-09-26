@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: progress
+      ts: "2026-09-26T03:41:16Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t034116z
+      host: tlatoanis-macbook-air
+      summary: |
+        Slice 3 on work/1242-4x53 (2f8761b37, trunk merged, not landed): a failed rust-tests check in local-ci re-runs exactly its FAILED tests once, same env and seat, and the check:rust-tests timing record carries reproduced=yes|no. The first red still fails the gate. scripts/test-rerun-failed-rust-tests.sh passes 5/5 and is bound as litmus step 6. CRITERION 4 negative control is arm 1: a seeded genuine regression records reproduced=yes. Sabotaging "yes" into "no" makes it refuse 4/5.
+        CRITERION 3, failure 1 CLASSIFIED with a mechanism, not called a flake: groundtruth::tests::the_spec_engine_stamps_the_index_frame_not_the_readers_head fails DETERMINISTICALLY when TILLANDSIAS_PODMAN_REFUSE_REAL is armed and no podman is seated, and passes when seated. That is recorded in scripts/local-ci.sh's rust-tests comment, measured 2026-09-18 (armed+unseated fails in 0.01s standalone, armed+seated passes; full --workspace --lib seated 332/0). The gate armed the tripwire and the standalone re-run did not, so "passed on re-run" was a regime difference, not non-determinism. It is fixed by seating /bin/false in local-ci.
+        OPEN: failure 2 (litmus:enclave-service-health-shape step 3) is unclassified. It needs the same re-run hook on the litmus path. Criterion 2 (a per-host split over a week) needs this to land and then accumulate records.
