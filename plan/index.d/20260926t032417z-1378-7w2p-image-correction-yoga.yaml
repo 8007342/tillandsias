@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: note
+      ts: "2026-09-26T03:24:17Z"
+      host: yoga
+      summary: |
+        CORRECTION to the §7.1 event of 2026-09-26T03:16:59Z: it names the image as
+        tillandsias-forge:latest. The runs used image ID a7c330487768, which is
+        tillandsias-forge:v56.9.21.2 (podman image inspect). The instrument no longer
+        accepts a mutable tag (check-container-bases refused it) and now records the
+        resolved image ID in its regime line.
