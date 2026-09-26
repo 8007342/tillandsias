@@ -21,7 +21,7 @@
 //!
 //! The instance id is derived here, never taken from input, and always matches
 //! the helper's `[A-Za-z0-9-]{1,64}` (a mismatch would be refused there).
-// @trace order:1376-8zdz, spec:forge-memory-swap
+// @trace order:1376-8zdz, spec:forge-hot-cold-split
 
 use std::path::{Path, PathBuf};
 

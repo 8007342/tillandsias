@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tillandsias-swap — root-owned helper behind tillandsias-swap@.service.
-# @trace order:1376-8zdz, spec:forge-memory-swap (design §9.1, §9.6, §9.7)
+# @trace order:1376-8zdz, spec:forge-hot-cold-split (design §9.1, §9.6, §9.7)
 #
 # One swapfile PER FORGE LAUNCH, deleted when the launch ends (operator ruling
 # 2026-09-26: "a new swapfile every launch ... thrown away and deleted on
