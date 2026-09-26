@@ -51,17 +51,17 @@ critical_path:
     expected_behavior: "ok: scenarios-pass"
 
   - step: "THE BREACH SHAPE: a macOS uninstall without --wipe leaves rootfs.img on disk"
-    command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh >/dev/null 2>&1; if [ -f \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'ok: vm-preserved'; else echo 'FAIL: the uninstaller deleted the VM image without --wipe'; fi; rm -rf \"$d\""
+    command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_APPS_DIR=\"$d/Applications\" TILLANDSIAS_UNINSTALL_TRAY_PROC=nonce-tray-1401 TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh >/dev/null 2>&1; if [ -f \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'ok: vm-preserved'; else echo 'FAIL: the uninstaller deleted the VM image without --wipe'; fi; rm -rf \"$d\""
     timeout_ms: 15000
     expected_behavior: "ok: vm-preserved"
 
   - step: "ESCAPE HATCH STAYS HONEST: --wipe on macOS does remove the VM image (a guard that preserved it unconditionally would pass the step above and must be caught here)"
-    command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh --wipe >/dev/null 2>&1; if [ -e \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'FAIL: --wipe left the VM image behind'; else echo 'ok: wipe-removes-vm'; fi; rm -rf \"$d\""
+    command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_APPS_DIR=\"$d/Applications\" TILLANDSIAS_UNINSTALL_TRAY_PROC=nonce-tray-1401 TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh --wipe >/dev/null 2>&1; if [ -e \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'FAIL: --wipe left the VM image behind'; else echo 'ok: wipe-removes-vm'; fi; rm -rf \"$d\""
     timeout_ms: 15000
     expected_behavior: "ok: wipe-removes-vm"
 
   - step: "NEGATIVE CONTROL: Linux still removes DATA_DIR unconditionally — a fix that preserved it on BOTH platforms would satisfy every step above while silently breaking the Linux uninstall"
-    command: "d=$(mktemp -d); mkdir -p \"$d/.local/share/tillandsias\" \"$d/.local/bin\"; echo bundled > \"$d/.local/share/tillandsias/flake.nix\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Linux bash scripts/uninstall.sh >/dev/null 2>&1; if [ -e \"$d/.local/share/tillandsias/flake.nix\" ]; then echo 'FAIL: linux uninstall stopped removing bundled data'; else echo 'ok: linux-unchanged'; fi; rm -rf \"$d\""
+    command: "d=$(mktemp -d); mkdir -p \"$d/.local/share/tillandsias\" \"$d/.local/bin\"; echo bundled > \"$d/.local/share/tillandsias/flake.nix\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_APPS_DIR=\"$d/Applications\" TILLANDSIAS_UNINSTALL_TRAY_PROC=nonce-tray-1401 TILLANDSIAS_UNINSTALL_FAKE_UNAME=Linux bash scripts/uninstall.sh >/dev/null 2>&1; if [ -e \"$d/.local/share/tillandsias/flake.nix\" ]; then echo 'FAIL: linux uninstall stopped removing bundled data'; else echo 'ok: linux-unchanged'; fi; rm -rf \"$d\""
     timeout_ms: 15000
     expected_behavior: "ok: linux-unchanged"
 
