@@ -39,8 +39,22 @@ const FINGERPRINT_KEY: &str = "fingerprint";
 /// skip. A same-size same-mtime edit defeats it, which on this corpus means a
 /// hand-edited ledger inside one filesystem timestamp tick — and the cost of
 /// that miss is a stale READ, which the CRDT argument above already tolerates.
+///
+/// THE BINARY IS AN INPUT TOO. The fold is a function of the ledger bytes AND
+/// of the code that folds them: a merge that changes fold semantics leaves every
+/// ledger file untouched, so a key over the files alone serves the OLD binary's
+/// fold to the rebuilt one — including to `check`. So the key mixes in the
+/// validator-surface content hash that build.rs embeds (1287-h6qn), and a build
+/// that could not compute it gets no cache at all rather than a shared key.
 fn fingerprint(index: &Path) -> Option<String> {
+    fingerprint_for(index, env!("TILLANDSIAS_PLAN_VALIDATOR_SURFACE"))
+}
+
+fn fingerprint_for(index: &Path, binary_id: &str) -> Option<String> {
     use std::fmt::Write as _;
+    if binary_id.is_empty() {
+        return None;
+    }
     let mut parts: Vec<(String, u64, i128)> = Vec::new();
     let meta = std::fs::metadata(index).ok()?;
     parts.push((
@@ -67,7 +81,7 @@ fn fingerprint(index: &Path) -> Option<String> {
     }
     parts.sort();
     let mut acc = String::new();
-    let _ = write!(acc, "v1\u{1}");
+    let _ = write!(acc, "v2\u{1}{binary_id}\u{1}");
     for (p, len, ts) in parts {
         let _ = write!(acc, "{p}\u{1}{len}\u{1}{ts}\u{2}");
     }
@@ -291,6 +305,37 @@ mod tests {
         let raw = std::fs::read_to_string(index).expect("read");
         let base: Value = serde_yaml::from_str(&raw).expect("parse");
         crate::fragments::fold(&base, &crate::fragments::load_all(index))
+    }
+
+    /// A snapshot written by a DIFFERENT binary over the SAME ledger files must
+    /// be a miss: after a merge that changes fold semantics, the rebuilt binary
+    /// may not be served the old binary's fold (964-tzmp review).
+    #[test]
+    fn a_snapshot_from_another_binary_fails_closed() {
+        let index = tmp_ledger("binary");
+        let old = fingerprint_for(&index, "old-binary").expect("old key");
+        assert_ne!(
+            Some(old.clone()),
+            fingerprint_for(&index, "new-binary"),
+            "the binary identity must move the key"
+        );
+        assert_eq!(
+            fingerprint_for(&index, ""),
+            None,
+            "no binary identity => no cache"
+        );
+        let path = snapshot_path(&index).expect("snapshot path");
+        std::fs::create_dir_all(path.parent().expect("dir")).expect("mk");
+        let mut data = b"PLANFOLD".to_vec();
+        data.extend_from_slice(&(old.len() as u32).to_le_bytes());
+        data.extend_from_slice(old.as_bytes());
+        data.extend_from_slice(b"{}");
+        std::fs::write(&path, data).expect("write stale snapshot");
+        assert!(
+            get_ledger(&index).is_none(),
+            "a snapshot keyed to another binary must not be served"
+        );
+        invalidate(&index);
     }
 
     /// A cache answers only for the corpus it was built from.
