@@ -1090,9 +1090,6 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # 1395-88tp: the grader earns positively_tested only from an enforced, reachable, tiered step with a green record for the exact bytes. Daily tier until a darwin run is recorded for a gate
-    # step (1302-7j8p).
-    # ============================================================================
     log_section "CentiColon Grader (1395-88tp)"
     if [[ -f "scripts/test-centicolon-grade.sh" ]]; then
         if bash scripts/test-centicolon-grade.sh > /tmp/test-centicolon-grade.log 2>&1; then
@@ -1107,9 +1104,6 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         log_fail_missing_guard "centicolon-grade" "scripts/test-centicolon-grade.sh"
     fi
 
-    # ============================================================================
-    # 1395-ue3i: the advisory R line warns on a lost satisfaction, reports scope, never refuses. Daily tier until a darwin run is recorded for a gate
-    # step (1302-7j8p).
     # ============================================================================
     log_section "CentiColon Advisory R Line (1395-ue3i)"
     if [[ -f "scripts/test-centicolon-ratchet.sh" ]]; then
